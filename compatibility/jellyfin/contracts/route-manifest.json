@@ -1,0 +1,934 @@
+{
+  "schemaVersion": 1,
+  "surface": "jellyfin",
+  "legacyBaselineCommit": "4028b58dbd3302ed431e2c5b32d9dde5634db218",
+  "legacyControllersRoot": "src/Melodee.Blazor/Controllers",
+  "routeCount": 58,
+  "routes": [
+    {
+      "path": "/api/jf/",
+      "methods": [
+        "GET"
+      ],
+      "controller": "RootController",
+      "action": "ServerRoot",
+      "auth": {
+        "required": false
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "RootController.cs"
+    },
+    {
+      "path": "/api/jf/Artists",
+      "methods": [
+        "GET"
+      ],
+      "controller": "ArtistsController",
+      "action": "GetArtistsAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "ArtistsController.cs"
+    },
+    {
+      "path": "/api/jf/Artists/AlbumArtists",
+      "methods": [
+        "GET"
+      ],
+      "controller": "ArtistsController",
+      "action": "GetAlbumArtistsAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "ArtistsController.cs"
+    },
+    {
+      "path": "/api/jf/Artists/{artistId}",
+      "methods": [
+        "GET"
+      ],
+      "controller": "ArtistsController",
+      "action": "GetArtistAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "ArtistsController.cs"
+    },
+    {
+      "path": "/api/jf/Artists/{artistId}/Images/{imageType}",
+      "methods": [
+        "GET"
+      ],
+      "controller": "ImagesController",
+      "action": "GetArtistImageAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "ImagesController.cs"
+    },
+    {
+      "path": "/api/jf/Artists/{artistId}/Similar",
+      "methods": [
+        "GET"
+      ],
+      "controller": "ArtistsController",
+      "action": "GetSimilarArtistsAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "ArtistsController.cs"
+    },
+    {
+      "path": "/api/jf/Audio/{itemId}/Lyrics",
+      "methods": [
+        "GET"
+      ],
+      "controller": "AudioController",
+      "action": "GetLyricsAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "AudioController.cs"
+    },
+    {
+      "path": "/api/jf/Audio/{itemId}/stream",
+      "methods": [
+        "GET"
+      ],
+      "controller": "AudioController",
+      "action": "StreamAudioAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "AudioController.cs"
+    },
+    {
+      "path": "/api/jf/Audio/{itemId}/stream.{extension}",
+      "methods": [
+        "GET"
+      ],
+      "controller": "AudioController",
+      "action": "StreamAudioWithContainerAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "AudioController.cs"
+    },
+    {
+      "path": "/api/jf/Audio/{itemId}/universal",
+      "methods": [
+        "GET"
+      ],
+      "controller": "AudioController",
+      "action": "UniversalAudioAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "AudioController.cs"
+    },
+    {
+      "path": "/api/jf/Genres",
+      "methods": [
+        "GET"
+      ],
+      "controller": "GenresController",
+      "action": "GetGenresAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "GenresController.cs"
+    },
+    {
+      "path": "/api/jf/Items",
+      "methods": [
+        "GET"
+      ],
+      "controller": "ItemsController",
+      "action": "GetItemsAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "ItemsController.cs"
+    },
+    {
+      "path": "/api/jf/Items/Filters",
+      "methods": [
+        "GET"
+      ],
+      "controller": "ItemsController",
+      "action": "GetFiltersAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "ItemsController.cs"
+    },
+    {
+      "path": "/api/jf/Items/{itemId}",
+      "methods": [
+        "DELETE"
+      ],
+      "controller": "ItemsController",
+      "action": "DeleteItemAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "ItemsController.cs"
+    },
+    {
+      "path": "/api/jf/Items/{itemId}",
+      "methods": [
+        "GET"
+      ],
+      "controller": "ItemsController",
+      "action": "GetItemAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "ItemsController.cs"
+    },
+    {
+      "path": "/api/jf/Items/{itemId}/Download",
+      "methods": [
+        "GET"
+      ],
+      "controller": "ItemsController",
+      "action": "GetItemFileAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "ItemsController.cs"
+    },
+    {
+      "path": "/api/jf/Items/{itemId}/File",
+      "methods": [
+        "GET"
+      ],
+      "controller": "ItemsController",
+      "action": "GetItemFileAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "ItemsController.cs"
+    },
+    {
+      "path": "/api/jf/Items/{itemId}/Images/{imageType}",
+      "methods": [
+        "GET"
+      ],
+      "controller": "ImagesController",
+      "action": "GetItemImageAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "ImagesController.cs"
+    },
+    {
+      "path": "/api/jf/Items/{itemId}/Images/{imageType}/{imageIndex:int}",
+      "methods": [
+        "GET"
+      ],
+      "controller": "ImagesController",
+      "action": "GetItemImageByIndexAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "ImagesController.cs"
+    },
+    {
+      "path": "/api/jf/Items/{itemId}/InstantMix",
+      "methods": [
+        "GET"
+      ],
+      "controller": "ItemsController",
+      "action": "GetInstantMixAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "ItemsController.cs"
+    },
+    {
+      "path": "/api/jf/Items/{itemId}/PlaybackInfo",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "ItemsController",
+      "action": "GetPlaybackInfoAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "ItemsController.cs"
+    },
+    {
+      "path": "/api/jf/Items/{itemId}/Refresh",
+      "methods": [
+        "POST"
+      ],
+      "controller": "ItemsController",
+      "action": "RefreshItemAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "ItemsController.cs"
+    },
+    {
+      "path": "/api/jf/Items/{itemId}/Similar",
+      "methods": [
+        "GET"
+      ],
+      "controller": "ItemsController",
+      "action": "GetSimilarItemsAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "ItemsController.cs"
+    },
+    {
+      "path": "/api/jf/MusicGenres",
+      "methods": [
+        "GET"
+      ],
+      "controller": "MusicGenresController",
+      "action": "GetMusicGenresAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "MusicGenresController.cs"
+    },
+    {
+      "path": "/api/jf/Playlists",
+      "methods": [
+        "POST"
+      ],
+      "controller": "PlaylistsController",
+      "action": "CreatePlaylistAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "PlaylistsController.cs"
+    },
+    {
+      "path": "/api/jf/Playlists",
+      "methods": [
+        "GET"
+      ],
+      "controller": "PlaylistsController",
+      "action": "GetPlaylistsAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "PlaylistsController.cs"
+    },
+    {
+      "path": "/api/jf/Playlists/{playlistId}",
+      "methods": [
+        "DELETE"
+      ],
+      "controller": "PlaylistsController",
+      "action": "DeletePlaylistAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "PlaylistsController.cs"
+    },
+    {
+      "path": "/api/jf/Playlists/{playlistId}",
+      "methods": [
+        "GET"
+      ],
+      "controller": "PlaylistsController",
+      "action": "GetPlaylistAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "PlaylistsController.cs"
+    },
+    {
+      "path": "/api/jf/Playlists/{playlistId}",
+      "methods": [
+        "POST"
+      ],
+      "controller": "PlaylistsController",
+      "action": "UpdatePlaylistAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "PlaylistsController.cs"
+    },
+    {
+      "path": "/api/jf/Playlists/{playlistId}/Items",
+      "methods": [
+        "POST"
+      ],
+      "controller": "PlaylistsController",
+      "action": "AddItemsToPlaylistAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "PlaylistsController.cs"
+    },
+    {
+      "path": "/api/jf/Playlists/{playlistId}/Items",
+      "methods": [
+        "GET"
+      ],
+      "controller": "PlaylistsController",
+      "action": "GetPlaylistItemsAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "PlaylistsController.cs"
+    },
+    {
+      "path": "/api/jf/Playlists/{playlistId}/Items",
+      "methods": [
+        "DELETE"
+      ],
+      "controller": "PlaylistsController",
+      "action": "RemoveItemsFromPlaylistAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "PlaylistsController.cs"
+    },
+    {
+      "path": "/api/jf/Playlists/{playlistId}/Items/{itemId}/Move/{newIndex:int}",
+      "methods": [
+        "POST"
+      ],
+      "controller": "PlaylistsController",
+      "action": "MovePlaylistItemAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "PlaylistsController.cs"
+    },
+    {
+      "path": "/api/jf/Sessions",
+      "methods": [
+        "GET"
+      ],
+      "controller": "SessionsController",
+      "action": "GetSessionsAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "SessionsController.cs"
+    },
+    {
+      "path": "/api/jf/Sessions/Capabilities",
+      "methods": [
+        "POST"
+      ],
+      "controller": "SessionsController",
+      "action": "PostCapabilitiesAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "SessionsController.cs"
+    },
+    {
+      "path": "/api/jf/Sessions/Capabilities/Full",
+      "methods": [
+        "POST"
+      ],
+      "controller": "SessionsController",
+      "action": "PostCapabilitiesFullAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "SessionsController.cs"
+    },
+    {
+      "path": "/api/jf/Sessions/Logout",
+      "methods": [
+        "POST"
+      ],
+      "controller": "SessionsController",
+      "action": "LogoutAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "SessionsController.cs"
+    },
+    {
+      "path": "/api/jf/Sessions/Playing",
+      "methods": [
+        "POST"
+      ],
+      "controller": "SessionsController",
+      "action": "ReportPlaybackStartAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "SessionsController.cs"
+    },
+    {
+      "path": "/api/jf/Sessions/Playing/Ping",
+      "methods": [
+        "POST"
+      ],
+      "controller": "SessionsController",
+      "action": "PingPlaybackAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "SessionsController.cs"
+    },
+    {
+      "path": "/api/jf/Sessions/Playing/Progress",
+      "methods": [
+        "POST"
+      ],
+      "controller": "SessionsController",
+      "action": "ReportPlaybackProgressAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "SessionsController.cs"
+    },
+    {
+      "path": "/api/jf/Sessions/Playing/Stopped",
+      "methods": [
+        "POST"
+      ],
+      "controller": "SessionsController",
+      "action": "ReportPlaybackStoppedAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "SessionsController.cs"
+    },
+    {
+      "path": "/api/jf/Songs/{itemId}/InstantMix",
+      "methods": [
+        "GET"
+      ],
+      "controller": "SongsController",
+      "action": "GetInstantMixAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "SongsController.cs"
+    },
+    {
+      "path": "/api/jf/System/Info",
+      "methods": [
+        "GET"
+      ],
+      "controller": "SystemController",
+      "action": "GetSystemInfoAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "SystemController.cs"
+    },
+    {
+      "path": "/api/jf/System/Info/Public",
+      "methods": [
+        "GET"
+      ],
+      "controller": "SystemController",
+      "action": "GetPublicSystemInfoAsync",
+      "auth": {
+        "required": false
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "SystemController.cs"
+    },
+    {
+      "path": "/api/jf/System/Ping",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SystemController",
+      "action": "Ping",
+      "auth": {
+        "required": false
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "SystemController.cs"
+    },
+    {
+      "path": "/api/jf/UserViews",
+      "methods": [
+        "GET"
+      ],
+      "controller": "UserViewsController",
+      "action": "GetUserViewsAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "UserViewsController.cs"
+    },
+    {
+      "path": "/api/jf/Users",
+      "methods": [
+        "GET"
+      ],
+      "controller": "UsersController",
+      "action": "GetUsersAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "UsersController.cs"
+    },
+    {
+      "path": "/api/jf/Users/AuthenticateByName",
+      "methods": [
+        "POST"
+      ],
+      "controller": "UsersController",
+      "action": "AuthenticateByNameAsync",
+      "auth": {
+        "required": false
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "UsersController.cs"
+    },
+    {
+      "path": "/api/jf/Users/Me",
+      "methods": [
+        "GET"
+      ],
+      "controller": "UsersController",
+      "action": "GetCurrentUserAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "UsersController.cs"
+    },
+    {
+      "path": "/api/jf/Users/Public",
+      "methods": [
+        "GET"
+      ],
+      "controller": "UsersController",
+      "action": "GetPublicUsersAsync",
+      "auth": {
+        "required": false
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "UsersController.cs"
+    },
+    {
+      "path": "/api/jf/Users/{userId}",
+      "methods": [
+        "GET"
+      ],
+      "controller": "UsersController",
+      "action": "GetUserByIdAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "UsersController.cs"
+    },
+    {
+      "path": "/api/jf/Users/{userId}/FavoriteItems/{itemId}",
+      "methods": [
+        "POST"
+      ],
+      "controller": "UsersController",
+      "action": "AddFavoriteAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "UsersController.cs"
+    },
+    {
+      "path": "/api/jf/Users/{userId}/FavoriteItems/{itemId}",
+      "methods": [
+        "DELETE"
+      ],
+      "controller": "UsersController",
+      "action": "RemoveFavoriteAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "UsersController.cs"
+    },
+    {
+      "path": "/api/jf/Users/{userId}/Items",
+      "methods": [
+        "GET"
+      ],
+      "controller": "UsersController",
+      "action": "GetUserItemsAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "UsersController.cs"
+    },
+    {
+      "path": "/api/jf/Users/{userId}/Items/{itemId}",
+      "methods": [
+        "GET"
+      ],
+      "controller": "UsersController",
+      "action": "GetUserItemByIdAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "UsersController.cs"
+    },
+    {
+      "path": "/api/jf/Users/{userId}/PlayedItems/{itemId}",
+      "methods": [
+        "POST"
+      ],
+      "controller": "UsersController",
+      "action": "MarkPlayedAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "UsersController.cs"
+    },
+    {
+      "path": "/api/jf/Users/{userId}/PlayedItems/{itemId}",
+      "methods": [
+        "DELETE"
+      ],
+      "controller": "UsersController",
+      "action": "MarkUnplayedAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "UsersController.cs"
+    },
+    {
+      "path": "/api/jf/Users/{userId}/Views",
+      "methods": [
+        "GET"
+      ],
+      "controller": "UsersController",
+      "action": "GetUserViewsAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "UsersController.cs"
+    }
+  ]
+}

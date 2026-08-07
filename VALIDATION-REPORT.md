@@ -1,6 +1,7 @@
 # Scaffold Validation Report
 
 **Generated:** 2026-08-07
+**Updated:** 2026-08-07 (Rust gate executed on the pinned toolchain; see "Rust gate" below)
 
 This report records checks run while producing the starter ZIP.
 
@@ -39,10 +40,27 @@ OK
 (no output)
 ```
 
-## Rust compilation status
+## Rust gate
 
-The artifact-generation environment did not provide the pinned Rust toolchain or network access,
-so `cargo generate-lockfile`, `cargo fmt`, `cargo clippy`, `cargo test`, and `cargo deny check` were
-not executed here. The repository contains a pinned toolchain, bootstrap/check scripts, and GitHub
-Actions CI that execute those checks on the first push. `Cargo.lock` is intentionally generated and
-committed by the first dependency-resolving run.
+Executed 2026-08-07 on the pinned toolchain (rustc/cargo 1.97.1, cargo-deny 0.20.2, Python 3.14.6):
+
+- Command: `./scripts/check.sh`
+- Result: PASS (exit 0) — repository validation, requirements index check, Python tests,
+  `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`,
+  `cargo test --workspace --all-features`, and `cargo deny check` all pass.
+- `Cargo.lock` is committed and resolves cleanly from a fresh `cargo` invocation.
+- cargo-deny reports `advisories ok, bans ok, licenses ok, sources ok`; the only warnings are benign
+  `license-not-encountered` notices for allowlisted licenses with no current dependent crate. No
+  license exceptions are required at this time.
+
+## Bootstrap server smoke check
+
+- Command: `cargo run -p melodee-server`, then `curl http://127.0.0.1:8080/healthz`
+- Result: HTTP 200, body
+  `{"service":"melodee-server","version":"0.1.0","status":"ok","phase":"phase-0-bootstrap"}`
+- SIGINT triggers graceful shutdown and the process exits 0.
+
+## Historical note
+
+The original scaffold-generation environment did not provide the pinned Rust toolchain or network
+access, so the Rust checks were first executed in the follow-up session recorded above.

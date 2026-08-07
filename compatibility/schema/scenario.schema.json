@@ -13,6 +13,23 @@
     "headers": { "type": "object", "additionalProperties": { "type": "string" } },
     "json": {},
     "allowFailure": { "type": "boolean", "default": false },
+    "normalize": {
+      "type": "object",
+      "description": "Volatile-field normalizers applied before comparison. Only values that legitimately vary between identical environments may be masked; never mask meaningful contract data.",
+      "properties": {
+        "maskJsonPaths": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^\\$(\\.[A-Za-z0-9_.-]+|\\[\\*\\]|\\[[0-9]+\\])*$" },
+          "description": "JSON paths (subset: $.a.b, $.a[*].b, $.a[0].b) whose values are replaced with a placeholder before comparison."
+        },
+        "dropHeaders": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Response headers removed before comparison (e.g. volatile etags)."
+        }
+      },
+      "additionalProperties": false
+    },
     "expectedStatus": {
       "oneOf": [
         { "type": "integer", "minimum": 100, "maximum": 599 },

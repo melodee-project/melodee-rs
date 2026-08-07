@@ -11,6 +11,22 @@ It is not a place for production credentials or private library dumps.
 - `scenarios/` — declarative capture scenarios.
 - `captures/` — local generated output; ignored by Git except `.gitkeep`.
 
+## Route manifests and OpenAPI contract
+
+Each surface's `contracts/route-manifest.json` is generated from the frozen legacy checkout
+(see `design/evidence/phase-0/legacy-baseline.md`):
+
+```bash
+python3 scripts/generate_route_manifest.py --legacy-root /path/to/melodee
+python3 scripts/generate_route_manifest.py --legacy-root /path/to/melodee --check  # drift check
+```
+
+`compatibility/melodee-api-v1/contracts/openapi-v1.json` is the captured `/openapi/v1.json`
+document with the volatile `servers` URL normalized to `https://{melodee-host}/`. The published
+document is known to be incomplete (party, native podcasts, and queue routes are missing); the
+route manifests are the authoritative route inventory. See
+`design/evidence/phase-0/route-inventory-summary.md`.
+
 ## Capture public baseline
 
 ```bash

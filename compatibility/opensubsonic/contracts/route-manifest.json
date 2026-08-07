@@ -1,0 +1,2772 @@
+{
+  "schemaVersion": 1,
+  "surface": "opensubsonic",
+  "legacyBaselineCommit": "4028b58dbd3302ed431e2c5b32d9dde5634db218",
+  "legacyControllersRoot": "src/Melodee.Blazor/Controllers",
+  "routeCount": 160,
+  "routes": [
+    {
+      "path": "/images/{id}/{size}",
+      "methods": [
+        "GET"
+      ],
+      "controller": "ImageController",
+      "action": "GetImageAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "ImageController.cs"
+    },
+    {
+      "path": "/ping",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SystemController",
+      "action": "Ping",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "SystemController.cs"
+    },
+    {
+      "path": "/rest/addChatMessage",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "ChatController",
+      "action": "DeprecatedWontImplement",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [
+        410
+      ],
+      "implementation": "gone",
+      "source": "ChatController.cs"
+    },
+    {
+      "path": "/rest/addChatMessage.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "ChatController",
+      "action": "DeprecatedWontImplement",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [
+        410
+      ],
+      "implementation": "gone",
+      "source": "ChatController.cs"
+    },
+    {
+      "path": "/rest/changePassword",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "UserManagementController",
+      "action": "NotImplemented",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [
+        501
+      ],
+      "implementation": "not-implemented",
+      "source": "UserManagementController.cs"
+    },
+    {
+      "path": "/rest/changePassword.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "UserManagementController",
+      "action": "NotImplemented",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [
+        501
+      ],
+      "implementation": "not-implemented",
+      "source": "UserManagementController.cs"
+    },
+    {
+      "path": "/rest/createBookmark",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BookmarksController",
+      "action": "CreateBookmarkAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BookmarksController.cs"
+    },
+    {
+      "path": "/rest/createBookmark.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BookmarksController",
+      "action": "CreateBookmarkAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BookmarksController.cs"
+    },
+    {
+      "path": "/rest/createInternetRadioStation",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "InternetRadioController",
+      "action": "CreateInternetRadioStationAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "InternetRadioController.cs"
+    },
+    {
+      "path": "/rest/createInternetRadioStation.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "InternetRadioController",
+      "action": "CreateInternetRadioStationAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "InternetRadioController.cs"
+    },
+    {
+      "path": "/rest/createPlaylist",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PlaylistController",
+      "action": "CreatePlaylistAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "PlaylistController.cs"
+    },
+    {
+      "path": "/rest/createPlaylist.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PlaylistController",
+      "action": "CreatePlaylistAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "PlaylistController.cs"
+    },
+    {
+      "path": "/rest/createPodcastChannel",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PodcastController",
+      "action": "CreatePodcastChannelAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "PodcastController.cs"
+    },
+    {
+      "path": "/rest/createPodcastChannel.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PodcastController",
+      "action": "CreatePodcastChannelAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "PodcastController.cs"
+    },
+    {
+      "path": "/rest/createShare",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SharingController",
+      "action": "CreateShareAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "SharingController.cs"
+    },
+    {
+      "path": "/rest/createShare.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SharingController",
+      "action": "CreateShareAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "SharingController.cs"
+    },
+    {
+      "path": "/rest/createUser",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "UserManagementController",
+      "action": "CreateUserAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "UserManagementController.cs"
+    },
+    {
+      "path": "/rest/createUser.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "UserManagementController",
+      "action": "CreateUserAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "UserManagementController.cs"
+    },
+    {
+      "path": "/rest/deleteBookmark",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BookmarksController",
+      "action": "DeleteBookmarkAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BookmarksController.cs"
+    },
+    {
+      "path": "/rest/deleteBookmark.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BookmarksController",
+      "action": "DeleteBookmarkAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BookmarksController.cs"
+    },
+    {
+      "path": "/rest/deleteInternetRadioStation",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "InternetRadioController",
+      "action": "DeleteInternetRadioStationAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "InternetRadioController.cs"
+    },
+    {
+      "path": "/rest/deleteInternetRadioStation.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "InternetRadioController",
+      "action": "DeleteInternetRadioStationAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "InternetRadioController.cs"
+    },
+    {
+      "path": "/rest/deletePlaylist",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PlaylistController",
+      "action": "DeletePlaylistAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "PlaylistController.cs"
+    },
+    {
+      "path": "/rest/deletePlaylist.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PlaylistController",
+      "action": "DeletePlaylistAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "PlaylistController.cs"
+    },
+    {
+      "path": "/rest/deletePodcastChannel",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PodcastController",
+      "action": "DeletePodcastChannelAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "PodcastController.cs"
+    },
+    {
+      "path": "/rest/deletePodcastChannel.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PodcastController",
+      "action": "DeletePodcastChannelAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "PodcastController.cs"
+    },
+    {
+      "path": "/rest/deletePodcastEpisode",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PodcastController",
+      "action": "DeletePodcastEpisodeAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "PodcastController.cs"
+    },
+    {
+      "path": "/rest/deletePodcastEpisode.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PodcastController",
+      "action": "DeletePodcastEpisodeAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "PodcastController.cs"
+    },
+    {
+      "path": "/rest/deleteShare",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SharingController",
+      "action": "DeleteShareAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "SharingController.cs"
+    },
+    {
+      "path": "/rest/deleteShare.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SharingController",
+      "action": "DeleteShareAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "SharingController.cs"
+    },
+    {
+      "path": "/rest/deleteUser",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "UserManagementController",
+      "action": "NotImplemented",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [
+        501
+      ],
+      "implementation": "not-implemented",
+      "source": "UserManagementController.cs"
+    },
+    {
+      "path": "/rest/deleteUser.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "UserManagementController",
+      "action": "NotImplemented",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [
+        501
+      ],
+      "implementation": "not-implemented",
+      "source": "UserManagementController.cs"
+    },
+    {
+      "path": "/rest/download",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaRetrievalController",
+      "action": "DownloadAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "MediaRetrievalController.cs"
+    },
+    {
+      "path": "/rest/download.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaRetrievalController",
+      "action": "DownloadAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "MediaRetrievalController.cs"
+    },
+    {
+      "path": "/rest/downloadPodcastEpisode",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PodcastController",
+      "action": "DownloadPodcastEpisodeAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "PodcastController.cs"
+    },
+    {
+      "path": "/rest/downloadPodcastEpisode.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PodcastController",
+      "action": "DownloadPodcastEpisodeAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "PodcastController.cs"
+    },
+    {
+      "path": "/rest/getAlbum",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingController",
+      "action": "GetAlbumAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BrowsingController.cs"
+    },
+    {
+      "path": "/rest/getAlbum.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingController",
+      "action": "GetAlbumAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BrowsingController.cs"
+    },
+    {
+      "path": "/rest/getAlbumInfo",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingController",
+      "action": "GetAlbumInfo",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BrowsingController.cs"
+    },
+    {
+      "path": "/rest/getAlbumInfo.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingController",
+      "action": "GetAlbumInfo",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BrowsingController.cs"
+    },
+    {
+      "path": "/rest/getAlbumInfo2",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingController",
+      "action": "GetAlbumInfo",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BrowsingController.cs"
+    },
+    {
+      "path": "/rest/getAlbumInfo2.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingController",
+      "action": "GetAlbumInfo",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BrowsingController.cs"
+    },
+    {
+      "path": "/rest/getAlbumList",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "AlbumSongController",
+      "action": "GetAlbumListAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "AlbumSongController.cs"
+    },
+    {
+      "path": "/rest/getAlbumList.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "AlbumSongController",
+      "action": "GetAlbumListAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "AlbumSongController.cs"
+    },
+    {
+      "path": "/rest/getAlbumList2",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "AlbumSongController",
+      "action": "GetAlbumList2Async",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "AlbumSongController.cs"
+    },
+    {
+      "path": "/rest/getAlbumList2.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "AlbumSongController",
+      "action": "GetAlbumList2Async",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "AlbumSongController.cs"
+    },
+    {
+      "path": "/rest/getArtist",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingController",
+      "action": "GetArtistAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BrowsingController.cs"
+    },
+    {
+      "path": "/rest/getArtist.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingController",
+      "action": "GetArtistAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BrowsingController.cs"
+    },
+    {
+      "path": "/rest/getArtistInfo",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingController",
+      "action": "GetArtistInfo",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BrowsingController.cs"
+    },
+    {
+      "path": "/rest/getArtistInfo.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingController",
+      "action": "GetArtistInfo",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BrowsingController.cs"
+    },
+    {
+      "path": "/rest/getArtistInfo2",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingController",
+      "action": "GetArtistInfo2",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BrowsingController.cs"
+    },
+    {
+      "path": "/rest/getArtistInfo2.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingController",
+      "action": "GetArtistInfo2",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BrowsingController.cs"
+    },
+    {
+      "path": "/rest/getArtists",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingController",
+      "action": "GetArtistsAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BrowsingController.cs"
+    },
+    {
+      "path": "/rest/getArtists.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingController",
+      "action": "GetArtistsAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BrowsingController.cs"
+    },
+    {
+      "path": "/rest/getAvatar",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaRetrievalController",
+      "action": "GetAvatarAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "MediaRetrievalController.cs"
+    },
+    {
+      "path": "/rest/getAvatar.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaRetrievalController",
+      "action": "GetAvatarAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "MediaRetrievalController.cs"
+    },
+    {
+      "path": "/rest/getBookmarks",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BookmarksController",
+      "action": "GetBookmarksAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BookmarksController.cs"
+    },
+    {
+      "path": "/rest/getBookmarks.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BookmarksController",
+      "action": "GetBookmarksAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BookmarksController.cs"
+    },
+    {
+      "path": "/rest/getCaptions",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaRetrievalController",
+      "action": "DeprecatedWontImplement",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [
+        410
+      ],
+      "implementation": "gone",
+      "source": "MediaRetrievalController.cs"
+    },
+    {
+      "path": "/rest/getCaptions.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaRetrievalController",
+      "action": "DeprecatedWontImplement",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [
+        410
+      ],
+      "implementation": "gone",
+      "source": "MediaRetrievalController.cs"
+    },
+    {
+      "path": "/rest/getChatMessages",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "ChatController",
+      "action": "DeprecatedWontImplement",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [
+        410
+      ],
+      "implementation": "gone",
+      "source": "ChatController.cs"
+    },
+    {
+      "path": "/rest/getChatMessages.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "ChatController",
+      "action": "DeprecatedWontImplement",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [
+        410
+      ],
+      "implementation": "gone",
+      "source": "ChatController.cs"
+    },
+    {
+      "path": "/rest/getCoverArt",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaRetrievalController",
+      "action": "GetCoverArtAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "MediaRetrievalController.cs"
+    },
+    {
+      "path": "/rest/getCoverArt.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaRetrievalController",
+      "action": "GetCoverArtAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "MediaRetrievalController.cs"
+    },
+    {
+      "path": "/rest/getGenres",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingController",
+      "action": "GetGenresAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BrowsingController.cs"
+    },
+    {
+      "path": "/rest/getGenres.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingController",
+      "action": "GetGenresAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BrowsingController.cs"
+    },
+    {
+      "path": "/rest/getIndexes",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingController",
+      "action": "GetIndexesAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BrowsingController.cs"
+    },
+    {
+      "path": "/rest/getIndexes.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingController",
+      "action": "GetIndexesAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BrowsingController.cs"
+    },
+    {
+      "path": "/rest/getInternetRadioStations",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "InternetRadioController",
+      "action": "GetInternetRadioStationsAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "InternetRadioController.cs"
+    },
+    {
+      "path": "/rest/getInternetRadioStations.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "InternetRadioController",
+      "action": "GetInternetRadioStationsAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "InternetRadioController.cs"
+    },
+    {
+      "path": "/rest/getLicense",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SystemController",
+      "action": "GetLicenseAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "SystemController.cs"
+    },
+    {
+      "path": "/rest/getLicense.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SystemController",
+      "action": "GetLicenseAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "SystemController.cs"
+    },
+    {
+      "path": "/rest/getLyrics",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaRetrievalController",
+      "action": "GetLyricsAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "MediaRetrievalController.cs"
+    },
+    {
+      "path": "/rest/getLyrics.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaRetrievalController",
+      "action": "GetLyricsAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "MediaRetrievalController.cs"
+    },
+    {
+      "path": "/rest/getLyricsBySongId",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaRetrievalController",
+      "action": "GetLyricsAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "MediaRetrievalController.cs"
+    },
+    {
+      "path": "/rest/getLyricsBySongId.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaRetrievalController",
+      "action": "GetLyricsAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "MediaRetrievalController.cs"
+    },
+    {
+      "path": "/rest/getMusicDirectory",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingController",
+      "action": "GetMusicDirectoryAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BrowsingController.cs"
+    },
+    {
+      "path": "/rest/getMusicDirectory.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingController",
+      "action": "GetMusicDirectoryAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BrowsingController.cs"
+    },
+    {
+      "path": "/rest/getMusicFolders",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingController",
+      "action": "GetMusicFolders",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BrowsingController.cs"
+    },
+    {
+      "path": "/rest/getMusicFolders.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingController",
+      "action": "GetMusicFolders",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BrowsingController.cs"
+    },
+    {
+      "path": "/rest/getNewestPodcasts",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PodcastController",
+      "action": "GetNewestPodcastsAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "PodcastController.cs"
+    },
+    {
+      "path": "/rest/getNewestPodcasts.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PodcastController",
+      "action": "GetNewestPodcastsAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "PodcastController.cs"
+    },
+    {
+      "path": "/rest/getNowPlaying",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "AlbumSongController",
+      "action": "GetNowPlayingAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "AlbumSongController.cs"
+    },
+    {
+      "path": "/rest/getNowPlaying.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "AlbumSongController",
+      "action": "GetNowPlayingAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "AlbumSongController.cs"
+    },
+    {
+      "path": "/rest/getOpenSubsonicExtensions",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SystemController",
+      "action": "GetOpenSubsonicExtensionsAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "SystemController.cs"
+    },
+    {
+      "path": "/rest/getOpenSubsonicExtensions.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SystemController",
+      "action": "GetOpenSubsonicExtensionsAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "SystemController.cs"
+    },
+    {
+      "path": "/rest/getPlayQueue",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BookmarksController",
+      "action": "GetPlayQueueAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BookmarksController.cs"
+    },
+    {
+      "path": "/rest/getPlayQueue.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BookmarksController",
+      "action": "GetPlayQueueAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BookmarksController.cs"
+    },
+    {
+      "path": "/rest/getPlaylist",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PlaylistController",
+      "action": "GetPlaylistAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "PlaylistController.cs"
+    },
+    {
+      "path": "/rest/getPlaylist.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PlaylistController",
+      "action": "GetPlaylistAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "PlaylistController.cs"
+    },
+    {
+      "path": "/rest/getPlaylists",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PlaylistController",
+      "action": "GetPlaylistsAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "PlaylistController.cs"
+    },
+    {
+      "path": "/rest/getPlaylists.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PlaylistController",
+      "action": "GetPlaylistsAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "PlaylistController.cs"
+    },
+    {
+      "path": "/rest/getPodcasts",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PodcastController",
+      "action": "GetPodcastsAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "PodcastController.cs"
+    },
+    {
+      "path": "/rest/getPodcasts.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PodcastController",
+      "action": "GetPodcastsAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "PodcastController.cs"
+    },
+    {
+      "path": "/rest/getRandomSongs",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "AlbumSongController",
+      "action": "GetRandomSongsAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "AlbumSongController.cs"
+    },
+    {
+      "path": "/rest/getRandomSongs.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "AlbumSongController",
+      "action": "GetRandomSongsAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "AlbumSongController.cs"
+    },
+    {
+      "path": "/rest/getShares",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SharingController",
+      "action": "GetSharesAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "SharingController.cs"
+    },
+    {
+      "path": "/rest/getShares.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SharingController",
+      "action": "GetSharesAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "SharingController.cs"
+    },
+    {
+      "path": "/rest/getSimilarSongs",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingController",
+      "action": "GetSimilarSongs",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BrowsingController.cs"
+    },
+    {
+      "path": "/rest/getSimilarSongs.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingController",
+      "action": "GetSimilarSongs",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BrowsingController.cs"
+    },
+    {
+      "path": "/rest/getSimilarSongs2",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingController",
+      "action": "GetSimilarSongs2",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BrowsingController.cs"
+    },
+    {
+      "path": "/rest/getSimilarSongs2.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingController",
+      "action": "GetSimilarSongs2",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BrowsingController.cs"
+    },
+    {
+      "path": "/rest/getSong",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingController",
+      "action": "GetSongAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BrowsingController.cs"
+    },
+    {
+      "path": "/rest/getSong.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingController",
+      "action": "GetSongAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BrowsingController.cs"
+    },
+    {
+      "path": "/rest/getSongsByGenre",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "AlbumSongController",
+      "action": "GetSongsByGenre",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "AlbumSongController.cs"
+    },
+    {
+      "path": "/rest/getSongsByGenre.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "AlbumSongController",
+      "action": "GetSongsByGenre",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "AlbumSongController.cs"
+    },
+    {
+      "path": "/rest/getStarred",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "AlbumSongController",
+      "action": "GetStarredAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "AlbumSongController.cs"
+    },
+    {
+      "path": "/rest/getStarred.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "AlbumSongController",
+      "action": "GetStarredAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "AlbumSongController.cs"
+    },
+    {
+      "path": "/rest/getStarred2",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "AlbumSongController",
+      "action": "GetStarred2Async",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "AlbumSongController.cs"
+    },
+    {
+      "path": "/rest/getStarred2.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "AlbumSongController",
+      "action": "GetStarred2Async",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "AlbumSongController.cs"
+    },
+    {
+      "path": "/rest/getTopSongs",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingController",
+      "action": "GetTopSongs",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BrowsingController.cs"
+    },
+    {
+      "path": "/rest/getTopSongs.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingController",
+      "action": "GetTopSongs",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BrowsingController.cs"
+    },
+    {
+      "path": "/rest/getUser",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "UserManagementController",
+      "action": "GetUserAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "UserManagementController.cs"
+    },
+    {
+      "path": "/rest/getUser.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "UserManagementController",
+      "action": "GetUserAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "UserManagementController.cs"
+    },
+    {
+      "path": "/rest/getUsers",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "UserManagementController",
+      "action": "NotImplemented",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [
+        501
+      ],
+      "implementation": "not-implemented",
+      "source": "UserManagementController.cs"
+    },
+    {
+      "path": "/rest/getUsers.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "UserManagementController",
+      "action": "NotImplemented",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [
+        501
+      ],
+      "implementation": "not-implemented",
+      "source": "UserManagementController.cs"
+    },
+    {
+      "path": "/rest/getVideoInfo",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingController",
+      "action": "DeprecatedWontImplement",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [
+        410
+      ],
+      "implementation": "gone",
+      "source": "BrowsingController.cs"
+    },
+    {
+      "path": "/rest/getVideoInfo.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingController",
+      "action": "DeprecatedWontImplement",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [
+        410
+      ],
+      "implementation": "gone",
+      "source": "BrowsingController.cs"
+    },
+    {
+      "path": "/rest/getVideos",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingController",
+      "action": "DeprecatedWontImplement",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [
+        410
+      ],
+      "implementation": "gone",
+      "source": "BrowsingController.cs"
+    },
+    {
+      "path": "/rest/getVideos.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingController",
+      "action": "DeprecatedWontImplement",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [
+        410
+      ],
+      "implementation": "gone",
+      "source": "BrowsingController.cs"
+    },
+    {
+      "path": "/rest/hls",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaRetrievalController",
+      "action": "DeprecatedWontImplement",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [
+        410
+      ],
+      "implementation": "gone",
+      "source": "MediaRetrievalController.cs"
+    },
+    {
+      "path": "/rest/hls.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaRetrievalController",
+      "action": "DeprecatedWontImplement",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [
+        410
+      ],
+      "implementation": "gone",
+      "source": "MediaRetrievalController.cs"
+    },
+    {
+      "path": "/rest/jukeboxControl",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "JukeboxController",
+      "action": "JukeboxControl",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [
+        410
+      ],
+      "implementation": "implemented-conditional",
+      "source": "JukeboxController.cs"
+    },
+    {
+      "path": "/rest/jukeboxControl.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "JukeboxController",
+      "action": "JukeboxControl",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [
+        410
+      ],
+      "implementation": "implemented-conditional",
+      "source": "JukeboxController.cs"
+    },
+    {
+      "path": "/rest/ping",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SystemController",
+      "action": "Ping",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "SystemController.cs"
+    },
+    {
+      "path": "/rest/ping.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SystemController",
+      "action": "Ping",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "SystemController.cs"
+    },
+    {
+      "path": "/rest/refreshPodcasts",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PodcastController",
+      "action": "RefreshPodcastsAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "PodcastController.cs"
+    },
+    {
+      "path": "/rest/refreshPodcasts.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PodcastController",
+      "action": "RefreshPodcastsAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "PodcastController.cs"
+    },
+    {
+      "path": "/rest/savePlayQueue",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BookmarksController",
+      "action": "SavePlayQueueAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BookmarksController.cs"
+    },
+    {
+      "path": "/rest/savePlayQueue.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BookmarksController",
+      "action": "SavePlayQueueAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "BookmarksController.cs"
+    },
+    {
+      "path": "/rest/scrobble",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaAnnotationController",
+      "action": "ScrobbleAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "MediaAnnotationController.cs"
+    },
+    {
+      "path": "/rest/scrobble.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaAnnotationController",
+      "action": "ScrobbleAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "MediaAnnotationController.cs"
+    },
+    {
+      "path": "/rest/search2",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SearchingController",
+      "action": "Search2Async",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "SearchingController.cs"
+    },
+    {
+      "path": "/rest/search2.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SearchingController",
+      "action": "Search2Async",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "SearchingController.cs"
+    },
+    {
+      "path": "/rest/search3",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SearchingController",
+      "action": "Search3Async",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "SearchingController.cs"
+    },
+    {
+      "path": "/rest/search3.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SearchingController",
+      "action": "Search3Async",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "SearchingController.cs"
+    },
+    {
+      "path": "/rest/searchForAlbumImage",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SearchEngineController",
+      "action": "SearchForAlbumImageAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "SearchEngineController.cs"
+    },
+    {
+      "path": "/rest/searchForAlbumImage.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SearchEngineController",
+      "action": "SearchForAlbumImageAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "SearchEngineController.cs"
+    },
+    {
+      "path": "/rest/searchForArtist",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SearchEngineController",
+      "action": "SearchForArtistAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "SearchEngineController.cs"
+    },
+    {
+      "path": "/rest/searchForArtist.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SearchEngineController",
+      "action": "SearchForArtistAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "SearchEngineController.cs"
+    },
+    {
+      "path": "/rest/searchForArtistImage",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SearchEngineController",
+      "action": "SearchForAlbumImageAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "SearchEngineController.cs"
+    },
+    {
+      "path": "/rest/searchForArtistImage.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SearchEngineController",
+      "action": "SearchForAlbumImageAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "SearchEngineController.cs"
+    },
+    {
+      "path": "/rest/setRating",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaAnnotationController",
+      "action": "SetRatingAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "MediaAnnotationController.cs"
+    },
+    {
+      "path": "/rest/setRating.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaAnnotationController",
+      "action": "SetRatingAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "MediaAnnotationController.cs"
+    },
+    {
+      "path": "/rest/star",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaAnnotationController",
+      "action": "StarAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "MediaAnnotationController.cs"
+    },
+    {
+      "path": "/rest/star.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaAnnotationController",
+      "action": "StarAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "MediaAnnotationController.cs"
+    },
+    {
+      "path": "/rest/stream",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaRetrievalController",
+      "action": "StreamAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "MediaRetrievalController.cs"
+    },
+    {
+      "path": "/rest/stream.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaRetrievalController",
+      "action": "StreamAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "MediaRetrievalController.cs"
+    },
+    {
+      "path": "/rest/streamPodcastEpisode",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PodcastController",
+      "action": "StreamPodcastEpisodeAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "PodcastController.cs"
+    },
+    {
+      "path": "/rest/streamPodcastEpisode.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PodcastController",
+      "action": "StreamPodcastEpisodeAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "PodcastController.cs"
+    },
+    {
+      "path": "/rest/unstar",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaAnnotationController",
+      "action": "UnstarAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "MediaAnnotationController.cs"
+    },
+    {
+      "path": "/rest/unstar.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaAnnotationController",
+      "action": "UnstarAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "MediaAnnotationController.cs"
+    },
+    {
+      "path": "/rest/updateInternetRadioStation",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "InternetRadioController",
+      "action": "UpdateInternetRadioStationAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "InternetRadioController.cs"
+    },
+    {
+      "path": "/rest/updateInternetRadioStation.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "InternetRadioController",
+      "action": "UpdateInternetRadioStationAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "InternetRadioController.cs"
+    },
+    {
+      "path": "/rest/updatePlaylist",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PlaylistController",
+      "action": "CreatePlaylistAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "PlaylistController.cs"
+    },
+    {
+      "path": "/rest/updatePlaylist.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PlaylistController",
+      "action": "CreatePlaylistAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "PlaylistController.cs"
+    },
+    {
+      "path": "/rest/updateShare",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SharingController",
+      "action": "UpdateShareAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "SharingController.cs"
+    },
+    {
+      "path": "/rest/updateShare.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SharingController",
+      "action": "UpdateShareAsync",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [],
+      "implementation": "implemented",
+      "source": "SharingController.cs"
+    },
+    {
+      "path": "/rest/updateUser",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "UserManagementController",
+      "action": "NotImplemented",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [
+        501
+      ],
+      "implementation": "not-implemented",
+      "source": "UserManagementController.cs"
+    },
+    {
+      "path": "/rest/updateUser.view",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "UserManagementController",
+      "action": "NotImplemented",
+      "auth": {
+        "required": false,
+        "note": "no ASP.NET authorization attribute; handler may authenticate internally"
+      },
+      "apiVersion": null,
+      "intentionalStatuses": [
+        501
+      ],
+      "implementation": "not-implemented",
+      "source": "UserManagementController.cs"
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+[
+  {
+    "name": "native-auth-login",
+    "surface": "melodee-api-v1",
+    "method": "POST",
+    "path": "/api/v1/auth/authenticate",
+    "auth": "none",
+    "json": {
+      "userName": "phase0-fixture",
+      "password": "Mel0deeR0cks!"
+    },
+    "allowFailure": false,
+    "normalize": {
+      "maskJsonPaths": [
+        "$.user.id",
+        "$.user.createdAt",
+        "$.user.updatedAt",
+        "$.user.thumbnailUrl",
+        "$.user.imageUrl",
+        "$.token",
+        "$.expiresAt",
+        "$.refreshToken",
+        "$.refreshTokenExpiresAt"
+      ]
+    },
+    "notes": "Fixture credentials for the disposable capture database only; never a real account. Tokens and timestamps are volatile and masked. thumbnailUrl/imageUrl embed the configured baseUrl and user id."
+  },
+  {
+    "name": "native-user-me",
+    "surface": "melodee-api-v1",
+    "method": "GET",
+    "path": "/api/v1/user/me",
+    "auth": "bearer",
+    "allowFailure": false,
+    "normalize": {
+      "maskJsonPaths": ["$.id", "$.createdAt", "$.updatedAt", "$.thumbnailUrl", "$.imageUrl"]
+    },
+    "notes": "Requires LEGACY_MELODEE_BEARER_TOKEN from a fresh native-auth-login capture."
+  }
+]

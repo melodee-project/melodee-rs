@@ -117,6 +117,7 @@ def capture_scenario(
     body_path.write_bytes(response_body)
     metadata = {
         "name": name,
+        "surface": scenario.get("surface"),
         "request": {
             "method": method,
             "url": redact_url(url),
@@ -129,6 +130,7 @@ def capture_scenario(
             "sha256": hashlib.sha256(response_body).hexdigest(),
             "bytes": len(response_body),
         },
+        "normalize": scenario.get("normalize", {}),
         "error": error_message,
         "allowFailure": allow_failure,
     }
@@ -164,7 +166,11 @@ def main() -> None:
     summary = {
         "capturedAtUtc": timestamp,
         "baseUrl": redact_url(args.base_url),
-        "scenarioFile": str(args.scenarios.relative_to(ROOT)),
+        "scenarioFile": str(
+            args.scenarios.resolve().relative_to(ROOT)
+            if args.scenarios.resolve().is_relative_to(ROOT)
+            else args.scenarios.resolve()
+        ),
         "results": results,
     }
     (output / "summary.json").write_text(
@@ -179,7 +185,13 @@ def main() -> None:
         print(f"{len(failures)} required captures failed", file=sys.stderr)
         raise SystemExit(1)
 
-    print(f"Capture written to {output.relative_to(ROOT)}")
+    resolved_output = output.resolve()
+    display = (
+        resolved_output.relative_to(ROOT)
+        if resolved_output.is_relative_to(ROOT)
+        else resolved_output
+    )
+    print(f"Capture written to {display}")
 
 
 if __name__ == "__main__":

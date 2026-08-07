@@ -1,37 +1,40 @@
 [
   {
     "name": "native-system-info",
+    "surface": "melodee-api-v1",
     "method": "GET",
     "path": "/api/v1/system/info",
     "auth": "none",
     "allowFailure": false
   },
   {
-    "name": "native-openapi-v1",
+    "name": "native-openapi-document",
+    "surface": "melodee-api-v1",
     "method": "GET",
-    "path": "/swagger/v1/swagger.json",
+    "path": "/openapi/v1.json",
     "auth": "none",
-    "allowFailure": true
-  },
-  {
-    "name": "native-openapi-melodee",
-    "method": "GET",
-    "path": "/swagger/melodee/swagger.json",
-    "auth": "none",
-    "allowFailure": true
+    "allowFailure": false,
+    "notes": "Published OpenAPI document. Known to be incomplete: party, native podcasts, and queue routes are missing (see route-inventory-summary.md)."
   },
   {
     "name": "opensubsonic-ping",
+    "surface": "opensubsonic",
     "method": "GET",
     "path": "/rest/ping.view?f=json&v=1.16.1&c=melodee-rs-phase0",
     "auth": "none",
-    "allowFailure": true
+    "allowFailure": false,
+    "notes": "Unauthenticated ping. Localhost requests bypass OpenSubsonic auth at the baseline."
   },
   {
     "name": "jellyfin-system-info-public",
+    "surface": "jellyfin",
     "method": "GET",
     "path": "/System/Info/Public",
     "auth": "none",
-    "allowFailure": true
+    "allowFailure": false,
+    "normalize": {
+      "maskJsonPaths": ["$.LocalAddress", "$.Version", "$.Id"]
+    },
+    "notes": "Root path is rewritten to /api/jf/System/Info/Public by JellyfinRoutingMiddleware. LocalAddress/Version/Id are environment- and build-volatile."
   }
 ]
