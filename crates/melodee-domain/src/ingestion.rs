@@ -58,7 +58,10 @@ impl IngestionState {
         if allowed {
             Ok(())
         } else {
-            Err(InvalidStateTransition { current: self, next })
+            Err(InvalidStateTransition {
+                current: self,
+                next,
+            })
         }
     }
 }

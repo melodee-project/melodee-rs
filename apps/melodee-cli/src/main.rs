@@ -3,7 +3,11 @@ use std::{env, process::Command};
 use clap::{Parser, Subcommand};
 
 #[derive(Debug, Parser)]
-#[command(name = "melodee", version, about = "Melodee Rust administrative CLI bootstrap")]
+#[command(
+    name = "melodee",
+    version,
+    about = "Melodee Rust administrative CLI bootstrap"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
