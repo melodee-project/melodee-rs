@@ -1,0 +1,6 @@
+# pnpm settings for the Melodee documentation site (pnpm 11 reads settings here,
+# not from package.json). esbuild and sharp ship platform binaries installed by
+# their build scripts; everything else runs without install scripts.
+allowBuilds:
+  esbuild: true
+  sharp: true

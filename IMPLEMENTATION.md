@@ -15,8 +15,26 @@ Each phase must produce:
 - automated tests and reproducible evidence;
 - updated requirement traceability;
 - relevant ADR decisions;
-- operational documentation; and
+- operational documentation;
+- user-facing documentation in `/docs`, delivered **alongside** implementation (see below); and
 - a clear exit decision.
+
+Documentation is not a final phase after feature implementation. Every implemented feature
+slice ships with its documentation work in the same change:
+
+```text
+Implement feature
+      │
+      ├── Tests
+      ├── Compatibility
+      ├── Documentation (/docs, same PR)
+      ├── Traceability
+      └── Release notes where appropriate
+```
+
+A phase exit review must not accept features whose public documentation is missing, incorrect,
+or deferred to a TODO. Behavior that is planned but not implemented is documented only as
+clearly-marked planned documentation, per `/docs/AGENTS.md`.
 
 Phases may overlap only when dependencies are stable and work is isolated. An agent must not begin a
 later phase merely because its code is interesting.
@@ -356,8 +374,10 @@ For every assigned issue:
 4. Write acceptance tests/fixtures.
 5. Implement the smallest safe slice.
 6. Run checks and record evidence.
-7. Update traceability and docs.
-8. Leave the tree in a buildable state.
+7. Evaluate documentation impact; update `/docs` in the same change when user-visible behavior
+   changed (read `/docs/AGENTS.md` first).
+8. Update traceability and internal docs.
+9. Leave the tree in a buildable state.
 
 ## 17. Release-gate evidence package
 

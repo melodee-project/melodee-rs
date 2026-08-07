@@ -52,7 +52,19 @@ A task is done when all applicable items below are satisfied.
 
 ## Documentation and evidence
 
+User-facing documentation is a completion gate, not a later phase. Public documentation lives
+in `/docs`; internal engineering documentation lives in `/design`.
+
+- [ ] Documentation impact has been evaluated.
+- [ ] All affected user-facing documentation under `/docs` has been created or updated in this
+      change. If documentation is genuinely unaffected, a short reason is recorded in the PR
+      ("Documentation impact: None — <reason>").
+- [ ] Configuration reference is updated for new/changed settings and defaults.
+- [ ] API documentation is updated for new/changed API behavior.
+- [ ] Upgrade/migration guidance is updated when behavior or storage changes require it.
+- [ ] Examples and commands in documentation are validated against the implementation.
+- [ ] Screenshots are updated when the UI they depict materially changed.
+- [ ] Release notes/changelog are updated when the change is release-relevant.
 - [ ] Requirement traceability is updated.
 - [ ] ADR status/references are updated.
-- [ ] User/operator docs are updated when behavior changes.
 - [ ] Evidence is reproducible from a clean checkout.

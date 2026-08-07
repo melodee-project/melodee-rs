@@ -28,7 +28,11 @@ template.
   dependent crate) are benign; errors are not.
 - **Doc validation is executable.** `python3 scripts/validate_repository.py` enforces required
   files, markdown link integrity, ADR status lines, and mockup PNG dimensions — doc edits can
-  fail CI. `python3 scripts/extract_requirements.py --check` fails when PRD.md requirement IDs
+  fail CI. It skips vendored/generated trees and the Starlight content routes under
+  `docs/src/content/`; docs-site links are enforced by the docs CI (`pnpm check:links` plus
+  build-time link validation in `.github/workflows/docs.yml`). Docs validation commands:
+  `cd docs && pnpm install --frozen-lockfile && pnpm check && pnpm check:links && pnpm build`.
+  `python3 scripts/extract_requirements.py --check` fails when PRD.md requirement IDs
   drift from `design/requirements/`; regenerate by running it without `--check` and committing
   the updated index.
 
@@ -126,10 +130,35 @@ the admin UI phase. A test that only proves the implementation calls itself is n
 
 Write an ADR when a decision is hard to reverse, spans multiple modules, is security/storage/
 compatibility/migration-sensitive, adds a runtime dependency or infrastructure service, or is
-likely to be debated later. Create it with `python3 scripts/new-adr.py "short title"`. Never
+likely to be debated later. Create it with `python3 scripts/new_adr.py "short title"`. Never
 edit history to hide an old decision — supersede it. Update requirement traceability whenever a
 requirement becomes implemented, tested, deferred, or superseded (and re-run
 `extract_requirements.py` when PRD requirement IDs change).
+
+## User-facing documentation is part of the product
+
+Public documentation lives in `/docs` (Astro Starlight, deployed to GitHub Pages). Internal
+engineering documentation lives in `/design`; compatibility evidence in `/compatibility`. Keep
+these boundaries strict.
+
+For every behavioral or user-visible change, evaluate documentation impact. If documentation is
+affected, update `/docs` **in the same change** — do not file a documentation TODO to claim a
+feature is complete. A feature is not complete merely because code and tests pass when its
+public documentation is missing or incorrect.
+
+Every implementation report must explicitly state:
+
+```text
+Documentation impact:
+- None — with reason
+or
+- Updated — list files
+```
+
+A bare `None` without a reason is not sufficient for user-visible work. Read
+`/docs/AGENTS.md` whenever you modify files under `/docs` or introduce user-visible behavior.
+Public documentation must only describe implemented behavior; planned capabilities are marked
+as planned.
 
 ## UI rules (future admin phase)
 
@@ -148,9 +177,11 @@ sorting/filtering/paging is server-side.
 4. Add or update tests first when practical.
 5. Implement the smallest coherent change.
 6. Run `./scripts/check.sh` (or the documented smallest equivalent).
-7. Update documentation and traceability.
+7. Evaluate user-facing documentation impact and update `/docs` in the same change when
+   affected; update internal documentation and traceability.
 8. Report: files changed; requirements satisfied; ADRs applied or proposed; tests run and
-   results; compatibility impact; data/migration impact; remaining risks.
+   results; compatibility impact; data/migration impact; documentation impact (explicit);
+   remaining risks.
 
 ## Definition of done
 

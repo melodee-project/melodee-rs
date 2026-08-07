@@ -23,6 +23,15 @@ remain fully FOSS.
 | Fingerprint | Chromaprint/fpcalc | 1.6.1 at PRD audit | MIT library | Proposed ADR-0108 |
 | Admin UI | React + Carbon | Carbon v11 / `@carbon/react` 1.x | MIT + Apache-2.0 | Proposed ADR-0109 |
 | Dependency audit | cargo-deny | 0.20.2 at audit | MIT/Apache-2.0 | Required tooling |
+| Documentation site | Astro + Starlight | astro 7.2.0, @astrojs/starlight 0.41.7 | MIT | Proposed ADR-0112 |
+| Docs validation | @astrojs/check, starlight-links-validator | 0.9.10, 0.25.2 | MIT | Proposed ADR-0112 |
+| Docs image pipeline | sharp | 0.35.3 | Apache-2.0 | Proposed ADR-0112 |
+| Docs toolchain | Node.js + pnpm + TypeScript | Node 22.12+, pnpm 11.20.0, TS 6.0.3 | MIT / Apache-2.0 | Proposed ADR-0112 |
+| Docs search | Pagefind (via Starlight) | bundled by Starlight | MIT | Proposed ADR-0112 |
+
+Documentation-site versions were verified against the npm registry on 2026-08-07 (all packages
+active, current stable line, licenses as listed, no paid/open-core requirement for any feature
+Melodee uses). The committed `docs/pnpm-lock.yaml` is the authoritative lock.
 
 ## Dependency approval checklist
 

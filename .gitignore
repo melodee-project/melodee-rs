@@ -34,7 +34,10 @@ __pycache__/
 *.py[cod]
 .venv/
 
-# Frontend (future)
+# Frontend (docs site + future admin UI)
+docs/node_modules/
+docs/dist/
+docs/.astro/
 admin-ui/node_modules/
 admin-ui/dist/
 admin-ui/coverage/

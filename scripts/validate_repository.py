@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import os
 import re
 import struct
 import sys
@@ -48,8 +49,30 @@ def png_size(path: Path) -> tuple[int, int]:
     return struct.unpack(">II", header[16:24])
 
 
+# Vendored/generated trees are not repository documentation and are never
+# committed; scanning them only reports upstream README issues.
+SKIP_DIRS = {"node_modules", "dist", ".astro", ".git", "target", "__pycache__", ".venv"}
+
+# The Starlight content tree uses route-style internal links (e.g.
+# `./quick-start/`) that intentionally do not resolve to files on disk. Those
+# links are validated by the docs toolchain instead (`pnpm check:links`,
+# starlight-links-validator, and the Astro build in the docs CI workflow).
+ROUTE_LINK_TREES = {ROOT / "docs" / "src" / "content"}
+
+
+def iter_markdown():
+    for dirpath, dirnames, filenames in os.walk(ROOT):
+        dirnames[:] = [name for name in dirnames if name not in SKIP_DIRS]
+        current = Path(dirpath)
+        if any(current == tree or tree in current.parents for tree in ROUTE_LINK_TREES):
+            continue
+        for filename in filenames:
+            if filename.endswith(".md"):
+                yield current / filename
+
+
 def validate_links(errors: list[str]) -> None:
-    for markdown in ROOT.rglob("*.md"):
+    for markdown in iter_markdown():
         text = markdown.read_text(encoding="utf-8")
         for raw in LINK_RE.findall(text):
             target = raw.split("#", 1)[0].strip().strip("<>")

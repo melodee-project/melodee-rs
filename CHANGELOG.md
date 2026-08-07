@@ -14,3 +14,5 @@ by an accepted ADR and release gate.
 - Minimal Rust server, CLI, and domain workspace.
 - Phase 0 compatibility-capture and repository-validation scaffolding.
 - Canonical Carbon admin UI reference mockups.
+- Astro Starlight public documentation platform under `/docs`, with GitHub Pages deployment,
+  PR validation, and documentation-impact rules in the Definition of Done.

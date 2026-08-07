@@ -1,0 +1,30 @@
+{
+  "name": "melodee-docs",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Melodee public user documentation (Astro Starlight)",
+  "type": "module",
+  "packageManager": "pnpm@11.20.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "start": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "astro check",
+    "check:links": "node scripts/check-relative-links.mjs",
+    "sync": "astro sync"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "0.41.7",
+    "astro": "7.2.0",
+    "sharp": "0.35.3",
+    "starlight-links-validator": "0.25.2"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.10",
+    "typescript": "6.0.3"
+  }
+}

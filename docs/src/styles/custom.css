@@ -1,0 +1,19 @@
+/*
+ * Melodee brand tokens for the Starlight documentation site.
+ *
+ * Customization is intentionally restrained: Starlight's design system and
+ * accessibility behavior stay authoritative, and only accent colors are
+ * adapted to the Melodee identity for light and dark appearance.
+ */
+
+:root {
+  --sl-color-accent-low: #134e4a;
+  --sl-color-accent: #0f766e;
+  --sl-color-accent-high: #99f6e4;
+}
+
+:root[data-theme='light'] {
+  --sl-color-accent-low: #ccfbf1;
+  --sl-color-accent: #0d9488;
+  --sl-color-accent-high: #134e4a;
+}

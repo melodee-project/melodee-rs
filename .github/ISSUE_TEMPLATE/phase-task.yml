@@ -33,6 +33,17 @@ body:
     validations:
       required: true
   - type: textarea
+    id: documentation
+    attributes:
+      label: Documentation acceptance criteria
+      description: >-
+        User-facing documentation impact of this task: which /docs pages must be created or
+        updated (installation, configuration, API, troubleshooting, feature pages), or why
+        there is no user-visible documentation impact. Documentation ships in the same change
+        as the implementation.
+    validations:
+      required: true
+  - type: textarea
     id: compatibility
     attributes:
       label: Compatibility and migration impact
