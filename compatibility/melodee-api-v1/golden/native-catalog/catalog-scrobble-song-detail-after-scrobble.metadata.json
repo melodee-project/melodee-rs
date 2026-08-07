@@ -1,0 +1,35 @@
+{
+  "name": "catalog-scrobble/song-detail-after-scrobble",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/api/v1/songs/d493e627-df71-50ed-93fb-c29b9f6ec96a",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "catalog-scrobble-song-detail-after-scrobble.json",
+    "sha256": "9e76114ca1eca7d6c52010b98ece25f7dc6bc861501ae9aacb04213f49a6d1d0",
+    "bytes": 1912
+  },
+  "normalize": {
+    "maskBaseUrl": true,
+    "maskUrlAuthTokenPaths": [
+      "$.streamUrl"
+    ],
+    "maskJsonPaths": [
+      "$.lastPlayedAt"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

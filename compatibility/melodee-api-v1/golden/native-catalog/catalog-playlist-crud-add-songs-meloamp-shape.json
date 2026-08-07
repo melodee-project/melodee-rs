@@ -1,0 +1,14 @@
+{
+  "type": "https://tools.ietf.org/html/rfc9110#section-15.5.1",
+  "title": "One or more validation errors occurred.",
+  "status": 400,
+  "errors": {
+    "$": [
+      "The JSON value could not be converted to System.Guid[]. Path: $ | LineNumber: 0 | BytePositionInLine: 1."
+    ],
+    "songIds": [
+      "The songIds field is required."
+    ]
+  },
+  "traceId": "<volatile>"
+}

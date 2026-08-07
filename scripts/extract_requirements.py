@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PRD = ROOT / "PRD.md"
 JSON_OUT = ROOT / "design" / "requirements" / "requirements.json"
 MARKDOWN_OUT = ROOT / "design" / "requirements" / "REQUIREMENTS-INDEX.md"
+OVERRIDES = ROOT / "design" / "requirements" / "status-overrides.json"
 
 PHASE_BY_PREFIX = {
     "PRD-PRINCIPLE": "all",
@@ -68,13 +69,24 @@ def determine_phase(requirement_id: str) -> str:
     return "unmapped"
 
 
+def load_overrides() -> dict[str, dict[str, object]]:
+    """Status/evidence overrides merged into the generated index. Kept in a
+    separate file because the index itself is generated and must never be
+    edited manually."""
+    if not OVERRIDES.exists():
+        return {}
+    return json.loads(OVERRIDES.read_text(encoding="utf-8"))
+
+
 def extract() -> list[dict[str, object]]:
+    overrides = load_overrides()
     requirements = []
     for line_number, line in enumerate(PRD.read_text(encoding="utf-8").splitlines(), start=1):
         match = HEADING_RE.match(line)
         if not match:
             continue
         requirement_id, title = match.groups()
+        override = overrides.get(requirement_id, {})
         requirements.append(
             {
                 "id": requirement_id,
@@ -82,9 +94,9 @@ def extract() -> list[dict[str, object]]:
                 "phase": determine_phase(requirement_id),
                 "source": "PRD.md",
                 "line": line_number,
-                "status": "planned",
-                "implementation": [],
-                "tests": [],
+                "status": override.get("status", "planned"),
+                "implementation": override.get("implementation", []),
+                "tests": override.get("tests", []),
             }
         )
 
@@ -107,8 +119,10 @@ def render_markdown(requirements: list[dict[str, object]]) -> str:
         "|---|---|---:|---|---|---|",
     ]
     for item in requirements:
+        implementation = "; ".join(str(x) for x in item["implementation"]) or "—"
+        tests = "; ".join(str(x) for x in item["tests"]) or "—"
         lines.append(
-            f"| `{item['id']}` | {item['title']} | {item['phase']} | {item['status']} | — | — |"
+            f"| `{item['id']}` | {item['title']} | {item['phase']} | {item['status']} | {implementation} | {tests} |"
         )
     return "\n".join(lines) + "\n"
 

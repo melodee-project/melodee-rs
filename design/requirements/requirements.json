@@ -905,9 +905,16 @@
     "phase": "7",
     "source": "PRD.md",
     "line": 1187,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "in-progress",
+    "implementation": [
+      "compatibility/melodee-api-v1/contracts/ (OpenAPI snapshot, route manifest, client usage, unified inventory)",
+      "compatibility/melodee-api-v1/golden/ (native-auth, native-catalog, native-stream)",
+      "design/evidence/phase-0/native-api-v1-capture.md",
+      "design/evidence/phase-0/native-client-route-inventory.md"
+    ],
+    "tests": [
+      "tests/python/test_native_v1_capture.py"
+    ]
   },
   {
     "id": "PRD-API-M1-002",
@@ -935,9 +942,14 @@
     "phase": "7",
     "source": "PRD.md",
     "line": 1206,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "in-progress",
+    "implementation": [
+      "compatibility/fixtures/catalog-v1.json (deterministic fixture UUID namespace)",
+      "compatibility/melodee-api-v1/golden/ (stable public IDs across reseeds)"
+    ],
+    "tests": [
+      "tests/python/test_native_v1_capture.py (GoldenFixtureTests)"
+    ]
   },
   {
     "id": "PRD-API-M1-005",
@@ -945,9 +957,14 @@
     "phase": "7",
     "source": "PRD.md",
     "line": 1210,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "in-progress",
+    "implementation": [
+      "compatibility/scenarios/native-*.json (method/path, params, casing, null-vs-omitted, status codes, envelopes, pagination, ordering, URLs, headers captured for the critical path)"
+    ],
+    "tests": [
+      "tests/python/test_native_v1_capture.py",
+      "scripts/compare_captures.py"
+    ]
   },
   {
     "id": "PRD-API-M1-006",
@@ -955,9 +972,13 @@
     "phase": "7",
     "source": "PRD.md",
     "line": 1226,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "in-progress",
+    "implementation": [
+      "compatibility/melodee-api-v1/contracts/route-inventory.json (all 202 routes classified; 35 excluded-from-build)"
+    ],
+    "tests": [
+      "tests/python/test_native_v1_capture.py (RouteInventoryTests)"
+    ]
   },
   {
     "id": "PRD-API-M1-007",
@@ -975,9 +996,14 @@
     "phase": "7,8",
     "source": "PRD.md",
     "line": 1263,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "captured",
+    "implementation": [
+      "compatibility/melodee-api-v1/golden/native-stream/ (URL shape, HMAC semantics, 200/206/400/401/302 matrix)",
+      "design/evidence/phase-0/native-api-v1-capture.md section 4"
+    ],
+    "tests": [
+      "tests/python/test_native_v1_capture.py (test_stream_range_semantics_evidence)"
+    ]
   },
   {
     "id": "PRD-STREAM-002",
@@ -985,9 +1011,13 @@
     "phase": "7,8",
     "source": "PRD.md",
     "line": 1267,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "in-progress",
+    "implementation": [
+      "compatibility/melodee-api-v1/golden/native-stream/ (direct play, ranges, content type/length)"
+    ],
+    "tests": [
+      "tests/python/test_native_v1_capture.py"
+    ]
   },
   {
     "id": "PRD-STREAM-003",
@@ -995,8 +1025,10 @@
     "phase": "7,8",
     "source": "PRD.md",
     "line": 1279,
-    "status": "planned",
-    "implementation": [],
+    "status": "in-progress",
+    "implementation": [
+      "design/evidence/phase-0/native-client-route-inventory.md (Android/Android Auto route inventory and gate prerequisites)"
+    ],
     "tests": []
   },
   {

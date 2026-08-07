@@ -1,0 +1,72 @@
+{
+  "meta": {
+    "totalCount": 2,
+    "pageSize": 100,
+    "currentPage": 1,
+    "totalPages": 1,
+    "hasPrevious": false,
+    "hasNext": false
+  },
+  "data": [
+    {
+      "id": "c359d116-92ab-5380-a6dd-e97b65cce905",
+      "artist": {
+        "id": "4f6a5272-9529-5a24-92a0-a3ede6a73d59",
+        "thumbnailUrl": "{melodee-origin}/images/artist_4f6a5272-9529-5a24-92a0-a3ede6a73d59/80",
+        "imageUrl": "{melodee-origin}/images/artist_4f6a5272-9529-5a24-92a0-a3ede6a73d59/1024",
+        "name": "The Harbour Lights",
+        "userStarred": false,
+        "userRating": 0,
+        "albumCount": 0,
+        "songCount": 0,
+        "createdAt": "9999-01-01 00:00:00",
+        "updatedAt": "---",
+        "biography": null,
+        "genres": null
+      },
+      "thumbnailUrl": "{melodee-origin}/images/album_c359d116-92ab-5380-a6dd-e97b65cce905/80",
+      "imageUrl": "{melodee-origin}/images/album_c359d116-92ab-5380-a6dd-e97b65cce905/1024",
+      "name": "Beacon",
+      "releaseYear": 2023,
+      "userStarred": false,
+      "userRating": 0,
+      "songCount": 1,
+      "durationMs": 2000,
+      "durationFormatted": "0:00:02",
+      "createdAt": "2026-01-11 00:00:00",
+      "updatedAt": "---",
+      "description": null,
+      "genre": null
+    },
+    {
+      "id": "009e8915-175d-5689-943e-7b5e8cd10a62",
+      "artist": {
+        "id": "4f6a5272-9529-5a24-92a0-a3ede6a73d59",
+        "thumbnailUrl": "{melodee-origin}/images/artist_4f6a5272-9529-5a24-92a0-a3ede6a73d59/80",
+        "imageUrl": "{melodee-origin}/images/artist_4f6a5272-9529-5a24-92a0-a3ede6a73d59/1024",
+        "name": "The Harbour Lights",
+        "userStarred": false,
+        "userRating": 0,
+        "albumCount": 0,
+        "songCount": 0,
+        "createdAt": "9999-01-01 00:00:00",
+        "updatedAt": "---",
+        "biography": null,
+        "genres": null
+      },
+      "thumbnailUrl": "{melodee-origin}/images/album_009e8915-175d-5689-943e-7b5e8cd10a62/80",
+      "imageUrl": "{melodee-origin}/images/album_009e8915-175d-5689-943e-7b5e8cd10a62/1024",
+      "name": "Dialogues",
+      "releaseYear": 2024,
+      "userStarred": false,
+      "userRating": 0,
+      "songCount": 1,
+      "durationMs": 2900,
+      "durationFormatted": "0:00:02",
+      "createdAt": "2026-01-12 00:00:00",
+      "updatedAt": "---",
+      "description": null,
+      "genre": null
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "code": "refresh_token_invalid",
+  "message": "Refresh token is invalid.",
+  "correlationId": "<volatile>"
+}

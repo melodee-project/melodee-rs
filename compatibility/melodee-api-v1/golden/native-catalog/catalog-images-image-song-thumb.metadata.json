@@ -1,0 +1,33 @@
+{
+  "name": "catalog-images/image-song-thumb",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/images/song_2b8eab4b-235d-5892-99f8-c0f5f54e8ab4/80",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1"
+    },
+    "jsonTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-length": "2497",
+      "content-type": "image/jpeg",
+      "etag": "72e4aa8a684d29dd94f12882b84a7c26a44b08c36c7cf3641068eee55fed8600"
+    },
+    "bodyFile": "catalog-images-image-song-thumb.bin",
+    "sha256": "6b5ad81bfc8a694b98a47dc8587eeeadb89d93f866850d06f26e64daa95897e2",
+    "bytes": 2497
+  },
+  "normalize": {
+    "dropHeaders": [
+      "etag",
+      "last-modified"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

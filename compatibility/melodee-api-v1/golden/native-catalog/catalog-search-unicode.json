@@ -1,0 +1,21 @@
+{
+  "meta": {
+    "totalCount": 0,
+    "pageSize": 10,
+    "currentPage": 1,
+    "totalPages": 0,
+    "hasPrevious": false,
+    "hasNext": false
+  },
+  "data": {
+    "totalCount": 0,
+    "artists": [],
+    "totalArtists": 0,
+    "albums": [],
+    "totalAlbums": 0,
+    "songs": [],
+    "totalSongs": 0,
+    "playlists": [],
+    "totalPlaylists": 0
+  }
+}

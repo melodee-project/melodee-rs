@@ -1,0 +1,32 @@
+{
+  "name": "catalog/album-songs-multidisc",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/api/v1/albums/645680d3-704a-5b83-a734-42a3fa88c3ed/songs",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "catalog-album-songs-multidisc.json",
+    "sha256": "3952f5106b1cbb018f6f452ac622243fa4ea2ba5cc48b8e52022a6e32f01d143",
+    "bytes": 8875
+  },
+  "normalize": {
+    "maskBaseUrl": true,
+    "maskUrlAuthTokenPaths": [
+      "$.data[*].streamUrl"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

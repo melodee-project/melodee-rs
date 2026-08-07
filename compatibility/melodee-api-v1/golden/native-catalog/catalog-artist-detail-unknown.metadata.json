@@ -1,0 +1,31 @@
+{
+  "name": "catalog/artist-detail-unknown",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/api/v1/artists/00000000-0000-0000-0000-000000000000",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null
+  },
+  "response": {
+    "status": 500,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "catalog-artist-detail-unknown.json",
+    "sha256": "d76f8a079083bbf8f0d93cef67bace555614b7a873888bd203ab8c831e2a05b6",
+    "bytes": 109
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.correlationId"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

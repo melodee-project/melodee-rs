@@ -1,0 +1,29 @@
+{
+  "name": "catalog/album-detail-compilation",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/api/v1/albums/97d569aa-9133-5351-b8c5-097cf57f96f9",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "catalog-album-detail-compilation.json",
+    "sha256": "99d0dcac60d960c7d7c3a7131b582b9112bc65d9863d5ec0d0b65c05eeba5bea",
+    "bytes": 987
+  },
+  "normalize": {
+    "maskBaseUrl": true
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

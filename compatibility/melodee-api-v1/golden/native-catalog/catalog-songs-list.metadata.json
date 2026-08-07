@@ -1,0 +1,32 @@
+{
+  "name": "catalog/songs-list",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/api/v1/songs?page=1&pageSize=5&orderBy=Title&orderDirection=asc",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "catalog-songs-list.json",
+    "sha256": "9ffe214681db96690aeaf814cae042badc954769fecd7464562a9851bae1ac51",
+    "bytes": 11045
+  },
+  "normalize": {
+    "maskBaseUrl": true,
+    "maskUrlAuthTokenPaths": [
+      "$.data[*].streamUrl"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

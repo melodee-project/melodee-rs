@@ -1,0 +1,32 @@
+{
+  "name": "catalog-playlist-crud/detail-after-delete",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/api/v1/playlists/<captured:playlistId>",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "catalog-playlist-crud-detail-after-delete.json",
+    "sha256": "30f439edd4bef6254ffeb804e149750809c6416a27ab768c48b4c0a481d629f0",
+    "bytes": 94
+  },
+  "normalize": {
+    "maskBaseUrl": true,
+    "maskJsonPaths": [
+      "$.correlationId"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

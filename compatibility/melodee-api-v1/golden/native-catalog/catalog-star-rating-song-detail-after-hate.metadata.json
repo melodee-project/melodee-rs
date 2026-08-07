@@ -1,0 +1,32 @@
+{
+  "name": "catalog-star-rating/song-detail-after-hate",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/api/v1/songs/e43ff3e7-3e4a-5168-9c31-cf2676eb6cb0",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "catalog-star-rating-song-detail-after-hate.json",
+    "sha256": "bbfa6558b7fc0a9929b2723377f5d90bdd85c41e2b031286c0ca13e8608f6db5",
+    "bytes": 1912
+  },
+  "normalize": {
+    "maskBaseUrl": true,
+    "maskUrlAuthTokenPaths": [
+      "$.streamUrl"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

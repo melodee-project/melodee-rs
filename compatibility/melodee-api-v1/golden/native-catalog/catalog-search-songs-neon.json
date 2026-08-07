@@ -1,0 +1,73 @@
+{
+  "meta": {
+    "totalCount": 1,
+    "pageSize": 10,
+    "currentPage": 1,
+    "totalPages": 1,
+    "hasPrevious": false,
+    "hasNext": false
+  },
+  "data": [
+    {
+      "id": "b3297a8f-5e2b-5ade-98ea-f899d38059e0",
+      "artist": {
+        "id": "8bf87c33-f669-5a85-a315-654f79fb895b",
+        "thumbnailUrl": "{melodee-origin}/images/artist_8bf87c33-f669-5a85-a315-654f79fb895b/80",
+        "imageUrl": "{melodee-origin}/images/artist_8bf87c33-f669-5a85-a315-654f79fb895b/1024",
+        "name": "Sæglópur 日本",
+        "userStarred": false,
+        "userRating": 0,
+        "albumCount": 0,
+        "songCount": 0,
+        "createdAt": "",
+        "updatedAt": "",
+        "biography": null,
+        "genres": null
+      },
+      "album": {
+        "id": "7bbfff2a-36f2-5739-9a7a-e5b0d34af3b0",
+        "artist": {
+          "id": "00000000-0000-0000-0000-000000000000",
+          "thumbnailUrl": "",
+          "imageUrl": "",
+          "name": "",
+          "userStarred": false,
+          "userRating": 0,
+          "albumCount": 0,
+          "songCount": 0,
+          "createdAt": "",
+          "updatedAt": "",
+          "biography": null,
+          "genres": null
+        },
+        "thumbnailUrl": "{melodee-origin}/images/album_7bbfff2a-36f2-5739-9a7a-e5b0d34af3b0/80",
+        "imageUrl": "{melodee-origin}/images/album_7bbfff2a-36f2-5739-9a7a-e5b0d34af3b0/1024",
+        "name": "Ünïcode Rëlease 東京",
+        "releaseYear": 2024,
+        "userStarred": false,
+        "userRating": 0,
+        "songCount": 0,
+        "durationMs": 0,
+        "durationFormatted": "",
+        "createdAt": "",
+        "updatedAt": "",
+        "description": null,
+        "genre": null
+      },
+      "streamUrl": "{melodee-origin}/song/stream/b3297a8f-5e2b-5ade-98ea-f899d38059e0/f78448cc-82ec-5864-877c-6c6163b00065/<hmac-auth-token>",
+      "thumbnailUrl": "{melodee-origin}/images/song_b3297a8f-5e2b-5ade-98ea-f899d38059e0/80",
+      "imageUrl": "{melodee-origin}/images/song_b3297a8f-5e2b-5ade-98ea-f899d38059e0/1024",
+      "title": "Neon 東京",
+      "durationMs": 2600,
+      "durationFormatted": "0:00:02",
+      "userStarred": false,
+      "userRating": 0,
+      "songNumber": 1,
+      "bitrate": 320,
+      "playCount": 0,
+      "createdAt": "2026-08-07 00:00:00",
+      "updatedAt": "---",
+      "genre": null
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "genres": [
+    {
+      "id": "55Kw5aKD6Z-z5qW9",
+      "name": "環境音楽",
+      "songCount": 2,
+      "albumCount": 1
+    },
+    {
+      "id": "Um9jaw",
+      "name": "Rock",
+      "songCount": 2,
+      "albumCount": 1
+    },
+    {
+      "id": "UG9zdC1Sb2Nr",
+      "name": "Post-Rock",
+      "songCount": 2,
+      "albumCount": 1
+    },
+    {
+      "id": "UG9w",
+      "name": "Pop",
+      "songCount": 2,
+      "albumCount": 2
+    },
+    {
+      "id": "SmF6eg",
+      "name": "Jazz",
+      "songCount": 3,
+      "albumCount": 1
+    },
+    {
+      "id": "Rm9saw",
+      "name": "Folk",
+      "songCount": 3,
+      "albumCount": 3
+    },
+    {
+      "id": "RWxlY3Ryb25pYw",
+      "name": "Electronic",
+      "songCount": 6,
+      "albumCount": 2
+    },
+    {
+      "id": "Q2xhc3NpY2Fs",
+      "name": "Classical",
+      "songCount": 4,
+      "albumCount": 1
+    },
+    {
+      "id": "QW1iaWVudA",
+      "name": "Ambient",
+      "songCount": 3,
+      "albumCount": 1
+    }
+  ],
+  "totalCount": 9,
+  "page": 1,
+  "limit": 50
+}

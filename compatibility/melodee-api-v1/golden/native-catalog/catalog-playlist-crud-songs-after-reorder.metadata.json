@@ -1,0 +1,32 @@
+{
+  "name": "catalog-playlist-crud/songs-after-reorder",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/api/v1/playlists/<captured:playlistId>/songs?page=1&pageSize=50",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "catalog-playlist-crud-songs-after-reorder.json",
+    "sha256": "3085415c7a90035f87b005eacdec82c584fb360f50e0ed1bbbfb5fccf8bc1a09",
+    "bytes": 4488
+  },
+  "normalize": {
+    "maskBaseUrl": true,
+    "maskUrlAuthTokenPaths": [
+      "$.data[*].streamUrl"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

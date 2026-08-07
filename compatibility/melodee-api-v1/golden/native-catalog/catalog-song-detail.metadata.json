@@ -1,0 +1,47 @@
+{
+  "name": "catalog/song-detail",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/api/v1/songs/ea26fc59-a545-51c2-94c4-702e1f97b80a",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "catalog-song-detail.json",
+    "sha256": "020b12627dbbecbf922b593c7da6a03eba0f1186aa01019c1f8a717609837480",
+    "bytes": 1918
+  },
+  "normalize": {
+    "maskBaseUrl": true,
+    "maskUrlAuthTokenPaths": [
+      "$.streamUrl"
+    ],
+    "structureChecks": {
+      "$.streamUrl": "streamAuthToken"
+    }
+  },
+  "structureChecks": {
+    "$.streamUrl": {
+      "type": "streamAuthToken",
+      "valid": true,
+      "binding": "127.0.0.1",
+      "expiresAt": "2026-08-14T21:23:33Z",
+      "expiresInFuture": true,
+      "expiresInDays": 7,
+      "hmacShape": "base64-sha256",
+      "userMatchesUrl": true,
+      "songMatchesUrl": true
+    }
+  },
+  "error": null,
+  "allowFailure": false
+}

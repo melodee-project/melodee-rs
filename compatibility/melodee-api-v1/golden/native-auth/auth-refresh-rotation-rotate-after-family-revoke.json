@@ -1,0 +1,5 @@
+{
+  "code": "refresh_token_replayed",
+  "message": "Refresh token has been revoked. Please re-authenticate.",
+  "correlationId": "<volatile>"
+}

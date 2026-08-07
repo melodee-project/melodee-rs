@@ -1,0 +1,41 @@
+{
+  "name": "catalog-images/login",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "POST",
+    "url": "{melodee-origin}/api/v1/auth/authenticate",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Content-Type": "application/json"
+    },
+    "jsonTemplate": {
+      "userName": "phase0-fixture",
+      "password": "<redacted>"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "catalog-images-login.json",
+    "sha256": "30ac3689870022104065e16355c22801312db403808b3e8e5cee6172efd1064d",
+    "bytes": 1041
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.token",
+      "$.expiresAt",
+      "$.refreshToken",
+      "$.refreshTokenExpiresAt",
+      "$.user.createdAt",
+      "$.user.updatedAt",
+      "$.serverVersion"
+    ],
+    "maskBaseUrl": true
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

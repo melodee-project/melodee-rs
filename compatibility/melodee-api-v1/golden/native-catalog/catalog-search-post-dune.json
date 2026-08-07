@@ -1,0 +1,50 @@
+{
+  "meta": {
+    "totalCount": 2,
+    "pageSize": 10,
+    "currentPage": 1,
+    "totalPages": 1,
+    "hasPrevious": false,
+    "hasNext": false
+  },
+  "data": {
+    "totalCount": 2,
+    "artists": [
+      {
+        "id": "5bf951d5-7afe-5c50-8941-145b7095902b",
+        "thumbnailUrl": "{melodee-origin}/images/artist_5bf951d5-7afe-5c50-8941-145b7095902b/80",
+        "imageUrl": "{melodee-origin}/images/artist_5bf951d5-7afe-5c50-8941-145b7095902b/1024",
+        "name": "Dune",
+        "userStarred": false,
+        "userRating": 0,
+        "albumCount": 1,
+        "songCount": 2,
+        "createdAt": "2026-01-03 00:00:00",
+        "updatedAt": "---",
+        "biography": null,
+        "genres": null
+      },
+      {
+        "id": "503f045f-1bd6-5ea7-9e32-14632344680c",
+        "thumbnailUrl": "{melodee-origin}/images/artist_503f045f-1bd6-5ea7-9e32-14632344680c/80",
+        "imageUrl": "{melodee-origin}/images/artist_503f045f-1bd6-5ea7-9e32-14632344680c/1024",
+        "name": "Düné",
+        "userStarred": false,
+        "userRating": 0,
+        "albumCount": 1,
+        "songCount": 1,
+        "createdAt": "2026-01-05 00:00:00",
+        "updatedAt": "---",
+        "biography": null,
+        "genres": null
+      }
+    ],
+    "totalArtists": 2,
+    "albums": [],
+    "totalAlbums": 0,
+    "songs": [],
+    "totalSongs": 0,
+    "playlists": [],
+    "totalPlaylists": 0
+  }
+}

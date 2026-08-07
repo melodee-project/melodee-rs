@@ -1,0 +1,34 @@
+{
+  "name": "stream/get-tampered-token",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/song/stream/2b8eab4b-235d-5892-99f8-c0f5f54e8ab4/f78448cc-82ec-5864-877c-6c6163b00065/<hmac-auth-token>",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1"
+    },
+    "jsonTemplate": null
+  },
+  "response": {
+    "status": 302,
+    "headers": {
+      "content-length": "0",
+      "cache-control": "no-cache,no-store",
+      "expires": "-1",
+      "location": "{melodee-origin}/Account/Login?ReturnUrl=%2FError"
+    },
+    "bodyFile": "stream-get-tampered-token.bin",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "normalize": {
+    "maskBaseUrl": true,
+    "maskJsonPaths": [
+      "$.correlationId"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

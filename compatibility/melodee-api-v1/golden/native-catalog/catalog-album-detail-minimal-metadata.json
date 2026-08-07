@@ -1,0 +1,30 @@
+{
+  "id": "de0f93a5-2979-5654-9afe-16453caa49af",
+  "artist": {
+    "id": "708790f0-57b5-5a45-a746-dd36634e8872",
+    "thumbnailUrl": "{melodee-origin}/images/artist_708790f0-57b5-5a45-a746-dd36634e8872/80",
+    "imageUrl": "{melodee-origin}/images/artist_708790f0-57b5-5a45-a746-dd36634e8872/1024",
+    "name": "Cassette Ghost",
+    "userStarred": false,
+    "userRating": 0,
+    "albumCount": 0,
+    "songCount": 0,
+    "createdAt": "9999-01-01 00:00:00",
+    "updatedAt": "---",
+    "biography": null,
+    "genres": null
+  },
+  "thumbnailUrl": "{melodee-origin}/images/album_de0f93a5-2979-5654-9afe-16453caa49af/80",
+  "imageUrl": "{melodee-origin}/images/album_de0f93a5-2979-5654-9afe-16453caa49af/1024",
+  "name": "Untitled Demos",
+  "releaseYear": 1987,
+  "userStarred": false,
+  "userRating": 0,
+  "songCount": 1,
+  "durationMs": 1800,
+  "durationFormatted": "0:00:01",
+  "createdAt": "2026-08-07 00:00:00",
+  "updatedAt": "---",
+  "description": null,
+  "genre": null
+}

@@ -1,0 +1,31 @@
+{
+  "name": "stream/get-unknown-user",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/song/stream/2b8eab4b-235d-5892-99f8-c0f5f54e8ab4/11111111-1111-1111-1111-111111111111/<hmac-auth-token>",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1"
+    },
+    "jsonTemplate": null
+  },
+  "response": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "stream-get-unknown-user.json",
+    "sha256": "06c7794c86e317dd3ada3ce1b52efeefad84a445dc6b5860f5ebaaf6ca055eb3",
+    "bytes": 109
+  },
+  "normalize": {
+    "maskBaseUrl": true,
+    "maskJsonPaths": [
+      "$.correlationId"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

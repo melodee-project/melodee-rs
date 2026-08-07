@@ -1,0 +1,36 @@
+{
+  "name": "stream/get-range-middle",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/song/stream/2b8eab4b-235d-5892-99f8-c0f5f54e8ab4/f78448cc-82ec-5864-877c-6c6163b00065/<hmac-auth-token>",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Range": "bytes=100000-101023"
+    },
+    "jsonTemplate": null
+  },
+  "response": {
+    "status": 206,
+    "headers": {
+      "content-length": "1024",
+      "content-type": "audio/wav",
+      "accept-ranges": "bytes",
+      "content-range": "bytes 100000-101023/220544"
+    },
+    "bodyFile": "stream-get-range-middle.bin",
+    "sha256": "5248225c3d9ffe2ebc6629dd689119567444e5762520b81b0f460a869255cf0e",
+    "bytes": 1024
+  },
+  "normalize": {
+    "maskBaseUrl": true,
+    "dropHeaders": [
+      "etag",
+      "last-modified"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

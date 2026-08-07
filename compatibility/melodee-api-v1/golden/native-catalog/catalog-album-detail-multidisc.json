@@ -1,0 +1,30 @@
+{
+  "id": "645680d3-704a-5b83-a734-42a3fa88c3ed",
+  "artist": {
+    "id": "0bdebd7d-8597-5891-b6e4-88f7762370b9",
+    "thumbnailUrl": "{melodee-origin}/images/artist_0bdebd7d-8597-5891-b6e4-88f7762370b9/80",
+    "imageUrl": "{melodee-origin}/images/artist_0bdebd7d-8597-5891-b6e4-88f7762370b9/1024",
+    "name": "The Obsidian Collective",
+    "userStarred": false,
+    "userRating": 0,
+    "albumCount": 0,
+    "songCount": 0,
+    "createdAt": "9999-01-01 00:00:00",
+    "updatedAt": "---",
+    "biography": null,
+    "genres": null
+  },
+  "thumbnailUrl": "{melodee-origin}/images/album_645680d3-704a-5b83-a734-42a3fa88c3ed/80",
+  "imageUrl": "{melodee-origin}/images/album_645680d3-704a-5b83-a734-42a3fa88c3ed/1024",
+  "name": "Anthology of Echoes",
+  "releaseYear": 2018,
+  "userStarred": false,
+  "userRating": 0,
+  "songCount": 4,
+  "durationMs": 9600,
+  "durationFormatted": "0:00:09",
+  "createdAt": "2026-08-07 00:00:00",
+  "updatedAt": "---",
+  "description": null,
+  "genre": null
+}

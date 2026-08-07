@@ -1,0 +1,29 @@
+{
+  "name": "catalog/genres-list",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/api/v1/genres",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "catalog-genres-list.json",
+    "sha256": "e10f8b7ab69d4f82d66b0af6d4aa9803436bebb2ff1d3f95a228fc1d18933004",
+    "bytes": 1035
+  },
+  "normalize": {
+    "maskBaseUrl": true
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

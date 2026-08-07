@@ -1,0 +1,35 @@
+{
+  "name": "stream/get-full",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/song/stream/2b8eab4b-235d-5892-99f8-c0f5f54e8ab4/f78448cc-82ec-5864-877c-6c6163b00065/<hmac-auth-token>",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1"
+    },
+    "jsonTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-length": "220544",
+      "content-type": "audio/wav",
+      "accept-ranges": "bytes",
+      "last-modified": "Fri, 07 Aug 2026 21:24:03 GMT"
+    },
+    "bodyFile": "stream-get-full.bin",
+    "sha256": "5331b93e16f584cd3eb8d6a3d2281bec960a731b26d96ec1d5802209f1915c0f",
+    "bytes": 220544
+  },
+  "normalize": {
+    "maskBaseUrl": true,
+    "dropHeaders": [
+      "etag",
+      "last-modified"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

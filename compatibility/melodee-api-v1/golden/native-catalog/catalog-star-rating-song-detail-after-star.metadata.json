@@ -1,0 +1,35 @@
+{
+  "name": "catalog-star-rating/song-detail-after-star",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/api/v1/songs/c418d383-13f5-598d-94a8-c15e5d2df348",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "catalog-star-rating-song-detail-after-star.json",
+    "sha256": "c3ef19f2cfec6317cf30511b02d79a971d0ff4122955add09c3187a20edf67cf",
+    "bytes": 1910
+  },
+  "normalize": {
+    "maskBaseUrl": true,
+    "maskUrlAuthTokenPaths": [
+      "$.streamUrl"
+    ],
+    "maskJsonPaths": [
+      "$.starredAt"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

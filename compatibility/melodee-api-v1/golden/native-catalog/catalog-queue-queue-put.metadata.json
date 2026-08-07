@@ -1,0 +1,36 @@
+{
+  "name": "catalog-queue/queue-put",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "PUT",
+    "url": "{melodee-origin}/api/v1/queue",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Content-Type": "application/json",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": {
+      "songIds": [
+        "2b8eab4b-235d-5892-99f8-c0f5f54e8ab4",
+        "b3297a8f-5e2b-5ade-98ea-f899d38059e0"
+      ],
+      "currentSongId": "b3297a8f-5e2b-5ade-98ea-f899d38059e0",
+      "position": 42.5,
+      "changedBy": "phase0-fixture"
+    }
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-length": "0"
+    },
+    "bodyFile": "catalog-queue-queue-put.bin",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "normalize": {},
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

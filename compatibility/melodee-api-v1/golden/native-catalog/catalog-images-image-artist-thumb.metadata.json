@@ -1,0 +1,33 @@
+{
+  "name": "catalog-images/image-artist-thumb",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/images/artist_813c11e0-61cd-5204-ae0f-ce68386eacec/80",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1"
+    },
+    "jsonTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-length": "4297",
+      "content-type": "image/jpeg",
+      "etag": "72e4aa8a684d29dd94f12882b84a7c26a44b08c36c7cf3641068eee55fed8600"
+    },
+    "bodyFile": "catalog-images-image-artist-thumb.bin",
+    "sha256": "0f56de9100735a30bc85cb05128a42c55dbff4eb8608d1c18a269973881acd81",
+    "bytes": 4297
+  },
+  "normalize": {
+    "dropHeaders": [
+      "etag",
+      "last-modified"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

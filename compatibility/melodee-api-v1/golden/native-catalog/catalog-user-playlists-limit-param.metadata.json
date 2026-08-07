@@ -1,0 +1,29 @@
+{
+  "name": "catalog/user-playlists-limit-param",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/api/v1/user/playlists?page=1&limit=50",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "catalog-user-playlists-limit-param.json",
+    "sha256": "8845db6d065e274c84a8ec9a126dae91a6a987480e2b8e199c0d711b82b978a8",
+    "bytes": 3201
+  },
+  "normalize": {
+    "maskBaseUrl": true
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

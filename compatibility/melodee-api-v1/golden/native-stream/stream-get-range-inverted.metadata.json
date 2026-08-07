@@ -1,0 +1,32 @@
+{
+  "name": "stream/get-range-inverted",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/song/stream/2b8eab4b-235d-5892-99f8-c0f5f54e8ab4/f78448cc-82ec-5864-877c-6c6163b00065/<hmac-auth-token>",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Range": "bytes=1000-500"
+    },
+    "jsonTemplate": null
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "stream-get-range-inverted.json",
+    "sha256": "162f859aed736b8277b70892cdf5259a0910a339de20620b57f651e4e3dc51ac",
+    "bytes": 97
+  },
+  "normalize": {
+    "maskBaseUrl": true,
+    "maskJsonPaths": [
+      "$.correlationId"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

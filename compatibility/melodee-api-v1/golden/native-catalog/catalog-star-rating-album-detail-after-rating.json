@@ -1,0 +1,30 @@
+{
+  "id": "4243b96d-1302-5cc9-82bf-395d76bf3ac8",
+  "artist": {
+    "id": "f993419e-f96f-5383-9c60-7f075c806943",
+    "thumbnailUrl": "{melodee-origin}/images/artist_f993419e-f96f-5383-9c60-7f075c806943/80",
+    "imageUrl": "{melodee-origin}/images/artist_f993419e-f96f-5383-9c60-7f075c806943/1024",
+    "name": "Nora Beacon",
+    "userStarred": false,
+    "userRating": 0,
+    "albumCount": 0,
+    "songCount": 0,
+    "createdAt": "9999-01-01 00:00:00",
+    "updatedAt": "---",
+    "biography": null,
+    "genres": null
+  },
+  "thumbnailUrl": "{melodee-origin}/images/album_4243b96d-1302-5cc9-82bf-395d76bf3ac8/80",
+  "imageUrl": "{melodee-origin}/images/album_4243b96d-1302-5cc9-82bf-395d76bf3ac8/1024",
+  "name": "Solo Ledger",
+  "releaseYear": 2022,
+  "userStarred": false,
+  "userRating": 0,
+  "songCount": 1,
+  "durationMs": 2500,
+  "durationFormatted": "0:00:02",
+  "createdAt": "2026-01-14 00:00:00",
+  "updatedAt": "---",
+  "description": null,
+  "genre": null
+}

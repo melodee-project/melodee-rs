@@ -1,0 +1,29 @@
+{
+  "name": "catalog/artists-list-page2",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/api/v1/artists?page=2&pageSize=5&orderBy=Name&orderDirection=asc",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "catalog-artists-list-page2.json",
+    "sha256": "df6fe1ad831ec8afaaa0fce81bf81496df1fc57be0053fa90cc0679d11b3cdc9",
+    "bytes": 2668
+  },
+  "normalize": {
+    "maskBaseUrl": true
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

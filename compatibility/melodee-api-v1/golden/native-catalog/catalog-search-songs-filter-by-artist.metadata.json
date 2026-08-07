@@ -1,0 +1,32 @@
+{
+  "name": "catalog/search-songs-filter-by-artist",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/api/v1/search/songs?q=a&page=1&pageSize=10&filterByArtistApiKey=5bf951d5-7afe-5c50-8941-145b7095902b",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "catalog-search-songs-filter-by-artist.json",
+    "sha256": "bdda02bca5b6081988db92b62280178f1602011f0456d5a3dee37a4c66a4115d",
+    "bytes": 165
+  },
+  "normalize": {
+    "maskBaseUrl": true,
+    "maskUrlAuthTokenPaths": [
+      "$.data[*].streamUrl"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

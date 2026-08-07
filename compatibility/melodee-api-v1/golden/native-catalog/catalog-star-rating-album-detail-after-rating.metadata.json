@@ -1,0 +1,29 @@
+{
+  "name": "catalog-star-rating/album-detail-after-rating",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/api/v1/albums/4243b96d-1302-5cc9-82bf-395d76bf3ac8",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "catalog-star-rating-album-detail-after-rating.json",
+    "sha256": "46847f2cf64553684f8402188dffed4c1b7058c1c5e2f7878d0818a6dde80b3b",
+    "bytes": 972
+  },
+  "normalize": {
+    "maskBaseUrl": true
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

@@ -1,0 +1,33 @@
+{
+  "name": "catalog-playlist-crud/reorder-songs",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "PUT",
+    "url": "{melodee-origin}/api/v1/playlists/<captured:playlistId>/songs/reorder",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Content-Type": "application/json",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": {
+      "songIds": [
+        "d493e627-df71-50ed-93fb-c29b9f6ec96a",
+        "2b8eab4b-235d-5892-99f8-c0f5f54e8ab4"
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-length": "0"
+    },
+    "bodyFile": "catalog-playlist-crud-reorder-songs.bin",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "normalize": {},
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

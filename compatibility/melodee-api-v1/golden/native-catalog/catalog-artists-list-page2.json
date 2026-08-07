@@ -1,0 +1,82 @@
+{
+  "meta": {
+    "totalCount": 10,
+    "pageSize": 5,
+    "currentPage": 2,
+    "totalPages": 2,
+    "hasPrevious": true,
+    "hasNext": false
+  },
+  "data": [
+    {
+      "id": "4f6a5272-9529-5a24-92a0-a3ede6a73d59",
+      "thumbnailUrl": "{melodee-origin}/images/artist_4f6a5272-9529-5a24-92a0-a3ede6a73d59/80",
+      "imageUrl": "{melodee-origin}/images/artist_4f6a5272-9529-5a24-92a0-a3ede6a73d59/1024",
+      "name": "The Harbour Lights",
+      "userStarred": false,
+      "userRating": 0,
+      "albumCount": 2,
+      "songCount": 2,
+      "createdAt": "2026-01-10 00:00:00",
+      "updatedAt": "---",
+      "biography": null,
+      "genres": null
+    },
+    {
+      "id": "0bdebd7d-8597-5891-b6e4-88f7762370b9",
+      "thumbnailUrl": "{melodee-origin}/images/artist_0bdebd7d-8597-5891-b6e4-88f7762370b9/80",
+      "imageUrl": "{melodee-origin}/images/artist_0bdebd7d-8597-5891-b6e4-88f7762370b9/1024",
+      "name": "The Obsidian Collective",
+      "userStarred": false,
+      "userRating": 0,
+      "albumCount": 1,
+      "songCount": 4,
+      "createdAt": "2026-01-17 00:00:00",
+      "updatedAt": "---",
+      "biography": null,
+      "genres": null
+    },
+    {
+      "id": "89eb2dc1-fd4c-5a57-99e5-480c96b292fc",
+      "thumbnailUrl": "{melodee-origin}/images/artist_89eb2dc1-fd4c-5a57-99e5-480c96b292fc/80",
+      "imageUrl": "{melodee-origin}/images/artist_89eb2dc1-fd4c-5a57-99e5-480c96b292fc/1024",
+      "name": "Various Artists",
+      "userStarred": false,
+      "userRating": 0,
+      "albumCount": 1,
+      "songCount": 3,
+      "createdAt": "2026-01-07 00:00:00",
+      "updatedAt": "---",
+      "biography": null,
+      "genres": null
+    },
+    {
+      "id": "708790f0-57b5-5a45-a746-dd36634e8872",
+      "thumbnailUrl": "{melodee-origin}/images/artist_708790f0-57b5-5a45-a746-dd36634e8872/80",
+      "imageUrl": "{melodee-origin}/images/artist_708790f0-57b5-5a45-a746-dd36634e8872/1024",
+      "name": "Cassette Ghost",
+      "userStarred": false,
+      "userRating": 0,
+      "albumCount": 1,
+      "songCount": 1,
+      "createdAt": "2026-01-19 00:00:00",
+      "updatedAt": "---",
+      "biography": null,
+      "genres": null
+    },
+    {
+      "id": "8bf87c33-f669-5a85-a315-654f79fb895b",
+      "thumbnailUrl": "{melodee-origin}/images/artist_8bf87c33-f669-5a85-a315-654f79fb895b/80",
+      "imageUrl": "{melodee-origin}/images/artist_8bf87c33-f669-5a85-a315-654f79fb895b/1024",
+      "name": "Sæglópur 日本",
+      "userStarred": false,
+      "userRating": 0,
+      "albumCount": 1,
+      "songCount": 2,
+      "createdAt": "2026-01-15 00:00:00",
+      "updatedAt": "---",
+      "biography": null,
+      "genres": null
+    }
+  ]
+}

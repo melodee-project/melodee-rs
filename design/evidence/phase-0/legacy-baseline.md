@@ -196,3 +196,24 @@ source.
   authenticated scenarios compare reproducibly (Issue 4).
 - Per-capture fixture dataset counts are recorded with each capture run, not here.
 - `configuration-inventory.md` (190 SettingRegistry keys with defaults) is a separate deliverable.
+
+## 9. Amendments from Issue 5 (2026-08-07)
+
+- **Automation.** The procedure in section 6 is automated by `scripts/legacy_oracle.py`
+  (`recreate`, `capture`, `status`, `stop`). `recreate` fails closed when the oracle checkout
+  is not exactly `4028b58dbd3302ed431e2c5b32d9dde5634db218`. The documented procedure above
+  remains the authoritative description of what the script does.
+- **`security.secretKey` is required.** `mcli user create` and the server fail with
+  "security.secretKey configuration is required" unless it is provided. Environment variables
+  are mapped into settings by replacing `_` with `.`, so the variable name is
+  `security_secretKey` (single underscore). The script provides a fixed synthetic fixture value.
+- **Canonical `baseUrl`.** Seeding sets `system.baseUrl=http://127.0.0.1:5157`; the verify step
+  asserts the `** REQUIRED: THIS MUST BE EDITED **` placeholder appears in no response.
+- **`<Compile Remove>` discovery.** `Melodee.Blazor.csproj` at the frozen commit excludes
+  `QueueController` and all five Party controllers from compilation; their routes exist in
+  source (and in the static route manifest, now annotated `excluded-from-build`) but answer 404
+  at runtime. See [native-api-v1-capture.md](native-api-v1-capture.md) section 5.
+- **Fixture dataset.** The disposable database now seeds a deterministic catalog
+  (`compatibility/fixtures/catalog-v1.json`: 10 artists / 10 albums / 19 songs / 2 playlists,
+  deterministic fixture-UUID public keys) plus the fixture user pinned to public ApiKey
+  `f78448cc-82ec-5864-877c-6c6163b00065`.

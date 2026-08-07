@@ -1,0 +1,27 @@
+{
+  "name": "catalog-playlist-crud/delete-playlist",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "DELETE",
+    "url": "{melodee-origin}/api/v1/playlists/<captured:playlistId>",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-length": "0"
+    },
+    "bodyFile": "catalog-playlist-crud-delete-playlist.bin",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "normalize": {},
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

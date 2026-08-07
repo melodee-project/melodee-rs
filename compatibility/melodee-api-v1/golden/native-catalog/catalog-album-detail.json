@@ -1,0 +1,30 @@
+{
+  "id": "69d97699-74c5-5403-878f-87f42d9d9fbb",
+  "artist": {
+    "id": "813c11e0-61cd-5204-ae0f-ce68386eacec",
+    "thumbnailUrl": "{melodee-origin}/images/artist_813c11e0-61cd-5204-ae0f-ce68386eacec/80",
+    "imageUrl": "{melodee-origin}/images/artist_813c11e0-61cd-5204-ae0f-ce68386eacec/1024",
+    "name": "Aurora Fields",
+    "userStarred": false,
+    "userRating": 0,
+    "albumCount": 0,
+    "songCount": 0,
+    "createdAt": "9999-01-01 00:00:00",
+    "updatedAt": "---",
+    "biography": null,
+    "genres": null
+  },
+  "thumbnailUrl": "{melodee-origin}/images/album_69d97699-74c5-5403-878f-87f42d9d9fbb/80",
+  "imageUrl": "{melodee-origin}/images/album_69d97699-74c5-5403-878f-87f42d9d9fbb/1024",
+  "name": "Northern Lights",
+  "releaseYear": 2021,
+  "userStarred": false,
+  "userRating": 0,
+  "songCount": 3,
+  "durationMs": 7700,
+  "durationFormatted": "0:00:07",
+  "createdAt": "2026-08-07 00:00:00",
+  "updatedAt": "---",
+  "description": null,
+  "genre": null
+}

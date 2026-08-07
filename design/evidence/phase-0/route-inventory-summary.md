@@ -79,6 +79,17 @@ Consequences for compatibility work:
   question; it does not change the parity obligation — current observable behavior is the
   contract.
 
+### Addendum (Issue 5, 2026-08-07): party and queue routes are not compiled at all
+
+The party/queue omission from the OpenAPI document has a harder cause than documentation
+settings: `Melodee.Blazor.csproj` at the frozen commit contains `<Compile Remove>` entries for
+`QueueController` and all five Party controllers. Their routes exist in source but answer
+**404** at runtime (captured: `catalog-queue/*` golden steps). The manifest generator now reads
+the csproj exclusion list and marks the 35 affected routes `excluded-from-build`
+(`implementation` field); podcasts remain compile-in but `IgnoreApi`. The unified contract
+inventory (`compatibility/melodee-api-v1/contracts/route-inventory.json`, Issue 5) records this
+per route alongside OpenAPI presence and client usage.
+
 ## 5. Discovery — OpenAPI document scope mixing
 
 The published document is titled "Melodee API v1" and explicitly describes itself as the native

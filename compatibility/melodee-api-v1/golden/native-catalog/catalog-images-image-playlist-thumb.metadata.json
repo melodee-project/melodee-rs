@@ -1,0 +1,33 @@
+{
+  "name": "catalog-images/image-playlist-thumb",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/images/playlist_b16ae181-fc40-5cd5-ba7b-0cf9f5b4c89d/80",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1"
+    },
+    "jsonTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-length": "41624",
+      "content-type": "image/gif",
+      "etag": "-3776735808000000000"
+    },
+    "bodyFile": "catalog-images-image-playlist-thumb.bin",
+    "sha256": "d4569b198cbb260c1ffd455e02ffec99173616555a21fa3a7d211927b1bc7cea",
+    "bytes": 41624
+  },
+  "normalize": {
+    "dropHeaders": [
+      "etag",
+      "last-modified"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

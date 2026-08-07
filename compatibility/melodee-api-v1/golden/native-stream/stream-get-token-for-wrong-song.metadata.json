@@ -1,0 +1,31 @@
+{
+  "name": "stream/get-token-for-wrong-song",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/song/stream/b3297a8f-5e2b-5ade-98ea-f899d38059e0/f78448cc-82ec-5864-877c-6c6163b00065/<hmac-auth-token>",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1"
+    },
+    "jsonTemplate": null
+  },
+  "response": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "stream-get-token-for-wrong-song.json",
+    "sha256": "84da6333e7090e6699ece2d6169b9af7707e8cec04793977d528cebde3bc1e02",
+    "bytes": 97
+  },
+  "normalize": {
+    "maskBaseUrl": true,
+    "maskJsonPaths": [
+      "$.correlationId"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

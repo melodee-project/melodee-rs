@@ -1,0 +1,5 @@
+{
+  "code": "UNAUTHORIZED",
+  "message": "Authorization token is invalid",
+  "correlationId": "<volatile>"
+}

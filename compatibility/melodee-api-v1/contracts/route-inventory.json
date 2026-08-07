@@ -2336,7 +2336,7 @@
         {
           "client": "meloamp",
           "evidence": "components/PlaylistPickerDialog.tsx:91",
-          "usedFor": "add songs to playlist"
+          "usedFor": "add songs to playlist — NOTE: client posts object body { songIds } but server binds bare Guid[]; broken against baseline (see scenario catalog-playlist-crud/add-songs-meloamp-shape)"
         }
       ],
       "scenarios": [],

@@ -96,16 +96,16 @@ Total requirements: **232**
 | `PRD-SEARCH-005` | MQL parity | 6 | planned | — | — |
 | `PRD-SEARCH-006` | Performance target | 6 | planned | — | — |
 | `PRD-SEARCH-007` | Rebuild command | 6 | planned | — | — |
-| `PRD-API-M1-001` | Compatibility contract | 7 | planned | — | — |
+| `PRD-API-M1-001` | Compatibility contract | 7 | in-progress | compatibility/melodee-api-v1/contracts/ (OpenAPI snapshot, route manifest, client usage, unified inventory); compatibility/melodee-api-v1/golden/ (native-auth, native-catalog, native-stream); design/evidence/phase-0/native-api-v1-capture.md; design/evidence/phase-0/native-client-route-inventory.md | tests/python/test_native_v1_capture.py |
 | `PRD-API-M1-002` | No forced synchronized client release | 7 | planned | — | — |
 | `PRD-API-M1-003` | Preserve existing vocabulary | 7 | planned | — | — |
-| `PRD-API-M1-004` | Preserve public IDs | 7 | planned | — | — |
-| `PRD-API-M1-005` | Preserve response details | 7 | planned | — | — |
-| `PRD-API-M1-006` | Current native surface | 7 | planned | — | — |
+| `PRD-API-M1-004` | Preserve public IDs | 7 | in-progress | compatibility/fixtures/catalog-v1.json (deterministic fixture UUID namespace); compatibility/melodee-api-v1/golden/ (stable public IDs across reseeds) | tests/python/test_native_v1_capture.py (GoldenFixtureTests) |
+| `PRD-API-M1-005` | Preserve response details | 7 | in-progress | compatibility/scenarios/native-*.json (method/path, params, casing, null-vs-omitted, status codes, envelopes, pagination, ordering, URLs, headers captured for the critical path) | tests/python/test_native_v1_capture.py; scripts/compare_captures.py |
+| `PRD-API-M1-006` | Current native surface | 7 | in-progress | compatibility/melodee-api-v1/contracts/route-inventory.json (all 202 routes classified; 35 excluded-from-build) | tests/python/test_native_v1_capture.py (RouteInventoryTests) |
 | `PRD-API-M1-007` | Future API evolution | 7 | planned | — | — |
-| `PRD-STREAM-001` | PRD-STREAM-001 | 7,8 | planned | — | — |
-| `PRD-STREAM-002` | PRD-STREAM-002 | 7,8 | planned | — | — |
-| `PRD-STREAM-003` | Android/Android Auto release gate | 7,8 | planned | — | — |
+| `PRD-STREAM-001` | PRD-STREAM-001 | 7,8 | captured | compatibility/melodee-api-v1/golden/native-stream/ (URL shape, HMAC semantics, 200/206/400/401/302 matrix); design/evidence/phase-0/native-api-v1-capture.md section 4 | tests/python/test_native_v1_capture.py (test_stream_range_semantics_evidence) |
+| `PRD-STREAM-002` | PRD-STREAM-002 | 7,8 | in-progress | compatibility/melodee-api-v1/golden/native-stream/ (direct play, ranges, content type/length) | tests/python/test_native_v1_capture.py |
+| `PRD-STREAM-003` | Android/Android Auto release gate | 7,8 | in-progress | design/evidence/phase-0/native-client-route-inventory.md (Android/Android Auto route inventory and gate prerequisites) | — |
 | `PRD-API-OS-001` | PRD-API-OS-001 | 8 | planned | — | — |
 | `PRD-API-OS-002` | PRD-API-OS-002 | 8 | planned | — | — |
 | `PRD-API-OS-003` | PRD-API-OS-003 | 8 | planned | — | — |

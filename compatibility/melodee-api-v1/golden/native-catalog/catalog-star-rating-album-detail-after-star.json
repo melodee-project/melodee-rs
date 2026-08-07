@@ -1,0 +1,30 @@
+{
+  "id": "263ebba5-739c-5cb9-987f-b2d2bbfbd0ad",
+  "artist": {
+    "id": "5bf951d5-7afe-5c50-8941-145b7095902b",
+    "thumbnailUrl": "{melodee-origin}/images/artist_5bf951d5-7afe-5c50-8941-145b7095902b/80",
+    "imageUrl": "{melodee-origin}/images/artist_5bf951d5-7afe-5c50-8941-145b7095902b/1024",
+    "name": "Dune",
+    "userStarred": false,
+    "userRating": 0,
+    "albumCount": 0,
+    "songCount": 0,
+    "createdAt": "9999-01-01 00:00:00",
+    "updatedAt": "---",
+    "biography": null,
+    "genres": null
+  },
+  "thumbnailUrl": "{melodee-origin}/images/album_263ebba5-739c-5cb9-987f-b2d2bbfbd0ad/80",
+  "imageUrl": "{melodee-origin}/images/album_263ebba5-739c-5cb9-987f-b2d2bbfbd0ad/1024",
+  "name": "Desert Rock Radio",
+  "releaseYear": 2019,
+  "userStarred": false,
+  "userRating": 0,
+  "songCount": 2,
+  "durationMs": 5000,
+  "durationFormatted": "0:00:05",
+  "createdAt": "2026-08-07 00:00:00",
+  "updatedAt": "---",
+  "description": null,
+  "genre": null
+}

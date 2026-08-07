@@ -1,0 +1,63 @@
+{
+  "comment": "Status/evidence overrides merged by scripts/extract_requirements.py. The requirements index is generated; record implementation/test evidence here. Controlled status vocabulary: planned, in-progress, captured, implemented, tested, deferred, superseded. 'captured' means Phase 0 behavioral evidence exists; it does not mean the Rust implementation exists.",
+  "PRD-API-M1-001": {
+    "status": "in-progress",
+    "implementation": [
+      "compatibility/melodee-api-v1/contracts/ (OpenAPI snapshot, route manifest, client usage, unified inventory)",
+      "compatibility/melodee-api-v1/golden/ (native-auth, native-catalog, native-stream)",
+      "design/evidence/phase-0/native-api-v1-capture.md",
+      "design/evidence/phase-0/native-client-route-inventory.md"
+    ],
+    "tests": ["tests/python/test_native_v1_capture.py"],
+    "note": "Native v1 surface captured (Issue 5). OpenSubsonic and Jellyfin captures are Issues 6-7."
+  },
+  "PRD-API-M1-004": {
+    "status": "in-progress",
+    "implementation": [
+      "compatibility/fixtures/catalog-v1.json (deterministic fixture UUID namespace)",
+      "compatibility/melodee-api-v1/golden/ (stable public IDs across reseeds)"
+    ],
+    "tests": ["tests/python/test_native_v1_capture.py (GoldenFixtureTests)"],
+    "note": "Public-ID shapes and stability evidenced; migration-time preservation remains Phase 11 work."
+  },
+  "PRD-API-M1-005": {
+    "status": "in-progress",
+    "implementation": [
+      "compatibility/scenarios/native-*.json (method/path, params, casing, null-vs-omitted, status codes, envelopes, pagination, ordering, URLs, headers captured for the critical path)"
+    ],
+    "tests": ["tests/python/test_native_v1_capture.py", "scripts/compare_captures.py"],
+    "note": "Critical path covered; full-surface coverage tracked by route-inventory.json parityStatus."
+  },
+  "PRD-API-M1-006": {
+    "status": "in-progress",
+    "implementation": [
+      "compatibility/melodee-api-v1/contracts/route-inventory.json (all 202 routes classified; 35 excluded-from-build)"
+    ],
+    "tests": ["tests/python/test_native_v1_capture.py (RouteInventoryTests)"],
+    "note": "Parity matrix exists; client-used-uncaptured routes are the later-phase backlog."
+  },
+  "PRD-STREAM-001": {
+    "status": "captured",
+    "implementation": [
+      "compatibility/melodee-api-v1/golden/native-stream/ (URL shape, HMAC semantics, 200/206/400/401/302 matrix)",
+      "design/evidence/phase-0/native-api-v1-capture.md section 4"
+    ],
+    "tests": ["tests/python/test_native_v1_capture.py (test_stream_range_semantics_evidence)"]
+  },
+  "PRD-STREAM-002": {
+    "status": "in-progress",
+    "implementation": [
+      "compatibility/melodee-api-v1/golden/native-stream/ (direct play, ranges, content type/length)"
+    ],
+    "tests": ["tests/python/test_native_v1_capture.py"],
+    "note": "Range/seek captured. Transcoding paths, concurrent playback, and disconnect handling remain (performance phase / Issue 9)."
+  },
+  "PRD-STREAM-003": {
+    "status": "in-progress",
+    "implementation": [
+      "design/evidence/phase-0/native-client-route-inventory.md (Android/Android Auto route inventory and gate prerequisites)"
+    ],
+    "tests": [],
+    "note": "Release gate; cannot run until the Rust server exists. Client-side prerequisites inventoried."
+  }
+}
