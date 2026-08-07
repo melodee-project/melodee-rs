@@ -455,20 +455,18 @@ def capture_request(
     body_path = output / f"{stem}{extension}"
     body_path.write_bytes(stored_body)
 
-    recorded_url = redact_url(unsubstitute_secrets(url, secrets))
-    if normalize.get("maskBaseUrl"):
-        recorded_url = recorded_url.replace(origin_text, ORIGIN_ALIAS)
+    # The request URL's origin is always host/port volatility; alias it even
+    # when body masking (maskBaseUrl) is not requested.
+    recorded_url = redact_url(unsubstitute_secrets(url, secrets)).replace(origin_text, ORIGIN_ALIAS)
     recorded_headers = {
         key: unsubstitute_secrets(value, secrets)
         for key, value in headers.items()
         if key.lower() not in {"authorization", "cookie"}
     }
     if "Authorization" in headers:
-        recorded_headers["Authorization"] = (
-            "Bearer <captured>"
-            if auth != "none"
-            else headers["Authorization"]
-        )
+        # Never record a credential value, synthetic or otherwise.
+        scheme, _, _ = headers["Authorization"].partition(" ")
+        recorded_headers["Authorization"] = f"{scheme} <redacted>" if scheme else "<redacted>"
     recorded_body = (
         redact_body_keys(json.loads(json.dumps(templated_body))) if templated_body is not None else None
     )

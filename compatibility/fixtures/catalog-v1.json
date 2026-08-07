@@ -26,7 +26,10 @@
           "albumType": 1,
           "releaseDate": "2021-03-15",
           "originalReleaseDate": "2021-03-15",
-          "genres": ["Ambient", "Electronic"],
+          "genres": [
+            "Ambient",
+            "Electronic"
+          ],
           "directory": "Northern Lights",
           "comment": "Synthetic ordinary Release fixture.",
           "playedCount": 12,
@@ -71,9 +74,13 @@
               "bpm": 88,
               "playedCount": 3
             }
-          ]
+          ],
+          "lastPlayedAt": "2026-08-06T12:00:00Z",
+          "createdAt": "2026-01-02T00:00:00Z"
         }
-      ]
+      ],
+      "lastPlayedAt": "2026-08-06T12:00:00Z",
+      "createdAt": "2026-01-01T00:00:00Z"
     },
     {
       "slug": "dune-plain",
@@ -91,7 +98,9 @@
           "albumStatus": 1,
           "albumType": 1,
           "releaseDate": "2019-06-01",
-          "genres": ["Rock"],
+          "genres": [
+            "Rock"
+          ],
           "directory": "Desert Rock Radio",
           "songs": [
             {
@@ -118,9 +127,11 @@
               "mediaFrequency": 247.0,
               "bpm": 118
             }
-          ]
+          ],
+          "createdAt": "2026-01-04T00:00:00Z"
         }
-      ]
+      ],
+      "createdAt": "2026-01-03T00:00:00Z"
     },
     {
       "slug": "dune-diacritic",
@@ -138,7 +149,9 @@
           "albumStatus": 1,
           "albumType": 3,
           "releaseDate": "2020-11-20",
-          "genres": ["Pop"],
+          "genres": [
+            "Pop"
+          ],
           "directory": "Dansk Sessions",
           "songs": [
             {
@@ -153,9 +166,11 @@
               "mediaFrequency": 262.0,
               "bpm": 105
             }
-          ]
+          ],
+          "createdAt": "2026-01-06T00:00:00Z"
         }
-      ]
+      ],
+      "createdAt": "2026-01-05T00:00:00Z"
     },
     {
       "slug": "various-artists",
@@ -174,7 +189,10 @@
           "albumType": 1,
           "releaseDate": "2025-01-10",
           "isCompilation": true,
-          "genres": ["Electronic", "Jazz"],
+          "genres": [
+            "Electronic",
+            "Jazz"
+          ],
           "directory": "Phase Zero Compilation",
           "comment": "Synthetic Various Artists compilation fixture.",
           "songs": [
@@ -214,9 +232,11 @@
               "mediaFrequency": 392.0,
               "bpm": 76
             }
-          ]
+          ],
+          "createdAt": "2026-01-08T00:00:00Z"
         }
-      ]
+      ],
+      "createdAt": "2026-01-07T00:00:00Z"
     },
     {
       "slug": "guest-vocalist",
@@ -227,7 +247,8 @@
       "directory": "Guest Vocalist",
       "biography": "Synthetic featured/guest artist fixture (no Releases of their own).",
       "tags": "fixture;guest",
-      "albums": []
+      "albums": [],
+      "createdAt": "2026-01-09T00:00:00Z"
     },
     {
       "slug": "harbour-lights",
@@ -245,7 +266,9 @@
           "albumStatus": 1,
           "albumType": 2,
           "releaseDate": "2023-04-02",
-          "genres": ["Folk"],
+          "genres": [
+            "Folk"
+          ],
           "directory": "Beacon",
           "songs": [
             {
@@ -260,7 +283,8 @@
               "mediaFrequency": 415.0,
               "bpm": 84
             }
-          ]
+          ],
+          "createdAt": "2026-01-11T00:00:00Z"
         },
         {
           "slug": "duet-dialogues",
@@ -269,7 +293,10 @@
           "albumStatus": 1,
           "albumType": 3,
           "releaseDate": "2024-09-14",
-          "genres": ["Folk", "Pop"],
+          "genres": [
+            "Folk",
+            "Pop"
+          ],
           "directory": "Dialogues",
           "comment": "Synthetic multi-artist Release fixture (multiple credited artists).",
           "songs": [
@@ -285,9 +312,11 @@
               "mediaFrequency": 466.0,
               "bpm": 110
             }
-          ]
+          ],
+          "createdAt": "2026-01-12T00:00:00Z"
         }
-      ]
+      ],
+      "createdAt": "2026-01-10T00:00:00Z"
     },
     {
       "slug": "nora-beacon",
@@ -306,7 +335,9 @@
           "albumStatus": 1,
           "albumType": 1,
           "releaseDate": "2022-08-19",
-          "genres": ["Folk"],
+          "genres": [
+            "Folk"
+          ],
           "directory": "Solo Ledger",
           "songs": [
             {
@@ -321,9 +352,11 @@
               "mediaFrequency": 494.0,
               "bpm": 90
             }
-          ]
+          ],
+          "createdAt": "2026-01-14T00:00:00Z"
         }
-      ]
+      ],
+      "createdAt": "2026-01-13T00:00:00Z"
     },
     {
       "slug": "saeglopur",
@@ -340,7 +373,10 @@
           "albumStatus": 1,
           "albumType": 1,
           "releaseDate": "2024-02-29",
-          "genres": ["Post-Rock", "環境音楽"],
+          "genres": [
+            "Post-Rock",
+            "環境音楽"
+          ],
           "directory": "Ünïcode Rëlease 東京",
           "songs": [
             {
@@ -367,9 +403,11 @@
               "mediaFrequency": 587.0,
               "bpm": 126
             }
-          ]
+          ],
+          "createdAt": "2026-01-16T00:00:00Z"
         }
-      ]
+      ],
+      "createdAt": "2026-01-15T00:00:00Z"
     },
     {
       "slug": "obsidian-collective",
@@ -388,7 +426,9 @@
           "albumType": 1,
           "releaseDate": "2018-10-31",
           "originalReleaseDate": "2016-05-05",
-          "genres": ["Classical"],
+          "genres": [
+            "Classical"
+          ],
           "directory": "Anthology of Echoes",
           "comment": "Synthetic multi-disc fixture: disc-qualified song numbers 101-102 (disc 1) and 201-202 (disc 2); per-song PartTitles carry disc subtitles. The legacy Songs schema has no disc column and (AlbumId, SongNumber) is unique.",
           "songs": [
@@ -445,9 +485,13 @@
               "mediaFrequency": 740.0,
               "bpm": 55
             }
-          ]
+          ],
+          "lastPlayedAt": "2026-08-05T12:00:00Z",
+          "createdAt": "2026-01-18T00:00:00Z"
         }
-      ]
+      ],
+      "lastPlayedAt": "2026-08-05T12:00:00Z",
+      "createdAt": "2026-01-17T00:00:00Z"
     },
     {
       "slug": "cassette-ghost",
@@ -478,9 +522,11 @@
               "mediaFrequency": 784.0,
               "bpm": 0
             }
-          ]
+          ],
+          "createdAt": "2026-01-20T00:00:00Z"
         }
-      ]
+      ],
+      "createdAt": "2026-01-19T00:00:00Z"
     }
   ],
   "artistRelations": [
@@ -545,15 +591,37 @@
     }
   ],
   "userSongs": [
-    {"song": "nl-02-polarveil", "isStarred": true, "rating": 5, "playedCount": 4},
-    {"song": "aoe-201-coda", "rating": 4, "playedCount": 9},
-    {"song": "ud-01-hiss", "isHated": true}
+    {
+      "song": "nl-02-polarveil",
+      "isStarred": true,
+      "rating": 5,
+      "playedCount": 4
+    },
+    {
+      "song": "aoe-201-coda",
+      "rating": 4,
+      "playedCount": 9
+    },
+    {
+      "song": "ud-01-hiss",
+      "isHated": true
+    }
   ],
   "userAlbums": [
-    {"album": "northern-lights", "isStarred": true, "rating": 5, "playedCount": 12}
+    {
+      "album": "northern-lights",
+      "isStarred": true,
+      "rating": 5,
+      "playedCount": 12
+    }
   ],
   "userArtists": [
-    {"artist": "aurora-fields", "isStarred": true, "rating": 5, "playedCount": 7}
+    {
+      "artist": "aurora-fields",
+      "isStarred": true,
+      "rating": 5,
+      "playedCount": 7
+    }
   ],
   "playlists": [
     {
@@ -562,14 +630,22 @@
       "comment": "Synthetic public playlist spanning multiple Releases.",
       "isPublic": true,
       "description": "Fixture playlist covering four different Releases.",
-      "songs": ["nl-01-solarwind", "pzc-01-guestvocal", "aoe-201-coda", "su-01-neon"]
+      "songs": [
+        "nl-01-solarwind",
+        "pzc-01-guestvocal",
+        "aoe-201-coda",
+        "su-01-neon"
+      ]
     },
     {
       "slug": "private-cuts",
       "name": "Private Cuts",
       "comment": "Synthetic private playlist fixture.",
       "isPublic": false,
-      "songs": ["hlb-01-lantern", "ud-01-hiss"]
+      "songs": [
+        "hlb-01-lantern",
+        "ud-01-hiss"
+      ]
     }
   ]
 }

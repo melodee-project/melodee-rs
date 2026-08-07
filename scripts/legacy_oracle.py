@@ -338,7 +338,7 @@ def seed_sql(catalog: dict, media: dict[str, tuple[int, str]]) -> str:
         statements.append(
             'INSERT INTO "Artists" ("Id","Name","NameNormalized","SortName","RealName","Directory",'
             '"AlbumCount","SongCount","LibraryId","MetaDataStatus","IsLocked","SortOrder","ApiKey",'
-            '"CreatedAt","PlayedCount","CalculatedRating","Biography","Tags","AlternateNames") VALUES ('
+            '"CreatedAt","PlayedCount","CalculatedRating","Biography","Tags","AlternateNames","LastPlayedAt") VALUES ('
             + ",".join(
                 [
                     str(artist_ids[artist["slug"]]),
@@ -354,12 +354,13 @@ def seed_sql(catalog: dict, media: dict[str, tuple[int, str]]) -> str:
                     "false",
                     "0",
                     sql_literal(fixture_uuid("artist", artist["slug"])),
-                    now,
+                    sql_literal(artist.get("createdAt", "2026-08-07T00:00:00Z")),
                     str(artist.get("playedCount", 0)),
                     str(artist.get("calculatedRating", 0)),
                     sql_literal(artist.get("biography")),
                     sql_literal(artist.get("tags")),
                     sql_literal(artist.get("alternateNames")),
+                    sql_literal(artist.get("lastPlayedAt")),
                 ]
             )
             + ");"
@@ -372,7 +373,7 @@ def seed_sql(catalog: dict, media: dict[str, tuple[int, str]]) -> str:
                 'INSERT INTO "Albums" ("Id","ArtistId","Name","NameNormalized","SortName","AlbumStatus",'
                 '"MetaDataStatus","AlbumType","OriginalReleaseDate","ReleaseDate","IsCompilation",'
                 '"SongCount","Duration","Genres","Directory","IsLocked","SortOrder","ApiKey","CreatedAt",'
-                '"PlayedCount","CalculatedRating","Tags","Comment","Description") VALUES ('
+                '"PlayedCount","CalculatedRating","Tags","Comment","Description","LastPlayedAt") VALUES ('
                 + ",".join(
                     [
                         str(album_ids[album["slug"]]),
@@ -393,12 +394,13 @@ def seed_sql(catalog: dict, media: dict[str, tuple[int, str]]) -> str:
                         "false",
                         "0",
                         sql_literal(fixture_uuid("album", album["slug"])),
-                        now,
+                        sql_literal(album.get("createdAt", "2026-08-07T00:00:00Z")),
                         str(album.get("playedCount", 0)),
                         str(album.get("calculatedRating", 0)),
                         sql_literal(album.get("tags")),
                         sql_literal(album.get("comment")),
                         sql_literal(album.get("description")),
+                        sql_literal(album.get("lastPlayedAt")),
                     ]
                 )
                 + ");"
