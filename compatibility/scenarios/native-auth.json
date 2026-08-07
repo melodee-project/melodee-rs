@@ -1,0 +1,346 @@
+[
+  {
+    "schemaVersion": 2,
+    "name": "auth-login-success",
+    "surface": "melodee-api-v1",
+    "method": "POST",
+    "path": "/api/v1/auth/authenticate",
+    "auth": "none",
+    "json": {
+      "userName": "phase0-fixture",
+      "password": "Mel0deeR0cks!"
+    },
+    "allowFailure": false,
+    "normalize": {
+      "maskJsonPaths": ["$.token", "$.expiresAt", "$.refreshToken", "$.refreshTokenExpiresAt", "$.user.createdAt", "$.user.updatedAt", "$.serverVersion"],
+      "maskBaseUrl": true,
+      "structureChecks": {
+        "$.token": "jwt",
+        "$.refreshToken": "opaqueToken"
+      }
+    },
+    "notes": "Fixture credentials are synthetic and public (scripts/legacy_oracle.py). Token VALUES are masked at capture time; their structure is validated and recorded in metadata instead. user.id is the deterministic fixture UUID and is deliberately NOT masked (public-ID stability evidence, PRD-API-M1-004)."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "auth-login-invalid-password",
+    "surface": "melodee-api-v1",
+    "method": "POST",
+    "path": "/api/v1/auth/authenticate",
+    "auth": "none",
+    "json": {
+      "userName": "phase0-fixture",
+      "password": "definitely-wrong-password"
+    },
+    "expectStatus": 401,
+    "normalize": {
+      "maskJsonPaths": ["$.correlationId"]
+    },
+    "notes": "Negative path: valid user, wrong password. Compare the error envelope against auth-login-unknown-user."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "auth-login-unknown-user",
+    "surface": "melodee-api-v1",
+    "method": "POST",
+    "path": "/api/v1/auth/authenticate",
+    "auth": "none",
+    "json": {
+      "userName": "phase0-no-such-user",
+      "password": "definitely-wrong-password"
+    },
+    "expectStatus": 401,
+    "normalize": {
+      "maskJsonPaths": ["$.correlationId"]
+    },
+    "notes": "Negative path: user does not exist. Records whether the server distinguishes unknown-user from wrong-password (user-enumeration behavior is compatibility data)."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "auth-user-missing-token",
+    "surface": "melodee-api-v1",
+    "method": "GET",
+    "path": "/api/v1/user/me",
+    "auth": "none",
+    "expectStatus": 401,
+    "normalize": {
+      "maskJsonPaths": ["$.correlationId"]
+    },
+    "notes": "No Authorization header at all."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "auth-user-malformed-token",
+    "surface": "melodee-api-v1",
+    "method": "GET",
+    "path": "/api/v1/user/me",
+    "auth": "none",
+    "headers": {
+      "Authorization": "Bearer not-a-real-jwt"
+    },
+    "expectStatus": 401,
+    "normalize": {
+      "maskJsonPaths": ["$.correlationId"]
+    },
+    "notes": "Well-formed header, garbage token value (synthetic, not a credential)."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "auth-user-expired-token",
+    "surface": "melodee-api-v1",
+    "method": "GET",
+    "path": "/api/v1/user/me",
+    "auth": "none",
+    "headers": {
+      "Authorization": "Bearer {{env:LEGACY_MELODEE_EXPIRED_JWT}}"
+    },
+    "expectStatus": 401,
+    "normalize": {
+      "maskJsonPaths": ["$.correlationId"]
+    },
+    "notes": "Expired but well-formed JWT signed with the committed fixture key (generate with scripts/gen_fixture_tokens.py; ValidateLifetime=true, ClockSkew=Zero in the oracle). Skipped if LEGACY_MELODEE_EXPIRED_JWT is unset."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "auth-refresh-invalid-token",
+    "surface": "melodee-api-v1",
+    "method": "POST",
+    "path": "/api/v1/auth/refresh-token",
+    "auth": "none",
+    "json": {"refreshToken": "phase0-not-a-real-refresh-token", "deviceId": "phase0-fixture-device"},
+    "expectStatus": 401,
+    "normalize": {
+      "maskJsonPaths": ["$.correlationId"]
+    },
+    "notes": "Garbage refresh token (synthetic). Expect refresh_token_invalid."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "auth-refresh-expired-token",
+    "surface": "melodee-api-v1",
+    "method": "POST",
+    "path": "/api/v1/auth/refresh-token",
+    "auth": "none",
+    "json": {"refreshToken": "phase0-expired-refresh-token-fixture-not-a-real-secret", "deviceId": "phase0-fixture-device"},
+    "expectStatus": 401,
+    "normalize": {
+      "maskJsonPaths": ["$.correlationId"]
+    },
+    "notes": "Well-formed but expired refresh token, seeded by scripts/legacy_oracle.py (ExpiresAt in the past, not revoked). Distinguishes 'expired' from 'invalid' and 'revoked' error codes. MUST run before any flow that logs out (logout revokes all user tokens, including the seeded expired row, changing its error code to refresh_token_replayed)."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "auth-refresh-rotation",
+    "surface": "melodee-api-v1",
+    "flow": [
+      {
+        "name": "login",
+        "method": "POST",
+        "path": "/api/v1/auth/authenticate",
+        "auth": "none",
+        "json": {"userName": "phase0-fixture", "password": "Mel0deeR0cks!"},
+        "capture": {"accessToken": "$.token", "refreshToken": "$.refreshToken"},
+        "secretCapture": ["accessToken", "refreshToken"],
+        "normalize": {
+          "maskJsonPaths": ["$.token", "$.expiresAt", "$.refreshToken", "$.refreshTokenExpiresAt", "$.user.createdAt", "$.user.updatedAt", "$.serverVersion"],
+          "maskBaseUrl": true,
+          "structureChecks": {"$.token": "jwt", "$.refreshToken": "opaqueToken"}
+        }
+      },
+      {
+        "name": "access-with-token",
+        "method": "GET",
+        "path": "/api/v1/user/me",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskJsonPaths": ["$.createdAt", "$.updatedAt"],
+          "maskBaseUrl": true
+        }
+      },
+      {
+        "name": "rotate-first",
+        "method": "POST",
+        "path": "/api/v1/auth/refresh-token",
+        "auth": "none",
+        "json": {"refreshToken": "{{refreshToken}}", "deviceId": "phase0-fixture-device"},
+        "capture": {"accessToken2": "$.token", "refreshToken2": "$.refreshToken"},
+        "secretCapture": ["accessToken2", "refreshToken2"],
+        "normalize": {
+          "maskJsonPaths": ["$.token", "$.expiresAt", "$.refreshToken", "$.refreshTokenExpiresAt", "$.user.createdAt", "$.user.updatedAt", "$.serverVersion"],
+          "maskBaseUrl": true,
+          "structureChecks": {"$.token": "jwt", "$.refreshToken": "opaqueToken"}
+        },
+        "notes": "Rotation: old refresh token is revoked (reason 'rotated') and a new token in the same family is issued."
+      },
+      {
+        "name": "access-with-rotated-token",
+        "method": "GET",
+        "path": "/api/v1/user/me",
+        "auth": "bearer-var:accessToken2",
+        "normalize": {
+          "maskJsonPaths": ["$.createdAt", "$.updatedAt"],
+          "maskBaseUrl": true
+        }
+      },
+      {
+        "name": "replay-rotated-token",
+        "method": "POST",
+        "path": "/api/v1/auth/refresh-token",
+        "auth": "none",
+        "json": {"refreshToken": "{{refreshToken}}", "deviceId": "phase0-fixture-device"},
+        "expectStatus": 401,
+        "normalize": {
+          "maskJsonPaths": ["$.correlationId"]
+        },
+        "notes": "Replay detection: reusing an already-rotated (revoked) refresh token. RevokeOnReplay=true revokes the ENTIRE token family."
+      },
+      {
+        "name": "rotate-after-family-revoke",
+        "method": "POST",
+        "path": "/api/v1/auth/refresh-token",
+        "auth": "none",
+        "json": {"refreshToken": "{{refreshToken2}}", "deviceId": "phase0-fixture-device"},
+        "expectStatus": 401,
+        "normalize": {
+          "maskJsonPaths": ["$.correlationId"]
+        },
+        "notes": "Proves the family-revoke cascade: the legitimately rotated second token is now also dead. A real client that loses a rotation race must re-authenticate."
+      },
+      {
+        "name": "relogin",
+        "method": "POST",
+        "path": "/api/v1/auth/authenticate",
+        "auth": "none",
+        "json": {"userName": "phase0-fixture", "password": "Mel0deeR0cks!"},
+        "capture": {"accessToken3": "$.token", "refreshToken3": "$.refreshToken"},
+        "secretCapture": ["accessToken3", "refreshToken3"],
+        "normalize": {
+          "maskJsonPaths": ["$.token", "$.expiresAt", "$.refreshToken", "$.refreshTokenExpiresAt", "$.user.createdAt", "$.user.updatedAt", "$.serverVersion"],
+          "maskBaseUrl": true,
+          "structureChecks": {"$.token": "jwt", "$.refreshToken": "opaqueToken"}
+        }
+      },
+      {
+        "name": "logout",
+        "method": "POST",
+        "path": "/api/v1/auth/logout",
+        "auth": "bearer-var:accessToken3",
+        "normalize": {},
+        "notes": "Logout revokes all refresh tokens for the user (reason 'logout')."
+      },
+      {
+        "name": "access-after-logout",
+        "method": "GET",
+        "path": "/api/v1/user/me",
+        "auth": "bearer-var:accessToken3",
+        "normalize": {
+          "maskJsonPaths": ["$.createdAt", "$.updatedAt"],
+          "maskBaseUrl": true
+        },
+        "notes": "Characterizes whether the stateless JWT access token still works after logout (server revokes refresh tokens only; access tokens are not revoked)."
+      },
+      {
+        "name": "refresh-after-logout",
+        "method": "POST",
+        "path": "/api/v1/auth/refresh-token",
+        "auth": "none",
+        "json": {"refreshToken": "{{refreshToken3}}", "deviceId": "phase0-fixture-device"},
+        "expectStatus": 401,
+        "normalize": {
+          "maskJsonPaths": ["$.correlationId"]
+        },
+        "notes": "The refresh token issued at relogin must be dead after logout."
+      }
+    ],
+    "notes": "Full refresh-token lifecycle evidence (PRD-API-M1-006 auth group): rotation, replay detection with family revoke, logout semantics, token behavior after logout."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "auth-refresh-legacy-jwt-endpoint",
+    "surface": "melodee-api-v1",
+    "flow": [
+      {
+        "name": "login",
+        "method": "POST",
+        "path": "/api/v1/auth/authenticate",
+        "auth": "none",
+        "json": {"userName": "phase0-fixture", "password": "Mel0deeR0cks!"},
+        "capture": {"accessToken": "$.token", "refreshToken": "$.refreshToken"},
+        "secretCapture": ["accessToken", "refreshToken"],
+        "normalize": {
+          "maskJsonPaths": ["$.token", "$.expiresAt", "$.refreshToken", "$.refreshTokenExpiresAt", "$.user.createdAt", "$.user.updatedAt", "$.serverVersion"],
+          "maskBaseUrl": true,
+          "structureChecks": {"$.token": "jwt", "$.refreshToken": "opaqueToken"}
+        }
+      },
+      {
+        "name": "refresh-with-valid-jwt",
+        "method": "POST",
+        "path": "/api/v1/auth/refresh",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskJsonPaths": ["$.token", "$.expiresAt", "$.user.createdAt", "$.user.updatedAt", "$.serverVersion"],
+          "maskBaseUrl": true,
+          "structureChecks": {"$.token": "jwt"}
+        },
+        "notes": "MeloAmp's 401 interceptor calls POST /auth/refresh (legacy endpoint requiring a valid JWT, no rotation). Response shape differs from /auth/refresh-token: no refreshToken fields."
+      },
+      {
+        "name": "refresh-with-expired-jwt",
+        "method": "POST",
+        "path": "/api/v1/auth/refresh",
+        "auth": "none",
+        "headers": {
+          "Authorization": "Bearer {{env:LEGACY_MELODEE_EXPIRED_JWT}}"
+        },
+        "expectStatus": 401,
+        "normalize": {
+          "maskJsonPaths": ["$.correlationId"]
+        },
+        "notes": "The controller remark claims this endpoint accepts a 'potentially expired' JWT; TokenValidationParameters (ValidateLifetime=true, ClockSkew=Zero) says otherwise. Capture settles the discrepancy. Skipped if LEGACY_MELODEE_EXPIRED_JWT is unset."
+      }
+    ]
+  },
+  {
+    "schemaVersion": 2,
+    "name": "auth-revoke-specific-token",
+    "surface": "melodee-api-v1",
+    "flow": [
+      {
+        "name": "login",
+        "method": "POST",
+        "path": "/api/v1/auth/authenticate",
+        "auth": "none",
+        "json": {"userName": "phase0-fixture", "password": "Mel0deeR0cks!"},
+        "capture": {"accessToken": "$.token", "refreshToken": "$.refreshToken"},
+        "secretCapture": ["accessToken", "refreshToken"],
+        "normalize": {
+          "maskJsonPaths": ["$.token", "$.expiresAt", "$.refreshToken", "$.refreshTokenExpiresAt", "$.user.createdAt", "$.user.updatedAt", "$.serverVersion"],
+          "maskBaseUrl": true,
+          "structureChecks": {"$.token": "jwt", "$.refreshToken": "opaqueToken"}
+        }
+      },
+      {
+        "name": "revoke",
+        "method": "POST",
+        "path": "/api/v1/auth/revoke",
+        "auth": "bearer-var:accessToken",
+        "json": {"refreshToken": "{{refreshToken}}"},
+        "normalize": {},
+        "notes": "Revoke a specific refresh token (per-device logout)."
+      },
+      {
+        "name": "rotate-revoked",
+        "method": "POST",
+        "path": "/api/v1/auth/refresh-token",
+        "auth": "none",
+        "json": {"refreshToken": "{{refreshToken}}", "deviceId": "phase0-fixture-device"},
+        "expectStatus": 401,
+        "normalize": {
+          "maskJsonPaths": ["$.correlationId"]
+        },
+        "notes": "The explicitly revoked token is rejected; because IsRevoked triggers replay detection, the family is also revoked."
+      }
+    ]
+  }
+]

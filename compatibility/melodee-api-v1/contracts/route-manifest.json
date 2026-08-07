@@ -896,8 +896,9 @@
       },
       "apiVersion": "1",
       "intentionalStatuses": [],
-      "implementation": "implemented",
-      "source": "PartyEndpointsController.cs"
+      "implementation": "excluded-from-build",
+      "source": "PartyEndpointsController.cs",
+      "buildExcluded": true
     },
     {
       "path": "/api/v1/party-endpoints/{id:guid}",
@@ -914,8 +915,9 @@
       },
       "apiVersion": "1",
       "intentionalStatuses": [],
-      "implementation": "implemented",
-      "source": "PartyEndpointsController.cs"
+      "implementation": "excluded-from-build",
+      "source": "PartyEndpointsController.cs",
+      "buildExcluded": true
     },
     {
       "path": "/api/v1/party-endpoints/{id:guid}/capabilities",
@@ -932,8 +934,9 @@
       },
       "apiVersion": "1",
       "intentionalStatuses": [],
-      "implementation": "implemented",
-      "source": "PartyEndpointsController.cs"
+      "implementation": "excluded-from-build",
+      "source": "PartyEndpointsController.cs",
+      "buildExcluded": true
     },
     {
       "path": "/api/v1/party-endpoints/{id:guid}/detach",
@@ -950,8 +953,9 @@
       },
       "apiVersion": "1",
       "intentionalStatuses": [],
-      "implementation": "implemented",
-      "source": "PartyEndpointsController.cs"
+      "implementation": "excluded-from-build",
+      "source": "PartyEndpointsController.cs",
+      "buildExcluded": true
     },
     {
       "path": "/api/v1/party-endpoints/{id:guid}/heartbeat",
@@ -968,8 +972,9 @@
       },
       "apiVersion": "1",
       "intentionalStatuses": [],
-      "implementation": "implemented",
-      "source": "PartyEndpointsController.cs"
+      "implementation": "excluded-from-build",
+      "source": "PartyEndpointsController.cs",
+      "buildExcluded": true
     },
     {
       "path": "/api/v1/party-endpoints/{id:guid}/state",
@@ -986,8 +991,9 @@
       },
       "apiVersion": "1",
       "intentionalStatuses": [],
-      "implementation": "implemented",
-      "source": "PartyEndpointsController.cs"
+      "implementation": "excluded-from-build",
+      "source": "PartyEndpointsController.cs",
+      "buildExcluded": true
     },
     {
       "path": "/api/v1/party-sessions",
@@ -1004,8 +1010,9 @@
       },
       "apiVersion": "1",
       "intentionalStatuses": [],
-      "implementation": "implemented",
-      "source": "PartySessionsController.cs"
+      "implementation": "excluded-from-build",
+      "source": "PartySessionsController.cs",
+      "buildExcluded": true
     },
     {
       "path": "/api/v1/party-sessions/active",
@@ -1022,8 +1029,9 @@
       },
       "apiVersion": "1",
       "intentionalStatuses": [],
-      "implementation": "implemented",
-      "source": "PartySessionsController.cs"
+      "implementation": "excluded-from-build",
+      "source": "PartySessionsController.cs",
+      "buildExcluded": true
     },
     {
       "path": "/api/v1/party-sessions/my",
@@ -1040,8 +1048,9 @@
       },
       "apiVersion": "1",
       "intentionalStatuses": [],
-      "implementation": "implemented",
-      "source": "PartySessionsController.cs"
+      "implementation": "excluded-from-build",
+      "source": "PartySessionsController.cs",
+      "buildExcluded": true
     },
     {
       "path": "/api/v1/party-sessions/{id:guid}",
@@ -1058,8 +1067,9 @@
       },
       "apiVersion": "1",
       "intentionalStatuses": [],
-      "implementation": "implemented",
-      "source": "PartySessionsController.cs"
+      "implementation": "excluded-from-build",
+      "source": "PartySessionsController.cs",
+      "buildExcluded": true
     },
     {
       "path": "/api/v1/party-sessions/{id:guid}/end",
@@ -1076,8 +1086,9 @@
       },
       "apiVersion": "1",
       "intentionalStatuses": [],
-      "implementation": "implemented",
-      "source": "PartySessionsController.cs"
+      "implementation": "excluded-from-build",
+      "source": "PartySessionsController.cs",
+      "buildExcluded": true
     },
     {
       "path": "/api/v1/party-sessions/{id:guid}/join",
@@ -1094,8 +1105,9 @@
       },
       "apiVersion": "1",
       "intentionalStatuses": [],
-      "implementation": "implemented",
-      "source": "PartySessionsController.cs"
+      "implementation": "excluded-from-build",
+      "source": "PartySessionsController.cs",
+      "buildExcluded": true
     },
     {
       "path": "/api/v1/party-sessions/{id:guid}/leave",
@@ -1112,8 +1124,9 @@
       },
       "apiVersion": "1",
       "intentionalStatuses": [],
-      "implementation": "implemented",
-      "source": "PartySessionsController.cs"
+      "implementation": "excluded-from-build",
+      "source": "PartySessionsController.cs",
+      "buildExcluded": true
     },
     {
       "path": "/api/v1/party-sessions/{id:guid}/participants",
@@ -1130,8 +1143,9 @@
       },
       "apiVersion": "1",
       "intentionalStatuses": [],
-      "implementation": "implemented",
-      "source": "PartySessionsController.cs"
+      "implementation": "excluded-from-build",
+      "source": "PartySessionsController.cs",
+      "buildExcluded": true
     },
     {
       "path": "/api/v1/party-sessions/{sessionId:guid}/audit",
@@ -1148,8 +1162,9 @@
       },
       "apiVersion": "1",
       "intentionalStatuses": [],
-      "implementation": "implemented",
-      "source": "PartyModerationController.cs"
+      "implementation": "excluded-from-build",
+      "source": "PartyModerationController.cs",
+      "buildExcluded": true
     },
     {
       "path": "/api/v1/party-sessions/{sessionId:guid}/participants/{targetUserId:int}/ban",
@@ -1166,8 +1181,9 @@
       },
       "apiVersion": "1",
       "intentionalStatuses": [],
-      "implementation": "implemented",
-      "source": "PartyModerationController.cs"
+      "implementation": "excluded-from-build",
+      "source": "PartyModerationController.cs",
+      "buildExcluded": true
     },
     {
       "path": "/api/v1/party-sessions/{sessionId:guid}/participants/{targetUserId:int}/kick",
@@ -1184,8 +1200,9 @@
       },
       "apiVersion": "1",
       "intentionalStatuses": [],
-      "implementation": "implemented",
-      "source": "PartyModerationController.cs"
+      "implementation": "excluded-from-build",
+      "source": "PartyModerationController.cs",
+      "buildExcluded": true
     },
     {
       "path": "/api/v1/party-sessions/{sessionId:guid}/participants/{targetUserId:int}/role",
@@ -1202,8 +1219,9 @@
       },
       "apiVersion": "1",
       "intentionalStatuses": [],
-      "implementation": "implemented",
-      "source": "PartyModerationController.cs"
+      "implementation": "excluded-from-build",
+      "source": "PartyModerationController.cs",
+      "buildExcluded": true
     },
     {
       "path": "/api/v1/party-sessions/{sessionId:guid}/participants/{targetUserId:int}/unban",
@@ -1220,8 +1238,9 @@
       },
       "apiVersion": "1",
       "intentionalStatuses": [],
-      "implementation": "implemented",
-      "source": "PartyModerationController.cs"
+      "implementation": "excluded-from-build",
+      "source": "PartyModerationController.cs",
+      "buildExcluded": true
     },
     {
       "path": "/api/v1/party-sessions/{sessionId:guid}/playback",
@@ -1238,8 +1257,9 @@
       },
       "apiVersion": "1",
       "intentionalStatuses": [],
-      "implementation": "implemented",
-      "source": "PartyPlaybackController.cs"
+      "implementation": "excluded-from-build",
+      "source": "PartyPlaybackController.cs",
+      "buildExcluded": true
     },
     {
       "path": "/api/v1/party-sessions/{sessionId:guid}/playback/next",
@@ -1256,8 +1276,9 @@
       },
       "apiVersion": "1",
       "intentionalStatuses": [],
-      "implementation": "implemented",
-      "source": "PartyPlaybackController.cs"
+      "implementation": "excluded-from-build",
+      "source": "PartyPlaybackController.cs",
+      "buildExcluded": true
     },
     {
       "path": "/api/v1/party-sessions/{sessionId:guid}/playback/pause",
@@ -1274,8 +1295,9 @@
       },
       "apiVersion": "1",
       "intentionalStatuses": [],
-      "implementation": "implemented",
-      "source": "PartyPlaybackController.cs"
+      "implementation": "excluded-from-build",
+      "source": "PartyPlaybackController.cs",
+      "buildExcluded": true
     },
     {
       "path": "/api/v1/party-sessions/{sessionId:guid}/playback/play",
@@ -1292,8 +1314,9 @@
       },
       "apiVersion": "1",
       "intentionalStatuses": [],
-      "implementation": "implemented",
-      "source": "PartyPlaybackController.cs"
+      "implementation": "excluded-from-build",
+      "source": "PartyPlaybackController.cs",
+      "buildExcluded": true
     },
     {
       "path": "/api/v1/party-sessions/{sessionId:guid}/playback/seek",
@@ -1310,8 +1333,9 @@
       },
       "apiVersion": "1",
       "intentionalStatuses": [],
-      "implementation": "implemented",
-      "source": "PartyPlaybackController.cs"
+      "implementation": "excluded-from-build",
+      "source": "PartyPlaybackController.cs",
+      "buildExcluded": true
     },
     {
       "path": "/api/v1/party-sessions/{sessionId:guid}/playback/stop",
@@ -1328,8 +1352,9 @@
       },
       "apiVersion": "1",
       "intentionalStatuses": [],
-      "implementation": "implemented",
-      "source": "PartyPlaybackController.cs"
+      "implementation": "excluded-from-build",
+      "source": "PartyPlaybackController.cs",
+      "buildExcluded": true
     },
     {
       "path": "/api/v1/party-sessions/{sessionId:guid}/playback/volume",
@@ -1346,8 +1371,9 @@
       },
       "apiVersion": "1",
       "intentionalStatuses": [],
-      "implementation": "implemented",
-      "source": "PartyPlaybackController.cs"
+      "implementation": "excluded-from-build",
+      "source": "PartyPlaybackController.cs",
+      "buildExcluded": true
     },
     {
       "path": "/api/v1/party-sessions/{sessionId:guid}/queue",
@@ -1364,8 +1390,9 @@
       },
       "apiVersion": "1",
       "intentionalStatuses": [],
-      "implementation": "implemented",
-      "source": "PartyQueueController.cs"
+      "implementation": "excluded-from-build",
+      "source": "PartyQueueController.cs",
+      "buildExcluded": true
     },
     {
       "path": "/api/v1/party-sessions/{sessionId:guid}/queue/clear",
@@ -1382,8 +1409,9 @@
       },
       "apiVersion": "1",
       "intentionalStatuses": [],
-      "implementation": "implemented",
-      "source": "PartyQueueController.cs"
+      "implementation": "excluded-from-build",
+      "source": "PartyQueueController.cs",
+      "buildExcluded": true
     },
     {
       "path": "/api/v1/party-sessions/{sessionId:guid}/queue/items",
@@ -1400,8 +1428,9 @@
       },
       "apiVersion": "1",
       "intentionalStatuses": [],
-      "implementation": "implemented",
-      "source": "PartyQueueController.cs"
+      "implementation": "excluded-from-build",
+      "source": "PartyQueueController.cs",
+      "buildExcluded": true
     },
     {
       "path": "/api/v1/party-sessions/{sessionId:guid}/queue/items/{itemId:guid}",
@@ -1418,8 +1447,9 @@
       },
       "apiVersion": "1",
       "intentionalStatuses": [],
-      "implementation": "implemented",
-      "source": "PartyQueueController.cs"
+      "implementation": "excluded-from-build",
+      "source": "PartyQueueController.cs",
+      "buildExcluded": true
     },
     {
       "path": "/api/v1/party-sessions/{sessionId:guid}/queue/items/{itemId:guid}/reorder",
@@ -1436,8 +1466,9 @@
       },
       "apiVersion": "1",
       "intentionalStatuses": [],
-      "implementation": "implemented",
-      "source": "PartyQueueController.cs"
+      "implementation": "excluded-from-build",
+      "source": "PartyQueueController.cs",
+      "buildExcluded": true
     },
     {
       "path": "/api/v1/party-sessions/{sessionId:guid}/settings/queue-lock",
@@ -1454,8 +1485,9 @@
       },
       "apiVersion": "1",
       "intentionalStatuses": [],
-      "implementation": "implemented",
-      "source": "PartyModerationController.cs"
+      "implementation": "excluded-from-build",
+      "source": "PartyModerationController.cs",
+      "buildExcluded": true
     },
     {
       "path": "/api/v1/playback-backend/capabilities",
@@ -2282,8 +2314,9 @@
       },
       "apiVersion": "1",
       "intentionalStatuses": [],
-      "implementation": "implemented",
-      "source": "QueueController.cs"
+      "implementation": "excluded-from-build",
+      "source": "QueueController.cs",
+      "buildExcluded": true
     },
     {
       "path": "/api/v1/queue",
@@ -2300,8 +2333,9 @@
       },
       "apiVersion": "1",
       "intentionalStatuses": [],
-      "implementation": "implemented",
-      "source": "QueueController.cs"
+      "implementation": "excluded-from-build",
+      "source": "QueueController.cs",
+      "buildExcluded": true
     },
     {
       "path": "/api/v1/queue",
@@ -2318,8 +2352,9 @@
       },
       "apiVersion": "1",
       "intentionalStatuses": [],
-      "implementation": "implemented",
-      "source": "QueueController.cs"
+      "implementation": "excluded-from-build",
+      "source": "QueueController.cs",
+      "buildExcluded": true
     },
     {
       "path": "/api/v1/recommendations",

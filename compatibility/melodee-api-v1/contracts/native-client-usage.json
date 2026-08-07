@@ -1,0 +1,734 @@
+{
+  "schemaVersion": 1,
+  "description": "Native Melodee API v1 routes actually exercised by the two supported native clients, inventoried from source at the recorded commits (FIRST-10-ISSUES.md Issue 5; Phase 0 review item 3). Only real call sites are listed; routes declared in client route tables but never invoked are excluded. Path parameters are normalized to {}. Full analysis: design/evidence/phase-0/native-client-route-inventory.md.",
+  "clients": [
+    {
+      "name": "melodee-player",
+      "platform": "Android (Kotlin, Retrofit/OkHttp, Media3/ExoPlayer, MediaBrowserServiceCompat for Android Auto)",
+      "repository": "https://github.com/melodee-project/melodee-player",
+      "commit": "7008eed187f42940b6614fe3438cf02fa5a07d94",
+      "authTransport": "Authorization: Bearer <jwt> on all API calls; NO auth on media/image fetches",
+      "routes": [
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/authenticate",
+          "evidence": "src/app/src/main/java/com/melodee/autoplayer/data/api/MusicApi.kt:7-10",
+          "usedFor": "login (userName XOR email by presence of @)"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/refresh-token",
+          "evidence": "data/api/MusicApi.kt:15-19; NetworkModule.kt:276",
+          "usedFor": "401 retry path only (X-Refresh-Request: true header skips Bearer)"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/system/info",
+          "evidence": "data/api/MusicApi.kt:12-13",
+          "usedFor": "version gate >= 1.2.0 before every login"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/user/me",
+          "evidence": "data/api/MusicApi.kt:22-23",
+          "usedFor": "home screen profile"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/user/playlists",
+          "evidence": "data/api/MusicApi.kt:25-29; MusicService.kt:571",
+          "usedFor": "home, playlists, Android Auto browse (query: page + LIMIT, not pageSize)"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/playlists/{}/songs",
+          "evidence": "data/api/MusicApi.kt:31-36; MusicService.kt:599,1577",
+          "usedFor": "playlist detail + Android Auto browse + lazy queue pagination (query: page + pageSize)"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/search/songs",
+          "evidence": "MusicService.kt:679,763",
+          "usedFor": "Android Auto voice/text search (query: q, page, pageSize, filterByArtistApiKey?)"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/artists",
+          "evidence": "MusicService.kt:672,711",
+          "usedFor": "Android Auto structured search artist resolution (query: q)"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/artists/{}/songs",
+          "evidence": "MusicService.kt:717",
+          "usedFor": "Android Auto artist browse"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/artists/{}/albums",
+          "evidence": "data/api/MusicApi.kt",
+          "usedFor": "artist detail"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/albums/{}/songs",
+          "evidence": "data/api/MusicApi.kt",
+          "usedFor": "album detail (no query params)"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/songs/starred/{}/{}",
+          "evidence": "data/api/MusicApi.kt:74-78; MusicService.kt:2645",
+          "usedFor": "favorite toggle incl. Android Auto/notification (path-encoded bool, no body)"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/scrobble",
+          "evidence": "data/api/ScrobbleApi.kt:58-59; service/ScrobbleManager.kt:130,176",
+          "usedFor": "nowPlaying after 10s, played at 50%; body has BOTH scrobbleTypeValue (int) and scrobbleType (string)"
+        }
+      ],
+      "opaqueServerUrls": [
+        {
+          "field": "Song.streamUrl",
+          "consumedBy": "ExoPlayer MediaItem.fromUri (MusicService.kt:1168); CacheDataSource over DefaultHttpDataSource, 200MB disk cache, no Authorization header, no explicit Range headers",
+          "compatibilityNote": "streamUrl must remain a fully self-authenticating absolute URL"
+        },
+        {
+          "field": "*.thumbnailUrl/imageUrl",
+          "consumedBy": "Coil + MediaSession metadata (MusicService.kt:814,1403)",
+          "compatibilityNote": "artwork URLs must be anonymously fetchable"
+        }
+      ],
+      "notUsed": [
+        "logout",
+        "register",
+        "rating endpoints",
+        "queue endpoints",
+        "shares",
+        "genres routes",
+        "any /rest/ OpenSubsonic route"
+      ]
+    },
+    {
+      "name": "meloamp",
+      "platform": "Desktop (Electron + React, axios)",
+      "repository": "https://github.com/melodee-project/meloamp",
+      "commit": "096c76d810af91205aeee54da58131766b0f076b",
+      "authTransport": "Authorization: Bearer <jwt> via axios interceptor; stream playback appends ?jwt=<token> query param for <audio> elements",
+      "routes": [
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/authenticate",
+          "evidence": "src/ui/src/api.ts:129",
+          "usedFor": "login (email + password)"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/refresh",
+          "evidence": "src/ui/src/api.ts:56",
+          "usedFor": "401 response interceptor (legacy JWT endpoint, no rotation)"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/system/info",
+          "evidence": "pages/LoginPage.tsx:25",
+          "usedFor": "unauthenticated version gate"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/system/stats",
+          "evidence": "pages/Dashboard.tsx:29",
+          "usedFor": "dashboard"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/artists",
+          "evidence": "pages/BrowseArtists.tsx:22",
+          "usedFor": "browse (page, pageSize=20, orderBy, orderDirection)"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/artists/recent",
+          "evidence": "pages/Dashboard.tsx:30",
+          "usedFor": "dashboard"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/artists/{}",
+          "evidence": "detailViews/ArtistDetailView.tsx:34",
+          "usedFor": "artist detail"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/artists/{}/albums",
+          "evidence": "detailViews/ArtistDetailView.tsx:46",
+          "usedFor": "artist detail"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/albums",
+          "evidence": "pages/BrowseAlbums.tsx:22",
+          "usedFor": "browse"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/albums/recent",
+          "evidence": "pages/Dashboard.tsx:31",
+          "usedFor": "dashboard"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/albums/{}",
+          "evidence": "detailViews/AlbumDetailView.tsx:37",
+          "usedFor": "album detail"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/albums/{}/songs",
+          "evidence": "detailViews/AlbumDetailView.tsx:53",
+          "usedFor": "album detail"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/songs",
+          "evidence": "pages/BrowseSongs.tsx:22",
+          "usedFor": "browse"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/songs/{}",
+          "evidence": "detailViews/SongDetailView.tsx:32",
+          "usedFor": "song detail"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/genres",
+          "evidence": "pages/GenresPage.tsx:55",
+          "usedFor": "genres page"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/genres/{}/songs",
+          "evidence": "pages/GenresPage.tsx:115-118",
+          "usedFor": "genre songs"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/user/me",
+          "evidence": "App.tsx:351",
+          "usedFor": "session restore"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/user/playlists",
+          "evidence": "components/PlaylistPickerDialog.tsx:65",
+          "usedFor": "playlist picker/manager/dashboard"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/user/last-played",
+          "evidence": "pages/HistoryPage.tsx:37",
+          "usedFor": "history"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/playlists/{}",
+          "evidence": "detailViews/PlaylistDetailView.tsx:104",
+          "usedFor": "playlist detail"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/playlists/{}/songs",
+          "evidence": "detailViews/PlaylistDetailView.tsx:119",
+          "usedFor": "playlist detail"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/playlists",
+          "evidence": "pages/PlaylistManager.tsx:108",
+          "usedFor": "create playlist / save queue as playlist"
+        },
+        {
+          "method": "PUT",
+          "path": "/api/v1/playlists/{}",
+          "evidence": "detailViews/PlaylistDetailView.tsx:340",
+          "usedFor": "edit playlist"
+        },
+        {
+          "method": "DELETE",
+          "path": "/api/v1/playlists/{}",
+          "evidence": "detailViews/PlaylistDetailView.tsx:196",
+          "usedFor": "delete playlist"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/playlists/{}/songs",
+          "evidence": "components/PlaylistPickerDialog.tsx:91",
+          "usedFor": "add songs to playlist — NOTE: client posts object body { songIds } but server binds bare Guid[]; broken against baseline (see scenario catalog-playlist-crud/add-songs-meloamp-shape)"
+        },
+        {
+          "method": "PUT",
+          "path": "/api/v1/playlists/{}/songs/reorder",
+          "evidence": "detailViews/PlaylistDetailView.tsx:166",
+          "usedFor": "reorder playlist"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/playlists/{}/image",
+          "evidence": "detailViews/PlaylistDetailView.tsx:350",
+          "usedFor": "playlist image upload (multipart)"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/playlists/smart",
+          "evidence": "pages/SmartPlaylistsPage.tsx:60",
+          "usedFor": "smart playlists"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/playlists/smart",
+          "evidence": "pages/SmartPlaylistsPage.tsx:83",
+          "usedFor": "create smart playlist (MQL)"
+        },
+        {
+          "method": "PUT",
+          "path": "/api/v1/playlists/smart/{}",
+          "evidence": "pages/SmartPlaylistsPage.tsx:103",
+          "usedFor": "edit smart playlist"
+        },
+        {
+          "method": "DELETE",
+          "path": "/api/v1/playlists/smart/{}",
+          "evidence": "pages/SmartPlaylistsPage.tsx:120",
+          "usedFor": "delete smart playlist"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/playlists/smart/{}/evaluate",
+          "evidence": "pages/SmartPlaylistsPage.tsx:130",
+          "usedFor": "preview smart playlist"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/search",
+          "evidence": "pages/SearchPage.tsx:121-129",
+          "usedFor": "combined search"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/search/songs",
+          "evidence": "pages/SearchAdvancedPage.tsx:154-161",
+          "usedFor": "song search"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/search/advanced",
+          "evidence": "pages/SearchAdvancedPage.tsx:88-139",
+          "usedFor": "advanced search with filters"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/songs/starred/{}/{}",
+          "evidence": "pages/Player.tsx:245,249",
+          "usedFor": "star toggle"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/songs/hated/{}/{}",
+          "evidence": "detailViews/SongDetailView.tsx:79",
+          "usedFor": "hate toggle"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/songs/setrating/{}/{}",
+          "evidence": "pages/Player.tsx:265",
+          "usedFor": "rating 0-5"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/albums/starred/{}/{}",
+          "evidence": "detailViews/AlbumDetailView.tsx:90",
+          "usedFor": "album star"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/albums/hated/{}/{}",
+          "evidence": "detailViews/AlbumDetailView.tsx:110",
+          "usedFor": "album hate"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/albums/setrating/{}/{}",
+          "evidence": "detailViews/AlbumDetailView.tsx:130",
+          "usedFor": "album rating"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/artists/starred/{}/{}",
+          "evidence": "detailViews/ArtistDetailView.tsx:76",
+          "usedFor": "artist star"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/artists/hated/{}/{}",
+          "evidence": "detailViews/ArtistDetailView.tsx:94",
+          "usedFor": "artist hate"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/scrobble",
+          "evidence": "hooks/useScrobble.ts:42-63",
+          "usedFor": "nowPlaying after 10s; played after 70%"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/shares",
+          "evidence": "pages/SharesPage.tsx:73",
+          "usedFor": "shares page"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/shares",
+          "evidence": "pages/SharesPage.tsx:96-106",
+          "usedFor": "create share"
+        },
+        {
+          "method": "PUT",
+          "path": "/api/v1/shares/{}",
+          "evidence": "pages/SharesPage.tsx:118",
+          "usedFor": "edit share"
+        },
+        {
+          "method": "DELETE",
+          "path": "/api/v1/shares/{}",
+          "evidence": "pages/SharesPage.tsx:136",
+          "usedFor": "delete share"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/shares/public/{}",
+          "evidence": "pages/PublicSharePage.tsx:111",
+          "usedFor": "public share page (unauthenticated)"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/themes",
+          "evidence": "pages/ThemesPage.tsx:40",
+          "usedFor": "themes page"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/themes/me",
+          "evidence": "pages/ThemesPage.tsx:64-67",
+          "usedFor": "select theme"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/themes/import",
+          "evidence": "pages/ThemesPage.tsx:130-136",
+          "usedFor": "import theme"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/themes/{}/export",
+          "evidence": "pages/ThemesPage.tsx:314-316",
+          "usedFor": "export theme (fetch WITHOUT Authorization header)"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/equalizer/presets",
+          "evidence": "pages/EqualizerPage.tsx:54",
+          "usedFor": "equalizer"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/equalizer/presets",
+          "evidence": "pages/EqualizerPage.tsx:88-95",
+          "usedFor": "save preset"
+        },
+        {
+          "method": "DELETE",
+          "path": "/api/v1/equalizer/presets/{}",
+          "evidence": "pages/EqualizerPage.tsx:106",
+          "usedFor": "delete preset"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/analytics/listening",
+          "evidence": "pages/AnalyticsPage.tsx:90",
+          "usedFor": "analytics"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/analytics/top/{}",
+          "evidence": "pages/AnalyticsPage.tsx:91",
+          "usedFor": "analytics"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/charts",
+          "evidence": "pages/ChartsPage.tsx:77",
+          "usedFor": "charts"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/charts/{}",
+          "evidence": "pages/ChartsPage.tsx:92",
+          "usedFor": "chart detail"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/recommendations",
+          "evidence": "pages/RecommendationsPage.tsx:37",
+          "usedFor": "recommendations"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/requests",
+          "evidence": "pages/RequestsPage.tsx:114-125",
+          "usedFor": "requests page"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/requests",
+          "evidence": "pages/RequestsPage.tsx:210-216",
+          "usedFor": "create request"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/requests/{}",
+          "evidence": "pages/RequestsPage.tsx:153",
+          "usedFor": "request detail"
+        },
+        {
+          "method": "PUT",
+          "path": "/api/v1/requests/{}",
+          "evidence": "pages/RequestsPage.tsx:197-203",
+          "usedFor": "edit request"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/requests/{}/comments",
+          "evidence": "pages/RequestsPage.tsx:158",
+          "usedFor": "request comments"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/requests/{}/comments",
+          "evidence": "pages/RequestsPage.tsx:171-175",
+          "usedFor": "comment"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/requests/{}/seen",
+          "evidence": "pages/RequestsPage.tsx:157",
+          "usedFor": "mark seen"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/requests/{}/complete",
+          "evidence": "pages/RequestsPage.tsx:186",
+          "usedFor": "complete request"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/requests/activity",
+          "evidence": "pages/RequestsPage.tsx:142",
+          "usedFor": "activity feed"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/requests/activity/unread",
+          "evidence": "pages/RequestsPage.tsx:99-101",
+          "usedFor": "unread activity"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/playback-backend/status",
+          "evidence": "pages/PlaybackToolsPage.tsx:114",
+          "usedFor": "playback tools"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/playback-backend/capabilities",
+          "evidence": "pages/PlaybackToolsPage.tsx:101",
+          "usedFor": "playback tools"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/playback/settings",
+          "evidence": "pages/PlaybackToolsPage.tsx:127",
+          "usedFor": "playback tools"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/playback/settings",
+          "evidence": "pages/PlaybackToolsPage.tsx:172-175",
+          "usedFor": "playback tools"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/playback-backend/register-endpoint",
+          "evidence": "pages/PlaybackToolsPage.tsx:189",
+          "usedFor": "playback tools"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/playback-backend/initialize",
+          "evidence": "pages/PlaybackToolsPage.tsx:203",
+          "usedFor": "playback tools"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/playback-backend/shutdown",
+          "evidence": "pages/PlaybackToolsPage.tsx:217",
+          "usedFor": "playback tools"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/playback-backend/heartbeat/{}",
+          "evidence": "pages/PlaybackToolsPage.tsx:258-259",
+          "usedFor": "playback tools"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/endpoints",
+          "evidence": "pages/PlaybackToolsPage.tsx:150",
+          "usedFor": "remote endpoints"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/endpoints/for-session/{}",
+          "evidence": "pages/PlaybackToolsPage.tsx:236-237",
+          "usedFor": "remote endpoints"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/endpoints/{}/attach",
+          "evidence": "pages/PlaybackToolsPage.tsx:284-287",
+          "usedFor": "remote endpoints"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/endpoints/{}/detach",
+          "evidence": "pages/PlaybackToolsPage.tsx:301-302",
+          "usedFor": "remote endpoints"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/admin/users",
+          "evidence": "pages/AdminUsersPage.tsx:41",
+          "usedFor": "admin page"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/artist-lookup/providers",
+          "evidence": "pages/ArtistLookupPage.tsx:86",
+          "usedFor": "artist lookup"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/artist-lookup",
+          "evidence": "pages/ArtistLookupPage.tsx:104-112",
+          "usedFor": "artist lookup"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/user/songs/liked",
+          "evidence": "pages/FavoritesPage.tsx:61,81,89,97",
+          "usedFor": "favorites; entity placeholder is a literal path segment iterated client-side (songs|albums|artists)"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/user/songs/disliked",
+          "evidence": "pages/FavoritesPage.tsx:63",
+          "usedFor": "favorites; entity placeholder is a literal path segment iterated client-side (songs|albums|artists)"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/user/songs/top-rated",
+          "evidence": "pages/FavoritesPage.tsx:65",
+          "usedFor": "favorites; entity placeholder is a literal path segment iterated client-side (songs|albums|artists)"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/user/songs/rated",
+          "evidence": "pages/FavoritesPage.tsx:67",
+          "usedFor": "favorites; entity placeholder is a literal path segment iterated client-side (songs|albums|artists)"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/user/albums/liked",
+          "evidence": "pages/FavoritesPage.tsx:61-67",
+          "usedFor": "favorites (entity variant)"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/user/artists/liked",
+          "evidence": "pages/FavoritesPage.tsx:61-67",
+          "usedFor": "favorites (entity variant)"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/user/albums/disliked",
+          "evidence": "pages/FavoritesPage.tsx:61-67",
+          "usedFor": "favorites (entity variant)"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/user/artists/disliked",
+          "evidence": "pages/FavoritesPage.tsx:61-67",
+          "usedFor": "favorites (entity variant)"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/user/albums/top-rated",
+          "evidence": "pages/FavoritesPage.tsx:61-67",
+          "usedFor": "favorites (entity variant)"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/user/artists/top-rated",
+          "evidence": "pages/FavoritesPage.tsx:61-67",
+          "usedFor": "favorites (entity variant)"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/user/albums/rated",
+          "evidence": "pages/FavoritesPage.tsx:61-67",
+          "usedFor": "favorites (entity variant)"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/user/artists/rated",
+          "evidence": "pages/FavoritesPage.tsx:61-67",
+          "usedFor": "favorites (entity variant)"
+        }
+      ],
+      "opaqueServerUrls": [
+        {
+          "field": "Song.streamUrl",
+          "consumedBy": "<audio> element via toQueueSong.ts:36-49; appends ?jwt=<token>; Player.tsx:132,139 probes HEAD then Range bytes=0-1023 fallback",
+          "compatibilityNote": "stream URL must tolerate an extra jwt query parameter and support HEAD + byte ranges"
+        },
+        {
+          "field": "*.thumbnailUrl/imageUrl",
+          "consumedBy": "verbatim in <img>/CSS; Electron MPRIS cache",
+          "compatibilityNote": "artwork URLs must be anonymously fetchable"
+        }
+      ],
+      "notUsed": [
+        "/api/v1/queue (queue is client-side zustand/localStorage)",
+        "all declared OpenSubsonic /rest/ podcast routes",
+        "auth/logout (declared, never called; logout is local JWT clear)",
+        "auth/revoke",
+        "auth/password-reset/*",
+        "/songs/random",
+        "/songs/{}/lyrics",
+        "/search/suggest",
+        "/search/similar/{}/{}"
+      ]
+    }
+  ]
+}

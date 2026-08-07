@@ -228,6 +228,28 @@ def parse_controller(path: Path) -> list[dict[str, object]]:
     return actions
 
 
+CSPROJ_REL = Path("src/Melodee.Blazor/Melodee.Blazor.csproj")
+COMPILE_REMOVE_RE = re.compile(r'<Compile\s+Remove="(?P<path>[^"]+)"')
+
+
+def build_excluded_sources(legacy_root: Path) -> set[str]:
+    """Source files excluded from compilation by ``<Compile Remove>`` entries.
+
+    Discovery (Issue 5): the frozen baseline excludes QueueController and all
+    Party controllers this way — their routes exist in source but answer 404
+    at runtime because the handlers are never compiled into the server."""
+    csproj = legacy_root / CSPROJ_REL
+    if not csproj.exists():
+        return set()
+    excluded: set[str] = set()
+    for match in COMPILE_REMOVE_RE.finditer(csproj.read_text(encoding="utf-8")):
+        normalized = match.group("path").replace("\\", "/")
+        if normalized.endswith("**"):
+            continue
+        excluded.add(normalized.rsplit("/", 1)[-1])
+    return excluded
+
+
 def legacy_commit(legacy_root: Path) -> str:
     result = subprocess.run(
         ["git", "-C", str(legacy_root), "rev-parse", "HEAD"],
@@ -240,10 +262,15 @@ def legacy_commit(legacy_root: Path) -> str:
 
 def build_manifests(legacy_root: Path) -> dict[str, dict[str, object]]:
     controllers = legacy_root / CONTROLLERS_REL
+    excluded = build_excluded_sources(legacy_root)
     manifests: dict[str, list[dict[str, object]]] = {surface: [] for surface in SURFACES.values()}
     for directory, surface in SURFACES.items():
         for path in sorted((controllers / directory).glob("*.cs")):
-            manifests[surface].extend(parse_controller(path))
+            for route in parse_controller(path):
+                if path.name in excluded:
+                    route["implementation"] = "excluded-from-build"
+                    route["buildExcluded"] = True
+                manifests[surface].append(route)
     for filename, surface in ROOT_FILES.items():
         path = controllers / filename
         if path.exists():

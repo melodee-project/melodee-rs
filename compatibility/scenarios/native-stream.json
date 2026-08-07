@@ -1,0 +1,305 @@
+[
+  {
+    "schemaVersion": 2,
+    "name": "stream",
+    "surface": "melodee-api-v1",
+    "flow": [
+      {
+        "name": "login",
+        "method": "POST",
+        "path": "/api/v1/auth/authenticate",
+        "auth": "none",
+        "json": {
+          "userName": "phase0-fixture",
+          "password": "Mel0deeR0cks!"
+        },
+        "capture": {
+          "accessToken": "$.token"
+        },
+        "secretCapture": [
+          "accessToken"
+        ],
+        "normalize": {
+          "maskJsonPaths": [
+            "$.token",
+            "$.expiresAt",
+            "$.refreshToken",
+            "$.refreshTokenExpiresAt",
+            "$.user.createdAt",
+            "$.user.updatedAt",
+            "$.serverVersion"
+          ],
+          "maskBaseUrl": true
+        }
+      },
+      {
+        "name": "album-songs-for-stream-url",
+        "method": "GET",
+        "path": "/api/v1/albums/69d97699-74c5-5403-878f-87f42d9d9fbb/songs",
+        "auth": "bearer-var:accessToken",
+        "capture": {
+          "streamUrl": "$.data[0].streamUrl"
+        },
+        "captureRegex": {
+          "streamAuthToken": {
+            "path": "$.data[0].streamUrl",
+            "regex": "/song/stream/[^/]+/[^/]+/([^/?\\s]+)"
+          }
+        },
+        "secretCapture": [
+          "streamAuthToken"
+        ],
+        "normalize": {
+          "maskBaseUrl": true,
+          "maskUrlAuthTokenPaths": [
+            "$.data[*].streamUrl"
+          ],
+          "structureChecks": {
+            "$.data[0].streamUrl": "streamAuthToken"
+          }
+        },
+        "notes": "data[0] is Solar Wind (songNumber 1, deterministic album ordering). The streamUrl is consumed verbatim by both native clients and is self-authenticating: {baseUrl}/song/stream/{songApiKey}/{userApiKey}/{urlencode(base64(userGuid:songGuid:clientIp|expiryUnix|hmacSha256))}. Secret = user PublicKey; expiry = 7 days; clientBinding = client IP. Only the auth token segment is treated as secret; the recorded stream-step request URLs keep the concrete path shape with the token segment masked."
+      },
+      {
+        "name": "head",
+        "method": "HEAD",
+        "path": "{{streamUrl}}",
+        "auth": "none",
+        "normalize": {
+          "maskBaseUrl": true,
+          "dropHeaders": [
+            "etag",
+            "last-modified"
+          ]
+        },
+        "notes": "MeloAmp probes stream URLs with HEAD first (Player.tsx:132). HEAD returns headers only (Accept-Ranges, Content-Length = full size, Content-Type)."
+      },
+      {
+        "name": "get-full",
+        "method": "GET",
+        "path": "{{streamUrl}}",
+        "auth": "none",
+        "normalize": {
+          "maskBaseUrl": true,
+          "dropHeaders": [
+            "etag",
+            "last-modified"
+          ]
+        },
+        "notes": "Normal full-file GET. Expect 200, Content-Type audio/wav, Accept-Ranges bytes (PhysicalFileResult, EnableRangeProcessing=true), Content-Length = FileSize."
+      },
+      {
+        "name": "get-range-initial",
+        "method": "GET",
+        "path": "{{streamUrl}}",
+        "auth": "none",
+        "headers": {
+          "Range": "bytes=0-1023"
+        },
+        "normalize": {
+          "maskBaseUrl": true,
+          "dropHeaders": [
+            "etag",
+            "last-modified"
+          ]
+        },
+        "notes": "Initial 1 KiB range (media-player probe pattern). Expect 206 with Content-Range bytes 0-1023/{size}."
+      },
+      {
+        "name": "get-range-middle",
+        "method": "GET",
+        "path": "{{streamUrl}}",
+        "auth": "none",
+        "headers": {
+          "Range": "bytes=100000-101023"
+        },
+        "normalize": {
+          "maskBaseUrl": true,
+          "dropHeaders": [
+            "etag",
+            "last-modified"
+          ]
+        },
+        "notes": "Middle-of-file range (seek target)."
+      },
+      {
+        "name": "get-range-final-suffix",
+        "method": "GET",
+        "path": "{{streamUrl}}",
+        "auth": "none",
+        "headers": {
+          "Range": "bytes=-2048"
+        },
+        "normalize": {
+          "maskBaseUrl": true,
+          "dropHeaders": [
+            "etag",
+            "last-modified"
+          ]
+        },
+        "notes": "Suffix range: last 2048 bytes."
+      },
+      {
+        "name": "get-range-open-end",
+        "method": "GET",
+        "path": "{{streamUrl}}",
+        "auth": "none",
+        "headers": {
+          "Range": "bytes=200000-"
+        },
+        "normalize": {
+          "maskBaseUrl": true,
+          "dropHeaders": [
+            "etag",
+            "last-modified"
+          ]
+        },
+        "notes": "Open-ended range from offset to EOF."
+      },
+      {
+        "name": "get-range-malformed",
+        "method": "GET",
+        "path": "{{streamUrl}}",
+        "auth": "none",
+        "headers": {
+          "Range": "bytes=abc-def"
+        },
+        "expectStatus": 400,
+        "normalize": {
+          "maskBaseUrl": true,
+          "maskJsonPaths": [
+            "$.correlationId"
+          ]
+        },
+        "notes": "Malformed range. The legacy server answers 400 'Unable to load song' (RangeParser returns null; controller maps to ApiBadRequest) — NOT RFC 7233's 416. Compatibility-critical."
+      },
+      {
+        "name": "get-range-unsatisfiable",
+        "method": "GET",
+        "path": "{{streamUrl}}",
+        "auth": "none",
+        "headers": {
+          "Range": "bytes=999999999-"
+        },
+        "expectStatus": 400,
+        "normalize": {
+          "maskBaseUrl": true,
+          "maskJsonPaths": [
+            "$.correlationId"
+          ]
+        },
+        "notes": "Start beyond EOF. Also 400, not 416."
+      },
+      {
+        "name": "get-range-inverted",
+        "method": "GET",
+        "path": "{{streamUrl}}",
+        "auth": "none",
+        "headers": {
+          "Range": "bytes=1000-500"
+        },
+        "expectStatus": 400,
+        "normalize": {
+          "maskBaseUrl": true,
+          "maskJsonPaths": [
+            "$.correlationId"
+          ]
+        },
+        "notes": "End before start."
+      },
+      {
+        "name": "get-range-multipart",
+        "method": "GET",
+        "path": "{{streamUrl}}",
+        "auth": "none",
+        "headers": {
+          "Range": "bytes=0-99,200-299"
+        },
+        "normalize": {
+          "maskBaseUrl": true,
+          "maskJsonPaths": [
+            "$.correlationId"
+          ]
+        },
+        "notes": "Multi-range request: RangeParser.ParseRange (single-range regex) rejects the comma form -> 400 'Unable to load song'. Multipart/byteranges responses are NOT supported.",
+        "expectStatus": 400
+      },
+      {
+        "name": "get-with-jwt-query-param",
+        "method": "GET",
+        "path": "{{streamUrl}}?jwt={{accessToken}}",
+        "auth": "none",
+        "headers": {
+          "Range": "bytes=0-1023"
+        },
+        "normalize": {
+          "maskBaseUrl": true,
+          "dropHeaders": [
+            "etag",
+            "last-modified"
+          ]
+        },
+        "notes": "MeloAmp appends ?jwt=<token> for <audio> playback (toQueueSong.ts:40-44). The route is [AllowAnonymous] with path-segment HMAC auth; records that the extra query param is tolerated (the jwt value is redacted in the recorded URL as a sensitive query key AND unsubstituted as a captured secret)."
+      },
+      {
+        "name": "get-tampered-token",
+        "method": "GET",
+        "path": "{{streamUrl}}tampered",
+        "auth": "none",
+        "normalize": {
+          "maskBaseUrl": true,
+          "maskJsonPaths": [
+            "$.correlationId"
+          ]
+        },
+        "notes": "DISCOVERY: a structurally undecodable authToken (corrupted base64) does NOT produce a clean 401 JSON; FromBase64 throws inside the controller, the error pipeline answers 302 Location: /Account/Login?ReturnUrl=%2FError (Blazor error handling). Captured without following redirects. Valid-format-but-wrong HMAC tokens DO get clean 401 JSON (see get-token-for-wrong-song).",
+        "followRedirects": false,
+        "expectStatus": 302
+      },
+      {
+        "name": "get-token-for-wrong-song",
+        "method": "GET",
+        "path": "{{baseUrl}}/song/stream/b3297a8f-5e2b-5ade-98ea-f899d38059e0/f78448cc-82ec-5864-877c-6c6163b00065/{{streamAuthToken}}",
+        "auth": "none",
+        "expectStatus": 401,
+        "normalize": {
+          "maskBaseUrl": true,
+          "maskJsonPaths": [
+            "$.correlationId"
+          ]
+        },
+        "notes": "Valid token bound to Solar Wind presented for a DIFFERENT song (Neon 東京): token song-guid check must reject. Proves per-song binding."
+      },
+      {
+        "name": "get-unknown-user",
+        "method": "GET",
+        "path": "{{baseUrl}}/song/stream/2b8eab4b-235d-5892-99f8-c0f5f54e8ab4/11111111-1111-1111-1111-111111111111/{{streamAuthToken}}",
+        "auth": "none",
+        "expectStatus": 401,
+        "normalize": {
+          "maskBaseUrl": true,
+          "maskJsonPaths": [
+            "$.correlationId"
+          ]
+        },
+        "notes": "Nonexistent (random) userApiKey with a valid token: user lookup fails before token validation -> 401."
+      },
+      {
+        "name": "get-empty-guid-user",
+        "method": "GET",
+        "path": "{{baseUrl}}/song/stream/2b8eab4b-235d-5892-99f8-c0f5f54e8ab4/00000000-0000-0000-0000-000000000000/{{streamAuthToken}}",
+        "auth": "none",
+        "followRedirects": false,
+        "expectStatus": 302,
+        "normalize": {
+          "maskBaseUrl": true,
+          "maskJsonPaths": [
+            "$.correlationId"
+          ]
+        },
+        "notes": "DISCOVERY: Guid.Empty as userApiKey takes the exception path (302 to /Account/Login?ReturnUrl=%2FError) instead of the clean 401 a random unknown GUID gets. Undocumented behavioral split in the stream auth pipeline."
+      }
+    ],
+    "notes": "PRD-STREAM-001/002 critical path: URL shape, HMAC auth semantics, 200 vs 206, Content-Type/Length/Range, Accept-Ranges, and invalid/unsatisfiable range behavior required by Android Media3/Android Auto and desktop clients."
+  }
+]

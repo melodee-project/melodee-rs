@@ -1,0 +1,4491 @@
+{
+  "schemaVersion": 1,
+  "surface": "melodee-api-v1",
+  "legacyBaselineCommit": "4028b58dbd3302ed431e2c5b32d9dde5634db218",
+  "inputs": [
+    "compatibility/melodee-api-v1/contracts/route-manifest.json",
+    "compatibility/melodee-api-v1/contracts/openapi-v1.json",
+    "compatibility/melodee-api-v1/contracts/native-client-usage.json",
+    "compatibility/scenarios/*.json"
+  ],
+  "routeCount": 202,
+  "summary": {
+    "client-used-uncaptured": 69,
+    "captured": 34,
+    "documented-uncaptured": 45,
+    "excluded-from-build": 35,
+    "undocumented-uncaptured": 19
+  },
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/users",
+      "manifestPath": "/api/v1/admin/users",
+      "controller": "UsersController",
+      "action": "ListUsersAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/AdminUsersPage.tsx:41",
+          "usedFor": "admin page"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/albums",
+      "manifestPath": "/api/v1/albums",
+      "controller": "AlbumsController",
+      "action": "ListAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/BrowseAlbums.tsx:22",
+          "usedFor": "browse"
+        }
+      ],
+      "scenarios": [
+        "catalog/albums-list"
+      ],
+      "parityStatus": "captured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/albums/hated/{}/{}",
+      "manifestPath": "/api/v1/albums/hated/{apiKey:guid}/{isHated:bool}",
+      "controller": "AlbumsController",
+      "action": "ToggleAlbumHated",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "detailViews/AlbumDetailView.tsx:110",
+          "usedFor": "album hate"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/albums/recent",
+      "manifestPath": "/api/v1/albums/recent",
+      "controller": "AlbumsController",
+      "action": "RecentlyAddedAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/Dashboard.tsx:31",
+          "usedFor": "dashboard"
+        }
+      ],
+      "scenarios": [
+        "catalog/albums-recent"
+      ],
+      "parityStatus": "captured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/albums/setrating/{}/{}",
+      "manifestPath": "/api/v1/albums/setrating/{apiKey:guid}/{rating:int}",
+      "controller": "AlbumsController",
+      "action": "SetAlbumRating",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "detailViews/AlbumDetailView.tsx:130",
+          "usedFor": "album rating"
+        }
+      ],
+      "scenarios": [
+        "catalog-star-rating/rate-album",
+        "catalog-star-rating/rate-album-reset"
+      ],
+      "parityStatus": "captured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/albums/starred/{}/{}",
+      "manifestPath": "/api/v1/albums/starred/{apiKey:guid}/{isStarred:bool}",
+      "controller": "AlbumsController",
+      "action": "ToggleAlbumStarred",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "detailViews/AlbumDetailView.tsx:90",
+          "usedFor": "album star"
+        }
+      ],
+      "scenarios": [
+        "catalog-star-rating/star-album-on",
+        "catalog-star-rating/star-album-off"
+      ],
+      "parityStatus": "captured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/albums/{}",
+      "manifestPath": "/api/v1/albums/{id:guid}",
+      "controller": "AlbumsController",
+      "action": "AlbumById",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "detailViews/AlbumDetailView.tsx:37",
+          "usedFor": "album detail"
+        }
+      ],
+      "scenarios": [
+        "catalog/album-detail",
+        "catalog/album-detail-compilation",
+        "catalog/album-detail-multidisc",
+        "catalog/album-detail-minimal-metadata",
+        "catalog-star-rating/album-detail-after-star",
+        "catalog-star-rating/album-detail-after-rating"
+      ],
+      "parityStatus": "captured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/albums/{}/songs",
+      "manifestPath": "/api/v1/albums/{id:guid}/songs",
+      "controller": "AlbumsController",
+      "action": "AlbumSongsAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "melodee-player",
+          "evidence": "data/api/MusicApi.kt",
+          "usedFor": "album detail (no query params)"
+        },
+        {
+          "client": "meloamp",
+          "evidence": "detailViews/AlbumDetailView.tsx:53",
+          "usedFor": "album detail"
+        }
+      ],
+      "scenarios": [
+        "catalog/album-songs",
+        "catalog/album-songs-multidisc",
+        "stream/album-songs-for-stream-url"
+      ],
+      "parityStatus": "captured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/analytics/listening",
+      "manifestPath": "/api/v1/analytics/listening",
+      "controller": "AnalyticsController",
+      "action": "GetListeningStatisticsAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/AnalyticsPage.tsx:90",
+          "usedFor": "analytics"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/analytics/top/{}",
+      "manifestPath": "/api/v1/analytics/top/{period}",
+      "controller": "AnalyticsController",
+      "action": "GetTopContentAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/AnalyticsPage.tsx:91",
+          "usedFor": "analytics"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/artist-lookup",
+      "manifestPath": "/api/v1/artist-lookup",
+      "controller": "ArtistLookupController",
+      "action": "Lookup",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/ArtistLookupPage.tsx:104-112",
+          "usedFor": "artist lookup"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/artist-lookup/providers",
+      "manifestPath": "/api/v1/artist-lookup/providers",
+      "controller": "ArtistLookupController",
+      "action": "GetProviders",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/ArtistLookupPage.tsx:86",
+          "usedFor": "artist lookup"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/artists",
+      "manifestPath": "/api/v1/artists",
+      "controller": "ArtistsController",
+      "action": "ListAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "melodee-player",
+          "evidence": "MusicService.kt:672,711",
+          "usedFor": "Android Auto structured search artist resolution (query: q)"
+        },
+        {
+          "client": "meloamp",
+          "evidence": "pages/BrowseArtists.tsx:22",
+          "usedFor": "browse (page, pageSize=20, orderBy, orderDirection)"
+        }
+      ],
+      "scenarios": [
+        "catalog/artists-list",
+        "catalog/artists-list-page2",
+        "catalog/artists-search-q-dune"
+      ],
+      "parityStatus": "captured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/artists/hated/{}/{}",
+      "manifestPath": "/api/v1/artists/hated/{apiKey:guid}/{isHated:bool}",
+      "controller": "ArtistsController",
+      "action": "ToggleArtistHated",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "detailViews/ArtistDetailView.tsx:94",
+          "usedFor": "artist hate"
+        }
+      ],
+      "scenarios": [
+        "catalog-star-rating/hate-artist-on",
+        "catalog-star-rating/hate-artist-off"
+      ],
+      "parityStatus": "captured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/artists/recent",
+      "manifestPath": "/api/v1/artists/recent",
+      "controller": "ArtistsController",
+      "action": "RecentlyAddedAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/Dashboard.tsx:30",
+          "usedFor": "dashboard"
+        }
+      ],
+      "scenarios": [
+        "catalog/artists-recent"
+      ],
+      "parityStatus": "captured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/artists/setrating/{}/{}",
+      "manifestPath": "/api/v1/artists/setrating/{apiKey:guid}/{rating:int}",
+      "controller": "ArtistsController",
+      "action": "SetArtistRating",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/artists/starred/{}/{}",
+      "manifestPath": "/api/v1/artists/starred/{apiKey:guid}/{isStarred:bool}",
+      "controller": "ArtistsController",
+      "action": "ToggleArtistStarred",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "detailViews/ArtistDetailView.tsx:76",
+          "usedFor": "artist star"
+        }
+      ],
+      "scenarios": [
+        "catalog-star-rating/star-artist-on",
+        "catalog-star-rating/star-artist-off"
+      ],
+      "parityStatus": "captured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/artists/{}",
+      "manifestPath": "/api/v1/artists/{id:guid}",
+      "controller": "ArtistsController",
+      "action": "ArtistById",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "detailViews/ArtistDetailView.tsx:34",
+          "usedFor": "artist detail"
+        }
+      ],
+      "scenarios": [
+        "catalog/artist-detail",
+        "catalog/artist-detail-unknown",
+        "catalog-star-rating/artist-detail-after-star"
+      ],
+      "parityStatus": "captured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/artists/{}/albums",
+      "manifestPath": "/api/v1/artists/{id:guid}/albums",
+      "controller": "ArtistsController",
+      "action": "ArtistAlbumsAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "melodee-player",
+          "evidence": "data/api/MusicApi.kt",
+          "usedFor": "artist detail"
+        },
+        {
+          "client": "meloamp",
+          "evidence": "detailViews/ArtistDetailView.tsx:46",
+          "usedFor": "artist detail"
+        }
+      ],
+      "scenarios": [
+        "catalog/artist-albums"
+      ],
+      "parityStatus": "captured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/artists/{}/songs",
+      "manifestPath": "/api/v1/artists/{id:guid}/songs",
+      "controller": "ArtistsController",
+      "action": "ArtistSongsAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "melodee-player",
+          "evidence": "MusicService.kt:717",
+          "usedFor": "Android Auto artist browse"
+        }
+      ],
+      "scenarios": [
+        "catalog/artist-songs"
+      ],
+      "parityStatus": "captured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/audio/bpm",
+      "manifestPath": "/api/v1/audio/bpm",
+      "controller": "AudioFeaturesController",
+      "action": "GetTracksByBpmAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/audio/features/{}",
+      "manifestPath": "/api/v1/audio/features/{id:guid}",
+      "controller": "AudioFeaturesController",
+      "action": "GetAudioFeaturesAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/authenticate",
+      "manifestPath": "/api/v1/auth/authenticate",
+      "controller": "AuthController",
+      "action": "AuthenticateAsync",
+      "auth": {
+        "required": false
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "melodee-player",
+          "evidence": "src/app/src/main/java/com/melodee/autoplayer/data/api/MusicApi.kt:7-10",
+          "usedFor": "login (userName XOR email by presence of @)"
+        },
+        {
+          "client": "meloamp",
+          "evidence": "src/ui/src/api.ts:129",
+          "usedFor": "login (email + password)"
+        }
+      ],
+      "scenarios": [
+        "native-auth-login",
+        "auth-login-success",
+        "auth-login-invalid-password",
+        "auth-login-unknown-user",
+        "auth-refresh-rotation/login",
+        "auth-refresh-rotation/relogin",
+        "auth-refresh-legacy-jwt-endpoint/login",
+        "auth-revoke-specific-token/login",
+        "catalog/login",
+        "catalog-queue/login",
+        "catalog-star-rating/login",
+        "catalog-scrobble/login",
+        "catalog-images/login",
+        "catalog-playlist-crud/login",
+        "stream/login"
+      ],
+      "parityStatus": "captured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/cookie/google",
+      "manifestPath": "/api/v1/auth/cookie/google",
+      "controller": "AuthController",
+      "action": "GoogleCookieAuthAsync",
+      "auth": {
+        "required": false
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/cookie/sign-in",
+      "manifestPath": "/api/v1/auth/cookie/sign-in",
+      "controller": "AuthController",
+      "action": "CookieSignInAsync",
+      "auth": {
+        "required": false
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/cookie/sign-out",
+      "manifestPath": "/api/v1/auth/cookie/sign-out",
+      "controller": "AuthController",
+      "action": "CookieSignOutAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "CookieAuthenticationDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/google",
+      "manifestPath": "/api/v1/auth/google",
+      "controller": "AuthController",
+      "action": "GoogleAuthAsync",
+      "auth": {
+        "required": false
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/logout",
+      "manifestPath": "/api/v1/auth/logout",
+      "controller": "AuthController",
+      "action": "LogoutAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [
+        "auth-refresh-rotation/logout"
+      ],
+      "parityStatus": "captured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/password-reset/confirm",
+      "manifestPath": "/api/v1/auth/password-reset/confirm",
+      "controller": "AuthController",
+      "action": "ConfirmPasswordResetAsync",
+      "auth": {
+        "required": false
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/password-reset/request",
+      "manifestPath": "/api/v1/auth/password-reset/request",
+      "controller": "AuthController",
+      "action": "RequestPasswordResetAsync",
+      "auth": {
+        "required": false
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/password-reset/validate/{}",
+      "manifestPath": "/api/v1/auth/password-reset/validate/{token}",
+      "controller": "AuthController",
+      "action": "ValidatePasswordResetTokenAsync",
+      "auth": {
+        "required": false
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/refresh",
+      "manifestPath": "/api/v1/auth/refresh",
+      "controller": "AuthController",
+      "action": "RefreshTokenAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "src/ui/src/api.ts:56",
+          "usedFor": "401 response interceptor (legacy JWT endpoint, no rotation)"
+        }
+      ],
+      "scenarios": [
+        "auth-refresh-legacy-jwt-endpoint/refresh-with-valid-jwt",
+        "auth-refresh-legacy-jwt-endpoint/refresh-with-expired-jwt"
+      ],
+      "parityStatus": "captured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/refresh-token",
+      "manifestPath": "/api/v1/auth/refresh-token",
+      "controller": "AuthController",
+      "action": "RefreshTokenWithRotationAsync",
+      "auth": {
+        "required": false
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "melodee-player",
+          "evidence": "data/api/MusicApi.kt:15-19; NetworkModule.kt:276",
+          "usedFor": "401 retry path only (X-Refresh-Request: true header skips Bearer)"
+        }
+      ],
+      "scenarios": [
+        "auth-refresh-invalid-token",
+        "auth-refresh-expired-token",
+        "auth-refresh-rotation/rotate-first",
+        "auth-refresh-rotation/replay-rotated-token",
+        "auth-refresh-rotation/rotate-after-family-revoke",
+        "auth-refresh-rotation/refresh-after-logout",
+        "auth-revoke-specific-token/rotate-revoked"
+      ],
+      "parityStatus": "captured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/revoke",
+      "manifestPath": "/api/v1/auth/revoke",
+      "controller": "AuthController",
+      "action": "RevokeTokenAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [
+        "auth-revoke-specific-token/revoke"
+      ],
+      "parityStatus": "captured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/charts",
+      "manifestPath": "/api/v1/charts",
+      "controller": "ChartsController",
+      "action": "ListAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/ChartsPage.tsx:77",
+          "usedFor": "charts"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/charts/{}",
+      "manifestPath": "/api/v1/charts/{idOrSlug}",
+      "controller": "ChartsController",
+      "action": "GetByIdOrSlug",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/ChartsPage.tsx:92",
+          "usedFor": "chart detail"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/charts/{}/playlist",
+      "manifestPath": "/api/v1/charts/{idOrSlug}/playlist",
+      "controller": "ChartsController",
+      "action": "GetPlaylistTracks",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/endpoints",
+      "manifestPath": "/api/v1/endpoints",
+      "controller": "PartySessionEndpointRegistryController",
+      "action": "GetEndpoints",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/PlaybackToolsPage.tsx:150",
+          "usedFor": "remote endpoints"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/endpoints/for-session/{}",
+      "manifestPath": "/api/v1/endpoints/for-session/{sessionId:guid}",
+      "controller": "PartySessionEndpointRegistryController",
+      "action": "GetEndpointsForSession",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/PlaybackToolsPage.tsx:236-237",
+          "usedFor": "remote endpoints"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/endpoints/{}/attach",
+      "manifestPath": "/api/v1/endpoints/{endpointId:guid}/attach",
+      "controller": "PartySessionEndpointRegistryController",
+      "action": "AttachEndpoint",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/PlaybackToolsPage.tsx:284-287",
+          "usedFor": "remote endpoints"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/endpoints/{}/detach",
+      "manifestPath": "/api/v1/endpoints/{endpointId:guid}/detach",
+      "controller": "PartySessionEndpointRegistryController",
+      "action": "DetachEndpoint",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/PlaybackToolsPage.tsx:301-302",
+          "usedFor": "remote endpoints"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/equalizer/presets",
+      "manifestPath": "/api/v1/equalizer/presets",
+      "controller": "EqualizerPresetsController",
+      "action": "ListPresetsAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/EqualizerPage.tsx:54",
+          "usedFor": "equalizer"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/equalizer/presets",
+      "manifestPath": "/api/v1/equalizer/presets",
+      "controller": "EqualizerPresetsController",
+      "action": "UpsertPresetAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/EqualizerPage.tsx:88-95",
+          "usedFor": "save preset"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/equalizer/presets/{}",
+      "manifestPath": "/api/v1/equalizer/presets/{id:guid}",
+      "controller": "EqualizerPresetsController",
+      "action": "DeletePresetAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/EqualizerPage.tsx:106",
+          "usedFor": "delete preset"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/genres",
+      "manifestPath": "/api/v1/genres",
+      "controller": "GenresController",
+      "action": "ListAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/GenresPage.tsx:55",
+          "usedFor": "genres page"
+        }
+      ],
+      "scenarios": [
+        "catalog/genres-list"
+      ],
+      "parityStatus": "captured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/genres/hated",
+      "manifestPath": "/api/v1/genres/hated",
+      "controller": "GenresController",
+      "action": "GetHatedGenres",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/genres/hated/{}/{}",
+      "manifestPath": "/api/v1/genres/hated/{id}/{isHated:bool}",
+      "controller": "GenresController",
+      "action": "ToggleGenreHated",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/genres/starred",
+      "manifestPath": "/api/v1/genres/starred",
+      "controller": "GenresController",
+      "action": "GetStarredGenres",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/genres/starred/{}/{}",
+      "manifestPath": "/api/v1/genres/starred/{id}/{isStarred:bool}",
+      "controller": "GenresController",
+      "action": "ToggleGenreStarred",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/genres/{}/songs",
+      "manifestPath": "/api/v1/genres/{id}/songs",
+      "controller": "GenresController",
+      "action": "GenreSongsAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/GenresPage.tsx:115-118",
+          "usedFor": "genre songs"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-endpoints/register",
+      "manifestPath": "/api/v1/party-endpoints/register",
+      "controller": "PartyEndpointsController",
+      "action": "Register",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "excluded-from-build",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "excluded-from-build"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/party-endpoints/{}",
+      "manifestPath": "/api/v1/party-endpoints/{id:guid}",
+      "controller": "PartyEndpointsController",
+      "action": "Get",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "excluded-from-build",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "excluded-from-build"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/party-endpoints/{}/capabilities",
+      "manifestPath": "/api/v1/party-endpoints/{id:guid}/capabilities",
+      "controller": "PartyEndpointsController",
+      "action": "UpdateCapabilities",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "excluded-from-build",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "excluded-from-build"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-endpoints/{}/detach",
+      "manifestPath": "/api/v1/party-endpoints/{id:guid}/detach",
+      "controller": "PartyEndpointsController",
+      "action": "Detach",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "excluded-from-build",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "excluded-from-build"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-endpoints/{}/heartbeat",
+      "manifestPath": "/api/v1/party-endpoints/{id:guid}/heartbeat",
+      "controller": "PartyEndpointsController",
+      "action": "Heartbeat",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "excluded-from-build",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "excluded-from-build"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/party-endpoints/{}/state",
+      "manifestPath": "/api/v1/party-endpoints/{id:guid}/state",
+      "controller": "PartyEndpointsController",
+      "action": "GetStateAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "excluded-from-build",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "excluded-from-build"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-sessions",
+      "manifestPath": "/api/v1/party-sessions",
+      "controller": "PartySessionsController",
+      "action": "Create",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "excluded-from-build",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "excluded-from-build"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/party-sessions/active",
+      "manifestPath": "/api/v1/party-sessions/active",
+      "controller": "PartySessionsController",
+      "action": "GetActiveSessions",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "excluded-from-build",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "excluded-from-build"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/party-sessions/my",
+      "manifestPath": "/api/v1/party-sessions/my",
+      "controller": "PartySessionsController",
+      "action": "GetMySessions",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "excluded-from-build",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "excluded-from-build"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/party-sessions/{}",
+      "manifestPath": "/api/v1/party-sessions/{id:guid}",
+      "controller": "PartySessionsController",
+      "action": "Get",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "excluded-from-build",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "excluded-from-build"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/party-sessions/{}/audit",
+      "manifestPath": "/api/v1/party-sessions/{sessionId:guid}/audit",
+      "controller": "PartyModerationController",
+      "action": "GetAuditLog",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "excluded-from-build",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "excluded-from-build"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-sessions/{}/end",
+      "manifestPath": "/api/v1/party-sessions/{id:guid}/end",
+      "controller": "PartySessionsController",
+      "action": "End",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "excluded-from-build",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "excluded-from-build"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-sessions/{}/join",
+      "manifestPath": "/api/v1/party-sessions/{id:guid}/join",
+      "controller": "PartySessionsController",
+      "action": "Join",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "excluded-from-build",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "excluded-from-build"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-sessions/{}/leave",
+      "manifestPath": "/api/v1/party-sessions/{id:guid}/leave",
+      "controller": "PartySessionsController",
+      "action": "Leave",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "excluded-from-build",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "excluded-from-build"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/party-sessions/{}/participants",
+      "manifestPath": "/api/v1/party-sessions/{id:guid}/participants",
+      "controller": "PartySessionsController",
+      "action": "GetParticipants",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "excluded-from-build",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "excluded-from-build"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-sessions/{}/participants/{}/ban",
+      "manifestPath": "/api/v1/party-sessions/{sessionId:guid}/participants/{targetUserId:int}/ban",
+      "controller": "PartyModerationController",
+      "action": "BanParticipant",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "excluded-from-build",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "excluded-from-build"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-sessions/{}/participants/{}/kick",
+      "manifestPath": "/api/v1/party-sessions/{sessionId:guid}/participants/{targetUserId:int}/kick",
+      "controller": "PartyModerationController",
+      "action": "KickParticipant",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "excluded-from-build",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "excluded-from-build"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-sessions/{}/participants/{}/role",
+      "manifestPath": "/api/v1/party-sessions/{sessionId:guid}/participants/{targetUserId:int}/role",
+      "controller": "PartyModerationController",
+      "action": "ChangeRole",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "excluded-from-build",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "excluded-from-build"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-sessions/{}/participants/{}/unban",
+      "manifestPath": "/api/v1/party-sessions/{sessionId:guid}/participants/{targetUserId:int}/unban",
+      "controller": "PartyModerationController",
+      "action": "UnbanParticipant",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "excluded-from-build",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "excluded-from-build"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/party-sessions/{}/playback",
+      "manifestPath": "/api/v1/party-sessions/{sessionId:guid}/playback",
+      "controller": "PartyPlaybackController",
+      "action": "GetState",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "excluded-from-build",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "excluded-from-build"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-sessions/{}/playback/next",
+      "manifestPath": "/api/v1/party-sessions/{sessionId:guid}/playback/next",
+      "controller": "PartyPlaybackController",
+      "action": "Skip",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "excluded-from-build",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "excluded-from-build"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-sessions/{}/playback/pause",
+      "manifestPath": "/api/v1/party-sessions/{sessionId:guid}/playback/pause",
+      "controller": "PartyPlaybackController",
+      "action": "Pause",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "excluded-from-build",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "excluded-from-build"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-sessions/{}/playback/play",
+      "manifestPath": "/api/v1/party-sessions/{sessionId:guid}/playback/play",
+      "controller": "PartyPlaybackController",
+      "action": "Play",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "excluded-from-build",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "excluded-from-build"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-sessions/{}/playback/seek",
+      "manifestPath": "/api/v1/party-sessions/{sessionId:guid}/playback/seek",
+      "controller": "PartyPlaybackController",
+      "action": "Seek",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "excluded-from-build",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "excluded-from-build"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-sessions/{}/playback/stop",
+      "manifestPath": "/api/v1/party-sessions/{sessionId:guid}/playback/stop",
+      "controller": "PartyPlaybackController",
+      "action": "Stop",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "excluded-from-build",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "excluded-from-build"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-sessions/{}/playback/volume",
+      "manifestPath": "/api/v1/party-sessions/{sessionId:guid}/playback/volume",
+      "controller": "PartyPlaybackController",
+      "action": "SetVolume",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "excluded-from-build",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "excluded-from-build"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/party-sessions/{}/queue",
+      "manifestPath": "/api/v1/party-sessions/{sessionId:guid}/queue",
+      "controller": "PartyQueueController",
+      "action": "Get",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "excluded-from-build",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "excluded-from-build"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-sessions/{}/queue/clear",
+      "manifestPath": "/api/v1/party-sessions/{sessionId:guid}/queue/clear",
+      "controller": "PartyQueueController",
+      "action": "Clear",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "excluded-from-build",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "excluded-from-build"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-sessions/{}/queue/items",
+      "manifestPath": "/api/v1/party-sessions/{sessionId:guid}/queue/items",
+      "controller": "PartyQueueController",
+      "action": "AddItems",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "excluded-from-build",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "excluded-from-build"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/party-sessions/{}/queue/items/{}",
+      "manifestPath": "/api/v1/party-sessions/{sessionId:guid}/queue/items/{itemId:guid}",
+      "controller": "PartyQueueController",
+      "action": "RemoveItem",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "excluded-from-build",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "excluded-from-build"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-sessions/{}/queue/items/{}/reorder",
+      "manifestPath": "/api/v1/party-sessions/{sessionId:guid}/queue/items/{itemId:guid}/reorder",
+      "controller": "PartyQueueController",
+      "action": "ReorderItem",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "excluded-from-build",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "excluded-from-build"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-sessions/{}/settings/queue-lock",
+      "manifestPath": "/api/v1/party-sessions/{sessionId:guid}/settings/queue-lock",
+      "controller": "PartyModerationController",
+      "action": "SetQueueLock",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "excluded-from-build",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "excluded-from-build"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/playback-backend/capabilities",
+      "manifestPath": "/api/v1/playback-backend/capabilities",
+      "controller": "PlaybackBackendController",
+      "action": "GetCapabilities",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/PlaybackToolsPage.tsx:101",
+          "usedFor": "playback tools"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/playback-backend/heartbeat/{}",
+      "manifestPath": "/api/v1/playback-backend/heartbeat/{sessionId:guid}",
+      "controller": "PlaybackBackendController",
+      "action": "UpdateHeartbeat",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/PlaybackToolsPage.tsx:258-259",
+          "usedFor": "playback tools"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/playback-backend/initialize",
+      "manifestPath": "/api/v1/playback-backend/initialize",
+      "controller": "PlaybackBackendController",
+      "action": "InitializeBackend",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/PlaybackToolsPage.tsx:203",
+          "usedFor": "playback tools"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/playback-backend/register-endpoint",
+      "manifestPath": "/api/v1/playback-backend/register-endpoint",
+      "controller": "PlaybackBackendController",
+      "action": "RegisterEndpoint",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/PlaybackToolsPage.tsx:189",
+          "usedFor": "playback tools"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/playback-backend/shutdown",
+      "manifestPath": "/api/v1/playback-backend/shutdown",
+      "controller": "PlaybackBackendController",
+      "action": "ShutdownBackend",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/PlaybackToolsPage.tsx:217",
+          "usedFor": "playback tools"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/playback-backend/status",
+      "manifestPath": "/api/v1/playback-backend/status",
+      "controller": "PlaybackBackendController",
+      "action": "GetStatus",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/PlaybackToolsPage.tsx:114",
+          "usedFor": "playback tools"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/playback/settings",
+      "manifestPath": "/api/v1/playback/settings",
+      "controller": "PlaybackSettingsController",
+      "action": "GetSettingsAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/PlaybackToolsPage.tsx:127",
+          "usedFor": "playback tools"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/playback/settings",
+      "manifestPath": "/api/v1/playback/settings",
+      "controller": "PlaybackSettingsController",
+      "action": "UpdateSettingsAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/PlaybackToolsPage.tsx:172-175",
+          "usedFor": "playback tools"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/playlists",
+      "manifestPath": "/api/v1/playlists",
+      "controller": "PlaylistsController",
+      "action": "ListAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/playlists",
+      "manifestPath": "/api/v1/playlists",
+      "controller": "PlaylistsController",
+      "action": "CreatePlaylist",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/PlaylistManager.tsx:108",
+          "usedFor": "create playlist / save queue as playlist"
+        }
+      ],
+      "scenarios": [
+        "catalog-playlist-crud/create-playlist"
+      ],
+      "parityStatus": "captured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/playlists/import",
+      "manifestPath": "/api/v1/playlists/import",
+      "controller": "PlaylistsController",
+      "action": "ImportPlaylist",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/playlists/smart",
+      "manifestPath": "/api/v1/playlists/smart",
+      "controller": "SmartPlaylistsController",
+      "action": "ListAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/SmartPlaylistsPage.tsx:60",
+          "usedFor": "smart playlists"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/playlists/smart",
+      "manifestPath": "/api/v1/playlists/smart",
+      "controller": "SmartPlaylistsController",
+      "action": "CreateAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/SmartPlaylistsPage.tsx:83",
+          "usedFor": "create smart playlist (MQL)"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/playlists/smart/{}",
+      "manifestPath": "/api/v1/playlists/smart/{id:guid}",
+      "controller": "SmartPlaylistsController",
+      "action": "DeleteAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/SmartPlaylistsPage.tsx:120",
+          "usedFor": "delete smart playlist"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/playlists/smart/{}",
+      "manifestPath": "/api/v1/playlists/smart/{id:guid}",
+      "controller": "SmartPlaylistsController",
+      "action": "GetByIdAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/playlists/smart/{}",
+      "manifestPath": "/api/v1/playlists/smart/{id:guid}",
+      "controller": "SmartPlaylistsController",
+      "action": "UpdateAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/SmartPlaylistsPage.tsx:103",
+          "usedFor": "edit smart playlist"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/playlists/smart/{}/evaluate",
+      "manifestPath": "/api/v1/playlists/smart/{id:guid}/evaluate",
+      "controller": "SmartPlaylistsController",
+      "action": "EvaluateAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/SmartPlaylistsPage.tsx:130",
+          "usedFor": "preview smart playlist"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/playlists/{}",
+      "manifestPath": "/api/v1/playlists/{apiKey:guid}",
+      "controller": "PlaylistsController",
+      "action": "DeletePlaylist",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "detailViews/PlaylistDetailView.tsx:196",
+          "usedFor": "delete playlist"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/playlists/{}",
+      "manifestPath": "/api/v1/playlists/{id:guid}",
+      "controller": "PlaylistsController",
+      "action": "PlaylistById",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "detailViews/PlaylistDetailView.tsx:104",
+          "usedFor": "playlist detail"
+        }
+      ],
+      "scenarios": [
+        "catalog/playlist-detail"
+      ],
+      "parityStatus": "captured"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/playlists/{}",
+      "manifestPath": "/api/v1/playlists/{apiKey:guid}",
+      "controller": "PlaylistsController",
+      "action": "UpdatePlaylist",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "detailViews/PlaylistDetailView.tsx:340",
+          "usedFor": "edit playlist"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/playlists/{}/image",
+      "manifestPath": "/api/v1/playlists/{apiKey:guid}/image",
+      "controller": "PlaylistsController",
+      "action": "DeletePlaylistImage",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/playlists/{}/image",
+      "manifestPath": "/api/v1/playlists/{apiKey:guid}/image",
+      "controller": "PlaylistsController",
+      "action": "UploadPlaylistImage",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "detailViews/PlaylistDetailView.tsx:350",
+          "usedFor": "playlist image upload (multipart)"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/playlists/{}/songs",
+      "manifestPath": "/api/v1/playlists/{apiKey:guid}/songs",
+      "controller": "PlaylistsController",
+      "action": "RemoveSongsFromPlaylist",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/playlists/{}/songs",
+      "manifestPath": "/api/v1/playlists/{apiKey:guid}/songs",
+      "controller": "PlaylistsController",
+      "action": "SongsForPlaylist",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "melodee-player",
+          "evidence": "data/api/MusicApi.kt:31-36; MusicService.kt:599,1577",
+          "usedFor": "playlist detail + Android Auto browse + lazy queue pagination (query: page + pageSize)"
+        },
+        {
+          "client": "meloamp",
+          "evidence": "detailViews/PlaylistDetailView.tsx:119",
+          "usedFor": "playlist detail"
+        }
+      ],
+      "scenarios": [
+        "catalog/playlist-songs"
+      ],
+      "parityStatus": "captured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/playlists/{}/songs",
+      "manifestPath": "/api/v1/playlists/{apiKey:guid}/songs",
+      "controller": "PlaylistsController",
+      "action": "AddSongsToPlaylist",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "components/PlaylistPickerDialog.tsx:91",
+          "usedFor": "add songs to playlist"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/playlists/{}/songs/reorder",
+      "manifestPath": "/api/v1/playlists/{apiKey:guid}/songs/reorder",
+      "controller": "PlaylistsController",
+      "action": "ReorderPlaylistSongs",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "detailViews/PlaylistDetailView.tsx:166",
+          "usedFor": "reorder playlist"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/podcasts/channels",
+      "manifestPath": "/api/v1/podcasts/channels",
+      "controller": "PodcastsController",
+      "action": "ListChannelsAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "undocumented-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/podcasts/channels",
+      "manifestPath": "/api/v1/podcasts/channels",
+      "controller": "PodcastsController",
+      "action": "CreateChannelAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "undocumented-uncaptured"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/podcasts/channels/{}",
+      "manifestPath": "/api/v1/podcasts/channels/{id:int}",
+      "controller": "PodcastsController",
+      "action": "DeleteChannelAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "undocumented-uncaptured"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/podcasts/channels/{}",
+      "manifestPath": "/api/v1/podcasts/channels/{id:int}",
+      "controller": "PodcastsController",
+      "action": "UpdateChannelAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "undocumented-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/podcasts/channels/{}/episodes",
+      "manifestPath": "/api/v1/podcasts/channels/{id:int}/episodes",
+      "controller": "PodcastsController",
+      "action": "ListEpisodesAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "undocumented-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/podcasts/channels/{}/refresh",
+      "manifestPath": "/api/v1/podcasts/channels/{id:int}/refresh",
+      "controller": "PodcastsController",
+      "action": "RefreshChannelAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "undocumented-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/podcasts/discover/lookup/{}",
+      "manifestPath": "/api/v1/podcasts/discover/lookup/{itunesId}",
+      "controller": "PodcastsController",
+      "action": "DiscoverLookupAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "undocumented-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/podcasts/discover/search",
+      "manifestPath": "/api/v1/podcasts/discover/search",
+      "controller": "PodcastsController",
+      "action": "DiscoverSearchAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "undocumented-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/podcasts/discover/trending",
+      "manifestPath": "/api/v1/podcasts/discover/trending",
+      "controller": "PodcastsController",
+      "action": "DiscoverTrendingAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "undocumented-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/podcasts/episodes/search",
+      "manifestPath": "/api/v1/podcasts/episodes/search",
+      "controller": "PodcastsController",
+      "action": "SearchEpisodesAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "undocumented-uncaptured"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/podcasts/episodes/{}",
+      "manifestPath": "/api/v1/podcasts/episodes/{id:int}",
+      "controller": "PodcastsController",
+      "action": "DeleteEpisodeAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "undocumented-uncaptured"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/podcasts/episodes/{}/bookmark",
+      "manifestPath": "/api/v1/podcasts/episodes/{id:int}/bookmark",
+      "controller": "PodcastsController",
+      "action": "DeleteBookmarkAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "undocumented-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/podcasts/episodes/{}/bookmark",
+      "manifestPath": "/api/v1/podcasts/episodes/{id:int}/bookmark",
+      "controller": "PodcastsController",
+      "action": "GetBookmarkAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "undocumented-uncaptured"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/podcasts/episodes/{}/bookmark",
+      "manifestPath": "/api/v1/podcasts/episodes/{id:int}/bookmark",
+      "controller": "PodcastsController",
+      "action": "SaveBookmarkAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "undocumented-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/podcasts/episodes/{}/download",
+      "manifestPath": "/api/v1/podcasts/episodes/{id:int}/download",
+      "controller": "PodcastsController",
+      "action": "DownloadEpisodeAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "undocumented-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/podcasts/episodes/{}/history",
+      "manifestPath": "/api/v1/podcasts/episodes/{id:int}/history",
+      "controller": "PodcastsController",
+      "action": "GetPlayHistoryAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "undocumented-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/podcasts/episodes/{}/play",
+      "manifestPath": "/api/v1/podcasts/episodes/{id:int}/play",
+      "controller": "PodcastsController",
+      "action": "NowPlayingAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "undocumented-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/podcasts/opml/export",
+      "manifestPath": "/api/v1/podcasts/opml/export",
+      "controller": "PodcastsController",
+      "action": "ExportOpmlAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "undocumented-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/podcasts/opml/import",
+      "manifestPath": "/api/v1/podcasts/opml/import",
+      "controller": "PodcastsController",
+      "action": "ImportOpmlAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "undocumented-uncaptured"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/queue",
+      "manifestPath": "/api/v1/queue",
+      "controller": "QueueController",
+      "action": "ClearQueueAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "excluded-from-build",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [
+        "catalog-queue/queue-delete"
+      ],
+      "parityStatus": "excluded-from-build"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/queue",
+      "manifestPath": "/api/v1/queue",
+      "controller": "QueueController",
+      "action": "GetQueueAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "excluded-from-build",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [
+        "catalog-queue/queue-get-empty",
+        "catalog-queue/queue-get-after-put",
+        "catalog-queue/queue-get-after-delete"
+      ],
+      "parityStatus": "excluded-from-build"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/queue",
+      "manifestPath": "/api/v1/queue",
+      "controller": "QueueController",
+      "action": "SaveQueueAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "excluded-from-build",
+      "inOpenApi": false,
+      "usedBy": [],
+      "scenarios": [
+        "catalog-queue/queue-put"
+      ],
+      "parityStatus": "excluded-from-build"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/recommendations",
+      "manifestPath": "/api/v1/recommendations",
+      "controller": "RecommendationsController",
+      "action": "GetRecommendationsAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/RecommendationsPage.tsx:37",
+          "usedFor": "recommendations"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/requests",
+      "manifestPath": "/api/v1/requests",
+      "controller": "RequestsController",
+      "action": "ListAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/RequestsPage.tsx:114-125",
+          "usedFor": "requests page"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/requests",
+      "manifestPath": "/api/v1/requests",
+      "controller": "RequestsController",
+      "action": "CreateAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/RequestsPage.tsx:210-216",
+          "usedFor": "create request"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/requests/activity",
+      "manifestPath": "/api/v1/requests/activity",
+      "controller": "RequestsController",
+      "action": "CheckActivityAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/RequestsPage.tsx:142",
+          "usedFor": "activity feed"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/requests/activity/unread",
+      "manifestPath": "/api/v1/requests/activity/unread",
+      "controller": "RequestsController",
+      "action": "GetUnreadAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/RequestsPage.tsx:99-101",
+          "usedFor": "unread activity"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/requests/{}",
+      "manifestPath": "/api/v1/requests/{apiKey:guid}",
+      "controller": "RequestsController",
+      "action": "DeleteAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/requests/{}",
+      "manifestPath": "/api/v1/requests/{apiKey:guid}",
+      "controller": "RequestsController",
+      "action": "GetByApiKeyAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/RequestsPage.tsx:153",
+          "usedFor": "request detail"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/requests/{}",
+      "manifestPath": "/api/v1/requests/{apiKey:guid}",
+      "controller": "RequestsController",
+      "action": "UpdateAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/RequestsPage.tsx:197-203",
+          "usedFor": "edit request"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/requests/{}/comments",
+      "manifestPath": "/api/v1/requests/{requestApiKey:guid}/comments",
+      "controller": "RequestsController",
+      "action": "ListCommentsAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/RequestsPage.tsx:158",
+          "usedFor": "request comments"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/requests/{}/comments",
+      "manifestPath": "/api/v1/requests/{requestApiKey:guid}/comments",
+      "controller": "RequestsController",
+      "action": "CreateCommentAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/RequestsPage.tsx:171-175",
+          "usedFor": "comment"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/requests/{}/complete",
+      "manifestPath": "/api/v1/requests/{apiKey:guid}/complete",
+      "controller": "RequestsController",
+      "action": "CompleteAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/RequestsPage.tsx:186",
+          "usedFor": "complete request"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/requests/{}/seen",
+      "manifestPath": "/api/v1/requests/{requestApiKey:guid}/seen",
+      "controller": "RequestsController",
+      "action": "MarkSeenAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/RequestsPage.tsx:157",
+          "usedFor": "mark seen"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/scrobble",
+      "manifestPath": "/api/v1/scrobble",
+      "controller": "ScrobbleController",
+      "action": "ScrobbleSong",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "melodee-player",
+          "evidence": "data/api/ScrobbleApi.kt:58-59; service/ScrobbleManager.kt:130,176",
+          "usedFor": "nowPlaying after 10s, played at 50%; body has BOTH scrobbleTypeValue (int) and scrobbleType (string)"
+        },
+        {
+          "client": "meloamp",
+          "evidence": "hooks/useScrobble.ts:42-63",
+          "usedFor": "nowPlaying after 10s; played after 70%"
+        }
+      ],
+      "scenarios": [
+        "catalog-scrobble/scrobble-now-playing",
+        "catalog-scrobble/scrobble-played",
+        "catalog-scrobble/scrobble-unknown-song"
+      ],
+      "parityStatus": "captured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/scrobble/lastfm/auth-url",
+      "manifestPath": "/api/v1/scrobble/lastfm/auth-url",
+      "controller": "ScrobbleController",
+      "action": "GetLastFmAuthUrl",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/scrobble/lastfm/disconnect",
+      "manifestPath": "/api/v1/scrobble/lastfm/disconnect",
+      "controller": "ScrobbleController",
+      "action": "DisconnectLastFm",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/scrobble/lastfm/session",
+      "manifestPath": "/api/v1/scrobble/lastfm/session",
+      "controller": "ScrobbleController",
+      "action": "ExchangeLastFmSession",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/search",
+      "manifestPath": "/api/v1/search",
+      "controller": "SearchController",
+      "action": "SearchAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/SearchPage.tsx:121-129",
+          "usedFor": "combined search"
+        }
+      ],
+      "scenarios": [
+        "catalog/search-post-dune",
+        "catalog/search-unicode"
+      ],
+      "parityStatus": "captured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/search/advanced",
+      "manifestPath": "/api/v1/search/advanced",
+      "controller": "SearchController",
+      "action": "AdvancedSearchAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/SearchAdvancedPage.tsx:88-139",
+          "usedFor": "advanced search with filters"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/search/similar/{}/{}",
+      "manifestPath": "/api/v1/search/similar/{id:guid}/{type}",
+      "controller": "SearchController",
+      "action": "FindSimilarAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/search/songs",
+      "manifestPath": "/api/v1/search/songs",
+      "controller": "SearchController",
+      "action": "SearchSongsAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "melodee-player",
+          "evidence": "MusicService.kt:679,763",
+          "usedFor": "Android Auto voice/text search (query: q, page, pageSize, filterByArtistApiKey?)"
+        },
+        {
+          "client": "meloamp",
+          "evidence": "pages/SearchAdvancedPage.tsx:154-161",
+          "usedFor": "song search"
+        }
+      ],
+      "scenarios": [
+        "catalog/search-songs-neon",
+        "catalog/search-songs-filter-by-artist"
+      ],
+      "parityStatus": "captured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/search/suggest",
+      "manifestPath": "/api/v1/search/suggest",
+      "controller": "SearchController",
+      "action": "SuggestAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/shares",
+      "manifestPath": "/api/v1/shares",
+      "controller": "SharesController",
+      "action": "ListAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/SharesPage.tsx:73",
+          "usedFor": "shares page"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/shares",
+      "manifestPath": "/api/v1/shares",
+      "controller": "SharesController",
+      "action": "CreateShare",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/SharesPage.tsx:96-106",
+          "usedFor": "create share"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/shares/public/{}",
+      "manifestPath": "/api/v1/shares/public/{shareUniqueId}",
+      "controller": "SharesController",
+      "action": "GetPublicShare",
+      "auth": {
+        "required": false
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/PublicSharePage.tsx:111",
+          "usedFor": "public share page (unauthenticated)"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/shares/{}",
+      "manifestPath": "/api/v1/shares/{apiKey:guid}",
+      "controller": "SharesController",
+      "action": "DeleteShare",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/SharesPage.tsx:136",
+          "usedFor": "delete share"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/shares/{}",
+      "manifestPath": "/api/v1/shares/{apiKey:guid}",
+      "controller": "SharesController",
+      "action": "GetShareByApiKey",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/shares/{}",
+      "manifestPath": "/api/v1/shares/{apiKey:guid}",
+      "controller": "SharesController",
+      "action": "UpdateShare",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/SharesPage.tsx:118",
+          "usedFor": "edit share"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/songs",
+      "manifestPath": "/api/v1/songs",
+      "controller": "SongsController",
+      "action": "ListAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/BrowseSongs.tsx:22",
+          "usedFor": "browse"
+        }
+      ],
+      "scenarios": [
+        "catalog/songs-list"
+      ],
+      "parityStatus": "captured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/songs/hated/{}/{}",
+      "manifestPath": "/api/v1/songs/hated/{apiKey:guid}/{isHated:bool}",
+      "controller": "SongsController",
+      "action": "ToggleSongHated",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "detailViews/SongDetailView.tsx:79",
+          "usedFor": "hate toggle"
+        }
+      ],
+      "scenarios": [
+        "catalog-star-rating/hate-song-on",
+        "catalog-star-rating/hate-song-off"
+      ],
+      "parityStatus": "captured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/songs/random",
+      "manifestPath": "/api/v1/songs/random",
+      "controller": "SongsController",
+      "action": "RandomSongsAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/songs/recent",
+      "manifestPath": "/api/v1/songs/recent",
+      "controller": "SongsController",
+      "action": "RecentlyAddedAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/songs/setrating/{}/{}",
+      "manifestPath": "/api/v1/songs/setrating/{apiKey:guid}/{rating:int}",
+      "controller": "SongsController",
+      "action": "SetSongRating",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/Player.tsx:265",
+          "usedFor": "rating 0-5"
+        }
+      ],
+      "scenarios": [
+        "catalog-star-rating/rate-song",
+        "catalog-star-rating/rate-song-reset"
+      ],
+      "parityStatus": "captured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/songs/starred/{}/{}",
+      "manifestPath": "/api/v1/songs/starred/{apiKey:guid}/{isStarred:bool}",
+      "controller": "SongsController",
+      "action": "ToggleSongStarred",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "melodee-player",
+          "evidence": "data/api/MusicApi.kt:74-78; MusicService.kt:2645",
+          "usedFor": "favorite toggle incl. Android Auto/notification (path-encoded bool, no body)"
+        },
+        {
+          "client": "meloamp",
+          "evidence": "pages/Player.tsx:245,249",
+          "usedFor": "star toggle"
+        }
+      ],
+      "scenarios": [
+        "catalog-star-rating/star-song-on",
+        "catalog-star-rating/star-song-off"
+      ],
+      "parityStatus": "captured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/songs/{}",
+      "manifestPath": "/api/v1/songs/{id:guid}",
+      "controller": "SongsController",
+      "action": "SongById",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "detailViews/SongDetailView.tsx:32",
+          "usedFor": "song detail"
+        }
+      ],
+      "scenarios": [
+        "catalog/song-detail",
+        "catalog/song-detail-unknown",
+        "catalog-star-rating/song-detail-after-star",
+        "catalog-star-rating/song-detail-after-unstar",
+        "catalog-star-rating/song-detail-after-rating",
+        "catalog-star-rating/song-detail-after-hate",
+        "catalog-scrobble/song-detail-before-scrobble",
+        "catalog-scrobble/song-detail-after-scrobble"
+      ],
+      "parityStatus": "captured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/songs/{}/lyrics",
+      "manifestPath": "/api/v1/songs/{id:guid}/lyrics",
+      "controller": "SongsController",
+      "action": "GetLyricsAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/system/info",
+      "manifestPath": "/api/v1/system/info",
+      "controller": "SystemController",
+      "action": "GetServerInfo",
+      "auth": {
+        "required": false
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "melodee-player",
+          "evidence": "data/api/MusicApi.kt:12-13",
+          "usedFor": "version gate >= 1.2.0 before every login"
+        },
+        {
+          "client": "meloamp",
+          "evidence": "pages/LoginPage.tsx:25",
+          "usedFor": "unauthenticated version gate"
+        }
+      ],
+      "scenarios": [
+        "native-system-info"
+      ],
+      "parityStatus": "captured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/system/stats",
+      "manifestPath": "/api/v1/system/stats",
+      "controller": "SystemController",
+      "action": "GetSystemStatsAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/Dashboard.tsx:29",
+          "usedFor": "dashboard"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/system/throw",
+      "manifestPath": "/api/v1/system/throw",
+      "controller": "SystemController",
+      "action": "ThrowException",
+      "auth": {
+        "required": false
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/themes",
+      "manifestPath": "/api/v1/themes",
+      "controller": "ThemesController",
+      "action": "GetThemes",
+      "auth": {
+        "required": false
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/ThemesPage.tsx:40",
+          "usedFor": "themes page"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/themes/import",
+      "manifestPath": "/api/v1/themes/import",
+      "controller": "ThemesController",
+      "action": "ImportTheme",
+      "auth": {
+        "required": true,
+        "roles": [
+          "Admin"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/ThemesPage.tsx:130-136",
+          "usedFor": "import theme"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/themes/me",
+      "manifestPath": "/api/v1/themes/me",
+      "controller": "ThemesController",
+      "action": "SetUserTheme",
+      "auth": {
+        "required": true
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/ThemesPage.tsx:64-67",
+          "usedFor": "select theme"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/themes/rescan",
+      "manifestPath": "/api/v1/themes/rescan",
+      "controller": "ThemesController",
+      "action": "RescanThemes",
+      "auth": {
+        "required": true,
+        "roles": [
+          "Admin"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/themes/{}",
+      "manifestPath": "/api/v1/themes/{themeId}",
+      "controller": "ThemesController",
+      "action": "DeleteTheme",
+      "auth": {
+        "required": true,
+        "roles": [
+          "Admin"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/themes/{}/export",
+      "manifestPath": "/api/v1/themes/{themeId}/export",
+      "controller": "ThemesController",
+      "action": "ExportTheme",
+      "auth": {
+        "required": true,
+        "roles": [
+          "Admin"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/ThemesPage.tsx:314-316",
+          "usedFor": "export theme (fetch WITHOUT Authorization header)"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/themes/{}/file/{}",
+      "manifestPath": "/api/v1/themes/{themeId}/file/{*fileName}",
+      "controller": "ThemesController",
+      "action": "GetThemeFile",
+      "auth": {
+        "required": false
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/albums/disliked",
+      "manifestPath": "/api/v1/user/albums/disliked",
+      "controller": "UserController",
+      "action": "DislikedAlbumsAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/FavoritesPage.tsx:61-67",
+          "usedFor": "favorites (entity variant)"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/albums/liked",
+      "manifestPath": "/api/v1/user/albums/liked",
+      "controller": "UserController",
+      "action": "LikedAlbumsAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/FavoritesPage.tsx:61-67",
+          "usedFor": "favorites (entity variant)"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/albums/rated",
+      "manifestPath": "/api/v1/user/albums/rated",
+      "controller": "UserController",
+      "action": "RatedAlbumsAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/FavoritesPage.tsx:61-67",
+          "usedFor": "favorites (entity variant)"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/albums/recently-played",
+      "manifestPath": "/api/v1/user/albums/recently-played",
+      "controller": "UserController",
+      "action": "RecentlyPlayedAlbumsAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/albums/top-rated",
+      "manifestPath": "/api/v1/user/albums/top-rated",
+      "controller": "UserController",
+      "action": "TopRatedAlbumsAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/FavoritesPage.tsx:61-67",
+          "usedFor": "favorites (entity variant)"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/artists/disliked",
+      "manifestPath": "/api/v1/user/artists/disliked",
+      "controller": "UserController",
+      "action": "DislikedArtistsAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/FavoritesPage.tsx:61-67",
+          "usedFor": "favorites (entity variant)"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/artists/liked",
+      "manifestPath": "/api/v1/user/artists/liked",
+      "controller": "UserController",
+      "action": "LikedArtistsAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/FavoritesPage.tsx:61-67",
+          "usedFor": "favorites (entity variant)"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/artists/rated",
+      "manifestPath": "/api/v1/user/artists/rated",
+      "controller": "UserController",
+      "action": "RatedArtistsAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/FavoritesPage.tsx:61-67",
+          "usedFor": "favorites (entity variant)"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/artists/recently-played",
+      "manifestPath": "/api/v1/user/artists/recently-played",
+      "controller": "UserController",
+      "action": "RecentlyPlayedArtistsAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/artists/top-rated",
+      "manifestPath": "/api/v1/user/artists/top-rated",
+      "controller": "UserController",
+      "action": "TopRatedArtistsAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/FavoritesPage.tsx:61-67",
+          "usedFor": "favorites (entity variant)"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/last-played",
+      "manifestPath": "/api/v1/user/last-played",
+      "controller": "UserController",
+      "action": "LastPlayedSongsAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/HistoryPage.tsx:37",
+          "usedFor": "history"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/me",
+      "manifestPath": "/api/v1/user/me",
+      "controller": "UserController",
+      "action": "AboutMeAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "melodee-player",
+          "evidence": "data/api/MusicApi.kt:22-23",
+          "usedFor": "home screen profile"
+        },
+        {
+          "client": "meloamp",
+          "evidence": "App.tsx:351",
+          "usedFor": "session restore"
+        }
+      ],
+      "scenarios": [
+        "native-user-me",
+        "auth-user-missing-token",
+        "auth-user-malformed-token",
+        "auth-user-expired-token",
+        "auth-refresh-rotation/access-with-token",
+        "auth-refresh-rotation/access-with-rotated-token",
+        "auth-refresh-rotation/access-after-logout"
+      ],
+      "parityStatus": "captured"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/user/me/link/google",
+      "manifestPath": "/api/v1/user/me/link/google",
+      "controller": "UserController",
+      "action": "UnlinkGoogleAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/user/me/link/google",
+      "manifestPath": "/api/v1/user/me/link/google",
+      "controller": "UserController",
+      "action": "LinkGoogleAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/me/linked-providers",
+      "manifestPath": "/api/v1/user/me/linked-providers",
+      "controller": "UserController",
+      "action": "GetLinkedProvidersAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/playlists",
+      "manifestPath": "/api/v1/user/playlists",
+      "controller": "UserController",
+      "action": "PlaylistsAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "melodee-player",
+          "evidence": "data/api/MusicApi.kt:25-29; MusicService.kt:571",
+          "usedFor": "home, playlists, Android Auto browse (query: page + LIMIT, not pageSize)"
+        },
+        {
+          "client": "meloamp",
+          "evidence": "components/PlaylistPickerDialog.tsx:65",
+          "usedFor": "playlist picker/manager/dashboard"
+        }
+      ],
+      "scenarios": [
+        "catalog/user-playlists-limit-param"
+      ],
+      "parityStatus": "captured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/songs/disliked",
+      "manifestPath": "/api/v1/user/songs/disliked",
+      "controller": "UserController",
+      "action": "DislikedSongsAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/FavoritesPage.tsx:63",
+          "usedFor": "favorites; entity placeholder is a literal path segment iterated client-side (songs|albums|artists)"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/songs/liked",
+      "manifestPath": "/api/v1/user/songs/liked",
+      "controller": "UserController",
+      "action": "LikedSongsAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/FavoritesPage.tsx:61,81,89,97",
+          "usedFor": "favorites; entity placeholder is a literal path segment iterated client-side (songs|albums|artists)"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/songs/rated",
+      "manifestPath": "/api/v1/user/songs/rated",
+      "controller": "UserController",
+      "action": "RatedSongsAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/FavoritesPage.tsx:67",
+          "usedFor": "favorites; entity placeholder is a literal path segment iterated client-side (songs|albums|artists)"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/songs/recently-played",
+      "manifestPath": "/api/v1/user/songs/recently-played",
+      "controller": "UserController",
+      "action": "RecentlyPlayedSongsAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/songs/top-rated",
+      "manifestPath": "/api/v1/user/songs/top-rated",
+      "controller": "UserController",
+      "action": "TopRatedSongsAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "meloamp",
+          "evidence": "pages/FavoritesPage.tsx:65",
+          "usedFor": "favorites; entity placeholder is a literal path segment iterated client-side (songs|albums|artists)"
+        }
+      ],
+      "scenarios": [],
+      "parityStatus": "client-used-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/stats",
+      "manifestPath": "/api/v1/user/stats",
+      "controller": "UserStatsController",
+      "action": "GetStatsAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/stats/history",
+      "manifestPath": "/api/v1/user/stats/history",
+      "controller": "UserStatsController",
+      "action": "GetHistoryAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/stats/plays-per-day",
+      "manifestPath": "/api/v1/user/stats/plays-per-day",
+      "controller": "UserStatsController",
+      "action": "GetPlaysPerDayAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/stats/top-genres",
+      "manifestPath": "/api/v1/user/stats/top-genres",
+      "controller": "UserStatsController",
+      "action": "GetTopGenresAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/stats/top-songs",
+      "manifestPath": "/api/v1/user/stats/top-songs",
+      "controller": "UserStatsController",
+      "action": "GetTopSongsAsync",
+      "auth": {
+        "required": true,
+        "schemes": [
+          "JwtBearerDefaults.AuthenticationScheme"
+        ]
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [],
+      "scenarios": [],
+      "parityStatus": "documented-uncaptured"
+    },
+    {
+      "method": "GET",
+      "path": "/song/stream/{}/{}/{}",
+      "manifestPath": "/song/stream/{apiKey:guid}/{userApiKey:guid}/{authToken}",
+      "controller": "SongsController",
+      "action": "StreamSong",
+      "auth": {
+        "required": false
+      },
+      "implementation": "implemented",
+      "inOpenApi": true,
+      "usedBy": [
+        {
+          "client": "melodee-player",
+          "evidence": "ExoPlayer MediaItem.fromUri (MusicService.kt:1168); CacheDataSource over DefaultHttpDataSource, 200MB disk cache, no Authorization header, no explicit Range headers",
+          "usedFor": "playback via server-provided streamUrl (never constructed client-side)"
+        },
+        {
+          "client": "meloamp",
+          "evidence": "<audio> element via toQueueSong.ts:36-49; appends ?jwt=<token>; Player.tsx:132,139 probes HEAD then Range bytes=0-1023 fallback",
+          "usedFor": "playback via server-provided streamUrl (never constructed client-side)"
+        }
+      ],
+      "scenarios": [
+        "stream/get-full",
+        "stream/get-range-initial",
+        "stream/get-range-middle",
+        "stream/get-range-final-suffix",
+        "stream/get-range-open-end",
+        "stream/get-range-malformed",
+        "stream/get-range-unsatisfiable",
+        "stream/get-range-inverted",
+        "stream/get-range-multipart",
+        "stream/get-with-jwt-query-param",
+        "stream/get-tampered-token",
+        "stream/get-token-for-wrong-song",
+        "stream/get-unknown-user",
+        "stream/get-empty-guid-user"
+      ],
+      "parityStatus": "captured"
+    }
+  ],
+  "crossSurfaceDependencies": [
+    {
+      "method": "GET",
+      "path": "/images/album_{}/{}",
+      "servingSurface": "opensubsonic (OpenSubsonic ImageController, unversioned)",
+      "usedBy": [
+        "melodee-player",
+        "meloamp"
+      ],
+      "scenarios": [
+        "catalog-images/image-album-large"
+      ],
+      "note": "Native clients fetch artwork URLs with no auth headers; served by the OpenSubsonic surface."
+    },
+    {
+      "method": "GET",
+      "path": "/images/artist_{}/{}",
+      "servingSurface": "opensubsonic (OpenSubsonic ImageController, unversioned)",
+      "usedBy": [
+        "melodee-player",
+        "meloamp"
+      ],
+      "scenarios": [
+        "catalog-images/image-artist-thumb"
+      ],
+      "note": "Native clients fetch artwork URLs with no auth headers; served by the OpenSubsonic surface."
+    },
+    {
+      "method": "GET",
+      "path": "/images/playlist_{}/{}",
+      "servingSurface": "opensubsonic (OpenSubsonic ImageController, unversioned)",
+      "usedBy": [
+        "melodee-player",
+        "meloamp"
+      ],
+      "scenarios": [
+        "catalog-images/image-playlist-thumb"
+      ],
+      "note": "Native clients fetch artwork URLs with no auth headers; served by the OpenSubsonic surface."
+    },
+    {
+      "method": "GET",
+      "path": "/images/song_{}/{}",
+      "servingSurface": "opensubsonic (OpenSubsonic ImageController, unversioned)",
+      "usedBy": [
+        "melodee-player",
+        "meloamp"
+      ],
+      "scenarios": [
+        "catalog-images/image-song-thumb",
+        "catalog-images/image-unknown-id"
+      ],
+      "note": "Native clients fetch artwork URLs with no auth headers; served by the OpenSubsonic surface."
+    },
+    {
+      "method": "GET",
+      "path": "/images/user_{}/{}",
+      "servingSurface": "opensubsonic (OpenSubsonic ImageController, unversioned)",
+      "usedBy": [
+        "melodee-player",
+        "meloamp"
+      ],
+      "scenarios": [
+        "catalog-images/image-user-thumb"
+      ],
+      "note": "Native clients fetch artwork URLs with no auth headers; served by the OpenSubsonic surface."
+    }
+  ]
+}

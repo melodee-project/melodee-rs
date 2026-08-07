@@ -1,0 +1,1067 @@
+[
+  {
+    "schemaVersion": 2,
+    "name": "catalog",
+    "surface": "melodee-api-v1",
+    "flow": [
+      {
+        "name": "login",
+        "method": "POST",
+        "path": "/api/v1/auth/authenticate",
+        "auth": "none",
+        "json": {
+          "userName": "phase0-fixture",
+          "password": "Mel0deeR0cks!"
+        },
+        "capture": {
+          "accessToken": "$.token"
+        },
+        "secretCapture": [
+          "accessToken"
+        ],
+        "normalize": {
+          "maskJsonPaths": [
+            "$.token",
+            "$.expiresAt",
+            "$.refreshToken",
+            "$.refreshTokenExpiresAt",
+            "$.user.createdAt",
+            "$.user.updatedAt",
+            "$.serverVersion"
+          ],
+          "maskBaseUrl": true,
+          "structureChecks": {
+            "$.token": "jwt"
+          }
+        }
+      },
+      {
+        "name": "artists-list",
+        "method": "GET",
+        "path": "/api/v1/artists?page=1&pageSize=5&orderBy=Name&orderDirection=asc",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskBaseUrl": true,
+          "maskUrlAuthTokenPaths": [
+            "$.data[*].streamUrl"
+          ]
+        },
+        "notes": "Paged artist browse with the meta/data envelope the Android client deserializes."
+      },
+      {
+        "name": "artists-list-page2",
+        "method": "GET",
+        "path": "/api/v1/artists?page=2&pageSize=5&orderBy=Name&orderDirection=asc",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskBaseUrl": true
+        },
+        "notes": "Pagination continuation; meta.hasNext/hasPrevious behavior."
+      },
+      {
+        "name": "artists-recent",
+        "method": "GET",
+        "path": "/api/v1/artists/recent?limit=4",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskBaseUrl": true
+        },
+        "notes": "MeloAmp dashboard route (recents by play history)."
+      },
+      {
+        "name": "artists-search-q-dune",
+        "method": "GET",
+        "path": "/api/v1/artists?q=Dune&page=1&pageSize=10",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskBaseUrl": true
+        },
+        "notes": "Name-collision evidence: 'Dune' and 'Düné' share NameNormalized=DUNE (Artists.Name is unique at the schema level, so exact duplicates cannot exist; diacritic variants are the closest representable case). Captures whether q search merges or separates the identities."
+      },
+      {
+        "name": "artist-detail",
+        "method": "GET",
+        "path": "/api/v1/artists/813c11e0-61cd-5204-ae0f-ce68386eacec",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskBaseUrl": true
+        },
+        "notes": "Aurora Fields; pre-seeded UserArtist (starred, rating 5) must surface in user-specific fields."
+      },
+      {
+        "name": "artist-detail-unknown",
+        "method": "GET",
+        "path": "/api/v1/artists/00000000-0000-0000-0000-000000000000",
+        "auth": "bearer-var:accessToken",
+        "expectStatus": 500,
+        "normalize": {
+          "maskJsonPaths": [
+            "$.correlationId"
+          ]
+        },
+        "notes": "DISCOVERY: unknown ApiKey returns HTTP 500 INTERNAL_ERROR, not the controller-declared 404 (ProducesResponseType documents 404; ApiNotFound code path is not reached at runtime). Undocumented behavior captured as compatibility evidence; candidate known-bug NOT to preserve in the Rust implementation (product decision required)."
+      },
+      {
+        "name": "artist-albums",
+        "method": "GET",
+        "path": "/api/v1/artists/4f6a5272-9529-5a24-92a0-a3ede6a73d59/albums?page=1&pageSize=100&orderBy=ReleaseDate&orderDirection=asc",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskBaseUrl": true
+        },
+        "notes": "The Harbour Lights (group) albums; multi-release artist ordering."
+      },
+      {
+        "name": "artist-songs",
+        "method": "GET",
+        "path": "/api/v1/artists/813c11e0-61cd-5204-ae0f-ce68386eacec/songs?page=1&pageSize=50",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskBaseUrl": true,
+          "maskUrlAuthTokenPaths": [
+            "$.data[*].streamUrl"
+          ],
+          "structureChecks": {
+            "$.data[0].streamUrl": "streamAuthToken"
+          }
+        },
+        "notes": "Android Auto artist-search path (MusicService.kt:717). Song payload embeds the self-authenticating streamUrl; the HMAC token segment is masked and structurally validated instead."
+      },
+      {
+        "name": "albums-list",
+        "method": "GET",
+        "path": "/api/v1/albums?page=1&pageSize=5&orderBy=Name&orderDirection=asc",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskBaseUrl": true
+        }
+      },
+      {
+        "name": "albums-recent",
+        "method": "GET",
+        "path": "/api/v1/albums/recent?limit=4",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskBaseUrl": true
+        },
+        "notes": "MeloAmp dashboard route."
+      },
+      {
+        "name": "album-detail",
+        "method": "GET",
+        "path": "/api/v1/albums/69d97699-74c5-5403-878f-87f42d9d9fbb",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskBaseUrl": true
+        },
+        "notes": "Northern Lights (ordinary solo Release); pre-seeded UserAlbum starred/rating 5."
+      },
+      {
+        "name": "album-detail-compilation",
+        "method": "GET",
+        "path": "/api/v1/albums/97d569aa-9133-5351-b8c5-097cf57f96f9",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskBaseUrl": true
+        },
+        "notes": "Various Artists compilation (IsCompilation=true) with per-track guest/feature Contributors."
+      },
+      {
+        "name": "album-detail-multidisc",
+        "method": "GET",
+        "path": "/api/v1/albums/645680d3-704a-5b83-a734-42a3fa88c3ed",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskBaseUrl": true
+        },
+        "notes": "Multi-disc Release: disc-qualified SongNumbers 101/102/201/202, PartTitles disc subtitles. The legacy schema has no disc column; (AlbumId,SongNumber) is unique."
+      },
+      {
+        "name": "album-detail-minimal-metadata",
+        "method": "GET",
+        "path": "/api/v1/albums/de0f93a5-2979-5654-9afe-16453caa49af",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskBaseUrl": true
+        },
+        "notes": "Optional/missing metadata: null genres, no sort name, no comment. Null-vs-omitted behavior is contract (PRD-API-M1-005)."
+      },
+      {
+        "name": "album-songs",
+        "method": "GET",
+        "path": "/api/v1/albums/69d97699-74c5-5403-878f-87f42d9d9fbb/songs",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskBaseUrl": true,
+          "maskUrlAuthTokenPaths": [
+            "$.data[*].streamUrl"
+          ],
+          "structureChecks": {
+            "$.data[0].streamUrl": "streamAuthToken"
+          }
+        },
+        "notes": "Android album-songs route (no query params in the client)."
+      },
+      {
+        "name": "album-songs-multidisc",
+        "method": "GET",
+        "path": "/api/v1/albums/645680d3-704a-5b83-a734-42a3fa88c3ed/songs",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskBaseUrl": true,
+          "maskUrlAuthTokenPaths": [
+            "$.data[*].streamUrl"
+          ]
+        },
+        "notes": "Multi-disc song ordering evidence (songNumber 101,102,201,202)."
+      },
+      {
+        "name": "songs-list",
+        "method": "GET",
+        "path": "/api/v1/songs?page=1&pageSize=5&orderBy=Title&orderDirection=asc",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskBaseUrl": true,
+          "maskUrlAuthTokenPaths": [
+            "$.data[*].streamUrl"
+          ]
+        }
+      },
+      {
+        "name": "song-detail",
+        "method": "GET",
+        "path": "/api/v1/songs/ea26fc59-a545-51c2-94c4-702e1f97b80a",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskBaseUrl": true,
+          "maskUrlAuthTokenPaths": [
+            "$.streamUrl"
+          ],
+          "structureChecks": {
+            "$.streamUrl": "streamAuthToken"
+          }
+        },
+        "notes": "Polar Veil: pre-seeded UserSong starred + rating 5 + playedCount 4; has lyrics."
+      },
+      {
+        "name": "song-detail-unknown",
+        "method": "GET",
+        "path": "/api/v1/songs/00000000-0000-0000-0000-000000000000",
+        "auth": "bearer-var:accessToken",
+        "expectStatus": 500,
+        "normalize": {
+          "maskJsonPaths": [
+            "$.correlationId"
+          ]
+        },
+        "notes": "DISCOVERY: unknown ApiKey returns HTTP 500 INTERNAL_ERROR, not the controller-declared 404 (ProducesResponseType documents 404; ApiNotFound code path is not reached at runtime). Undocumented behavior captured as compatibility evidence; candidate known-bug NOT to preserve in the Rust implementation (product decision required)."
+      },
+      {
+        "name": "search-post-dune",
+        "method": "POST",
+        "path": "/api/v1/search",
+        "auth": "bearer-var:accessToken",
+        "json": {
+          "query": "Dune",
+          "pageSize": 10,
+          "artistPage": 1,
+          "albumPage": 1,
+          "songPage": 1
+        },
+        "normalize": {
+          "maskBaseUrl": true,
+          "maskUrlAuthTokenPaths": [
+            "$.songs.data[*].streamUrl"
+          ]
+        },
+        "notes": "Combined search (MeloAmp SearchPage). Records whether both normalized-name-collision artists appear."
+      },
+      {
+        "name": "search-songs-neon",
+        "method": "GET",
+        "path": "/api/v1/search/songs?q=Neon&page=1&pageSize=10",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskBaseUrl": true,
+          "maskUrlAuthTokenPaths": [
+            "$.data[*].streamUrl"
+          ]
+        },
+        "notes": "Android Auto search route (MusicService.kt:763)."
+      },
+      {
+        "name": "search-songs-filter-by-artist",
+        "method": "GET",
+        "path": "/api/v1/search/songs?q=a&page=1&pageSize=10&filterByArtistApiKey=5bf951d5-7afe-5c50-8941-145b7095902b",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskBaseUrl": true,
+          "maskUrlAuthTokenPaths": [
+            "$.data[*].streamUrl"
+          ]
+        },
+        "notes": "Android Auto 'title by artist' path (MusicService.kt:679) scoped to Dune (plain)."
+      },
+      {
+        "name": "search-unicode",
+        "method": "POST",
+        "path": "/api/v1/search",
+        "auth": "bearer-var:accessToken",
+        "json": {
+          "query": "東京",
+          "pageSize": 10
+        },
+        "normalize": {
+          "maskBaseUrl": true,
+          "maskUrlAuthTokenPaths": [
+            "$.songs.data[*].streamUrl"
+          ]
+        },
+        "notes": "Unicode (CJK) query behavior."
+      },
+      {
+        "name": "user-playlists-limit-param",
+        "method": "GET",
+        "path": "/api/v1/user/playlists?page=1&limit=50",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskBaseUrl": true
+        },
+        "notes": "Android uses 'limit' here but 'pageSize' on /playlists/{id}/songs; the inconsistency is contract (client inventory finding)."
+      },
+      {
+        "name": "playlist-detail",
+        "method": "GET",
+        "path": "/api/v1/playlists/b16ae181-fc40-5cd5-ba7b-0cf9f5b4c89d",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskBaseUrl": true
+        }
+      },
+      {
+        "name": "playlist-songs",
+        "method": "GET",
+        "path": "/api/v1/playlists/b16ae181-fc40-5cd5-ba7b-0cf9f5b4c89d/songs?page=1&pageSize=50",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskBaseUrl": true,
+          "maskUrlAuthTokenPaths": [
+            "$.data[*].streamUrl"
+          ]
+        },
+        "notes": "Playlist spanning four Releases; PlaylistOrder must be stable."
+      },
+      {
+        "name": "genres-list",
+        "method": "GET",
+        "path": "/api/v1/genres",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskBaseUrl": true
+        },
+        "notes": "Includes Unicode genre 環境音楽."
+      }
+    ],
+    "notes": "Native catalog critical path: browse/detail for Artist/Album(Release)/Song(Track), search, playlists, genres. Album/Song vocabulary is preserved deliberately at the API boundary (PRD-API-M1-003)."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "catalog-queue",
+    "surface": "melodee-api-v1",
+    "flow": [
+      {
+        "name": "login",
+        "method": "POST",
+        "path": "/api/v1/auth/authenticate",
+        "auth": "none",
+        "json": {
+          "userName": "phase0-fixture",
+          "password": "Mel0deeR0cks!"
+        },
+        "capture": {
+          "accessToken": "$.token"
+        },
+        "secretCapture": [
+          "accessToken"
+        ],
+        "normalize": {
+          "maskJsonPaths": [
+            "$.token",
+            "$.expiresAt",
+            "$.refreshToken",
+            "$.refreshTokenExpiresAt",
+            "$.user.createdAt",
+            "$.user.updatedAt",
+            "$.serverVersion"
+          ],
+          "maskBaseUrl": true
+        }
+      },
+      {
+        "name": "queue-get-empty",
+        "method": "GET",
+        "path": "/api/v1/queue",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskBaseUrl": true
+        },
+        "notes": "Route not compiled into the baseline server (csproj Compile Remove); 404 with empty body is the captured runtime behavior.",
+        "expectStatus": 404
+      },
+      {
+        "name": "queue-put",
+        "method": "PUT",
+        "path": "/api/v1/queue",
+        "auth": "bearer-var:accessToken",
+        "json": {
+          "songIds": [
+            "2b8eab4b-235d-5892-99f8-c0f5f54e8ab4",
+            "b3297a8f-5e2b-5ade-98ea-f899d38059e0"
+          ],
+          "currentSongId": "b3297a8f-5e2b-5ade-98ea-f899d38059e0",
+          "position": 42.5,
+          "changedBy": "phase0-fixture"
+        },
+        "normalize": {},
+        "expectStatus": 404,
+        "notes": "Route not compiled into the baseline server (csproj Compile Remove); 404 with empty body is the captured runtime behavior."
+      },
+      {
+        "name": "queue-get-after-put",
+        "method": "GET",
+        "path": "/api/v1/queue",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskBaseUrl": true,
+          "maskUrlAuthTokenPaths": [
+            "$.songs[*].streamUrl"
+          ],
+          "maskJsonPaths": [
+            "$.lastUpdatedAt"
+          ]
+        },
+        "expectStatus": 404,
+        "notes": "Route not compiled into the baseline server (csproj Compile Remove); 404 with empty body is the captured runtime behavior."
+      },
+      {
+        "name": "queue-delete",
+        "method": "DELETE",
+        "path": "/api/v1/queue",
+        "auth": "bearer-var:accessToken",
+        "normalize": {},
+        "expectStatus": 404,
+        "notes": "Route not compiled into the baseline server (csproj Compile Remove); 404 with empty body is the captured runtime behavior."
+      },
+      {
+        "name": "queue-get-after-delete",
+        "method": "GET",
+        "path": "/api/v1/queue",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskBaseUrl": true
+        },
+        "expectStatus": 404,
+        "notes": "Route not compiled into the baseline server (csproj Compile Remove); 404 with empty body is the captured runtime behavior."
+      }
+    ],
+    "notes": "DISCOVERY: /api/v1/queue exists in legacy source and in the static route manifest but is excluded from compilation by <Compile Remove> in Melodee.Blazor.csproj at the frozen baseline (together with all Party controllers). The route answers 404 at runtime with an empty body. These steps capture that runtime truth; the queue PUT/GET/DELETE round-trip cannot be captured against this baseline because the handler is not compiled in."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "catalog-star-rating",
+    "surface": "melodee-api-v1",
+    "flow": [
+      {
+        "name": "login",
+        "method": "POST",
+        "path": "/api/v1/auth/authenticate",
+        "auth": "none",
+        "json": {
+          "userName": "phase0-fixture",
+          "password": "Mel0deeR0cks!"
+        },
+        "capture": {
+          "accessToken": "$.token"
+        },
+        "secretCapture": [
+          "accessToken"
+        ],
+        "normalize": {
+          "maskJsonPaths": [
+            "$.token",
+            "$.expiresAt",
+            "$.refreshToken",
+            "$.refreshTokenExpiresAt",
+            "$.user.createdAt",
+            "$.user.updatedAt",
+            "$.serverVersion"
+          ],
+          "maskBaseUrl": true
+        }
+      },
+      {
+        "name": "star-song-on",
+        "method": "POST",
+        "path": "/api/v1/songs/starred/c418d383-13f5-598d-94a8-c15e5d2df348/true",
+        "auth": "bearer-var:accessToken",
+        "normalize": {},
+        "notes": "Path-encoded star toggle (no body), the exact mechanism both native clients use."
+      },
+      {
+        "name": "song-detail-after-star",
+        "method": "GET",
+        "path": "/api/v1/songs/c418d383-13f5-598d-94a8-c15e5d2df348",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskBaseUrl": true,
+          "maskUrlAuthTokenPaths": [
+            "$.streamUrl"
+          ],
+          "maskJsonPaths": [
+            "$.starredAt"
+          ]
+        },
+        "notes": "Verifies userStarred=true round-trips into the detail payload."
+      },
+      {
+        "name": "star-song-off",
+        "method": "POST",
+        "path": "/api/v1/songs/starred/c418d383-13f5-598d-94a8-c15e5d2df348/false",
+        "auth": "bearer-var:accessToken",
+        "normalize": {}
+      },
+      {
+        "name": "song-detail-after-unstar",
+        "method": "GET",
+        "path": "/api/v1/songs/c418d383-13f5-598d-94a8-c15e5d2df348",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskBaseUrl": true,
+          "maskUrlAuthTokenPaths": [
+            "$.streamUrl"
+          ],
+          "maskJsonPaths": [
+            "$.starredAt"
+          ]
+        }
+      },
+      {
+        "name": "rate-song",
+        "method": "POST",
+        "path": "/api/v1/songs/setrating/3e185e31-88b5-519b-b830-1ae915e80ba5/3",
+        "auth": "bearer-var:accessToken",
+        "normalize": {}
+      },
+      {
+        "name": "song-detail-after-rating",
+        "method": "GET",
+        "path": "/api/v1/songs/3e185e31-88b5-519b-b830-1ae915e80ba5",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskBaseUrl": true,
+          "maskUrlAuthTokenPaths": [
+            "$.streamUrl"
+          ]
+        },
+        "notes": "Verifies userRating=3 round-trips."
+      },
+      {
+        "name": "rate-song-reset",
+        "method": "POST",
+        "path": "/api/v1/songs/setrating/3e185e31-88b5-519b-b830-1ae915e80ba5/0",
+        "auth": "bearer-var:accessToken",
+        "normalize": {}
+      },
+      {
+        "name": "hate-song-on",
+        "method": "POST",
+        "path": "/api/v1/songs/hated/e43ff3e7-3e4a-5168-9c31-cf2676eb6cb0/true",
+        "auth": "bearer-var:accessToken",
+        "normalize": {}
+      },
+      {
+        "name": "song-detail-after-hate",
+        "method": "GET",
+        "path": "/api/v1/songs/e43ff3e7-3e4a-5168-9c31-cf2676eb6cb0",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskBaseUrl": true,
+          "maskUrlAuthTokenPaths": [
+            "$.streamUrl"
+          ]
+        }
+      },
+      {
+        "name": "hate-song-off",
+        "method": "POST",
+        "path": "/api/v1/songs/hated/e43ff3e7-3e4a-5168-9c31-cf2676eb6cb0/false",
+        "auth": "bearer-var:accessToken",
+        "normalize": {}
+      },
+      {
+        "name": "star-album-on",
+        "method": "POST",
+        "path": "/api/v1/albums/starred/263ebba5-739c-5cb9-987f-b2d2bbfbd0ad/true",
+        "auth": "bearer-var:accessToken",
+        "normalize": {},
+        "notes": "MeloAmp album star toggle (AlbumDetailView.tsx:90)."
+      },
+      {
+        "name": "album-detail-after-star",
+        "method": "GET",
+        "path": "/api/v1/albums/263ebba5-739c-5cb9-987f-b2d2bbfbd0ad",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskBaseUrl": true
+        },
+        "notes": "Verifies album userStarred=true round-trips."
+      },
+      {
+        "name": "star-album-off",
+        "method": "POST",
+        "path": "/api/v1/albums/starred/263ebba5-739c-5cb9-987f-b2d2bbfbd0ad/false",
+        "auth": "bearer-var:accessToken",
+        "normalize": {}
+      },
+      {
+        "name": "rate-album",
+        "method": "POST",
+        "path": "/api/v1/albums/setrating/4243b96d-1302-5cc9-82bf-395d76bf3ac8/4",
+        "auth": "bearer-var:accessToken",
+        "normalize": {},
+        "notes": "MeloAmp album rating (AlbumDetailView.tsx:130)."
+      },
+      {
+        "name": "album-detail-after-rating",
+        "method": "GET",
+        "path": "/api/v1/albums/4243b96d-1302-5cc9-82bf-395d76bf3ac8",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskBaseUrl": true
+        }
+      },
+      {
+        "name": "rate-album-reset",
+        "method": "POST",
+        "path": "/api/v1/albums/setrating/4243b96d-1302-5cc9-82bf-395d76bf3ac8/0",
+        "auth": "bearer-var:accessToken",
+        "normalize": {}
+      },
+      {
+        "name": "star-artist-on",
+        "method": "POST",
+        "path": "/api/v1/artists/starred/5bf951d5-7afe-5c50-8941-145b7095902b/true",
+        "auth": "bearer-var:accessToken",
+        "normalize": {},
+        "notes": "MeloAmp artist star toggle (ArtistDetailView.tsx:76)."
+      },
+      {
+        "name": "artist-detail-after-star",
+        "method": "GET",
+        "path": "/api/v1/artists/5bf951d5-7afe-5c50-8941-145b7095902b",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskBaseUrl": true
+        }
+      },
+      {
+        "name": "star-artist-off",
+        "method": "POST",
+        "path": "/api/v1/artists/starred/5bf951d5-7afe-5c50-8941-145b7095902b/false",
+        "auth": "bearer-var:accessToken",
+        "normalize": {}
+      },
+      {
+        "name": "hate-artist-on",
+        "method": "POST",
+        "path": "/api/v1/artists/hated/503f045f-1bd6-5ea7-9e32-14632344680c/true",
+        "auth": "bearer-var:accessToken",
+        "normalize": {},
+        "notes": "MeloAmp artist hate toggle (ArtistDetailView.tsx:94)."
+      },
+      {
+        "name": "hate-artist-off",
+        "method": "POST",
+        "path": "/api/v1/artists/hated/503f045f-1bd6-5ea7-9e32-14632344680c/false",
+        "auth": "bearer-var:accessToken",
+        "normalize": {}
+      }
+    ]
+  },
+  {
+    "schemaVersion": 2,
+    "name": "catalog-scrobble",
+    "surface": "melodee-api-v1",
+    "flow": [
+      {
+        "name": "login",
+        "method": "POST",
+        "path": "/api/v1/auth/authenticate",
+        "auth": "none",
+        "json": {
+          "userName": "phase0-fixture",
+          "password": "Mel0deeR0cks!"
+        },
+        "capture": {
+          "accessToken": "$.token"
+        },
+        "secretCapture": [
+          "accessToken"
+        ],
+        "normalize": {
+          "maskJsonPaths": [
+            "$.token",
+            "$.expiresAt",
+            "$.refreshToken",
+            "$.refreshTokenExpiresAt",
+            "$.user.createdAt",
+            "$.user.updatedAt",
+            "$.serverVersion"
+          ],
+          "maskBaseUrl": true
+        }
+      },
+      {
+        "name": "song-detail-before-scrobble",
+        "method": "GET",
+        "path": "/api/v1/songs/d493e627-df71-50ed-93fb-c29b9f6ec96a",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskBaseUrl": true,
+          "maskUrlAuthTokenPaths": [
+            "$.streamUrl"
+          ]
+        },
+        "notes": "Baseline playedCount before scrobbling (Lantern, seeded playedCount 0)."
+      },
+      {
+        "name": "scrobble-now-playing",
+        "method": "POST",
+        "path": "/api/v1/scrobble",
+        "auth": "bearer-var:accessToken",
+        "json": {
+          "songId": "d493e627-df71-50ed-93fb-c29b9f6ec96a",
+          "playerName": "MelodeePlayer",
+          "scrobbleTypeValue": 1,
+          "scrobbleType": "nowPlaying",
+          "timestamp": 1786050000.0,
+          "playedDuration": 10.0
+        },
+        "normalize": {},
+        "notes": "Android ScrobbleManager body shape, including the redundant integer scrobbleTypeValue the client sends (server parses the string scrobbleType). Fixed synthetic timestamp for determinism."
+      },
+      {
+        "name": "scrobble-played",
+        "method": "POST",
+        "path": "/api/v1/scrobble",
+        "auth": "bearer-var:accessToken",
+        "json": {
+          "songId": "d493e627-df71-50ed-93fb-c29b9f6ec96a",
+          "playerName": "MelodeePlayer",
+          "scrobbleTypeValue": 2,
+          "scrobbleType": "played",
+          "timestamp": 1786050060.0,
+          "playedDuration": 60.0
+        },
+        "normalize": {}
+      },
+      {
+        "name": "song-detail-after-scrobble",
+        "method": "GET",
+        "path": "/api/v1/songs/d493e627-df71-50ed-93fb-c29b9f6ec96a",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskBaseUrl": true,
+          "maskUrlAuthTokenPaths": [
+            "$.streamUrl"
+          ],
+          "maskJsonPaths": [
+            "$.lastPlayedAt"
+          ]
+        },
+        "notes": "Verifies the played scrobble incremented playedCount (diff against song-detail-before-scrobble)."
+      },
+      {
+        "name": "scrobble-unknown-song",
+        "method": "POST",
+        "path": "/api/v1/scrobble",
+        "auth": "bearer-var:accessToken",
+        "json": {
+          "songId": "00000000-0000-0000-0000-000000000000",
+          "playerName": "MelodeePlayer",
+          "scrobbleType": "played",
+          "timestamp": 1786050060.0,
+          "playedDuration": 60.0
+        },
+        "expectStatus": 500,
+        "normalize": {
+          "maskJsonPaths": [
+            "$.correlationId"
+          ]
+        },
+        "notes": "DISCOVERY: unknown songId returns HTTP 500 INTERNAL_ERROR, not the documented 400 'Unknown song' (the controller's ApiBadRequest path is unreachable because songService.GetByApiKeyAsync fails first — same root cause class as the artist/album/song/playlist detail 500s)."
+      }
+    ]
+  },
+  {
+    "schemaVersion": 2,
+    "name": "catalog-images",
+    "surface": "melodee-api-v1",
+    "flow": [
+      {
+        "name": "login",
+        "method": "POST",
+        "path": "/api/v1/auth/authenticate",
+        "auth": "none",
+        "json": {
+          "userName": "phase0-fixture",
+          "password": "Mel0deeR0cks!"
+        },
+        "capture": {
+          "accessToken": "$.token"
+        },
+        "secretCapture": [
+          "accessToken"
+        ],
+        "normalize": {
+          "maskJsonPaths": [
+            "$.token",
+            "$.expiresAt",
+            "$.refreshToken",
+            "$.refreshTokenExpiresAt",
+            "$.user.createdAt",
+            "$.user.updatedAt",
+            "$.serverVersion"
+          ],
+          "maskBaseUrl": true
+        }
+      },
+      {
+        "name": "image-song-thumb",
+        "method": "GET",
+        "path": "/images/song_2b8eab4b-235d-5892-99f8-c0f5f54e8ab4/80",
+        "auth": "none",
+        "normalize": {
+          "dropHeaders": [
+            "etag",
+            "last-modified"
+          ]
+        },
+        "notes": "Cross-surface route: served by the OpenSubsonic ImageController but consumed by native clients via imageUrl/thumbnailUrl with NO auth headers (both clients). Must be anonymously fetchable. Fixture songs have no custom artwork, so the default image is expected."
+      },
+      {
+        "name": "image-album-large",
+        "method": "GET",
+        "path": "/images/album_69d97699-74c5-5403-878f-87f42d9d9fbb/1024",
+        "auth": "none",
+        "normalize": {
+          "dropHeaders": [
+            "etag",
+            "last-modified"
+          ]
+        }
+      },
+      {
+        "name": "image-artist-thumb",
+        "method": "GET",
+        "path": "/images/artist_813c11e0-61cd-5204-ae0f-ce68386eacec/80",
+        "auth": "none",
+        "normalize": {
+          "dropHeaders": [
+            "etag",
+            "last-modified"
+          ]
+        }
+      },
+      {
+        "name": "image-playlist-thumb",
+        "method": "GET",
+        "path": "/images/playlist_b16ae181-fc40-5cd5-ba7b-0cf9f5b4c89d/80",
+        "auth": "none",
+        "normalize": {
+          "dropHeaders": [
+            "etag",
+            "last-modified"
+          ]
+        }
+      },
+      {
+        "name": "image-user-thumb",
+        "method": "GET",
+        "path": "/images/user_f78448cc-82ec-5864-877c-6c6163b00065/80",
+        "auth": "none",
+        "normalize": {
+          "dropHeaders": [
+            "etag",
+            "last-modified"
+          ]
+        }
+      },
+      {
+        "name": "image-unknown-id",
+        "method": "GET",
+        "path": "/images/song_00000000-0000-0000-0000-000000000000/80",
+        "auth": "none",
+        "normalize": {
+          "dropHeaders": [
+            "etag",
+            "last-modified"
+          ]
+        },
+        "notes": "Negative path: unknown image id. Status recorded (404 vs default image fallback is undocumented behavior to characterize)."
+      }
+    ]
+  },
+  {
+    "schemaVersion": 2,
+    "name": "catalog-playlist-crud",
+    "surface": "melodee-api-v1",
+    "flow": [
+      {
+        "name": "login",
+        "method": "POST",
+        "path": "/api/v1/auth/authenticate",
+        "auth": "none",
+        "json": {
+          "userName": "phase0-fixture",
+          "password": "Mel0deeR0cks!"
+        },
+        "capture": {
+          "accessToken": "$.token"
+        },
+        "secretCapture": [
+          "accessToken"
+        ],
+        "normalize": {
+          "maskJsonPaths": [
+            "$.token",
+            "$.expiresAt",
+            "$.refreshToken",
+            "$.refreshTokenExpiresAt",
+            "$.user.createdAt",
+            "$.user.updatedAt",
+            "$.serverVersion"
+          ],
+          "maskBaseUrl": true
+        }
+      },
+      {
+        "name": "create-playlist",
+        "method": "POST",
+        "path": "/api/v1/playlists",
+        "auth": "bearer-var:accessToken",
+        "json": {
+          "name": "CRUD Probe",
+          "comment": "synthetic CRUD probe",
+          "isPublic": false,
+          "songIds": [
+            "2b8eab4b-235d-5892-99f8-c0f5f54e8ab4",
+            "d493e627-df71-50ed-93fb-c29b9f6ec96a"
+          ]
+        },
+        "capture": {
+          "playlistId": "$.id"
+        },
+        "secretCapture": [
+          "playlistId"
+        ],
+        "normalize": {
+          "maskBaseUrl": true,
+          "maskJsonPaths": [
+            "$.id",
+            "$.thumbnailUrl",
+            "$.imageUrl",
+            "$.createdAt",
+            "$.updatedAt",
+            "$.owner.createdAt",
+            "$.owner.updatedAt"
+          ]
+        },
+        "notes": "MeloAmp playlist creation (also 'save queue as playlist', QueueView.tsx:253). The server-generated playlist ApiKey is random per run and is masked/unsubstituted."
+      },
+      {
+        "name": "add-songs",
+        "method": "POST",
+        "path": "/api/v1/playlists/{{playlistId}}/songs",
+        "auth": "bearer-var:accessToken",
+        "json": [
+          "b3297a8f-5e2b-5ade-98ea-f899d38059e0"
+        ],
+        "normalize": {
+          "maskJsonPaths": [
+            "$.correlationId"
+          ]
+        },
+        "notes": "SERVER BUG EVIDENCE: even the CORRECT bare-array body 500s at runtime — PlaylistService.AddSongsToPlaylistAsync dereferences the Song navigation (playlist.Songs.Sum(x => x.Song.Duration)) which is not included in the query, so add-songs is broken in BOTH body forms at this baseline (object form: 400 model-binding envelope; bare array: 500 INTERNAL_ERROR). The Rust implementation must NOT preserve the 500; the 400-vs-200 contract for the object shape is a product decision (MeloAmp sends the object form).",
+        "expectStatus": 500
+      },
+      {
+        "name": "add-songs-meloamp-shape",
+        "method": "POST",
+        "path": "/api/v1/playlists/{{playlistId}}/songs",
+        "auth": "bearer-var:accessToken",
+        "json": {
+          "songIds": [
+            "b3297a8f-5e2b-5ade-98ea-f899d38059e0"
+          ]
+        },
+        "expectStatus": 400,
+        "normalize": {
+          "maskJsonPaths": [
+            "$.traceId"
+          ]
+        },
+        "notes": "CLIENT/SERVER MISMATCH EVIDENCE: MeloAmp posts an OBJECT body { songIds: [...] } (PlaylistPickerDialog.tsx:91) but the server action binds [FromBody] Guid[] — a bare array — so the object form fails model binding with an ASP.NET validation envelope. MeloAmp add-to-playlist is broken against this baseline; the Rust server must reproduce the 400 for the object shape unless a product decision changes the API. (Since the bare-array form also fails — see add-songs — no working add-songs form exists at this baseline.)"
+      },
+      {
+        "name": "reorder-songs",
+        "method": "PUT",
+        "path": "/api/v1/playlists/{{playlistId}}/songs/reorder",
+        "auth": "bearer-var:accessToken",
+        "json": {
+          "songIds": [
+            "d493e627-df71-50ed-93fb-c29b9f6ec96a",
+            "2b8eab4b-235d-5892-99f8-c0f5f54e8ab4"
+          ]
+        },
+        "normalize": {},
+        "notes": "MeloAmp drag-reorder (PlaylistDetailView.tsx:166). Reorders the two songs from creation (independent of the broken add-songs route)."
+      },
+      {
+        "name": "songs-after-reorder",
+        "method": "GET",
+        "path": "/api/v1/playlists/{{playlistId}}/songs?page=1&pageSize=50",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskBaseUrl": true,
+          "maskUrlAuthTokenPaths": [
+            "$.data[*].streamUrl"
+          ]
+        },
+        "notes": "Verifies the reordered PlaylistOrder is observable."
+      },
+      {
+        "name": "delete-playlist",
+        "method": "DELETE",
+        "path": "/api/v1/playlists/{{playlistId}}",
+        "auth": "bearer-var:accessToken",
+        "normalize": {}
+      },
+      {
+        "name": "detail-after-delete",
+        "method": "GET",
+        "path": "/api/v1/playlists/{{playlistId}}",
+        "auth": "bearer-var:accessToken",
+        "normalize": {
+          "maskBaseUrl": true,
+          "maskJsonPaths": [
+            "$.correlationId"
+          ]
+        },
+        "notes": "Deleted playlist returns a CLEAN 404 (unlike the unknown-id 500 class for pre-existing-but-unknown GUIDs on artist/album/song detail — the playlist service handles not-found explicitly).",
+        "expectStatus": 404
+      }
+    ],
+    "notes": "Playlist mutation lifecycle used by MeloAmp (create/add/reorder/delete)."
+  }
+]

@@ -153,7 +153,7 @@ def compare_scenario(
     try:
         left_json = json.loads(left_body)
         right_json = json.loads(right_body)
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, UnicodeDecodeError):
         if left_body != right_body:
             differences.append(
                 Difference(name, "response.body", f"{len(left_body)} bytes", f"{len(right_body)} bytes")
