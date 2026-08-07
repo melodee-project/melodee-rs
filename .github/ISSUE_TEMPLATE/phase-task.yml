@@ -1,0 +1,55 @@
+name: Phase implementation task
+description: A requirements-traced task within an approved implementation phase
+title: "phase-N: "
+labels: ["implementation"]
+body:
+  - type: input
+    id: requirements
+    attributes:
+      label: PRD requirement IDs
+      description: Comma-separated IDs from design/requirements/REQUIREMENTS-INDEX.md
+      placeholder: PRD-TEST-002, PRD-API-M1-001
+    validations:
+      required: true
+  - type: input
+    id: phase
+    attributes:
+      label: Implementation phase
+      placeholder: Phase 0
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: State observable behavior, not a preferred implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Include tests, evidence, and phase exit criteria affected.
+    validations:
+      required: true
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility and migration impact
+      description: Native v1, OpenSubsonic, Jellyfin, public IDs, persistent data, clients.
+  - type: textarea
+    id: decisions
+    attributes:
+      label: ADRs and decisions
+      description: Accepted ADRs plus any proposed ADR required before implementation.
+  - type: checkboxes
+    id: guardrails
+    attributes:
+      label: Guardrails
+      options:
+        - label: The task is within the current phase.
+          required: true
+        - label: No required proprietary or open-core feature is introduced.
+          required: true
+        - label: Legacy behavior will be captured before it is changed.
+          required: true

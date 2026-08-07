@@ -1,0 +1,45 @@
+# Rust
+/target/
+Cargo.lock.tmp
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+
+# IDEs and editors
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Runtime data
+/data/
+/logs/
+/search-index/
+compatibility/captures/*
+!compatibility/captures/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# Frontend (future)
+admin-ui/node_modules/
+admin-ui/dist/
+admin-ui/coverage/
+
+# Test output
+coverage/
+test-results/
+playwright-report/

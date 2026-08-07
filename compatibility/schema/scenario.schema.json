@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://melodee.org/schemas/compatibility-scenario-v1.json",
+  "title": "Melodee compatibility capture scenario",
+  "type": "object",
+  "required": ["name", "method", "path", "auth"],
+  "properties": {
+    "name": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]+$" },
+    "surface": { "enum": ["melodee-api-v1", "opensubsonic", "jellyfin"] },
+    "method": { "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"] },
+    "path": { "type": "string", "pattern": "^/" },
+    "auth": { "enum": ["none", "bearer", "opensubsonic", "jellyfin-token"] },
+    "headers": { "type": "object", "additionalProperties": { "type": "string" } },
+    "json": {},
+    "allowFailure": { "type": "boolean", "default": false },
+    "expectedStatus": {
+      "oneOf": [
+        { "type": "integer", "minimum": 100, "maximum": 599 },
+        { "type": "array", "items": { "type": "integer", "minimum": 100, "maximum": 599 } }
+      ]
+    },
+    "notes": { "type": "string" }
+  },
+  "additionalProperties": false
+}

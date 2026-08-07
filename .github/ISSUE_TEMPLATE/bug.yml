@@ -1,0 +1,38 @@
+name: Bug report
+description: Report a reproducible defect in the Rust rewrite
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior or compatibility contract
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Commit/version
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitized evidence
+      description: Logs, request metadata, fixture ID, client/version. Never include credentials.
+  - type: textarea
+    id: impact
+    attributes:
+      label: API/client/data impact

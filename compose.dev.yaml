@@ -1,0 +1,22 @@
+name: melodee-rs-dev
+
+services:
+  postgres:
+    image: postgres:18.4-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: melodee
+      POSTGRES_USER: melodee
+      POSTGRES_PASSWORD: melodee-dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - melodee_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U melodee -d melodee"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  melodee_pg_data:

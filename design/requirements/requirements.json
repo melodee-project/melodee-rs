@@ -1,0 +1,2322 @@
+[
+  {
+    "id": "PRD-PRINCIPLE-001",
+    "title": "Behavioral compatibility over implementation similarity",
+    "phase": "all",
+    "source": "PRD.md",
+    "line": 27,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-PRINCIPLE-002",
+    "title": "Existing external contracts are first-class product features",
+    "phase": "all",
+    "source": "PRD.md",
+    "line": 37,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-PRINCIPLE-003",
+    "title": "The native Melodee API is a core product surface",
+    "phase": "all",
+    "source": "PRD.md",
+    "line": 51,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-PRINCIPLE-004",
+    "title": "OpenSubsonic and native Melodee APIs serve different purposes",
+    "phase": "all",
+    "source": "PRD.md",
+    "line": 57,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-PRINCIPLE-005",
+    "title": "Melodee owns identity",
+    "phase": "all",
+    "source": "PRD.md",
+    "line": 66,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-PRINCIPLE-006",
+    "title": "Uncertainty must not become destructive behavior",
+    "phase": "all",
+    "source": "PRD.md",
+    "line": 70,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-PRINCIPLE-007",
+    "title": "FOSS-only core stack",
+    "phase": "all",
+    "source": "PRD.md",
+    "line": 74,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-PRINCIPLE-008",
+    "title": "Architecture decisions are durable records",
+    "phase": "all",
+    "source": "PRD.md",
+    "line": 78,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-SCALE-001",
+    "title": "PRD-SCALE-001",
+    "phase": "0,6",
+    "source": "PRD.md",
+    "line": 100,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-SCALE-002",
+    "title": "PRD-SCALE-002",
+    "phase": "0,6",
+    "source": "PRD.md",
+    "line": 104,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-SCALE-003",
+    "title": "PRD-SCALE-003",
+    "phase": "0,6",
+    "source": "PRD.md",
+    "line": 108,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-ARCH-001",
+    "title": "Modular monolith first",
+    "phase": "1",
+    "source": "PRD.md",
+    "line": 283,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-ARCH-002",
+    "title": "Compile-time module boundaries",
+    "phase": "1",
+    "source": "PRD.md",
+    "line": 332,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-ARCH-003",
+    "title": "PostgreSQL is the authoritative state store",
+    "phase": "1",
+    "source": "PRD.md",
+    "line": 336,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-ARCH-004",
+    "title": "Tantivy is a projection",
+    "phase": "1",
+    "source": "PRD.md",
+    "line": 349,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-ARCH-005",
+    "title": "Filesystem is canonical for media bytes, not identity",
+    "phase": "1",
+    "source": "PRD.md",
+    "line": 353,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-ARCH-006",
+    "title": "Avoid unnecessary infrastructure",
+    "phase": "1",
+    "source": "PRD.md",
+    "line": 357,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-INGEST-001",
+    "title": "Per-Release retry",
+    "phase": "2",
+    "source": "PRD.md",
+    "line": 492,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-INGEST-002",
+    "title": "Lease-based concurrency",
+    "phase": "2",
+    "source": "PRD.md",
+    "line": 496,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-INGEST-003",
+    "title": "Watchers are accelerators only",
+    "phase": "2",
+    "source": "PRD.md",
+    "line": 502,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-INGEST-004",
+    "title": "Settling detection",
+    "phase": "2",
+    "source": "PRD.md",
+    "line": 506,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-INGEST-005",
+    "title": "Source safety",
+    "phase": "2",
+    "source": "PRD.md",
+    "line": 520,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-INGEST-006",
+    "title": "Safe staging/publishing",
+    "phase": "2",
+    "source": "PRD.md",
+    "line": 524,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-INGEST-007",
+    "title": "Versioned manifest",
+    "phase": "2",
+    "source": "PRD.md",
+    "line": 544,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-INGEST-008",
+    "title": "Structural validity is independent of enrichment",
+    "phase": "2",
+    "source": "PRD.md",
+    "line": 550,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-INGEST-009",
+    "title": "Bounded resource pools",
+    "phase": "2",
+    "source": "PRD.md",
+    "line": 554,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-INGEST-010",
+    "title": "Operator visibility",
+    "phase": "2",
+    "source": "PRD.md",
+    "line": 568,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-MEDIA-001",
+    "title": "PRD-MEDIA-001",
+    "phase": "3",
+    "source": "PRD.md",
+    "line": 576,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-MEDIA-002",
+    "title": "Canonical format policy",
+    "phase": "3",
+    "source": "PRD.md",
+    "line": 582,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-MEDIA-003",
+    "title": "Use mature media tools",
+    "phase": "3",
+    "source": "PRD.md",
+    "line": 588,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-MEDIA-004",
+    "title": "Metadata reading",
+    "phase": "3",
+    "source": "PRD.md",
+    "line": 592,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-MEDIA-005",
+    "title": "Artwork",
+    "phase": "3",
+    "source": "PRD.md",
+    "line": 596,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-MEDIA-006",
+    "title": "Sidecar files",
+    "phase": "3",
+    "source": "PRD.md",
+    "line": 600,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-FP-001",
+    "title": "Compute once, reuse",
+    "phase": "3,5",
+    "source": "PRD.md",
+    "line": 608,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-FP-002",
+    "title": "Distinguish byte identity from audio identity",
+    "phase": "3,5",
+    "source": "PRD.md",
+    "line": 612,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-FP-003",
+    "title": "Acoustic fingerprinting",
+    "phase": "3,5",
+    "source": "PRD.md",
+    "line": 621,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-FP-004",
+    "title": "Underlying audio identity abstraction",
+    "phase": "3,5",
+    "source": "PRD.md",
+    "line": 625,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-FP-005",
+    "title": "Physical byte deduplication is optional for parity",
+    "phase": "3,5",
+    "source": "PRD.md",
+    "line": 631,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-ARTIST-001",
+    "title": "Names are not unique",
+    "phase": "4",
+    "source": "PRD.md",
+    "line": 645,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-ARTIST-002",
+    "title": "Stable immutable identity",
+    "phase": "4",
+    "source": "PRD.md",
+    "line": 649,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-ARTIST-003",
+    "title": "Artist types remain identity-oriented",
+    "phase": "4",
+    "source": "PRD.md",
+    "line": 669,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-ARTIST-004",
+    "title": "Aliases mean same identity",
+    "phase": "4",
+    "source": "PRD.md",
+    "line": 682,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-ARTIST-005",
+    "title": "External identities are normalized rows",
+    "phase": "4",
+    "source": "PRD.md",
+    "line": 688,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-ARTIST-006",
+    "title": "Relationships do not imply equality",
+    "phase": "4",
+    "source": "PRD.md",
+    "line": 706,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-ARTIST-007",
+    "title": "Date-bounded group membership",
+    "phase": "4",
+    "source": "PRD.md",
+    "line": 716,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-ARTIST-008",
+    "title": "User decisions outrank providers",
+    "phase": "4",
+    "source": "PRD.md",
+    "line": 720,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-ARTIST-009",
+    "title": "Negative identity assertions",
+    "phase": "4",
+    "source": "PRD.md",
+    "line": 724,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-ARTIST-010",
+    "title": "Safe merge/split",
+    "phase": "4",
+    "source": "PRD.md",
+    "line": 728,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-ARTIST-011",
+    "title": "Bias against false merges",
+    "phase": "4",
+    "source": "PRD.md",
+    "line": 734,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-ARTIST-012",
+    "title": "Do not port the current external-authority identity model",
+    "phase": "4",
+    "source": "PRD.md",
+    "line": 738,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-RESOLVE-001",
+    "title": "PRD-RESOLVE-001",
+    "phase": "4",
+    "source": "PRD.md",
+    "line": 746,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-RESOLVE-002",
+    "title": "PRD-RESOLVE-002",
+    "phase": "4",
+    "source": "PRD.md",
+    "line": 750,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-RESOLVE-003",
+    "title": "PRD-RESOLVE-003",
+    "phase": "4",
+    "source": "PRD.md",
+    "line": 765,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-RESOLVE-004",
+    "title": "PRD-RESOLVE-004",
+    "phase": "4",
+    "source": "PRD.md",
+    "line": 769,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-RESOLVE-005",
+    "title": "PRD-RESOLVE-005",
+    "phase": "4",
+    "source": "PRD.md",
+    "line": 773,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-CREDIT-001",
+    "title": "ReleaseArtist",
+    "phase": "4",
+    "source": "PRD.md",
+    "line": 798,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-CREDIT-002",
+    "title": "TrackArtist",
+    "phase": "4",
+    "source": "PRD.md",
+    "line": 802,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-CREDIT-003",
+    "title": "Contribution",
+    "phase": "4",
+    "source": "PRD.md",
+    "line": 806,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-CREDIT-004",
+    "title": "Preserve DisplayArtist",
+    "phase": "4",
+    "source": "PRD.md",
+    "line": 828,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-CREDIT-005",
+    "title": "Parsing does not create identity",
+    "phase": "4",
+    "source": "PRD.md",
+    "line": 846,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-CREDIT-006",
+    "title": "“Everything this Artist is on” is first-class",
+    "phase": "4",
+    "source": "PRD.md",
+    "line": 850,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-CREDIT-007",
+    "title": "Direct vs inferred participation",
+    "phase": "4",
+    "source": "PRD.md",
+    "line": 860,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-CREDIT-008",
+    "title": "Materialized relationship projection",
+    "phase": "4",
+    "source": "PRD.md",
+    "line": 869,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-CLASS-001",
+    "title": "Multi-valued traits",
+    "phase": "5",
+    "source": "PRD.md",
+    "line": 889,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-CLASS-002",
+    "title": "Evidence and confidence",
+    "phase": "5",
+    "source": "PRD.md",
+    "line": 929,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-CLASS-003",
+    "title": "Evidence hierarchy",
+    "phase": "5",
+    "source": "PRD.md",
+    "line": 944,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-POLICY-001",
+    "title": "Dispositions",
+    "phase": "5",
+    "source": "PRD.md",
+    "line": 966,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-POLICY-002",
+    "title": "Semantics",
+    "phase": "5",
+    "source": "PRD.md",
+    "line": 978,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-POLICY-003",
+    "title": "Greatest Hits requirement",
+    "phase": "5",
+    "source": "PRD.md",
+    "line": 986,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-POLICY-004",
+    "title": "Track novelty categories",
+    "phase": "5",
+    "source": "PRD.md",
+    "line": 998,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-POLICY-005",
+    "title": "Novelty semantics for redundant collections",
+    "phase": "5",
+    "source": "PRD.md",
+    "line": 1008,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-POLICY-006",
+    "title": "Example default rules",
+    "phase": "5",
+    "source": "PRD.md",
+    "line": 1018,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-POLICY-007",
+    "title": "Durable decision record before delete",
+    "phase": "5",
+    "source": "PRD.md",
+    "line": 1041,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-POLICY-008",
+    "title": "Policy test mode",
+    "phase": "5",
+    "source": "PRD.md",
+    "line": 1055,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-STORAGE-001",
+    "title": "PRD-STORAGE-001",
+    "phase": "2,3,11",
+    "source": "PRD.md",
+    "line": 1068,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-STORAGE-002",
+    "title": "PRD-STORAGE-002",
+    "phase": "2,3,11",
+    "source": "PRD.md",
+    "line": 1074,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-STORAGE-003",
+    "title": "PRD-STORAGE-003",
+    "phase": "2,3,11",
+    "source": "PRD.md",
+    "line": 1093,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-STORAGE-004",
+    "title": "PRD-STORAGE-004",
+    "phase": "2,3,11",
+    "source": "PRD.md",
+    "line": 1097,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-CATALOG-001",
+    "title": "PRD-CATALOG-001",
+    "phase": "4",
+    "source": "PRD.md",
+    "line": 1105,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-CATALOG-002",
+    "title": "PRD-CATALOG-002",
+    "phase": "4",
+    "source": "PRD.md",
+    "line": 1109,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-CATALOG-003",
+    "title": "PRD-CATALOG-003",
+    "phase": "4",
+    "source": "PRD.md",
+    "line": 1113,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-CATALOG-004",
+    "title": "PRD-CATALOG-004",
+    "phase": "4",
+    "source": "PRD.md",
+    "line": 1117,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-CATALOG-005",
+    "title": "PRD-CATALOG-005",
+    "phase": "4",
+    "source": "PRD.md",
+    "line": 1121,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-SEARCH-001",
+    "title": "Search engine",
+    "phase": "6",
+    "source": "PRD.md",
+    "line": 1129,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-SEARCH-002",
+    "title": "Searchable entities",
+    "phase": "6",
+    "source": "PRD.md",
+    "line": 1133,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-SEARCH-003",
+    "title": "Participant IDs in Track index",
+    "phase": "6",
+    "source": "PRD.md",
+    "line": 1143,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-SEARCH-004",
+    "title": "MQL isolation",
+    "phase": "6",
+    "source": "PRD.md",
+    "line": 1147,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-SEARCH-005",
+    "title": "MQL parity",
+    "phase": "6",
+    "source": "PRD.md",
+    "line": 1157,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-SEARCH-006",
+    "title": "Performance target",
+    "phase": "6",
+    "source": "PRD.md",
+    "line": 1169,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-SEARCH-007",
+    "title": "Rebuild command",
+    "phase": "6",
+    "source": "PRD.md",
+    "line": 1173,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-API-M1-001",
+    "title": "Compatibility contract",
+    "phase": "7",
+    "source": "PRD.md",
+    "line": 1187,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-API-M1-002",
+    "title": "No forced synchronized client release",
+    "phase": "7",
+    "source": "PRD.md",
+    "line": 1198,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-API-M1-003",
+    "title": "Preserve existing vocabulary",
+    "phase": "7",
+    "source": "PRD.md",
+    "line": 1202,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-API-M1-004",
+    "title": "Preserve public IDs",
+    "phase": "7",
+    "source": "PRD.md",
+    "line": 1206,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-API-M1-005",
+    "title": "Preserve response details",
+    "phase": "7",
+    "source": "PRD.md",
+    "line": 1210,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-API-M1-006",
+    "title": "Current native surface",
+    "phase": "7",
+    "source": "PRD.md",
+    "line": 1226,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-API-M1-007",
+    "title": "Future API evolution",
+    "phase": "7",
+    "source": "PRD.md",
+    "line": 1253,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-STREAM-001",
+    "title": "PRD-STREAM-001",
+    "phase": "7,8",
+    "source": "PRD.md",
+    "line": 1263,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-STREAM-002",
+    "title": "PRD-STREAM-002",
+    "phase": "7,8",
+    "source": "PRD.md",
+    "line": 1267,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-STREAM-003",
+    "title": "Android/Android Auto release gate",
+    "phase": "7,8",
+    "source": "PRD.md",
+    "line": 1279,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-API-OS-001",
+    "title": "PRD-API-OS-001",
+    "phase": "8",
+    "source": "PRD.md",
+    "line": 1302,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-API-OS-002",
+    "title": "PRD-API-OS-002",
+    "phase": "8",
+    "source": "PRD.md",
+    "line": 1306,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-API-OS-003",
+    "title": "PRD-API-OS-003",
+    "phase": "8",
+    "source": "PRD.md",
+    "line": 1310,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-API-OS-004",
+    "title": "Current supported groups",
+    "phase": "8",
+    "source": "PRD.md",
+    "line": 1314,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-API-OS-005",
+    "title": "Preserve intentional unsupported behavior",
+    "phase": "8",
+    "source": "PRD.md",
+    "line": 1337,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-API-OS-006",
+    "title": "Advertised extensions",
+    "phase": "8",
+    "source": "PRD.md",
+    "line": 1343,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-API-OS-007",
+    "title": "Client verification",
+    "phase": "8",
+    "source": "PRD.md",
+    "line": 1347,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-API-JF-001",
+    "title": "PRD-API-JF-001",
+    "phase": "8",
+    "source": "PRD.md",
+    "line": 1365,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-API-JF-002",
+    "title": "PRD-API-JF-002",
+    "phase": "8",
+    "source": "PRD.md",
+    "line": 1369,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-API-JF-003",
+    "title": "PRD-API-JF-003",
+    "phase": "8",
+    "source": "PRD.md",
+    "line": 1373,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-API-JF-004",
+    "title": "PRD-API-JF-004",
+    "phase": "8",
+    "source": "PRD.md",
+    "line": 1377,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-API-JF-005",
+    "title": "PRD-API-JF-005",
+    "phase": "8",
+    "source": "PRD.md",
+    "line": 1391,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-API-JF-006",
+    "title": "PRD-API-JF-006",
+    "phase": "8",
+    "source": "PRD.md",
+    "line": 1395,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-API-ADMIN-001",
+    "title": "PRD-API-ADMIN-001",
+    "phase": "10",
+    "source": "PRD.md",
+    "line": 1403,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-API-ADMIN-002",
+    "title": "PRD-API-ADMIN-002",
+    "phase": "10",
+    "source": "PRD.md",
+    "line": 1407,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-API-ADMIN-003",
+    "title": "PRD-API-ADMIN-003",
+    "phase": "10",
+    "source": "PRD.md",
+    "line": 1421,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-AUTH-001",
+    "title": "PRD-AUTH-001",
+    "phase": "7,8,9",
+    "source": "PRD.md",
+    "line": 1429,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-AUTH-002",
+    "title": "PRD-AUTH-002",
+    "phase": "7,8,9",
+    "source": "PRD.md",
+    "line": 1435,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-AUTH-003",
+    "title": "PRD-AUTH-003",
+    "phase": "7,8,9",
+    "source": "PRD.md",
+    "line": 1447,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-AUTH-004",
+    "title": "PRD-AUTH-004",
+    "phase": "7,8,9",
+    "source": "PRD.md",
+    "line": 1451,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-AUTH-005",
+    "title": "PRD-AUTH-005",
+    "phase": "7,8,9",
+    "source": "PRD.md",
+    "line": 1455,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-AUTH-006",
+    "title": "PRD-AUTH-006",
+    "phase": "7,8,9",
+    "source": "PRD.md",
+    "line": 1459,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-AUTH-007",
+    "title": "PRD-AUTH-007",
+    "phase": "7,8,9",
+    "source": "PRD.md",
+    "line": 1465,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-USER-001",
+    "title": "PRD-USER-001",
+    "phase": "9",
+    "source": "PRD.md",
+    "line": 1473,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-USER-002",
+    "title": "PRD-USER-002",
+    "phase": "9",
+    "source": "PRD.md",
+    "line": 1477,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-USER-003",
+    "title": "PRD-USER-003",
+    "phase": "9",
+    "source": "PRD.md",
+    "line": 1481,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-USER-004",
+    "title": "PRD-USER-004",
+    "phase": "9",
+    "source": "PRD.md",
+    "line": 1485,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-USER-005",
+    "title": "PRD-USER-005",
+    "phase": "9",
+    "source": "PRD.md",
+    "line": 1489,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-PLAYLIST-001",
+    "title": "PRD-PLAYLIST-001",
+    "phase": "9",
+    "source": "PRD.md",
+    "line": 1497,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-PLAYLIST-002",
+    "title": "PRD-PLAYLIST-002",
+    "phase": "9",
+    "source": "PRD.md",
+    "line": 1501,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-PLAYLIST-003",
+    "title": "PRD-PLAYLIST-003",
+    "phase": "9",
+    "source": "PRD.md",
+    "line": 1505,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-REQUEST-001",
+    "title": "PRD-REQUEST-001",
+    "phase": "9",
+    "source": "PRD.md",
+    "line": 1513,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-REQUEST-002",
+    "title": "PRD-REQUEST-002",
+    "phase": "9",
+    "source": "PRD.md",
+    "line": 1517,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-SHARE-001",
+    "title": "PRD-SHARE-001",
+    "phase": "9",
+    "source": "PRD.md",
+    "line": 1525,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-SHARE-002",
+    "title": "PRD-SHARE-002",
+    "phase": "9",
+    "source": "PRD.md",
+    "line": 1529,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-SHARE-003",
+    "title": "PRD-SHARE-003",
+    "phase": "9",
+    "source": "PRD.md",
+    "line": 1533,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-POD-001",
+    "title": "PRD-POD-001",
+    "phase": "9",
+    "source": "PRD.md",
+    "line": 1547,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-POD-002",
+    "title": "PRD-POD-002",
+    "phase": "9",
+    "source": "PRD.md",
+    "line": 1551,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-POD-003",
+    "title": "PRD-POD-003",
+    "phase": "9",
+    "source": "PRD.md",
+    "line": 1567,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-DISCOVERY-001",
+    "title": "PRD-DISCOVERY-001",
+    "phase": "9",
+    "source": "PRD.md",
+    "line": 1575,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-DISCOVERY-002",
+    "title": "PRD-DISCOVERY-002",
+    "phase": "9",
+    "source": "PRD.md",
+    "line": 1579,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-DISCOVERY-003",
+    "title": "PRD-DISCOVERY-003",
+    "phase": "9",
+    "source": "PRD.md",
+    "line": 1583,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-PARTY-001",
+    "title": "PRD-PARTY-001",
+    "phase": "9",
+    "source": "PRD.md",
+    "line": 1593,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-PARTY-002",
+    "title": "PRD-PARTY-002",
+    "phase": "9",
+    "source": "PRD.md",
+    "line": 1597,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-PARTY-003",
+    "title": "PRD-PARTY-003",
+    "phase": "9",
+    "source": "PRD.md",
+    "line": 1601,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-PARTY-004",
+    "title": "PRD-PARTY-004",
+    "phase": "9",
+    "source": "PRD.md",
+    "line": 1605,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-DEVICE-001",
+    "title": "PRD-DEVICE-001",
+    "phase": "9",
+    "source": "PRD.md",
+    "line": 1615,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-DEVICE-002",
+    "title": "PRD-DEVICE-002",
+    "phase": "9",
+    "source": "PRD.md",
+    "line": 1619,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-DEVICE-003",
+    "title": "PRD-DEVICE-003",
+    "phase": "9",
+    "source": "PRD.md",
+    "line": 1623,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-SCRIPT-001",
+    "title": "PRD-SCRIPT-001",
+    "phase": "9",
+    "source": "PRD.md",
+    "line": 1631,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-SCRIPT-002",
+    "title": "PRD-SCRIPT-002",
+    "phase": "9",
+    "source": "PRD.md",
+    "line": 1638,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-SCRIPT-003",
+    "title": "PRD-SCRIPT-003",
+    "phase": "9",
+    "source": "PRD.md",
+    "line": 1642,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-SCRIPT-004",
+    "title": "PRD-SCRIPT-004",
+    "phase": "9",
+    "source": "PRD.md",
+    "line": 1646,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-SCRIPT-005",
+    "title": "PRD-SCRIPT-005",
+    "phase": "9",
+    "source": "PRD.md",
+    "line": 1650,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-EXT-001",
+    "title": "PRD-EXT-001",
+    "phase": "4,9",
+    "source": "PRD.md",
+    "line": 1658,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-EXT-002",
+    "title": "PRD-EXT-002",
+    "phase": "4,9",
+    "source": "PRD.md",
+    "line": 1664,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-EXT-003",
+    "title": "PRD-EXT-003",
+    "phase": "4,9",
+    "source": "PRD.md",
+    "line": 1668,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-EXT-004",
+    "title": "PRD-EXT-004",
+    "phase": "4,9",
+    "source": "PRD.md",
+    "line": 1672,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-UI-001",
+    "title": "Modern, slick, simple, intuitive",
+    "phase": "10",
+    "source": "PRD.md",
+    "line": 1688,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-UI-002",
+    "title": "Preferred stack",
+    "phase": "10",
+    "source": "PRD.md",
+    "line": 1692,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-UI-003",
+    "title": "TanStack Table is optional",
+    "phase": "10",
+    "source": "PRD.md",
+    "line": 1698,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-UI-004",
+    "title": "Admin navigation",
+    "phase": "10",
+    "source": "PRD.md",
+    "line": 1702,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-UI-005",
+    "title": "Remove `/Data` vs `/Media` from the user mental model",
+    "phase": "10",
+    "source": "PRD.md",
+    "line": 1736,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-UI-006",
+    "title": "Primary/detail workflows",
+    "phase": "10",
+    "source": "PRD.md",
+    "line": 1748,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-UI-007",
+    "title": "Preview playback only where useful",
+    "phase": "10",
+    "source": "PRD.md",
+    "line": 1752,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-UI-008",
+    "title": "Destructive action UX",
+    "phase": "10",
+    "source": "PRD.md",
+    "line": 1756,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-UI-009",
+    "title": "Command palette",
+    "phase": "10",
+    "source": "PRD.md",
+    "line": 1766,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-UI-010",
+    "title": "Server-side data operations",
+    "phase": "10",
+    "source": "PRD.md",
+    "line": 1770,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-UI-REF-001",
+    "title": "PRD-UI-REF-001",
+    "phase": "10",
+    "source": "PRD.md",
+    "line": 1789,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-UI-REF-002",
+    "title": "PRD-UI-REF-002",
+    "phase": "10",
+    "source": "PRD.md",
+    "line": 1793,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-UI-REF-003",
+    "title": "PRD-UI-REF-003",
+    "phase": "10",
+    "source": "PRD.md",
+    "line": 1797,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-THEME-001",
+    "title": "PRD-THEME-001",
+    "phase": "10",
+    "source": "PRD.md",
+    "line": 1860,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-THEME-002",
+    "title": "PRD-THEME-002",
+    "phase": "10",
+    "source": "PRD.md",
+    "line": 1864,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-THEME-003",
+    "title": "PRD-THEME-003",
+    "phase": "10",
+    "source": "PRD.md",
+    "line": 1875,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-THEME-004",
+    "title": "PRD-THEME-004",
+    "phase": "10",
+    "source": "PRD.md",
+    "line": 1879,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-I18N-001",
+    "title": "PRD-I18N-001",
+    "phase": "10",
+    "source": "PRD.md",
+    "line": 1889,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-I18N-002",
+    "title": "PRD-I18N-002",
+    "phase": "10",
+    "source": "PRD.md",
+    "line": 1914,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-I18N-003",
+    "title": "PRD-I18N-003",
+    "phase": "10",
+    "source": "PRD.md",
+    "line": 1918,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-I18N-004",
+    "title": "PRD-I18N-004",
+    "phase": "10",
+    "source": "PRD.md",
+    "line": 1922,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-I18N-005",
+    "title": "PRD-I18N-005",
+    "phase": "10",
+    "source": "PRD.md",
+    "line": 1926,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-I18N-006",
+    "title": "PRD-I18N-006",
+    "phase": "10",
+    "source": "PRD.md",
+    "line": 1930,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-WEB-001",
+    "title": "PRD-WEB-001",
+    "phase": "9,10",
+    "source": "PRD.md",
+    "line": 1940,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-WEB-002",
+    "title": "PRD-WEB-002",
+    "phase": "9,10",
+    "source": "PRD.md",
+    "line": 1951,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-SETUP-001",
+    "title": "PRD-SETUP-001",
+    "phase": "9",
+    "source": "PRD.md",
+    "line": 1959,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-SETUP-002",
+    "title": "PRD-SETUP-002",
+    "phase": "9",
+    "source": "PRD.md",
+    "line": 1973,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-CONFIG-001",
+    "title": "PRD-CONFIG-001",
+    "phase": "1,9",
+    "source": "PRD.md",
+    "line": 1977,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-CONFIG-002",
+    "title": "PRD-CONFIG-002",
+    "phase": "1,9",
+    "source": "PRD.md",
+    "line": 1981,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-CONFIG-003",
+    "title": "PRD-CONFIG-003",
+    "phase": "1,9",
+    "source": "PRD.md",
+    "line": 1985,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-WORK-001",
+    "title": "PRD-WORK-001",
+    "phase": "1,2,9",
+    "source": "PRD.md",
+    "line": 1993,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-WORK-002",
+    "title": "PRD-WORK-002",
+    "phase": "1,2,9",
+    "source": "PRD.md",
+    "line": 1997,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-WORK-003",
+    "title": "PRD-WORK-003",
+    "phase": "1,2,9",
+    "source": "PRD.md",
+    "line": 2009,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-WORK-004",
+    "title": "PRD-WORK-004",
+    "phase": "1,2,9",
+    "source": "PRD.md",
+    "line": 2023,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-WORK-005",
+    "title": "PRD-WORK-005",
+    "phase": "1,2,9",
+    "source": "PRD.md",
+    "line": 2027,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-OBS-001",
+    "title": "PRD-OBS-001",
+    "phase": "1,2",
+    "source": "PRD.md",
+    "line": 2054,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-OBS-002",
+    "title": "PRD-OBS-002",
+    "phase": "1,2",
+    "source": "PRD.md",
+    "line": 2058,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-OBS-003",
+    "title": "PRD-OBS-003",
+    "phase": "1,2",
+    "source": "PRD.md",
+    "line": 2072,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-OBS-004",
+    "title": "PRD-OBS-004",
+    "phase": "1,2",
+    "source": "PRD.md",
+    "line": 2076,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-OBS-005",
+    "title": "PRD-OBS-005",
+    "phase": "1,2",
+    "source": "PRD.md",
+    "line": 2080,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-PERF-001",
+    "title": "PRD-PERF-001",
+    "phase": "0,all",
+    "source": "PRD.md",
+    "line": 2088,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-PERF-002",
+    "title": "PRD-PERF-002",
+    "phase": "0,all",
+    "source": "PRD.md",
+    "line": 2092,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-PERF-003",
+    "title": "PRD-PERF-003",
+    "phase": "0,all",
+    "source": "PRD.md",
+    "line": 2100,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-PERF-004",
+    "title": "PRD-PERF-004",
+    "phase": "0,all",
+    "source": "PRD.md",
+    "line": 2112,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-PERF-005",
+    "title": "PRD-PERF-005",
+    "phase": "0,all",
+    "source": "PRD.md",
+    "line": 2116,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-PERF-006",
+    "title": "PRD-PERF-006",
+    "phase": "0,all",
+    "source": "PRD.md",
+    "line": 2120,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-MIG-001",
+    "title": "Preserve media",
+    "phase": "11",
+    "source": "PRD.md",
+    "line": 2130,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-MIG-002",
+    "title": "Preserve public identity",
+    "phase": "11",
+    "source": "PRD.md",
+    "line": 2134,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-MIG-003",
+    "title": "Preserve user state",
+    "phase": "11",
+    "source": "PRD.md",
+    "line": 2138,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-MIG-004",
+    "title": "Preserve catalog relationships",
+    "phase": "11",
+    "source": "PRD.md",
+    "line": 2156,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-MIG-005",
+    "title": "No mandatory upfront fingerprint of every byte",
+    "phase": "11",
+    "source": "PRD.md",
+    "line": 2160,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-MIG-006",
+    "title": "Search is rebuildable",
+    "phase": "11",
+    "source": "PRD.md",
+    "line": 2164,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-MIG-007",
+    "title": "Rollback",
+    "phase": "11",
+    "source": "PRD.md",
+    "line": 2168,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-TEST-001",
+    "title": "C# server as oracle",
+    "phase": "0,all",
+    "source": "PRD.md",
+    "line": 2200,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-TEST-002",
+    "title": "Differential API harness",
+    "phase": "0,all",
+    "source": "PRD.md",
+    "line": 2204,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-TEST-003",
+    "title": "Golden contracts",
+    "phase": "0,all",
+    "source": "PRD.md",
+    "line": 2220,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-TEST-004",
+    "title": "Real-client compatibility",
+    "phase": "0,all",
+    "source": "PRD.md",
+    "line": 2224,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-TEST-005",
+    "title": "Media corpus",
+    "phase": "0,all",
+    "source": "PRD.md",
+    "line": 2233,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-TEST-006",
+    "title": "Fault injection",
+    "phase": "0,all",
+    "source": "PRD.md",
+    "line": 2257,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-TEST-007",
+    "title": "Invariant",
+    "phase": "0,all",
+    "source": "PRD.md",
+    "line": 2275,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-TEST-008",
+    "title": "UI testing",
+    "phase": "0,all",
+    "source": "PRD.md",
+    "line": 2281,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-SEC-001",
+    "title": "PRD-SEC-001",
+    "phase": "all",
+    "source": "PRD.md",
+    "line": 2291,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-SEC-002",
+    "title": "PRD-SEC-002",
+    "phase": "all",
+    "source": "PRD.md",
+    "line": 2295,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-SEC-003",
+    "title": "PRD-SEC-003",
+    "phase": "all",
+    "source": "PRD.md",
+    "line": 2299,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-SEC-004",
+    "title": "PRD-SEC-004",
+    "phase": "all",
+    "source": "PRD.md",
+    "line": 2303,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-SEC-005",
+    "title": "PRD-SEC-005",
+    "phase": "all",
+    "source": "PRD.md",
+    "line": 2307,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-SEC-006",
+    "title": "PRD-SEC-006",
+    "phase": "all",
+    "source": "PRD.md",
+    "line": 2311,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-SEC-007",
+    "title": "PRD-SEC-007",
+    "phase": "all",
+    "source": "PRD.md",
+    "line": 2315,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-DEPLOY-001",
+    "title": "PRD-DEPLOY-001",
+    "phase": "1,11",
+    "source": "PRD.md",
+    "line": 2395,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-DEPLOY-002",
+    "title": "PRD-DEPLOY-002",
+    "phase": "1,11",
+    "source": "PRD.md",
+    "line": 2399,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-DEPLOY-003",
+    "title": "PRD-DEPLOY-003",
+    "phase": "1,11",
+    "source": "PRD.md",
+    "line": 2403,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-DEPLOY-004",
+    "title": "PRD-DEPLOY-004",
+    "phase": "1,11",
+    "source": "PRD.md",
+    "line": 2419,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-DEPLOY-005",
+    "title": "PRD-DEPLOY-005",
+    "phase": "1,11",
+    "source": "PRD.md",
+    "line": 2423,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-DEPLOY-006",
+    "title": "PRD-DEPLOY-006",
+    "phase": "1,11",
+    "source": "PRD.md",
+    "line": 2427,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  }
+]
