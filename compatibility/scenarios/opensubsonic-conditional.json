@@ -1,0 +1,232 @@
+[
+  {
+    "schemaVersion": 2,
+    "name": "os-getpodcasts",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getPodcasts.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "podcast.enabled=true (seeded default): empty channel list (fixture has no podcasts)."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getnewestpodcasts",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getNewestPodcasts.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Empty episodes list."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getpodcasts-norole",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getPodcasts.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t=00000000000000000000000000000000&s=x",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Podcast auth failure returns HTTP 403 + error 40 envelope (UNLIKE other controllers' HTTP 200) — recorded from enforced state.",
+    "expectStatus": 403
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getuser",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getUser.view?f=json&v=1.16.1&c=phase0&username=phase0-fixture&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion",
+        "$.subsonic-response.user.avatarLastChanged"
+      ]
+    },
+    "notes": "Current user-management subset: getUser is SUPPORTED (unlike getUsers/updateUser/deleteUser/changePassword -> 501)."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-createuser",
+    "surface": "opensubsonic",
+    "flow": [
+      {
+        "name": "create-new-user",
+        "method": "GET",
+        "path": "/rest/createUser.view?f=json&v=1.16.1&c=phase0&username=os-probe&password=probe&email=probe@example.test&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.user.id",
+            "$.subsonic-response.user.avatarLastChanged"
+          ]
+        },
+        "notes": "CORRECTION (found by the clean-recreation gate): createUser SUCCEEDS for a fresh username (200 + user model). The error-10 'User creation failed.' captured earlier was a DUPLICATE-NAME failure in an accumulated database."
+      },
+      {
+        "name": "create-duplicate-user",
+        "method": "GET",
+        "path": "/rest/createUser.view?f=json&v=1.16.1&c=phase0&username=os-probe&password=probe&email=probe@example.test&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion"
+          ]
+        },
+        "notes": "Duplicate username -> error 10 'User creation failed.'"
+      }
+    ],
+    "notes": "User-management subset: getUser supported; createUser works for fresh names (error 10 on duplicates); getUsers/updateUser/deleteUser/changePassword are 501."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-podcasts-refresh",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/refreshPodcasts.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Enabled state with no channels."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-podcasts-delete-channel-missing",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/deletePodcastChannel.view?f=json&v=1.16.1&c=phase0&id=1&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Delete a nonexistent channel id (int form). Nonexistent id -> HTTP 400 with a RAW ResponseData body (NOT the subsonic-response envelope) — podcast controller error shape deviates.",
+    "expectStatus": 400
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-podcasts-delete-episode-missing",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/deletePodcastEpisode.view?f=json&v=1.16.1&c=phase0&id=1&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Nonexistent id -> HTTP 400 with a RAW ResponseData body (NOT the subsonic-response envelope) — podcast controller error shape deviates.",
+    "expectStatus": 400
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-podcasts-download-episode-missing",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/downloadPodcastEpisode.view?f=json&v=1.16.1&c=phase0&id=1&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Nonexistent id -> HTTP 400 with a RAW ResponseData body (NOT the subsonic-response envelope) — podcast controller error shape deviates.",
+    "expectStatus": 400
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-podcasts-stream-episode-missing",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/streamPodcastEpisode.view?f=json&v=1.16.1&c=phase0&id=1&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "streamPodcastEpisode additionally requires HasStreamRole when auth is not bypassed. Nonexistent id -> HTTP 400 with a RAW ResponseData body (NOT the subsonic-response envelope) — podcast controller error shape deviates.",
+    "expectStatus": 400
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-searchforalbumimage",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/searchForAlbumImage.view?f=json&v=1.16.1&c=phase0&query=Northern%20Lights&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "followRedirects": false,
+    "expectStatus": 302,
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Melodee extension image search: 302 in fixture environment (external provider dependency), same as searchForArtistImage."
+  }
+]

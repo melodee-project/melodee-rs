@@ -120,3 +120,12 @@ curl -s http://127.0.0.1:5157/openapi/v1.json
   the committed artifacts (enforced by `test_openapi_contract_is_sanitized`).
 - The capture environment used a disposable database seeded by EF migrations only; no production
   data was accessed.
+
+### Second addendum (Issue 6, 2026-08-08): scan routes were invisible to the parser
+
+`OpenSubsonic/MediaLibraryScanning.cs` defines `startScan`/`getScanStatus` (plain and `.view`)
+but its class lacks the `Controller` name suffix, so the Issue 3 parser skipped it. The
+generator's class regex was relaxed; the OpenSubsonic manifest is now **164 routes** (was 160).
+The route counts in section 2 are superseded accordingly (native 202, OpenSubsonic 164,
+Jellyfin 58).
+

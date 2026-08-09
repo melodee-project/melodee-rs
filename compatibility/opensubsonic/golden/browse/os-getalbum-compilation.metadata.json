@@ -1,0 +1,35 @@
+{
+  "name": "os-getalbum-compilation",
+  "surface": "opensubsonic",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/rest/getAlbum.view?f=json&v=1.16.1&c=phase0&id=album_97d569aa-9133-5351-b8c5-097cf57f96f9&u=phase0-fixture&t=%3Credacted%3E&s=%3Credacted%3E",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-length": "6326",
+      "content-type": "application/json; charset=utf-8",
+      "x-total-count": "0"
+    },
+    "bodyFile": "os-getalbum-compilation.json",
+    "sha256": "65e952952611980421e98ae7f394a11400a8c2d32b51b03e614358d25ce2743f",
+    "bytes": 10308
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.subsonic-response.serverVersion"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

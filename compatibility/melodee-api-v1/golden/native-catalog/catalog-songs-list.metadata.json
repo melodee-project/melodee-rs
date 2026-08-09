@@ -9,7 +9,8 @@
       "User-Agent": "melodee-rs-phase0-capture/1",
       "Authorization": "Bearer <redacted>"
     },
-    "jsonTemplate": null
+    "jsonTemplate": null,
+    "bodyTemplate": null
   },
   "response": {
     "status": 200,
@@ -17,7 +18,7 @@
       "content-type": "application/json; charset=utf-8"
     },
     "bodyFile": "catalog-songs-list.json",
-    "sha256": "9ffe214681db96690aeaf814cae042badc954769fecd7464562a9851bae1ac51",
+    "sha256": "0162b4d5cde49e1bc3fd6e7708a5a4cbe1b7f8ad5f60165993902984b5de4c15",
     "bytes": 11045
   },
   "normalize": {

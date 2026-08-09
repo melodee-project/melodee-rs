@@ -1,0 +1,127 @@
+[
+  {
+    "schemaVersion": 2,
+    "name": "os-ping-json",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/ping.view?f=json&v=1.16.1&c=melodee-rs-phase0",
+    "auth": "none",
+    "normalize": {"maskJsonPaths": ["$.subsonic-response.serverVersion"]},
+    "notes": "ping requires no authentication (OpenSubsonicApiService.PingAsync)."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-ping-xml",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/ping.view?v=1.16.1&c=melodee-rs-phase0",
+    "auth": "none",
+    "normalize": {"maskRegex": [{"pattern": "serverVersion=\"[^\"]*\"", "replace": "serverVersion=\"<volatile>\""}]},
+    "notes": "XML is the default format when f is omitted. XML envelope uses hardcoded lowercase type=\"melodee\" (JSON uses configured \"Melodee\")."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-ping-plain-route",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/ping?f=json&v=1.16.1&c=melodee-rs-phase0",
+    "auth": "none",
+    "normalize": {"maskJsonPaths": ["$.subsonic-response.serverVersion"]},
+    "notes": "PRD-API-OS-001: plain and .view forms both registered."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-ping-root-alias",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/ping?f=json&v=1.16.1&c=melodee-rs-phase0",
+    "auth": "none",
+    "normalize": {"maskJsonPaths": ["$.subsonic-response.serverVersion"]},
+    "notes": "ping is additionally registered at the server root /ping."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-ping-jsonp",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/ping.view?f=jsonp&callback=phase0Callback&v=1.16.1&c=melodee-rs-phase0",
+    "auth": "none",
+    "normalize": {"maskRegex": [{"pattern": "\"serverVersion\":\"[^\"]*\"", "replace": "\"serverVersion\":\"<volatile>\""}]},
+    "notes": "PRD-API-OS-002: JSONP wraps the JSON body as callback(json) with Content-Type application/javascript."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-ping-jsonp-no-callback",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/ping.view?f=jsonp&v=1.16.1&c=melodee-rs-phase0",
+    "auth": "none",
+    "normalize": {"maskRegex": [{"pattern": "serverVersion=\"[^\"]*\"", "replace": "serverVersion=\"<volatile>\""}]},
+    "notes": "f=jsonp WITHOUT callback falls back to XML (ApiRequest.IsXmlRequest)."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getlicense-json",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getLicense.view?f=json&v=1.16.1&c=melodee-rs-phase0",
+    "auth": "none",
+    "normalize": {
+      "maskJsonPaths": ["$.subsonic-response.serverVersion", "$.subsonic-response.license.licenseExpires", "$.subsonic-response.license.trailExpires", "$.subsonic-response.license.email"]
+    },
+    "notes": "License expiry fields are now+50y (volatile). JSON key is 'trailExpires' (sic; XML attribute is 'trialExpires') — a preserved typo. email may embed config/license identity (masked pending review)."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getlicense-xml",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getLicense.view?v=1.16.1&c=melodee-rs-phase0",
+    "auth": "none",
+    "normalize": {
+      "maskRegex": [
+        {"pattern": "serverVersion=\"[^\"]*\"", "replace": "serverVersion=\"<volatile>\""},
+        {"pattern": "(licenseExpires|trialExpires|email)=\"[^\"]*\"", "replace": "\\1=\"<volatile>\""}
+      ]
+    }
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getopensubsonicextensions-json",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getOpenSubsonicExtensions.view?f=json&v=1.16.1&c=melodee-rs-phase0",
+    "auth": "none",
+    "normalize": {"maskJsonPaths": ["$.subsonic-response.serverVersion"]},
+    "notes": "Public (no auth per OpenSubsonic spec). Advertised at baseline: melodeeExtensions[1], apiKeyAuthentication[1] (ADVERTISED BUT NOT HONORED), formPost[1], songLyrics[1], transcodeOffset[1] (ADVERTISED BUT NON-FUNCTIONAL)."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getopensubsonicextensions-xml",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getOpenSubsonicExtensions.view?v=1.16.1&c=melodee-rs-phase0",
+    "auth": "none",
+    "normalize": {"maskRegex": [{"pattern": "serverVersion=\"[^\"]*\"", "replace": "serverVersion=\"<volatile>\""}]},
+    "notes": "DISCOVERY preserved: the XML form is malformed (OpenSubsonicExtension.ToXml emits attributes with no element name)."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getmusicfolders-json",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getMusicFolders.view?f=json&v=1.16.1&c=melodee-rs-phase0",
+    "auth": "none",
+    "normalize": {"maskJsonPaths": ["$.subsonic-response.serverVersion"]},
+    "notes": "Storage-type libraries only. Captured via localhost auth bypass (no credentials) — see opensubsonic-auth.json for the bypass contract. Two folders expected: the migration-seeded default Storage library plus the fixture library."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getmusicfolders-xml",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getMusicFolders.view?v=1.16.1&c=melodee-rs-phase0",
+    "auth": "none",
+    "normalize": {"maskRegex": [{"pattern": "serverVersion=\"[^\"]*\"", "replace": "serverVersion=\"<volatile>\""}]}
+  }
+]

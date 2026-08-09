@@ -1,0 +1,8 @@
+{
+  "type": "about:blank",
+  "title": "Range Not Satisfiable",
+  "status": 416,
+  "detail": "Invalid range specified.",
+  "traceId": "<volatile>",
+  "errorCode": null
+}

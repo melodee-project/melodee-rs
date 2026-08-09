@@ -1,0 +1,28 @@
+{
+  "name": "jf-extra/audio-lyrics-none",
+  "surface": "jellyfin",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/Audio/2b8eab4b235d589299f8c0f5f54e8ab4/Lyrics",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "MediaBrowser <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "jf-extra-audio-lyrics-none.json",
+    "sha256": "b908de2f683347064633e0271e156d0e71fb002aaf8ad700c6f1471e83ff9949",
+    "bytes": 19
+  },
+  "normalize": {},
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

@@ -1,0 +1,380 @@
+[
+  {
+    "schemaVersion": 2,
+    "name": "jf-browse",
+    "surface": "jellyfin",
+    "flow": [
+      {
+        "name": "login",
+        "method": "POST",
+        "path": "/Users/AuthenticateByName",
+        "json": {
+          "Username": "phase0-fixture",
+          "Pw": "Mel0deeR0cks!"
+        },
+        "capture": {
+          "jfToken": "$.AccessToken"
+        },
+        "secretCapture": [
+          "jfToken"
+        ],
+        "normalize": {
+          "maskJsonPaths": [
+            "$.AccessToken",
+            "$.SessionInfo",
+            "$.User.LastLoginDate",
+            "$.User.LastActivityDate",
+            "$.User.Configuration"
+          ]
+        }
+      },
+      {
+        "name": "userviews",
+        "method": "GET",
+        "path": "/UserViews",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {},
+        "notes": "One view per unlocked Storage library; CollectionType music; view Id = library ApiKey N-format."
+      },
+      {
+        "name": "user-views-by-id",
+        "method": "GET",
+        "path": "/Users/f78448cc82ec5864877c6c6163b00065/Views",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {},
+        "notes": "Same view set via the Users route."
+      },
+      {
+        "name": "items-artists",
+        "method": "GET",
+        "path": "/Items?includeItemTypes=MusicArtist&startIndex=0&limit=5",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {},
+        "notes": "Artist listing: ItemsResult {Items, TotalRecordCount, StartIndex}; BaseItem Type MusicArtist, IsFolder true, empty ImageTags."
+      },
+      {
+        "name": "items-albums",
+        "method": "GET",
+        "path": "/Items?includeItemTypes=MusicAlbum&startIndex=0&limit=5",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {},
+        "notes": "Album listing: ProductionYear, RunTimeTicks, AlbumArtist(s)."
+      },
+      {
+        "name": "items-songs",
+        "method": "GET",
+        "path": "/Items?includeItemTypes=Audio&startIndex=0&limit=5",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.Items"
+          ]
+        },
+        "notes": "Global song listing sorts by SongNumber ONLY with no tiebreak (ItemsController) — ties across albums make ordering nondeterministic (same instability family as recents/playlists). The Items array is masked; TotalRecordCount/envelope are the evidence here. Deterministic song content is captured in items-parent-album."
+      },
+      {
+        "name": "items-parent-artist",
+        "method": "GET",
+        "path": "/Items?parentId=813c11e061cd5204ae0fce68386eacec",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {},
+        "notes": "parentId probed as Artist -> that artist's albums."
+      },
+      {
+        "name": "items-parent-album",
+        "method": "GET",
+        "path": "/Items?parentId=645680d3704a5b83a73442a3fa88c3ed",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {},
+        "notes": "parentId probed as Album -> songs in SongNumber order (multi-disc evidence)."
+      },
+      {
+        "name": "items-searchterm-dune",
+        "method": "GET",
+        "path": "/Items?includeItemTypes=MusicArtist&searchTerm=Dune",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {},
+        "notes": "Normalized contains search: both Dune and Düné."
+      },
+      {
+        "name": "item-artist-detail",
+        "method": "GET",
+        "path": "/Items/813c11e061cd5204ae0fce68386eacec",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {},
+        "notes": "Artist detail BaseItem."
+      },
+      {
+        "name": "item-album-detail",
+        "method": "GET",
+        "path": "/Items/69d9769974c55403878f87f42d9d9fbb",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {},
+        "notes": "Album detail BaseItem."
+      },
+      {
+        "name": "item-song-detail",
+        "method": "GET",
+        "path": "/Items/ea26fc59a54551c294c4702e1f97b80a",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {},
+        "notes": "Song detail BaseItem."
+      },
+      {
+        "name": "item-unknown",
+        "method": "GET",
+        "path": "/Items/00000000000000000000000000000000",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.TraceId",
+            "$.traceId"
+          ]
+        },
+        "notes": "Unknown id -> 404 JellyfinProblemDetails (contrast with native 500 and OpenSubsonic ok+error/302 classes).",
+        "expectStatus": 404
+      },
+      {
+        "name": "items-filters",
+        "method": "GET",
+        "path": "/Items/Filters",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {},
+        "notes": "Genres (incl. Unicode 環境音楽) and Years from the catalog."
+      },
+      {
+        "name": "items-similar-song",
+        "method": "GET",
+        "path": "/Items/2b8eab4b235d589299f8c0f5f54e8ab4/Similar",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.Items"
+          ]
+        },
+        "notes": "Random similar songs (same artist/genre) — ordering volatile: mask Items."
+      },
+      {
+        "name": "items-similar-artist-id",
+        "method": "GET",
+        "path": "/Items/813c11e061cd5204ae0fce68386eacec/Similar",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {},
+        "notes": "QUIRK: /Items/{id}/Similar with an ARTIST id returns an EMPTY result (only song/album ids probed)."
+      },
+      {
+        "name": "items-instantmix-song",
+        "method": "GET",
+        "path": "/Items/2b8eab4b235d589299f8c0f5f54e8ab4/InstantMix?limit=5",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.Items"
+          ]
+        },
+        "notes": "Random mix — mask Items."
+      },
+      {
+        "name": "items-instantmix-unknown",
+        "method": "GET",
+        "path": "/Items/00000000000000000000000000000000/InstantMix",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.TraceId",
+            "$.traceId"
+          ]
+        },
+        "notes": "Unknown seed -> 404.",
+        "expectStatus": 404
+      },
+      {
+        "name": "items-video-type-empty",
+        "method": "GET",
+        "path": "/Items?includeItemTypes=Video",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {},
+        "notes": "UNSUPPORTED: non-music includeItemTypes silently dropped -> empty ItemsResult."
+      }
+    ]
+  },
+  {
+    "schemaVersion": 2,
+    "name": "jf-artists-genres",
+    "surface": "jellyfin",
+    "flow": [
+      {
+        "name": "login",
+        "method": "POST",
+        "path": "/Users/AuthenticateByName",
+        "json": {
+          "Username": "phase0-fixture",
+          "Pw": "Mel0deeR0cks!"
+        },
+        "capture": {
+          "jfToken": "$.AccessToken"
+        },
+        "secretCapture": [
+          "jfToken"
+        ],
+        "normalize": {
+          "maskJsonPaths": [
+            "$.AccessToken",
+            "$.SessionInfo",
+            "$.User.LastLoginDate",
+            "$.User.LastActivityDate",
+            "$.User.Configuration"
+          ]
+        }
+      },
+      {
+        "name": "artists-list",
+        "method": "GET",
+        "path": "/Artists?startIndex=0&limit=5",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {
+          "dropHeaders": []
+        },
+        "notes": "Paged artists with collection ETag header (quoted MD5, deterministic across runs at fixed seed)."
+      },
+      {
+        "name": "albumartists-list",
+        "method": "GET",
+        "path": "/Artists/AlbumArtists?startIndex=0&limit=5",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {
+          "dropHeaders": [
+            "etag"
+          ]
+        },
+        "notes": "Delegates to the same artist listing."
+      },
+      {
+        "name": "artist-detail",
+        "method": "GET",
+        "path": "/Artists/813c11e061cd5204ae0fce68386eacec",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {
+          "dropHeaders": [
+            "etag"
+          ]
+        },
+        "notes": "Single artist with item ETag."
+      },
+      {
+        "name": "artist-similar",
+        "method": "GET",
+        "path": "/Artists/5bf951d57afe5c508941145b7095902b/Similar?limit=5",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.Items[*].Etag"
+          ]
+        },
+        "notes": "Genre-overlap similar artists (in-memory scoring)."
+      },
+      {
+        "name": "genres-list",
+        "method": "GET",
+        "path": "/Genres",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {
+          "dropHeaders": [
+            "etag"
+          ],
+          "maskJsonPaths": [
+            "$.Items[*].DateCreated"
+          ]
+        },
+        "notes": "Genres from catalog; Id = deterministic MD5-derived GUID of genre:{NAME}."
+      },
+      {
+        "name": "musicgenres-list",
+        "method": "GET",
+        "path": "/MusicGenres",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {
+          "dropHeaders": [
+            "etag"
+          ],
+          "maskJsonPaths": [
+            "$.Items[*].DateCreated"
+          ]
+        },
+        "notes": "MusicGenres variant (nearly identical; ignores sort params)."
+      }
+    ]
+  }
+]

@@ -1,0 +1,481 @@
+[
+  {
+    "schemaVersion": 2,
+    "name": "os-playlists",
+    "surface": "opensubsonic",
+    "flow": [
+      {
+        "name": "getplaylists",
+        "method": "GET",
+        "path": "/rest/getPlaylists.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.playlist.created",
+            "$.subsonic-response.playlist.changed",
+            "$.subsonic-response.playlists.playlist[*].created",
+            "$.subsonic-response.playlists.playlist[*].changed",
+            "$.subsonic-response.playQueue.changed",
+            "$.subsonic-response.bookmarks.bookmark[*].created",
+            "$.subsonic-response.bookmarks.bookmark[*].changed"
+          ]
+        },
+        "notes": "Playlist list (no entry items; dpl_ dynamic playlists merged when present)."
+      },
+      {
+        "name": "getplaylist",
+        "method": "GET",
+        "path": "/rest/getPlaylist.view?f=json&v=1.16.1&c=phase0&id=playlist_b16ae181-fc40-5cd5-ba7b-0cf9f5b4c89d&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.playlist.created",
+            "$.subsonic-response.playlist.changed",
+            "$.subsonic-response.playlists.playlist[*].created",
+            "$.subsonic-response.playlists.playlist[*].changed",
+            "$.subsonic-response.playQueue.changed",
+            "$.subsonic-response.bookmarks.bookmark[*].created",
+            "$.subsonic-response.bookmarks.bookmark[*].changed"
+          ]
+        },
+        "notes": "Phase0 Mix with 4 entries spanning Releases; allowedUsers/owner fields."
+      },
+      {
+        "name": "getplaylist-unknown",
+        "method": "GET",
+        "path": "/rest/getPlaylist.view?f=json&v=1.16.1&c=phase0&id=playlist_00000000-0000-0000-0000-000000000000&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.playlist.created",
+            "$.subsonic-response.playlist.changed",
+            "$.subsonic-response.playlists.playlist[*].created",
+            "$.subsonic-response.playlists.playlist[*].changed",
+            "$.subsonic-response.playQueue.changed",
+            "$.subsonic-response.bookmarks.bookmark[*].created",
+            "$.subsonic-response.bookmarks.bookmark[*].changed"
+          ]
+        },
+        "notes": "DISCOVERY: this unknown-id path throws inside the service and the error pipeline answers 302 Location: /Account/Login?ReturnUrl=%2FError... (ReturnUrl embeds the original query INCLUDING auth credentials — a credential-leak observation). getSong/getArtist unknowns instead return 200 with the status:'ok' quirk.",
+        "followRedirects": false,
+        "expectStatus": 302
+      },
+      {
+        "name": "create-playlist",
+        "method": "GET",
+        "path": "/rest/createPlaylist.view?f=json&v=1.16.1&c=phase0&name=OS-Probe&songId=song_2b8eab4b-235d-5892-99f8-c0f5f54e8ab4&songId=song_b3297a8f-5e2b-5ade-98ea-f899d38059e0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.playlist.id",
+            "$.subsonic-response.playlist.created",
+            "$.subsonic-response.playlist.changed",
+            "$.subsonic-response.playlist.coverArt"
+          ],
+          "maskBaseUrl": true
+        },
+        "notes": "COVER-DEPENDENT BEHAVIOR: with a cover-bearing first song (Solar Wind -> Northern Lights has fixture artwork) create succeeds; the response construction resolves the cover image. In the pre-artwork fixture this same call 302'd after PARTIALLY creating the playlist (SongCount set, no PlaylistSong rows, null SongId) and poisoned all playlist serialization — the playlist response/cover path is the fragile boundary, not the service create itself.",
+        "capture": {
+          "osPlaylistId": "$.subsonic-response.playlist.id"
+        },
+        "secretCapture": [
+          "osPlaylistId"
+        ]
+      },
+      {
+        "name": "verify-created",
+        "method": "GET",
+        "path": "/rest/getPlaylist.view?f=json&v=1.16.1&c=phase0&id={{osPlaylistId}}&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.playlist.id",
+            "$.subsonic-response.playlist.created",
+            "$.subsonic-response.playlist.changed",
+            "$.subsonic-response.playlist.coverArt"
+          ],
+          "maskBaseUrl": true
+        },
+        "notes": "STATE VERIFICATION: created playlist with its two songs."
+      },
+      {
+        "name": "delete-created",
+        "method": "GET",
+        "path": "/rest/deletePlaylist.view?f=json&v=1.16.1&c=phase0&id={{osPlaylistId}}&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion"
+          ],
+          "maskBaseUrl": true
+        },
+        "notes": "Cleanup."
+      },
+      {
+        "name": "get-private-playlist",
+        "method": "GET",
+        "path": "/rest/getPlaylist.view?f=json&v=1.16.1&c=phase0&id=playlist_97b60b28-5379-5790-af01-ed8b6aa27d7f&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.playlist.created",
+            "$.subsonic-response.playlist.changed"
+          ]
+        },
+        "notes": "Seeded Private Cuts (2 songs) — baseline for update/delete coverage since createPlaylist is broken."
+      },
+      {
+        "name": "update-playlist-add-remove",
+        "method": "GET",
+        "path": "/rest/updatePlaylist.view?f=json&v=1.16.1&c=phase0&playlistId=playlist_97b60b28-5379-5790-af01-ed8b6aa27d7f&name=Private-Cuts-Renamed&songIdToAdd=song_2b8eab4b-235d-5892-99f8-c0f5f54e8ab4&songIndexToRemove=0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.playlist.created",
+            "$.subsonic-response.playlist.changed"
+          ]
+        },
+        "notes": "COVER-DEPENDENT BREAKAGE: updatePlaylist 302s when the playlist's cover song's album lacks artwork (Private Cuts -> Lantern -> Beacon has none): the response serialization's cover resolution throws. Mutation is NOT applied. Playlists with cover-bearing content work (see create-playlist). The fragile boundary is cover resolution during playlist serialization, not the update service itself.",
+        "followRedirects": false,
+        "expectStatus": 302
+      },
+      {
+        "name": "verify-updated",
+        "method": "GET",
+        "path": "/rest/getPlaylist.view?f=json&v=1.16.1&c=phase0&id=playlist_97b60b28-5379-5790-af01-ed8b6aa27d7f&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.playlist.created",
+            "$.subsonic-response.playlist.changed"
+          ]
+        },
+        "notes": "CONFIRMS the 302 left the playlist unmutated (name 'Private Cuts', original 2 songs)."
+      },
+      {
+        "name": "delete-playlist",
+        "method": "GET",
+        "path": "/rest/deletePlaylist.view?f=json&v=1.16.1&c=phase0&id=playlist_97b60b28-5379-5790-af01-ed8b6aa27d7f&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.playlist.created",
+            "$.subsonic-response.playlist.changed"
+          ]
+        },
+        "notes": ""
+      },
+      {
+        "name": "verify-deleted",
+        "method": "GET",
+        "path": "/rest/getPlaylist.view?f=json&v=1.16.1&c=phase0&id=playlist_97b60b28-5379-5790-af01-ed8b6aa27d7f&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.playlist.created",
+            "$.subsonic-response.playlist.changed"
+          ]
+        },
+        "notes": "Deleted playlist -> HTTP 200 with status:'ok' + error block (code 70) quirk. Contrast: the all-zero GUID on this same endpoint 302s."
+      }
+    ]
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-bookmarks",
+    "surface": "opensubsonic",
+    "flow": [
+      {
+        "name": "getbookmarks-empty",
+        "method": "GET",
+        "path": "/rest/getBookmarks.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.playlist.created",
+            "$.subsonic-response.playlist.changed",
+            "$.subsonic-response.playlists.playlist[*].created",
+            "$.subsonic-response.playlists.playlist[*].changed",
+            "$.subsonic-response.playQueue.changed",
+            "$.subsonic-response.bookmarks.bookmark[*].created",
+            "$.subsonic-response.bookmarks.bookmark[*].changed"
+          ]
+        },
+        "notes": "Empty initially."
+      },
+      {
+        "name": "create-bookmark",
+        "method": "GET",
+        "path": "/rest/createBookmark.view?f=json&v=1.16.1&c=phase0&id=song_2b8eab4b-235d-5892-99f8-c0f5f54e8ab4&position=42000&comment=probe&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.playlist.created",
+            "$.subsonic-response.playlist.changed",
+            "$.subsonic-response.playlists.playlist[*].created",
+            "$.subsonic-response.playlists.playlist[*].changed",
+            "$.subsonic-response.playQueue.changed",
+            "$.subsonic-response.bookmarks.bookmark[*].created",
+            "$.subsonic-response.bookmarks.bookmark[*].changed"
+          ]
+        },
+        "notes": "Position unit inconsistency (controller doc: ms; Bookmark model doc: seconds) — raw value preserved."
+      },
+      {
+        "name": "verify-bookmarks",
+        "method": "GET",
+        "path": "/rest/getBookmarks.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.playlist.created",
+            "$.subsonic-response.playlist.changed",
+            "$.subsonic-response.playlists.playlist[*].created",
+            "$.subsonic-response.playlists.playlist[*].changed",
+            "$.subsonic-response.playQueue.changed",
+            "$.subsonic-response.bookmarks.bookmark[*].created",
+            "$.subsonic-response.bookmarks.bookmark[*].changed"
+          ]
+        },
+        "notes": "Bookmark with embedded song Child."
+      },
+      {
+        "name": "delete-bookmark",
+        "method": "GET",
+        "path": "/rest/deleteBookmark.view?f=json&v=1.16.1&c=phase0&id=song_2b8eab4b-235d-5892-99f8-c0f5f54e8ab4&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.playlist.created",
+            "$.subsonic-response.playlist.changed",
+            "$.subsonic-response.playlists.playlist[*].created",
+            "$.subsonic-response.playlists.playlist[*].changed",
+            "$.subsonic-response.playQueue.changed",
+            "$.subsonic-response.bookmarks.bookmark[*].created",
+            "$.subsonic-response.bookmarks.bookmark[*].changed"
+          ]
+        },
+        "notes": ""
+      },
+      {
+        "name": "verify-bookmarks-empty",
+        "method": "GET",
+        "path": "/rest/getBookmarks.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.playlist.created",
+            "$.subsonic-response.playlist.changed",
+            "$.subsonic-response.playlists.playlist[*].created",
+            "$.subsonic-response.playlists.playlist[*].changed",
+            "$.subsonic-response.playQueue.changed",
+            "$.subsonic-response.bookmarks.bookmark[*].created",
+            "$.subsonic-response.bookmarks.bookmark[*].changed"
+          ]
+        },
+        "notes": ""
+      }
+    ]
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-playqueue",
+    "surface": "opensubsonic",
+    "flow": [
+      {
+        "name": "getplayqueue-empty",
+        "method": "GET",
+        "path": "/rest/getPlayQueue.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.playlist.created",
+            "$.subsonic-response.playlist.changed",
+            "$.subsonic-response.playlists.playlist[*].created",
+            "$.subsonic-response.playlists.playlist[*].changed",
+            "$.subsonic-response.playQueue.changed",
+            "$.subsonic-response.bookmarks.bookmark[*].created",
+            "$.subsonic-response.bookmarks.bookmark[*].changed"
+          ]
+        },
+        "notes": "Empty queue: synthesized playQueue with current:0, position:0 (changed is volatile)."
+      },
+      {
+        "name": "saveplayqueue",
+        "method": "GET",
+        "path": "/rest/savePlayQueue.view?f=json&v=1.16.1&c=phase0&id=song_2b8eab4b-235d-5892-99f8-c0f5f54e8ab4&id=song_b3297a8f-5e2b-5ade-98ea-f899d38059e0&current=song_b3297a8f-5e2b-5ade-98ea-f899d38059e0&position=42000&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.playlist.created",
+            "$.subsonic-response.playlist.changed",
+            "$.subsonic-response.playlists.playlist[*].created",
+            "$.subsonic-response.playlists.playlist[*].changed",
+            "$.subsonic-response.playQueue.changed",
+            "$.subsonic-response.bookmarks.bookmark[*].created",
+            "$.subsonic-response.bookmarks.bookmark[*].changed"
+          ]
+        },
+        "notes": "Save two songs with current + position (ms). ChangedBy = c client."
+      },
+      {
+        "name": "verify-playqueue",
+        "method": "GET",
+        "path": "/rest/getPlayQueue.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.playlist.created",
+            "$.subsonic-response.playlist.changed",
+            "$.subsonic-response.playlists.playlist[*].created",
+            "$.subsonic-response.playlists.playlist[*].changed",
+            "$.subsonic-response.playQueue.changed",
+            "$.subsonic-response.bookmarks.bookmark[*].created",
+            "$.subsonic-response.bookmarks.bookmark[*].changed"
+          ]
+        },
+        "notes": "QUIRK EVIDENCE: playQueue.current is the internal PlayQueId INT, not a song id. entry order preserved."
+      },
+      {
+        "name": "clear-playqueue",
+        "method": "GET",
+        "path": "/rest/savePlayQueue.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.playlist.created",
+            "$.subsonic-response.playlist.changed",
+            "$.subsonic-response.playlists.playlist[*].created",
+            "$.subsonic-response.playlists.playlist[*].changed",
+            "$.subsonic-response.playQueue.changed",
+            "$.subsonic-response.bookmarks.bookmark[*].created",
+            "$.subsonic-response.bookmarks.bookmark[*].changed"
+          ]
+        },
+        "notes": "savePlayQueue with no id params clears the queue."
+      },
+      {
+        "name": "verify-playqueue-empty",
+        "method": "GET",
+        "path": "/rest/getPlayQueue.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.playlist.created",
+            "$.subsonic-response.playlist.changed",
+            "$.subsonic-response.playlists.playlist[*].created",
+            "$.subsonic-response.playlists.playlist[*].changed",
+            "$.subsonic-response.playQueue.changed",
+            "$.subsonic-response.bookmarks.bookmark[*].created",
+            "$.subsonic-response.bookmarks.bookmark[*].changed"
+          ]
+        },
+        "notes": ""
+      }
+    ]
+  }
+]

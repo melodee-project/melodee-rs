@@ -1,0 +1,33 @@
+{
+  "name": "os-ping-root-alias",
+  "surface": "opensubsonic",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/ping?f=json&v=1.16.1&c=melodee-rs-phase0",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-length": "119",
+      "content-type": "application/json; charset=utf-8",
+      "x-total-count": "0"
+    },
+    "bodyFile": "os-ping-root-alias.json",
+    "sha256": "2c5cf79153c9d49c5c6353bb7e6432f63a638ce0fc6eee259a50a5e8f54a5128",
+    "bytes": 161
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.subsonic-response.serverVersion"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

@@ -1,0 +1,28 @@
+{
+  "name": "jf-browse/item-song-detail",
+  "surface": "jellyfin",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/Items/ea26fc59a54551c294c4702e1f97b80a",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "MediaBrowser <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "jf-browse-item-song-detail.json",
+    "sha256": "b8048928cb6d8a6ddcc6d6bffff2cce328073f1fe8036c66ddc887863dc0aa04",
+    "bytes": 3271
+  },
+  "normalize": {},
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

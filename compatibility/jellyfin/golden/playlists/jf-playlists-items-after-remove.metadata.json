@@ -1,0 +1,28 @@
+{
+  "name": "jf-playlists/items-after-remove",
+  "surface": "jellyfin",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/Playlists/b16ae181fc405cd5ba7b0cf9f5b4c89d/Items",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "MediaBrowser <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "jf-playlists-items-after-remove.json",
+    "sha256": "91e8dd436e7c3325065f26c3c2d6c51f8fabc678d1c8e83f1cffc770162f2339",
+    "bytes": 5429
+  },
+  "normalize": {},
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

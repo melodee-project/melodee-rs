@@ -1,7 +1,7 @@
 # ADR-0112: Use Astro Starlight for user-facing documentation
 
 - **Date:** 2026-08-07
-- **Status:** Proposed
+- **Status:** Accepted
 - **Decision owners:** Unassigned
 - **Supersedes:** None
 - **Superseded by:** None
@@ -126,3 +126,14 @@ pnpm toolchain aligns with the planned admin UI stack.
 - [ADR-0103: Require fully FOSS dependencies](ADR-0103-require-fully-foss-dependencies.md)
 - [docs/README.md](../../docs/README.md)
 - [docs/AGENTS.md](../../docs/AGENTS.md)
+
+## Phase 0 ratification (2026-08-09)
+
+- **Status change:** Proposed -> Accepted (Issue 10 ratification authority).
+- **Evidence:** the decision is already implemented and continuously verified: `/docs` is a
+  self-contained Starlight project; `.github/workflows/docs.yml` runs `pnpm check`,
+  `pnpm check:links`, and a build with link validation on every change; the site deploys to
+  GitHub Pages.
+- **Technology revalidation (2026-08-09):** npm registry — astro 7.2.0 (MIT) and
+  @astrojs/starlight 0.41.7 (MIT) are the exact versions recorded in this ADR and remain the
+  current releases; Pagefind search is fully static/FOSS. No commercial boundary.

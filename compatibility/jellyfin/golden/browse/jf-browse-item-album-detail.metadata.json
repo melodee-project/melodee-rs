@@ -1,0 +1,28 @@
+{
+  "name": "jf-browse/item-album-detail",
+  "surface": "jellyfin",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/Items/69d9769974c55403878f87f42d9d9fbb",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "MediaBrowser <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "jf-browse-item-album-detail.json",
+    "sha256": "74ce060fe855b8e34624926a3429e34f4522b47f68f0657db0fe8339e69ce8e1",
+    "bytes": 1681
+  },
+  "normalize": {},
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

@@ -1,0 +1,35 @@
+{
+  "name": "os-annotation-scrobble/scrobble-time-mismatch",
+  "surface": "opensubsonic",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/rest/scrobble.view?f=json&v=1.16.1&c=phase0&id=song_2b8eab4b-235d-5892-99f8-c0f5f54e8ab4&id=song_c418d383-13f5-598d-94a8-c15e5d2df348&time=1786050060000&submission=true&u=phase0-fixture&t=%3Credacted%3E&s=%3Credacted%3E",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-length": "178",
+      "content-type": "application/json; charset=utf-8",
+      "x-total-count": "0"
+    },
+    "bodyFile": "os-annotation-scrobble-scrobble-time-mismatch.json",
+    "sha256": "7bd98f445d815b284943c0c94964940b69a6a49c1045f696e52134270ba867dd",
+    "bytes": 247
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.subsonic-response.serverVersion"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

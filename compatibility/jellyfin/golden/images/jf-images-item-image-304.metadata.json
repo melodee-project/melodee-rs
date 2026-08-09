@@ -1,0 +1,33 @@
+{
+  "name": "jf-images/item-image-304",
+  "surface": "jellyfin",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/Items/69d9769974c55403878f87f42d9d9fbb/Images/Primary",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "If-None-Match": "\"17673120000000000\"",
+      "Authorization": "MediaBrowser <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 304,
+    "headers": {
+      "etag": "\"17673120000000000\""
+    },
+    "bodyFile": "jf-images-item-image-304.bin",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "normalize": {
+    "dropHeaders": [
+      "etag"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

@@ -1,0 +1,45 @@
+{
+  "name": "os-shares/verify-shares-empty",
+  "surface": "opensubsonic",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/rest/getShares.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t=%3Credacted%3E&s=%3Credacted%3E",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-length": "4004",
+      "content-type": "application/json; charset=utf-8",
+      "x-total-count": "0"
+    },
+    "bodyFile": "os-shares-verify-shares-empty.json",
+    "sha256": "7a27a8507578e94af2b699bcd0c37e1373ab140aaf6f06a926af5a672cf3b19b",
+    "bytes": 7224
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.subsonic-response.serverVersion",
+      "$.subsonic-response.shares.share[*].created",
+      "$.subsonic-response.shares.share[*].expires",
+      "$.subsonic-response.shares.share[*].lastVisited",
+      "$.subsonic-response.shares.share.id",
+      "$.subsonic-response.shares.share.url",
+      "$.subsonic-response.shares.share.created",
+      "$.subsonic-response.shares.share[*].id",
+      "$.subsonic-response.shares.share[*].url",
+      "$.subsonic-response.internetRadioStations.internetRadioStation[*].id"
+    ],
+    "maskBaseUrl": true
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

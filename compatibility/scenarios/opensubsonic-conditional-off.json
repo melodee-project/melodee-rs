@@ -1,0 +1,59 @@
+[
+  {
+    "schemaVersion": 2,
+    "name": "os-podcasts-disabled-getpodcasts",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getPodcasts.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "expectStatus": 400,
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "CONDITIONAL: podcast.enabled=false -> HTTP 400 + generic error 0 'Podcasts are currently disabled.' (unlike the enabled 200 or the auth-failure 403). Captured in the podcast-disabled phase of legacy_oracle.py capture."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-podcasts-disabled-getnewest",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getNewestPodcasts.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "expectStatus": 400,
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": ""
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-podcasts-disabled-create",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/createPodcastChannel.view?f=json&v=1.16.1&c=phase0&url=http://pod.example.test/feed&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "expectStatus": 400,
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": ""
+  }
+]

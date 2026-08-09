@@ -24,6 +24,10 @@ template.
   Host port is **5433**, not 5432 — `DATABASE_URL` in `.env` must match. The `postgres:18+`
   image requires the volume mounted at `/var/lib/postgresql` (not the legacy
   `/var/lib/postgresql/data`).
+- **Legacy oracle (Phase 0 compatibility):** `python3 scripts/legacy_oracle.py recreate`
+  rebuilds the frozen C# baseline (commit `4028b58d...`, fails closed on mismatch) and
+  `python3 scripts/legacy_oracle.py capture` regenerates all golden captures. Details:
+  `design/evidence/phase-0/legacy-baseline.md` and `compatibility/README.md`.
 - **cargo-deny** warnings like `license-not-encountered` (allowed licenses with no current
   dependent crate) are benign; errors are not.
 - **Doc validation is executable.** `python3 scripts/validate_repository.py` enforces required

@@ -1,0 +1,29 @@
+{
+  "name": "jf-extra/users-items-redirect",
+  "surface": "jellyfin",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/Users/f78448cc82ec5864877c6c6163b00065/Items?includeItemTypes=MusicAlbum&recursive=true",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "MediaBrowser <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 307,
+    "headers": {
+      "content-length": "0",
+      "location": "/Items?includeItemTypes=MusicAlbum&recursive=True&userId=f78448cc82ec5864877c6c6163b00065"
+    },
+    "bodyFile": "jf-extra-users-items-redirect.bin",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "normalize": {},
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

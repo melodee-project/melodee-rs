@@ -15,7 +15,8 @@
         "d493e627-df71-50ed-93fb-c29b9f6ec96a",
         "2b8eab4b-235d-5892-99f8-c0f5f54e8ab4"
       ]
-    }
+    },
+    "bodyTemplate": null
   },
   "response": {
     "status": 200,

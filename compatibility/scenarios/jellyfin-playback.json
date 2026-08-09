@@ -1,0 +1,273 @@
+[
+  {
+    "schemaVersion": 2,
+    "name": "jf-playback",
+    "surface": "jellyfin",
+    "flow": [
+      {
+        "name": "login",
+        "method": "POST",
+        "path": "/Users/AuthenticateByName",
+        "json": {
+          "Username": "phase0-fixture",
+          "Pw": "Mel0deeR0cks!"
+        },
+        "capture": {
+          "jfToken": "$.AccessToken"
+        },
+        "secretCapture": [
+          "jfToken"
+        ],
+        "normalize": {
+          "maskJsonPaths": [
+            "$.AccessToken",
+            "$.SessionInfo",
+            "$.User.LastLoginDate",
+            "$.User.LastActivityDate",
+            "$.User.Configuration"
+          ]
+        }
+      },
+      {
+        "name": "stream-full",
+        "method": "GET",
+        "path": "/Audio/2b8eab4b235d589299f8c0f5f54e8ab4/stream",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {
+          "dropHeaders": [
+            "etag",
+            "last-modified"
+          ]
+        },
+        "notes": "Direct play: 200, Accept-Ranges bytes, Content-Type audio/wav (from actual file, never requested container), Content-Length."
+      },
+      {
+        "name": "stream-head",
+        "method": "HEAD",
+        "path": "/Audio/2b8eab4b235d589299f8c0f5f54e8ab4/stream",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {
+          "dropHeaders": [
+            "etag",
+            "last-modified"
+          ]
+        },
+        "notes": "HEAD: 200 headers only."
+      },
+      {
+        "name": "stream-range-start",
+        "method": "GET",
+        "path": "/Audio/2b8eab4b235d589299f8c0f5f54e8ab4/stream",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\"",
+          "Range": "bytes=0-1023"
+        },
+        "normalize": {
+          "dropHeaders": [
+            "etag",
+            "last-modified"
+          ]
+        },
+        "notes": "bytes=0-1023 -> 206 with CORRECT Content-Range (single-pass handling, unlike the OpenSubsonic double-processing bug)."
+      },
+      {
+        "name": "stream-range-middle",
+        "method": "GET",
+        "path": "/Audio/2b8eab4b235d589299f8c0f5f54e8ab4/stream",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\"",
+          "Range": "bytes=100000-101023"
+        },
+        "normalize": {
+          "dropHeaders": [
+            "etag",
+            "last-modified"
+          ]
+        },
+        "notes": "bytes=100000-101023 -> 206 correct (bytes 100000-101023/220544)."
+      },
+      {
+        "name": "stream-range-end",
+        "method": "GET",
+        "path": "/Audio/2b8eab4b235d589299f8c0f5f54e8ab4/stream",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\"",
+          "Range": "bytes=-2048"
+        },
+        "normalize": {
+          "dropHeaders": [
+            "etag",
+            "last-modified"
+          ]
+        },
+        "notes": "bytes=-2048 -> 206."
+      },
+      {
+        "name": "stream-range-invalid",
+        "method": "GET",
+        "path": "/Audio/2b8eab4b235d589299f8c0f5f54e8ab4/stream",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\"",
+          "Range": "bytes=abc-def"
+        },
+        "normalize": {
+          "dropHeaders": [
+            "etag",
+            "last-modified"
+          ],
+          "maskJsonPaths": [
+            "$.TraceId",
+            "$.traceId"
+          ]
+        },
+        "notes": "Invalid range -> 416 JellyfinProblemDetails with Content-Range bytes */220544 (RFC-correct, unlike OpenSubsonic's 404).",
+        "expectStatus": 416
+      },
+      {
+        "name": "stream-range-unsatisfiable",
+        "method": "GET",
+        "path": "/Audio/2b8eab4b235d589299f8c0f5f54e8ab4/stream",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\"",
+          "Range": "bytes=999999999-"
+        },
+        "normalize": {
+          "dropHeaders": [
+            "etag",
+            "last-modified"
+          ],
+          "maskJsonPaths": [
+            "$.TraceId",
+            "$.traceId"
+          ]
+        },
+        "notes": "Beyond EOF -> 416.",
+        "expectStatus": 416
+      },
+      {
+        "name": "stream-extension-no-static",
+        "method": "GET",
+        "path": "/Audio/2b8eab4b235d589299f8c0f5f54e8ab4/stream.mp3",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.TraceId",
+            "$.traceId"
+          ]
+        },
+        "notes": "TRANSCODE REJECTION: stream.{container} without static=true -> 400 'Transcoding is not supported. Use static=true for direct streaming.'",
+        "expectStatus": 400
+      },
+      {
+        "name": "stream-extension-static",
+        "method": "GET",
+        "path": "/Audio/2b8eab4b235d589299f8c0f5f54e8ab4/stream.mp3?static=true",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {
+          "dropHeaders": [
+            "etag",
+            "last-modified"
+          ]
+        },
+        "notes": "With static=true the requested container is IGNORED and the original WAV is served (Content-Type audio/wav)."
+      },
+      {
+        "name": "stream-universal",
+        "method": "GET",
+        "path": "/Audio/2b8eab4b235d589299f8c0f5f54e8ab4/universal?container=mp3&maxStreamingBitrate=128000&api_key={{jfToken}}",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {
+          "dropHeaders": [
+            "etag",
+            "last-modified"
+          ]
+        },
+        "notes": "Universal always forces static=true; container/codec params ignored; original served. api_key transport evidence (redacted in recording)."
+      },
+      {
+        "name": "playbackinfo",
+        "method": "GET",
+        "path": "/Items/2b8eab4b235d589299f8c0f5f54e8ab4/PlaybackInfo",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.PlaySessionId"
+          ]
+        },
+        "notes": "PlaybackInfo: SupportsDirectPlay/Stream true, SupportsTranscoding FALSE; PlaySessionId random (masked)."
+      },
+      {
+        "name": "stream-unknown",
+        "method": "GET",
+        "path": "/Audio/00000000000000000000000000000000/stream",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.TraceId",
+            "$.traceId"
+          ]
+        },
+        "notes": "Unknown id -> 404 'Audio item not found.'",
+        "expectStatus": 404
+      },
+      {
+        "name": "download-item",
+        "method": "GET",
+        "path": "/Items/2b8eab4b235d589299f8c0f5f54e8ab4/Download",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {
+          "dropHeaders": [
+            "etag",
+            "last-modified"
+          ]
+        },
+        "notes": "Download role gated; 200 with Content-Disposition attachment; manual 206 support."
+      },
+      {
+        "name": "file-item",
+        "method": "GET",
+        "path": "/Items/2b8eab4b235d589299f8c0f5f54e8ab4/File",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {
+          "dropHeaders": [
+            "etag",
+            "last-modified"
+          ]
+        },
+        "notes": "Same handler as Download."
+      }
+    ]
+  }
+]

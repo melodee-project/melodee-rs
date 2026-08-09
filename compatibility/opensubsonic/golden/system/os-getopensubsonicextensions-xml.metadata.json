@@ -1,0 +1,36 @@
+{
+  "name": "os-getopensubsonicextensions-xml",
+  "surface": "opensubsonic",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/rest/getOpenSubsonicExtensions.view?v=1.16.1&c=melodee-rs-phase0",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-length": "398",
+      "content-type": "application/xml",
+      "x-total-count": "0"
+    },
+    "bodyFile": "os-getopensubsonicextensions-xml.xml",
+    "sha256": "452892c87483f8668c8dcd12e598732fb75eb483844885d7eba740d5f37f8d1a",
+    "bytes": 401
+  },
+  "normalize": {
+    "maskRegex": [
+      {
+        "pattern": "serverVersion=\"[^\"]*\"",
+        "replace": "serverVersion=\"<volatile>\""
+      }
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

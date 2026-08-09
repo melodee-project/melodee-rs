@@ -1,0 +1,8 @@
+{
+  "type": "about:blank",
+  "title": "Not Found",
+  "status": 404,
+  "detail": "Item not found or cannot be deleted.",
+  "traceId": "<volatile>",
+  "errorCode": null
+}

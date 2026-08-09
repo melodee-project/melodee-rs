@@ -1,0 +1,12 @@
+{
+  "lyrics": [
+    {
+      "text": "Synthetic lyric line one",
+      "start": 0
+    },
+    {
+      "text": "Synthetic lyric line two",
+      "start": 10000000
+    }
+  ]
+}

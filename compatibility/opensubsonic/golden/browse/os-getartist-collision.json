@@ -1,0 +1,38 @@
+{
+  "subsonic-response": {
+    "status": "ok",
+    "version": "1.16.1",
+    "type": "Melodee",
+    "serverVersion": "<volatile>",
+    "openSubsonic": true,
+    "artist": {
+      "id": "artist_5bf951d5-7afe-5c50-8941-145b7095902b",
+      "name": "Dune",
+      "albumCount": 1,
+      "averageRating": 0.0,
+      "coverArt": "artist_5bf951d5-7afe-5c50-8941-145b7095902b",
+      "artistImageUrl": "http://127.0.0.1:5157/images/artist_5bf951d5-7afe-5c50-8941-145b7095902b/large",
+      "album": [
+        {
+          "id": "album_263ebba5-739c-5cb9-987f-b2d2bbfbd0ad",
+          "album": "Desert Rock Radio",
+          "title": "Desert Rock Radio",
+          "name": "Desert Rock Radio",
+          "coverArt": "album_263ebba5-739c-5cb9-987f-b2d2bbfbd0ad",
+          "songCount": 2,
+          "created": "2026-01-04T00:00:00Z",
+          "duration": 5,
+          "playedCount": 0,
+          "artistId": "artist_5bf951d5-7afe-5c50-8941-145b7095902b",
+          "artist": "Dune",
+          "year": 2019,
+          "genres": [
+            "Rock"
+          ],
+          "genre": "Rock",
+          "parent": "library_c598e196-db6f-582e-b110-1726c138bd4f"
+        }
+      ]
+    }
+  }
+}

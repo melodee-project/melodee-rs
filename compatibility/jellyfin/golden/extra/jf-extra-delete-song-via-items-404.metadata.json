@@ -1,0 +1,33 @@
+{
+  "name": "jf-extra/delete-song-via-items-404",
+  "surface": "jellyfin",
+  "request": {
+    "method": "DELETE",
+    "url": "{melodee-origin}/Items/2b8eab4b235d589299f8c0f5f54e8ab4",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "MediaBrowser <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "jf-extra-delete-song-via-items-404.json",
+    "sha256": "caf80626b21dd2504165ed01080f8b0aa2ef2547e83d0b54f951fbc21516b480",
+    "bytes": 169
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.TraceId",
+      "$.traceId"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

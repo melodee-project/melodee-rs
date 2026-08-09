@@ -1,0 +1,43 @@
+{
+  "name": "os-playlists/getplaylist-unknown",
+  "surface": "opensubsonic",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/rest/getPlaylist.view?f=json&v=1.16.1&c=phase0&id=playlist_00000000-0000-0000-0000-000000000000&u=phase0-fixture&t=%3Credacted%3E&s=%3Credacted%3E",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 302,
+    "headers": {
+      "content-length": "0",
+      "cache-control": "no-cache,no-store",
+      "expires": "-1",
+      "location": "http://capture-fixture.example.test/Account/Login?ReturnUrl=%2FError%3Ff%3Djson%26v%3D1.16.1%26c%3Dphase0%26id%3Dplaylist_00000000-0000-0000-0000-000000000000%26u%3Dphase0-fixture%26t%3D%3Ccaptured%3Aenv%3APHASE0_SUBSONIC_TOKEN%3E%26s%3D%3Ccaptured%3Aenv%3APHASE0_SUBSONIC_SALT%3E"
+    },
+    "bodyFile": "os-playlists-getplaylist-unknown.bin",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.subsonic-response.serverVersion",
+      "$.subsonic-response.playlist.created",
+      "$.subsonic-response.playlist.changed",
+      "$.subsonic-response.playlists.playlist[*].created",
+      "$.subsonic-response.playlists.playlist[*].changed",
+      "$.subsonic-response.playQueue.changed",
+      "$.subsonic-response.bookmarks.bookmark[*].created",
+      "$.subsonic-response.bookmarks.bookmark[*].changed"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

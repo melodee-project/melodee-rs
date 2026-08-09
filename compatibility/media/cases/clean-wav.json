@@ -1,0 +1,78 @@
+{
+  "slug": "clean-wav",
+  "description": "Untagged PCM WAV (WAV metadata support is minimal).",
+  "expected": {
+    "codec": "pcm",
+    "conversion": "mp3",
+    "extractedTags": "filename-fallback"
+  },
+  "input": {
+    "files": [
+      "01 First Light.wav",
+      "02 Second Wave.wav",
+      "03 Third Echo.wav"
+    ],
+    "sizes": {
+      "03 Third Echo.wav": 199374,
+      "02 Second Wave.wav": 187910,
+      "01 First Light.wav": 176444
+    },
+    "sha256": {
+      "03 Third Echo.wav": "a9d8c271f333d97835226c2f9c7c331c1e1529a2a3a61b040f0e9b04e37f1342",
+      "02 Second Wave.wav": "fffedc39ae78b24127fbf7a20e9345711cba610da626f2cdb43120f8886074a4",
+      "01 First Light.wav": "6eeac52dee136c0aad6fb24b408b60e9d515c5a52ceea6c63737c14f68bfbcd6"
+    }
+  },
+  "extraction": {
+    "extractions": [
+      {
+        "file": "01 First Light.wav",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {},
+        "mediaAudios": {},
+        "imageCount": 0,
+        "crcHash": null
+      },
+      {
+        "file": "02 Second Wave.wav",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {},
+        "mediaAudios": {},
+        "imageCount": 0,
+        "crcHash": null
+      }
+    ]
+  },
+  "pipeline": {
+    "processExitCode": 0,
+    "processSummary": {
+      "Elapsed Time": "00:00:01",
+      "Directories Processed": "1",
+      "Albums Processed": "0",
+      "Valid Albums": "0 (0%)",
+      "New Artists": "0",
+      "New Albums": "0",
+      "New Songs": "0"
+    },
+    "processErrorTail": null,
+    "stagingTree": [],
+    "albums": [],
+    "inboundLeftovers": [
+      {
+        "path": "01 First Light.wav",
+        "size": 176444
+      },
+      {
+        "path": "02 Second Wave.wav",
+        "size": 187910
+      },
+      {
+        "path": "03 Third Echo.wav",
+        "size": 199374
+      }
+    ],
+    "validations": []
+  }
+}

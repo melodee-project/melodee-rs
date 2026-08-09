@@ -1,0 +1,21 @@
+{
+  "tier": "C",
+  "database": "melodee_bench_c",
+  "counts": "100000/500000/5000000",
+  "targetCounts": {
+    "artists": 100000,
+    "albums": 500000,
+    "songs": 5000000
+  },
+  "timingsSeconds": {
+    "drop_and_recreate": 0.02,
+    "settings_and_library": 0.02,
+    "artists": 1.79,
+    "albums": 17.56,
+    "songs": 203.26,
+    "fixture_user": 3.6,
+    "playlists": 0.03
+  },
+  "totalSeconds": 252.64,
+  "uuidScheme": "md5('bench-<kind>-<i>')::uuid (deterministic per tier)"
+}

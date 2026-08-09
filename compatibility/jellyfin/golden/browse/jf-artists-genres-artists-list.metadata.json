@@ -1,0 +1,31 @@
+{
+  "name": "jf-artists-genres/artists-list",
+  "surface": "jellyfin",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/Artists?startIndex=0&limit=5",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "MediaBrowser <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "etag": "\"41f96b56f70d313865b4f35992f4ac42\""
+    },
+    "bodyFile": "jf-artists-genres-artists-list.json",
+    "sha256": "8f6ae2a3089e78224de9ea7c7bc3ea77a5c7902e061efe84c5c23bd9342fccd5",
+    "bytes": 7950
+  },
+  "normalize": {
+    "dropHeaders": []
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

@@ -1,0 +1,222 @@
+{
+  "slug": "cue-split",
+  "description": "Single WAV + CUE sheet (split into tracks).",
+  "expected": {
+    "sidecar": "cue -> ffmpeg split per track"
+  },
+  "input": {
+    "files": [
+      "album.cue",
+      "album.wav"
+    ],
+    "sizes": {
+      "album.cue": 343,
+      "album.wav": 529244
+    },
+    "sha256": {
+      "album.wav": "ed8d3acb50a38a032a15c184cfef889d48dd5b47191f07c43b5a2b1621422761"
+    }
+  },
+  "extraction": {
+    "extractions": [
+      {
+        "file": "album.wav",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {},
+        "mediaAudios": {},
+        "imageCount": 0,
+        "crcHash": null
+      }
+    ]
+  },
+  "pipeline": {
+    "processExitCode": 0,
+    "processSummary": {
+      "Elapsed Time": "00:00:03",
+      "Directories Processed": "1",
+      "Albums Processed": "1",
+      "Valid Albums": "0 (0%)",
+      "New Artists": "1",
+      "New Albums": "1",
+      "New Songs": "3"
+    },
+    "processErrorTail": null,
+    "stagingTree": [
+      {
+        "path": "Corpus Artist - [] Cue Path/0001 First Light.mp3",
+        "size": 82716
+      },
+      {
+        "path": "Corpus Artist - [] Cue Path/0002 Second Wave.mp3",
+        "size": 82716
+      },
+      {
+        "path": "Corpus Artist - [] Cue Path/0003 Third Echo.mp3",
+        "size": 82715
+      },
+      {
+        "path": "Corpus Artist - [] Cue Path/melodee.json",
+        "size": 5148,
+        "sha256": null
+      }
+    ],
+    "albums": [
+      {
+        "directory": "Corpus Artist - [] Cue Path",
+        "status": "Invalid",
+        "statusReasons": "HasInvalidArtists, HasInvalidSongs, HasInvalidYear, HasNoImages, IsNotStudioTypeAlbum, SongsAreNotSequentiallyNumbered, HasInvalidFirstSongNumber, HasLessThanMinimumDuration",
+        "albumType": "NotSet",
+        "validationMessages": [
+          {
+            "message": "Album artist is invalid.",
+            "severity": 2
+          },
+          {
+            "message": "Album has invalid year.",
+            "severity": 2
+          },
+          {
+            "message": "Album Song numbers are invalid.",
+            "severity": 2
+          },
+          {
+            "message": "Album does not have cover image.",
+            "severity": 2
+          },
+          {
+            "message": "Album Artist is unknown, will need manual validation.",
+            "severity": 2
+          },
+          {
+            "message": "Album is not studio type, will need manual validation.",
+            "severity": 2
+          },
+          {
+            "message": "Album has songs with invalid song durations.",
+            "severity": 2
+          },
+          {
+            "message": "Album duration is less than the minimum album duration.",
+            "severity": 2
+          }
+        ],
+        "songCount": 3,
+        "songs": [
+          {
+            "fileName": "0001 First Light.mp3",
+            "size": 343,
+            "title": "First Light",
+            "songNumber": 1,
+            "mediaNumber": null,
+            "sortOrder": 1,
+            "crcHash": "27F50E83"
+          },
+          {
+            "fileName": "0002 Second Wave.mp3",
+            "size": 343,
+            "title": "Second Wave",
+            "songNumber": 2,
+            "mediaNumber": null,
+            "sortOrder": 2,
+            "crcHash": "27F50E83"
+          },
+          {
+            "fileName": "0003 Third Echo.mp3",
+            "size": 0,
+            "title": "Third Echo",
+            "songNumber": 3,
+            "mediaNumber": null,
+            "sortOrder": 0,
+            "crcHash": "27F50E83"
+          }
+        ],
+        "images": [],
+        "displaySummary": "003 : Cue Path"
+      }
+    ],
+    "inboundLeftovers": [
+      {
+        "path": "0001 First Light.mp3",
+        "size": 82716
+      },
+      {
+        "path": "0002 Second Wave.mp3",
+        "size": 82716
+      },
+      {
+        "path": "0003 Third Echo.mp3",
+        "size": 82715
+      },
+      {
+        "path": "Corpus Artist_Cue Path.melodee.json",
+        "size": 4082
+      },
+      {
+        "path": "album.cue._converted",
+        "size": 343
+      },
+      {
+        "path": "album.wav._converted",
+        "size": 529244
+      }
+    ],
+    "validations": [
+      {
+        "album": "Corpus Artist - [] Cue Path",
+        "exitCode": 0,
+        "result": {
+          "data": {
+            "albumStatus": 3,
+            "albumStatusReasons": 42500280,
+            "isValid": false,
+            "messages ": [
+              {
+                "message": "Album artist is  invalid.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album has invalid  year.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album Song numbers are  invalid.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album does not have cover  image.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album Artist is unknown, will  need manual validation.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album is not  studio type, will need manual  validation.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album has songs with  invalid song durations.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album duration  is less than the minimum album  duration.",
+                "sortOrder": 0,
+                "severity": 2
+              }
+            ]
+          },
+          "isSuccess": true,
+          "type": 200
+        }
+      }
+    ]
+  }
+}

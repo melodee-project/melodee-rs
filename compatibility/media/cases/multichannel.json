@@ -1,0 +1,76 @@
+{
+  "slug": "multichannel",
+  "description": "5.1 channel WAV source.",
+  "expected": {
+    "conversion": "channels preserved (no channel mapping at baseline)"
+  },
+  "input": {
+    "files": [
+      "01 First Light.wav",
+      "02 Second Wave.wav",
+      "03 Third Echo.wav"
+    ],
+    "sizes": {
+      "03 Third Echo.wav": 1196024,
+      "02 Second Wave.wav": 1127240,
+      "01 First Light.wav": 1058444
+    },
+    "sha256": {
+      "03 Third Echo.wav": "92f778a690cce15d88d23b9e23a8915d83c788bf046da9304e5b926dfd02770a",
+      "02 Second Wave.wav": "54b64d41061b46d45af2ab3ca399ac19c9867fdafe45fe73f1f000d9707d1cb5",
+      "01 First Light.wav": "e1eb333fd7f7219463b5f1fe4b192f0d72396caaade175cee4e3456c7f9fcf17"
+    }
+  },
+  "extraction": {
+    "extractions": [
+      {
+        "file": "01 First Light.wav",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {},
+        "mediaAudios": {},
+        "imageCount": 0,
+        "crcHash": null
+      },
+      {
+        "file": "02 Second Wave.wav",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {},
+        "mediaAudios": {},
+        "imageCount": 0,
+        "crcHash": null
+      }
+    ]
+  },
+  "pipeline": {
+    "processExitCode": 0,
+    "processSummary": {
+      "Elapsed Time": "00:00:01",
+      "Directories Processed": "1",
+      "Albums Processed": "0",
+      "Valid Albums": "0 (0%)",
+      "New Artists": "0",
+      "New Albums": "0",
+      "New Songs": "0"
+    },
+    "processErrorTail": null,
+    "stagingTree": [],
+    "albums": [],
+    "inboundLeftovers": [
+      {
+        "path": "01 First Light.wav",
+        "size": 1058444
+      },
+      {
+        "path": "02 Second Wave.wav",
+        "size": 1127240
+      },
+      {
+        "path": "03 Third Echo.wav",
+        "size": 1196024
+      }
+    ],
+    "validations": []
+  }
+}

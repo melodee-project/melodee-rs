@@ -1,0 +1,128 @@
+{
+  "subsonic-response": {
+    "status": "ok",
+    "version": "1.16.1",
+    "type": "Melodee",
+    "serverVersion": "<volatile>",
+    "openSubsonic": true,
+    "playlist": {
+      "id": "playlist_97b60b28-5379-5790-af01-ed8b6aa27d7f",
+      "name": "Private Cuts",
+      "comment": "Synthetic private playlist fixture.",
+      "owner": "phase0-fixture",
+      "public": false,
+      "songCount": 2,
+      "duration": 4,
+      "created": "<volatile>",
+      "changed": "<volatile>",
+      "coverArt": "playlist_97b60b28-5379-5790-af01-ed8b6aa27d7f",
+      "allowedUsers": [],
+      "entry": [
+        {
+          "id": "song_d493e627-df71-50ed-93fb-c29b9f6ec96a",
+          "parent": "album_c359d116-92ab-5380-a6dd-e97b65cce905",
+          "isDir": false,
+          "title": "Lantern",
+          "album": "Beacon",
+          "artist": "The Harbour Lights",
+          "song": 1,
+          "year": 2023,
+          "coverArt": "song_d493e627-df71-50ed-93fb-c29b9f6ec96a",
+          "size": 176444,
+          "contentType": "audio/wav",
+          "suffix": ".wav",
+          "duration": 2,
+          "bitRate": 1411,
+          "bitDepth": 16,
+          "samplingRate": 44100,
+          "path": "Beacon/01 - Lantern.wav",
+          "playCount": 0,
+          "discNumber": 1,
+          "created": "2026-01-01T00:10:10Z",
+          "albumId": "album_c359d116-92ab-5380-a6dd-e97b65cce905",
+          "artistId": "artist_4f6a5272-9529-5a24-92a0-a3ede6a73d59",
+          "type": "music",
+          "mediaType": "song",
+          "isVideo": false,
+          "bpm": 84,
+          "sortName": "Lantern",
+          "genres": [
+            {
+              "value": "Folk",
+              "songCount": 0,
+              "albumCount": 0
+            }
+          ],
+          "artists": [],
+          "displayArtist": "The Harbour Lights",
+          "albumArtists": [
+            {
+              "id": "artist_4f6a5272-9529-5a24-92a0-a3ede6a73d59",
+              "name": "The Harbour Lights",
+              "coverArt": "artist_4f6a5272-9529-5a24-92a0-a3ede6a73d59",
+              "albumCount": 2,
+              "userRating": 0,
+              "artistImageUrl": "URL",
+              "sortName": "Harbour Lights, The"
+            }
+          ],
+          "displayAlbumArtist": "The Harbour Lights",
+          "contributors": [],
+          "replayGain": {},
+          "averageRating": 0,
+          "playerId": 0,
+          "track": 1,
+          "genre": "Folk"
+        },
+        {
+          "id": "song_b666e766-49f7-54a2-8a13-5c265c6d8208",
+          "parent": "album_de0f93a5-2979-5654-9afe-16453caa49af",
+          "isDir": false,
+          "title": "Hiss",
+          "album": "Untitled Demos",
+          "artist": "Cassette Ghost",
+          "song": 1,
+          "year": 1987,
+          "coverArt": "song_b666e766-49f7-54a2-8a13-5c265c6d8208",
+          "size": 158804,
+          "contentType": "audio/wav",
+          "suffix": ".wav",
+          "duration": 2,
+          "bitRate": 1411,
+          "bitDepth": 16,
+          "samplingRate": 44100,
+          "path": "Untitled Demos/01 - Hiss.wav",
+          "playCount": 0,
+          "discNumber": 1,
+          "created": "2026-01-01T00:19:19Z",
+          "albumId": "album_de0f93a5-2979-5654-9afe-16453caa49af",
+          "artistId": "artist_708790f0-57b5-5a45-a746-dd36634e8872",
+          "type": "music",
+          "mediaType": "song",
+          "isVideo": false,
+          "bpm": 0,
+          "sortName": "Hiss",
+          "artists": [],
+          "displayArtist": "Cassette Ghost",
+          "albumArtists": [
+            {
+              "id": "artist_708790f0-57b5-5a45-a746-dd36634e8872",
+              "name": "Cassette Ghost",
+              "coverArt": "artist_708790f0-57b5-5a45-a746-dd36634e8872",
+              "albumCount": 1,
+              "userRating": 0,
+              "artistImageUrl": "URL"
+            }
+          ],
+          "displayAlbumArtist": "Cassette Ghost",
+          "contributors": [],
+          "replayGain": {},
+          "averageRating": 0,
+          "userRating": 0,
+          "playerId": 0,
+          "track": 1
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "subsonic-response": {
+    "status": "ok",
+    "version": "1.16.1",
+    "type": "Melodee",
+    "serverVersion": "<volatile>",
+    "openSubsonic": true,
+    "artist": {
+      "id": "artist_89eb2dc1-fd4c-5a57-99e5-480c96b292fc",
+      "name": "Various Artists",
+      "albumCount": 1,
+      "averageRating": 0.0,
+      "coverArt": "artist_89eb2dc1-fd4c-5a57-99e5-480c96b292fc",
+      "artistImageUrl": "http://127.0.0.1:5157/images/artist_89eb2dc1-fd4c-5a57-99e5-480c96b292fc/large",
+      "album": [
+        {
+          "id": "album_97d569aa-9133-5351-b8c5-097cf57f96f9",
+          "album": "Phase Zero Compilation",
+          "title": "Phase Zero Compilation",
+          "name": "Phase Zero Compilation",
+          "coverArt": "album_97d569aa-9133-5351-b8c5-097cf57f96f9",
+          "songCount": 3,
+          "created": "2026-01-08T00:00:00Z",
+          "duration": 7,
+          "playedCount": 0,
+          "artistId": "artist_89eb2dc1-fd4c-5a57-99e5-480c96b292fc",
+          "artist": "Various Artists",
+          "year": 2025,
+          "genres": [
+            "Electronic",
+            "Jazz"
+          ],
+          "genre": "Electronic",
+          "parent": "library_c598e196-db6f-582e-b110-1726c138bd4f"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "name": "os-ping-jsonp",
+  "surface": "opensubsonic",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/rest/ping.view?f=jsonp&callback=phase0Callback&v=1.16.1&c=melodee-rs-phase0",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-length": "135",
+      "content-type": "application/javascript; charset=utf-8",
+      "x-total-count": "0"
+    },
+    "bodyFile": "os-ping-jsonp.txt",
+    "sha256": "626bd0f921c6a318f88835066816823049a3133b5c78c3cb209206919d31a846",
+    "bytes": 138
+  },
+  "normalize": {
+    "maskRegex": [
+      {
+        "pattern": "\"serverVersion\":\"[^\"]*\"",
+        "replace": "\"serverVersion\":\"<volatile>\""
+      }
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

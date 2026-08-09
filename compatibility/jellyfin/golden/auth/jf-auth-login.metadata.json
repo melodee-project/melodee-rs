@@ -1,0 +1,50 @@
+{
+  "name": "jf-auth/login",
+  "surface": "jellyfin",
+  "request": {
+    "method": "POST",
+    "url": "{melodee-origin}/Users/AuthenticateByName",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Content-Type": "application/json"
+    },
+    "jsonTemplate": {
+      "Username": "phase0-fixture",
+      "Pw": "Mel0deeR0cks!"
+    },
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "jf-auth-login.json",
+    "sha256": "8dde956ba111846028a9afbe6c8f85480f5bbabe5f32ed81a4cee442c789ba54",
+    "bytes": 1506
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.AccessToken",
+      "$.SessionInfo.Id",
+      "$.SessionInfo.LastActivityDate",
+      "$.User.LastLoginDate",
+      "$.User.LastActivityDate",
+      "$.User.Configuration",
+      "$.SessionInfo"
+    ],
+    "structureChecks": {
+      "$.AccessToken": "opaqueToken"
+    }
+  },
+  "structureChecks": {
+    "$.AccessToken": {
+      "type": "opaqueToken",
+      "valid": true,
+      "length": 64
+    }
+  },
+  "error": null,
+  "allowFailure": false
+}

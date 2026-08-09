@@ -1,0 +1,33 @@
+{
+  "name": "jf-userstate/favorite-unknown",
+  "surface": "jellyfin",
+  "request": {
+    "method": "POST",
+    "url": "{melodee-origin}/Users/f78448cc82ec5864877c6c6163b00065/FavoriteItems/00000000000000000000000000000000",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "MediaBrowser <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "jf-userstate-favorite-unknown.json",
+    "sha256": "dfbd2b861551b4abf27f731c6eae7132b67d545d4182313d006ad7db911fd91a",
+    "bytes": 148
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.TraceId",
+      "$.traceId"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

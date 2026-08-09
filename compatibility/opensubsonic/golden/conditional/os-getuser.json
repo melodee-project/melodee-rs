@@ -1,0 +1,20 @@
+{
+  "subsonic-response": {
+    "status": "ok",
+    "version": "1.16.1",
+    "type": "Melodee",
+    "serverVersion": "<volatile>",
+    "openSubsonic": true,
+    "user": {
+      "username": "phase0-fixture",
+      "adminRole": true,
+      "email": "phase0-fixture@example.test",
+      "streamRole": true,
+      "scrobblingEnabled": true,
+      "downloadRole": true,
+      "shareRole": true,
+      "jukeboxRole": true,
+      "avatarLastChanged": "<volatile>"
+    }
+  }
+}

@@ -1,0 +1,215 @@
+{
+  "slug": "corrupt-audio",
+  "description": "Truncated MP3 (first 4 KiB of a longer encode).",
+  "expected": {
+    "behavior": "skipped or invalid song"
+  },
+  "input": {
+    "files": [
+      "01 Truncated.mp3",
+      "02 Second Wave.mp3",
+      "03 Third Echo.mp3"
+    ],
+    "sizes": {
+      "03 Third Echo.mp3": 55987,
+      "02 Second Wave.mp3": 52853,
+      "01 Truncated.mp3": 4096
+    },
+    "sha256": {
+      "03 Third Echo.mp3": "81ff6675608dc8ee9fabba244a5738780131e6f0c5cc50aa7ede216d534fe164",
+      "02 Second Wave.mp3": "5691e0a6b3c82580a936fe9563fe4cefc1309f52fc8237369d09359b00f9c776",
+      "01 Truncated.mp3": "545584bcf8014adc557a48016cf87d0a27a877461aaebf4cda7f9583908f33d7"
+    }
+  },
+  "extraction": {
+    "extractions": [
+      {
+        "file": "01 Truncated.mp3",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {},
+        "mediaAudios": {},
+        "imageCount": 0,
+        "crcHash": null
+      },
+      {
+        "file": "02 Second Wave.mp3",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {
+          "Genre": "Ambient",
+          "DiscNumber": 1,
+          "Bpm": 0,
+          "OrigAlbumYear": 2021,
+          "AlbumDate": "2021-01-01T00:00:00.0000000Z",
+          "Date": "2021-01-01T00:00:00Z",
+          "Encoder": "Lavf62.12.102",
+          "RecordingYear": 2021,
+          "DiscTotal": 1,
+          "AlbumArtist": "Corpus Artist",
+          "Title": "Second Wave",
+          "TrackNumber": 2,
+          "Album": "Corrupt Path"
+        },
+        "mediaAudios": {
+          "BitRate": 192,
+          "BitDepth": -1,
+          "SampleRate": 44100,
+          "IsVbr": false,
+          "Duration": 2,
+          "DurationMs": 2194.2083333333335,
+          "CodecLongName": "MPEG Audio (Layer III)",
+          "Channels": "Mono (1/0.0)",
+          "ChannelLayout": "Mono (1/0.0)",
+          "ChannelsArrangementDescription": "Mono (1/0.0)",
+          "ChannelsArrangementNumberChannels": 1,
+          "AudioDataOffset": 192,
+          "AudioDataSize": 52661
+        },
+        "imageCount": 0,
+        "crcHash": "A6996425"
+      }
+    ]
+  },
+  "pipeline": {
+    "processExitCode": 0,
+    "processSummary": {
+      "Elapsed Time": "00:00:03",
+      "Directories Processed": "1",
+      "Albums Processed": "1",
+      "Valid Albums": "0 (0%)",
+      "New Artists": "1",
+      "New Albums": "1",
+      "New Songs": "2"
+    },
+    "processErrorTail": null,
+    "stagingTree": [
+      {
+        "path": "Corpus Artist - [2021] Corrupt Path/0002 Second Wave.mp3",
+        "size": 52887
+      },
+      {
+        "path": "Corpus Artist - [2021] Corrupt Path/0003 Third Echo.mp3",
+        "size": 56021
+      },
+      {
+        "path": "Corpus Artist - [2021] Corrupt Path/melodee.json",
+        "size": 8353,
+        "sha256": null
+      }
+    ],
+    "albums": [
+      {
+        "directory": "Corpus Artist - [2021] Corrupt Path",
+        "status": "Invalid",
+        "statusReasons": "HasInvalidArtists, HasNoImages, HasLessThanMinimumSongs, HasLessThanMinimumDuration",
+        "albumType": "Album",
+        "validationMessages": [
+          {
+            "message": "Album artist is invalid.",
+            "severity": 2
+          },
+          {
+            "message": "Album does not have cover image.",
+            "severity": 2
+          },
+          {
+            "message": "Album Artist is unknown, will need manual validation.",
+            "severity": 2
+          },
+          {
+            "message": "Album song count is less than the minimum song count.",
+            "severity": 2
+          },
+          {
+            "message": "Album duration is less than the minimum album duration.",
+            "severity": 2
+          }
+        ],
+        "songCount": 2,
+        "songs": [
+          {
+            "fileName": "0002 Second Wave.mp3",
+            "size": 52853,
+            "title": "Second Wave",
+            "songNumber": 1,
+            "mediaNumber": 1,
+            "sortOrder": 2,
+            "crcHash": "A6996425"
+          },
+          {
+            "fileName": "0003 Third Echo.mp3",
+            "size": 55987,
+            "title": "Third Echo",
+            "songNumber": 2,
+            "mediaNumber": 1,
+            "sortOrder": 3,
+            "crcHash": "B62DBD1D"
+          }
+        ],
+        "images": [],
+        "displaySummary": "002 : Corrupt Path"
+      }
+    ],
+    "inboundLeftovers": [
+      {
+        "path": "01 Truncated.mp3",
+        "size": 4096
+      },
+      {
+        "path": "02 Second Wave.mp3",
+        "size": 52853
+      },
+      {
+        "path": "03 Third Echo.mp3",
+        "size": 55987
+      },
+      {
+        "path": "melodee.json",
+        "size": 8020
+      }
+    ],
+    "validations": [
+      {
+        "album": "Corpus Artist - [2021] Corrupt Path",
+        "exitCode": 0,
+        "result": {
+          "data": {
+            "albumStatus": 3,
+            "albumStatusReasons": 50331784,
+            "isValid": false,
+            "messages ": [
+              {
+                "message": "Album artist is  invalid.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album does not have cover  image.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album Artist is unknown, will  need manual validation.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album song  count is less than the minimum song  count.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album duration is less than the  minimum album  duration.",
+                "sortOrder": 0,
+                "severity": 2
+              }
+            ]
+          },
+          "isSuccess": true,
+          "type": 200
+        }
+      }
+    ]
+  }
+}

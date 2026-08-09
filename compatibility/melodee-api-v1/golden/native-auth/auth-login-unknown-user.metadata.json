@@ -12,7 +12,8 @@
     "jsonTemplate": {
       "userName": "phase0-no-such-user",
       "password": "<redacted>"
-    }
+    },
+    "bodyTemplate": null
   },
   "response": {
     "status": 401,

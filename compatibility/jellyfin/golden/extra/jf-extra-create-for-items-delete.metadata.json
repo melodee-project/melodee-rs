@@ -1,0 +1,37 @@
+{
+  "name": "jf-extra/create-for-items-delete",
+  "surface": "jellyfin",
+  "request": {
+    "method": "POST",
+    "url": "{melodee-origin}/Playlists",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Content-Type": "application/json",
+      "Authorization": "MediaBrowser <redacted>"
+    },
+    "jsonTemplate": {
+      "Name": "JF-Items-Delete",
+      "Ids": [],
+      "IsPublic": false
+    },
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "jf-extra-create-for-items-delete.json",
+    "sha256": "efd0afc72156f6ce05d87faecffb8200fad18cee8cd27ed1dc22c8f6f856389b",
+    "bytes": 25
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.Id"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

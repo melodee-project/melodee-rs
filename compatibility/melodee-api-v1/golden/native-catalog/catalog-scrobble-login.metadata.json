@@ -12,7 +12,8 @@
     "jsonTemplate": {
       "userName": "phase0-fixture",
       "password": "<redacted>"
-    }
+    },
+    "bodyTemplate": null
   },
   "response": {
     "status": 200,

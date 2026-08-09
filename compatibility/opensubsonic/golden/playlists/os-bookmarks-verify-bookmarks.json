@@ -1,0 +1,83 @@
+{
+  "subsonic-response": {
+    "status": "ok",
+    "version": "1.16.1",
+    "type": "Melodee",
+    "serverVersion": "<volatile>",
+    "openSubsonic": true,
+    "bookmarks": {
+      "bookmark": [
+        {
+          "position": 42000,
+          "username": "phase0-fixture",
+          "comment": "probe",
+          "created": "<volatile>",
+          "changed": "<volatile>",
+          "entry": [
+            {
+              "id": "song_2b8eab4b-235d-5892-99f8-c0f5f54e8ab4",
+              "parent": "album_69d97699-74c5-5403-878f-87f42d9d9fbb",
+              "isDir": false,
+              "title": "Solar Wind",
+              "album": "Northern Lights",
+              "artist": "Aurora Fields",
+              "song": 1,
+              "year": 2021,
+              "coverArt": "song_2b8eab4b-235d-5892-99f8-c0f5f54e8ab4",
+              "size": 220544,
+              "contentType": "audio/wav",
+              "suffix": ".wav",
+              "duration": 2,
+              "bitRate": 1411,
+              "bitDepth": 16,
+              "samplingRate": 44100,
+              "path": "Northern Lights/01 - Solar Wind.wav",
+              "playCount": 5,
+              "discNumber": 1,
+              "created": "2026-01-01T00:01:01Z",
+              "albumId": "album_69d97699-74c5-5403-878f-87f42d9d9fbb",
+              "artistId": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+              "type": "music",
+              "mediaType": "song",
+              "isVideo": false,
+              "bpm": 92,
+              "sortName": "Solar Wind",
+              "genres": [
+                {
+                  "value": "Ambient",
+                  "songCount": 0,
+                  "albumCount": 0
+                },
+                {
+                  "value": "Electronic",
+                  "songCount": 0,
+                  "albumCount": 0
+                }
+              ],
+              "artists": [],
+              "displayArtist": "Aurora Fields",
+              "albumArtists": [
+                {
+                  "id": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+                  "name": "Aurora Fields",
+                  "coverArt": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+                  "albumCount": 1,
+                  "userRating": 0,
+                  "artistImageUrl": "URL",
+                  "sortName": "Aurora Fields"
+                }
+              ],
+              "displayAlbumArtist": "Aurora Fields",
+              "contributors": [],
+              "replayGain": {},
+              "averageRating": 0,
+              "playerId": 0,
+              "track": 1,
+              "genre": "Ambient"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

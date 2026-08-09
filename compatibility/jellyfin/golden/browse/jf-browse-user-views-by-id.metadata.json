@@ -1,0 +1,28 @@
+{
+  "name": "jf-browse/user-views-by-id",
+  "surface": "jellyfin",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/Users/f78448cc82ec5864877c6c6163b00065/Views",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "MediaBrowser <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "jf-browse-user-views-by-id.json",
+    "sha256": "9bd999c49e0763bf8f2fdbb93039ac4b6942f53683ee41eded596f10b18d8f95",
+    "bytes": 2764
+  },
+  "normalize": {},
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

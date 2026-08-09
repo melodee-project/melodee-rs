@@ -1,0 +1,259 @@
+{
+  "slug": "high-samplerate",
+  "description": "96 kHz FLAC source.",
+  "expected": {
+    "conversion": "resampled to conversion.samplingRate (48000)"
+  },
+  "input": {
+    "files": [
+      "01 First Light.flac",
+      "02 Second Wave.flac",
+      "03 Third Echo.flac"
+    ],
+    "sizes": {
+      "03 Third Echo.flac": 66372,
+      "02 Second Wave.flac": 62800,
+      "01 First Light.flac": 59871
+    },
+    "sha256": {
+      "03 Third Echo.flac": "093e6c17930f558e4ce698b39fde57a19ab1559a9634cf0c62f28f716f441521",
+      "02 Second Wave.flac": "71d65f9e1c1154db82d6d710b71523e9e320d4227a8dc06229b7db0998414add",
+      "01 First Light.flac": "2550449c5d5b40f1ce69f96beb9b7300b0042875c24b3129733719785857996a"
+    }
+  },
+  "extraction": {
+    "extractions": [
+      {
+        "file": "01 First Light.flac",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {
+          "Genre": "Ambient",
+          "DiscNumber": 1,
+          "Bpm": 0,
+          "OrigAlbumYear": 2021,
+          "AlbumDate": "2021-01-01T00:00:00.0000000Z",
+          "Date": "2021-01-01T00:00:00Z",
+          "Encoder": "Lavf62.12.102",
+          "RecordingYear": 2021,
+          "DiscTotal": 1,
+          "AlbumArtist": "Corpus Artist",
+          "Title": "First Light",
+          "TrackNumber": 1,
+          "Album": "HiRes Path"
+        },
+        "mediaAudios": {
+          "BitRate": 206,
+          "BitDepth": 16,
+          "SampleRate": 96000,
+          "IsVbr": false,
+          "Duration": 2,
+          "DurationMs": 2000,
+          "CodecLongName": "Free Lossless Audio Codec",
+          "Channels": "Mono (1/0.0)",
+          "ChannelLayout": "Mono (1/0.0)",
+          "ChannelsArrangementDescription": "Mono (1/0.0)",
+          "ChannelsArrangementNumberChannels": 1,
+          "AudioDataOffset": 8431,
+          "AudioDataSize": 51440
+        },
+        "imageCount": 0,
+        "crcHash": "15AB175D"
+      },
+      {
+        "file": "02 Second Wave.flac",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {
+          "Genre": "Ambient",
+          "DiscNumber": 1,
+          "Bpm": 0,
+          "OrigAlbumYear": 2021,
+          "AlbumDate": "2021-01-01T00:00:00.0000000Z",
+          "Date": "2021-01-01T00:00:00Z",
+          "Encoder": "Lavf62.12.102",
+          "RecordingYear": 2021,
+          "DiscTotal": 1,
+          "AlbumArtist": "Corpus Artist",
+          "Title": "Second Wave",
+          "TrackNumber": 2,
+          "Album": "HiRes Path"
+        },
+        "mediaAudios": {
+          "BitRate": 204,
+          "BitDepth": 16,
+          "SampleRate": 96000,
+          "IsVbr": false,
+          "Duration": 2,
+          "DurationMs": 2130,
+          "CodecLongName": "Free Lossless Audio Codec",
+          "Channels": "Mono (1/0.0)",
+          "ChannelLayout": "Mono (1/0.0)",
+          "ChannelsArrangementDescription": "Mono (1/0.0)",
+          "ChannelsArrangementNumberChannels": 1,
+          "AudioDataOffset": 8431,
+          "AudioDataSize": 54369
+        },
+        "imageCount": 0,
+        "crcHash": "7B621D7B"
+      }
+    ]
+  },
+  "pipeline": {
+    "processExitCode": 0,
+    "processSummary": {
+      "Elapsed Time": "00:00:04",
+      "Directories Processed": "1",
+      "Albums Processed": "1",
+      "Valid Albums": "0 (0%)",
+      "New Artists": "1",
+      "New Albums": "1",
+      "New Songs": "3"
+    },
+    "processErrorTail": null,
+    "stagingTree": [
+      {
+        "path": "Corpus Artist - [2021] Hires Path/0001 First Light.mp3",
+        "size": 82784
+      },
+      {
+        "path": "Corpus Artist - [2021] Hires Path/0002 Second Wave.mp3",
+        "size": 87584
+      },
+      {
+        "path": "Corpus Artist - [2021] Hires Path/0003 Third Echo.mp3",
+        "size": 93343
+      },
+      {
+        "path": "Corpus Artist - [2021] Hires Path/melodee.json",
+        "size": 10935,
+        "sha256": null
+      }
+    ],
+    "albums": [
+      {
+        "directory": "Corpus Artist - [2021] Hires Path",
+        "status": "Invalid",
+        "statusReasons": "HasInvalidArtists, HasNoImages, HasLessThanMinimumDuration",
+        "albumType": "Album",
+        "validationMessages": [
+          {
+            "message": "Album artist is invalid.",
+            "severity": 2
+          },
+          {
+            "message": "Album does not have cover image.",
+            "severity": 2
+          },
+          {
+            "message": "Album Artist is unknown, will need manual validation.",
+            "severity": 2
+          },
+          {
+            "message": "Album duration is less than the minimum album duration.",
+            "severity": 2
+          }
+        ],
+        "songCount": 3,
+        "songs": [
+          {
+            "fileName": "0001 First Light.mp3",
+            "size": 82750,
+            "title": "First Light",
+            "songNumber": 1,
+            "mediaNumber": 1,
+            "sortOrder": 1,
+            "crcHash": "415B8345"
+          },
+          {
+            "fileName": "0002 Second Wave.mp3",
+            "size": 87550,
+            "title": "Second Wave",
+            "songNumber": 2,
+            "mediaNumber": 1,
+            "sortOrder": 2,
+            "crcHash": "6602FEDE"
+          },
+          {
+            "fileName": "0003 Third Echo.mp3",
+            "size": 93309,
+            "title": "Third Echo",
+            "songNumber": 3,
+            "mediaNumber": 1,
+            "sortOrder": 3,
+            "crcHash": "1D9FD8B0"
+          }
+        ],
+        "images": [],
+        "displaySummary": "003 : HiRes Path"
+      }
+    ],
+    "inboundLeftovers": [
+      {
+        "path": "01 First Light.flac._converted",
+        "size": 59871
+      },
+      {
+        "path": "01 First Light.mp3",
+        "size": 82750
+      },
+      {
+        "path": "02 Second Wave.flac._converted",
+        "size": 62800
+      },
+      {
+        "path": "02 Second Wave.mp3",
+        "size": 87550
+      },
+      {
+        "path": "03 Third Echo.flac._converted",
+        "size": 66372
+      },
+      {
+        "path": "03 Third Echo.mp3",
+        "size": 93309
+      },
+      {
+        "path": "melodee.json",
+        "size": 10373
+      }
+    ],
+    "validations": [
+      {
+        "album": "Corpus Artist - [2021] Hires Path",
+        "exitCode": 0,
+        "result": {
+          "data": {
+            "albumStatus": 3,
+            "albumStatusReasons": 33554568,
+            "isValid": false,
+            "messages ": [
+              {
+                "message": "Album artist is  invalid.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album does not have cover  image.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album Artist is unknown, will  need manual validation.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album duration  is less than the minimum album  duration.",
+                "sortOrder": 0,
+                "severity": 2
+              }
+            ]
+          },
+          "isSuccess": true,
+          "type": 200
+        }
+      }
+    ]
+  }
+}

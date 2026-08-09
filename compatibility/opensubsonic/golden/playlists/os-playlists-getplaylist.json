@@ -1,0 +1,263 @@
+{
+  "subsonic-response": {
+    "status": "ok",
+    "version": "1.16.1",
+    "type": "Melodee",
+    "serverVersion": "<volatile>",
+    "openSubsonic": true,
+    "playlist": {
+      "id": "playlist_b16ae181-fc40-5cd5-ba7b-0cf9f5b4c89d",
+      "name": "Phase0 Mix",
+      "comment": "Synthetic public playlist spanning multiple Releases.",
+      "owner": "phase0-fixture",
+      "public": true,
+      "songCount": 4,
+      "duration": 11,
+      "created": "<volatile>",
+      "changed": "<volatile>",
+      "coverArt": "playlist_b16ae181-fc40-5cd5-ba7b-0cf9f5b4c89d",
+      "allowedUsers": [],
+      "entry": [
+        {
+          "id": "song_2b8eab4b-235d-5892-99f8-c0f5f54e8ab4",
+          "parent": "album_69d97699-74c5-5403-878f-87f42d9d9fbb",
+          "isDir": false,
+          "title": "Solar Wind",
+          "album": "Northern Lights",
+          "artist": "Aurora Fields",
+          "song": 1,
+          "year": 2021,
+          "coverArt": "song_2b8eab4b-235d-5892-99f8-c0f5f54e8ab4",
+          "size": 220544,
+          "contentType": "audio/wav",
+          "suffix": ".wav",
+          "duration": 2,
+          "bitRate": 1411,
+          "bitDepth": 16,
+          "samplingRate": 44100,
+          "path": "Northern Lights/01 - Solar Wind.wav",
+          "playCount": 5,
+          "discNumber": 1,
+          "created": "2026-01-01T00:01:01Z",
+          "albumId": "album_69d97699-74c5-5403-878f-87f42d9d9fbb",
+          "artistId": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+          "type": "music",
+          "mediaType": "song",
+          "isVideo": false,
+          "bpm": 92,
+          "sortName": "Solar Wind",
+          "genres": [
+            {
+              "value": "Ambient",
+              "songCount": 0,
+              "albumCount": 0
+            },
+            {
+              "value": "Electronic",
+              "songCount": 0,
+              "albumCount": 0
+            }
+          ],
+          "artists": [],
+          "displayArtist": "Aurora Fields",
+          "albumArtists": [
+            {
+              "id": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+              "name": "Aurora Fields",
+              "coverArt": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+              "albumCount": 1,
+              "userRating": 0,
+              "artistImageUrl": "URL",
+              "sortName": "Aurora Fields"
+            }
+          ],
+          "displayAlbumArtist": "Aurora Fields",
+          "contributors": [],
+          "replayGain": {},
+          "averageRating": 0,
+          "playerId": 0,
+          "track": 1,
+          "genre": "Ambient"
+        },
+        {
+          "id": "song_828f864f-0d5a-572e-a6c4-69e96fa6983f",
+          "parent": "album_97d569aa-9133-5351-b8c5-097cf57f96f9",
+          "isDir": false,
+          "title": "Falling (feat. Guest Vocalist)",
+          "album": "Phase Zero Compilation",
+          "artist": "Various Artists",
+          "song": 1,
+          "year": 2025,
+          "coverArt": "song_828f864f-0d5a-572e-a6c4-69e96fa6983f",
+          "size": 247002,
+          "contentType": "audio/wav",
+          "suffix": ".wav",
+          "duration": 3,
+          "bitRate": 1411,
+          "bitDepth": 16,
+          "samplingRate": 44100,
+          "path": "Phase Zero Compilation/01 - Falling (feat. Guest Vocalist).wav",
+          "playCount": 0,
+          "discNumber": 1,
+          "created": "2026-01-01T00:07:07Z",
+          "albumId": "album_97d569aa-9133-5351-b8c5-097cf57f96f9",
+          "artistId": "artist_89eb2dc1-fd4c-5a57-99e5-480c96b292fc",
+          "type": "music",
+          "mediaType": "song",
+          "isVideo": false,
+          "bpm": 97,
+          "sortName": "Falling (feat. Guest Vocalist)",
+          "genres": [
+            {
+              "value": "Electronic",
+              "songCount": 0,
+              "albumCount": 0
+            },
+            {
+              "value": "Jazz",
+              "songCount": 0,
+              "albumCount": 0
+            }
+          ],
+          "artists": [],
+          "displayArtist": "Various Artists",
+          "albumArtists": [
+            {
+              "id": "artist_89eb2dc1-fd4c-5a57-99e5-480c96b292fc",
+              "name": "Various Artists",
+              "coverArt": "artist_89eb2dc1-fd4c-5a57-99e5-480c96b292fc",
+              "albumCount": 1,
+              "userRating": 0,
+              "artistImageUrl": "URL",
+              "sortName": "Various Artists"
+            }
+          ],
+          "displayAlbumArtist": "Various Artists",
+          "contributors": [],
+          "replayGain": {},
+          "averageRating": 0,
+          "playerId": 0,
+          "track": 1,
+          "genre": "Electronic"
+        },
+        {
+          "id": "song_b3297a8f-5e2b-5ade-98ea-f899d38059e0",
+          "parent": "album_7bbfff2a-36f2-5739-9a7a-e5b0d34af3b0",
+          "isDir": false,
+          "title": "Neon 東京",
+          "album": "Ünïcode Rëlease 東京",
+          "artist": "Sæglópur 日本",
+          "song": 1,
+          "year": 2024,
+          "coverArt": "song_b3297a8f-5e2b-5ade-98ea-f899d38059e0",
+          "size": 229364,
+          "contentType": "audio/wav",
+          "suffix": ".wav",
+          "duration": 3,
+          "bitRate": 1411,
+          "bitDepth": 16,
+          "samplingRate": 44100,
+          "path": "Ünïcode Rëlease 東京/01 - Neon 東京.wav",
+          "playCount": 0,
+          "discNumber": 1,
+          "created": "2026-01-01T00:13:13Z",
+          "albumId": "album_7bbfff2a-36f2-5739-9a7a-e5b0d34af3b0",
+          "artistId": "artist_8bf87c33-f669-5a85-a315-654f79fb895b",
+          "type": "music",
+          "mediaType": "song",
+          "isVideo": false,
+          "bpm": 132,
+          "sortName": "Neon 東京",
+          "genres": [
+            {
+              "value": "Post-Rock",
+              "songCount": 0,
+              "albumCount": 0
+            },
+            {
+              "value": "環境音楽",
+              "songCount": 0,
+              "albumCount": 0
+            }
+          ],
+          "artists": [],
+          "displayArtist": "Sæglópur 日本",
+          "albumArtists": [
+            {
+              "id": "artist_8bf87c33-f669-5a85-a315-654f79fb895b",
+              "name": "Sæglópur 日本",
+              "coverArt": "artist_8bf87c33-f669-5a85-a315-654f79fb895b",
+              "albumCount": 1,
+              "userRating": 0,
+              "artistImageUrl": "URL"
+            }
+          ],
+          "displayAlbumArtist": "Sæglópur 日本",
+          "contributors": [],
+          "replayGain": {},
+          "averageRating": 0,
+          "playerId": 0,
+          "track": 1,
+          "genre": "Post-Rock"
+        },
+        {
+          "id": "song_a39f05c4-2783-53c1-aa3c-e4e9d6a6f0a3",
+          "parent": "album_645680d3-704a-5b83-a734-42a3fa88c3ed",
+          "isDir": false,
+          "title": "Coda",
+          "album": "Anthology of Echoes",
+          "artist": "The Obsidian Collective",
+          "song": 201,
+          "year": 2018,
+          "coverArt": "song_a39f05c4-2783-53c1-aa3c-e4e9d6a6f0a3",
+          "size": 238184,
+          "contentType": "audio/wav",
+          "suffix": ".wav",
+          "duration": 3,
+          "bitRate": 1411,
+          "bitDepth": 16,
+          "samplingRate": 44100,
+          "path": "Anthology of Echoes/201 - Coda.wav",
+          "playCount": 9,
+          "discNumber": 1,
+          "created": "2026-01-01T00:17:17Z",
+          "albumId": "album_645680d3-704a-5b83-a734-42a3fa88c3ed",
+          "artistId": "artist_0bdebd7d-8597-5891-b6e4-88f7762370b9",
+          "type": "music",
+          "mediaType": "song",
+          "isVideo": false,
+          "bpm": 58,
+          "sortName": "Coda",
+          "genres": [
+            {
+              "value": "Classical",
+              "songCount": 0,
+              "albumCount": 0
+            }
+          ],
+          "artists": [],
+          "displayArtist": "The Obsidian Collective",
+          "albumArtists": [
+            {
+              "id": "artist_0bdebd7d-8597-5891-b6e4-88f7762370b9",
+              "name": "The Obsidian Collective",
+              "coverArt": "artist_0bdebd7d-8597-5891-b6e4-88f7762370b9",
+              "albumCount": 1,
+              "userRating": 0,
+              "artistImageUrl": "URL",
+              "sortName": "Obsidian Collective, The"
+            }
+          ],
+          "displayAlbumArtist": "The Obsidian Collective",
+          "contributors": [],
+          "replayGain": {},
+          "averageRating": 0,
+          "userRating": 4,
+          "playerId": 0,
+          "track": 201,
+          "genre": "Classical"
+        }
+      ]
+    }
+  }
+}

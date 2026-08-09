@@ -1,0 +1,235 @@
+{
+  "slug": "missing-track-number",
+  "description": "One song without TRCK.",
+  "expected": {
+    "validation": "Song.IsValid false (SongNumber 0)"
+  },
+  "input": {
+    "files": [
+      "01 First Light.mp3",
+      "Unknown Position.mp3"
+    ],
+    "sizes": {
+      "Unknown Position.mp3": 49693,
+      "01 First Light.mp3": 49722
+    },
+    "sha256": {
+      "Unknown Position.mp3": "dab8019fe1f12fb7b0fc7a847f9b244a42e8c5b420252cb788f09fdb9598993a",
+      "01 First Light.mp3": "b52c38e0306dc18cdd12ff02462ac62b6f86196e17c55fbdc4bd59ec02d0c6b5"
+    }
+  },
+  "extraction": {
+    "extractions": [
+      {
+        "file": "01 First Light.mp3",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {
+          "Genre": "Ambient",
+          "DiscNumber": 1,
+          "Bpm": 0,
+          "OrigAlbumYear": 2021,
+          "AlbumDate": "2021-01-01T00:00:00.0000000Z",
+          "Date": "2021-01-01T00:00:00Z",
+          "Encoder": "Lavf62.12.102",
+          "RecordingYear": 2021,
+          "DiscTotal": 1,
+          "AlbumArtist": "Corpus Artist",
+          "Title": "First Light",
+          "TrackNumber": 1,
+          "Album": "Numberless Path"
+        },
+        "mediaAudios": {
+          "BitRate": 192,
+          "BitDepth": -1,
+          "SampleRate": 44100,
+          "IsVbr": false,
+          "Duration": 2,
+          "DurationMs": 2063.625,
+          "CodecLongName": "MPEG Audio (Layer III)",
+          "Channels": "Mono (1/0.0)",
+          "ChannelLayout": "Mono (1/0.0)",
+          "ChannelsArrangementDescription": "Mono (1/0.0)",
+          "ChannelsArrangementNumberChannels": 1,
+          "AudioDataOffset": 195,
+          "AudioDataSize": 49527
+        },
+        "imageCount": 0,
+        "crcHash": "CB9E5B8D"
+      },
+      {
+        "file": "Unknown Position.mp3",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {
+          "DiscNumber": 1,
+          "Bpm": 0,
+          "OrigAlbumYear": 2021,
+          "AlbumDate": "2021-01-01T00:00:00.0000000Z",
+          "Date": "2021-01-01T00:00:00Z",
+          "Encoder": "Lavf62.12.102",
+          "RecordingYear": 2021,
+          "DiscTotal": 1,
+          "AlbumArtist": "Corpus Artist",
+          "Title": "Unknown Position",
+          "TrackNumber": 0,
+          "Album": "Numberless Path"
+        },
+        "mediaAudios": {
+          "BitRate": 192,
+          "BitDepth": -1,
+          "SampleRate": 44100,
+          "IsVbr": false,
+          "Duration": 2,
+          "DurationMs": 2063.625,
+          "CodecLongName": "MPEG Audio (Layer III)",
+          "Channels": "Mono (1/0.0)",
+          "ChannelLayout": "Mono (1/0.0)",
+          "ChannelsArrangementDescription": "Mono (1/0.0)",
+          "ChannelsArrangementNumberChannels": 1,
+          "AudioDataOffset": 166,
+          "AudioDataSize": 49527
+        },
+        "imageCount": 0,
+        "crcHash": "013612F3"
+      }
+    ]
+  },
+  "pipeline": {
+    "processExitCode": 0,
+    "processSummary": {
+      "Elapsed Time": "00:00:03",
+      "Directories Processed": "1",
+      "Albums Processed": "1",
+      "Valid Albums": "0 (0%)",
+      "New Artists": "1",
+      "New Albums": "1",
+      "New Songs": "2"
+    },
+    "processErrorTail": null,
+    "stagingTree": [
+      {
+        "path": "Corpus Artist - [2021] Numberless Path/0000 Unknown Position.mp3",
+        "size": 49742
+      },
+      {
+        "path": "Corpus Artist - [2021] Numberless Path/0001 First Light.mp3",
+        "size": 49756
+      },
+      {
+        "path": "Corpus Artist - [2021] Numberless Path/melodee.json",
+        "size": 8231,
+        "sha256": null
+      }
+    ],
+    "albums": [
+      {
+        "directory": "Corpus Artist - [2021] Numberless Path",
+        "status": "Invalid",
+        "statusReasons": "HasInvalidArtists, HasNoImages, HasLessThanMinimumSongs, HasLessThanMinimumDuration",
+        "albumType": "Album",
+        "validationMessages": [
+          {
+            "message": "Album artist is invalid.",
+            "severity": 2
+          },
+          {
+            "message": "Album does not have cover image.",
+            "severity": 2
+          },
+          {
+            "message": "Album Artist is unknown, will need manual validation.",
+            "severity": 2
+          },
+          {
+            "message": "Album song count is less than the minimum song count.",
+            "severity": 2
+          },
+          {
+            "message": "Album duration is less than the minimum album duration.",
+            "severity": 2
+          }
+        ],
+        "songCount": 2,
+        "songs": [
+          {
+            "fileName": "0000 Unknown Position.mp3",
+            "size": 49693,
+            "title": "Unknown Position",
+            "songNumber": 1,
+            "mediaNumber": 1,
+            "sortOrder": 0,
+            "crcHash": "013612F3"
+          },
+          {
+            "fileName": "0001 First Light.mp3",
+            "size": 49722,
+            "title": "First Light",
+            "songNumber": 2,
+            "mediaNumber": 1,
+            "sortOrder": 1,
+            "crcHash": "CB9E5B8D"
+          }
+        ],
+        "images": [],
+        "displaySummary": "002 : Numberless Path"
+      }
+    ],
+    "inboundLeftovers": [
+      {
+        "path": "01 First Light.mp3",
+        "size": 49722
+      },
+      {
+        "path": "Unknown Position.mp3",
+        "size": 49693
+      },
+      {
+        "path": "melodee.json",
+        "size": 8010
+      }
+    ],
+    "validations": [
+      {
+        "album": "Corpus Artist - [2021] Numberless Path",
+        "exitCode": 0,
+        "result": {
+          "data": {
+            "albumStatus": 3,
+            "albumStatusReasons": 50331784,
+            "isValid": false,
+            "messages ": [
+              {
+                "message": "Album artist is  invalid.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album does not have cover  image.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album Artist is unknown, will  need manual validation.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album song  count is less than the minimum song  count.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album duration is less than the  minimum album  duration.",
+                "sortOrder": 0,
+                "severity": 2
+              }
+            ]
+          },
+          "isSuccess": true,
+          "type": 200
+        }
+      }
+    ]
+  }
+}

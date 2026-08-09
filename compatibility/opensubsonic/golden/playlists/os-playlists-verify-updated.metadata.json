@@ -1,0 +1,37 @@
+{
+  "name": "os-playlists/verify-updated",
+  "surface": "opensubsonic",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/rest/getPlaylist.view?f=json&v=1.16.1&c=phase0&id=playlist_97b60b28-5379-5790-af01-ed8b6aa27d7f&u=phase0-fixture&t=%3Credacted%3E&s=%3Credacted%3E",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-length": "2667",
+      "content-type": "application/json; charset=utf-8",
+      "x-total-count": "0"
+    },
+    "bodyFile": "os-playlists-verify-updated.json",
+    "sha256": "074bbaa0e42c9f69483c8eef9e07a78606325816207332ded1d4d21fc8064650",
+    "bytes": 4106
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.subsonic-response.serverVersion",
+      "$.subsonic-response.playlist.created",
+      "$.subsonic-response.playlist.changed"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

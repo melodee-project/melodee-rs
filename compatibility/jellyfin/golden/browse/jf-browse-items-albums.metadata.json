@@ -1,0 +1,28 @@
+{
+  "name": "jf-browse/items-albums",
+  "surface": "jellyfin",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/Items?includeItemTypes=MusicAlbum&startIndex=0&limit=5",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "MediaBrowser <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "jf-browse-items-albums.json",
+    "sha256": "0a17ff2d4b0572b5b819c4614932ed9ced9191620adee7e35a2d811d3d97d90f",
+    "bytes": 8750
+  },
+  "normalize": {},
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

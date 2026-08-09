@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Melodee - A modern music library management system for organizing, streaming, and discovering your music collection. Features include music tagging, album artwork, playlist management, and multi-format audio support.">
+    <meta name="keywords" content="music library, audio management, music streaming, music organizer, media player, music collection">
+    <meta name="author" content="Melodee">
+    <base href="/">
+
+    
+    <link rel="preload" href="app.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="app.css"></noscript>
+
+    <link rel="stylesheet" href="server.styles.css">
+    <link href="/_content/PSC.Blazor.Components.MarkdownEditor/css/easymde.min.css" rel="stylesheet">
+    <link rel="icon" type="image/ico" href="favicon.ico">
+    <title>Melodee - Music Library Management System</title><!--Blazor:<volatile>--><link rel="preload" href="_content/Radzen.Blazor/fonts/MaterialSymbolsOutlined.woff2" as="font" type="font/woff2" crossorigin="anonymous" /><link id="radzen-theme-link" rel="stylesheet" href="_content/Radzen.Blazor/css/dark-base.css?v=11.1.4.0" /><!--Blazor:<volatile>--><!--Blazor:<volatile>--><!--Blazor:<volatile>--></head>
+
+<body><!--Blazor:<volatile>-->
+<div aria-live="polite" class="rz-notification"></div>
+
+
+
+
+<div aria-live="polite" class="rz-notification"></div>
+
+
+
+<style b-pt5h144vmy>
+    .login-container {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+        background-color: var(--rz-body-background-color, var(--rz-base-background-color));
+    }
+    
+    .login-card {
+        width: 100%;
+        max-width: 420px;
+        background: var(--rz-base-background-color);
+        border-radius: 16px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        overflow: hidden;
+    }
+    
+    .login-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 2.5rem 2rem;
+        text-align: center;
+    }
+    
+    .login-logo {
+        width: 80px;
+        height: 80px;
+        margin-bottom: 1rem;
+        filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.2));
+    }
+    
+    .login-title {
+        color: white;
+        font-size: 1.75rem;
+        font-weight: 600;
+        margin: 0;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    
+    .login-subtitle {
+        color: rgba(255, 255, 255, 0.85);
+        font-size: 0.9rem;
+        margin-top: 0.5rem;
+    }
+    
+    .login-body {
+        padding: 2rem;
+    }
+    
+    .login-form-field {
+        margin-bottom: 1.25rem;
+    }
+    
+    .login-form-field label {
+        display: block;
+        font-size: 0.875rem;
+        font-weight: 500;
+        margin-bottom: 0.5rem;
+        color: var(--rz-text-color);
+    }
+    
+    .login-form-field .rz-textbox,
+    .login-form-field .rz-password {
+        width: 100%;
+        border-radius: 8px;
+    }
+    
+    .login-btn-primary {
+        width: 100%;
+        height: 48px;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 1rem;
+        margin-top: 0.5rem;
+    }
+    
+    .login-divider {
+        display: flex;
+        align-items: center;
+        margin: 1.5rem 0;
+        color: var(--rz-text-disabled-color);
+        font-size: 0.8rem;
+    }
+    
+    .login-divider::before,
+    .login-divider::after {
+        content: "";
+        flex: 1;
+        height: 1px;
+        background: var(--rz-border-color);
+    }
+    
+    .login-divider span {
+        padding: 0 1rem;
+    }
+    
+    .login-google-btn {
+        width: 100%;
+        height: 48px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        font-weight: 500;
+    }
+    
+    .login-footer {
+        text-align: center;
+        padding: 1.5rem 2rem;
+        background: var(--rz-base-background-color);
+        border-top: 1px solid var(--rz-border-color);
+    }
+    
+    .login-footer-text {
+        color: var(--rz-text-color);
+        font-size: 0.9rem;
+    }
+    
+    .login-footer-link {
+        font-weight: 600;
+        margin-left: 0.25rem;
+    }
+    
+    .login-links {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 0.5rem;
+        margin-bottom: 1rem;
+    }
+    
+    .login-links a {
+        font-size: 0.875rem;
+        color: var(--rz-primary);
+    }
+    
+    .language-selector-wrapper {
+        margin-top: 1rem;
+    }
+</style><div class="login-container" b-pt5h144vmy><div aria-valuemax="100" aria-valuemin="0" role="progressbar" class="rz-progressbar-circular rz-progressbar-indeterminate rz-progressbar-primary rz-progressbar-circular-lg" id="<volatile>"><svg class="rz-progressbar-circular-viewbox" viewBox="-19 -19 38 38"><circle class="rz-progressbar-circular-background" r="15.91549" fill="none"></circle>
+            <circle class="rz-progressbar-circular-value" r="15.91549" fill="none" stroke-dashoffset="0"></circle></svg></div></div>
+        <!--Blazor:<volatile>-->
+
+
+<script src="_framework/blazor.web.js"></script>
+<script defer>
+    window.getUserAgent = () => {
+        return navigator.userAgent;
+    };
+
+    function openInNewTab(url) {
+        window.open(url, '_blank');
+    }
+
+    async function downloadFileFromStream(fileName, contentStreamReference) {
+        const arrayBuffer = await contentStreamReference.arrayBuffer();
+        const blob = new Blob([arrayBuffer]);
+        const url = URL.createObjectURL(blob);
+        const anchorElement = document.createElement('a');
+        anchorElement.href = url;
+        anchorElement.download = fileName ?? '';
+        anchorElement.click();
+        anchorElement.remove();
+        URL.revokeObjectURL(url);
+    }
+</script>
+<script src="_content/Radzen.Blazor/Radzen.Blazor.js?v=11.1.4.0" defer></script>
+<script src="/_content/PSC.Blazor.Components.MarkdownEditor/js/easymde.min.js" defer></script>
+<script src="/_content/PSC.Blazor.Components.MarkdownEditor/js/markdownEditor.js" defer></script>
+<script src="js/auth.js" defer></script>
+<script src="js/googleAuth.js" defer></script>
+<script src="js/themeManager.js" defer></script>
+<script src="js/downloadFile.js" defer></script>
+<script src="js/codeEditor.js" defer></script>
+<script src="js/monacoEditor.js" defer></script></body></html><!--Blazor-Server-Component-State:<volatile>-->

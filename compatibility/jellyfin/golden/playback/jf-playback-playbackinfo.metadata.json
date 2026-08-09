@@ -1,0 +1,32 @@
+{
+  "name": "jf-playback/playbackinfo",
+  "surface": "jellyfin",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/Items/2b8eab4b235d589299f8c0f5f54e8ab4/PlaybackInfo",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "MediaBrowser <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "jf-playback-playbackinfo.json",
+    "sha256": "57aea851c60d27352965a4c9888d89e4c0b7d9ecf020c3dfa4a4d3a73a03da2c",
+    "bytes": 1555
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.PlaySessionId"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

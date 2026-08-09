@@ -1,0 +1,469 @@
+[
+  {
+    "schemaVersion": 2,
+    "name": "os-stream-full",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/stream.view?f=json&v=1.16.1&c=phase0&id=song_2b8eab4b-235d-5892-99f8-c0f5f54e8ab4&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ],
+      "dropHeaders": [
+        "etag",
+        "last-modified"
+      ]
+    },
+    "notes": "Direct stream: 200, Accept-Ranges bytes, Content-Type audio/wav, Content-Length 220544, Content-Duration header, no-store cache headers, ETag (dropped at compare)."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-stream-head",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/stream.view?f=json&v=1.16.1&c=phase0&id=song_2b8eab4b-235d-5892-99f8-c0f5f54e8ab4&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ],
+      "dropHeaders": [
+        "etag",
+        "last-modified"
+      ]
+    },
+    "notes": "HEAD-equivalent probe not supported (GET only registered); captured as GET for headers."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-stream-range-start",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/stream.view?f=json&v=1.16.1&c=phase0&id=song_2b8eab4b-235d-5892-99f8-c0f5f54e8ab4&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test",
+      "Range": "bytes=0-1023"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ],
+      "dropHeaders": [
+        "etag",
+        "last-modified"
+      ]
+    },
+    "notes": "bytes=0-1023 returns the correct 1024 bytes only because start=0 survives the second range application. See os-stream-range-middle for the double-processing bug. NOTE: the Content-Range total is also wrong (reports the 1024-byte bounded stream length, /1024, not /220544) — only the body bytes are correct."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-stream-range-middle",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/stream.view?f=json&v=1.16.1&c=phase0&id=song_2b8eab4b-235d-5892-99f8-c0f5f54e8ab4&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test",
+      "Range": "bytes=100000-101023"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ],
+      "dropHeaders": [
+        "etag",
+        "last-modified"
+      ]
+    },
+    "notes": "CRITICAL DISCOVERY (double range processing): the 206 path wraps the file in a BoundedStream but leaves ASP.NET EnableRangeProcessing=true, so the client's Range header is applied a SECOND time against the range-length stream. bytes=100000-101023 on a 220544-byte file -> 416 (Content-Range bytes */1024). Any nonzero-offset range is either 416 or silently mangled (see os-stream-range-middle-mangled). Only start=0 and suffix ranges work (accidentally). Native-surface streaming does this correctly (EnableRangeProcessing=false). MUST NOT be preserved — Rust deviation requires product sign-off.",
+    "expectStatus": 416
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-stream-range-end",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/stream.view?f=json&v=1.16.1&c=phase0&id=song_2b8eab4b-235d-5892-99f8-c0f5f54e8ab4&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test",
+      "Range": "bytes=-2048"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ],
+      "dropHeaders": [
+        "etag",
+        "last-modified"
+      ]
+    },
+    "notes": "Suffix range bytes=-2048 works BY COINCIDENCE: the bounded suffix stream has length 2048 and the re-applied suffix selects it entirely. See os-stream-range-middle for the double-processing bug. Its Content-Range total is likewise wrong (/2048, the bounded length)."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-stream-range-invalid",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/stream.view?f=json&v=1.16.1&c=phase0&id=song_2b8eab4b-235d-5892-99f8-c0f5f54e8ab4&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test",
+      "Range": "bytes=abc-def"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ],
+      "dropHeaders": [
+        "etag",
+        "last-modified"
+      ]
+    },
+    "notes": "DISCOVERY: invalid range -> 404 + error 70 JSON (the 416 path is unreachable because the service re-wraps the range error), NOT 416. Differs from the native surface (400).",
+    "expectStatus": 404
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-stream-range-unsatisfiable",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/stream.view?f=json&v=1.16.1&c=phase0&id=song_2b8eab4b-235d-5892-99f8-c0f5f54e8ab4&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test",
+      "Range": "bytes=999999999-"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ],
+      "dropHeaders": [
+        "etag",
+        "last-modified"
+      ]
+    },
+    "notes": "Start beyond EOF -> 404 + error 70 (not 416).",
+    "expectStatus": 404
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-stream-timeoffset",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/stream.view?f=json&v=1.16.1&c=phase0&id=song_2b8eab4b-235d-5892-99f8-c0f5f54e8ab4&timeOffset=10&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ],
+      "dropHeaders": [
+        "etag",
+        "last-modified"
+      ]
+    },
+    "notes": "transcodeOffset[1] is advertised but timeOffset is rejected ('TimeOffset not supported for streaming') -> 404 + error 70.",
+    "expectStatus": 404
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-stream-maxbitrate-ignored",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/stream.view?f=json&v=1.16.1&c=phase0&id=song_2b8eab4b-235d-5892-99f8-c0f5f54e8ab4&maxBitRate=64&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ],
+      "dropHeaders": [
+        "etag",
+        "last-modified"
+      ]
+    },
+    "notes": "No transcoding is implemented at this commit: maxBitRate is silently ignored — response is the full original WAV at 200."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-stream-unknown",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/stream.view?f=json&v=1.16.1&c=phase0&id=song_00000000-0000-0000-0000-000000000000&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ],
+      "dropHeaders": [
+        "etag",
+        "last-modified"
+      ]
+    },
+    "notes": "Unknown song id throws (unknown-id 500/302 class) -> 302 to /Account/Login?ReturnUrl=%2FError. The documented 404+error70 path covers known-song-missing-file, not unknown ids.",
+    "expectStatus": 302,
+    "followRedirects": false
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-download",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/download.view?f=json&v=1.16.1&c=phase0&id=song_2b8eab4b-235d-5892-99f8-c0f5f54e8ab4&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ],
+      "dropHeaders": [
+        "etag",
+        "last-modified"
+      ]
+    },
+    "notes": "Download: 200 with Content-Disposition attachment; filename; gated by system.isDownloadingEnabled (seeded true)."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getcoverart-80",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getCoverArt.view?f=json&v=1.16.1&c=phase0&id=album_69d97699-74c5-5403-878f-87f42d9d9fbb&size=80&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "dropHeaders": [
+        "etag",
+        "last-modified"
+      ]
+    },
+    "notes": "Fixture has no custom artwork: default album image resized to 80px square. ETag recorded."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getcoverart-default",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getCoverArt.view?f=json&v=1.16.1&c=phase0&id=album_69d97699-74c5-5403-878f-87f42d9d9fbb&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "dropHeaders": [
+        "etag",
+        "last-modified"
+      ]
+    },
+    "notes": "No size param -> Large (unresized default image)."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getcoverart-song",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getCoverArt.view?f=json&v=1.16.1&c=phase0&id=song_2b8eab4b-235d-5892-99f8-c0f5f54e8ab4&size=300&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "dropHeaders": [
+        "etag",
+        "last-modified"
+      ]
+    },
+    "notes": "Song ids resolve to the parent album's cover."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getcoverart-unknown",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getCoverArt.view?f=json&v=1.16.1&c=phase0&id=album_00000000-0000-0000-0000-000000000000&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "dropHeaders": [
+        "etag",
+        "last-modified"
+      ]
+    },
+    "notes": "DISCOVERY: unknown id -> HTTP 200 with EMPTY body (no error envelope), via ImageResult fallback."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getavatar",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getAvatar.view?f=json&v=1.16.1&c=phase0&username=phase0-fixture&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "dropHeaders": [
+        "etag",
+        "last-modified"
+      ]
+    },
+    "notes": "Always image/png; no avatar -> built-in default avatar. Never 404."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getlyrics",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getLyrics.view?f=json&v=1.16.1&c=phase0&artist=Aurora%20Fields&title=Polar%20Veil&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Polar Veil has seeded lyrics."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getlyrics-missing",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getLyrics.view?f=json&v=1.16.1&c=phase0&artist=Aurora%20Fields&title=Solar%20Wind&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "No lyrics -> status ok with empty value and echoed artist/title (never an error)."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getlyricsbysongid",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getLyricsBySongId.view?f=json&v=1.16.1&c=phase0&id=song_ea26fc59-a545-51c2-94c4-702e1f97b80a&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Structured lyrics (songLyrics[1] extension): structuredLyrics with lang/synced/line[]."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getlyricsbysongid-none",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getLyricsBySongId.view?f=json&v=1.16.1&c=phase0&id=song_2b8eab4b-235d-5892-99f8-c0f5f54e8ab4&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "No lyrics -> status ok with NO structuredLyrics key at all."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-download-unknown",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/download.view?f=json&v=1.16.1&c=phase0&id=song_00000000-0000-0000-0000-000000000000&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "expectStatus": 302,
+    "followRedirects": false,
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ],
+      "dropHeaders": [
+        "etag",
+        "last-modified"
+      ]
+    },
+    "notes": "Same unknown-id 302 class as stream."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-stream-range-middle-mangled",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/stream.view?f=json&v=1.16.1&c=phase0&id=song_2b8eab4b-235d-5892-99f8-c0f5f54e8ab4&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test",
+      "Range": "bytes=100000-200000"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ],
+      "dropHeaders": [
+        "etag",
+        "last-modified"
+      ]
+    },
+    "notes": "MANGLED-SEEK EVIDENCE: bytes=100000-200000 -> 206 with ONE byte (Content-Range bytes 100000-100000/100001): the second range application maps the offset onto the bounded stream. Clients seeking via OpenSubsonic receive corrupted audio at this baseline."
+  }
+]

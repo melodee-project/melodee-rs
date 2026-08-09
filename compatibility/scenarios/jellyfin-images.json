@@ -1,0 +1,160 @@
+[
+  {
+    "schemaVersion": 2,
+    "name": "jf-images",
+    "surface": "jellyfin",
+    "flow": [
+      {
+        "name": "login",
+        "method": "POST",
+        "path": "/Users/AuthenticateByName",
+        "json": {
+          "Username": "phase0-fixture",
+          "Pw": "Mel0deeR0cks!"
+        },
+        "capture": {
+          "jfToken": "$.AccessToken"
+        },
+        "secretCapture": [
+          "jfToken"
+        ],
+        "normalize": {
+          "maskJsonPaths": [
+            "$.AccessToken",
+            "$.SessionInfo",
+            "$.User.LastLoginDate",
+            "$.User.LastActivityDate",
+            "$.User.Configuration"
+          ]
+        }
+      },
+      {
+        "name": "item-image-primary",
+        "method": "GET",
+        "path": "/Items/69d9769974c55403878f87f42d9d9fbb/Images/Primary",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "captureHeaders": {
+          "albumImageEtag": "etag"
+        },
+        "normalize": {
+          "dropHeaders": []
+        },
+        "notes": "Northern Lights HAS fixture artwork (cover.png): content type sniffed image/png, Cache-Control public max-age=86400, quoted ETag (deterministic at fixed seed)."
+      },
+      {
+        "name": "item-image-head",
+        "method": "HEAD",
+        "path": "/Items/69d9769974c55403878f87f42d9d9fbb/Images/Primary",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {
+          "dropHeaders": [
+            "etag"
+          ]
+        },
+        "notes": "HEAD: headers only."
+      },
+      {
+        "name": "item-image-304",
+        "method": "GET",
+        "path": "/Items/69d9769974c55403878f87f42d9d9fbb/Images/Primary",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\"",
+          "If-None-Match": "{{albumImageEtag}}"
+        },
+        "expectStatus": 304,
+        "normalize": {
+          "dropHeaders": [
+            "etag"
+          ]
+        },
+        "notes": "If-None-Match with the captured ETag -> 304 (conditional image caching)."
+      },
+      {
+        "name": "artist-image",
+        "method": "GET",
+        "path": "/Artists/813c11e061cd5204ae0fce68386eacec/Images/Primary",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {
+          "dropHeaders": [
+            "etag"
+          ]
+        },
+        "notes": "Aurora Fields HAS fixture artwork (artist.png)."
+      },
+      {
+        "name": "image-no-artwork-404",
+        "method": "GET",
+        "path": "/Items/263ebba5739c5cb9987fb2d2bbfbd0ad/Images/Primary",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "expectStatus": 404,
+        "normalize": {
+          "maskJsonPaths": [
+            "$.TraceId",
+            "$.traceId"
+          ]
+        },
+        "notes": "CROSS-SURFACE DIFFERENCE: entities without stored artwork get 404 here — the OpenSubsonic /images/ route serves default images instead."
+      },
+      {
+        "name": "image-unknown",
+        "method": "GET",
+        "path": "/Items/00000000000000000000000000000000/Images/Primary",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "expectStatus": 404,
+        "normalize": {
+          "maskJsonPaths": [
+            "$.TraceId",
+            "$.traceId"
+          ]
+        },
+        "notes": "Unknown item -> 404."
+      },
+      {
+        "name": "image-maxwidth-bucket",
+        "method": "GET",
+        "path": "/Items/69d9769974c55403878f87f42d9d9fbb/Images/Primary?maxWidth=100",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {
+          "dropHeaders": [
+            "etag"
+          ]
+        },
+        "notes": "maxWidth<=100 -> Small bucket resize; imageType/width/height/tag/format params ignored."
+      },
+      {
+        "name": "item-image-indexed",
+        "method": "GET",
+        "path": "/Items/69d9769974c55403878f87f42d9d9fbb/Images/Primary/0",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {
+          "dropHeaders": [
+            "etag"
+          ]
+        },
+        "notes": "imageIndex variant (accepted, ignored at baseline)."
+      }
+    ]
+  }
+]

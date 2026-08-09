@@ -1,0 +1,15 @@
+{
+  "subsonic-response": {
+    "status": "ok",
+    "version": "1.16.1",
+    "type": "Melodee",
+    "serverVersion": "<volatile>",
+    "openSubsonic": true,
+    "license": {
+      "valid": true,
+      "email": "<volatile>",
+      "licenseExpires": "<volatile>",
+      "trailExpires": "<volatile>"
+    }
+  }
+}

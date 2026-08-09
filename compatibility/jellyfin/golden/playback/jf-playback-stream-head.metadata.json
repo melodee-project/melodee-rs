@@ -1,0 +1,35 @@
+{
+  "name": "jf-playback/stream-head",
+  "surface": "jellyfin",
+  "request": {
+    "method": "HEAD",
+    "url": "{melodee-origin}/Audio/2b8eab4b235d589299f8c0f5f54e8ab4/stream",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "MediaBrowser <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-length": "220544",
+      "content-type": "audio/wav",
+      "accept-ranges": "bytes"
+    },
+    "bodyFile": "jf-playback-stream-head.bin",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "normalize": {
+    "dropHeaders": [
+      "etag",
+      "last-modified"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

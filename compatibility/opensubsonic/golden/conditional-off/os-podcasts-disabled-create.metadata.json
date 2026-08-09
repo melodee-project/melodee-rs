@@ -1,0 +1,33 @@
+{
+  "name": "os-podcasts-disabled-create",
+  "surface": "opensubsonic",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/rest/createPodcastChannel.view?f=json&v=1.16.1&c=phase0&url=http%3A%2F%2Fpod.example.test%2Ffeed&u=phase0-fixture&t=%3Credacted%3E&s=%3Credacted%3E",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "os-podcasts-disabled-create.json",
+    "sha256": "10b9021bced14ffc722a53da578b4e072358d53a763c3d2e3ea35f7c5ed5f8be",
+    "bytes": 661
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.subsonic-response.serverVersion"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

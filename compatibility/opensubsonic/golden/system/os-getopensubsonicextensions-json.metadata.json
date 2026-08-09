@@ -1,0 +1,33 @@
+{
+  "name": "os-getopensubsonicextensions-json",
+  "surface": "opensubsonic",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/rest/getOpenSubsonicExtensions.view?f=json&v=1.16.1&c=melodee-rs-phase0",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-length": "351",
+      "content-type": "application/json; charset=utf-8",
+      "x-total-count": "0"
+    },
+    "bodyFile": "os-getopensubsonicextensions-json.json",
+    "sha256": "b652a5f7f45f32ca40a6c55263faa614bcf203162b180132a44764ca5bb5af49",
+    "bytes": 674
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.subsonic-response.serverVersion"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

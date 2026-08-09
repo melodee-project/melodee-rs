@@ -1,0 +1,14 @@
+{
+  "subsonic-response": {
+    "status": "ok",
+    "version": "1.16.1",
+    "type": "Melodee",
+    "serverVersion": "<volatile>",
+    "openSubsonic": true,
+    "lyrics": {
+      "value": "",
+      "artist": "Aurora Fields",
+      "title": "Solar Wind"
+    }
+  }
+}

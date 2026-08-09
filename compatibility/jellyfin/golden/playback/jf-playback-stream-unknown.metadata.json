@@ -1,0 +1,33 @@
+{
+  "name": "jf-playback/stream-unknown",
+  "surface": "jellyfin",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/Audio/00000000000000000000000000000000/stream",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "MediaBrowser <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "jf-playback-stream-unknown.json",
+    "sha256": "815a99e4aca788f910db689048e21ee455f142e02106cdc28bba0bff98bcbd33",
+    "bytes": 154
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.TraceId",
+      "$.traceId"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

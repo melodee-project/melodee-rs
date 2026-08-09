@@ -1,0 +1,36 @@
+{
+  "name": "jf-artists-genres/genres-list",
+  "surface": "jellyfin",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/Genres",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "MediaBrowser <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "etag": "\"3ba92f64868a3a974bfb8e75739be6c7\""
+    },
+    "bodyFile": "jf-artists-genres-genres-list.json",
+    "sha256": "c7a9025c4c16ff2edf4774659cbb2a82c39cc4be8a30e6a8452ea68214e0ed3c",
+    "bytes": 13805
+  },
+  "normalize": {
+    "dropHeaders": [
+      "etag"
+    ],
+    "maskJsonPaths": [
+      "$.Items[*].DateCreated"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

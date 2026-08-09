@@ -1,0 +1,382 @@
+{
+  "schemaVersion": 1,
+  "environment": {
+    "dateUtc": "2026-08-08T05:12:56Z",
+    "melodeeRsCommit": "f0fbc0cc2a27f03103b7a05b74407bc481ad240c",
+    "legacyBaselineCommit": "4028b58dbd3302ed431e2c5b32d9dde5634db218",
+    "tier": "A",
+    "database": "melodee_bench_a",
+    "os": "Linux 7.1.5-201.fc44.x86_64",
+    "architecture": "x86_64",
+    "cpu": "AMD Ryzen 9 3900X 12-Core Processor",
+    "logicalCpus": 24,
+    "memory": "MemTotal:       65730564 kB",
+    "postgres": "psql (PostgreSQL) 18.3",
+    "dotnet": "10.0.110",
+    "ffmpeg": "ffmpeg version 8.1.2 Copyright (c) 2000-2026 the FFmpeg developers",
+    "server": "Melodee 2.2.0 (Kestrel, Production, QuartzDisabled=true, UseForwardedHeaders=true)",
+    "cacheState": "cold-on-first-iteration-then-warm (server restarted before matrix)",
+    "datasetSeed": "deterministic md5('bench-<kind>-<i>') rows",
+    "iterations": 5,
+    "command": "python3 scripts/run_benchmarks.py --tier A"
+  },
+  "results": [
+    {
+      "id": "native.artists.list",
+      "surface": "melodee-api-v1",
+      "status": 200,
+      "responseBytes": 20268,
+      "coldMs": 149.2,
+      "warmMedianMs": 8.6,
+      "warmMinMs": 7.0,
+      "warmMaxMs": 18.4,
+      "iterations": [
+        149.2,
+        18.4,
+        9.9,
+        7.0,
+        7.2
+      ]
+    },
+    {
+      "id": "native.albums.list",
+      "surface": "melodee-api-v1",
+      "status": 200,
+      "responseBytes": 43468,
+      "coldMs": 196.6,
+      "warmMedianMs": 11.0,
+      "warmMinMs": 9.8,
+      "warmMaxMs": 13.6,
+      "iterations": [
+        196.6,
+        13.6,
+        10.9,
+        11.1,
+        9.8
+      ]
+    },
+    {
+      "id": "native.songs.list",
+      "surface": "melodee-api-v1",
+      "status": 200,
+      "responseBytes": 89770,
+      "coldMs": 149.6,
+      "warmMedianMs": 16.5,
+      "warmMinMs": 14.6,
+      "warmMaxMs": 31.3,
+      "iterations": [
+        149.6,
+        14.6,
+        16.6,
+        16.4,
+        31.3
+      ]
+    },
+    {
+      "id": "native.albums.recent",
+      "surface": "melodee-api-v1",
+      "status": 200,
+      "responseBytes": 8789,
+      "coldMs": 58.0,
+      "warmMedianMs": 7.4,
+      "warmMinMs": 6.3,
+      "warmMaxMs": 19.0,
+      "iterations": [
+        58.0,
+        7.4,
+        6.3,
+        7.4,
+        19.0
+      ]
+    },
+    {
+      "id": "native.search.exact-artist",
+      "surface": "melodee-api-v1",
+      "status": 200,
+      "responseBytes": 248,
+      "coldMs": 426.6,
+      "warmMedianMs": 29.6,
+      "warmMinMs": 28.5,
+      "warmMaxMs": 39.8,
+      "iterations": [
+        426.6,
+        39.8,
+        29.8,
+        28.5,
+        29.3
+      ]
+    },
+    {
+      "id": "native.search.partial-artist",
+      "surface": "melodee-api-v1",
+      "status": 200,
+      "responseBytes": 248,
+      "coldMs": 33.7,
+      "warmMedianMs": 45.3,
+      "warmMinMs": 44.2,
+      "warmMaxMs": 51.6,
+      "iterations": [
+        33.7,
+        44.2,
+        46.1,
+        51.6,
+        44.5
+      ]
+    },
+    {
+      "id": "native.search.track-title",
+      "surface": "melodee-api-v1",
+      "status": 200,
+      "responseBytes": 248,
+      "coldMs": 39.9,
+      "warmMedianMs": 997.8,
+      "warmMinMs": 585.5,
+      "warmMaxMs": 1001.0,
+      "iterations": [
+        39.9,
+        585.5,
+        998.5,
+        997.1,
+        1001.0
+      ]
+    },
+    {
+      "id": "native.search.common-word",
+      "surface": "melodee-api-v1",
+      "status": 200,
+      "responseBytes": 8313,
+      "coldMs": 1013.4,
+      "warmMedianMs": 998.2,
+      "warmMinMs": 984.5,
+      "warmMaxMs": 1000.7,
+      "iterations": [
+        1013.4,
+        984.5,
+        998.7,
+        1000.7,
+        997.8
+      ]
+    },
+    {
+      "id": "native.search.unicode",
+      "surface": "melodee-api-v1",
+      "status": 200,
+      "responseBytes": 248,
+      "coldMs": 1002.8,
+      "warmMedianMs": 999.2,
+      "warmMinMs": 998.2,
+      "warmMaxMs": 1000.5,
+      "iterations": [
+        1002.8,
+        1000.5,
+        999.9,
+        998.2,
+        998.5
+      ]
+    },
+    {
+      "id": "native.search.nonexistent",
+      "surface": "melodee-api-v1",
+      "status": 200,
+      "responseBytes": 248,
+      "coldMs": 1000.5,
+      "warmMedianMs": 1001.0,
+      "warmMinMs": 999.5,
+      "warmMaxMs": 1056.9,
+      "iterations": [
+        1000.5,
+        999.5,
+        1002.0,
+        999.9,
+        1056.9
+      ]
+    },
+    {
+      "id": "os.getIndexes",
+      "surface": "opensubsonic",
+      "status": 200,
+      "responseBytes": 288288,
+      "coldMs": 353.2,
+      "warmMedianMs": 266.8,
+      "warmMinMs": 262.5,
+      "warmMaxMs": 270.2,
+      "iterations": [
+        353.2,
+        269.6,
+        270.2,
+        262.5,
+        263.9
+      ]
+    },
+    {
+      "id": "os.getArtists",
+      "surface": "opensubsonic",
+      "status": 200,
+      "responseBytes": 288263,
+      "coldMs": 266.7,
+      "warmMedianMs": 261.1,
+      "warmMinMs": 260.1,
+      "warmMaxMs": 265.8,
+      "iterations": [
+        266.7,
+        260.1,
+        261.1,
+        261.2,
+        265.8
+      ]
+    },
+    {
+      "id": "os.getAlbumList2.newest",
+      "surface": "opensubsonic",
+      "status": 200,
+      "responseBytes": 21594,
+      "coldMs": 476.1,
+      "warmMedianMs": 257.7,
+      "warmMinMs": 252.8,
+      "warmMaxMs": 259.9,
+      "iterations": [
+        476.1,
+        259.9,
+        257.7,
+        257.7,
+        252.8
+      ]
+    },
+    {
+      "id": "os.search3",
+      "surface": "opensubsonic",
+      "status": 200,
+      "responseBytes": 170,
+      "coldMs": 339.8,
+      "warmMedianMs": 277.5,
+      "warmMinMs": 258.4,
+      "warmMaxMs": 300.5,
+      "iterations": [
+        339.8,
+        258.4,
+        300.5,
+        283.4,
+        271.6
+      ]
+    },
+    {
+      "id": "os.getRandomSongs",
+      "surface": "opensubsonic",
+      "status": 200,
+      "responseBytes": 11067,
+      "coldMs": 1051.8,
+      "warmMedianMs": 950.8,
+      "warmMinMs": 940.1,
+      "warmMaxMs": 956.2,
+      "iterations": [
+        1051.8,
+        940.1,
+        947.0,
+        954.5,
+        956.2
+      ]
+    },
+    {
+      "id": "os.getStarred2",
+      "surface": "opensubsonic",
+      "status": 200,
+      "responseBytes": 165,
+      "coldMs": 428.8,
+      "warmMedianMs": 240.6,
+      "warmMinMs": 238.5,
+      "warmMaxMs": 253.9,
+      "iterations": [
+        428.8,
+        253.9,
+        241.4,
+        239.7,
+        238.5
+      ]
+    },
+    {
+      "id": "jf.userViews",
+      "surface": "jellyfin",
+      "status": 200,
+      "responseBytes": 1995,
+      "coldMs": 65.5,
+      "warmMedianMs": 3.3,
+      "warmMinMs": 2.9,
+      "warmMaxMs": 6.1,
+      "iterations": [
+        65.5,
+        6.1,
+        3.5,
+        2.9,
+        3.1
+      ]
+    },
+    {
+      "id": "jf.artists.list",
+      "surface": "jellyfin",
+      "status": 200,
+      "responseBytes": 57750,
+      "coldMs": 56.8,
+      "warmMedianMs": 6.2,
+      "warmMinMs": 5.5,
+      "warmMaxMs": 6.7,
+      "iterations": [
+        56.8,
+        6.0,
+        6.4,
+        5.5,
+        6.7
+      ]
+    },
+    {
+      "id": "jf.items.audio",
+      "surface": "jellyfin",
+      "status": 200,
+      "responseBytes": 123251,
+      "coldMs": 120.2,
+      "warmMedianMs": 25.1,
+      "warmMinMs": 24.4,
+      "warmMaxMs": 27.7,
+      "iterations": [
+        120.2,
+        25.1,
+        25.2,
+        24.4,
+        27.7
+      ]
+    },
+    {
+      "id": "jf.items.albums",
+      "surface": "jellyfin",
+      "status": 200,
+      "responseBytes": 61900,
+      "coldMs": 38.8,
+      "warmMedianMs": 7.2,
+      "warmMinMs": 7.1,
+      "warmMaxMs": 7.6,
+      "iterations": [
+        38.8,
+        7.1,
+        7.1,
+        7.6,
+        7.3
+      ]
+    },
+    {
+      "id": "jf.playlists",
+      "surface": "jellyfin",
+      "status": 200,
+      "responseBytes": 5902,
+      "coldMs": 71.5,
+      "warmMedianMs": 5.2,
+      "warmMinMs": 4.0,
+      "warmMaxMs": 6.2,
+      "iterations": [
+        71.5,
+        6.2,
+        5.1,
+        4.0,
+        5.4
+      ]
+    }
+  ]
+}

@@ -1,0 +1,197 @@
+[
+  {
+    "schemaVersion": 2,
+    "name": "jf-root-no-markers",
+    "surface": "jellyfin",
+    "method": "GET",
+    "path": "/",
+    "auth": "none",
+    "headers": {},
+    "normalize": {
+      "maskRegex": [
+        {
+          "pattern": "<!--Blazor:\\{.*?-->",
+          "replace": "<!--Blazor:<volatile>-->"
+        },
+        {
+          "pattern": "<!--Blazor-Server-Component-State:.*",
+          "replace": "<!--Blazor-Server-Component-State:<volatile>-->"
+        },
+        {
+          "pattern": "id=\"[A-Za-z0-9_-]{10}\"",
+          "replace": "id=\"<volatile>\""
+        }
+      ],
+      "dropHeaders": [
+        "content-length",
+        "etag",
+        "last-modified"
+      ]
+    },
+    "notes": "ROUTING: bare GET / with no Jellyfin markers is NOT rewritten — falls through to the Blazor app (text/html). Discovery probes must carry markers. (Body is the Blazor login page; Blazor prerender state is volatile and masked — the routing decision and content-type are the evidence.)"
+  },
+  {
+    "schemaVersion": 2,
+    "name": "jf-root-head-mediabrowser",
+    "surface": "jellyfin",
+    "method": "HEAD",
+    "path": "/",
+    "auth": "none",
+    "headers": {
+      "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\""
+    },
+    "normalize": {},
+    "notes": "ROUTING: HEAD / with a MediaBrowser Authorization header IS rewritten to /api/jf -> 200 empty (RootController). Jellyfin client discovery probe."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "jf-system-info-public",
+    "surface": "jellyfin",
+    "method": "GET",
+    "path": "/System/Info/Public",
+    "auth": "none",
+    "headers": {},
+    "normalize": {
+      "maskJsonPaths": [
+        "$.Version",
+        "$.LocalAddress",
+        "$.Id"
+      ]
+    },
+    "notes": "Allowlisted pre-auth route (rewritten regardless of headers). Id = MD5(Jwt:Issuer) — deterministic in the fixture environment. LocalAddress volatile per deployment; masked.",
+    "notes_extra": null
+  },
+  {
+    "schemaVersion": 2,
+    "name": "jf-system-info-public-explicit",
+    "surface": "jellyfin",
+    "method": "GET",
+    "path": "/api/jf/System/Info/Public",
+    "auth": "none",
+    "headers": {},
+    "normalize": {
+      "maskJsonPaths": [
+        "$.Version",
+        "$.LocalAddress",
+        "$.Id"
+      ]
+    },
+    "notes": "Explicit /api/jf form (no middleware rewrite needed)."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "jf-system-ping",
+    "surface": "jellyfin",
+    "method": "GET",
+    "path": "/System/Ping",
+    "auth": "none",
+    "headers": {},
+    "normalize": {},
+    "notes": "Allowlisted; 204.",
+    "expectStatus": 204
+  },
+  {
+    "schemaVersion": 2,
+    "name": "jf-system-info",
+    "surface": "jellyfin",
+    "method": "GET",
+    "path": "/System/Info",
+    "auth": "none",
+    "headers": {
+      "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\""
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.Version",
+        "$.LocalAddress",
+        "$.Id",
+        "$.WebSocketPortNumber"
+      ]
+    },
+    "notes": "SystemController.GetSystemInfoAsync serves WITHOUT valid auth (marker needed only for the middleware rewrite; a token-less MediaBrowser header suffices)."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "jf-users-public",
+    "surface": "jellyfin",
+    "method": "GET",
+    "path": "/Users/Public",
+    "auth": "none",
+    "headers": {},
+    "normalize": {},
+    "notes": "Always an empty array at baseline."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "jf-unsupported-videos",
+    "surface": "jellyfin",
+    "method": "GET",
+    "path": "/Videos",
+    "auth": "none",
+    "headers": {
+      "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\""
+    },
+    "normalize": {},
+    "notes": "UNSUPPORTED SCOPE: with MediaBrowser markers the request is rewritten to /api/jf/Videos -> ASP.NET 404 empty body (no controller). Non-music surfaces are absent, not simulated.",
+    "expectStatus": 404
+  },
+  {
+    "schemaVersion": 2,
+    "name": "jf-unsupported-livetv",
+    "surface": "jellyfin",
+    "method": "GET",
+    "path": "/LiveTv/Channels",
+    "auth": "none",
+    "headers": {
+      "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\""
+    },
+    "normalize": {},
+    "notes": "UNSUPPORTED SCOPE: same 404 class.",
+    "expectStatus": 404
+  },
+  {
+    "schemaVersion": 2,
+    "name": "jf-unsupported-shows",
+    "surface": "jellyfin",
+    "method": "GET",
+    "path": "/Shows/NextUp?userId=f78448cc82ec5864877c6c6163b00065",
+    "auth": "none",
+    "headers": {
+      "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\""
+    },
+    "normalize": {},
+    "notes": "UNSUPPORTED SCOPE: same 404 class.",
+    "expectStatus": 404
+  },
+  {
+    "schemaVersion": 2,
+    "name": "jf-system-info-fallthrough",
+    "surface": "jellyfin",
+    "method": "GET",
+    "path": "/System/Info",
+    "auth": "none",
+    "headers": {},
+    "normalize": {
+      "maskRegex": [
+        {
+          "pattern": "<!--Blazor:\\{.*?-->",
+          "replace": "<!--Blazor:<volatile>-->"
+        },
+        {
+          "pattern": "<!--Blazor-Server-Component-State:.*",
+          "replace": "<!--Blazor-Server-Component-State:<volatile>-->"
+        },
+        {
+          "pattern": "id=\"[A-Za-z0-9_-]{10}\"",
+          "replace": "id=\"<volatile>\""
+        }
+      ],
+      "dropHeaders": [
+        "content-length",
+        "etag",
+        "last-modified"
+      ]
+    },
+    "notes": "ROUTING: /System/Info is NOT in the middleware allowlist — without markers it falls through to the Blazor app (HTML)."
+  }
+]

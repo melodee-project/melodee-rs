@@ -1,0 +1,182 @@
+[
+  {
+    "schemaVersion": 2,
+    "name": "os-auth-bypass-localhost",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getMusicFolders.view?f=json&v=1.16.1&c=melodee-rs-phase0",
+    "auth": "none",
+    "normalize": {"maskJsonPaths": ["$.subsonic-response.serverVersion"]},
+    "notes": "CONTRACT: OpenSubsonic auth is bypassed when (a) the request is local (RemoteIp loopback or remote==local), (b) the path contains /images/, or (c) request scheme+host equals system.baseUrl — ControllerBase.OnActionExecutionAsync. No user is synthesized; per-user data then operates on BlankUserInfo."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-auth-valid-token",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getMusicFolders.view?f=json&v=1.16.1&c=melodee-rs-phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {"X-Forwarded-For": "203.0.113.7", "X-Forwarded-Host": "capture-fixture.example.test"},
+    "normalize": {"maskJsonPaths": ["$.subsonic-response.serverVersion"]},
+    "notes": "Enforced auth (X-Forwarded-For/Host defeat the localhost+baseUrl bypasses; the oracle runs with UseForwardedHeaders=true for exactly this). Token is md5(opensubsonicSecret+salt), computed at capture time and injected via env — never persisted. The user's OpenSubsonic secret is a per-user GENERATED secret (UserAuthenticationService.GenerateOpenSubsonicSecret), seeded to a known fixture value."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-auth-valid-token-uppercase",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getMusicFolders.view?f=json&v=1.16.1&c=melodee-rs-phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN_UPPER}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {"X-Forwarded-For": "203.0.113.7", "X-Forwarded-Host": "capture-fixture.example.test"},
+    "normalize": {"maskJsonPaths": ["$.subsonic-response.serverVersion"]},
+    "notes": "Token comparison is OrdinalIgnoreCase — uppercase hex is accepted. Uppercase form injected via env (never persisted)."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-auth-valid-password-plain",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getMusicFolders.view?f=json&v=1.16.1&c=melodee-rs-phase0&u=phase0-fixture&p=Mel0deeR0cks!",
+    "auth": "none",
+    "headers": {"X-Forwarded-For": "203.0.113.7", "X-Forwarded-Host": "capture-fixture.example.test"},
+    "normalize": {"maskJsonPaths": ["$.subsonic-response.serverVersion"]},
+    "notes": "Plaintext password form (bcrypt verify). Fixture password is documented synthetic."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-auth-valid-password-enc-hex",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getMusicFolders.view?f=json&v=1.16.1&c=melodee-rs-phase0&u=phase0-fixture&p=enc:4d656c306465655230636b7321",
+    "auth": "none",
+    "headers": {"X-Forwarded-For": "203.0.113.7", "X-Forwarded-Host": "capture-fixture.example.test"},
+    "normalize": {"maskJsonPaths": ["$.subsonic-response.serverVersion"]},
+    "notes": "enc: hex-encoded password form (FromHexString). Hex of the public fixture password."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-auth-invalid-username",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getMusicFolders.view?f=json&v=1.16.1&c=melodee-rs-phase0&u=phase0-no-such-user&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {"X-Forwarded-For": "203.0.113.7", "X-Forwarded-Host": "capture-fixture.example.test"},
+    "normalize": {"maskJsonPaths": ["$.subsonic-response.serverVersion"]},
+    "notes": "Unknown user: HTTP 200 with error 40 envelope — identical to wrong-password (no user enumeration, matching the native surface)."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-auth-invalid-token",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getMusicFolders.view?f=json&v=1.16.1&c=melodee-rs-phase0&u=phase0-fixture&t=00000000000000000000000000000000&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {"X-Forwarded-For": "203.0.113.7", "X-Forwarded-Host": "capture-fixture.example.test"},
+    "normalize": {"maskJsonPaths": ["$.subsonic-response.serverVersion"]},
+    "notes": "Wrong MD5 token: error 40."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-auth-malformed-token",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getMusicFolders.view?f=json&v=1.16.1&c=melodee-rs-phase0&u=phase0-fixture&t=nothexatall&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {"X-Forwarded-For": "203.0.113.7", "X-Forwarded-Host": "capture-fixture.example.test"},
+    "normalize": {"maskJsonPaths": ["$.subsonic-response.serverVersion"]},
+    "notes": "Non-hex token: error 40 (string compare, no parsing crash)."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-auth-token-without-salt",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getMusicFolders.view?f=json&v=1.16.1&c=melodee-rs-phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}",
+    "auth": "none",
+    "headers": {"X-Forwarded-For": "203.0.113.7", "X-Forwarded-Host": "capture-fixture.example.test"},
+    "normalize": {"maskJsonPaths": ["$.subsonic-response.serverVersion"]},
+    "notes": "t without s: guard rejects (both required for the token path) -> error 40."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-auth-missing",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getMusicFolders.view?f=json&v=1.16.1&c=melodee-rs-phase0",
+    "auth": "none",
+    "headers": {"X-Forwarded-For": "203.0.113.7", "X-Forwarded-Host": "capture-fixture.example.test"},
+    "normalize": {"maskJsonPaths": ["$.subsonic-response.serverVersion"]},
+    "notes": "No credentials under enforced auth: error 40."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-auth-missing-xml",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getMusicFolders.view?v=1.16.1&c=melodee-rs-phase0",
+    "auth": "none",
+    "headers": {"X-Forwarded-For": "203.0.113.7", "X-Forwarded-Host": "capture-fixture.example.test"},
+    "normalize": {"maskRegex": [{"pattern": "serverVersion=\"[^\"]*\"", "replace": "serverVersion=\"<volatile>\""}]},
+    "notes": "Same auth failure in the default XML envelope."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-auth-apikey-only",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getMusicFolders.view?f=json&v=1.16.1&c=melodee-rs-phase0&u=phase0-fixture&apiKey=phase0-not-a-real-apikey",
+    "auth": "none",
+    "headers": {"X-Forwarded-For": "203.0.113.7", "X-Forwarded-Host": "capture-fixture.example.test"},
+    "normalize": {"maskJsonPaths": ["$.subsonic-response.serverVersion"]},
+    "notes": "DISCOVERY: apiKeyAuthentication[1] is ADVERTISED in getOpenSubsonicExtensions but the apiKey param is never consulted for OpenSubsonic auth (only the native Melodee API uses it) -> error 40."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-auth-jwt-only-unreachable",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getMusicFolders.view?f=json&v=1.16.1&c=melodee-rs-phase0&u=phase0-fixture&jwt={{env:PHASE0_SUBSONIC_JWT}}",
+    "auth": "none",
+    "headers": {"X-Forwarded-For": "203.0.113.7", "X-Forwarded-Host": "capture-fixture.example.test"},
+    "normalize": {"maskJsonPaths": ["$.subsonic-response.serverVersion"]},
+    "notes": "DISCOVERY: jwt-only requests never reach the JWT branch — the guard requires u AND (p OR t). Error 40."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-auth-jwt-forged-unsigned",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getMusicFolders.view?f=json&v=1.16.1&c=melodee-rs-phase0&u=phase0-fixture&p=wrong-password&jwt={{env:PHASE0_SUBSONIC_JWT}}",
+    "auth": "none",
+    "headers": {"X-Forwarded-For": "203.0.113.7", "X-Forwarded-Host": "capture-fixture.example.test"},
+    "normalize": {"maskJsonPaths": ["$.subsonic-response.serverVersion"]},
+    "notes": "SECURITY-CRITICAL EVIDENCE: the jwt branch (a) requires u + any p/t to pass the guard, (b) takes PRECEDENCE over the password, and (c) performs NO signature verification (payload base64url-decoded, sid/name/sub claims mapped to a user). A forged unsigned JWT with name=target plus a wrong password AUTHENTICATES. The Rust implementation must not preserve unsigned-JWT acceptance (explicit security decision required; see Phase 0 report)."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-auth-form-post",
+    "surface": "opensubsonic",
+    "method": "POST",
+    "path": "/rest/getMusicFolders.view",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test",
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    "body": "f=json&v=1.16.1&c=melodee-rs-phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "normalize": {"maskJsonPaths": ["$.subsonic-response.serverVersion"]},
+    "notes": "PRD-API-OS-003: form POST auth (formPost[1] advertised; all endpoints register GET+POST)."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-auth-no-version-param",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getMusicFolders.view?f=json&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {"X-Forwarded-For": "203.0.113.7", "X-Forwarded-Host": "capture-fixture.example.test"},
+    "normalize": {"maskJsonPaths": ["$.subsonic-response.serverVersion"]},
+    "notes": "v and c are optional; no version-compatibility check exists (Error.IncompatibleSubsonicVersion is defined but unused)."
+  }
+]

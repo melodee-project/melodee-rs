@@ -1,0 +1,213 @@
+{
+  "subsonic-response": {
+    "status": "ok",
+    "version": "1.16.1",
+    "type": "Melodee",
+    "serverVersion": "<volatile>",
+    "openSubsonic": true,
+    "albumList2": {
+      "album": [
+        {
+          "id": "album_de0f93a5-2979-5654-9afe-16453caa49af",
+          "album": "Untitled Demos",
+          "title": "Untitled Demos",
+          "name": "Untitled Demos",
+          "coverArt": "album_de0f93a5-2979-5654-9afe-16453caa49af",
+          "songCount": 1,
+          "created": "2026-01-20T00:00:00Z",
+          "duration": 2,
+          "playedCount": 0,
+          "artistId": "artist_708790f0-57b5-5a45-a746-dd36634e8872",
+          "artist": "Cassette Ghost",
+          "year": 1987,
+          "userRating": 0,
+          "parent": "library_c598e196-db6f-582e-b110-1726c138bd4f"
+        },
+        {
+          "id": "album_645680d3-704a-5b83-a734-42a3fa88c3ed",
+          "album": "Anthology of Echoes",
+          "title": "Anthology of Echoes",
+          "name": "Anthology of Echoes",
+          "coverArt": "album_645680d3-704a-5b83-a734-42a3fa88c3ed",
+          "songCount": 4,
+          "created": "2026-01-18T00:00:00Z",
+          "duration": 10,
+          "playedCount": 0,
+          "artistId": "artist_0bdebd7d-8597-5891-b6e4-88f7762370b9",
+          "artist": "The Obsidian Collective",
+          "year": 2018,
+          "userRating": 0,
+          "genres": [
+            "Classical"
+          ],
+          "genre": "Classical",
+          "parent": "library_c598e196-db6f-582e-b110-1726c138bd4f"
+        },
+        {
+          "id": "album_7bbfff2a-36f2-5739-9a7a-e5b0d34af3b0",
+          "album": "Ünïcode Rëlease 東京",
+          "title": "Ünïcode Rëlease 東京",
+          "name": "Ünïcode Rëlease 東京",
+          "coverArt": "album_7bbfff2a-36f2-5739-9a7a-e5b0d34af3b0",
+          "songCount": 2,
+          "created": "2026-01-16T00:00:00Z",
+          "duration": 5,
+          "playedCount": 0,
+          "artistId": "artist_8bf87c33-f669-5a85-a315-654f79fb895b",
+          "artist": "Sæglópur 日本",
+          "year": 2024,
+          "userRating": 0,
+          "genres": [
+            "Post-Rock",
+            "環境音楽"
+          ],
+          "genre": "Post-Rock",
+          "parent": "library_c598e196-db6f-582e-b110-1726c138bd4f"
+        },
+        {
+          "id": "album_4243b96d-1302-5cc9-82bf-395d76bf3ac8",
+          "album": "Solo Ledger",
+          "title": "Solo Ledger",
+          "name": "Solo Ledger",
+          "coverArt": "album_4243b96d-1302-5cc9-82bf-395d76bf3ac8",
+          "songCount": 1,
+          "created": "2026-01-14T00:00:00Z",
+          "duration": 2,
+          "playedCount": 0,
+          "artistId": "artist_f993419e-f96f-5383-9c60-7f075c806943",
+          "artist": "Nora Beacon",
+          "year": 2022,
+          "userRating": 0,
+          "genres": [
+            "Folk"
+          ],
+          "genre": "Folk",
+          "parent": "library_c598e196-db6f-582e-b110-1726c138bd4f"
+        },
+        {
+          "id": "album_009e8915-175d-5689-943e-7b5e8cd10a62",
+          "album": "Dialogues",
+          "title": "Dialogues",
+          "name": "Dialogues",
+          "coverArt": "album_009e8915-175d-5689-943e-7b5e8cd10a62",
+          "songCount": 1,
+          "created": "2026-01-12T00:00:00Z",
+          "duration": 3,
+          "playedCount": 0,
+          "artistId": "artist_4f6a5272-9529-5a24-92a0-a3ede6a73d59",
+          "artist": "The Harbour Lights",
+          "year": 2024,
+          "userRating": 0,
+          "genres": [
+            "Folk",
+            "Pop"
+          ],
+          "genre": "Folk",
+          "parent": "library_c598e196-db6f-582e-b110-1726c138bd4f"
+        },
+        {
+          "id": "album_c359d116-92ab-5380-a6dd-e97b65cce905",
+          "album": "Beacon",
+          "title": "Beacon",
+          "name": "Beacon",
+          "coverArt": "album_c359d116-92ab-5380-a6dd-e97b65cce905",
+          "songCount": 1,
+          "created": "2026-01-11T00:00:00Z",
+          "duration": 2,
+          "playedCount": 0,
+          "artistId": "artist_4f6a5272-9529-5a24-92a0-a3ede6a73d59",
+          "artist": "The Harbour Lights",
+          "year": 2023,
+          "userRating": 0,
+          "genres": [
+            "Folk"
+          ],
+          "genre": "Folk",
+          "parent": "library_c598e196-db6f-582e-b110-1726c138bd4f"
+        },
+        {
+          "id": "album_97d569aa-9133-5351-b8c5-097cf57f96f9",
+          "album": "Phase Zero Compilation",
+          "title": "Phase Zero Compilation",
+          "name": "Phase Zero Compilation",
+          "coverArt": "album_97d569aa-9133-5351-b8c5-097cf57f96f9",
+          "songCount": 3,
+          "created": "2026-01-08T00:00:00Z",
+          "duration": 8,
+          "playedCount": 0,
+          "artistId": "artist_89eb2dc1-fd4c-5a57-99e5-480c96b292fc",
+          "artist": "Various Artists",
+          "year": 2025,
+          "userRating": 0,
+          "genres": [
+            "Electronic",
+            "Jazz"
+          ],
+          "genre": "Electronic",
+          "parent": "library_c598e196-db6f-582e-b110-1726c138bd4f"
+        },
+        {
+          "id": "album_b6716af3-7988-52bd-8e12-91fca722cf56",
+          "album": "Dansk Sessions",
+          "title": "Dansk Sessions",
+          "name": "Dansk Sessions",
+          "coverArt": "album_b6716af3-7988-52bd-8e12-91fca722cf56",
+          "songCount": 1,
+          "created": "2026-01-06T00:00:00Z",
+          "duration": 2,
+          "playedCount": 0,
+          "artistId": "artist_503f045f-1bd6-5ea7-9e32-14632344680c",
+          "artist": "Düné",
+          "year": 2020,
+          "userRating": 0,
+          "genres": [
+            "Pop"
+          ],
+          "genre": "Pop",
+          "parent": "library_c598e196-db6f-582e-b110-1726c138bd4f"
+        },
+        {
+          "id": "album_263ebba5-739c-5cb9-987f-b2d2bbfbd0ad",
+          "album": "Desert Rock Radio",
+          "title": "Desert Rock Radio",
+          "name": "Desert Rock Radio",
+          "coverArt": "album_263ebba5-739c-5cb9-987f-b2d2bbfbd0ad",
+          "songCount": 2,
+          "created": "2026-01-04T00:00:00Z",
+          "duration": 5,
+          "playedCount": 0,
+          "artistId": "artist_5bf951d5-7afe-5c50-8941-145b7095902b",
+          "artist": "Dune",
+          "year": 2019,
+          "userRating": 0,
+          "genres": [
+            "Rock"
+          ],
+          "genre": "Rock",
+          "parent": "library_c598e196-db6f-582e-b110-1726c138bd4f"
+        },
+        {
+          "id": "album_69d97699-74c5-5403-878f-87f42d9d9fbb",
+          "album": "Northern Lights",
+          "title": "Northern Lights",
+          "name": "Northern Lights",
+          "coverArt": "album_69d97699-74c5-5403-878f-87f42d9d9fbb",
+          "songCount": 3,
+          "created": "2026-01-02T00:00:00Z",
+          "duration": 8,
+          "playedCount": 12,
+          "artistId": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+          "artist": "Aurora Fields",
+          "year": 2021,
+          "userRating": 5,
+          "genres": [
+            "Ambient",
+            "Electronic"
+          ],
+          "genre": "Ambient",
+          "parent": "library_c598e196-db6f-582e-b110-1726c138bd4f"
+        }
+      ]
+    }
+  }
+}

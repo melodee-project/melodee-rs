@@ -1,0 +1,256 @@
+{
+  "slug": "title-live",
+  "description": "Album title containing 'live'.",
+  "expected": {
+    "albumType": "Other (live regex)"
+  },
+  "input": {
+    "files": [
+      "01 First Light.mp3",
+      "02 Second Wave.mp3",
+      "03 Third Echo.mp3"
+    ],
+    "sizes": {
+      "03 Third Echo.mp3": 56000,
+      "02 Second Wave.mp3": 52866,
+      "01 First Light.mp3": 49732
+    },
+    "sha256": {
+      "03 Third Echo.mp3": "f97914a0df06315bf9c83cc29d1417f6b5430d951fd31a32d3fce53dd13d628b",
+      "02 Second Wave.mp3": "a5d1ba50f78dc38ed8af102ee5a86971e6815d245474452f5f21bf9ab0b0bfc0",
+      "01 First Light.mp3": "cf2be36abfd3fae2269636088271cee38ec22520321a7a4b252bd874479cbb2e"
+    }
+  },
+  "extraction": {
+    "extractions": [
+      {
+        "file": "01 First Light.mp3",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {
+          "Genre": "Ambient",
+          "DiscNumber": 1,
+          "Bpm": 0,
+          "OrigAlbumYear": 2021,
+          "AlbumDate": "2021-01-01T00:00:00.0000000Z",
+          "Date": "2021-01-01T00:00:00Z",
+          "Encoder": "Lavf62.12.102",
+          "RecordingYear": 2021,
+          "DiscTotal": 1,
+          "AlbumArtist": "Corpus Artist",
+          "Title": "First Light",
+          "TrackNumber": 1,
+          "Album": "Signals Live at the Depot"
+        },
+        "mediaAudios": {
+          "BitRate": 192,
+          "BitDepth": -1,
+          "SampleRate": 44100,
+          "IsVbr": false,
+          "Duration": 2,
+          "DurationMs": 2063.625,
+          "CodecLongName": "MPEG Audio (Layer III)",
+          "Channels": "Mono (1/0.0)",
+          "ChannelLayout": "Mono (1/0.0)",
+          "ChannelsArrangementDescription": "Mono (1/0.0)",
+          "ChannelsArrangementNumberChannels": 1,
+          "AudioDataOffset": 205,
+          "AudioDataSize": 49527
+        },
+        "imageCount": 0,
+        "crcHash": "CF0CD3C5"
+      },
+      {
+        "file": "02 Second Wave.mp3",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {
+          "Genre": "Ambient",
+          "DiscNumber": 1,
+          "Bpm": 0,
+          "OrigAlbumYear": 2021,
+          "AlbumDate": "2021-01-01T00:00:00.0000000Z",
+          "Date": "2021-01-01T00:00:00Z",
+          "Encoder": "Lavf62.12.102",
+          "RecordingYear": 2021,
+          "DiscTotal": 1,
+          "AlbumArtist": "Corpus Artist",
+          "Title": "Second Wave",
+          "TrackNumber": 2,
+          "Album": "Signals Live at the Depot"
+        },
+        "mediaAudios": {
+          "BitRate": 192,
+          "BitDepth": -1,
+          "SampleRate": 44100,
+          "IsVbr": false,
+          "Duration": 2,
+          "DurationMs": 2194.2083333333335,
+          "CodecLongName": "MPEG Audio (Layer III)",
+          "Channels": "Mono (1/0.0)",
+          "ChannelLayout": "Mono (1/0.0)",
+          "ChannelsArrangementDescription": "Mono (1/0.0)",
+          "ChannelsArrangementNumberChannels": 1,
+          "AudioDataOffset": 205,
+          "AudioDataSize": 52661
+        },
+        "imageCount": 0,
+        "crcHash": "F25B465E"
+      }
+    ]
+  },
+  "pipeline": {
+    "processExitCode": 0,
+    "processSummary": {
+      "Elapsed Time": "00:00:03",
+      "Directories Processed": "1",
+      "Albums Processed": "1",
+      "Valid Albums": "0 (0%)",
+      "New Artists": "1",
+      "New Albums": "1",
+      "New Songs": "3"
+    },
+    "processErrorTail": null,
+    "stagingTree": [
+      {
+        "path": "Corpus Artist - [2021] Signals Live At The Depot/0001 First Light.mp3",
+        "size": 49766
+      },
+      {
+        "path": "Corpus Artist - [2021] Signals Live At The Depot/0002 Second Wave.mp3",
+        "size": 52900
+      },
+      {
+        "path": "Corpus Artist - [2021] Signals Live At The Depot/0003 Third Echo.mp3",
+        "size": 56034
+      },
+      {
+        "path": "Corpus Artist - [2021] Signals Live At The Depot/melodee.json",
+        "size": 11220,
+        "sha256": null
+      }
+    ],
+    "albums": [
+      {
+        "directory": "Corpus Artist - [2021] Signals Live At The Depot",
+        "status": "Invalid",
+        "statusReasons": "HasInvalidArtists, HasNoImages, IsNotStudioTypeAlbum, HasLessThanMinimumDuration",
+        "albumType": "Other",
+        "validationMessages": [
+          {
+            "message": "Album artist is invalid.",
+            "severity": 2
+          },
+          {
+            "message": "Album does not have cover image.",
+            "severity": 2
+          },
+          {
+            "message": "Album Artist is unknown, will need manual validation.",
+            "severity": 2
+          },
+          {
+            "message": "Album is not studio type, will need manual validation.",
+            "severity": 2
+          },
+          {
+            "message": "Album duration is less than the minimum album duration.",
+            "severity": 2
+          }
+        ],
+        "songCount": 3,
+        "songs": [
+          {
+            "fileName": "0001 First Light.mp3",
+            "size": 49732,
+            "title": "First Light",
+            "songNumber": 1,
+            "mediaNumber": 1,
+            "sortOrder": 1,
+            "crcHash": "CF0CD3C5"
+          },
+          {
+            "fileName": "0002 Second Wave.mp3",
+            "size": 52866,
+            "title": "Second Wave",
+            "songNumber": 2,
+            "mediaNumber": 1,
+            "sortOrder": 2,
+            "crcHash": "F25B465E"
+          },
+          {
+            "fileName": "0003 Third Echo.mp3",
+            "size": 56000,
+            "title": "Third Echo",
+            "songNumber": 3,
+            "mediaNumber": 1,
+            "sortOrder": 3,
+            "crcHash": "96CC74CF"
+          }
+        ],
+        "images": [],
+        "displaySummary": "003 : Signals Live at the Depot"
+      }
+    ],
+    "inboundLeftovers": [
+      {
+        "path": "01 First Light.mp3",
+        "size": 49732
+      },
+      {
+        "path": "02 Second Wave.mp3",
+        "size": 52866
+      },
+      {
+        "path": "03 Third Echo.mp3",
+        "size": 56000
+      },
+      {
+        "path": "melodee.json",
+        "size": 10602
+      }
+    ],
+    "validations": [
+      {
+        "album": "Corpus Artist - [2021] Signals Live At The Depot",
+        "exitCode": 0,
+        "result": {
+          "data": {
+            "albumStatus": 3,
+            "albumStatusReasons": 33587336,
+            "isValid": false,
+            "messages ": [
+              {
+                "message": "Album artist is  invalid.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album does not have cover  image.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album Artist is unknown, will  need manual validation.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album is not  studio type, will need manual  validation.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album duration is less than the minimum album  duration.",
+                "sortOrder": 0,
+                "severity": 2
+              }
+            ]
+          },
+          "isSuccess": true,
+          "type": 200
+        }
+      }
+    ]
+  }
+}

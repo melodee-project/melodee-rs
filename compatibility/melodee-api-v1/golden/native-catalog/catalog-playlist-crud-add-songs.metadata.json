@@ -12,7 +12,8 @@
     },
     "jsonTemplate": [
       "b3297a8f-5e2b-5ade-98ea-f899d38059e0"
-    ]
+    ],
+    "bodyTemplate": null
   },
   "response": {
     "status": 500,

@@ -35,7 +35,10 @@ ROOT_FILES = {"ThemesController.cs": "melodee-api-v1"}
 
 HTTP_VERBS = {"Get": "GET", "Post": "POST", "Put": "PUT", "Delete": "DELETE", "Patch": "PATCH"}
 
-CLASS_RE = re.compile(r"\bclass\s+(?P<name>\w+)Controller\b")
+# Matches controller classes including outliers that lack the Controller
+# suffix (OpenSubsonic MediaLibraryScanning — Issue 6 discovery). Base-class
+# files produce no routes and are naturally excluded.
+CLASS_RE = re.compile(r"\bclass\s+(?P<name>\w+)\b")
 # Excludes type declarations such as `public sealed class Foo(` — the tempered
 # lookahead rejects any token sequence ending in a type keyword.
 METHOD_RE = re.compile(
@@ -98,6 +101,11 @@ def split_member_bodies(source: str, method_spans: list[tuple[int, str]]) -> dic
     return bodies
 
 
+def controller_token(controller: str) -> str:
+    """ASP.NET's [controller] token: class name minus the Controller suffix."""
+    return controller[: -len("Controller")] if controller.endswith("Controller") else controller
+
+
 def resolve_routes(
     class_prefix: str | None,
     controller: str,
@@ -106,7 +114,7 @@ def resolve_routes(
     route_templates: list[str],
 ) -> list[str]:
     prefix = class_prefix or ""
-    prefix = prefix.replace("[controller]", controller)
+    prefix = prefix.replace("[controller]", controller_token(controller))
     version = api_version or "1"
     prefix = prefix.replace("{version:apiVersion}", version)
 
@@ -114,7 +122,7 @@ def resolve_routes(
     resolved: list[str] = []
     for template in templates:
         if template is not None:
-            template = template.replace("[controller]", controller)
+            template = template.replace("[controller]", controller_token(controller))
         if template is None:
             path = prefix
         elif template.startswith("/"):

@@ -1,0 +1,36 @@
+{
+  "name": "jf-auth-negative/missing-fields",
+  "surface": "jellyfin",
+  "request": {
+    "method": "POST",
+    "url": "{melodee-origin}/Users/AuthenticateByName",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Content-Type": "application/json"
+    },
+    "jsonTemplate": {
+      "Username": "",
+      "Pw": ""
+    },
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "jf-auth-negative-missing-fields.json",
+    "sha256": "b156b4362566a9d435db5a3b8e82fceafb09c9d43fa9c2ed9d2be793b3383647",
+    "bytes": 170
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.TraceId",
+      "$.traceId"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

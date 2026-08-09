@@ -1,0 +1,38 @@
+{
+  "name": "os-stream-timeoffset",
+  "surface": "opensubsonic",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/rest/stream.view?f=json&v=1.16.1&c=phase0&id=song_2b8eab4b-235d-5892-99f8-c0f5f54e8ab4&timeOffset=10&u=phase0-fixture&t=%3Credacted%3E&s=%3Credacted%3E",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-length": "188",
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "os-stream-timeoffset.json",
+    "sha256": "3892995e1bb2f7f31dd7faff63f81e4c00fc74627e0a4dd05de172e839ea9802",
+    "bytes": 257
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.subsonic-response.serverVersion"
+    ],
+    "dropHeaders": [
+      "etag",
+      "last-modified"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

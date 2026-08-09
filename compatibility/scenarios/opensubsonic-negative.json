@@ -1,0 +1,230 @@
+[
+  {
+    "schemaVersion": 2,
+    "name": "os-gone-getchatmessages",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getChatMessages.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "expectStatus": 410,
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "PRD-API-OS-005: chat surface intentionally Gone. Empty body, Cache-Control no-cache."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-gone-addchatmessage",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/addChatMessage.view?f=json&v=1.16.1&c=phase0&message=hi&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "expectStatus": 410,
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": ""
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-gone-hls",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/hls.view?f=json&v=1.16.1&c=phase0&id=song_2b8eab4b-235d-5892-99f8-c0f5f54e8ab4&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "expectStatus": 410,
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "HLS (video-oriented) intentionally Gone."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-gone-getcaptions",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getCaptions.view?f=json&v=1.16.1&c=phase0&id=song_2b8eab4b-235d-5892-99f8-c0f5f54e8ab4&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "expectStatus": 410,
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": ""
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-gone-getvideoinfo",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getVideoInfo.view?f=json&v=1.16.1&c=phase0&id=1&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "expectStatus": 410,
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Audio-focused; video surface Gone."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-gone-getvideos",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getVideos.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "expectStatus": 410,
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": ""
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-gone-getvideos-plain",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getVideos?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "expectStatus": 410,
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Plain (non-.view) form also Gone (PRD-API-OS-001)."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-notimplemented-getusers",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getUsers.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "expectStatus": 501,
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "User-management subset intentionally Not Implemented."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-notimplemented-updateuser",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/updateUser.view?f=json&v=1.16.1&c=phase0&username=x&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "expectStatus": 501,
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": ""
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-notimplemented-deleteuser",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/deleteUser.view?f=json&v=1.16.1&c=phase0&username=x&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "expectStatus": 501,
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": ""
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-notimplemented-changepassword",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/changePassword.view?f=json&v=1.16.1&c=phase0&username=x&password=y&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "expectStatus": 501,
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": ""
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-gone-jukebox-disabled",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/jukeboxControl.view?f=json&v=1.16.1&c=phase0&action=status&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "expectStatus": 410,
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Conditional Gone: jukebox.enabled=false (seeded) AND jukebox.backendType empty -> 410 with Cache-Control: no-cache, empty body. Enabled-without-backend also 410 (backendType empty)."
+  }
+]

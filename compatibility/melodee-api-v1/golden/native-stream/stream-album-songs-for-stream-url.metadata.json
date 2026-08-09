@@ -9,7 +9,8 @@
       "User-Agent": "melodee-rs-phase0-capture/1",
       "Authorization": "Bearer <redacted>"
     },
-    "jsonTemplate": null
+    "jsonTemplate": null,
+    "bodyTemplate": null
   },
   "response": {
     "status": 200,
@@ -17,7 +18,7 @@
       "content-type": "application/json; charset=utf-8"
     },
     "bodyFile": "stream-album-songs-for-stream-url.json",
-    "sha256": "d81ccee35b20ed30582c9ec6473467435258bd9f59c6341ebdd8120765eb836e",
+    "sha256": "2631d657e3f1d7d4cdab02f164ffdf5b2cb527a806beb25c3216a25a283184cb",
     "bytes": 6659
   },
   "normalize": {
@@ -34,7 +35,7 @@
       "type": "streamAuthToken",
       "valid": true,
       "binding": "127.0.0.1",
-      "expiresAt": "2026-08-14T21:24:09Z",
+      "expiresAt": "2026-08-16T19:55:10Z",
       "expiresInFuture": true,
       "expiresInDays": 7,
       "hmacShape": "base64-sha256",

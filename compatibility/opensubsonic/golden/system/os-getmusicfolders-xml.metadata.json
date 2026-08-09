@@ -1,0 +1,36 @@
+{
+  "name": "os-getmusicfolders-xml",
+  "surface": "opensubsonic",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/rest/getMusicFolders.view?v=1.16.1&c=melodee-rs-phase0",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-length": "366",
+      "content-type": "application/xml",
+      "x-total-count": "0"
+    },
+    "bodyFile": "os-getmusicfolders-xml.xml",
+    "sha256": "ab158a4cb9956f28f5b775d757344436728654e0fa22e6dd4951b96d9cd09f4d",
+    "bytes": 369
+  },
+  "normalize": {
+    "maskRegex": [
+      {
+        "pattern": "serverVersion=\"[^\"]*\"",
+        "replace": "serverVersion=\"<volatile>\""
+      }
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

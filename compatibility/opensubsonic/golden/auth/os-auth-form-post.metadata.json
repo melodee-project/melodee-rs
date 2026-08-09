@@ -1,0 +1,36 @@
+{
+  "name": "os-auth-form-post",
+  "surface": "opensubsonic",
+  "request": {
+    "method": "POST",
+    "url": "{melodee-origin}/rest/getMusicFolders.view",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test",
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": "f=json&v=1.16.1&c=melodee-rs-phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-length": "309",
+      "content-type": "application/json; charset=utf-8",
+      "x-total-count": "0"
+    },
+    "bodyFile": "os-auth-form-post.json",
+    "sha256": "712f1a374fec5b621817fa59c426fa4fd231c1d538e47a0d83d382e1645f14df",
+    "bytes": 461
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.subsonic-response.serverVersion"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

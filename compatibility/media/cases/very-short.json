@@ -1,0 +1,231 @@
+{
+  "slug": "very-short",
+  "description": "0.5s track (below any sane duration).",
+  "expected": {
+    "validation": "duration rules"
+  },
+  "input": {
+    "files": [
+      "01 Blip 1.mp3",
+      "02 Blip 2.mp3",
+      "03 Blip 3.mp3"
+    ],
+    "sizes": {
+      "03 Blip 3.mp3": 13976,
+      "02 Blip 2.mp3": 13976,
+      "01 Blip 1.mp3": 13976
+    },
+    "sha256": {
+      "03 Blip 3.mp3": "3ba519ff0c74cdea4d071e5abce79824184edccf5e603d32e7ad5aecf976be14",
+      "02 Blip 2.mp3": "be94910f54b6ece67465c4575ae23254c36b19e70774464149c47be2cbfba630",
+      "01 Blip 1.mp3": "4d402ba083f3144565c5b69b7481a52be27ee04db8573c46a582157cc1a56dfe"
+    }
+  },
+  "extraction": {
+    "extractions": [
+      {
+        "file": "01 Blip 1.mp3",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {
+          "Genre": "Ambient",
+          "DiscNumber": 1,
+          "Bpm": 0,
+          "OrigAlbumYear": 2021,
+          "AlbumDate": "2021-01-01T00:00:00.0000000Z",
+          "Date": "2021-01-01T00:00:00Z",
+          "Encoder": "Lavf62.12.102",
+          "RecordingYear": 2021,
+          "DiscTotal": 1,
+          "AlbumArtist": "Corpus Artist",
+          "Title": "Blip 1",
+          "TrackNumber": 1,
+          "Album": "Short Path"
+        },
+        "mediaAudios": {
+          "BitRate": 192,
+          "BitDepth": -1,
+          "SampleRate": 44100,
+          "IsVbr": false,
+          "Duration": 1,
+          "DurationMs": 574.625,
+          "CodecLongName": "MPEG Audio (Layer III)",
+          "Channels": "Mono (1/0.0)",
+          "ChannelLayout": "Mono (1/0.0)",
+          "ChannelsArrangementDescription": "Mono (1/0.0)",
+          "ChannelsArrangementNumberChannels": 1,
+          "AudioDataOffset": 185,
+          "AudioDataSize": 13791
+        },
+        "imageCount": 0,
+        "crcHash": "8EDFC22B"
+      },
+      {
+        "file": "02 Blip 2.mp3",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {
+          "Genre": "Ambient",
+          "DiscNumber": 1,
+          "Bpm": 0,
+          "OrigAlbumYear": 2021,
+          "AlbumDate": "2021-01-01T00:00:00.0000000Z",
+          "Date": "2021-01-01T00:00:00Z",
+          "Encoder": "Lavf62.12.102",
+          "RecordingYear": 2021,
+          "DiscTotal": 1,
+          "AlbumArtist": "Corpus Artist",
+          "Title": "Blip 2",
+          "TrackNumber": 2,
+          "Album": "Short Path"
+        },
+        "mediaAudios": {
+          "BitRate": 192,
+          "BitDepth": -1,
+          "SampleRate": 44100,
+          "IsVbr": false,
+          "Duration": 1,
+          "DurationMs": 574.625,
+          "CodecLongName": "MPEG Audio (Layer III)",
+          "Channels": "Mono (1/0.0)",
+          "ChannelLayout": "Mono (1/0.0)",
+          "ChannelsArrangementDescription": "Mono (1/0.0)",
+          "ChannelsArrangementNumberChannels": 1,
+          "AudioDataOffset": 185,
+          "AudioDataSize": 13791
+        },
+        "imageCount": 0,
+        "crcHash": "B4FAA989"
+      }
+    ]
+  },
+  "pipeline": {
+    "processExitCode": 0,
+    "processSummary": {
+      "Elapsed Time": "00:00:03",
+      "Directories Processed": "1",
+      "Albums Processed": "1",
+      "Valid Albums": "0 (0%)",
+      "New Artists": "1",
+      "New Albums": "1",
+      "New Songs": "3"
+    },
+    "processErrorTail": null,
+    "stagingTree": [
+      {
+        "path": "Corpus Artist - [2021] Short Path/0002 Blip 2.mp3",
+        "size": 14010
+      },
+      {
+        "path": "Corpus Artist - [2021] Short Path/melodee.json",
+        "size": 10884,
+        "sha256": null
+      }
+    ],
+    "albums": [
+      {
+        "directory": "Corpus Artist - [2021] Short Path",
+        "status": "Invalid",
+        "statusReasons": "HasInvalidArtists, HasNoImages, HasLessThanMinimumDuration",
+        "albumType": "Album",
+        "validationMessages": [
+          {
+            "message": "Album artist is invalid.",
+            "severity": 2
+          },
+          {
+            "message": "Album does not have cover image.",
+            "severity": 2
+          },
+          {
+            "message": "Album Artist is unknown, will need manual validation.",
+            "severity": 2
+          },
+          {
+            "message": "Album duration is less than the minimum album duration.",
+            "severity": 2
+          }
+        ],
+        "songCount": 3,
+        "songs": [
+          {
+            "fileName": "01 Blip 1.mp3",
+            "size": 13976,
+            "title": "Blip 1",
+            "songNumber": 1,
+            "mediaNumber": 1,
+            "sortOrder": 1,
+            "crcHash": "8EDFC22B"
+          },
+          {
+            "fileName": "0002 Blip 2.mp3",
+            "size": 13976,
+            "title": "Blip 2",
+            "songNumber": 2,
+            "mediaNumber": 1,
+            "sortOrder": 2,
+            "crcHash": "B4FAA989"
+          },
+          {
+            "fileName": "03 Blip 3.mp3",
+            "size": 13976,
+            "title": "Blip 3",
+            "songNumber": 3,
+            "mediaNumber": 1,
+            "sortOrder": 3,
+            "crcHash": "E1C36D7B"
+          }
+        ],
+        "images": [],
+        "displaySummary": "003 : Short Path"
+      }
+    ],
+    "inboundLeftovers": [
+      {
+        "path": "02 Blip 2.mp3",
+        "size": 13976
+      },
+      {
+        "path": "melodee.json",
+        "size": 10316
+      }
+    ],
+    "validations": [
+      {
+        "album": "Corpus Artist - [2021] Short Path",
+        "exitCode": 0,
+        "result": {
+          "data": {
+            "albumStatus": 3,
+            "albumStatusReasons": 33554568,
+            "isValid": false,
+            "messages ": [
+              {
+                "message": "Album artist is  invalid.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album does not have cover  image.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album Artist is unknown, will  need manual validation.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album duration  is less than the minimum album  duration.",
+                "sortOrder": 0,
+                "severity": 2
+              }
+            ]
+          },
+          "isSuccess": true,
+          "type": 200
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,256 @@
+{
+  "slug": "title-featuring",
+  "description": "Featuring fragment in album title (undesired text).",
+  "expected": {
+    "validation": "Undesired severity (flagged, not invalid)"
+  },
+  "input": {
+    "files": [
+      "01 First Light.mp3",
+      "02 Second Wave.mp3",
+      "03 Third Echo.mp3"
+    ],
+    "sizes": {
+      "03 Third Echo.mp3": 56005,
+      "02 Second Wave.mp3": 52871,
+      "01 First Light.mp3": 49737
+    },
+    "sha256": {
+      "03 Third Echo.mp3": "b0eb2fd2ba8f6460cb3a07a72668069cff252c83de2afd26a9cf2eb689229a04",
+      "02 Second Wave.mp3": "4849b944365c0a0444dbcb46e8cef76c9576afe5bff37a2aa50642f3b20e84d6",
+      "01 First Light.mp3": "b0e4d831ea79493304b675709b6bbc5d79f565a4b82e8875b7561b9d617a497b"
+    }
+  },
+  "extraction": {
+    "extractions": [
+      {
+        "file": "01 First Light.mp3",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {
+          "Genre": "Ambient",
+          "DiscNumber": 1,
+          "Bpm": 0,
+          "OrigAlbumYear": 2021,
+          "AlbumDate": "2021-01-01T00:00:00.0000000Z",
+          "Date": "2021-01-01T00:00:00Z",
+          "Encoder": "Lavf62.12.102",
+          "RecordingYear": 2021,
+          "DiscTotal": 1,
+          "AlbumArtist": "Corpus Artist",
+          "Title": "First Light",
+          "TrackNumber": 1,
+          "Album": "Signals (feat. Guest Vocalist)"
+        },
+        "mediaAudios": {
+          "BitRate": 192,
+          "BitDepth": -1,
+          "SampleRate": 44100,
+          "IsVbr": false,
+          "Duration": 2,
+          "DurationMs": 2063.625,
+          "CodecLongName": "MPEG Audio (Layer III)",
+          "Channels": "Mono (1/0.0)",
+          "ChannelLayout": "Mono (1/0.0)",
+          "ChannelsArrangementDescription": "Mono (1/0.0)",
+          "ChannelsArrangementNumberChannels": 1,
+          "AudioDataOffset": 210,
+          "AudioDataSize": 49527
+        },
+        "imageCount": 0,
+        "crcHash": "D77A2489"
+      },
+      {
+        "file": "02 Second Wave.mp3",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {
+          "Genre": "Ambient",
+          "DiscNumber": 1,
+          "Bpm": 0,
+          "OrigAlbumYear": 2021,
+          "AlbumDate": "2021-01-01T00:00:00.0000000Z",
+          "Date": "2021-01-01T00:00:00Z",
+          "Encoder": "Lavf62.12.102",
+          "RecordingYear": 2021,
+          "DiscTotal": 1,
+          "AlbumArtist": "Corpus Artist",
+          "Title": "Second Wave",
+          "TrackNumber": 2,
+          "Album": "Signals (feat. Guest Vocalist)"
+        },
+        "mediaAudios": {
+          "BitRate": 192,
+          "BitDepth": -1,
+          "SampleRate": 44100,
+          "IsVbr": false,
+          "Duration": 2,
+          "DurationMs": 2194.2083333333335,
+          "CodecLongName": "MPEG Audio (Layer III)",
+          "Channels": "Mono (1/0.0)",
+          "ChannelLayout": "Mono (1/0.0)",
+          "ChannelsArrangementDescription": "Mono (1/0.0)",
+          "ChannelsArrangementNumberChannels": 1,
+          "AudioDataOffset": 210,
+          "AudioDataSize": 52661
+        },
+        "imageCount": 0,
+        "crcHash": "C1E48DF3"
+      }
+    ]
+  },
+  "pipeline": {
+    "processExitCode": 0,
+    "processSummary": {
+      "Elapsed Time": "00:00:03",
+      "Directories Processed": "1",
+      "Albums Processed": "1",
+      "Valid Albums": "0 (0%)",
+      "New Artists": "1",
+      "New Albums": "1",
+      "New Songs": "3"
+    },
+    "processErrorTail": null,
+    "stagingTree": [
+      {
+        "path": "Corpus Artist - [2021] Signals Feat Guest Vocalist/0001 First Light.mp3",
+        "size": 49771
+      },
+      {
+        "path": "Corpus Artist - [2021] Signals Feat Guest Vocalist/0002 Second Wave.mp3",
+        "size": 52905
+      },
+      {
+        "path": "Corpus Artist - [2021] Signals Feat Guest Vocalist/0003 Third Echo.mp3",
+        "size": 56039
+      },
+      {
+        "path": "Corpus Artist - [2021] Signals Feat Guest Vocalist/melodee.json",
+        "size": 11234,
+        "sha256": null
+      }
+    ],
+    "albums": [
+      {
+        "directory": "Corpus Artist - [2021] Signals Feat Guest Vocalist",
+        "status": "Invalid",
+        "statusReasons": "HasInvalidArtists, HasNoImages, TitleHasUnwantedText, HasLessThanMinimumDuration",
+        "albumType": "Album",
+        "validationMessages": [
+          {
+            "message": "Album artist is invalid.",
+            "severity": 2
+          },
+          {
+            "message": "Album title has unwanted text.",
+            "severity": 1
+          },
+          {
+            "message": "Album does not have cover image.",
+            "severity": 2
+          },
+          {
+            "message": "Album Artist is unknown, will need manual validation.",
+            "severity": 2
+          },
+          {
+            "message": "Album duration is less than the minimum album duration.",
+            "severity": 2
+          }
+        ],
+        "songCount": 3,
+        "songs": [
+          {
+            "fileName": "0001 First Light.mp3",
+            "size": 49737,
+            "title": "First Light",
+            "songNumber": 1,
+            "mediaNumber": 1,
+            "sortOrder": 1,
+            "crcHash": "D77A2489"
+          },
+          {
+            "fileName": "0002 Second Wave.mp3",
+            "size": 52871,
+            "title": "Second Wave",
+            "songNumber": 2,
+            "mediaNumber": 1,
+            "sortOrder": 2,
+            "crcHash": "C1E48DF3"
+          },
+          {
+            "fileName": "0003 Third Echo.mp3",
+            "size": 56005,
+            "title": "Third Echo",
+            "songNumber": 3,
+            "mediaNumber": 1,
+            "sortOrder": 3,
+            "crcHash": "BB7A9E0F"
+          }
+        ],
+        "images": [],
+        "displaySummary": "003 : Signals (feat. Guest Vocalist)"
+      }
+    ],
+    "inboundLeftovers": [
+      {
+        "path": "01 First Light.mp3",
+        "size": 49737
+      },
+      {
+        "path": "02 Second Wave.mp3",
+        "size": 52871
+      },
+      {
+        "path": "03 Third Echo.mp3",
+        "size": 56005
+      },
+      {
+        "path": "melodee.json",
+        "size": 10619
+      }
+    ],
+    "validations": [
+      {
+        "album": "Corpus Artist - [2021] Signals Feat Guest Vocalist",
+        "exitCode": 0,
+        "result": {
+          "data": {
+            "albumStatus": 3,
+            "albumStatusReasons": 35651720,
+            "isValid": false,
+            "messages ": [
+              {
+                "message": "Album artist is  invalid.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album title has unwanted  text.",
+                "sortOrder": 0,
+                "severity": 1
+              },
+              {
+                "message": "Album does not have cover  image.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album Artist is unknown, will  need manual validation.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album duration  is less than the minimum album  duration.",
+                "sortOrder": 0,
+                "severity": 2
+              }
+            ]
+          },
+          "isSuccess": true,
+          "type": 200
+        }
+      }
+    ]
+  }
+}

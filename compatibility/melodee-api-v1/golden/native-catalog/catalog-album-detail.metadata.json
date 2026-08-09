@@ -9,7 +9,8 @@
       "User-Agent": "melodee-rs-phase0-capture/1",
       "Authorization": "Bearer <redacted>"
     },
-    "jsonTemplate": null
+    "jsonTemplate": null,
+    "bodyTemplate": null
   },
   "response": {
     "status": 200,
@@ -17,7 +18,7 @@
       "content-type": "application/json; charset=utf-8"
     },
     "bodyFile": "catalog-album-detail.json",
-    "sha256": "3bd9863b42fbaca2fb199bed35f8febb48d6245a5304b9b08311861d15f14fe3",
+    "sha256": "67a37ceb62a853106ad4ffe8e4019116d4ea377c0b42525f934c91a7082accdb",
     "bytes": 978
   },
   "normalize": {

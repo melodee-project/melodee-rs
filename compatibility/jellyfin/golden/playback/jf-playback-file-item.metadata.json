@@ -1,0 +1,37 @@
+{
+  "name": "jf-playback/file-item",
+  "surface": "jellyfin",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/Items/2b8eab4b235d589299f8c0f5f54e8ab4/File",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "MediaBrowser <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-length": "220544",
+      "content-type": "audio/wav",
+      "accept-ranges": "bytes",
+      "last-modified": "Sun, 09 Aug 2026 19:58:35 GMT",
+      "content-disposition": "attachment; filename=\"01%20-%20Solar%20Wind.wav\""
+    },
+    "bodyFile": "jf-playback-file-item.bin",
+    "sha256": "5331b93e16f584cd3eb8d6a3d2281bec960a731b26d96ec1d5802209f1915c0f",
+    "bytes": 220544
+  },
+  "normalize": {
+    "dropHeaders": [
+      "etag",
+      "last-modified"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

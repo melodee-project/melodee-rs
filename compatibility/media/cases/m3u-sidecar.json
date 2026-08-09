@@ -1,0 +1,253 @@
+{
+  "slug": "m3u-sidecar",
+  "description": "MP3s plus an M3U playlist.",
+  "expected": {
+    "sidecar": "m3u parsed"
+  },
+  "input": {
+    "files": [
+      "01 First Light.mp3",
+      "02 Second Wave.mp3",
+      "03 Third Echo.mp3",
+      "release.m3u"
+    ],
+    "sizes": {
+      "release.m3u": 64,
+      "03 Third Echo.mp3": 55983,
+      "02 Second Wave.mp3": 52849,
+      "01 First Light.mp3": 49715
+    },
+    "sha256": {
+      "03 Third Echo.mp3": "a676ef009bb1d564ea1ee2d330a0b68dc76d0fa0fca8cd544e2ec918ce186c42",
+      "02 Second Wave.mp3": "2ce7bc353cf961aff92d7dad100f18577c397ea8e64651a1737152622f3c341b",
+      "01 First Light.mp3": "70468725b3e5b6d38880be36bc77025f01d9a95586f7aee5d9269d20320c7726"
+    }
+  },
+  "extraction": {
+    "extractions": [
+      {
+        "file": "01 First Light.mp3",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {
+          "Genre": "Ambient",
+          "DiscNumber": 1,
+          "Bpm": 0,
+          "OrigAlbumYear": 2021,
+          "AlbumDate": "2021-01-01T00:00:00.0000000Z",
+          "Date": "2021-01-01T00:00:00Z",
+          "Encoder": "Lavf62.12.102",
+          "RecordingYear": 2021,
+          "DiscTotal": 1,
+          "AlbumArtist": "Corpus Artist",
+          "Title": "First Light",
+          "TrackNumber": 1,
+          "Album": "M3U Path"
+        },
+        "mediaAudios": {
+          "BitRate": 192,
+          "BitDepth": -1,
+          "SampleRate": 44100,
+          "IsVbr": false,
+          "Duration": 2,
+          "DurationMs": 2063.625,
+          "CodecLongName": "MPEG Audio (Layer III)",
+          "Channels": "Mono (1/0.0)",
+          "ChannelLayout": "Mono (1/0.0)",
+          "ChannelsArrangementDescription": "Mono (1/0.0)",
+          "ChannelsArrangementNumberChannels": 1,
+          "AudioDataOffset": 188,
+          "AudioDataSize": 49527
+        },
+        "imageCount": 0,
+        "crcHash": "94A8FA9E"
+      },
+      {
+        "file": "02 Second Wave.mp3",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {
+          "Genre": "Ambient",
+          "DiscNumber": 1,
+          "Bpm": 0,
+          "OrigAlbumYear": 2021,
+          "AlbumDate": "2021-01-01T00:00:00.0000000Z",
+          "Date": "2021-01-01T00:00:00Z",
+          "Encoder": "Lavf62.12.102",
+          "RecordingYear": 2021,
+          "DiscTotal": 1,
+          "AlbumArtist": "Corpus Artist",
+          "Title": "Second Wave",
+          "TrackNumber": 2,
+          "Album": "M3U Path"
+        },
+        "mediaAudios": {
+          "BitRate": 192,
+          "BitDepth": -1,
+          "SampleRate": 44100,
+          "IsVbr": false,
+          "Duration": 2,
+          "DurationMs": 2194.2083333333335,
+          "CodecLongName": "MPEG Audio (Layer III)",
+          "Channels": "Mono (1/0.0)",
+          "ChannelLayout": "Mono (1/0.0)",
+          "ChannelsArrangementDescription": "Mono (1/0.0)",
+          "ChannelsArrangementNumberChannels": 1,
+          "AudioDataOffset": 188,
+          "AudioDataSize": 52661
+        },
+        "imageCount": 0,
+        "crcHash": "EC4B6A04"
+      }
+    ]
+  },
+  "pipeline": {
+    "processExitCode": 0,
+    "processSummary": {
+      "Elapsed Time": "00:00:03",
+      "Directories Processed": "1",
+      "Albums Processed": "1",
+      "Valid Albums": "0 (0%)",
+      "New Artists": "1",
+      "New Albums": "1",
+      "New Songs": "3"
+    },
+    "processErrorTail": null,
+    "stagingTree": [
+      {
+        "path": "Corpus Artist - [2021] M3u Path/0001 First Light.mp3",
+        "size": 49749
+      },
+      {
+        "path": "Corpus Artist - [2021] M3u Path/0002 Second Wave.mp3",
+        "size": 52883
+      },
+      {
+        "path": "Corpus Artist - [2021] M3u Path/0003 Third Echo.mp3",
+        "size": 56017
+      },
+      {
+        "path": "Corpus Artist - [2021] M3u Path/melodee.json",
+        "size": 10964,
+        "sha256": null
+      }
+    ],
+    "albums": [
+      {
+        "directory": "Corpus Artist - [2021] M3u Path",
+        "status": "Invalid",
+        "statusReasons": "HasInvalidArtists, HasNoImages, HasLessThanMinimumDuration",
+        "albumType": "Album",
+        "validationMessages": [
+          {
+            "message": "Album artist is invalid.",
+            "severity": 2
+          },
+          {
+            "message": "Album does not have cover image.",
+            "severity": 2
+          },
+          {
+            "message": "Album Artist is unknown, will need manual validation.",
+            "severity": 2
+          },
+          {
+            "message": "Album duration is less than the minimum album duration.",
+            "severity": 2
+          }
+        ],
+        "songCount": 3,
+        "songs": [
+          {
+            "fileName": "0001 First Light.mp3",
+            "size": 49715,
+            "title": "First Light",
+            "songNumber": 1,
+            "mediaNumber": 1,
+            "sortOrder": 1,
+            "crcHash": "94A8FA9E"
+          },
+          {
+            "fileName": "0002 Second Wave.mp3",
+            "size": 52849,
+            "title": "Second Wave",
+            "songNumber": 2,
+            "mediaNumber": 1,
+            "sortOrder": 2,
+            "crcHash": "EC4B6A04"
+          },
+          {
+            "fileName": "0003 Third Echo.mp3",
+            "size": 55983,
+            "title": "Third Echo",
+            "songNumber": 3,
+            "mediaNumber": 1,
+            "sortOrder": 3,
+            "crcHash": "8C68374D"
+          }
+        ],
+        "images": [],
+        "displaySummary": "003 : M3U Path"
+      }
+    ],
+    "inboundLeftovers": [
+      {
+        "path": "01 First Light.mp3",
+        "size": 49715
+      },
+      {
+        "path": "02 Second Wave.mp3",
+        "size": 52849
+      },
+      {
+        "path": "03 Third Echo.mp3",
+        "size": 55983
+      },
+      {
+        "path": "melodee.json",
+        "size": 10397
+      },
+      {
+        "path": "release.m3u",
+        "size": 64
+      }
+    ],
+    "validations": [
+      {
+        "album": "Corpus Artist - [2021] M3u Path",
+        "exitCode": 0,
+        "result": {
+          "data": {
+            "albumStatus": 3,
+            "albumStatusReasons": 33554568,
+            "isValid": false,
+            "messages ": [
+              {
+                "message": "Album artist is  invalid.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album does not have cover  image.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album Artist is unknown, will  need manual validation.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album duration  is less than the minimum album  duration.",
+                "sortOrder": 0,
+                "severity": 2
+              }
+            ]
+          },
+          "isSuccess": true,
+          "type": 200
+        }
+      }
+    ]
+  }
+}

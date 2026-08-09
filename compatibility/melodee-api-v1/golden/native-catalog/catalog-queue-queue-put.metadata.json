@@ -18,7 +18,8 @@
       "currentSongId": "b3297a8f-5e2b-5ade-98ea-f899d38059e0",
       "position": 42.5,
       "changedBy": "phase0-fixture"
-    }
+    },
+    "bodyTemplate": null
   },
   "response": {
     "status": 404,

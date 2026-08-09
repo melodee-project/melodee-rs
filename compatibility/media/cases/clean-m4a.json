@@ -1,0 +1,260 @@
+{
+  "slug": "clean-m4a",
+  "description": "Clean tagged AAC/M4A.",
+  "expected": {
+    "codec": "aac",
+    "conversion": "mp3"
+  },
+  "input": {
+    "files": [
+      "01 First Light.m4a",
+      "02 Second Wave.m4a",
+      "03 Third Echo.m4a"
+    ],
+    "sizes": {
+      "03 Third Echo.m4a": 43408,
+      "02 Second Wave.m4a": 37677,
+      "01 First Light.m4a": 35355
+    },
+    "sha256": {
+      "03 Third Echo.m4a": "66fa1ea7a36e2f57467d3d35d2c76ce038afe53053ff528f4f3530b3e1b912ee",
+      "02 Second Wave.m4a": "5069b478fb61dd2e99341947a19a63689cb66103622ba58940222ab934864af0",
+      "01 First Light.m4a": "1067bedae2996c7c567effb90e2f6a16fc2b2278bd1bbddbabd452e1b522ea72"
+    }
+  },
+  "extraction": {
+    "extractions": [
+      {
+        "file": "01 First Light.m4a",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {
+          "Genre": "Jazz",
+          "DiscNumber": 1,
+          "Bpm": 0,
+          "OrigAlbumYear": 2021,
+          "AlbumDate": "2021-01-01T00:00:00.0000000Z",
+          "Date": "2021-01-01T00:00:00Z",
+          "Encoder": "Lavf62.12.102",
+          "RecordingYear": 2021,
+          "DiscTotal": 1,
+          "AlbumArtist": "Corpus Artist",
+          "Title": "First Light",
+          "TrackNumber": 1,
+          "Album": "AAC Path"
+        },
+        "mediaAudios": {
+          "BitRate": 136,
+          "BitDepth": -1,
+          "SampleRate": 44100,
+          "IsVbr": true,
+          "Duration": 2,
+          "DurationMs": 2000,
+          "CodecLongName": "MPEG-4 Part 14",
+          "Channels": "Mono (1/0.0)",
+          "ChannelLayout": "Mono (1/0.0)",
+          "ChannelsArrangementDescription": "Mono (1/0.0)",
+          "ChannelsArrangementNumberChannels": 1,
+          "AudioDataOffset": 36,
+          "AudioDataSize": 33975
+        },
+        "imageCount": 0,
+        "crcHash": "77C0DDF7"
+      },
+      {
+        "file": "02 Second Wave.m4a",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {
+          "Genre": "Jazz",
+          "DiscNumber": 1,
+          "Bpm": 0,
+          "OrigAlbumYear": 2021,
+          "AlbumDate": "2021-01-01T00:00:00.0000000Z",
+          "Date": "2021-01-01T00:00:00Z",
+          "Encoder": "Lavf62.12.102",
+          "RecordingYear": 2021,
+          "DiscTotal": 1,
+          "AlbumArtist": "Corpus Artist",
+          "Title": "Second Wave",
+          "TrackNumber": 2,
+          "Album": "AAC Path"
+        },
+        "mediaAudios": {
+          "BitRate": 136,
+          "BitDepth": -1,
+          "SampleRate": 44100,
+          "IsVbr": true,
+          "Duration": 2,
+          "DurationMs": 2130,
+          "CodecLongName": "MPEG-4 Part 14",
+          "Channels": "Mono (1/0.0)",
+          "ChannelLayout": "Mono (1/0.0)",
+          "ChannelsArrangementDescription": "Mono (1/0.0)",
+          "ChannelsArrangementNumberChannels": 1,
+          "AudioDataOffset": 36,
+          "AudioDataSize": 36277
+        },
+        "imageCount": 0,
+        "crcHash": "6F4FC70B"
+      }
+    ]
+  },
+  "pipeline": {
+    "processExitCode": 0,
+    "processSummary": {
+      "Elapsed Time": "00:00:04",
+      "Directories Processed": "1",
+      "Albums Processed": "1",
+      "Valid Albums": "0 (0%)",
+      "New Artists": "1",
+      "New Albums": "1",
+      "New Songs": "3"
+    },
+    "processErrorTail": null,
+    "stagingTree": [
+      {
+        "path": "Corpus Artist - [2021] Aac Path/0001 First Light.mp3",
+        "size": 83838
+      },
+      {
+        "path": "Corpus Artist - [2021] Aac Path/0002 Second Wave.mp3",
+        "size": 88638
+      },
+      {
+        "path": "Corpus Artist - [2021] Aac Path/0003 Third Echo.mp3",
+        "size": 93437
+      },
+      {
+        "path": "Corpus Artist - [2021] Aac Path/melodee.json",
+        "size": 10882,
+        "sha256": null
+      }
+    ],
+    "albums": [
+      {
+        "directory": "Corpus Artist - [2021] Aac Path",
+        "status": "Invalid",
+        "statusReasons": "HasInvalidArtists, HasNoImages, HasLessThanMinimumDuration",
+        "albumType": "Album",
+        "validationMessages": [
+          {
+            "message": "Album artist is invalid.",
+            "severity": 2
+          },
+          {
+            "message": "Album does not have cover image.",
+            "severity": 2
+          },
+          {
+            "message": "Album Artist is unknown, will need manual validation.",
+            "severity": 2
+          },
+          {
+            "message": "Album duration is less than the minimum album duration.",
+            "severity": 2
+          }
+        ],
+        "songCount": 3,
+        "songs": [
+          {
+            "fileName": "0001 First Light.mp3",
+            "size": 83804,
+            "title": "First Light",
+            "songNumber": 1,
+            "mediaNumber": 1,
+            "sortOrder": 1,
+            "crcHash": "9197C024"
+          },
+          {
+            "fileName": "0002 Second Wave.mp3",
+            "size": 88604,
+            "title": "Second Wave",
+            "songNumber": 2,
+            "mediaNumber": 1,
+            "sortOrder": 2,
+            "crcHash": "A460ACD7"
+          },
+          {
+            "fileName": "0003 Third Echo.mp3",
+            "size": 93403,
+            "title": "Third Echo",
+            "songNumber": 3,
+            "mediaNumber": 1,
+            "sortOrder": 3,
+            "crcHash": "5A4541AC"
+          }
+        ],
+        "images": [],
+        "displaySummary": "003 : AAC Path"
+      }
+    ],
+    "inboundLeftovers": [
+      {
+        "path": "01 First Light.m4a._converted",
+        "size": 35355
+      },
+      {
+        "path": "01 First Light.mp3",
+        "size": 83804
+      },
+      {
+        "path": "02 Second Wave.m4a._converted",
+        "size": 37677
+      },
+      {
+        "path": "02 Second Wave.mp3",
+        "size": 88604
+      },
+      {
+        "path": "03 Third Echo.m4a._converted",
+        "size": 43408
+      },
+      {
+        "path": "03 Third Echo.mp3",
+        "size": 93403
+      },
+      {
+        "path": "melodee.json",
+        "size": 10313
+      }
+    ],
+    "validations": [
+      {
+        "album": "Corpus Artist - [2021] Aac Path",
+        "exitCode": 0,
+        "result": {
+          "data": {
+            "albumStatus": 3,
+            "albumStatusReasons": 33554568,
+            "isValid": false,
+            "messages ": [
+              {
+                "message": "Album artist is  invalid.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album does not have cover  image.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album Artist is unknown, will  need manual validation.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album duration  is less than the minimum album  duration.",
+                "sortOrder": 0,
+                "severity": 2
+              }
+            ]
+          },
+          "isSuccess": true,
+          "type": 200
+        }
+      }
+    ]
+  }
+}

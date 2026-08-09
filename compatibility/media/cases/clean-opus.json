@@ -1,0 +1,289 @@
+{
+  "slug": "clean-opus",
+  "description": "Clean tagged OPUS.",
+  "expected": {
+    "codec": "opus",
+    "conversion": "mp3"
+  },
+  "input": {
+    "files": [
+      "01 First Light.opus",
+      "02 Second Wave.opus",
+      "03 Third Echo.opus"
+    ],
+    "sizes": {
+      "03 Third Echo.opus": 43424,
+      "02 Second Wave.opus": 44727,
+      "01 First Light.opus": 37858
+    },
+    "sha256": {
+      "03 Third Echo.opus": "9c9f63bcab91abb190d83d15b10c3296f2bbb79cd1b9e03bc86084f8f20c3f28",
+      "02 Second Wave.opus": "d76b6e7ba7c20951cb767e5f9fb9ba6f7a36afa5c189a6ae19aaf7f308cccf9d",
+      "01 First Light.opus": "6cd4ea1798f6b3d6919447d821b58afd7ac20e500e640eb977842f901713a3ba"
+    }
+  },
+  "extraction": {
+    "extractions": [
+      {
+        "file": "01 First Light.opus",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {
+          "Genre": "Folk",
+          "DiscNumber": 1,
+          "Bpm": 0,
+          "OrigAlbumYear": 2021,
+          "AlbumDate": "2021-01-01T00:00:00.0000000Z",
+          "Date": "2021-01-01T00:00:00Z",
+          "Encoder": "Lavc62.28.102 libopus",
+          "RecordingYear": 2021,
+          "DiscTotal": 1,
+          "AlbumArtist": "Corpus Artist",
+          "Title": "First Light",
+          "TrackNumber": 1,
+          "Album": "Opus Path"
+        },
+        "mediaAudios": {
+          "BitRate": 150,
+          "BitDepth": -1,
+          "SampleRate": 48000,
+          "IsVbr": true,
+          "Duration": 2,
+          "DurationMs": 2006.5,
+          "CodecLongName": "OGG (Opus)",
+          "Channels": "Mono (1/0.0)",
+          "ChannelLayout": "Mono (1/0.0)",
+          "ChannelsArrangementDescription": "Mono (1/0.0)",
+          "ChannelsArrangementNumberChannels": 1,
+          "AudioDataOffset": 276,
+          "AudioDataSize": 37582
+        },
+        "imageCount": 0,
+        "crcHash": "5EC7627C"
+      },
+      {
+        "file": "02 Second Wave.opus",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {
+          "Genre": "Folk",
+          "DiscNumber": 1,
+          "Bpm": 0,
+          "OrigAlbumYear": 2021,
+          "AlbumDate": "2021-01-01T00:00:00.0000000Z",
+          "Date": "2021-01-01T00:00:00Z",
+          "Encoder": "Lavc62.28.102 libopus",
+          "RecordingYear": 2021,
+          "DiscTotal": 1,
+          "AlbumArtist": "Corpus Artist",
+          "Title": "Second Wave",
+          "TrackNumber": 2,
+          "Album": "Opus Path"
+        },
+        "mediaAudios": {
+          "BitRate": 167,
+          "BitDepth": -1,
+          "SampleRate": 48000,
+          "IsVbr": true,
+          "Duration": 2,
+          "DurationMs": 2136.5,
+          "CodecLongName": "OGG (Opus)",
+          "Channels": "Mono (1/0.0)",
+          "ChannelLayout": "Mono (1/0.0)",
+          "ChannelsArrangementDescription": "Mono (1/0.0)",
+          "ChannelsArrangementNumberChannels": 1,
+          "AudioDataOffset": 276,
+          "AudioDataSize": 44451
+        },
+        "imageCount": 0,
+        "crcHash": "896FE1D5"
+      }
+    ]
+  },
+  "pipeline": {
+    "processExitCode": 0,
+    "processSummary": {
+      "Elapsed Time": "00:00:03",
+      "Directories Processed": "1",
+      "Albums Processed": "1",
+      "Valid Albums": "0 (0%)",
+      "New Artists": "1",
+      "New Albums": "1",
+      "New Songs": "3"
+    },
+    "processErrorTail": null,
+    "stagingTree": [
+      {
+        "path": "Clean - [] 3733868237/0000 03 Third Echo.Mp3.mp3",
+        "size": 93183
+      },
+      {
+        "path": "Clean - [] 3733868237/melodee.json",
+        "size": 5066,
+        "sha256": null
+      }
+    ],
+    "albums": [
+      {
+        "directory": "Clean - [] 3733868237",
+        "status": "Invalid",
+        "statusReasons": "HasInvalidArtists, HasInvalidSongs, HasInvalidYear, HasNoImages, HasSongsWithUnwantedText, IsNotStudioTypeAlbum, TitleIsInvalid, HasLessThanMinimumDuration",
+        "albumType": "NotSet",
+        "validationMessages": [
+          {
+            "message": "Album artist is invalid.",
+            "severity": 2
+          },
+          {
+            "message": "Album has invalid songs.",
+            "severity": 2
+          },
+          {
+            "message": "Album has invalid year.",
+            "severity": 2
+          },
+          {
+            "message": "Album title is invalid.",
+            "severity": 2
+          },
+          {
+            "message": "Some Songs have unwanted text: [ArtistId [] AlbumId [] SongId [ed0e323b-6d67-406b-8871-88f565d321fa] File [UniqueId [948521350] Size [87405] Name [02 Second Wave.mp3]]][ArtistId [] AlbumId [] SongId [23370af2-b87d-40b0-8cdf-0a708aebec12] File [UniqueId [108616989] Size [82605] Name [01 First Light.mp3]]][ArtistId [] AlbumId [] SongId [9691a829-903a-48c1-9b2d-d8ce26923342] File [UniqueId [3403753309] Size [93165] Name [0000 03 Third Echo.Mp3.mp3]]]",
+            "severity": 1
+          },
+          {
+            "message": "Album does not have cover image.",
+            "severity": 2
+          },
+          {
+            "message": "Album Artist is unknown, will need manual validation.",
+            "severity": 2
+          },
+          {
+            "message": "Album is not studio type, will need manual validation.",
+            "severity": 2
+          },
+          {
+            "message": "Album duration is less than the minimum album duration.",
+            "severity": 2
+          }
+        ],
+        "songCount": 3,
+        "songs": [
+          {
+            "fileName": "02 Second Wave.mp3",
+            "size": 87405,
+            "title": null,
+            "songNumber": 1,
+            "mediaNumber": null,
+            "sortOrder": 0,
+            "crcHash": "2F42C01C"
+          },
+          {
+            "fileName": "01 First Light.mp3",
+            "size": 82605,
+            "title": null,
+            "songNumber": 2,
+            "mediaNumber": null,
+            "sortOrder": 0,
+            "crcHash": "0D2BF126"
+          },
+          {
+            "fileName": "0000 03 Third Echo.Mp3.mp3",
+            "size": 93165,
+            "title": null,
+            "songNumber": 3,
+            "mediaNumber": null,
+            "sortOrder": 0,
+            "crcHash": "7C65F3D2"
+          }
+        ],
+        "images": [],
+        "displaySummary": "003 : "
+      }
+    ],
+    "inboundLeftovers": [
+      {
+        "path": "01 First Light.opus._converted",
+        "size": 37858
+      },
+      {
+        "path": "02 Second Wave.opus._converted",
+        "size": 44727
+      },
+      {
+        "path": "03 Third Echo.mp3",
+        "size": 93165
+      },
+      {
+        "path": "03 Third Echo.opus._converted",
+        "size": 43424
+      },
+      {
+        "path": "melodee.json",
+        "size": 4114
+      }
+    ],
+    "validations": [
+      {
+        "album": "Clean - [] 3733868237",
+        "exitCode": 0,
+        "result": {
+          "data": {
+            "albumStatus": 3,
+            "albumStatusReasons": 37785784,
+            "isValid": false,
+            "messages ": [
+              {
+                "message": "Album artist is  invalid.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album has invalid  songs.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album has invalid  year.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album title is  invalid.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Some Songs have unwanted text: [ArtistId [] AlbumId [] SongId [ed0e323b-6d67-406b-8871-88f565d321fa] File  [UniqueId [948521350] Size [87405] Name [02 Second Wave.mp3]]][ArtistId []  AlbumId [] SongId [23370af2-b87d-40b0-8cdf-0a708aebec12] File [UniqueId  [108616989] Size [82605] Name [01 First Light.mp3]]][ArtistId [] AlbumId []  SongId [9691a829-903a-48c1-9b2d-d8ce26923342] File [UniqueId [3403753309] Size  [93165] Name [0000 03 Third  Echo.Mp3.mp3]]]",
+                "sortOrder": 0,
+                "severity": 1
+              },
+              {
+                "message": "Album does not have  cover image.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album Artist is unknown,  will need manual validation.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album is  not studio type, will need manual  validation.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album duration is less than the minimum album  duration.",
+                "sortOrder": 0,
+                "severity": 2
+              }
+            ]
+          },
+          "isSuccess": true,
+          "type": 200
+        }
+      }
+    ]
+  }
+}

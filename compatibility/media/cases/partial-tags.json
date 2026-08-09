@@ -1,0 +1,200 @@
+{
+  "slug": "partial-tags",
+  "description": "Only a title tag; no artist/album.",
+  "expected": {
+    "fallback": "directory-name segments"
+  },
+  "input": {
+    "files": [
+      "01 First Light.mp3",
+      "02 Second Wave.mp3",
+      "03 Third Echo.mp3"
+    ],
+    "sizes": {
+      "03 Third Echo.mp3": 55863,
+      "02 Second Wave.mp3": 52729,
+      "01 First Light.mp3": 49595
+    },
+    "sha256": {
+      "03 Third Echo.mp3": "cb367f159aefcfff063523b7b87c24e277d911dc7f8cbc502490f7ba68d09e44",
+      "02 Second Wave.mp3": "1a6ef74f72760f5159e30a98fb08cd75228c098ea230c656ba8011fdcf4ee33a",
+      "01 First Light.mp3": "d162183d19841cc44a3fe6fd72f0c24cf82fe45f1ced60eb7d8c9d9386323ec0"
+    }
+  },
+  "extraction": {
+    "extractions": [
+      {
+        "file": "01 First Light.mp3",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {},
+        "mediaAudios": {},
+        "imageCount": 0,
+        "crcHash": null
+      },
+      {
+        "file": "02 Second Wave.mp3",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {},
+        "mediaAudios": {},
+        "imageCount": 0,
+        "crcHash": null
+      }
+    ]
+  },
+  "pipeline": {
+    "processExitCode": 0,
+    "processSummary": {
+      "Elapsed Time": "00:00:03",
+      "Directories Processed": "1",
+      "Albums Processed": "1",
+      "Valid Albums": "0 (0%)",
+      "New Artists": "1",
+      "New Albums": "1",
+      "New Songs": "3"
+    },
+    "processErrorTail": null,
+    "stagingTree": [
+      {
+        "path": "Partial - [] 169664/0000 First Light.mp3",
+        "size": 49613
+      },
+      {
+        "path": "Partial - [] 169664/0000 Second Wave.mp3",
+        "size": 52747
+      },
+      {
+        "path": "Partial - [] 169664/0000 Third Echo.mp3",
+        "size": 55881
+      },
+      {
+        "path": "Partial - [] 169664/melodee.json",
+        "size": 4782,
+        "sha256": null
+      }
+    ],
+    "albums": [
+      {
+        "directory": "Partial - [] 169664",
+        "status": "Invalid",
+        "statusReasons": "HasInvalidYear, HasNoImages, IsNotStudioTypeAlbum, TitleIsInvalid, HasLessThanMinimumDuration",
+        "albumType": "NotSet",
+        "validationMessages": [
+          {
+            "message": "Album has invalid year.",
+            "severity": 2
+          },
+          {
+            "message": "Album title is invalid.",
+            "severity": 2
+          },
+          {
+            "message": "Album does not have cover image.",
+            "severity": 2
+          },
+          {
+            "message": "Album is not studio type, will need manual validation.",
+            "severity": 2
+          },
+          {
+            "message": "Album duration is less than the minimum album duration.",
+            "severity": 2
+          }
+        ],
+        "songCount": 3,
+        "songs": [
+          {
+            "fileName": "0000 First Light.mp3",
+            "size": 49595,
+            "title": "First Light",
+            "songNumber": 1,
+            "mediaNumber": null,
+            "sortOrder": 0,
+            "crcHash": "28EC23CF"
+          },
+          {
+            "fileName": "0000 Second Wave.mp3",
+            "size": 52729,
+            "title": "Second Wave",
+            "songNumber": 2,
+            "mediaNumber": null,
+            "sortOrder": 0,
+            "crcHash": "3B0D89FA"
+          },
+          {
+            "fileName": "0000 Third Echo.mp3",
+            "size": 55863,
+            "title": "Third Echo",
+            "songNumber": 3,
+            "mediaNumber": null,
+            "sortOrder": 0,
+            "crcHash": "C9781559"
+          }
+        ],
+        "images": [],
+        "displaySummary": "003 : "
+      }
+    ],
+    "inboundLeftovers": [
+      {
+        "path": "01 First Light.mp3",
+        "size": 49595
+      },
+      {
+        "path": "02 Second Wave.mp3",
+        "size": 52729
+      },
+      {
+        "path": "03 Third Echo.mp3",
+        "size": 55863
+      },
+      {
+        "path": "melodee.json",
+        "size": 4052
+      }
+    ],
+    "validations": [
+      {
+        "album": "Partial - [] 169664",
+        "exitCode": 0,
+        "result": {
+          "data": {
+            "albumStatus": 3,
+            "albumStatusReasons": 37781664,
+            "isValid": false,
+            "messages ": [
+              {
+                "message": "Album has invalid  year.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album title is  invalid.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album does not have cover  image.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album is not studio type, will  need manual validation.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album duration  is less than the minimum album  duration.",
+                "sortOrder": 0,
+                "severity": 2
+              }
+            ]
+          },
+          "isSuccess": true,
+          "type": 200
+        }
+      }
+    ]
+  }
+}

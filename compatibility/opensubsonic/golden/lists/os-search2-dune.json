@@ -1,0 +1,27 @@
+{
+  "subsonic-response": {
+    "status": "ok",
+    "version": "1.16.1",
+    "type": "Melodee",
+    "serverVersion": "<volatile>",
+    "openSubsonic": true,
+    "searchResult2": {
+      "album": [],
+      "song": [],
+      "artist": [
+        {
+          "id": "artist_5bf951d5-7afe-5c50-8941-145b7095902b",
+          "name": "Dune",
+          "coverArt": "artist_5bf951d5-7afe-5c50-8941-145b7095902b",
+          "albumCount": 1
+        },
+        {
+          "id": "artist_503f045f-1bd6-5ea7-9e32-14632344680c",
+          "name": "Düné",
+          "coverArt": "artist_503f045f-1bd6-5ea7-9e32-14632344680c",
+          "albumCount": 1
+        }
+      ]
+    }
+  }
+}

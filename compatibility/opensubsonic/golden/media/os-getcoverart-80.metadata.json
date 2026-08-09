@@ -1,0 +1,36 @@
+{
+  "name": "os-getcoverart-80",
+  "surface": "opensubsonic",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/rest/getCoverArt.view?f=json&v=1.16.1&c=phase0&id=album_69d97699-74c5-5403-878f-87f42d9d9fbb&size=80&u=phase0-fixture&t=%3Credacted%3E&s=%3Credacted%3E",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-length": "785",
+      "content-type": "image/jpeg",
+      "etag": "fda2a2741f69f726b74e07522e8e57487ed3d26a32699e798da0877f47348b18"
+    },
+    "bodyFile": "os-getcoverart-80.bin",
+    "sha256": "ea00fc2fbab43a129b5f4793c3014200b72b5fffc7a3e88dbb5371c0d681f618",
+    "bytes": 785
+  },
+  "normalize": {
+    "dropHeaders": [
+      "etag",
+      "last-modified"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

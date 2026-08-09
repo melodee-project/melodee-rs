@@ -1,0 +1,237 @@
+[
+  {
+    "schemaVersion": 2,
+    "name": "jf-extra",
+    "surface": "jellyfin",
+    "flow": [
+      {
+        "name": "login",
+        "method": "POST",
+        "path": "/Users/AuthenticateByName",
+        "json": {
+          "Username": "phase0-fixture",
+          "Pw": "Mel0deeR0cks!"
+        },
+        "capture": {
+          "jfToken": "$.AccessToken"
+        },
+        "secretCapture": [
+          "jfToken"
+        ],
+        "normalize": {
+          "maskJsonPaths": [
+            "$.AccessToken",
+            "$.SessionInfo",
+            "$.User.LastLoginDate",
+            "$.User.LastActivityDate",
+            "$.User.Configuration"
+          ]
+        }
+      },
+      {
+        "name": "audio-lyrics",
+        "method": "GET",
+        "path": "/Audio/ea26fc59a54551c294c4702e1f97b80a/Lyrics",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {},
+        "notes": "Sibling .lrc parsed into {Lyrics:[{Text, Start(ticks)}]} (fixture Polar Veil has a seeded .lrc sidecar)."
+      },
+      {
+        "name": "audio-lyrics-none",
+        "method": "GET",
+        "path": "/Audio/2b8eab4b235d589299f8c0f5f54e8ab4/Lyrics",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {},
+        "notes": "No .lrc sibling -> {Lyrics: []} (never an error)."
+      },
+      {
+        "name": "playbackinfo-post",
+        "method": "POST",
+        "path": "/Items/2b8eab4b235d589299f8c0f5f54e8ab4/PlaybackInfo",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.PlaySessionId"
+          ]
+        },
+        "notes": "POST form (standard Jellyfin client form).",
+        "json": {}
+      },
+      {
+        "name": "item-refresh-noop",
+        "method": "POST",
+        "path": "/Items/69d9769974c55403878f87f42d9d9fbb/Refresh",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {},
+        "notes": "No-op stub -> 204 (acknowledged, nothing scanned).",
+        "expectStatus": 204
+      },
+      {
+        "name": "songs-instantmix",
+        "method": "GET",
+        "path": "/Songs/2b8eab4b235d589299f8c0f5f54e8ab4/InstantMix?limit=5",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.Items"
+          ]
+        },
+        "notes": "Songs-controller instant mix variant — random: mask Items."
+      },
+      {
+        "name": "system-ping-post",
+        "method": "POST",
+        "path": "/System/Ping",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {},
+        "notes": "POST variant of ping.",
+        "expectStatus": 204
+      },
+      {
+        "name": "users-list-admin",
+        "method": "GET",
+        "path": "/Users",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$[*].LastLoginDate",
+            "$[*].LastActivityDate",
+            "$[*].Configuration"
+          ]
+        },
+        "notes": "Admin token -> all users (non-admin would see only self)."
+      },
+      {
+        "name": "users-by-id",
+        "method": "GET",
+        "path": "/Users/f78448cc82ec5864877c6c6163b00065",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.LastLoginDate",
+            "$.LastActivityDate",
+            "$.Configuration"
+          ]
+        },
+        "notes": "Self-or-admin user fetch."
+      },
+      {
+        "name": "users-items-redirect",
+        "method": "GET",
+        "path": "/Users/f78448cc82ec5864877c6c6163b00065/Items?includeItemTypes=MusicAlbum&recursive=true",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {},
+        "notes": "RedirectPreserveMethod to /Items?...&userId=... (307-class; middleware re-detects on follow).",
+        "followRedirects": false,
+        "expectStatus": 307
+      },
+      {
+        "name": "users-item-redirect",
+        "method": "GET",
+        "path": "/Users/f78448cc82ec5864877c6c6163b00065/Items/2b8eab4b235d589299f8c0f5f54e8ab4",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {},
+        "notes": "RedirectPreserveMethod to /Items/{guid}.",
+        "followRedirects": false,
+        "expectStatus": 307
+      },
+      {
+        "name": "create-for-items-delete",
+        "method": "POST",
+        "path": "/Playlists",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "json": {
+          "Name": "JF-Items-Delete",
+          "Ids": [],
+          "IsPublic": false
+        },
+        "capture": {
+          "jfPlaylistId3": "$.Id"
+        },
+        "secretCapture": [
+          "jfPlaylistId3"
+        ],
+        "normalize": {
+          "maskJsonPaths": [
+            "$.Id"
+          ]
+        },
+        "notes": "Create empty playlist for the DELETE /Items route."
+      },
+      {
+        "name": "delete-playlist-via-items",
+        "method": "DELETE",
+        "path": "/Items/{{jfPlaylistId3}}",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "expectStatus": 204,
+        "normalize": {},
+        "notes": "DELETE /Items/{id} deletes ONLY playlists owned by the user -> 204."
+      },
+      {
+        "name": "delete-song-via-items-404",
+        "method": "DELETE",
+        "path": "/Items/2b8eab4b235d589299f8c0f5f54e8ab4",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.TraceId",
+            "$.traceId"
+          ]
+        },
+        "notes": "DELETE on a song -> 404 'Item not found or cannot be deleted.'",
+        "expectStatus": 404
+      },
+      {
+        "name": "capabilities",
+        "method": "POST",
+        "path": "/Sessions/Capabilities?playableMediaTypes=Audio&supportsMediaControl=true",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {},
+        "notes": "Capabilities acknowledge-only 204 (query-param form).",
+        "expectStatus": 204
+      }
+    ]
+  }
+]

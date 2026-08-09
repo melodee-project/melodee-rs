@@ -1,0 +1,58 @@
+{
+  "MediaSources": [
+    {
+      "Protocol": "File",
+      "Id": "2b8eab4b235d589299f8c0f5f54e8ab4",
+      "Path": null,
+      "Type": "Default",
+      "Container": "wav",
+      "Size": 220544,
+      "Name": "Solar Wind",
+      "IsRemote": false,
+      "ETag": null,
+      "RunTimeTicks": 25000000000,
+      "ReadAtNativeFramerate": false,
+      "IgnoreDts": false,
+      "IgnoreIndex": false,
+      "GenPtsInput": false,
+      "SupportsTranscoding": false,
+      "SupportsDirectStream": true,
+      "SupportsDirectPlay": true,
+      "IsInfiniteStream": false,
+      "RequiresOpening": false,
+      "RequiresClosing": false,
+      "RequiresLooping": false,
+      "SupportsProbing": true,
+      "MediaStreams": [
+        {
+          "Codec": "pcm",
+          "TimeBase": null,
+          "CodecTimeBase": null,
+          "Title": null,
+          "DisplayTitle": "PCM -  channels",
+          "DisplayLanguage": null,
+          "IsInterlaced": false,
+          "IsAVC": null,
+          "ChannelLayout": null,
+          "BitRate": 1411000,
+          "BitDepth": null,
+          "RefFrames": null,
+          "IsDefault": true,
+          "IsForced": false,
+          "Type": "Audio",
+          "Index": 0,
+          "IsExternal": false,
+          "IsTextSubtitleStream": false,
+          "SupportsExternalStream": false,
+          "Level": 0,
+          "Channels": null,
+          "SampleRate": 44100,
+          "IsAnamorphic": null
+        }
+      ],
+      "Bitrate": 1411000,
+      "DefaultAudioStreamIndex": null
+    }
+  ],
+  "PlaySessionId": "<volatile>"
+}

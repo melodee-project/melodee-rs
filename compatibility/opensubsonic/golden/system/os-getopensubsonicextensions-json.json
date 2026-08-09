@@ -1,0 +1,41 @@
+{
+  "subsonic-response": {
+    "status": "ok",
+    "version": "1.16.1",
+    "type": "Melodee",
+    "serverVersion": "<volatile>",
+    "openSubsonic": true,
+    "openSubsonicExtensions": [
+      {
+        "name": "melodeeExtensions",
+        "versions": [
+          1
+        ]
+      },
+      {
+        "name": "apiKeyAuthentication",
+        "versions": [
+          1
+        ]
+      },
+      {
+        "name": "formPost",
+        "versions": [
+          1
+        ]
+      },
+      {
+        "name": "songLyrics",
+        "versions": [
+          1
+        ]
+      },
+      {
+        "name": "transcodeOffset",
+        "versions": [
+          1
+        ]
+      }
+    ]
+  }
+}

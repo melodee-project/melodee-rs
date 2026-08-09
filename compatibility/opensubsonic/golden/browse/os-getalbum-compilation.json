@@ -1,0 +1,323 @@
+{
+  "subsonic-response": {
+    "status": "ok",
+    "version": "1.16.1",
+    "type": "Melodee",
+    "serverVersion": "<volatile>",
+    "openSubsonic": true,
+    "album": {
+      "id": "album_97d569aa-9133-5351-b8c5-097cf57f96f9",
+      "name": "Phase Zero Compilation",
+      "title": "Phase Zero Compilation",
+      "artist": "Various Artists",
+      "year": 2025,
+      "coverArt": "album_97d569aa-9133-5351-b8c5-097cf57f96f9",
+      "duration": 8,
+      "playCount": 0,
+      "genre": "Electronic,Jazz",
+      "created": "2026-01-08T00:00:00Z",
+      "artistId": "artist_89eb2dc1-fd4c-5a57-99e5-480c96b292fc",
+      "songCount": 3,
+      "played": "",
+      "genres": [
+        {
+          "name": "Electronic"
+        },
+        {
+          "name": "Jazz"
+        }
+      ],
+      "artists": [
+        {
+          "id": "artist_eebcf6e2-4cbb-5177-be07-42a2dacec3b5",
+          "name": "Guest Vocalist",
+          "coverArt": "artist_eebcf6e2-4cbb-5177-be07-42a2dacec3b5",
+          "albumCount": 0,
+          "userRating": 0,
+          "artistImageUrl": "URL",
+          "sortName": "Guest Vocalist"
+        },
+        {
+          "id": "contributor_THEPHASE0STRINGS",
+          "name": "The Phase0 Strings",
+          "coverArt": "contributor_THEPHASE0STRINGS",
+          "albumCount": 0,
+          "userRating": 0
+        },
+        {
+          "id": "contributor_WETPAVEMENTQUARTET",
+          "name": "Wet Pavement Quartet",
+          "coverArt": "contributor_WETPAVEMENTQUARTET",
+          "albumCount": 0,
+          "userRating": 0
+        }
+      ],
+      "displayArtist": "Various Artists",
+      "moods": [],
+      "originalAlbumDate": {
+        "year": 2025,
+        "month": 1,
+        "day": 10
+      },
+      "albumDate": {
+        "year": 2025,
+        "month": 1,
+        "day": 10
+      },
+      "isCompilation": true,
+      "discTitles": [],
+      "song": [
+        {
+          "id": "song_828f864f-0d5a-572e-a6c4-69e96fa6983f",
+          "parent": "album_97d569aa-9133-5351-b8c5-097cf57f96f9",
+          "isDir": false,
+          "title": "Falling (feat. Guest Vocalist)",
+          "album": "Phase Zero Compilation",
+          "artist": "Various Artists",
+          "song": 1,
+          "year": 2025,
+          "coverArt": "song_828f864f-0d5a-572e-a6c4-69e96fa6983f",
+          "size": 247002,
+          "contentType": "audio/wav",
+          "suffix": ".wav",
+          "duration": 3,
+          "bitRate": 1411,
+          "bitDepth": 16,
+          "samplingRate": 44100,
+          "path": "Phase Zero Compilation/01 - Falling (feat. Guest Vocalist).wav",
+          "playCount": 0,
+          "discNumber": 1,
+          "created": "2026-01-01T00:07:07Z",
+          "albumId": "album_97d569aa-9133-5351-b8c5-097cf57f96f9",
+          "artistId": "artist_89eb2dc1-fd4c-5a57-99e5-480c96b292fc",
+          "type": "music",
+          "mediaType": "song",
+          "isVideo": false,
+          "bpm": 97,
+          "sortName": "Falling (feat. Guest Vocalist)",
+          "genres": [
+            {
+              "value": "Electronic",
+              "songCount": 0,
+              "albumCount": 0
+            },
+            {
+              "value": "Jazz",
+              "songCount": 0,
+              "albumCount": 0
+            }
+          ],
+          "artists": [
+            {
+              "id": "artist_eebcf6e2-4cbb-5177-be07-42a2dacec3b5",
+              "name": "Guest Vocalist",
+              "coverArt": "artist_eebcf6e2-4cbb-5177-be07-42a2dacec3b5",
+              "albumCount": 0,
+              "userRating": 0,
+              "artistImageUrl": "URL",
+              "sortName": "Guest Vocalist"
+            }
+          ],
+          "displayArtist": "Various Artists",
+          "albumArtists": [
+            {
+              "id": "artist_89eb2dc1-fd4c-5a57-99e5-480c96b292fc",
+              "name": "Various Artists",
+              "coverArt": "artist_89eb2dc1-fd4c-5a57-99e5-480c96b292fc",
+              "albumCount": 1,
+              "userRating": 0,
+              "artistImageUrl": "URL",
+              "sortName": "Various Artists"
+            }
+          ],
+          "displayAlbumArtist": "Various Artists",
+          "contributors": [
+            {
+              "role": "FeaturedArtist",
+              "artistId3": {
+                "id": "artist_eebcf6e2-4cbb-5177-be07-42a2dacec3b5",
+                "name": "Guest Vocalist",
+                "coverArt": "artist_eebcf6e2-4cbb-5177-be07-42a2dacec3b5",
+                "albumCount": 0,
+                "userRating": 0,
+                "artistImageUrl": "URL",
+                "sortName": "Guest Vocalist"
+              }
+            }
+          ],
+          "replayGain": {},
+          "averageRating": 0,
+          "playerId": 0,
+          "track": 1,
+          "genre": "Electronic"
+        },
+        {
+          "id": "song_781ea0e7-2cc5-5c7d-9c23-bcb486b6e2b1",
+          "parent": "album_97d569aa-9133-5351-b8c5-097cf57f96f9",
+          "isDir": false,
+          "title": "String Section Interlude",
+          "album": "Phase Zero Compilation",
+          "artist": "Various Artists",
+          "song": 2,
+          "year": 2025,
+          "coverArt": "song_781ea0e7-2cc5-5c7d-9c23-bcb486b6e2b1",
+          "size": 185264,
+          "contentType": "audio/wav",
+          "suffix": ".wav",
+          "duration": 2,
+          "bitRate": 1411,
+          "bitDepth": 16,
+          "samplingRate": 44100,
+          "path": "Phase Zero Compilation/02 - String Section Interlude.wav",
+          "playCount": 0,
+          "discNumber": 1,
+          "created": "2026-01-01T00:08:08Z",
+          "albumId": "album_97d569aa-9133-5351-b8c5-097cf57f96f9",
+          "artistId": "artist_89eb2dc1-fd4c-5a57-99e5-480c96b292fc",
+          "type": "music",
+          "mediaType": "song",
+          "isVideo": false,
+          "bpm": 70,
+          "sortName": "String Section Interlude",
+          "genres": [
+            {
+              "value": "Electronic",
+              "songCount": 0,
+              "albumCount": 0
+            },
+            {
+              "value": "Jazz",
+              "songCount": 0,
+              "albumCount": 0
+            }
+          ],
+          "artists": [
+            {
+              "id": "contributor_THEPHASE0STRINGS",
+              "name": "The Phase0 Strings",
+              "coverArt": "song_781ea0e7-2cc5-5c7d-9c23-bcb486b6e2b1",
+              "albumCount": 0,
+              "userRating": 0
+            }
+          ],
+          "displayArtist": "Various Artists",
+          "albumArtists": [
+            {
+              "id": "artist_89eb2dc1-fd4c-5a57-99e5-480c96b292fc",
+              "name": "Various Artists",
+              "coverArt": "artist_89eb2dc1-fd4c-5a57-99e5-480c96b292fc",
+              "albumCount": 1,
+              "userRating": 0,
+              "artistImageUrl": "URL",
+              "sortName": "Various Artists"
+            }
+          ],
+          "displayAlbumArtist": "Various Artists",
+          "contributors": [
+            {
+              "role": "Performer",
+              "artistId3": {
+                "id": "contributor_THEPHASE0STRINGS",
+                "name": "The Phase0 Strings",
+                "coverArt": "song_781ea0e7-2cc5-5c7d-9c23-bcb486b6e2b1",
+                "albumCount": 0,
+                "userRating": 0
+              }
+            }
+          ],
+          "replayGain": {},
+          "averageRating": 0,
+          "playerId": 0,
+          "track": 2,
+          "genre": "Electronic"
+        },
+        {
+          "id": "song_20cf62c1-fae9-5966-8193-4c4ca99ed749",
+          "parent": "album_97d569aa-9133-5351-b8c5-097cf57f96f9",
+          "isDir": false,
+          "title": "Saxophone in the Rain",
+          "album": "Phase Zero Compilation",
+          "artist": "Various Artists",
+          "song": 3,
+          "year": 2025,
+          "coverArt": "song_20cf62c1-fae9-5966-8193-4c4ca99ed749",
+          "size": 238184,
+          "contentType": "audio/wav",
+          "suffix": ".wav",
+          "duration": 3,
+          "bitRate": 1411,
+          "bitDepth": 16,
+          "samplingRate": 44100,
+          "path": "Phase Zero Compilation/03 - Saxophone in the Rain.wav",
+          "playCount": 0,
+          "discNumber": 1,
+          "created": "2026-01-01T00:09:09Z",
+          "albumId": "album_97d569aa-9133-5351-b8c5-097cf57f96f9",
+          "artistId": "artist_89eb2dc1-fd4c-5a57-99e5-480c96b292fc",
+          "type": "music",
+          "mediaType": "song",
+          "isVideo": false,
+          "bpm": 76,
+          "sortName": "Saxophone in the Rain",
+          "genres": [
+            {
+              "value": "Electronic",
+              "songCount": 0,
+              "albumCount": 0
+            },
+            {
+              "value": "Jazz",
+              "songCount": 0,
+              "albumCount": 0
+            }
+          ],
+          "artists": [
+            {
+              "id": "contributor_WETPAVEMENTQUARTET",
+              "name": "Wet Pavement Quartet",
+              "coverArt": "song_20cf62c1-fae9-5966-8193-4c4ca99ed749",
+              "albumCount": 0,
+              "userRating": 0
+            }
+          ],
+          "displayArtist": "Various Artists",
+          "albumArtists": [
+            {
+              "id": "artist_89eb2dc1-fd4c-5a57-99e5-480c96b292fc",
+              "name": "Various Artists",
+              "coverArt": "artist_89eb2dc1-fd4c-5a57-99e5-480c96b292fc",
+              "albumCount": 1,
+              "userRating": 0,
+              "artistImageUrl": "URL",
+              "sortName": "Various Artists"
+            }
+          ],
+          "displayAlbumArtist": "Various Artists",
+          "contributors": [
+            {
+              "role": "Performer",
+              "artistId3": {
+                "id": "contributor_WETPAVEMENTQUARTET",
+                "name": "Wet Pavement Quartet",
+                "coverArt": "song_20cf62c1-fae9-5966-8193-4c4ca99ed749",
+                "albumCount": 0,
+                "userRating": 0
+              }
+            }
+          ],
+          "replayGain": {},
+          "averageRating": 0,
+          "playerId": 0,
+          "track": 3,
+          "genre": "Electronic"
+        }
+      ],
+      "parent": "album_97d569aa-9133-5351-b8c5-097cf57f96f9",
+      "originalReleaseDate": {
+        "year": 2025,
+        "month": 1,
+        "day": 10
+      }
+    }
+  }
+}

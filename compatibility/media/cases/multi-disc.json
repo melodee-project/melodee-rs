@@ -1,0 +1,260 @@
+{
+  "slug": "multi-disc",
+  "description": "Two discs via TPOS tags (disc 1/2 and 2/2).",
+  "expected": {
+    "disc": "MediaNumber ordering; SortOrder = SongNumber + disc*10000 - 10000"
+  },
+  "input": {
+    "files": [
+      "101 D1 First.mp3",
+      "102 D1 Second.mp3",
+      "201 D2 First.mp3",
+      "202 D2 Second.mp3"
+    ],
+    "sizes": {
+      "202 D2 Second.mp3": 49729,
+      "201 D2 First.mp3": 49728,
+      "102 D1 Second.mp3": 49729,
+      "101 D1 First.mp3": 49728
+    },
+    "sha256": {
+      "202 D2 Second.mp3": "02769c59030ccee954e4e6b144860c88bb5d31255d64fe0c9adabddbf70c105f",
+      "201 D2 First.mp3": "54690be2679a0d8397e6578b5ed37e40c579c9141fb85c29cdbb34025d425867",
+      "102 D1 Second.mp3": "e7684d0b7cf88eacacf10d40a218a2f4d7504b82e5529408cbb2509bd16b122b",
+      "101 D1 First.mp3": "b9277d32e2f04035cd521cbff51b7d9b07c1fee581580c75ac7943ce63f3ec6d"
+    }
+  },
+  "extraction": {
+    "extractions": [
+      {
+        "file": "101 D1 First.mp3",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {
+          "Genre": "Ambient",
+          "DiscNumber": 1,
+          "Bpm": 0,
+          "OrigAlbumYear": 2021,
+          "AlbumDate": "2021-01-01T00:00:00.0000000Z",
+          "Date": "2021-01-01T00:00:00Z",
+          "Encoder": "Lavf62.12.102",
+          "RecordingYear": 2021,
+          "DiscTotal": 1,
+          "AlbumArtist": "Corpus Artist",
+          "Title": "D1 First",
+          "TrackNumber": 1,
+          "Album": "Disc Path"
+        },
+        "mediaAudios": {
+          "BitRate": 192,
+          "BitDepth": -1,
+          "SampleRate": 44100,
+          "IsVbr": false,
+          "Duration": 2,
+          "DurationMs": 2063.625,
+          "CodecLongName": "MPEG Audio (Layer III)",
+          "Channels": "Mono (1/0.0)",
+          "ChannelLayout": "Mono (1/0.0)",
+          "ChannelsArrangementDescription": "Mono (1/0.0)",
+          "ChannelsArrangementNumberChannels": 1,
+          "AudioDataOffset": 201,
+          "AudioDataSize": 49527
+        },
+        "imageCount": 0,
+        "crcHash": "1295EE82"
+      },
+      {
+        "file": "102 D1 Second.mp3",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {
+          "Genre": "Ambient",
+          "DiscNumber": 1,
+          "Bpm": 0,
+          "OrigAlbumYear": 2021,
+          "AlbumDate": "2021-01-01T00:00:00.0000000Z",
+          "Date": "2021-01-01T00:00:00Z",
+          "Encoder": "Lavf62.12.102",
+          "RecordingYear": 2021,
+          "DiscTotal": 1,
+          "AlbumArtist": "Corpus Artist",
+          "Title": "D1 Second",
+          "TrackNumber": 2,
+          "Album": "Disc Path"
+        },
+        "mediaAudios": {
+          "BitRate": 192,
+          "BitDepth": -1,
+          "SampleRate": 44100,
+          "IsVbr": false,
+          "Duration": 2,
+          "DurationMs": 2063.625,
+          "CodecLongName": "MPEG Audio (Layer III)",
+          "Channels": "Mono (1/0.0)",
+          "ChannelLayout": "Mono (1/0.0)",
+          "ChannelsArrangementDescription": "Mono (1/0.0)",
+          "ChannelsArrangementNumberChannels": 1,
+          "AudioDataOffset": 202,
+          "AudioDataSize": 49527
+        },
+        "imageCount": 0,
+        "crcHash": "DEDCCE55"
+      }
+    ]
+  },
+  "pipeline": {
+    "processExitCode": 0,
+    "processSummary": {
+      "Elapsed Time": "00:00:03",
+      "Directories Processed": "1",
+      "Albums Processed": "1",
+      "Valid Albums": "0 (0%)",
+      "New Artists": "1",
+      "New Albums": "1",
+      "New Songs": "4"
+    },
+    "processErrorTail": null,
+    "stagingTree": [
+      {
+        "path": "Corpus Artist - [2021] Disc Path/0001 D1 First.mp3",
+        "size": 49747
+      },
+      {
+        "path": "Corpus Artist - [2021] Disc Path/0002 D1 Second.mp3",
+        "size": 49748
+      },
+      {
+        "path": "Corpus Artist - [2021] Disc Path/melodee.json",
+        "size": 13838,
+        "sha256": null
+      }
+    ],
+    "albums": [
+      {
+        "directory": "Corpus Artist - [2021] Disc Path",
+        "status": "Invalid",
+        "statusReasons": "HasInvalidArtists, HasNoImages, SongsAreNotSequentiallyNumbered, HasInvalidFirstSongNumber, HasLessThanMinimumDuration",
+        "albumType": "Album",
+        "validationMessages": [
+          {
+            "message": "Album artist is invalid.",
+            "severity": 2
+          },
+          {
+            "message": "Album Song numbers are invalid.",
+            "severity": 2
+          },
+          {
+            "message": "Album does not have cover image.",
+            "severity": 2
+          },
+          {
+            "message": "Album Artist is unknown, will need manual validation.",
+            "severity": 2
+          },
+          {
+            "message": "Album duration is less than the minimum album duration.",
+            "severity": 2
+          }
+        ],
+        "songCount": 4,
+        "songs": [
+          {
+            "fileName": "201 D2 First.mp3",
+            "size": 49728,
+            "title": "D2 First",
+            "songNumber": 1,
+            "mediaNumber": 2,
+            "sortOrder": 10001,
+            "crcHash": "8C974ABE"
+          },
+          {
+            "fileName": "202 D2 Second.mp3",
+            "size": 49729,
+            "title": "D2 Second",
+            "songNumber": 2,
+            "mediaNumber": 2,
+            "sortOrder": 10002,
+            "crcHash": "4BF91785"
+          },
+          {
+            "fileName": "0002 D1 Second.mp3",
+            "size": 49729,
+            "title": "D1 Second",
+            "songNumber": 3,
+            "mediaNumber": 1,
+            "sortOrder": 2,
+            "crcHash": "DEDCCE55"
+          },
+          {
+            "fileName": "0001 D1 First.mp3",
+            "size": 49728,
+            "title": "D1 First",
+            "songNumber": 4,
+            "mediaNumber": 1,
+            "sortOrder": 1,
+            "crcHash": "1295EE82"
+          }
+        ],
+        "images": [],
+        "displaySummary": "004 : Disc Path"
+      }
+    ],
+    "inboundLeftovers": [
+      {
+        "path": "101 D1 First.mp3",
+        "size": 49728
+      },
+      {
+        "path": "102 D1 Second.mp3",
+        "size": 49729
+      },
+      {
+        "path": "melodee.json",
+        "size": 13272
+      }
+    ],
+    "validations": [
+      {
+        "album": "Corpus Artist - [2021] Disc Path",
+        "exitCode": 0,
+        "result": {
+          "data": {
+            "albumStatus": 3,
+            "albumStatusReasons": 42467464,
+            "isValid": false,
+            "messages ": [
+              {
+                "message": "Album artist is  invalid.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album Song numbers are  invalid.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album does not have cover  image.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album Artist is unknown, will  need manual validation.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album duration  is less than the minimum album  duration.",
+                "sortOrder": 0,
+                "severity": 2
+              }
+            ]
+          },
+          "isSuccess": true,
+          "type": 200
+        }
+      }
+    ]
+  }
+}

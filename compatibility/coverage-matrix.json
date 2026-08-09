@@ -1,0 +1,553 @@
+{
+  "schemaVersion": 1,
+  "legacyBaselineCommit": "4028b58dbd3302ed431e2c5b32d9dde5634db218",
+  "surfaces": {
+    "melodee-api-v1": {
+      "knownRoutes": 202,
+      "paritySummary": {
+        "client-used-uncaptured": 69,
+        "captured": 34,
+        "documented-uncaptured": 45,
+        "excluded-from-build": 35,
+        "undocumented-uncaptured": 19
+      },
+      "goldenCaptures": 118,
+      "goldenFiles": 239,
+      "clientUsage": {
+        "melodee-player": 13,
+        "meloamp": 98
+      },
+      "plannedRustPhase": "Phase 7 (native API adapter)",
+      "gaps": [
+        {
+          "method": "GET",
+          "path": "/api/v1/admin/users",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/albums/hated/{}/{}",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/analytics/listening",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/analytics/top/{}",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/artist-lookup",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/artist-lookup/providers",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/charts",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/charts/{}",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/endpoints",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/endpoints/for-session/{}",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/endpoints/{}/attach",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/endpoints/{}/detach",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/equalizer/presets",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/equalizer/presets",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "DELETE",
+          "path": "/api/v1/equalizer/presets/{}",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/genres/{}/songs",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/playback-backend/capabilities",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/playback-backend/heartbeat/{}",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/playback-backend/initialize",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/playback-backend/register-endpoint",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/playback-backend/shutdown",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/playback-backend/status",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/playback/settings",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/playback/settings",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/playlists/smart",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/playlists/smart",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "DELETE",
+          "path": "/api/v1/playlists/smart/{}",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "PUT",
+          "path": "/api/v1/playlists/smart/{}",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/playlists/smart/{}/evaluate",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "DELETE",
+          "path": "/api/v1/playlists/{}",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "PUT",
+          "path": "/api/v1/playlists/{}",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/playlists/{}/image",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/playlists/{}/songs",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "PUT",
+          "path": "/api/v1/playlists/{}/songs/reorder",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/podcasts/channels",
+          "parityStatus": "undocumented-uncaptured"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/podcasts/channels",
+          "parityStatus": "undocumented-uncaptured"
+        },
+        {
+          "method": "DELETE",
+          "path": "/api/v1/podcasts/channels/{}",
+          "parityStatus": "undocumented-uncaptured"
+        },
+        {
+          "method": "PATCH",
+          "path": "/api/v1/podcasts/channels/{}",
+          "parityStatus": "undocumented-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/podcasts/channels/{}/episodes",
+          "parityStatus": "undocumented-uncaptured"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/podcasts/channels/{}/refresh",
+          "parityStatus": "undocumented-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/podcasts/discover/lookup/{}",
+          "parityStatus": "undocumented-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/podcasts/discover/search",
+          "parityStatus": "undocumented-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/podcasts/discover/trending",
+          "parityStatus": "undocumented-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/podcasts/episodes/search",
+          "parityStatus": "undocumented-uncaptured"
+        },
+        {
+          "method": "DELETE",
+          "path": "/api/v1/podcasts/episodes/{}",
+          "parityStatus": "undocumented-uncaptured"
+        },
+        {
+          "method": "DELETE",
+          "path": "/api/v1/podcasts/episodes/{}/bookmark",
+          "parityStatus": "undocumented-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/podcasts/episodes/{}/bookmark",
+          "parityStatus": "undocumented-uncaptured"
+        },
+        {
+          "method": "PUT",
+          "path": "/api/v1/podcasts/episodes/{}/bookmark",
+          "parityStatus": "undocumented-uncaptured"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/podcasts/episodes/{}/download",
+          "parityStatus": "undocumented-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/podcasts/episodes/{}/history",
+          "parityStatus": "undocumented-uncaptured"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/podcasts/episodes/{}/play",
+          "parityStatus": "undocumented-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/podcasts/opml/export",
+          "parityStatus": "undocumented-uncaptured"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/podcasts/opml/import",
+          "parityStatus": "undocumented-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/recommendations",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/requests",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/requests",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/requests/activity",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/requests/activity/unread",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/requests/{}",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "PUT",
+          "path": "/api/v1/requests/{}",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/requests/{}/comments",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/requests/{}/comments",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/requests/{}/complete",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/requests/{}/seen",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/search/advanced",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/shares",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/shares",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/shares/public/{}",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "DELETE",
+          "path": "/api/v1/shares/{}",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "PUT",
+          "path": "/api/v1/shares/{}",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/system/stats",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/themes",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/themes/import",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/themes/me",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/themes/{}/export",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/user/albums/disliked",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/user/albums/liked",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/user/albums/rated",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/user/albums/top-rated",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/user/artists/disliked",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/user/artists/liked",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/user/artists/rated",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/user/artists/top-rated",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/user/last-played",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/user/songs/disliked",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/user/songs/liked",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/user/songs/rated",
+          "parityStatus": "client-used-uncaptured"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/user/songs/top-rated",
+          "parityStatus": "client-used-uncaptured"
+        }
+      ]
+    },
+    "opensubsonic": {
+      "knownEndpoints": 81,
+      "classificationSummary": {
+        "gone": 6,
+        "not-implemented": 4,
+        "supported": 56,
+        "conditional": 15
+      },
+      "goldenCaptures": 179,
+      "goldenFiles": 369,
+      "plannedRustPhase": "Phase 8 (OpenSubsonic adapter)",
+      "gaps": []
+    },
+    "jellyfin": {
+      "knownRoutes": 60,
+      "coveredRoutes": 60,
+      "goldenCaptures": 127,
+      "goldenFiles": 262,
+      "plannedRustPhase": "Phase 8 (Jellyfin adapter)",
+      "gaps": []
+    },
+    "media": {
+      "corpusCases": 31,
+      "baseline": "compatibility/media/baseline.json",
+      "plannedRustPhase": "Phase 2-3 (ingestion/media pipeline)"
+    }
+  },
+  "openDiscrepancies": [
+    {
+      "id": "D1",
+      "surface": "opensubsonic",
+      "summary": "Unsigned-JWT acceptance with precedence over password auth (security-critical; do not preserve)",
+      "evidence": "golden/auth/os-auth-jwt-forged-unsigned"
+    },
+    {
+      "id": "D2",
+      "surface": "opensubsonic",
+      "summary": "Double range-processing corrupts nonzero-offset seeks (416 or wrong bytes)",
+      "evidence": "golden/media/os-stream-range-middle*"
+    },
+    {
+      "id": "D3",
+      "surface": "all",
+      "summary": "Unknown-ApiKey detail behavior differs per surface (native 500, OS ok+error or 302, Jellyfin clean 404)",
+      "evidence": "golden/*/…-unknown*"
+    },
+    {
+      "id": "D4",
+      "surface": "all",
+      "summary": "Playlist mutation corruption class (native/JF add-to-nonempty 500; OS cover-dependent 302; zero-GUID SongApiKey rows)",
+      "evidence": "golden/*/…playlist*"
+    },
+    {
+      "id": "D5",
+      "surface": "melodee-api-v1",
+      "summary": "MeloAmp add-to-playlist posts object body; server binds bare Guid[] (400) — client feature broken at baseline",
+      "evidence": "golden/native-catalog/catalog-playlist-crud-add-songs-meloamp-shape"
+    },
+    {
+      "id": "D6",
+      "surface": "melodee-api-v1",
+      "summary": "Queue + Party controllers are excluded from compilation (404 at runtime despite manifest presence)",
+      "evidence": "golden/native-catalog/catalog-queue-*"
+    },
+    {
+      "id": "D7",
+      "surface": "melodee-api-v1",
+      "summary": "JWT access tokens survive logout (stateless); refresh tokens revoked",
+      "evidence": "golden/native-auth/auth-refresh-rotation-access-after-logout"
+    },
+    {
+      "id": "D8",
+      "surface": "opensubsonic",
+      "summary": "Advertised extensions apiKeyAuthentication/transcodeOffset are non-functional",
+      "evidence": "golden/system/os-getopensubsonicextensions-*"
+    },
+    {
+      "id": "D9",
+      "surface": "media",
+      "summary": "F1: metadata-container gate silently skips tagless WAV/AIFF; F2: same-size files deleted without content comparison",
+      "evidence": "compatibility/media/cases/{clean-wav,same-size-files}.json"
+    },
+    {
+      "id": "D10",
+      "surface": "all",
+      "summary": "List sorts lack tiebreaks (recents, playlists, global song lists) — nondeterministic order on equal keys",
+      "evidence": "design/evidence/phase-0/native-api-v1-capture.md section 5"
+    }
+  ]
+}

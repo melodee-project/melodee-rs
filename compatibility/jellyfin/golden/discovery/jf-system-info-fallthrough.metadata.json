@@ -1,0 +1,48 @@
+{
+  "name": "jf-system-info-fallthrough",
+  "surface": "jellyfin",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/System/Info",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-cache, no-store, max-age=0"
+    },
+    "bodyFile": "jf-system-info-fallthrough.xml",
+    "sha256": "800ace46ebc8ba71c34de0b305eedc52ac5b250038da6eb47c70026647a3d71e",
+    "bytes": 6543
+  },
+  "normalize": {
+    "maskRegex": [
+      {
+        "pattern": "<!--Blazor:\\{.*?-->",
+        "replace": "<!--Blazor:<volatile>-->"
+      },
+      {
+        "pattern": "<!--Blazor-Server-Component-State:.*",
+        "replace": "<!--Blazor-Server-Component-State:<volatile>-->"
+      },
+      {
+        "pattern": "id=\"[A-Za-z0-9_-]{10}\"",
+        "replace": "id=\"<volatile>\""
+      }
+    ],
+    "dropHeaders": [
+      "content-length",
+      "etag",
+      "last-modified"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

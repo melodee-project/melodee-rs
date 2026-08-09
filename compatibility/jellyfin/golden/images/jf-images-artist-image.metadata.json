@@ -1,0 +1,35 @@
+{
+  "name": "jf-images/artist-image",
+  "surface": "jellyfin",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/Artists/813c11e061cd5204ae0fce68386eacec/Images/Primary",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "MediaBrowser <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-length": "136",
+      "content-type": "image/png",
+      "cache-control": "public, max-age=86400",
+      "etag": "\"17672256000000000\""
+    },
+    "bodyFile": "jf-images-artist-image.bin",
+    "sha256": "5521f336041fb7437c2556fa13dff6d72ee2704ebb709ba6faed446f2157677a",
+    "bytes": 136
+  },
+  "normalize": {
+    "dropHeaders": [
+      "etag"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

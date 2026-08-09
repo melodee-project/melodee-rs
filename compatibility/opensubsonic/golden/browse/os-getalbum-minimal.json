@@ -1,0 +1,95 @@
+{
+  "subsonic-response": {
+    "status": "ok",
+    "version": "1.16.1",
+    "type": "Melodee",
+    "serverVersion": "<volatile>",
+    "openSubsonic": true,
+    "album": {
+      "id": "album_de0f93a5-2979-5654-9afe-16453caa49af",
+      "name": "Untitled Demos",
+      "title": "Untitled Demos",
+      "artist": "Cassette Ghost",
+      "year": 1987,
+      "coverArt": "album_de0f93a5-2979-5654-9afe-16453caa49af",
+      "duration": 2,
+      "playCount": 0,
+      "created": "2026-01-20T00:00:00Z",
+      "artistId": "artist_708790f0-57b5-5a45-a746-dd36634e8872",
+      "songCount": 1,
+      "played": "",
+      "genres": [],
+      "artists": [],
+      "displayArtist": "Cassette Ghost",
+      "moods": [],
+      "originalAlbumDate": {
+        "year": 1987,
+        "month": 1,
+        "day": 1
+      },
+      "albumDate": {
+        "year": 1987,
+        "month": 1,
+        "day": 1
+      },
+      "isCompilation": false,
+      "discTitles": [],
+      "song": [
+        {
+          "id": "song_b666e766-49f7-54a2-8a13-5c265c6d8208",
+          "parent": "album_de0f93a5-2979-5654-9afe-16453caa49af",
+          "isDir": false,
+          "title": "Hiss",
+          "album": "Untitled Demos",
+          "artist": "Cassette Ghost",
+          "song": 1,
+          "year": 1987,
+          "coverArt": "song_b666e766-49f7-54a2-8a13-5c265c6d8208",
+          "size": 158804,
+          "contentType": "audio/wav",
+          "suffix": ".wav",
+          "duration": 2,
+          "bitRate": 1411,
+          "bitDepth": 16,
+          "samplingRate": 44100,
+          "path": "Untitled Demos/01 - Hiss.wav",
+          "playCount": 0,
+          "discNumber": 1,
+          "created": "2026-01-01T00:19:19Z",
+          "albumId": "album_de0f93a5-2979-5654-9afe-16453caa49af",
+          "artistId": "artist_708790f0-57b5-5a45-a746-dd36634e8872",
+          "type": "music",
+          "mediaType": "song",
+          "isVideo": false,
+          "bpm": 0,
+          "sortName": "Hiss",
+          "artists": [],
+          "displayArtist": "Cassette Ghost",
+          "albumArtists": [
+            {
+              "id": "artist_708790f0-57b5-5a45-a746-dd36634e8872",
+              "name": "Cassette Ghost",
+              "coverArt": "artist_708790f0-57b5-5a45-a746-dd36634e8872",
+              "albumCount": 1,
+              "userRating": 0,
+              "artistImageUrl": "URL"
+            }
+          ],
+          "displayAlbumArtist": "Cassette Ghost",
+          "contributors": [],
+          "replayGain": {},
+          "averageRating": 0,
+          "userRating": 0,
+          "playerId": 0,
+          "track": 1
+        }
+      ],
+      "parent": "album_de0f93a5-2979-5654-9afe-16453caa49af",
+      "originalReleaseDate": {
+        "year": 1987,
+        "month": 1,
+        "day": 1
+      }
+    }
+  }
+}

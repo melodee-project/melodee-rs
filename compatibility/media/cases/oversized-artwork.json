@@ -1,0 +1,257 @@
+{
+  "slug": "oversized-artwork",
+  "description": "4000x4000 JPEG cover.",
+  "expected": {
+    "artwork": "resized to square tiers"
+  },
+  "input": {
+    "files": [
+      "01 First Light.mp3",
+      "02 Second Wave.mp3",
+      "03 Third Echo.mp3",
+      "cover.jpg"
+    ],
+    "sizes": {
+      "cover.jpg": 187706,
+      "03 Third Echo.mp3": 55989,
+      "02 Second Wave.mp3": 52855,
+      "01 First Light.mp3": 49721
+    },
+    "sha256": {
+      "03 Third Echo.mp3": "c31517eda2b09c1a6f73a85da384fb2958a56f11f9f2e394e8c6aafd0b04cb5e",
+      "02 Second Wave.mp3": "22b6a7ab211086db7fdc1adb5230d51a1eb589e92704867d8b95e8f3fba0b8be",
+      "01 First Light.mp3": "7ece75ac399ded7b49521a91994f7aa700f144559a9c1c51d0710ca1025a5848"
+    }
+  },
+  "extraction": {
+    "extractions": [
+      {
+        "file": "01 First Light.mp3",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {
+          "Genre": "Ambient",
+          "DiscNumber": 1,
+          "Bpm": 0,
+          "OrigAlbumYear": 2021,
+          "AlbumDate": "2021-01-01T00:00:00.0000000Z",
+          "Date": "2021-01-01T00:00:00Z",
+          "Encoder": "Lavf62.12.102",
+          "RecordingYear": 2021,
+          "DiscTotal": 1,
+          "AlbumArtist": "Corpus Artist",
+          "Title": "First Light",
+          "TrackNumber": 1,
+          "Album": "Oversized Path"
+        },
+        "mediaAudios": {
+          "BitRate": 192,
+          "BitDepth": -1,
+          "SampleRate": 44100,
+          "IsVbr": false,
+          "Duration": 2,
+          "DurationMs": 2063.625,
+          "CodecLongName": "MPEG Audio (Layer III)",
+          "Channels": "Mono (1/0.0)",
+          "ChannelLayout": "Mono (1/0.0)",
+          "ChannelsArrangementDescription": "Mono (1/0.0)",
+          "ChannelsArrangementNumberChannels": 1,
+          "AudioDataOffset": 194,
+          "AudioDataSize": 49527
+        },
+        "imageCount": 0,
+        "crcHash": "3F12FA72"
+      },
+      {
+        "file": "02 Second Wave.mp3",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {
+          "Genre": "Ambient",
+          "DiscNumber": 1,
+          "Bpm": 0,
+          "OrigAlbumYear": 2021,
+          "AlbumDate": "2021-01-01T00:00:00.0000000Z",
+          "Date": "2021-01-01T00:00:00Z",
+          "Encoder": "Lavf62.12.102",
+          "RecordingYear": 2021,
+          "DiscTotal": 1,
+          "AlbumArtist": "Corpus Artist",
+          "Title": "Second Wave",
+          "TrackNumber": 2,
+          "Album": "Oversized Path"
+        },
+        "mediaAudios": {
+          "BitRate": 192,
+          "BitDepth": -1,
+          "SampleRate": 44100,
+          "IsVbr": false,
+          "Duration": 2,
+          "DurationMs": 2194.2083333333335,
+          "CodecLongName": "MPEG Audio (Layer III)",
+          "Channels": "Mono (1/0.0)",
+          "ChannelLayout": "Mono (1/0.0)",
+          "ChannelsArrangementDescription": "Mono (1/0.0)",
+          "ChannelsArrangementNumberChannels": 1,
+          "AudioDataOffset": 194,
+          "AudioDataSize": 52661
+        },
+        "imageCount": 0,
+        "crcHash": "C1E2B364"
+      }
+    ]
+  },
+  "pipeline": {
+    "processExitCode": 0,
+    "processSummary": {
+      "Elapsed Time": "00:00:03",
+      "Directories Processed": "1",
+      "Albums Processed": "1",
+      "Valid Albums": "0 (0%)",
+      "New Artists": "1",
+      "New Albums": "1",
+      "New Songs": "3"
+    },
+    "processErrorTail": null,
+    "stagingTree": [
+      {
+        "path": "Corpus Artist - [2021] Oversized Path/0001 First Light.mp3",
+        "size": 49755
+      },
+      {
+        "path": "Corpus Artist - [2021] Oversized Path/0002 Second Wave.mp3",
+        "size": 52889
+      },
+      {
+        "path": "Corpus Artist - [2021] Oversized Path/0003 Third Echo.mp3",
+        "size": 56023
+      },
+      {
+        "path": "Corpus Artist - [2021] Oversized Path/i-01-Front.jpg",
+        "size": 15287
+      },
+      {
+        "path": "Corpus Artist - [2021] Oversized Path/melodee.json",
+        "size": 11187,
+        "sha256": null
+      }
+    ],
+    "albums": [
+      {
+        "directory": "Corpus Artist - [2021] Oversized Path",
+        "status": "Invalid",
+        "statusReasons": "HasInvalidArtists, HasLessThanMinimumDuration",
+        "albumType": "Album",
+        "validationMessages": [
+          {
+            "message": "Album artist is invalid.",
+            "severity": 2
+          },
+          {
+            "message": "Album Artist is unknown, will need manual validation.",
+            "severity": 2
+          },
+          {
+            "message": "Album duration is less than the minimum album duration.",
+            "severity": 2
+          }
+        ],
+        "songCount": 3,
+        "songs": [
+          {
+            "fileName": "0001 First Light.mp3",
+            "size": 49721,
+            "title": "First Light",
+            "songNumber": 1,
+            "mediaNumber": 1,
+            "sortOrder": 1,
+            "crcHash": "3F12FA72"
+          },
+          {
+            "fileName": "0002 Second Wave.mp3",
+            "size": 52855,
+            "title": "Second Wave",
+            "songNumber": 2,
+            "mediaNumber": 1,
+            "sortOrder": 2,
+            "crcHash": "C1E2B364"
+          },
+          {
+            "fileName": "0003 Third Echo.mp3",
+            "size": 55989,
+            "title": "Third Echo",
+            "songNumber": 3,
+            "mediaNumber": 1,
+            "sortOrder": 3,
+            "crcHash": "E3885F8B"
+          }
+        ],
+        "images": [
+          {
+            "name": "i-01-Front.jpg",
+            "pictureIdentifier": "Front",
+            "width": 1600,
+            "height": 1600,
+            "wasEmbeddedInSong": false,
+            "originalFilename": "cover.jpg"
+          }
+        ],
+        "displaySummary": "003 : Oversized Path"
+      }
+    ],
+    "inboundLeftovers": [
+      {
+        "path": "01 First Light.mp3",
+        "size": 49721
+      },
+      {
+        "path": "02 Second Wave.mp3",
+        "size": 52855
+      },
+      {
+        "path": "03 Third Echo.mp3",
+        "size": 55989
+      },
+      {
+        "path": "cover.jpg",
+        "size": 15287
+      },
+      {
+        "path": "melodee.json",
+        "size": 10453
+      }
+    ],
+    "validations": [
+      {
+        "album": "Corpus Artist - [2021] Oversized Path",
+        "exitCode": 0,
+        "result": {
+          "data": {
+            "albumStatus": 3,
+            "albumStatusReasons": 33554440,
+            "isValid": false,
+            "messages ": [
+              {
+                "message": "Album artist is  invalid.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album Artist is unknown, will  need manual validation.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album duration  is less than the minimum album  duration.",
+                "sortOrder": 0,
+                "severity": 2
+              }
+            ]
+          },
+          "isSuccess": true,
+          "type": 200
+        }
+      }
+    ]
+  }
+}

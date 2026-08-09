@@ -1,0 +1,241 @@
+{
+  "slug": "invalid-artwork",
+  "description": "Garbage bytes named cover.jpg.",
+  "expected": {
+    "artwork": "deleted; album flagged missing cover"
+  },
+  "input": {
+    "files": [
+      "01 First Light.mp3",
+      "02 Second Wave.mp3",
+      "03 Third Echo.mp3",
+      "cover.jpg"
+    ],
+    "sizes": {
+      "cover.jpg": 1024,
+      "03 Third Echo.mp3": 55990,
+      "02 Second Wave.mp3": 52856,
+      "01 First Light.mp3": 49722
+    },
+    "sha256": {
+      "03 Third Echo.mp3": "3c60946bbf9d1fbafdf060fcbacb336434087a1e88dd1220e1ebcffcf9a44296",
+      "02 Second Wave.mp3": "b33273e708bb82129d69ba553786594511e3585128194d49cb5b63b483c15505",
+      "01 First Light.mp3": "837f276f45a5bd397c4e6d08b0636f67749cc6bf0a5758e15cbf7fd950c6a740"
+    }
+  },
+  "extraction": {
+    "extractions": [
+      {
+        "file": "01 First Light.mp3",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {
+          "Genre": "Ambient",
+          "DiscNumber": 1,
+          "Bpm": 0,
+          "OrigAlbumYear": 2021,
+          "AlbumDate": "2021-01-01T00:00:00.0000000Z",
+          "Date": "2021-01-01T00:00:00Z",
+          "Encoder": "Lavf62.12.102",
+          "RecordingYear": 2021,
+          "DiscTotal": 1,
+          "AlbumArtist": "Corpus Artist",
+          "Title": "First Light",
+          "TrackNumber": 1,
+          "Album": "Broken Art Path"
+        },
+        "mediaAudios": {
+          "BitRate": 192,
+          "BitDepth": -1,
+          "SampleRate": 44100,
+          "IsVbr": false,
+          "Duration": 2,
+          "DurationMs": 2063.625,
+          "CodecLongName": "MPEG Audio (Layer III)",
+          "Channels": "Mono (1/0.0)",
+          "ChannelLayout": "Mono (1/0.0)",
+          "ChannelsArrangementDescription": "Mono (1/0.0)",
+          "ChannelsArrangementNumberChannels": 1,
+          "AudioDataOffset": 195,
+          "AudioDataSize": 49527
+        },
+        "imageCount": 0,
+        "crcHash": "B5C80FD1"
+      },
+      {
+        "file": "02 Second Wave.mp3",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {
+          "Genre": "Ambient",
+          "DiscNumber": 1,
+          "Bpm": 0,
+          "OrigAlbumYear": 2021,
+          "AlbumDate": "2021-01-01T00:00:00.0000000Z",
+          "Date": "2021-01-01T00:00:00Z",
+          "Encoder": "Lavf62.12.102",
+          "RecordingYear": 2021,
+          "DiscTotal": 1,
+          "AlbumArtist": "Corpus Artist",
+          "Title": "Second Wave",
+          "TrackNumber": 2,
+          "Album": "Broken Art Path"
+        },
+        "mediaAudios": {
+          "BitRate": 192,
+          "BitDepth": -1,
+          "SampleRate": 44100,
+          "IsVbr": false,
+          "Duration": 2,
+          "DurationMs": 2194.2083333333335,
+          "CodecLongName": "MPEG Audio (Layer III)",
+          "Channels": "Mono (1/0.0)",
+          "ChannelLayout": "Mono (1/0.0)",
+          "ChannelsArrangementDescription": "Mono (1/0.0)",
+          "ChannelsArrangementNumberChannels": 1,
+          "AudioDataOffset": 195,
+          "AudioDataSize": 52661
+        },
+        "imageCount": 0,
+        "crcHash": "0D7EAD31"
+      }
+    ]
+  },
+  "pipeline": {
+    "processExitCode": 1,
+    "processSummary": {},
+    "processErrorTail": null,
+    "stagingTree": [
+      {
+        "path": "Corpus Artist - [2021] Broken Art Path/0001 First Light.mp3",
+        "size": 49756
+      },
+      {
+        "path": "Corpus Artist - [2021] Broken Art Path/0002 Second Wave.mp3",
+        "size": 52890
+      },
+      {
+        "path": "Corpus Artist - [2021] Broken Art Path/0003 Third Echo.mp3",
+        "size": 56024
+      },
+      {
+        "path": "Corpus Artist - [2021] Broken Art Path/melodee.json",
+        "size": 11033,
+        "sha256": null
+      }
+    ],
+    "albums": [
+      {
+        "directory": "Corpus Artist - [2021] Broken Art Path",
+        "status": "Invalid",
+        "statusReasons": "HasInvalidArtists, HasNoImages, HasLessThanMinimumDuration",
+        "albumType": "Album",
+        "validationMessages": [
+          {
+            "message": "Album artist is invalid.",
+            "severity": 2
+          },
+          {
+            "message": "Album does not have cover image.",
+            "severity": 2
+          },
+          {
+            "message": "Album Artist is unknown, will need manual validation.",
+            "severity": 2
+          },
+          {
+            "message": "Album duration is less than the minimum album duration.",
+            "severity": 2
+          }
+        ],
+        "songCount": 3,
+        "songs": [
+          {
+            "fileName": "0001 First Light.mp3",
+            "size": 49722,
+            "title": "First Light",
+            "songNumber": 1,
+            "mediaNumber": 1,
+            "sortOrder": 1,
+            "crcHash": "B5C80FD1"
+          },
+          {
+            "fileName": "0002 Second Wave.mp3",
+            "size": 52856,
+            "title": "Second Wave",
+            "songNumber": 2,
+            "mediaNumber": 1,
+            "sortOrder": 2,
+            "crcHash": "0D7EAD31"
+          },
+          {
+            "fileName": "0003 Third Echo.mp3",
+            "size": 55990,
+            "title": "Third Echo",
+            "songNumber": 3,
+            "mediaNumber": 1,
+            "sortOrder": 3,
+            "crcHash": "8E6D14DE"
+          }
+        ],
+        "images": [],
+        "displaySummary": "003 : Broken Art Path"
+      }
+    ],
+    "inboundLeftovers": [
+      {
+        "path": "01 First Light.mp3",
+        "size": 49722
+      },
+      {
+        "path": "02 Second Wave.mp3",
+        "size": 52856
+      },
+      {
+        "path": "03 Third Echo.mp3",
+        "size": 55990
+      },
+      {
+        "path": "melodee.json",
+        "size": 10452
+      }
+    ],
+    "validations": [
+      {
+        "album": "Corpus Artist - [2021] Broken Art Path",
+        "exitCode": 0,
+        "result": {
+          "data": {
+            "albumStatus": 3,
+            "albumStatusReasons": 33554568,
+            "isValid": false,
+            "messages ": [
+              {
+                "message": "Album artist is  invalid.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album does not have cover  image.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album Artist is unknown, will  need manual validation.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album duration  is less than the minimum album  duration.",
+                "sortOrder": 0,
+                "severity": 2
+              }
+            ]
+          },
+          "isSuccess": true,
+          "type": 200
+        }
+      }
+    ]
+  }
+}

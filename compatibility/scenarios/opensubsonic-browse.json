@@ -1,0 +1,479 @@
+[
+  {
+    "schemaVersion": 2,
+    "name": "os-getindexes",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getIndexes.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Legacy indexed artist view over the fixture catalog."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getartists",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getArtists.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "ID3 artist view. CoverArt uses artist_{guid}; artistImageUrl is relative /images/ path."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getartists-xml",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getArtists.view?v=1.16.1&c=phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskRegex": [
+        {
+          "pattern": "serverVersion=\"[^\"]*\"",
+          "replace": "serverVersion=\"<volatile>\""
+        },
+        {
+          "pattern": "lastModified=\"[^\"]*\"",
+          "replace": "lastModified=\"<volatile>\""
+        }
+      ]
+    },
+    "notes": "ID3 artist view, XML envelope."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getartist",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getArtist.view?f=json&v=1.16.1&c=phase0&id=artist_813c11e0-61cd-5204-ae0f-ce68386eacec&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Aurora Fields with album list."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getartist-collision",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getArtist.view?f=json&v=1.16.1&c=phase0&id=artist_5bf951d5-7afe-5c50-8941-145b7095902b&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Dune (plain) — one of the two normalized-name-collision artists; verifies distinct identity."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getartist-various",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getArtist.view?f=json&v=1.16.1&c=phase0&id=artist_89eb2dc1-fd4c-5a57-99e5-480c96b292fc&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Various Artists with compilation album."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getartist-unknown",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getArtist.view?f=json&v=1.16.1&c=phase0&id=artist_00000000-0000-0000-0000-000000000000&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "DISCOVERY: unknown artist -> status:'ok' with NO artist key and NO error block (OpenSubsonicApiService GetArtistAsync)."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getalbum",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getAlbum.view?f=json&v=1.16.1&c=phase0&id=album_69d97699-74c5-5403-878f-87f42d9d9fbb&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Northern Lights: AlbumID3WithSongs — dual artist/albumArtists, genres array + singular genre, replayGain, contributors, ItemDate fields."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getalbum-compilation",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getAlbum.view?f=json&v=1.16.1&c=phase0&id=album_97d569aa-9133-5351-b8c5-097cf57f96f9&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "VA compilation: isCompilation true, per-song contributors (featured guest with artist ref, name-only performers)."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getalbum-multidisc",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getAlbum.view?f=json&v=1.16.1&c=phase0&id=album_645680d3-704a-5b83-a734-42a3fa88c3ed&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Multi-disc: disc-qualified song numbers 101/102/201/202, discTitles from PartTitles."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getalbum-minimal",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getAlbum.view?f=json&v=1.16.1&c=phase0&id=album_de0f93a5-2979-5654-9afe-16453caa49af&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Minimal metadata: null genres/sort names — null-vs-omitted evidence."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getalbum-unknown",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getAlbum.view?f=json&v=1.16.1&c=phase0&id=album_00000000-0000-0000-0000-000000000000&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "DISCOVERY: this unknown-id path throws inside the service and the error pipeline answers 302 Location: /Account/Login?ReturnUrl=%2FError... (ReturnUrl embeds the original query INCLUDING auth credentials — a credential-leak observation). getSong/getArtist unknowns instead return 200 with the status:'ok' quirk.",
+    "followRedirects": false,
+    "expectStatus": 302
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getsong",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getSong.view?f=json&v=1.16.1&c=phase0&id=song_ea26fc59-a545-51c2-94c4-702e1f97b80a&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Polar Veil: starred (seeded StarredAt), userRating 5, lyrics present, replayGain block, suffix '.wav', path relative."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getsong-unknown",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getSong.view?f=json&v=1.16.1&c=phase0&id=song_00000000-0000-0000-0000-000000000000&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "QUIRK: status:'ok' WITH error block (same IsSuccess quirk)."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getsong-malformed-id",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getSong.view?f=json&v=1.16.1&c=phase0&id=notanid&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Malformed id -> error 44 (InvalidApiKeyError)."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getgenres",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getGenres.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Genre counts including Unicode genre 環境音楽."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getmusicdirectory-library",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getMusicDirectory.view?f=json&v=1.16.1&c=phase0&id=library_c598e196-db6f-582e-b110-1726c138bd4f&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Directory-style browse from the music folder root."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getmusicdirectory-artist",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getMusicDirectory.view?f=json&v=1.16.1&c=phase0&id=artist_813c11e0-61cd-5204-ae0f-ce68386eacec&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Artist directory -> album children."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getmusicdirectory-album",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getMusicDirectory.view?f=json&v=1.16.1&c=phase0&id=album_645680d3-704a-5b83-a734-42a3fa88c3ed&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Multi-disc album directory -> song children in disc-qualified order."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getalbuminfo",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getAlbumInfo.view?f=json&v=1.16.1&c=phase0&id=album_69d97699-74c5-5403-878f-87f42d9d9fbb&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Album metadata; external providers offline in fixture environment."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getalbuminfo2",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getAlbumInfo2.view?f=json&v=1.16.1&c=phase0&id=album_69d97699-74c5-5403-878f-87f42d9d9fbb&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "ID3 variant."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getartistinfo",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getArtistInfo.view?f=json&v=1.16.1&c=phase0&id=artist_813c11e0-61cd-5204-ae0f-ce68386eacec&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Artist metadata and similar artists."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getartistinfo2",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getArtistInfo2.view?f=json&v=1.16.1&c=phase0&id=artist_813c11e0-61cd-5204-ae0f-ce68386eacec&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "ID3 variant."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getsimilarsongs",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getSimilarSongs.view?f=json&v=1.16.1&c=phase0&id=song_2b8eab4b-235d-5892-99f8-c0f5f54e8ab4&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Legacy similar songs."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getsimilarsongs2",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getSimilarSongs2.view?f=json&v=1.16.1&c=phase0&id=song_2b8eab4b-235d-5892-99f8-c0f5f54e8ab4&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "ID3 similar songs."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-gettopsongs",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getTopSongs.view?f=json&v=1.16.1&c=phase0&artist=Dune&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Top songs by artist NAME — collision-relevant: which identity does 'Dune' resolve to?"
+  }
+]

@@ -1,0 +1,270 @@
+{
+  "slug": "clean-flac",
+  "description": "Clean tagged FLAC (Vorbis comments).",
+  "expected": {
+    "codec": "flac",
+    "conversion": "mp3 (NeedsConversionToMp3Async)"
+  },
+  "input": {
+    "files": [
+      "01 First Light.flac",
+      "02 Second Wave.flac",
+      "03 Third Echo.flac",
+      "cover.jpg"
+    ],
+    "sizes": {
+      "cover.jpg": 4480,
+      "03 Third Echo.flac": 36392,
+      "02 Second Wave.flac": 34876,
+      "01 First Light.flac": 32585
+    },
+    "sha256": {
+      "03 Third Echo.flac": "7340e8fe367e84d868f3cd6a05c9f2ffeecf4eb7e240314de30a6c6213005ce2",
+      "02 Second Wave.flac": "f9a96efc4e02d2793bba3039e6d337ede742ce454847cc466a92f88a21cbfbca",
+      "01 First Light.flac": "af9c1a0c7a0b520a239d4c864384d658918040089c2a06822d26115dedfebddf"
+    }
+  },
+  "extraction": {
+    "extractions": [
+      {
+        "file": "01 First Light.flac",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {
+          "Genre": "Electronic",
+          "DiscNumber": 1,
+          "Bpm": 0,
+          "OrigAlbumYear": 2021,
+          "AlbumDate": "2021-01-01T00:00:00.0000000Z",
+          "Date": "2021-01-01T00:00:00Z",
+          "Encoder": "Lavf62.12.102",
+          "RecordingYear": 2021,
+          "DiscTotal": 1,
+          "AlbumArtist": "Corpus Artist",
+          "Title": "First Light",
+          "TrackNumber": 1,
+          "Album": "Lossless Path"
+        },
+        "mediaAudios": {
+          "BitRate": 97,
+          "BitDepth": 16,
+          "SampleRate": 44100,
+          "IsVbr": false,
+          "Duration": 2,
+          "DurationMs": 2000,
+          "CodecLongName": "Free Lossless Audio Codec",
+          "Channels": "Mono (1/0.0)",
+          "ChannelLayout": "Mono (1/0.0)",
+          "ChannelsArrangementDescription": "Mono (1/0.0)",
+          "ChannelsArrangementNumberChannels": 1,
+          "AudioDataOffset": 8437,
+          "AudioDataSize": 24148
+        },
+        "imageCount": 0,
+        "crcHash": "B83278EC"
+      },
+      {
+        "file": "02 Second Wave.flac",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {
+          "Genre": "Electronic",
+          "DiscNumber": 1,
+          "Bpm": 0,
+          "OrigAlbumYear": 2021,
+          "AlbumDate": "2021-01-01T00:00:00.0000000Z",
+          "Date": "2021-01-01T00:00:00Z",
+          "Encoder": "Lavf62.12.102",
+          "RecordingYear": 2021,
+          "DiscTotal": 1,
+          "AlbumArtist": "Corpus Artist",
+          "Title": "Second Wave",
+          "TrackNumber": 2,
+          "Album": "Lossless Path"
+        },
+        "mediaAudios": {
+          "BitRate": 99,
+          "BitDepth": 16,
+          "SampleRate": 44100,
+          "IsVbr": false,
+          "Duration": 2,
+          "DurationMs": 2130,
+          "CodecLongName": "Free Lossless Audio Codec",
+          "Channels": "Mono (1/0.0)",
+          "ChannelLayout": "Mono (1/0.0)",
+          "ChannelsArrangementDescription": "Mono (1/0.0)",
+          "ChannelsArrangementNumberChannels": 1,
+          "AudioDataOffset": 8437,
+          "AudioDataSize": 26439
+        },
+        "imageCount": 0,
+        "crcHash": "0E04045E"
+      }
+    ]
+  },
+  "pipeline": {
+    "processExitCode": 0,
+    "processSummary": {
+      "Elapsed Time": "00:00:03",
+      "Directories Processed": "1",
+      "Albums Processed": "1",
+      "Valid Albums": "0 (0%)",
+      "New Artists": "1",
+      "New Albums": "1",
+      "New Songs": "3"
+    },
+    "processErrorTail": null,
+    "stagingTree": [
+      {
+        "path": "Corpus Artist - [2021] Lossless Path/0001 First Light.mp3",
+        "size": 82790
+      },
+      {
+        "path": "Corpus Artist - [2021] Lossless Path/0002 Second Wave.mp3",
+        "size": 87590
+      },
+      {
+        "path": "Corpus Artist - [2021] Lossless Path/0003 Third Echo.mp3",
+        "size": 93349
+      },
+      {
+        "path": "Corpus Artist - [2021] Lossless Path/i-01-Front.jpg",
+        "size": 4480
+      },
+      {
+        "path": "Corpus Artist - [2021] Lossless Path/melodee.json",
+        "size": 11121,
+        "sha256": null
+      }
+    ],
+    "albums": [
+      {
+        "directory": "Corpus Artist - [2021] Lossless Path",
+        "status": "Invalid",
+        "statusReasons": "HasInvalidArtists, HasLessThanMinimumDuration",
+        "albumType": "Album",
+        "validationMessages": [
+          {
+            "message": "Album artist is invalid.",
+            "severity": 2
+          },
+          {
+            "message": "Album Artist is unknown, will need manual validation.",
+            "severity": 2
+          },
+          {
+            "message": "Album duration is less than the minimum album duration.",
+            "severity": 2
+          }
+        ],
+        "songCount": 3,
+        "songs": [
+          {
+            "fileName": "0001 First Light.mp3",
+            "size": 82756,
+            "title": "First Light",
+            "songNumber": 1,
+            "mediaNumber": 1,
+            "sortOrder": 1,
+            "crcHash": "3827098B"
+          },
+          {
+            "fileName": "0002 Second Wave.mp3",
+            "size": 87556,
+            "title": "Second Wave",
+            "songNumber": 2,
+            "mediaNumber": 1,
+            "sortOrder": 2,
+            "crcHash": "6ABA244B"
+          },
+          {
+            "fileName": "0003 Third Echo.mp3",
+            "size": 93315,
+            "title": "Third Echo",
+            "songNumber": 3,
+            "mediaNumber": 1,
+            "sortOrder": 3,
+            "crcHash": "4A27E33A"
+          }
+        ],
+        "images": [
+          {
+            "name": "i-01-Front.jpg",
+            "pictureIdentifier": "Front",
+            "width": 600,
+            "height": 600,
+            "wasEmbeddedInSong": false,
+            "originalFilename": "cover.jpg"
+          }
+        ],
+        "displaySummary": "003 : Lossless Path"
+      }
+    ],
+    "inboundLeftovers": [
+      {
+        "path": "01 First Light.flac._converted",
+        "size": 32585
+      },
+      {
+        "path": "01 First Light.mp3",
+        "size": 82756
+      },
+      {
+        "path": "02 Second Wave.flac._converted",
+        "size": 34876
+      },
+      {
+        "path": "02 Second Wave.mp3",
+        "size": 87556
+      },
+      {
+        "path": "03 Third Echo.flac._converted",
+        "size": 36392
+      },
+      {
+        "path": "03 Third Echo.mp3",
+        "size": 93315
+      },
+      {
+        "path": "cover.jpg",
+        "size": 4480
+      },
+      {
+        "path": "melodee.json",
+        "size": 10379
+      }
+    ],
+    "validations": [
+      {
+        "album": "Corpus Artist - [2021] Lossless Path",
+        "exitCode": 0,
+        "result": {
+          "data": {
+            "albumStatus": 3,
+            "albumStatusReasons": 33554440,
+            "isValid": false,
+            "messages ": [
+              {
+                "message": "Album artist is  invalid.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album Artist is unknown, will  need manual validation.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album duration  is less than the minimum album  duration.",
+                "sortOrder": 0,
+                "severity": 2
+              }
+            ]
+          },
+          "isSuccess": true,
+          "type": 200
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "subsonic-response": {
+    "status": "ok",
+    "version": "1.16.1",
+    "type": "Melodee",
+    "serverVersion": "<volatile>",
+    "openSubsonic": true,
+    "directory": {
+      "id": "library_c598e196-db6f-582e-b110-1726c138bd4f",
+      "name": "",
+      "averageRating": 0,
+      "playCount": 0,
+      "child": []
+    }
+  }
+}

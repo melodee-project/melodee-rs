@@ -1,0 +1,31 @@
+{
+  "isSuccess": true,
+  "apiKeyId": null,
+  "userInfo": {
+    "id": 0,
+    "apiKey": "00000000-0000-0000-0000-000000000000",
+    "userName": "",
+    "email": "",
+    "publicKey": "",
+    "timeZoneId": "UTC",
+    "passwordEncrypted": null,
+    "roles": null
+  },
+  "subsonic-response": {
+    "isSuccess": false,
+    "dataPropertyName": "error",
+    "dataDetailPropertyName": "",
+    "version": "1.16.1",
+    "type": "Melodee",
+    "serverVersion": "<volatile>",
+    "error": {
+      "code": 0,
+      "message": "Invalid episode id",
+      "helpUrl": null
+    },
+    "etag": null,
+    "contentType": null,
+    "data": null
+  },
+  "totalCount": 0
+}

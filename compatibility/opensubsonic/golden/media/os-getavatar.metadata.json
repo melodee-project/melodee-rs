@@ -1,0 +1,35 @@
+{
+  "name": "os-getavatar",
+  "surface": "opensubsonic",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/rest/getAvatar.view?f=json&v=1.16.1&c=phase0&username=phase0-fixture&u=phase0-fixture&t=%3Credacted%3E&s=%3Credacted%3E",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-length": "2271384",
+      "content-type": "image/png"
+    },
+    "bodyFile": "os-getavatar.bin",
+    "sha256": "f9fcb886686624834113bc17a7a9d7ad203489c1b1334b3d281f8194d97ba419",
+    "bytes": 2271384
+  },
+  "normalize": {
+    "dropHeaders": [
+      "etag",
+      "last-modified"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

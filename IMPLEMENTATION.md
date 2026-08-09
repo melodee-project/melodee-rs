@@ -1,6 +1,7 @@
 # Melodee Rust Rewrite — Implementation Guide
 
-**Status:** Phased execution plan  
+**Status:** Phased execution plan — **Phase 0 complete (2026-08-09)**; see
+[design/evidence/phase-0/PHASE-0-REPORT.md](design/evidence/phase-0/PHASE-0-REPORT.md)  
 **Date:** 2026-08-07  
 **Governing documents:** [PRD.md](PRD.md), [SPEC.md](SPEC.md), accepted ADRs
 

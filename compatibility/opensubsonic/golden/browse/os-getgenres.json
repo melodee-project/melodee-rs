@@ -1,0 +1,58 @@
+{
+  "subsonic-response": {
+    "status": "ok",
+    "version": "1.16.1",
+    "type": "Melodee",
+    "serverVersion": "<volatile>",
+    "openSubsonic": true,
+    "genres": {
+      "genre": [
+        {
+          "value": "Ambient",
+          "songCount": 3,
+          "albumCount": 1
+        },
+        {
+          "value": "Classical",
+          "songCount": 4,
+          "albumCount": 1
+        },
+        {
+          "value": "Electronic",
+          "songCount": 6,
+          "albumCount": 2
+        },
+        {
+          "value": "Folk",
+          "songCount": 3,
+          "albumCount": 3
+        },
+        {
+          "value": "Jazz",
+          "songCount": 3,
+          "albumCount": 1
+        },
+        {
+          "value": "Pop",
+          "songCount": 2,
+          "albumCount": 2
+        },
+        {
+          "value": "Post-Rock",
+          "songCount": 2,
+          "albumCount": 1
+        },
+        {
+          "value": "Rock",
+          "songCount": 2,
+          "albumCount": 1
+        },
+        {
+          "value": "環境音楽",
+          "songCount": 2,
+          "albumCount": 1
+        }
+      ]
+    }
+  }
+}

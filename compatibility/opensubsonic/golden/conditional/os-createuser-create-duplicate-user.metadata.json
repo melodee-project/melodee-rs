@@ -1,0 +1,35 @@
+{
+  "name": "os-createuser/create-duplicate-user",
+  "surface": "opensubsonic",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/rest/createUser.view?f=json&v=1.16.1&c=phase0&username=os-probe&password=%3Credacted%3E&email=probe%40example.test&u=phase0-fixture&t=%3Credacted%3E&s=%3Credacted%3E",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-length": "176",
+      "content-type": "application/json; charset=utf-8",
+      "x-total-count": "0"
+    },
+    "bodyFile": "os-createuser-create-duplicate-user.json",
+    "sha256": "55e9c4f8c9ea9e999cd6247ffaab3defaaf7d688ba027d133d0f6a51502d4cf7",
+    "bytes": 245
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.subsonic-response.serverVersion"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

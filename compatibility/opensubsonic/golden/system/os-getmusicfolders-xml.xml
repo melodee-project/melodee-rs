@@ -1,0 +1,1 @@
+<subsonic-response xmlns="https://subsonic.org/restapi" status="ok" type="melodee" version="1.16.1" serverVersion="<volatile>" openSubsonic="true"><musicFolders><musicFolder id="library_c598e196-db6f-582e-b110-1726c138bd4f" name="Phase0 Fixture Library"/><musicFolder id="library_f63a6428-55d5-847b-3d09-3fa3b69b66ae" name="Storage"/></musicFolders></subsonic-response>

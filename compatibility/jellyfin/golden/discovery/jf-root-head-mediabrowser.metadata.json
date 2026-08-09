@@ -1,0 +1,28 @@
+{
+  "name": "jf-root-head-mediabrowser",
+  "surface": "jellyfin",
+  "request": {
+    "method": "HEAD",
+    "url": "{melodee-origin}/",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "MediaBrowser <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-length": "0"
+    },
+    "bodyFile": "jf-root-head-mediabrowser.bin",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "normalize": {},
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

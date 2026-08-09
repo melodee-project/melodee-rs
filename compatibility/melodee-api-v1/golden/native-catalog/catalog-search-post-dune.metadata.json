@@ -16,7 +16,8 @@
       "artistPage": 1,
       "albumPage": 1,
       "songPage": 1
-    }
+    },
+    "bodyTemplate": null
   },
   "response": {
     "status": 200,

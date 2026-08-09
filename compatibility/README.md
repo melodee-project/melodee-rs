@@ -67,3 +67,33 @@ A fixture promoted from `captures/` into a `golden/` directory must:
 - be accompanied by a test.
 
 Do not normalize meaningful differences merely to make tests pass.
+
+## OpenSubsonic surface (Issue 6)
+
+- Scenarios: `scenarios/opensubsonic-*.json` (11 files, 177 steps; system/auth/browse/lists/
+  media/annotation/playlists/community/negative/conditional/conditional-off).
+- Golden: `opensubsonic/golden/` with per-directory `provenance.json`.
+- Endpoint inventory: `opensubsonic/contracts/route-inventory.json`
+  (`python3 scripts/build_opensubsonic_inventory.py --check`).
+- Findings: `design/evidence/phase-0/opensubsonic-capture.md` (auth bypass contract, unsigned
+  JWT acceptance, double range-processing seek bug, 410/501 matrix, playlist mutation breakage).
+
+
+## Media baseline (Issue 8)
+
+- `media/baseline.json` + `media/cases/` — 31-case synthetic corpus outcomes (extraction,
+  pipeline, validation). Generator: `scripts/generate_media_corpus.py`; harness:
+  `scripts/capture_media_baseline.py`. Report: `design/evidence/phase-0/media-baseline.md`.
+
+## Benchmarks (Issue 9)
+
+- `benchmarks/` — three deterministic dataset tiers (15k/560k/5M songs), endpoint timing
+  matrices with environment metadata, `SUMMARY.md`. Generators:
+  `scripts/generate_benchmark_dataset.py`, `scripts/run_benchmarks.py`.
+  Report: `design/evidence/phase-0/scale-baseline.md`.
+
+## Phase 0 closure (Issue 10)
+
+- `coverage-matrix.json` + `COVERAGE-MATRIX.md` — per-surface coverage and open discrepancies
+  (`scripts/build_coverage_matrix.py`).
+- Canonical report: `design/evidence/phase-0/PHASE-0-REPORT.md`.

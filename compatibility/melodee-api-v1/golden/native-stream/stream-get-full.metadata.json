@@ -8,7 +8,8 @@
     "headers": {
       "User-Agent": "melodee-rs-phase0-capture/1"
     },
-    "jsonTemplate": null
+    "jsonTemplate": null,
+    "bodyTemplate": null
   },
   "response": {
     "status": 200,
@@ -16,7 +17,7 @@
       "content-length": "220544",
       "content-type": "audio/wav",
       "accept-ranges": "bytes",
-      "last-modified": "Fri, 07 Aug 2026 21:24:03 GMT"
+      "last-modified": "Sun, 09 Aug 2026 19:54:54 GMT"
     },
     "bodyFile": "stream-get-full.bin",
     "sha256": "5331b93e16f584cd3eb8d6a3d2281bec960a731b26d96ec1d5802209f1915c0f",

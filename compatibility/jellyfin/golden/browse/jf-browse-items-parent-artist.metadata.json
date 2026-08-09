@@ -1,0 +1,28 @@
+{
+  "name": "jf-browse/items-parent-artist",
+  "surface": "jellyfin",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/Items?parentId=813c11e061cd5204ae0fce68386eacec",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "MediaBrowser <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "jf-browse-items-parent-artist.json",
+    "sha256": "3cd88f89426267096bd8a9c1b657ae666782ea65a9da48d553528d67e55f98aa",
+    "bytes": 1825
+  },
+  "normalize": {},
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

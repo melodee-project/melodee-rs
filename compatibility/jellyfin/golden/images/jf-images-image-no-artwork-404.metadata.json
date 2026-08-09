@@ -1,0 +1,33 @@
+{
+  "name": "jf-images/image-no-artwork-404",
+  "surface": "jellyfin",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/Items/263ebba5739c5cb9987fb2d2bbfbd0ad/Images/Primary",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "MediaBrowser <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "jf-images-image-no-artwork-404.json",
+    "sha256": "4e2f1bd33ad9deb0520fbaaf1d877f015ea7054598059be5d4d4d830aa828636",
+    "bytes": 155
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.TraceId",
+      "$.traceId"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

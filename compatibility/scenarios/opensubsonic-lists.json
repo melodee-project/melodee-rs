@@ -1,0 +1,388 @@
+[
+  {
+    "schemaVersion": 2,
+    "name": "os-getalbumlist-newest",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getAlbumList.view?f=json&v=1.16.1&c=phase0&type=newest&size=10&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "getAlbumList type=newest (Child-shaped albums, legacy envelope)."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getalbumlist2-newest",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getAlbumList2.view?f=json&v=1.16.1&c=phase0&type=newest&size=10&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "ID3 album list, newest = CreatedAt desc (staggered fixture timestamps give deterministic order)."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getalbumlist2-alphabetical",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getAlbumList2.view?f=json&v=1.16.1&c=phase0&type=alphabeticalByName&size=10&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": ""
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getalbumlist2-bygenre",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getAlbumList2.view?f=json&v=1.16.1&c=phase0&type=byGenre&genre=Rock&size=10&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": ""
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getalbumlist2-byyear",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getAlbumList2.view?f=json&v=1.16.1&c=phase0&type=byYear&fromYear=2019&toYear=2021&size=10&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": ""
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getalbumlist2-starred",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getAlbumList2.view?f=json&v=1.16.1&c=phase0&type=starred&size=10&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Seeded UserAlbum star (Northern Lights) must appear."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getalbumlist2-recent",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getAlbumList2.view?f=json&v=1.16.1&c=phase0&type=recent&size=10&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "QUIRK: type=recent sorts by ReleaseDate (not last played) at this baseline."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getalbumlist2-frequent",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getAlbumList2.view?f=json&v=1.16.1&c=phase0&type=frequent&size=10&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Most played (seeded playedCounts)."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getrandomsongs",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getRandomSongs.view?f=json&v=1.16.1&c=phase0&size=5&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion",
+        "$.subsonic-response.randomSongs.song"
+      ],
+      "dropHeaders": [
+        "content-length"
+      ]
+    },
+    "notes": "Random selection: the song array is masked because ordering/selection is nondeterministic; envelope + size are the contract."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getsongsbygenre-rock",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getSongsByGenre.view?f=json&v=1.16.1&c=phase0&genre=Rock&count=10&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": ""
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getsongsbygenre-unicode",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getSongsByGenre.view?f=json&v=1.16.1&c=phase0&genre=%E7%92%B0%E5%A2%83%E9%9F%B3%E6%A5%BD&count=10&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Unicode genre query."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getsongsbygenre-none",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getSongsByGenre.view?f=json&v=1.16.1&c=phase0&genre=NoSuchGenre&count=10&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Empty result shape."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getnowplaying-empty",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getNowPlaying.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "No active now-playing entries."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getstarred",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getStarred.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Legacy starred view (legacy Artist/Child shapes). Seeded: artist Aurora Fields, album Northern Lights, song Polar Veil."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-getstarred2",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/getStarred2.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "ID3 starred view (ArtistID3/AlbumID3/Child). artistImageUrl is the literal placeholder 'URL' (quirk)."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-search3-dune",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/search3.view?f=json&v=1.16.1&c=phase0&query=Dune&artistCount=10&albumCount=10&songCount=10&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "ID3 search over the normalized-name collision pair; both Dune and Düné expected."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-search2-dune",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/search2.view?f=json&v=1.16.1&c=phase0&query=Dune&artistCount=10&albumCount=10&songCount=10&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Legacy search2 shape (searchResult2, hardcoded placeholder fields on songs: bitrate 0, suffix 'mp3', path 'unknown')."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-search3-unicode",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/search3.view?f=json&v=1.16.1&c=phase0&query=%E6%9D%B1%E4%BA%AC&artistCount=10&albumCount=10&songCount=10&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Unicode (CJK) query."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-search3-none",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/search3.view?f=json&v=1.16.1&c=phase0&query=zzzznothing&artistCount=10&albumCount=10&songCount=10&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Nonexistent term: empty arrays shape."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-searchforartist",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/searchForArtist.view?f=json&v=1.16.1&c=phase0&query=Dune&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Melodee extension (melodeeExtensions[1]). Matrix says Supported, but in the fixture environment it 302s via the exception pipeline (external artist-search provider unreachable/empty engine). ENVIRONMENT-CONDITIONAL: the route's error behavior under provider failure is what's captured here.",
+    "followRedirects": false,
+    "expectStatus": 302
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-searchforartistimage",
+    "surface": "opensubsonic",
+    "method": "GET",
+    "path": "/rest/searchForArtistImage.view?f=json&v=1.16.1&c=phase0&query=Aurora%20Fields&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+    "auth": "none",
+    "headers": {
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "normalize": {
+      "maskJsonPaths": [
+        "$.subsonic-response.serverVersion"
+      ]
+    },
+    "notes": "Melodee extension image search: 302 in fixture environment (external image provider dependency). Same environment-conditional caveat.",
+    "followRedirects": false,
+    "expectStatus": 302
+  }
+]

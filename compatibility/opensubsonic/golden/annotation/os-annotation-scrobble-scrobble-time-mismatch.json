@@ -1,0 +1,13 @@
+{
+  "subsonic-response": {
+    "status": "ok",
+    "version": "1.16.1",
+    "type": "Melodee",
+    "serverVersion": "<volatile>",
+    "openSubsonic": true,
+    "error": {
+      "code": 0,
+      "message": "Wrong number of timestamps."
+    }
+  }
+}

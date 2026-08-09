@@ -1,0 +1,35 @@
+{
+  "name": "jf-images/image-maxwidth-bucket",
+  "surface": "jellyfin",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/Items/69d9769974c55403878f87f42d9d9fbb/Images/Primary?maxWidth=100",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "MediaBrowser <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-length": "785",
+      "content-type": "image/jpeg",
+      "cache-control": "public, max-age=86400",
+      "etag": "\"c46acb7cb44c53be3fdd49f3b0f823de7776c42c196c13f13cf0d9cd5273c175\""
+    },
+    "bodyFile": "jf-images-image-maxwidth-bucket.bin",
+    "sha256": "ea00fc2fbab43a129b5f4793c3014200b72b5fffc7a3e88dbb5371c0d681f618",
+    "bytes": 785
+  },
+  "normalize": {
+    "dropHeaders": [
+      "etag"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

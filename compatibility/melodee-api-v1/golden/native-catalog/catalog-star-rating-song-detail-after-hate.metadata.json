@@ -9,7 +9,8 @@
       "User-Agent": "melodee-rs-phase0-capture/1",
       "Authorization": "Bearer <redacted>"
     },
-    "jsonTemplate": null
+    "jsonTemplate": null,
+    "bodyTemplate": null
   },
   "response": {
     "status": 200,
@@ -17,7 +18,7 @@
       "content-type": "application/json; charset=utf-8"
     },
     "bodyFile": "catalog-star-rating-song-detail-after-hate.json",
-    "sha256": "bbfa6558b7fc0a9929b2723377f5d90bdd85c41e2b031286c0ca13e8608f6db5",
+    "sha256": "a6feb441caa8ea4b02d02b2bb610e634d52688dcda133a000101104c05d0e443",
     "bytes": 1912
   },
   "normalize": {

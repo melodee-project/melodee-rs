@@ -1,0 +1,35 @@
+{
+  "name": "os-getartist-various",
+  "surface": "opensubsonic",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/rest/getArtist.view?f=json&v=1.16.1&c=phase0&id=artist_89eb2dc1-fd4c-5a57-99e5-480c96b292fc&u=phase0-fixture&t=%3Credacted%3E&s=%3Credacted%3E",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-length": "897",
+      "content-type": "application/json; charset=utf-8",
+      "x-total-count": "1"
+    },
+    "bodyFile": "os-getartist-various.json",
+    "sha256": "4c81830b14d46b957b6d402b5b911215f675c962546896fa290bd598d898776c",
+    "bytes": 1243
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.subsonic-response.serverVersion"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

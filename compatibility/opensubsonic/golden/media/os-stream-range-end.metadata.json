@@ -1,0 +1,47 @@
+{
+  "name": "os-stream-range-end",
+  "surface": "opensubsonic",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/rest/stream.view?f=json&v=1.16.1&c=phase0&id=song_2b8eab4b-235d-5892-99f8-c0f5f54e8ab4&u=phase0-fixture&t=%3Credacted%3E&s=%3Credacted%3E",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test",
+      "Range": "bytes=-2048"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 206,
+    "headers": {
+      "content-length": "2048",
+      "content-type": "audio/wav",
+      "accept-ranges": "bytes",
+      "access-control-allow-origin": "*",
+      "cache-control": "no-store, must-revalidate, no-cache, max-age=0",
+      "content-range": "bytes 0-2047/2048",
+      "etag": "\"220544-639219021744344164\"",
+      "expires": "Mon, 01 Jan 1990 00:00:00 GMT",
+      "last-modified": "Sun, 09 Aug 2026 19:56:14 GMT",
+      "content-duration": "2.5"
+    },
+    "bodyFile": "os-stream-range-end.bin",
+    "sha256": "e17ad032343a1ad42162204e8012043046b8a0cca6fb347d69b7aacff64d0148",
+    "bytes": 2048
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.subsonic-response.serverVersion"
+    ],
+    "dropHeaders": [
+      "etag",
+      "last-modified"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

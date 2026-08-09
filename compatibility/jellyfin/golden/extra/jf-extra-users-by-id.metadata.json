@@ -1,0 +1,34 @@
+{
+  "name": "jf-extra/users-by-id",
+  "surface": "jellyfin",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/Users/f78448cc82ec5864877c6c6163b00065",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "MediaBrowser <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "jf-extra-users-by-id.json",
+    "sha256": "f2b734863727bd67064e7b178504e901d8176502398514b6790e77df7d62f209",
+    "bytes": 1306
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.LastLoginDate",
+      "$.LastActivityDate",
+      "$.Configuration"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "legacyBaselineCommit": "4028b58dbd3302ed431e2c5b32d9dde5634db218",
+  "legacyVersion": "2.2.0 (v2.1.4-19-g4028b58d)",
+  "databaseMigrationHead": "20260714155936_AddDeleteSourceResidueAfterIngestSetting",
+  "fixtureCatalog": "compatibility/fixtures/catalog-v1.json",
+  "fixtureCatalogSha256": "b451de20a1b5ae518de21d8ed680519d6fd33a20e5424d9794fe4872cc04339b",
+  "fixtureUuidNamespace": "uuid5(NAMESPACE_URL, 'https://melodee.dev/phase0-fixtures/v1') of '<kind>:<slug>'",
+  "captureEnvironment": "disposable PostgreSQL melodee_phase0; deterministic synthetic WAV media + PNG artwork + LRC sidecar; QuartzDisabled=true; UseForwardedHeaders=true; fixture-only synthetic credentials (scripts/legacy_oracle.py)",
+  "capturedAtUtc": "2026-08-09T19:53:40Z",
+  "reproducedBy": "python3 scripts/legacy_oracle.py recreate && python3 scripts/legacy_oracle.py capture; promoted from a clean full recreation (Issue 10 exit-gate proof)",
+  "surface": "opensubsonic"
+}

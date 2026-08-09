@@ -1,0 +1,19 @@
+{
+  "subsonic-response": {
+    "status": "ok",
+    "version": "1.16.1",
+    "type": "Melodee",
+    "serverVersion": "<volatile>",
+    "openSubsonic": true,
+    "internetRadioStations": {
+      "internetRadioStation": [
+        {
+          "id": "<volatile>",
+          "name": "Phase0 Radio",
+          "streamUrl": "http://radio.example.test/stream",
+          "homePageUrl": "http://radio.example.test"
+        }
+      ]
+    }
+  }
+}

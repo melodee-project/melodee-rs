@@ -335,7 +335,11 @@
         "path": "/api/v1/playlists/b16ae181-fc40-5cd5-ba7b-0cf9f5b4c89d",
         "auth": "bearer-var:accessToken",
         "normalize": {
-          "maskBaseUrl": true
+          "maskBaseUrl": true,
+          "maskJsonPaths": [
+            "$.owner.createdAt",
+            "$.owner.updatedAt"
+          ]
         }
       },
       {
@@ -347,6 +351,10 @@
           "maskBaseUrl": true,
           "maskUrlAuthTokenPaths": [
             "$.data[*].streamUrl"
+          ],
+          "maskJsonPaths": [
+            "$.owner.createdAt",
+            "$.owner.updatedAt"
           ]
         },
         "notes": "Playlist spanning four Releases; PlaylistOrder must be stable."

@@ -13,7 +13,8 @@
     "jsonTemplate": {
       "query": "東京",
       "pageSize": 10
-    }
+    },
+    "bodyTemplate": null
   },
   "response": {
     "status": 200,

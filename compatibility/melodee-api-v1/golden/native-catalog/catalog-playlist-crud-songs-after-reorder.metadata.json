@@ -9,7 +9,8 @@
       "User-Agent": "melodee-rs-phase0-capture/1",
       "Authorization": "Bearer <redacted>"
     },
-    "jsonTemplate": null
+    "jsonTemplate": null,
+    "bodyTemplate": null
   },
   "response": {
     "status": 200,
@@ -17,7 +18,7 @@
       "content-type": "application/json; charset=utf-8"
     },
     "bodyFile": "catalog-playlist-crud-songs-after-reorder.json",
-    "sha256": "3085415c7a90035f87b005eacdec82c584fb360f50e0ed1bbbfb5fccf8bc1a09",
+    "sha256": "496ab3e5744b64f88b5b0d3fbb928ce429c1eb532be622ded381795bf422e5aa",
     "bytes": 4488
   },
   "normalize": {

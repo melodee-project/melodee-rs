@@ -1,0 +1,20 @@
+{
+  "subsonic-response": {
+    "status": "ok",
+    "version": "1.16.1",
+    "type": "Melodee",
+    "serverVersion": "<volatile>",
+    "openSubsonic": true,
+    "artistInfo": {
+      "biography": "Synthetic ordinary solo artist fixture.",
+      "isArtistInfo2": false,
+      "id": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+      "name": "Aurora Fields",
+      "songCount": 3,
+      "albumCount": 1,
+      "smallImageUrl": "http://127.0.0.1:5157/images/artist_813c11e0-61cd-5204-ae0f-ce68386eacec/thumbnail",
+      "mediumImageUrl": "http://127.0.0.1:5157/images/artist_813c11e0-61cd-5204-ae0f-ce68386eacec/medium",
+      "largeImageUrl": "http://127.0.0.1:5157/images/artist_813c11e0-61cd-5204-ae0f-ce68386eacec/large"
+    }
+  }
+}

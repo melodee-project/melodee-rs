@@ -1,0 +1,36 @@
+{
+  "name": "os-ping-xml",
+  "surface": "opensubsonic",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/rest/ping.view?v=1.16.1&c=melodee-rs-phase0",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-length": "164",
+      "content-type": "application/xml",
+      "x-total-count": "0"
+    },
+    "bodyFile": "os-ping-xml.xml",
+    "sha256": "3a53a86bc01f12117d494dd9c8f8be7aaa73e184fb9c61032e7f7b55867f18a9",
+    "bytes": 167
+  },
+  "normalize": {
+    "maskRegex": [
+      {
+        "pattern": "serverVersion=\"[^\"]*\"",
+        "replace": "serverVersion=\"<volatile>\""
+      }
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

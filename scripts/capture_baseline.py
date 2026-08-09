@@ -127,6 +127,15 @@ def safe_name(value: str) -> str:
     return re.sub(r"[^a-zA-Z0-9._-]+", "-", value).strip("-") or "scenario"
 
 
+def apply_mask_regex(text: str, rules: list[dict[str, str]]) -> str:
+    """Apply scenario-declared regex masks to text bodies (XML, JSONP, plain
+    text) where JSON-path masking cannot reach. Each rule: {"pattern": ...,
+    "replace": ...}."""
+    for rule in rules:
+        text = re.sub(str(rule["pattern"]), str(rule.get("replace", MASK)), text)
+    return text
+
+
 # ---------------------------------------------------------------------------
 # JSON path subset (shared semantics with compare_captures.py)
 # ---------------------------------------------------------------------------
@@ -312,6 +321,13 @@ def capture_request(
     allow_failure = bool(scenario.get("allowFailure", False))
     expect_status = scenario.get("expectStatus")
 
+    # Env-injected values are potential credentials (subsonic tokens, forged
+    # JWTs); register them as secrets so recordings never persist them.
+    for env_name in re.findall(r"\{\{env:([A-Za-z0-9_]+)\}\}", json.dumps(scenario)):
+        env_value = os.environ.get(env_name)
+        if env_value:
+            secrets.setdefault(f"env:{env_name}", env_value)
+
     raw_path = str(scenario["path"])
     path = str(substitute(raw_path, variables))
     url = path if path.startswith("http") else urllib.parse.urljoin(
@@ -337,6 +353,8 @@ def capture_request(
     if templated_body is not None:
         body = json.dumps(substitute(templated_body, variables)).encode("utf-8")
         headers["Content-Type"] = "application/json"
+    elif scenario.get("body") is not None:
+        body = str(substitute(str(scenario["body"]), variables)).encode("utf-8")
 
     request = urllib.request.Request(url, data=body, headers=headers, method=method)
     if scenario.get("followRedirects") is False:
@@ -401,7 +419,7 @@ def capture_request(
             pass
     elif "xml" in content_type or response_body.lstrip().startswith(b"<"):
         extension = ".xml"
-    elif content_type.startswith("text/"):
+    elif content_type.startswith("text/") or "javascript" in content_type:
         extension = ".txt"
 
     # Structure checks run on the RAW body before any masking.
@@ -443,13 +461,27 @@ def capture_request(
             masked = replace_origin(masked, origin_text)
         masked = json.loads(json.dumps(masked))  # defensive copy
         stored_body = (json.dumps(masked, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
-    elif extension == ".txt" and normalize.get("maskBaseUrl"):
-        stored_body = response_body.replace(origin_text.encode(), ORIGIN_ALIAS.encode())
+    else:
+        text_body = response_body
+        if extension in {".xml", ".txt"}:
+            decoded = response_body.decode("utf-8", "replace")
+            if normalize.get("maskRegex"):
+                decoded = apply_mask_regex(decoded, list(normalize["maskRegex"]))
+            if normalize.get("maskBaseUrl"):
+                decoded = decoded.replace(origin_text, ORIGIN_ALIAS)
+            text_body = decoded.encode("utf-8")
+        stored_body = text_body
 
     if normalize.get("maskBaseUrl"):
         response_headers = {
             key: value.replace(origin_text, ORIGIN_ALIAS) for key, value in response_headers.items()
         }
+    # Redirect targets can carry credentials in their query strings (the error
+    # pipeline's ReturnUrl embeds the original request, including t/s/jwt).
+    if "location" in response_headers:
+        response_headers["location"] = redact_url(
+            unsubstitute_secrets(response_headers["location"], secrets)
+        )
 
     stem = safe_name(name)
     body_path = output / f"{stem}{extension}"
@@ -470,6 +502,9 @@ def capture_request(
     recorded_body = (
         redact_body_keys(json.loads(json.dumps(templated_body))) if templated_body is not None else None
     )
+    recorded_raw_body = None
+    if scenario.get("body") is not None:
+        recorded_raw_body = redact_url(unsubstitute_secrets(str(scenario["body"]), secrets))
 
     metadata = {
         "name": name,
@@ -480,6 +515,7 @@ def capture_request(
             "auth": auth,
             "headers": recorded_headers,
             "jsonTemplate": recorded_body,
+            "bodyTemplate": recorded_raw_body,
         },
         "response": {
             "status": status,
@@ -517,6 +553,12 @@ def capture_request(
         for var_name in scenario.get("secretCapture", []):
             if var_name in variables:
                 secrets[var_name] = variables[var_name]
+    # Header capture (e.g. ETag for If-None-Match flows).
+    for var_name, header_name in dict(scenario.get("captureHeaders", {})).items():
+        value = response_headers.get(str(header_name).lower())
+        if value is None:
+            raise SystemExit(f"{name}: cannot capture header {header_name}")
+        variables[var_name] = value
 
     return metadata
 

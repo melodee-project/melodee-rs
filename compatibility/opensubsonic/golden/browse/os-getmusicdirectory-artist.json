@@ -1,0 +1,73 @@
+{
+  "subsonic-response": {
+    "status": "ok",
+    "version": "1.16.1",
+    "type": "Melodee",
+    "serverVersion": "<volatile>",
+    "openSubsonic": true,
+    "directory": {
+      "id": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+      "name": "Aurora Fields",
+      "starred": "2026-08-07T00:00:00Z",
+      "userRating": 5,
+      "averageRating": 0.0,
+      "playCount": 7,
+      "played": "2026-08-06T12:00:00Z",
+      "child": [
+        {
+          "id": "album_69d97699-74c5-5403-878f-87f42d9d9fbb",
+          "parent": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+          "isDir": true,
+          "title": "Northern Lights",
+          "album": "Northern Lights",
+          "artist": "Aurora Fields",
+          "year": 2021,
+          "coverArt": "album_69d97699-74c5-5403-878f-87f42d9d9fbb",
+          "starred": "",
+          "duration": 8,
+          "playCount": 12,
+          "played": "2026-08-06T12:00:00Z",
+          "created": "2026-01-02T00:00:00Z",
+          "albumId": "album_69d97699-74c5-5403-878f-87f42d9d9fbb",
+          "artistId": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+          "type": "music",
+          "mediaType": "album",
+          "isVideo": false,
+          "sortName": "Northern Lights",
+          "genres": [
+            {
+              "value": "Ambient",
+              "songCount": 0,
+              "albumCount": 0
+            },
+            {
+              "value": "Electronic",
+              "songCount": 0,
+              "albumCount": 0
+            }
+          ],
+          "artists": [],
+          "displayArtist": "Aurora Fields",
+          "albumArtists": [
+            {
+              "id": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+              "name": "Aurora Fields",
+              "coverArt": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+              "albumCount": 1,
+              "userRating": 0,
+              "artistImageUrl": "URL",
+              "sortName": "Aurora Fields"
+            }
+          ],
+          "displayAlbumArtist": "Aurora Fields",
+          "contributors": [],
+          "replayGain": {},
+          "averageRating": 0,
+          "userRating": 5,
+          "playerId": 0,
+          "genre": "Ambient"
+        }
+      ]
+    }
+  }
+}

@@ -9,7 +9,8 @@
       "User-Agent": "melodee-rs-phase0-capture/1",
       "Authorization": "Bearer <redacted>"
     },
-    "jsonTemplate": null
+    "jsonTemplate": null,
+    "bodyTemplate": null
   },
   "response": {
     "status": 200,
@@ -17,7 +18,7 @@
       "content-type": "application/json; charset=utf-8"
     },
     "bodyFile": "catalog-star-rating-song-detail-after-unstar.json",
-    "sha256": "920739298b5b86fd7ff436a1f4a28c9c5e36b202490b26da1594020e1ffe0ef6",
+    "sha256": "5420ed625ff6054646cfae0c3221286adda4e1feb567c84ebe54b5e6d9e025be",
     "bytes": 1911
   },
   "normalize": {

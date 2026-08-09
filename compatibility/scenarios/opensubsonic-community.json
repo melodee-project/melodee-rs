@@ -1,0 +1,427 @@
+[
+  {
+    "schemaVersion": 2,
+    "name": "os-shares",
+    "surface": "opensubsonic",
+    "flow": [
+      {
+        "name": "getshares-empty",
+        "method": "GET",
+        "path": "/rest/getShares.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.shares.share[*].created",
+            "$.subsonic-response.shares.share[*].expires",
+            "$.subsonic-response.shares.share[*].lastVisited",
+            "$.subsonic-response.shares.share.id",
+            "$.subsonic-response.shares.share.url",
+            "$.subsonic-response.shares.share.created",
+            "$.subsonic-response.shares.share[*].id",
+            "$.subsonic-response.shares.share[*].url",
+            "$.subsonic-response.internetRadioStations.internetRadioStation[*].id"
+          ],
+          "maskBaseUrl": true
+        },
+        "notes": "Empty initially."
+      },
+      {
+        "name": "create-share",
+        "method": "GET",
+        "path": "/rest/createShare.view?f=json&v=1.16.1&c=phase0&id=album_69d97699-74c5-5403-878f-87f42d9d9fbb&description=probe-share&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.shares.share[*].created",
+            "$.subsonic-response.shares.share[*].expires",
+            "$.subsonic-response.shares.share[*].lastVisited",
+            "$.subsonic-response.shares.share.id",
+            "$.subsonic-response.shares.share.url",
+            "$.subsonic-response.shares.share.created",
+            "$.subsonic-response.shares.share[*].id",
+            "$.subsonic-response.shares.share[*].url",
+            "$.subsonic-response.internetRadioStations.internetRadioStation[*].id"
+          ],
+          "maskBaseUrl": true
+        },
+        "notes": "Create album share. url embeds system.baseUrl ({melodee-origin} aliased). Share id captured for later steps.",
+        "capture": {
+          "shareId": "$.subsonic-response.shares.share.id"
+        },
+        "secretCapture": [
+          "shareId"
+        ]
+      },
+      {
+        "name": "verify-shares",
+        "method": "GET",
+        "path": "/rest/getShares.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.shares.share[*].created",
+            "$.subsonic-response.shares.share[*].expires",
+            "$.subsonic-response.shares.share[*].lastVisited",
+            "$.subsonic-response.shares.share.id",
+            "$.subsonic-response.shares.share.url",
+            "$.subsonic-response.shares.share.created",
+            "$.subsonic-response.shares.share[*].id",
+            "$.subsonic-response.shares.share[*].url",
+            "$.subsonic-response.internetRadioStations.internetRadioStation[*].id"
+          ],
+          "maskBaseUrl": true
+        },
+        "notes": "Share with entry children (album songs)."
+      },
+      {
+        "name": "update-share",
+        "method": "GET",
+        "path": "/rest/updateShare.view?f=json&v=1.16.1&c=phase0&id={shareId}&description=updated-desc&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.shares.share[*].created",
+            "$.subsonic-response.shares.share[*].expires",
+            "$.subsonic-response.shares.share[*].lastVisited",
+            "$.subsonic-response.shares.share.id",
+            "$.subsonic-response.shares.share.url",
+            "$.subsonic-response.shares.share.created",
+            "$.subsonic-response.shares.share[*].id",
+            "$.subsonic-response.shares.share[*].url",
+            "$.subsonic-response.internetRadioStations.internetRadioStation[*].id"
+          ],
+          "maskBaseUrl": true
+        },
+        "notes": "Update description."
+      },
+      {
+        "name": "delete-share",
+        "method": "GET",
+        "path": "/rest/deleteShare.view?f=json&v=1.16.1&c=phase0&id={shareId}&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.shares.share[*].created",
+            "$.subsonic-response.shares.share[*].expires",
+            "$.subsonic-response.shares.share[*].lastVisited",
+            "$.subsonic-response.shares.share.id",
+            "$.subsonic-response.shares.share.url",
+            "$.subsonic-response.shares.share.created",
+            "$.subsonic-response.shares.share[*].id",
+            "$.subsonic-response.shares.share[*].url",
+            "$.subsonic-response.internetRadioStations.internetRadioStation[*].id"
+          ],
+          "maskBaseUrl": true
+        },
+        "notes": ""
+      },
+      {
+        "name": "verify-shares-empty",
+        "method": "GET",
+        "path": "/rest/getShares.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.shares.share[*].created",
+            "$.subsonic-response.shares.share[*].expires",
+            "$.subsonic-response.shares.share[*].lastVisited",
+            "$.subsonic-response.shares.share.id",
+            "$.subsonic-response.shares.share.url",
+            "$.subsonic-response.shares.share.created",
+            "$.subsonic-response.shares.share[*].id",
+            "$.subsonic-response.shares.share[*].url",
+            "$.subsonic-response.internetRadioStations.internetRadioStation[*].id"
+          ],
+          "maskBaseUrl": true
+        },
+        "notes": ""
+      },
+      {
+        "name": "create-share-bad-id",
+        "method": "GET",
+        "path": "/rest/createShare.view?f=json&v=1.16.1&c=phase0&id=garbage&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.shares.share[*].created",
+            "$.subsonic-response.shares.share[*].expires",
+            "$.subsonic-response.shares.share[*].lastVisited",
+            "$.subsonic-response.shares.share.id",
+            "$.subsonic-response.shares.share.url",
+            "$.subsonic-response.shares.share.created",
+            "$.subsonic-response.shares.share[*].id",
+            "$.subsonic-response.shares.share[*].url",
+            "$.subsonic-response.internetRadioStations.internetRadioStation[*].id"
+          ],
+          "maskBaseUrl": true
+        },
+        "notes": "Unprefixed id throws (apiKey guard class) -> 302 redirect, NOT the error-10 envelope the code suggests.",
+        "followRedirects": false,
+        "expectStatus": 302
+      }
+    ]
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-radio",
+    "surface": "opensubsonic",
+    "flow": [
+      {
+        "name": "getradio-empty",
+        "method": "GET",
+        "path": "/rest/getInternetRadioStations.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.shares.share.id",
+            "$.subsonic-response.shares.share.url",
+            "$.subsonic-response.shares.share.created",
+            "$.subsonic-response.shares.share[*].id",
+            "$.subsonic-response.shares.share[*].url",
+            "$.subsonic-response.shares.share[*].created",
+            "$.subsonic-response.internetRadioStations.internetRadioStation[*].id"
+          ]
+        },
+        "notes": "Empty initially."
+      },
+      {
+        "name": "create-radio",
+        "method": "GET",
+        "path": "/rest/createInternetRadioStation.view?f=json&v=1.16.1&c=phase0&name=Phase0%20Radio&streamUrl=http://radio.example.test/stream&homePageUrl=http://radio.example.test&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.shares.share.id",
+            "$.subsonic-response.shares.share.url",
+            "$.subsonic-response.shares.share.created",
+            "$.subsonic-response.shares.share[*].id",
+            "$.subsonic-response.shares.share[*].url",
+            "$.subsonic-response.shares.share[*].created",
+            "$.subsonic-response.internetRadioStations.internetRadioStation[*].id"
+          ]
+        },
+        "notes": "Create (requires admin — fixture user is admin). Response is a bare ok envelope with NO station data; the new id is captured from the subsequent list call.",
+        "allowFailure": false
+      },
+      {
+        "name": "verify-radio",
+        "method": "GET",
+        "path": "/rest/getInternetRadioStations.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.shares.share.id",
+            "$.subsonic-response.shares.share.url",
+            "$.subsonic-response.shares.share.created",
+            "$.subsonic-response.shares.share[*].id",
+            "$.subsonic-response.shares.share[*].url",
+            "$.subsonic-response.shares.share[*].created",
+            "$.subsonic-response.internetRadioStations.internetRadioStation[*].id"
+          ]
+        },
+        "notes": "radio_{guid} id form; id captured for update/delete steps.",
+        "capture": {
+          "radioId": "$.subsonic-response.internetRadioStations.internetRadioStation[0].id"
+        },
+        "secretCapture": [
+          "radioId"
+        ]
+      },
+      {
+        "name": "update-radio",
+        "method": "GET",
+        "path": "/rest/updateInternetRadioStation.view?f=json&v=1.16.1&c=phase0&id={radioId}&name=Phase0%20Radio%202&streamUrl=http://radio.example.test/stream2&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.shares.share.id",
+            "$.subsonic-response.shares.share.url",
+            "$.subsonic-response.shares.share.created",
+            "$.subsonic-response.shares.share[*].id",
+            "$.subsonic-response.shares.share[*].url",
+            "$.subsonic-response.shares.share[*].created",
+            "$.subsonic-response.internetRadioStations.internetRadioStation[*].id"
+          ]
+        },
+        "notes": ""
+      },
+      {
+        "name": "delete-radio",
+        "method": "GET",
+        "path": "/rest/deleteInternetRadioStation.view?f=json&v=1.16.1&c=phase0&id={radioId}&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.shares.share.id",
+            "$.subsonic-response.shares.share.url",
+            "$.subsonic-response.shares.share.created",
+            "$.subsonic-response.shares.share[*].id",
+            "$.subsonic-response.shares.share[*].url",
+            "$.subsonic-response.shares.share[*].created",
+            "$.subsonic-response.internetRadioStations.internetRadioStation[*].id"
+          ]
+        },
+        "notes": ""
+      },
+      {
+        "name": "verify-radio-empty",
+        "method": "GET",
+        "path": "/rest/getInternetRadioStations.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.shares.share.id",
+            "$.subsonic-response.shares.share.url",
+            "$.subsonic-response.shares.share.created",
+            "$.subsonic-response.shares.share[*].id",
+            "$.subsonic-response.shares.share[*].url",
+            "$.subsonic-response.shares.share[*].created",
+            "$.subsonic-response.internetRadioStations.internetRadioStation[*].id"
+          ]
+        },
+        "notes": ""
+      }
+    ]
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-scan",
+    "surface": "opensubsonic",
+    "flow": [
+      {
+        "name": "getscanstatus",
+        "method": "GET",
+        "path": "/rest/getScanStatus.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.shares.share.id",
+            "$.subsonic-response.shares.share.url",
+            "$.subsonic-response.shares.share.created",
+            "$.subsonic-response.shares.share[*].id",
+            "$.subsonic-response.shares.share[*].url",
+            "$.subsonic-response.shares.share[*].created",
+            "$.subsonic-response.internetRadioStations.internetRadioStation[*].id"
+          ]
+        },
+        "notes": "Baseline scan status (no admin requirement — any authenticated user)."
+      },
+      {
+        "name": "startscan",
+        "method": "GET",
+        "path": "/rest/startScan.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.shares.share.id",
+            "$.subsonic-response.shares.share.url",
+            "$.subsonic-response.shares.share.created",
+            "$.subsonic-response.shares.share[*].id",
+            "$.subsonic-response.shares.share[*].url",
+            "$.subsonic-response.shares.share[*].created",
+            "$.subsonic-response.internetRadioStations.internetRadioStation[*].id"
+          ]
+        },
+        "notes": "Triggers LibraryProcessJob. Oracle runs QuartzDisabled=true — JobPersistenceException path may fire; the captured response is the disposable-environment contract."
+      },
+      {
+        "name": "getscanstatus-after",
+        "method": "GET",
+        "path": "/rest/getScanStatus.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.shares.share.id",
+            "$.subsonic-response.shares.share.url",
+            "$.subsonic-response.shares.share.created",
+            "$.subsonic-response.shares.share[*].id",
+            "$.subsonic-response.shares.share[*].url",
+            "$.subsonic-response.shares.share[*].created",
+            "$.subsonic-response.internetRadioStations.internetRadioStation[*].id"
+          ]
+        },
+        "notes": ""
+      }
+    ]
+  }
+]

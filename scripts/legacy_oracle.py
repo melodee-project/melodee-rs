@@ -62,6 +62,15 @@ FIXTURE_PASSWORD = "Mel0deeR0cks!"
 FIXTURE_JWT_KEY = "phase0-fixture-only-jwt-signing-key-NOT-A-REAL-SECRET-0000000000000000"
 FIXTURE_AUTH_TOKEN = "phase0-fixture-only-auth-token-NOT-A-REAL-SECRET-0000000000000000"
 FIXTURE_SECURITY_KEY = "phase0-fixture-only-security-secret-key-NOT-A-REAL-SECRET-0000"
+# Synthetic, public OpenSubsonic secret for the fixture user. Seeded through
+# the same AES-GCM protector the server uses so OpenSubsonic token/salt auth
+# can be exercised deterministically (the server generates a random secret at
+# user creation; we overwrite it with this known fixture value).
+FIXTURE_OPENSUBSONIC_SECRET = "phase0-opensubsonic-fixture-secret-not-a-real-secret"
+# Fixed synthetic salt for OpenSubsonic token captures. The token
+# md5(secret+salt) is computed at capture time and injected via environment —
+# a usable credential is never written to disk or committed.
+FIXTURE_SUBSONIC_SALT = "f1xture5a1t"
 EXPIRED_REFRESH_TOKEN_RAW = "phase0-expired-refresh-token-fixture-not-a-real-secret"
 
 WORK_DIR = Path(os.environ.get("PHASE0_WORK_DIR", "/tmp/legacy-oracle"))
@@ -69,6 +78,25 @@ LIBRARY_DIR = WORK_DIR / "library"
 STORAGE_DIR = WORK_DIR / "storage"
 PID_FILE = WORK_DIR / "server.pid"
 LOG_FILE = WORK_DIR / "server.log"
+
+
+def protect_secret(secret: str) -> str:
+    """AES-GCM protector compatible with the legacy SecretProtector
+    (v1:gcm:base64(nonce|tag|ciphertext), key = SHA256(security.secretKey)).
+    Deterministic nonce: this protects a public fixture value, so reproducible
+    output is a feature, not a weakness."""
+    try:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    except ImportError as error:
+        raise SystemExit(
+            "python package 'cryptography' is required for seeding the OpenSubsonic fixture secret"
+        ) from error
+    key = hashlib.sha256(FIXTURE_SECURITY_KEY.encode("utf-8")).digest()
+    nonce = hashlib.sha256(b"phase0-fixture-nonce" + secret.encode("utf-8")).digest()[:12]
+    aesgcm = AESGCM(key)
+    ciphertext_and_tag = aesgcm.encrypt(nonce, secret.encode("utf-8"), None)
+    combined = nonce + ciphertext_and_tag[-16:] + ciphertext_and_tag[:-16]
+    return "v1:gcm:" + base64.b64encode(combined).decode("ascii")
 
 
 def fixture_uuid(kind: str, slug: str) -> str:
@@ -250,6 +278,26 @@ def cmd_reset_db(config: OracleConfig) -> None:
 # seed
 # ---------------------------------------------------------------------------
 
+def make_png(path: Path, *, size: int, rgb: tuple[int, int, int]) -> None:
+    """Deterministic minimal RGB PNG (no external deps)."""
+    import zlib
+
+    def chunk(tag: bytes, data: bytes) -> bytes:
+        return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+
+    raw = b""
+    for _ in range(size):
+        raw += b"\x00" + bytes(rgb) * size
+    png = (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", size, size, 8, 2, 0, 0, 0))
+        + chunk(b"IDAT", zlib.compress(raw, 9))
+        + chunk(b"IEND", b"")
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(png)
+
+
 def make_wav(path: Path, *, seconds: float, frequency: float) -> None:
     """Deterministic PCM WAV (16-bit mono 44100 Hz sine)."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -266,6 +314,14 @@ def make_wav(path: Path, *, seconds: float, frequency: float) -> None:
         wav.writeframes(bytes(samples))
 
 
+FIXTURE_IMAGE_SPECS = [
+    # (artist slug, album slug or None, file name, rgb) — one artist and one
+    # album carry real artwork; every other entity exercises the no-image path.
+    ("aurora-fields", None, "artist.png", (46, 82, 130)),
+    ("aurora-fields", "northern-lights", "cover.png", (130, 46, 82)),
+]
+
+
 def seed_media_files(catalog: dict) -> dict[str, tuple[int, str]]:
     """Write WAV files; return {song_slug: (file_size, sha256_hex)}."""
     results: dict[str, tuple[int, str]] = {}
@@ -277,6 +333,24 @@ def seed_media_files(catalog: dict) -> dict[str, tuple[int, str]]:
                 make_wav(target, seconds=song["mediaSeconds"], frequency=song["mediaFrequency"])
                 data = target.read_bytes()
                 results[song["slug"]] = (len(data), hashlib.sha256(data).hexdigest())
+    artists_by_slug = {a["slug"]: a for a in catalog["artists"]}
+    for artist_slug, album_slug, file_name, rgb in FIXTURE_IMAGE_SPECS:
+        artist = artists_by_slug[artist_slug]
+        directory = Path(artist["directory"])
+        if album_slug:
+            album = next(a for a in artist["albums"] if a["slug"] == album_slug)
+            directory = directory / album["directory"]
+        make_png(LIBRARY_DIR / directory / file_name, size=64, rgb=rgb)
+    # Synchronized-lyrics sidecar for the Jellyfin /Audio/{id}/Lyrics route.
+    aurora = artists_by_slug["aurora-fields"]
+    northern = aurora["albums"][0]
+    lrc = (
+        LIBRARY_DIR / aurora["directory"] / northern["directory"] / "02 - Polar Veil.lrc"
+    )
+    lrc.write_text(
+        "[00:00.00] Synthetic lyric line one\n[00:01.00] Synthetic lyric line two\n",
+        encoding="utf-8",
+    )
     return results
 
 
@@ -302,10 +376,21 @@ def seed_sql(catalog: dict, media: dict[str, tuple[int, str]]) -> str:
                 + ");"
             )
     # Playlists first: Playlists.SongId references Songs without ON DELETE CASCADE.
+    # Wipe ALL playlists: scenario-created ones (native/OS/JF CRUD flows) must
+    # not leak across capture runs; fixture playlists are reinserted below.
+    statements.append('DELETE FROM "Playlists";')
+    # Scenario-created entities must not leak across capture runs.
+    statements.append('DELETE FROM "RadioStations";')
+    statements.append('DELETE FROM "Shares";')
+    statements.append('DELETE FROM "Bookmarks";')
+    statements.append('DELETE FROM "PlayQues";')
+    # Non-fixture users (scenario-created, e.g. OpenSubsonic createUser) must
+    # not leak either; user-dependent rows above are already wiped.
     statements.append(
-        f'DELETE FROM "Playlists" WHERE "ApiKey" IN ('
-        + ",".join(sql_literal(fixture_uuid("playlist", p["slug"])) for p in catalog["playlists"])
-        + ");"
+        f'DELETE FROM "RefreshTokens" WHERE "UserId" NOT IN (SELECT "Id" FROM "Users" WHERE "UserName" = {sql_literal(FIXTURE_USER)});'
+    )
+    statements.append(
+        f'DELETE FROM "Users" WHERE "UserName" <> {sql_literal(FIXTURE_USER)};'
     )
     statements.append(
         f'DELETE FROM "Libraries" WHERE "ApiKey" = {sql_literal(fixture_library_key)};'
@@ -406,9 +491,14 @@ def seed_sql(catalog: dict, media: dict[str, tuple[int, str]]) -> str:
                 + ");"
             )
 
+    song_counter = 0
     for artist in catalog["artists"]:
         for album in artist["albums"]:
             for song in album["songs"]:
+                song_counter += 1
+                # Stagger CreatedAt: global song listings order by CreatedAt and
+                # the legacy server has no tiebreak for equal timestamps.
+                song_created = f"2026-01-01T00:{song_counter % 60:02d}:{song_counter % 60:02d}Z"
                 size, sha = media[song["slug"]]
                 statements.append(
                     'INSERT INTO "Songs" ("Id","AlbumId","Title","TitleSort","TitleNormalized","Genres",'
@@ -438,7 +528,7 @@ def seed_sql(catalog: dict, media: dict[str, tuple[int, str]]) -> str:
                             "false",
                             "0",
                             sql_literal(fixture_uuid("song", song["slug"])),
-                            now,
+                            sql_literal(song.get("createdAt", song_created)),
                             str(song.get("playedCount", 0)),
                             str(song.get("calculatedRating", 0)),
                             sql_literal(song.get("comment")),
@@ -554,7 +644,9 @@ def seed_sql(catalog: dict, media: dict[str, tuple[int, str]]) -> str:
             + ");"
         )
 
-    # Playlists spanning multiple Releases.
+    # Playlists spanning multiple Releases. Stagger CreatedAt so list ordering
+    # is deterministic (the legacy server has no tiebreak for equal timestamps).
+    playlist_day = 1
     for playlist in catalog["playlists"]:
         songs = playlist["songs"]
         duration = 0.0
@@ -579,12 +671,13 @@ def seed_sql(catalog: dict, media: dict[str, tuple[int, str]]) -> str:
                     "false",
                     "0",
                     sql_literal(fixture_uuid("playlist", playlist["slug"])),
-                    now,
+                    sql_literal(playlist.get("createdAt", f"2026-03-{playlist_day:02d}T00:00:00Z")),
                     sql_literal(playlist.get("description")),
                 ]
             )
             + ");"
         )
+        playlist_day += 1
         for order, slug in enumerate(songs, start=1):
             statements.append(
                 'INSERT INTO "PlaylistSong" ("SongId","PlaylistId","SongApiKey","PlaylistOrder") VALUES ('
@@ -677,7 +770,8 @@ def cmd_seed(config: OracleConfig) -> None:
     psql(
         config,
         f'UPDATE "Users" SET "ApiKey" = {sql_literal(fixture_uuid("user", FIXTURE_USER))}, '
-        f'"IsScrobblingEnabled" = true '
+        f'"IsScrobblingEnabled" = true, '
+        f'"OpenSubsonicSecretProtected" = {sql_literal(protect_secret(FIXTURE_OPENSUBSONIC_SECRET))} '
         f'WHERE "UserName" = {sql_literal(FIXTURE_USER)};',
     )
 
@@ -726,6 +820,10 @@ def cmd_start(config: OracleConfig) -> None:
             "ASPNETCORE_ENVIRONMENT": "Production",
             "ASPNETCORE_URLS": config.base_url,
             "QuartzDisabled": "true",
+            # Allows capture tooling to present non-local client IPs via
+            # X-Forwarded-For so auth-enforced (non-bypassed) OpenSubsonic and
+            # IP-bound behavior can be captured from the same machine.
+            "UseForwardedHeaders": "true",
             "ConnectionStrings__DefaultConnection": config.connection_string,
             "ConnectionStrings__MusicBrainzConnection": f"Data Source={STORAGE_DIR}/_search-engines/musicbrainz/musicbrainz.ddb;",
             "ConnectionStrings__ArtistSearchEngineConnection": f"Data Source={STORAGE_DIR}/_search-engines/artistSearchEngine.db;Cache=Shared",
@@ -765,9 +863,29 @@ def cmd_stop(config: OracleConfig) -> None:
     pid = int(PID_FILE.read_text().strip())
     try:
         os.killpg(pid, signal.SIGTERM)
-        print(f"stopped server process group {pid}")
     except (OSError, ProcessLookupError):
         print(f"process {pid} not running")
+        PID_FILE.unlink(missing_ok=True)
+        return
+    # Wait for the process group to actually exit — otherwise a subsequent
+    # start's readiness probe can pass against the dying instance and the
+    # capture then races its shutdown (Issue 6 pipeline discovery).
+    # The legacy server routinely takes >10s to stop (or ignores SIGTERM in
+    # this configuration); escalate quickly to keep capture cycles fast.
+    deadline = time.time() + 10
+    while time.time() < deadline:
+        try:
+            os.kill(pid, 0)
+        except OSError:
+            PID_FILE.unlink(missing_ok=True)
+            print(f"stopped server process group {pid}")
+            return
+        time.sleep(0.5)
+    try:
+        os.killpg(pid, signal.SIGKILL)
+        print(f"force-killed server process group {pid}")
+    except (OSError, ProcessLookupError):
+        pass
     PID_FILE.unlink(missing_ok=True)
 
 
@@ -840,10 +958,28 @@ def cmd_verify(config: OracleConfig) -> None:
         raise SystemExit(f"{len(failures)} verification checks failed")
 
 
-NATIVE_V1_SCENARIO_FILES = [
+SCENARIO_FILES = [
     "native-auth.json",
     "native-catalog.json",
     "native-stream.json",
+    "opensubsonic-system.json",
+    "opensubsonic-auth.json",
+    "opensubsonic-browse.json",
+    "opensubsonic-lists.json",
+    "opensubsonic-media.json",
+    "opensubsonic-annotation.json",
+    "opensubsonic-playlists.json",
+    "opensubsonic-community.json",
+    "opensubsonic-negative.json",
+    "opensubsonic-conditional.json",
+    "jellyfin-discovery.json",
+    "jellyfin-auth.json",
+    "jellyfin-browse.json",
+    "jellyfin-playback.json",
+    "jellyfin-userstate.json",
+    "jellyfin-playlists.json",
+    "jellyfin-images.json",
+    "jellyfin-extra.json",
 ]
 
 
@@ -866,23 +1002,83 @@ def cmd_capture(config: OracleConfig) -> None:
         FIXTURE_JWT_KEY, expired=True, user_api_key=fixture_uuid("user", FIXTURE_USER)
     )
 
+    subsonic_token = hashlib.md5(
+        (FIXTURE_OPENSUBSONIC_SECRET + FIXTURE_SUBSONIC_SALT).encode("utf-8")
+    ).hexdigest()
+    # Forged unsigned JWT used to prove the OpenSubsonic jwt branch performs
+    # no signature verification (payload-only claims mapping).
+    forged_jwt = module.make_jwt(
+        "phase0-unsigned-fixture-key",
+        expired=False,
+        user_api_key=fixture_uuid("user", FIXTURE_USER),
+    )
+    capture_env = {
+        **os.environ,
+        "LEGACY_MELODEE_EXPIRED_JWT": expired_jwt,
+        "PHASE0_SUBSONIC_SALT": FIXTURE_SUBSONIC_SALT,
+        "PHASE0_SUBSONIC_TOKEN": subsonic_token,
+        "PHASE0_SUBSONIC_TOKEN_UPPER": subsonic_token.upper(),
+        "PHASE0_SUBSONIC_JWT": forged_jwt,
+    }
+
     timestamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
     output_parent = ROOT / "compatibility" / "captures" / f"native-v1-{timestamp}"
     output_parent.mkdir(parents=True, exist_ok=False)
-    for scenario_file in NATIVE_V1_SCENARIO_FILES:
+    for scenario_file in SCENARIO_FILES:
+        scenario_path = ROOT / "compatibility" / "scenarios" / scenario_file
+        if not scenario_path.exists():
+            print(f"skipping {scenario_file} (not present)")
+            continue
         cmd_seed(config)
+        # The legacy server caches user/song detail rows; restart so reseeded
+        # credential and catalog changes are visible (Issue 6 discovery).
+        cmd_stop(config)
+        cmd_start(config)
         run(
             [
                 sys.executable,
                 str(ROOT / "scripts" / "capture_baseline.py"),
                 "--scenarios",
-                str(ROOT / "compatibility" / "scenarios" / scenario_file),
+                str(scenario_path),
                 "--output",
                 str(output_parent / scenario_file.replace(".json", "")),
             ],
-            env={**os.environ, "LEGACY_MELODEE_EXPIRED_JWT": expired_jwt},
+            env=capture_env,
         )
-    print(f"native v1 captures written to {output_parent.relative_to(ROOT)}")
+
+    # Conditional-feature phase: podcast.enabled=false (the seeded default is
+    # true). Toggle, restart (config cache), capture, restore.
+    off_scenario = ROOT / "compatibility" / "scenarios" / "opensubsonic-conditional-off.json"
+    if off_scenario.exists():
+        set_setting(config, "podcast.enabled", "false")
+        cmd_stop(config)
+        cmd_start(config)
+        try:
+            run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "capture_baseline.py"),
+                    "--scenarios",
+                    str(off_scenario),
+                    "--output",
+                    str(output_parent / "opensubsonic-conditional-off"),
+                ],
+                env=capture_env,
+            )
+        finally:
+            set_setting(config, "podcast.enabled", "true")
+            cmd_stop(config)
+            cmd_start(config)
+    print(f"captures written to {output_parent.relative_to(ROOT)}")
+
+
+def set_setting(config: OracleConfig, key: str, value: str) -> None:
+    psql(
+        config,
+        "INSERT INTO \"Settings\" (\"ApiKey\",\"Category\",\"CreatedAt\",\"Description\",\"IsLocked\",\"Key\",\"LastUpdatedAt\",\"SortOrder\",\"Value\")"
+        f" VALUES (gen_random_uuid(), 0, now(), 'Phase 0 conditional capture toggle', false, {sql_literal(key)}, now(), 0, {sql_literal(value)})"
+        " ON CONFLICT (\"Key\") DO UPDATE SET \"Value\" = EXCLUDED.\"Value\";",
+    )
 
 
 def cmd_recreate(config: OracleConfig) -> None:

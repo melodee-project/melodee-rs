@@ -1,0 +1,38 @@
+{
+  "name": "os-auth-missing-xml",
+  "surface": "opensubsonic",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/rest/getMusicFolders.view?v=1.16.1&c=melodee-rs-phase0",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-length": "223",
+      "content-type": "application/xml",
+      "x-total-count": "0"
+    },
+    "bodyFile": "os-auth-missing-xml.xml",
+    "sha256": "ad57ee6019af380509ed5b174801f27d29a7fdf8d904f93d4a61c4f987f9c1b2",
+    "bytes": 226
+  },
+  "normalize": {
+    "maskRegex": [
+      {
+        "pattern": "serverVersion=\"[^\"]*\"",
+        "replace": "serverVersion=\"<volatile>\""
+      }
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

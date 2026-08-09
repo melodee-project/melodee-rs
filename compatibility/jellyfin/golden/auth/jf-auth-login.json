@@ -1,0 +1,43 @@
+{
+  "User": {
+    "Name": "phase0-fixture",
+    "ServerId": "93cd3cc3a120127ccfda124620290cae",
+    "Id": "f78448cc82ec5864877c6c6163b00065",
+    "HasPassword": true,
+    "HasConfiguredPassword": true,
+    "HasConfiguredEasyPassword": false,
+    "EnableAutoLogin": false,
+    "LastLoginDate": "<volatile>",
+    "LastActivityDate": "<volatile>",
+    "Configuration": "<volatile>",
+    "Policy": {
+      "IsAdministrator": true,
+      "IsHidden": false,
+      "IsDisabled": false,
+      "EnableUserPreferenceAccess": true,
+      "EnableRemoteControlOfOtherUsers": false,
+      "EnableSharedDeviceControl": true,
+      "EnableRemoteAccess": true,
+      "EnableLiveTvManagement": false,
+      "EnableLiveTvAccess": false,
+      "EnableMediaPlayback": true,
+      "EnableAudioPlaybackTranscoding": true,
+      "EnableVideoPlaybackTranscoding": false,
+      "EnablePlaybackRemuxing": true,
+      "EnableContentDeletion": false,
+      "EnableContentDownloading": true,
+      "EnableSyncTranscoding": true,
+      "EnableMediaConversion": false,
+      "EnableAllChannels": true,
+      "EnableAllFolders": true,
+      "InvalidLoginAttemptCount": 0,
+      "EnablePublicSharing": true,
+      "RemoteClientBitrateLimit": 0,
+      "AuthenticationProviderId": "Melodee.Blazor.Auth.DefaultAuthenticationProvider",
+      "PasswordResetProviderId": "Melodee.Blazor.Auth.DefaultPasswordResetProvider"
+    }
+  },
+  "SessionInfo": "<volatile>",
+  "AccessToken": "<volatile>",
+  "ServerId": "93cd3cc3a120127ccfda124620290cae"
+}

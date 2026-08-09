@@ -17,7 +17,8 @@
       "scrobbleType": "nowPlaying",
       "timestamp": 1786050000.0,
       "playedDuration": 10.0
-    }
+    },
+    "bodyTemplate": null
   },
   "response": {
     "status": 200,

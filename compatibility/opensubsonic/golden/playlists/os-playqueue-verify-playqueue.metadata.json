@@ -1,0 +1,42 @@
+{
+  "name": "os-playqueue/verify-playqueue",
+  "surface": "opensubsonic",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/rest/getPlayQueue.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t=%3Credacted%3E&s=%3Credacted%3E",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-length": "2804",
+      "content-type": "application/json; charset=utf-8",
+      "x-total-count": "0"
+    },
+    "bodyFile": "os-playqueue-verify-playqueue.json",
+    "sha256": "6a844f280eec823c2f711b5f7ea4dfdf319758529cdc7b858ac3cd617a94fe42",
+    "bytes": 4329
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.subsonic-response.serverVersion",
+      "$.subsonic-response.playlist.created",
+      "$.subsonic-response.playlist.changed",
+      "$.subsonic-response.playlists.playlist[*].created",
+      "$.subsonic-response.playlists.playlist[*].changed",
+      "$.subsonic-response.playQueue.changed",
+      "$.subsonic-response.bookmarks.bookmark[*].created",
+      "$.subsonic-response.bookmarks.bookmark[*].changed"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

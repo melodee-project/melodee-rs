@@ -36,9 +36,9 @@
     "albumsDisliked": 0,
     "songsLiked": 0,
     "songsDisliked": 0,
-    "createdAt": "2026-08-07T20:16:18Z",
-    "updatedAt": ""
+    "createdAt": "<volatile>",
+    "updatedAt": "<volatile>"
   },
-  "createdAt": "2026-08-07T00:00:00Z",
+  "createdAt": "2026-03-01T00:00:00Z",
   "updatedAt": ""
 }

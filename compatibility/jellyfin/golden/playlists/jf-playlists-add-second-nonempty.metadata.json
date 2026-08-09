@@ -1,0 +1,32 @@
+{
+  "name": "jf-playlists/add-second-nonempty",
+  "surface": "jellyfin",
+  "request": {
+    "method": "POST",
+    "url": "{melodee-origin}/Playlists/<captured:jfPlaylistId>/Items?ids=2b8eab4b235d589299f8c0f5f54e8ab4",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "MediaBrowser <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 500,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "jf-playlists-add-second-nonempty.json",
+    "sha256": "d76f8a079083bbf8f0d93cef67bace555614b7a873888bd203ab8c831e2a05b6",
+    "bytes": 109
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.correlationId"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

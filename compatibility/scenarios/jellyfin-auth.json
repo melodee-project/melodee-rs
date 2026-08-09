@@ -1,0 +1,281 @@
+[
+  {
+    "schemaVersion": 2,
+    "name": "jf-auth",
+    "surface": "jellyfin",
+    "flow": [
+      {
+        "name": "login",
+        "method": "POST",
+        "path": "/Users/AuthenticateByName",
+        "json": {
+          "Username": "phase0-fixture",
+          "Pw": "Mel0deeR0cks!"
+        },
+        "capture": {
+          "jfToken": "$.AccessToken"
+        },
+        "secretCapture": [
+          "jfToken"
+        ],
+        "normalize": {
+          "maskJsonPaths": [
+            "$.AccessToken",
+            "$.SessionInfo.Id",
+            "$.SessionInfo.LastActivityDate",
+            "$.User.LastLoginDate",
+            "$.User.LastActivityDate",
+            "$.User.Configuration",
+            "$.SessionInfo"
+          ],
+          "structureChecks": {
+            "$.AccessToken": "opaqueToken"
+          }
+        },
+        "notes": "Success: {User, SessionInfo, AccessToken, ServerId}. AccessToken = 64-char hex (structure check); SessionInfo.Id is ephemeral (masked); ServerId deterministic (MD5 of Jwt:Issuer).",
+        "extra": {}
+      },
+      {
+        "name": "me-mediabrowser-header",
+        "method": "GET",
+        "path": "/Users/Me",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.LastLoginDate",
+            "$.LastActivityDate",
+            "$.Configuration"
+          ]
+        },
+        "notes": "Token transport 1: Authorization MediaBrowser Token=..."
+      },
+      {
+        "name": "me-x-mediabrowser-token",
+        "method": "GET",
+        "path": "/Users/Me",
+        "auth": "none",
+        "headers": {
+          "X-MediaBrowser-Token": "{{jfToken}}"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.LastLoginDate",
+            "$.LastActivityDate",
+            "$.Configuration"
+          ]
+        },
+        "notes": "Token transport 2: X-MediaBrowser-Token raw header."
+      },
+      {
+        "name": "me-x-emby-token",
+        "method": "GET",
+        "path": "/Users/Me",
+        "auth": "none",
+        "headers": {
+          "X-Emby-Token": "{{jfToken}}"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.LastLoginDate",
+            "$.LastActivityDate",
+            "$.Configuration"
+          ]
+        },
+        "notes": "Token transport 3: X-Emby-Token raw header."
+      },
+      {
+        "name": "me-x-emby-authorization",
+        "method": "GET",
+        "path": "/Users/Me",
+        "auth": "none",
+        "headers": {
+          "X-Emby-Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.LastLoginDate",
+            "$.LastActivityDate",
+            "$.Configuration"
+          ]
+        },
+        "notes": "Token transport 4: X-Emby-Authorization MediaBrowser header."
+      },
+      {
+        "name": "me-api-key-query",
+        "method": "GET",
+        "path": "/Users/Me?api_key={{jfToken}}",
+        "auth": "none",
+        "headers": {},
+        "normalize": {
+          "maskJsonPaths": [
+            "$.LastLoginDate",
+            "$.LastActivityDate",
+            "$.Configuration"
+          ]
+        },
+        "notes": "Token transport 5: api_key query param (only Jellyfin path prefixes route this way)."
+      },
+      {
+        "name": "logout",
+        "method": "POST",
+        "path": "/Sessions/Logout",
+        "auth": "none",
+        "headers": {
+          "X-MediaBrowser-Token": "{{jfToken}}"
+        },
+        "normalize": {},
+        "notes": "204; revokes the presented token.",
+        "expectStatus": 204
+      },
+      {
+        "name": "me-after-logout",
+        "method": "GET",
+        "path": "/Users/Me",
+        "auth": "none",
+        "headers": {
+          "X-MediaBrowser-Token": "{{jfToken}}"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.TraceId",
+            "$.traceId"
+          ]
+        },
+        "notes": "Revoked token -> 401 JellyfinProblemDetails (unlike the native JWT, Jellyfin tokens are stateful and die at logout).",
+        "expectStatus": 401
+      }
+    ]
+  },
+  {
+    "schemaVersion": 2,
+    "name": "jf-auth-negative",
+    "surface": "jellyfin",
+    "flow": [
+      {
+        "name": "missing-fields",
+        "method": "POST",
+        "path": "/Users/AuthenticateByName",
+        "auth": "none",
+        "headers": {},
+        "normalize": {
+          "maskJsonPaths": [
+            "$.TraceId",
+            "$.traceId"
+          ]
+        },
+        "notes": "Empty body fields -> 400.",
+        "expectStatus": 400,
+        "json": {
+          "Username": "",
+          "Pw": ""
+        }
+      },
+      {
+        "name": "password-field-not-read",
+        "method": "POST",
+        "path": "/Users/AuthenticateByName",
+        "auth": "none",
+        "headers": {},
+        "normalize": {
+          "maskJsonPaths": [
+            "$.TraceId",
+            "$.traceId"
+          ]
+        },
+        "notes": "DISCOVERY: the request DTO reads ONLY 'Pw' — a body with 'Password' but no 'Pw' -> 400 'Username and password are required.'",
+        "expectStatus": 400,
+        "json": {
+          "Username": "phase0-fixture",
+          "Password": "Mel0deeR0cks!"
+        }
+      },
+      {
+        "name": "wrong-password",
+        "method": "POST",
+        "path": "/Users/AuthenticateByName",
+        "auth": "none",
+        "headers": {},
+        "normalize": {
+          "maskJsonPaths": [
+            "$.TraceId",
+            "$.traceId"
+          ]
+        },
+        "notes": "401 JellyfinProblemDetails.",
+        "expectStatus": 401,
+        "json": {
+          "Username": "phase0-fixture",
+          "Pw": "wrong"
+        }
+      },
+      {
+        "name": "unknown-user",
+        "method": "POST",
+        "path": "/Users/AuthenticateByName",
+        "auth": "none",
+        "headers": {},
+        "normalize": {
+          "maskJsonPaths": [
+            "$.TraceId",
+            "$.traceId"
+          ]
+        },
+        "notes": "401 — same envelope as wrong-password.",
+        "expectStatus": 401,
+        "json": {
+          "Username": "phase0-no-such-user",
+          "Pw": "wrong"
+        }
+      },
+      {
+        "name": "me-no-token",
+        "method": "GET",
+        "path": "/Users/Me",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\""
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.TraceId",
+            "$.traceId"
+          ]
+        },
+        "notes": "MediaBrowser marker WITHOUT Token field: middleware rewrites, controller rejects -> 401 JellyfinProblemDetails. (With NO markers at all the request is not rewritten and falls through to the Blazor app — see jf-root-no-markers.)",
+        "expectStatus": 401
+      },
+      {
+        "name": "me-garbage-token",
+        "method": "GET",
+        "path": "/Users/Me",
+        "auth": "none",
+        "headers": {
+          "X-MediaBrowser-Token": "phase0-not-a-real-jellyfin-token"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.TraceId",
+            "$.traceId"
+          ]
+        },
+        "notes": "Garbage token -> 401.",
+        "expectStatus": 401
+      },
+      {
+        "name": "logout-unauthenticated",
+        "method": "POST",
+        "path": "/Sessions/Logout",
+        "auth": "none",
+        "headers": {
+          "X-MediaBrowser-Token": "phase0-not-a-real-jellyfin-token"
+        },
+        "normalize": {},
+        "notes": "Logout with a garbage token -> 204 anyway (idempotent). Without any Jellyfin marker the request is not rewritten and falls through to the Blazor login redirect.",
+        "expectStatus": 204
+      }
+    ]
+  }
+]

@@ -1,0 +1,68 @@
+{
+  "Items": [
+    {
+      "Name": "Coda",
+      "ServerId": "93cd3cc3a120127ccfda124620290cae",
+      "Id": "a39f05c4278353c1aa3ce4e9d6a6f0a3",
+      "Etag": "49f1b4c7996df0cd08836c66609f606b",
+      "DateCreated": "2026-01-01T00:17:17.0000000Z",
+      "CanDelete": false,
+      "CanDownload": true,
+      "SortName": "Coda",
+      "ExternalUrls": null,
+      "Path": null,
+      "EnableMediaSourceDisplay": true,
+      "ChannelId": null,
+      "Overview": null,
+      "Taglines": null,
+      "Genres": null,
+      "CommunityRating": null,
+      "RunTimeTicks": 27000000000,
+      "PlayAccess": "Full",
+      "ProductionYear": null,
+      "IndexNumber": 201,
+      "ParentIndexNumber": 1,
+      "RemoteTrailers": null,
+      "ProviderIds": null,
+      "IsFolder": false,
+      "ParentId": null,
+      "Type": "Audio",
+      "Studios": null,
+      "GenreItems": null,
+      "LocalTrailerCount": 0,
+      "UserData": null,
+      "ChildCount": null,
+      "SpecialFeatureCount": 0,
+      "DisplayPreferencesId": null,
+      "Tags": null,
+      "PrimaryImageAspectRatio": null,
+      "Artists": [
+        "The Obsidian Collective"
+      ],
+      "ArtistItems": [
+        {
+          "Name": "The Obsidian Collective",
+          "Id": "0bdebd7d85975891b6e488f7762370b9"
+        }
+      ],
+      "Album": "Anthology of Echoes",
+      "AlbumId": "645680d3704a5b83a73442a3fa88c3ed",
+      "AlbumPrimaryImageTag": null,
+      "AlbumArtist": null,
+      "AlbumArtists": null,
+      "ImageTags": {},
+      "BackdropImageTags": [],
+      "ScreenshotImageTags": null,
+      "ImageBlurHashes": null,
+      "LocationType": "FileSystem",
+      "LockedFields": null,
+      "LockData": false,
+      "MediaSources": null,
+      "Container": null,
+      "MediaType": "Audio",
+      "HasLyrics": false
+    }
+  ],
+  "TotalRecordCount": 1,
+  "StartIndex": 0
+}

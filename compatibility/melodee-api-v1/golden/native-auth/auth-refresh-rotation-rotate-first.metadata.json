@@ -12,7 +12,8 @@
     "jsonTemplate": {
       "refreshToken": "<redacted>",
       "deviceId": "phase0-fixture-device"
-    }
+    },
+    "bodyTemplate": null
   },
   "response": {
     "status": 200,

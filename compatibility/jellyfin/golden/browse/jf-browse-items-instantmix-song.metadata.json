@@ -1,0 +1,32 @@
+{
+  "name": "jf-browse/items-instantmix-song",
+  "surface": "jellyfin",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/Items/2b8eab4b235d589299f8c0f5f54e8ab4/InstantMix?limit=5",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "MediaBrowser <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "jf-browse-items-instantmix-song.json",
+    "sha256": "a074e65cdb9673361049e46862dfc07f1c9dfad2c406317750aa5d24fc917f88",
+    "bytes": 72
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.Items"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

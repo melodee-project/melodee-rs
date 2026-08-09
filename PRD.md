@@ -2835,7 +2835,7 @@ These sources are inputs to the parity inventory. They do not replace tests agai
 - Tokio releases: https://github.com/tokio-rs/tokio/releases
 - Axum: https://github.com/tokio-rs/axum
 - PostgreSQL versioning: https://www.postgresql.org/support/versioning/
-- SQLx: https://github.com/transact-rs/sqlx
+- SQLx: https://github.com/launchbadge/sqlx
 - Tantivy: https://github.com/quickwit-oss/tantivy
 - Lofty: https://github.com/Serial-ATA/lofty-rs
 - FFmpeg: https://ffmpeg.org/download.html

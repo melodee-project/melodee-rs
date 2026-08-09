@@ -1,0 +1,69 @@
+# Phase 0 Benchmark Summary
+
+All timings are server-response wall time (ms) for a single request, median of warm iterations after the first (cold) call. Environment details are in the linked result files. Legacy Melodee 2.2.0 at baseline 4028b58d.
+
+| Date (UTC) | Tier | Endpoint | Cold (ms) | Warm median (ms) | Status | Result file |
+|---|---|---|---|---|---|---|
+| 2026-08-08T05:12:56Z | A | native.artists.list | 149.2 | 8.6 | 200 | results/tier-a-20260808T051256Z.json |
+| 2026-08-08T05:12:56Z | A | native.albums.list | 196.6 | 11.0 | 200 | results/tier-a-20260808T051256Z.json |
+| 2026-08-08T05:12:56Z | A | native.songs.list | 149.6 | 16.5 | 200 | results/tier-a-20260808T051256Z.json |
+| 2026-08-08T05:12:56Z | A | native.albums.recent | 58.0 | 7.4 | 200 | results/tier-a-20260808T051256Z.json |
+| 2026-08-08T05:12:56Z | A | native.search.exact-artist | 426.6 | 29.6 | 200 | results/tier-a-20260808T051256Z.json |
+| 2026-08-08T05:12:56Z | A | native.search.partial-artist | 33.7 | 45.3 | 200 | results/tier-a-20260808T051256Z.json |
+| 2026-08-08T05:12:56Z | A | native.search.track-title | 39.9 | 997.8 | 200 | results/tier-a-20260808T051256Z.json |
+| 2026-08-08T05:12:56Z | A | native.search.common-word | 1013.4 | 998.2 | 200 | results/tier-a-20260808T051256Z.json |
+| 2026-08-08T05:12:56Z | A | native.search.unicode | 1002.8 | 999.2 | 200 | results/tier-a-20260808T051256Z.json |
+| 2026-08-08T05:12:56Z | A | native.search.nonexistent | 1000.5 | 1001.0 | 200 | results/tier-a-20260808T051256Z.json |
+| 2026-08-08T05:12:56Z | A | os.getIndexes | 353.2 | 266.8 | 200 | results/tier-a-20260808T051256Z.json |
+| 2026-08-08T05:12:56Z | A | os.getArtists | 266.7 | 261.1 | 200 | results/tier-a-20260808T051256Z.json |
+| 2026-08-08T05:12:56Z | A | os.getAlbumList2.newest | 476.1 | 257.7 | 200 | results/tier-a-20260808T051256Z.json |
+| 2026-08-08T05:12:56Z | A | os.search3 | 339.8 | 277.5 | 200 | results/tier-a-20260808T051256Z.json |
+| 2026-08-08T05:12:56Z | A | os.getRandomSongs | 1051.8 | 950.8 | 200 | results/tier-a-20260808T051256Z.json |
+| 2026-08-08T05:12:56Z | A | os.getStarred2 | 428.8 | 240.6 | 200 | results/tier-a-20260808T051256Z.json |
+| 2026-08-08T05:12:56Z | A | jf.userViews | 65.5 | 3.3 | 200 | results/tier-a-20260808T051256Z.json |
+| 2026-08-08T05:12:56Z | A | jf.artists.list | 56.8 | 6.2 | 200 | results/tier-a-20260808T051256Z.json |
+| 2026-08-08T05:12:56Z | A | jf.items.audio | 120.2 | 25.1 | 200 | results/tier-a-20260808T051256Z.json |
+| 2026-08-08T05:12:56Z | A | jf.items.albums | 38.8 | 7.2 | 200 | results/tier-a-20260808T051256Z.json |
+| 2026-08-08T05:12:56Z | A | jf.playlists | 71.5 | 5.2 | 200 | results/tier-a-20260808T051256Z.json |
+| 2026-08-08T05:34:23Z | B | native.artists.list | 140.1 | 9.5 | 200 | results/tier-b-20260808T053424Z.json |
+| 2026-08-08T05:34:23Z | B | native.albums.list | 200.2 | 47.6 | 200 | results/tier-b-20260808T053424Z.json |
+| 2026-08-08T05:34:23Z | B | native.songs.list | 161.2 | 30.7 | 200 | results/tier-b-20260808T053424Z.json |
+| 2026-08-08T05:34:23Z | B | native.albums.recent | 89.7 | 40.7 | 200 | results/tier-b-20260808T053424Z.json |
+| 2026-08-08T05:34:23Z | B | native.search.exact-artist | 609.6 | 198.6 | 200 | results/tier-b-20260808T053424Z.json |
+| 2026-08-08T05:34:23Z | B | native.search.partial-artist | 194.6 | 194.2 | 200 | results/tier-b-20260808T053424Z.json |
+| 2026-08-08T05:34:23Z | B | native.search.track-title | 180.6 | 191.6 | 200 | results/tier-b-20260808T053424Z.json |
+| 2026-08-08T05:34:23Z | B | native.search.common-word | 987.5 | 997.6 | 200 | results/tier-b-20260808T053424Z.json |
+| 2026-08-08T05:34:23Z | B | native.search.unicode | 1005.8 | 999.8 | 200 | results/tier-b-20260808T053424Z.json |
+| 2026-08-08T05:34:23Z | B | native.search.nonexistent | 1001.7 | 1000.5 | 200 | results/tier-b-20260808T053424Z.json |
+| 2026-08-08T05:34:23Z | B | os.getIndexes | 853.7 | 692.7 | 200 | results/tier-b-20260808T053424Z.json |
+| 2026-08-08T05:34:23Z | B | os.getArtists | 643.7 | 606.6 | 200 | results/tier-b-20260808T053424Z.json |
+| 2026-08-08T05:34:23Z | B | os.getAlbumList2.newest | 573.6 | 329.7 | 200 | results/tier-b-20260808T053424Z.json |
+| 2026-08-08T05:34:23Z | B | os.search3 | 563.4 | 513.3 | 200 | results/tier-b-20260808T053424Z.json |
+| 2026-08-08T05:34:23Z | B | os.getRandomSongs | 25136.1 | 24625.2 | 200 | results/tier-b-20260808T053424Z.json |
+| 2026-08-08T05:34:23Z | B | os.getStarred2 | 410.8 | 254.0 | 200 | results/tier-b-20260808T053424Z.json |
+| 2026-08-08T05:34:23Z | B | jf.userViews | 65.5 | 3.2 | 200 | results/tier-b-20260808T053424Z.json |
+| 2026-08-08T05:34:23Z | B | jf.artists.list | 70.6 | 24.3 | 200 | results/tier-b-20260808T053424Z.json |
+| 2026-08-08T05:34:23Z | B | jf.items.audio | 356.6 | 259.8 | 200 | results/tier-b-20260808T053424Z.json |
+| 2026-08-08T05:34:23Z | B | jf.items.albums | 71.6 | 39.7 | 200 | results/tier-b-20260808T053424Z.json |
+| 2026-08-08T05:34:23Z | B | jf.playlists | 69.2 | 3.5 | 200 | results/tier-b-20260808T053424Z.json |
+| 2026-08-08T05:47:34Z | C | native.artists.list | 148.9 | 21.2 | 200 | results/tier-c-20260808T054734Z.json |
+| 2026-08-08T05:47:34Z | C | native.albums.list | 305.6 | 172.5 | 200 | results/tier-c-20260808T054734Z.json |
+| 2026-08-08T05:47:34Z | C | native.songs.list | 236.9 | 110.1 | 200 | results/tier-c-20260808T054734Z.json |
+| 2026-08-08T05:47:34Z | C | native.albums.recent | 191.3 | 138.1 | 200 | results/tier-c-20260808T054734Z.json |
+| 2026-08-08T05:47:34Z | C | native.search.exact-artist | 1435.6 | 1076.1 | 200 | results/tier-c-20260808T054734Z.json |
+| 2026-08-08T05:47:34Z | C | native.search.partial-artist | 1047.9 | 1023.2 | 200 | results/tier-c-20260808T054734Z.json |
+| 2026-08-08T05:47:34Z | C | native.search.track-title | 1083.2 | 1042.0 | 200 | results/tier-c-20260808T054734Z.json |
+| 2026-08-08T05:47:34Z | C | native.search.common-word | 1038.1 | 1023.8 | 200 | results/tier-c-20260808T054734Z.json |
+| 2026-08-08T05:47:34Z | C | native.search.unicode | 1052.2 | 1040.9 | 200 | results/tier-c-20260808T054734Z.json |
+| 2026-08-08T05:47:34Z | C | native.search.nonexistent | 1004.6 | 1017.8 | 200 | results/tier-c-20260808T054734Z.json |
+| 2026-08-08T05:47:34Z | C | os.getIndexes | 1495.5 | 1326.3 | 200 | results/tier-c-20260808T054734Z.json |
+| 2026-08-08T05:47:34Z | C | os.getArtists | 1204.0 | 1187.2 | 200 | results/tier-c-20260808T054734Z.json |
+| 2026-08-08T05:47:34Z | C | os.getAlbumList2.newest | 683.8 | 481.8 | 200 | results/tier-c-20260808T054734Z.json |
+| 2026-08-08T05:47:34Z | C | os.search3 | 2152.9 | 2098.0 | 200 | results/tier-c-20260808T054734Z.json |
+| 2026-08-08T05:47:34Z | C | os.getRandomSongs | 241210.4 | 230343.1 | 200 | results/tier-c-20260808T054734Z.json |
+| 2026-08-08T05:47:34Z | C | os.getStarred2 | 445.7 | 254.1 | 200 | results/tier-c-20260808T054734Z.json |
+| 2026-08-08T05:47:34Z | C | jf.userViews | 71.7 | 6.9 | 200 | results/tier-c-20260808T054734Z.json |
+| 2026-08-08T05:47:34Z | C | jf.artists.list | 111.6 | 58.7 | 200 | results/tier-c-20260808T054734Z.json |
+| 2026-08-08T05:47:34Z | C | jf.items.audio | 1708.6 | 1523.4 | 200 | results/tier-c-20260808T054734Z.json |
+| 2026-08-08T05:47:34Z | C | jf.items.albums | 176.9 | 150.2 | 200 | results/tier-c-20260808T054734Z.json |
+| 2026-08-08T05:47:34Z | C | jf.playlists | 69.1 | 4.9 | 200 | results/tier-c-20260808T054734Z.json |

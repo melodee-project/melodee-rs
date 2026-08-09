@@ -1,0 +1,1853 @@
+{
+  "schemaVersion": 1,
+  "surface": "opensubsonic",
+  "legacyBaselineCommit": "4028b58dbd3302ed431e2c5b32d9dde5634db218",
+  "authModel": {
+    "transports": [
+      "query string",
+      "form POST (all endpoints)"
+    ],
+    "forms": [
+      "u + t + s (token = md5(opensubsonicSecret+salt), case-insensitive hex)",
+      "u + p (plaintext or enc: hex)",
+      "jwt param (NO signature verification; requires u + any p/t to reach the branch; takes precedence)",
+      "apiKey param: advertised (apiKeyAuthentication[1]) but NOT honored"
+    ],
+    "bypass": "no credentials required when request is local, path contains /images/, or request host == system.baseUrl; no user synthesized (BlankUserInfo)",
+    "failure": "HTTP 200 + subsonic-response error 40 (podcast controller: HTTP 403)"
+  },
+  "formats": {
+    "default": "xml",
+    "json": "f=json",
+    "jsonp": "f=jsonp&callback=... (without callback falls back to XML)",
+    "envelope": "subsonic-response {status, version, type, serverVersion, openSubsonic:true}; XML type is hardcoded lowercase 'melodee'"
+  },
+  "endpointCount": 81,
+  "summary": {
+    "gone": 6,
+    "not-implemented": 4,
+    "supported": 56,
+    "conditional": 15
+  },
+  "endpoints": [
+    {
+      "endpoint": "addChatMessage",
+      "routes": [
+        "/rest/addChatMessage",
+        "/rest/addChatMessage.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "ChatControllerController",
+      "classification": "gone",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": 410,
+      "intentionalStatuses": [
+        410
+      ],
+      "scenarios": [
+        "os-gone-addchatmessage"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "changePassword",
+      "routes": [
+        "/rest/changePassword",
+        "/rest/changePassword.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "UserManagementControllerController",
+      "classification": "not-implemented",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": 501,
+      "intentionalStatuses": [
+        501
+      ],
+      "scenarios": [
+        "os-notimplemented-changepassword"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "createBookmark",
+      "routes": [
+        "/rest/createBookmark",
+        "/rest/createBookmark.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BookmarksControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-bookmarks/create-bookmark"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "createInternetRadioStation",
+      "routes": [
+        "/rest/createInternetRadioStation",
+        "/rest/createInternetRadioStation.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "InternetRadioControllerController",
+      "classification": "conditional",
+      "prerequisite": "admin",
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-radio/create-radio"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "createPlaylist",
+      "routes": [
+        "/rest/createPlaylist",
+        "/rest/createPlaylist.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PlaylistControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-playlists/create-playlist"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "createPodcastChannel",
+      "routes": [
+        "/rest/createPodcastChannel",
+        "/rest/createPodcastChannel.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PodcastControllerController",
+      "classification": "conditional",
+      "prerequisite": "podcast.enabled (seeded true); podcast role; auth failures return HTTP 403 (unique to this controller); disabled -> HTTP 400 error 0",
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-podcasts-disabled-create"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "createShare",
+      "routes": [
+        "/rest/createShare",
+        "/rest/createShare.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SharingControllerController",
+      "classification": "conditional",
+      "prerequisite": "user CanShare capability",
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-shares/create-share",
+        "os-shares/create-share-bad-id"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "createUser",
+      "routes": [
+        "/rest/createUser",
+        "/rest/createUser.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "UserManagementControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-createuser"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "deleteBookmark",
+      "routes": [
+        "/rest/deleteBookmark",
+        "/rest/deleteBookmark.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BookmarksControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-bookmarks/delete-bookmark"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "deleteInternetRadioStation",
+      "routes": [
+        "/rest/deleteInternetRadioStation",
+        "/rest/deleteInternetRadioStation.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "InternetRadioControllerController",
+      "classification": "conditional",
+      "prerequisite": "admin",
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-radio/delete-radio"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "deletePlaylist",
+      "routes": [
+        "/rest/deletePlaylist",
+        "/rest/deletePlaylist.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PlaylistControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-playlists/delete-playlist"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "deletePodcastChannel",
+      "routes": [
+        "/rest/deletePodcastChannel",
+        "/rest/deletePodcastChannel.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PodcastControllerController",
+      "classification": "conditional",
+      "prerequisite": "podcast.enabled (seeded true); podcast role; auth failures return HTTP 403 (unique to this controller); disabled -> HTTP 400 error 0",
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-podcasts-delete-channel-missing"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "deletePodcastEpisode",
+      "routes": [
+        "/rest/deletePodcastEpisode",
+        "/rest/deletePodcastEpisode.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PodcastControllerController",
+      "classification": "conditional",
+      "prerequisite": "podcast.enabled (seeded true); podcast role; auth failures return HTTP 403 (unique to this controller); disabled -> HTTP 400 error 0",
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-podcasts-delete-episode-missing"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "deleteShare",
+      "routes": [
+        "/rest/deleteShare",
+        "/rest/deleteShare.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SharingControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-shares/delete-share"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "deleteUser",
+      "routes": [
+        "/rest/deleteUser",
+        "/rest/deleteUser.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "UserManagementControllerController",
+      "classification": "not-implemented",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": 501,
+      "intentionalStatuses": [
+        501
+      ],
+      "scenarios": [
+        "os-notimplemented-deleteuser"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "download",
+      "routes": [
+        "/rest/download",
+        "/rest/download.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaRetrievalControllerController",
+      "classification": "conditional",
+      "prerequisite": "system.isDownloadingEnabled (seeded true)",
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-download",
+        "os-download-unknown"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "downloadPodcastEpisode",
+      "routes": [
+        "/rest/downloadPodcastEpisode",
+        "/rest/downloadPodcastEpisode.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PodcastControllerController",
+      "classification": "conditional",
+      "prerequisite": "podcast.enabled (seeded true); podcast role; auth failures return HTTP 403 (unique to this controller); disabled -> HTTP 400 error 0",
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-podcasts-download-episode-missing"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getAlbum",
+      "routes": [
+        "/rest/getAlbum",
+        "/rest/getAlbum.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-getalbum",
+        "os-getalbum-compilation",
+        "os-getalbum-minimal",
+        "os-getalbum-multidisc",
+        "os-getalbum-unknown"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getAlbumInfo",
+      "routes": [
+        "/rest/getAlbumInfo",
+        "/rest/getAlbumInfo.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-getalbuminfo"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getAlbumInfo2",
+      "routes": [
+        "/rest/getAlbumInfo2",
+        "/rest/getAlbumInfo2.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-getalbuminfo2"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getAlbumList",
+      "routes": [
+        "/rest/getAlbumList",
+        "/rest/getAlbumList.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "AlbumSongControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-getalbumlist-newest"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getAlbumList2",
+      "routes": [
+        "/rest/getAlbumList2",
+        "/rest/getAlbumList2.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "AlbumSongControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-getalbumlist2-alphabetical",
+        "os-getalbumlist2-bygenre",
+        "os-getalbumlist2-byyear",
+        "os-getalbumlist2-frequent",
+        "os-getalbumlist2-newest",
+        "os-getalbumlist2-recent",
+        "os-getalbumlist2-starred"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getArtist",
+      "routes": [
+        "/rest/getArtist",
+        "/rest/getArtist.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-getartist",
+        "os-getartist-collision",
+        "os-getartist-unknown",
+        "os-getartist-various"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getArtistInfo",
+      "routes": [
+        "/rest/getArtistInfo",
+        "/rest/getArtistInfo.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-getartistinfo"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getArtistInfo2",
+      "routes": [
+        "/rest/getArtistInfo2",
+        "/rest/getArtistInfo2.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-getartistinfo2"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getArtists",
+      "routes": [
+        "/rest/getArtists",
+        "/rest/getArtists.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-getartists",
+        "os-getartists-xml"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getAvatar",
+      "routes": [
+        "/rest/getAvatar",
+        "/rest/getAvatar.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaRetrievalControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-getavatar"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getBookmarks",
+      "routes": [
+        "/rest/getBookmarks",
+        "/rest/getBookmarks.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BookmarksControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-bookmarks/getbookmarks-empty",
+        "os-bookmarks/verify-bookmarks",
+        "os-bookmarks/verify-bookmarks-empty"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getCaptions",
+      "routes": [
+        "/rest/getCaptions",
+        "/rest/getCaptions.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaRetrievalControllerController",
+      "classification": "gone",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": 410,
+      "intentionalStatuses": [
+        410
+      ],
+      "scenarios": [
+        "os-gone-getcaptions"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getChatMessages",
+      "routes": [
+        "/rest/getChatMessages",
+        "/rest/getChatMessages.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "ChatControllerController",
+      "classification": "gone",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": 410,
+      "intentionalStatuses": [
+        410
+      ],
+      "scenarios": [
+        "os-gone-getchatmessages"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getCoverArt",
+      "routes": [
+        "/rest/getCoverArt",
+        "/rest/getCoverArt.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaRetrievalControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-getcoverart-80",
+        "os-getcoverart-default",
+        "os-getcoverart-song",
+        "os-getcoverart-unknown"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getGenres",
+      "routes": [
+        "/rest/getGenres",
+        "/rest/getGenres.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-getgenres"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getIndexes",
+      "routes": [
+        "/rest/getIndexes",
+        "/rest/getIndexes.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-getindexes"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getInternetRadioStations",
+      "routes": [
+        "/rest/getInternetRadioStations",
+        "/rest/getInternetRadioStations.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "InternetRadioControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-radio/getradio-empty",
+        "os-radio/verify-radio",
+        "os-radio/verify-radio-empty"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getLicense",
+      "routes": [
+        "/rest/getLicense",
+        "/rest/getLicense.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SystemControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-getlicense-json",
+        "os-getlicense-xml"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getLyrics",
+      "routes": [
+        "/rest/getLyrics",
+        "/rest/getLyrics.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaRetrievalControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-getlyrics",
+        "os-getlyrics-missing"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getLyricsBySongId",
+      "routes": [
+        "/rest/getLyricsBySongId",
+        "/rest/getLyricsBySongId.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaRetrievalControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-getlyricsbysongid",
+        "os-getlyricsbysongid-none"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getMusicDirectory",
+      "routes": [
+        "/rest/getMusicDirectory",
+        "/rest/getMusicDirectory.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-getmusicdirectory-album",
+        "os-getmusicdirectory-artist",
+        "os-getmusicdirectory-library"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getMusicFolders",
+      "routes": [
+        "/rest/getMusicFolders",
+        "/rest/getMusicFolders.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-auth-apikey-only",
+        "os-auth-bypass-localhost",
+        "os-auth-form-post",
+        "os-auth-invalid-token",
+        "os-auth-invalid-username",
+        "os-auth-jwt-forged-unsigned",
+        "os-auth-jwt-only-unreachable",
+        "os-auth-malformed-token",
+        "os-auth-missing",
+        "os-auth-missing-xml",
+        "os-auth-no-version-param",
+        "os-auth-token-without-salt",
+        "os-auth-valid-password-enc-hex",
+        "os-auth-valid-password-plain",
+        "os-auth-valid-token",
+        "os-auth-valid-token-uppercase",
+        "os-getmusicfolders-json",
+        "os-getmusicfolders-xml"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getNewestPodcasts",
+      "routes": [
+        "/rest/getNewestPodcasts",
+        "/rest/getNewestPodcasts.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PodcastControllerController",
+      "classification": "conditional",
+      "prerequisite": "podcast.enabled (seeded true); podcast role; auth failures return HTTP 403 (unique to this controller); disabled -> HTTP 400 error 0",
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-getnewestpodcasts",
+        "os-podcasts-disabled-getnewest"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getNowPlaying",
+      "routes": [
+        "/rest/getNowPlaying",
+        "/rest/getNowPlaying.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "AlbumSongControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-annotation-scrobble/verify-nowplaying",
+        "os-getnowplaying-empty"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getOpenSubsonicExtensions",
+      "routes": [
+        "/rest/getOpenSubsonicExtensions",
+        "/rest/getOpenSubsonicExtensions.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SystemControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-getopensubsonicextensions-json",
+        "os-getopensubsonicextensions-xml"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getPlayQueue",
+      "routes": [
+        "/rest/getPlayQueue",
+        "/rest/getPlayQueue.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BookmarksControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-playqueue/getplayqueue-empty",
+        "os-playqueue/verify-playqueue",
+        "os-playqueue/verify-playqueue-empty"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getPlaylist",
+      "routes": [
+        "/rest/getPlaylist",
+        "/rest/getPlaylist.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PlaylistControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-playlists/get-private-playlist",
+        "os-playlists/getplaylist",
+        "os-playlists/getplaylist-unknown",
+        "os-playlists/verify-deleted",
+        "os-playlists/verify-updated"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getPlaylists",
+      "routes": [
+        "/rest/getPlaylists",
+        "/rest/getPlaylists.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PlaylistControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-playlists/getplaylists"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getPodcasts",
+      "routes": [
+        "/rest/getPodcasts",
+        "/rest/getPodcasts.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PodcastControllerController",
+      "classification": "conditional",
+      "prerequisite": "podcast.enabled (seeded true); podcast role; auth failures return HTTP 403 (unique to this controller); disabled -> HTTP 400 error 0",
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-getpodcasts",
+        "os-getpodcasts-norole",
+        "os-podcasts-disabled-getpodcasts"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getRandomSongs",
+      "routes": [
+        "/rest/getRandomSongs",
+        "/rest/getRandomSongs.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "AlbumSongControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-getrandomsongs"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getScanStatus",
+      "routes": [
+        "/rest/getScanStatus",
+        "/rest/getScanStatus.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaLibraryScanningController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-scan/getscanstatus",
+        "os-scan/getscanstatus-after"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getShares",
+      "routes": [
+        "/rest/getShares",
+        "/rest/getShares.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SharingControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-shares/getshares-empty",
+        "os-shares/verify-shares",
+        "os-shares/verify-shares-empty"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getSimilarSongs",
+      "routes": [
+        "/rest/getSimilarSongs",
+        "/rest/getSimilarSongs.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-getsimilarsongs"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getSimilarSongs2",
+      "routes": [
+        "/rest/getSimilarSongs2",
+        "/rest/getSimilarSongs2.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-getsimilarsongs2"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getSong",
+      "routes": [
+        "/rest/getSong",
+        "/rest/getSong.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-annotation-rating/verify-rating",
+        "os-annotation-rating/verify-rating-cleared",
+        "os-getsong",
+        "os-getsong-malformed-id",
+        "os-getsong-unknown"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getSongsByGenre",
+      "routes": [
+        "/rest/getSongsByGenre",
+        "/rest/getSongsByGenre.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "AlbumSongControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-getsongsbygenre-none",
+        "os-getsongsbygenre-rock",
+        "os-getsongsbygenre-unicode"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getStarred",
+      "routes": [
+        "/rest/getStarred",
+        "/rest/getStarred.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "AlbumSongControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-getstarred"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getStarred2",
+      "routes": [
+        "/rest/getStarred2",
+        "/rest/getStarred2.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "AlbumSongControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-annotation-star/verify-starred2-after-star",
+        "os-annotation-star/verify-starred2-after-unstar",
+        "os-annotation-star/verify-starred2-album",
+        "os-getstarred2"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getTopSongs",
+      "routes": [
+        "/rest/getTopSongs",
+        "/rest/getTopSongs.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-gettopsongs"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getUser",
+      "routes": [
+        "/rest/getUser",
+        "/rest/getUser.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "UserManagementControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-getuser"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getUsers",
+      "routes": [
+        "/rest/getUsers",
+        "/rest/getUsers.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "UserManagementControllerController",
+      "classification": "not-implemented",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": 501,
+      "intentionalStatuses": [
+        501
+      ],
+      "scenarios": [
+        "os-notimplemented-getusers"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getVideoInfo",
+      "routes": [
+        "/rest/getVideoInfo",
+        "/rest/getVideoInfo.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingControllerController",
+      "classification": "gone",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": 410,
+      "intentionalStatuses": [
+        410
+      ],
+      "scenarios": [
+        "os-gone-getvideoinfo"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "getVideos",
+      "routes": [
+        "/rest/getVideos",
+        "/rest/getVideos.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BrowsingControllerController",
+      "classification": "gone",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": 410,
+      "intentionalStatuses": [
+        410
+      ],
+      "scenarios": [
+        "os-gone-getvideos",
+        "os-gone-getvideos-plain"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "hls",
+      "routes": [
+        "/rest/hls",
+        "/rest/hls.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaRetrievalControllerController",
+      "classification": "gone",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": 410,
+      "intentionalStatuses": [
+        410
+      ],
+      "scenarios": [
+        "os-gone-hls"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "jukeboxControl",
+      "routes": [
+        "/rest/jukeboxControl",
+        "/rest/jukeboxControl.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "JukeboxControllerController",
+      "classification": "conditional",
+      "prerequisite": "jukebox.enabled AND jukebox.backendType non-empty; else 410",
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [
+        410
+      ],
+      "scenarios": [
+        "os-gone-jukebox-disabled"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "ping",
+      "routes": [
+        "/ping",
+        "/rest/ping",
+        "/rest/ping.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SystemControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-ping-json",
+        "os-ping-jsonp",
+        "os-ping-jsonp-no-callback",
+        "os-ping-plain-route",
+        "os-ping-xml"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "refreshPodcasts",
+      "routes": [
+        "/rest/refreshPodcasts",
+        "/rest/refreshPodcasts.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PodcastControllerController",
+      "classification": "conditional",
+      "prerequisite": "podcast.enabled (seeded true); podcast role; auth failures return HTTP 403 (unique to this controller); disabled -> HTTP 400 error 0",
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-podcasts-refresh"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "savePlayQueue",
+      "routes": [
+        "/rest/savePlayQueue",
+        "/rest/savePlayQueue.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "BookmarksControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-playqueue/clear-playqueue",
+        "os-playqueue/saveplayqueue"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "scrobble",
+      "routes": [
+        "/rest/scrobble",
+        "/rest/scrobble.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaAnnotationControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-annotation-scrobble/scrobble-default-submission",
+        "os-annotation-scrobble/scrobble-nowplaying",
+        "os-annotation-scrobble/scrobble-submission",
+        "os-annotation-scrobble/scrobble-submission-repeat",
+        "os-annotation-scrobble/scrobble-time-mismatch"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "search2",
+      "routes": [
+        "/rest/search2",
+        "/rest/search2.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SearchingControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-search2-dune"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "search3",
+      "routes": [
+        "/rest/search3",
+        "/rest/search3.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SearchingControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-search3-dune",
+        "os-search3-none",
+        "os-search3-unicode"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "searchForAlbumImage",
+      "routes": [
+        "/rest/searchForAlbumImage",
+        "/rest/searchForAlbumImage.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SearchEngineControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-searchforalbumimage"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": true
+    },
+    {
+      "endpoint": "searchForArtist",
+      "routes": [
+        "/rest/searchForArtist",
+        "/rest/searchForArtist.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SearchEngineControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-searchforartist"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": true
+    },
+    {
+      "endpoint": "searchForArtistImage",
+      "routes": [
+        "/rest/searchForArtistImage",
+        "/rest/searchForArtistImage.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SearchEngineControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-searchforartistimage"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": true
+    },
+    {
+      "endpoint": "setRating",
+      "routes": [
+        "/rest/setRating",
+        "/rest/setRating.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaAnnotationControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-annotation-rating/setrating-clear",
+        "os-annotation-rating/setrating-invalid-id",
+        "os-annotation-rating/setrating-song-4"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "star",
+      "routes": [
+        "/rest/star",
+        "/rest/star.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaAnnotationControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-annotation-star/star-album-via-albumid",
+        "os-annotation-star/star-malformed-id",
+        "os-annotation-star/star-song"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "startScan",
+      "routes": [
+        "/rest/startScan",
+        "/rest/startScan.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaLibraryScanningController",
+      "classification": "conditional",
+      "prerequisite": "no admin requirement at baseline (any authenticated user)",
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-scan/startscan"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "stream",
+      "routes": [
+        "/rest/stream",
+        "/rest/stream.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaRetrievalControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-stream-full",
+        "os-stream-head",
+        "os-stream-maxbitrate-ignored",
+        "os-stream-range-end",
+        "os-stream-range-invalid",
+        "os-stream-range-middle",
+        "os-stream-range-middle-mangled",
+        "os-stream-range-start",
+        "os-stream-range-unsatisfiable",
+        "os-stream-timeoffset",
+        "os-stream-unknown"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "streamPodcastEpisode",
+      "routes": [
+        "/rest/streamPodcastEpisode",
+        "/rest/streamPodcastEpisode.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PodcastControllerController",
+      "classification": "conditional",
+      "prerequisite": "podcast.enabled (seeded true); podcast role; auth failures return HTTP 403 (unique to this controller); disabled -> HTTP 400 error 0",
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-podcasts-stream-episode-missing"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "unstar",
+      "routes": [
+        "/rest/unstar",
+        "/rest/unstar.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "MediaAnnotationControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-annotation-star/unstar-album",
+        "os-annotation-star/unstar-song"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "updateInternetRadioStation",
+      "routes": [
+        "/rest/updateInternetRadioStation",
+        "/rest/updateInternetRadioStation.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "InternetRadioControllerController",
+      "classification": "conditional",
+      "prerequisite": "admin",
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-radio/update-radio"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "updatePlaylist",
+      "routes": [
+        "/rest/updatePlaylist",
+        "/rest/updatePlaylist.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "PlaylistControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-playlists/update-playlist-add-remove"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "updateShare",
+      "routes": [
+        "/rest/updateShare",
+        "/rest/updateShare.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "SharingControllerController",
+      "classification": "supported",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": null,
+      "intentionalStatuses": [],
+      "scenarios": [
+        "os-shares/update-share"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    },
+    {
+      "endpoint": "updateUser",
+      "routes": [
+        "/rest/updateUser",
+        "/rest/updateUser.view"
+      ],
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "controller": "UserManagementControllerController",
+      "classification": "not-implemented",
+      "prerequisite": null,
+      "expectedUnsupportedStatus": 501,
+      "intentionalStatuses": [
+        501
+      ],
+      "scenarios": [
+        "os-notimplemented-updateuser"
+      ],
+      "hasGoldenScenario": true,
+      "isMelodeeExtension": false
+    }
+  ]
+}

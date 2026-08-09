@@ -1,0 +1,35 @@
+{
+  "name": "os-getsongsbygenre-rock",
+  "surface": "opensubsonic",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/rest/getSongsByGenre.view?f=json&v=1.16.1&c=phase0&genre=Rock&count=10&u=phase0-fixture&t=%3Credacted%3E&s=%3Credacted%3E",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-length": "2347",
+      "content-type": "application/json; charset=utf-8",
+      "x-total-count": "2"
+    },
+    "bodyFile": "os-getsongsbygenre-rock.json",
+    "sha256": "ce5ce6f189d2148c689ba975ae297e6d58a22b29f6a80c1f52e20fff880740a6",
+    "bytes": 3831
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.subsonic-response.serverVersion"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

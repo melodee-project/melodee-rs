@@ -1,0 +1,33 @@
+{
+  "name": "jf-auth-negative/me-garbage-token",
+  "surface": "jellyfin",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/Users/Me",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "X-MediaBrowser-Token": "phase0-not-a-real-jellyfin-token"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "jf-auth-negative-me-garbage-token.json",
+    "sha256": "ec50adc67ef12cd3196e3b516a73be20d11dd078fa383a8b34462cd54bd2c708",
+    "bytes": 176
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.TraceId",
+      "$.traceId"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

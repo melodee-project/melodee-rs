@@ -1,0 +1,247 @@
+{
+  "slug": "long-track",
+  "description": "One unusually long track (120s) among normal ones.",
+  "expected": {
+    "validation": "duration rules"
+  },
+  "input": {
+    "files": [
+      "01 Marathon.mp3",
+      "02 Second Wave.mp3",
+      "03 Third Echo.mp3"
+    ],
+    "sizes": {
+      "03 Third Echo.mp3": 55984,
+      "02 Second Wave.mp3": 52850,
+      "01 Marathon.mp3": 2881595
+    },
+    "sha256": {
+      "03 Third Echo.mp3": "029186a446a12c0d5899e86eedbdabb0792a90b12f0b3d2d9ac692089b5bd54e",
+      "02 Second Wave.mp3": "76f5613d4888ccd35318ceafbdf5fd7c380fa516755dd46d964d0ba929c4517c",
+      "01 Marathon.mp3": "79a8ac09d1d2b73cd56239ee9f439700ec206c32469c671f90ce9f83d75ff865"
+    }
+  },
+  "extraction": {
+    "extractions": [
+      {
+        "file": "01 Marathon.mp3",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {
+          "Genre": "Ambient",
+          "DiscNumber": 1,
+          "Bpm": 0,
+          "OrigAlbumYear": 2021,
+          "AlbumDate": "2021-01-01T00:00:00.0000000Z",
+          "Date": "2021-01-01T00:00:00Z",
+          "Encoder": "Lavf62.12.102",
+          "RecordingYear": 2021,
+          "DiscTotal": 1,
+          "AlbumArtist": "Corpus Artist",
+          "Title": "Marathon",
+          "TrackNumber": 1,
+          "Album": "Long Path"
+        },
+        "mediaAudios": {
+          "BitRate": 192,
+          "BitDepth": -1,
+          "SampleRate": 44100,
+          "IsVbr": false,
+          "Duration": 120,
+          "DurationMs": 120058.70833333333,
+          "CodecLongName": "MPEG Audio (Layer III)",
+          "Channels": "Mono (1/0.0)",
+          "ChannelLayout": "Mono (1/0.0)",
+          "ChannelsArrangementDescription": "Mono (1/0.0)",
+          "ChannelsArrangementNumberChannels": 1,
+          "AudioDataOffset": 186,
+          "AudioDataSize": 2881409
+        },
+        "imageCount": 0,
+        "crcHash": "F1549572"
+      },
+      {
+        "file": "02 Second Wave.mp3",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {
+          "Genre": "Ambient",
+          "DiscNumber": 1,
+          "Bpm": 0,
+          "OrigAlbumYear": 2021,
+          "AlbumDate": "2021-01-01T00:00:00.0000000Z",
+          "Date": "2021-01-01T00:00:00Z",
+          "Encoder": "Lavf62.12.102",
+          "RecordingYear": 2021,
+          "DiscTotal": 1,
+          "AlbumArtist": "Corpus Artist",
+          "Title": "Second Wave",
+          "TrackNumber": 2,
+          "Album": "Long Path"
+        },
+        "mediaAudios": {
+          "BitRate": 192,
+          "BitDepth": -1,
+          "SampleRate": 44100,
+          "IsVbr": false,
+          "Duration": 2,
+          "DurationMs": 2194.2083333333335,
+          "CodecLongName": "MPEG Audio (Layer III)",
+          "Channels": "Mono (1/0.0)",
+          "ChannelLayout": "Mono (1/0.0)",
+          "ChannelsArrangementDescription": "Mono (1/0.0)",
+          "ChannelsArrangementNumberChannels": 1,
+          "AudioDataOffset": 189,
+          "AudioDataSize": 52661
+        },
+        "imageCount": 0,
+        "crcHash": "5C3B087E"
+      }
+    ]
+  },
+  "pipeline": {
+    "processExitCode": 0,
+    "processSummary": {
+      "Elapsed Time": "00:00:03",
+      "Directories Processed": "1",
+      "Albums Processed": "1",
+      "Valid Albums": "0 (0%)",
+      "New Artists": "1",
+      "New Albums": "1",
+      "New Songs": "3"
+    },
+    "processErrorTail": null,
+    "stagingTree": [
+      {
+        "path": "Corpus Artist - [2021] Long Path/0001 Marathon.mp3",
+        "size": 2881629
+      },
+      {
+        "path": "Corpus Artist - [2021] Long Path/0002 Second Wave.mp3",
+        "size": 52884
+      },
+      {
+        "path": "Corpus Artist - [2021] Long Path/0003 Third Echo.mp3",
+        "size": 56018
+      },
+      {
+        "path": "Corpus Artist - [2021] Long Path/melodee.json",
+        "size": 10991,
+        "sha256": null
+      }
+    ],
+    "albums": [
+      {
+        "directory": "Corpus Artist - [2021] Long Path",
+        "status": "Invalid",
+        "statusReasons": "HasInvalidArtists, HasNoImages, HasLessThanMinimumDuration",
+        "albumType": "Album",
+        "validationMessages": [
+          {
+            "message": "Album artist is invalid.",
+            "severity": 2
+          },
+          {
+            "message": "Album does not have cover image.",
+            "severity": 2
+          },
+          {
+            "message": "Album Artist is unknown, will need manual validation.",
+            "severity": 2
+          },
+          {
+            "message": "Album duration is less than the minimum album duration.",
+            "severity": 2
+          }
+        ],
+        "songCount": 3,
+        "songs": [
+          {
+            "fileName": "0001 Marathon.mp3",
+            "size": 2881595,
+            "title": "Marathon",
+            "songNumber": 1,
+            "mediaNumber": 1,
+            "sortOrder": 1,
+            "crcHash": "F1549572"
+          },
+          {
+            "fileName": "0002 Second Wave.mp3",
+            "size": 52850,
+            "title": "Second Wave",
+            "songNumber": 2,
+            "mediaNumber": 1,
+            "sortOrder": 2,
+            "crcHash": "5C3B087E"
+          },
+          {
+            "fileName": "0003 Third Echo.mp3",
+            "size": 55984,
+            "title": "Third Echo",
+            "songNumber": 3,
+            "mediaNumber": 1,
+            "sortOrder": 3,
+            "crcHash": "C2316EDB"
+          }
+        ],
+        "images": [],
+        "displaySummary": "003 : Long Path"
+      }
+    ],
+    "inboundLeftovers": [
+      {
+        "path": "01 Marathon.mp3",
+        "size": 2881595
+      },
+      {
+        "path": "02 Second Wave.mp3",
+        "size": 52850
+      },
+      {
+        "path": "03 Third Echo.mp3",
+        "size": 55984
+      },
+      {
+        "path": "melodee.json",
+        "size": 10421
+      }
+    ],
+    "validations": [
+      {
+        "album": "Corpus Artist - [2021] Long Path",
+        "exitCode": 0,
+        "result": {
+          "data": {
+            "albumStatus": 3,
+            "albumStatusReasons": 33554568,
+            "isValid": false,
+            "messages ": [
+              {
+                "message": "Album artist is  invalid.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album does not have cover  image.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album Artist is unknown, will  need manual validation.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album duration  is less than the minimum album  duration.",
+                "sortOrder": 0,
+                "severity": 2
+              }
+            ]
+          },
+          "isSuccess": true,
+          "type": 200
+        }
+      }
+    ]
+  }
+}

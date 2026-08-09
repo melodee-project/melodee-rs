@@ -1,0 +1,35 @@
+{
+  "name": "os-getalbumlist2-starred",
+  "surface": "opensubsonic",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/rest/getAlbumList2.view?f=json&v=1.16.1&c=phase0&type=starred&size=10&u=phase0-fixture&t=%3Credacted%3E&s=%3Credacted%3E",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-length": "623",
+      "content-type": "application/json; charset=utf-8",
+      "x-total-count": "1"
+    },
+    "bodyFile": "os-getalbumlist2-starred.json",
+    "sha256": "2b98df504bb0e8bb41dfb238cf1eca6d75407a737bc38a51fb8d177af4501072",
+    "bytes": 938
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.subsonic-response.serverVersion"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

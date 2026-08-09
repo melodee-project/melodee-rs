@@ -1,0 +1,33 @@
+{
+  "name": "jf-playlists/detail-after-delete",
+  "surface": "jellyfin",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/Playlists/b16ae181fc405cd5ba7b0cf9f5b4c89d",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "MediaBrowser <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "jf-playlists-detail-after-delete.json",
+    "sha256": "7e5c1ea2714b3786873a148fed989915d9cdc1b51e91c7a17306bd7647f05fd6",
+    "bytes": 152
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.TraceId",
+      "$.traceId"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

@@ -1,0 +1,133 @@
+{
+  "subsonic-response": {
+    "status": "ok",
+    "version": "1.16.1",
+    "type": "Melodee",
+    "serverVersion": "<volatile>",
+    "openSubsonic": true,
+    "songsByGenre": {
+      "song": [
+        {
+          "id": "song_b3297a8f-5e2b-5ade-98ea-f899d38059e0",
+          "parent": "album_7bbfff2a-36f2-5739-9a7a-e5b0d34af3b0",
+          "isDir": false,
+          "title": "Neon 東京",
+          "album": "Ünïcode Rëlease 東京",
+          "artist": "Sæglópur 日本",
+          "song": 1,
+          "year": 2024,
+          "coverArt": "song_b3297a8f-5e2b-5ade-98ea-f899d38059e0",
+          "size": 229364,
+          "contentType": "audio/wav",
+          "suffix": ".wav",
+          "duration": 3,
+          "bitRate": 1411,
+          "bitDepth": 16,
+          "samplingRate": 44100,
+          "path": "Ünïcode Rëlease 東京/01 - Neon 東京.wav",
+          "playCount": 0,
+          "discNumber": 1,
+          "created": "2026-01-01T00:13:13Z",
+          "albumId": "album_7bbfff2a-36f2-5739-9a7a-e5b0d34af3b0",
+          "artistId": "artist_8bf87c33-f669-5a85-a315-654f79fb895b",
+          "type": "music",
+          "mediaType": "song",
+          "isVideo": false,
+          "bpm": 132,
+          "sortName": "Neon 東京",
+          "genres": [
+            {
+              "value": "Post-Rock",
+              "songCount": 0,
+              "albumCount": 0
+            },
+            {
+              "value": "環境音楽",
+              "songCount": 0,
+              "albumCount": 0
+            }
+          ],
+          "artists": [],
+          "displayArtist": "Sæglópur 日本",
+          "albumArtists": [
+            {
+              "id": "artist_8bf87c33-f669-5a85-a315-654f79fb895b",
+              "name": "Sæglópur 日本",
+              "coverArt": "artist_8bf87c33-f669-5a85-a315-654f79fb895b",
+              "albumCount": 1,
+              "userRating": 0,
+              "artistImageUrl": "URL"
+            }
+          ],
+          "displayAlbumArtist": "Sæglópur 日本",
+          "contributors": [],
+          "replayGain": {},
+          "averageRating": 0,
+          "playerId": 0,
+          "track": 1,
+          "genre": "Post-Rock"
+        },
+        {
+          "id": "song_8c1a08ab-06dc-5438-a3b8-c1347a68791f",
+          "parent": "album_7bbfff2a-36f2-5739-9a7a-e5b0d34af3b0",
+          "isDir": false,
+          "title": "Eple (Røyskatt Mix)",
+          "album": "Ünïcode Rëlease 東京",
+          "artist": "Sæglópur 日本",
+          "song": 2,
+          "year": 2024,
+          "coverArt": "song_8c1a08ab-06dc-5438-a3b8-c1347a68791f",
+          "size": 211724,
+          "contentType": "audio/wav",
+          "suffix": ".wav",
+          "duration": 2,
+          "bitRate": 1411,
+          "bitDepth": 16,
+          "samplingRate": 44100,
+          "path": "Ünïcode Rëlease 東京/02 - Eple (Røyskatt Mix).wav",
+          "playCount": 0,
+          "discNumber": 1,
+          "created": "2026-01-01T00:14:14Z",
+          "albumId": "album_7bbfff2a-36f2-5739-9a7a-e5b0d34af3b0",
+          "artistId": "artist_8bf87c33-f669-5a85-a315-654f79fb895b",
+          "type": "music",
+          "mediaType": "song",
+          "isVideo": false,
+          "bpm": 126,
+          "sortName": "Eple (Røyskatt Mix)",
+          "genres": [
+            {
+              "value": "Post-Rock",
+              "songCount": 0,
+              "albumCount": 0
+            },
+            {
+              "value": "環境音楽",
+              "songCount": 0,
+              "albumCount": 0
+            }
+          ],
+          "artists": [],
+          "displayArtist": "Sæglópur 日本",
+          "albumArtists": [
+            {
+              "id": "artist_8bf87c33-f669-5a85-a315-654f79fb895b",
+              "name": "Sæglópur 日本",
+              "coverArt": "artist_8bf87c33-f669-5a85-a315-654f79fb895b",
+              "albumCount": 1,
+              "userRating": 0,
+              "artistImageUrl": "URL"
+            }
+          ],
+          "displayAlbumArtist": "Sæglópur 日本",
+          "contributors": [],
+          "replayGain": {},
+          "averageRating": 0,
+          "playerId": 0,
+          "track": 2,
+          "genre": "Post-Rock"
+        }
+      ]
+    }
+  }
+}

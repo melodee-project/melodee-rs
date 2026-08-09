@@ -1,0 +1,43 @@
+{
+  "subsonic-response": {
+    "status": "ok",
+    "version": "1.16.1",
+    "type": "Melodee",
+    "serverVersion": "<volatile>",
+    "openSubsonic": true,
+    "artist": {
+      "id": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+      "name": "Aurora Fields",
+      "albumCount": 1,
+      "userRating": 5,
+      "averageRating": 0.0,
+      "coverArt": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+      "artistImageUrl": "http://127.0.0.1:5157/images/artist_813c11e0-61cd-5204-ae0f-ce68386eacec/large",
+      "userStarred": "2026-08-07T00:00:00Z",
+      "album": [
+        {
+          "id": "album_69d97699-74c5-5403-878f-87f42d9d9fbb",
+          "album": "Northern Lights",
+          "title": "Northern Lights",
+          "name": "Northern Lights",
+          "coverArt": "album_69d97699-74c5-5403-878f-87f42d9d9fbb",
+          "songCount": 3,
+          "created": "2026-01-02T00:00:00Z",
+          "duration": 7,
+          "playedCount": 12,
+          "artistId": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+          "artist": "Aurora Fields",
+          "year": 2021,
+          "userRating": 5,
+          "genres": [
+            "Ambient",
+            "Electronic"
+          ],
+          "genre": "Ambient",
+          "parent": "library_c598e196-db6f-582e-b110-1726c138bd4f"
+        }
+      ],
+      "starred": "2026-08-07T00:00:00Z"
+    }
+  }
+}

@@ -8,7 +8,9 @@
       "design/evidence/phase-0/native-api-v1-capture.md",
       "design/evidence/phase-0/native-client-route-inventory.md"
     ],
-    "tests": ["tests/python/test_native_v1_capture.py"],
+    "tests": [
+      "tests/python/test_native_v1_capture.py"
+    ],
     "note": "Native v1 surface captured (Issue 5). OpenSubsonic and Jellyfin captures are Issues 6-7."
   },
   "PRD-API-M1-004": {
@@ -17,7 +19,9 @@
       "compatibility/fixtures/catalog-v1.json (deterministic fixture UUID namespace)",
       "compatibility/melodee-api-v1/golden/ (stable public IDs across reseeds)"
     ],
-    "tests": ["tests/python/test_native_v1_capture.py (GoldenFixtureTests)"],
+    "tests": [
+      "tests/python/test_native_v1_capture.py (GoldenFixtureTests)"
+    ],
     "note": "Public-ID shapes and stability evidenced; migration-time preservation remains Phase 11 work."
   },
   "PRD-API-M1-005": {
@@ -25,7 +29,10 @@
     "implementation": [
       "compatibility/scenarios/native-*.json (method/path, params, casing, null-vs-omitted, status codes, envelopes, pagination, ordering, URLs, headers captured for the critical path)"
     ],
-    "tests": ["tests/python/test_native_v1_capture.py", "scripts/compare_captures.py"],
+    "tests": [
+      "tests/python/test_native_v1_capture.py",
+      "scripts/compare_captures.py"
+    ],
     "note": "Critical path covered; full-surface coverage tracked by route-inventory.json parityStatus."
   },
   "PRD-API-M1-006": {
@@ -33,7 +40,9 @@
     "implementation": [
       "compatibility/melodee-api-v1/contracts/route-inventory.json (all 202 routes classified; 35 excluded-from-build)"
     ],
-    "tests": ["tests/python/test_native_v1_capture.py (RouteInventoryTests)"],
+    "tests": [
+      "tests/python/test_native_v1_capture.py (RouteInventoryTests)"
+    ],
     "note": "Parity matrix exists; client-used-uncaptured routes are the later-phase backlog."
   },
   "PRD-STREAM-001": {
@@ -42,14 +51,18 @@
       "compatibility/melodee-api-v1/golden/native-stream/ (URL shape, HMAC semantics, 200/206/400/401/302 matrix)",
       "design/evidence/phase-0/native-api-v1-capture.md section 4"
     ],
-    "tests": ["tests/python/test_native_v1_capture.py (test_stream_range_semantics_evidence)"]
+    "tests": [
+      "tests/python/test_native_v1_capture.py (test_stream_range_semantics_evidence)"
+    ]
   },
   "PRD-STREAM-002": {
     "status": "in-progress",
     "implementation": [
       "compatibility/melodee-api-v1/golden/native-stream/ (direct play, ranges, content type/length)"
     ],
-    "tests": ["tests/python/test_native_v1_capture.py"],
+    "tests": [
+      "tests/python/test_native_v1_capture.py"
+    ],
     "note": "Range/seek captured. Transcoding paths, concurrent playback, and disconnect handling remain (performance phase / Issue 9)."
   },
   "PRD-STREAM-003": {
@@ -59,5 +72,313 @@
     ],
     "tests": [],
     "note": "Release gate; cannot run until the Rust server exists. Client-side prerequisites inventoried."
+  },
+  "PRD-API-OS-001": {
+    "status": "captured",
+    "implementation": [
+      "compatibility/opensubsonic/contracts/route-inventory.json (164 routes; plain and .view forms)"
+    ],
+    "tests": [
+      "tests/python/test_opensubsonic_capture.py"
+    ]
+  },
+  "PRD-API-OS-002": {
+    "status": "captured",
+    "implementation": [
+      "compatibility/opensubsonic/golden/system/ (JSON/XML/JSONP envelope evidence incl. quirks)"
+    ],
+    "tests": [
+      "tests/python/test_opensubsonic_capture.py (SystemAndFormatTests)"
+    ]
+  },
+  "PRD-API-OS-003": {
+    "status": "captured",
+    "implementation": [
+      "compatibility/opensubsonic/golden/auth/ (token/salt, plain+enc password, JWT, apiKey, form POST, bypass)",
+      "design/evidence/phase-0/opensubsonic-capture.md section 3"
+    ],
+    "tests": [
+      "tests/python/test_opensubsonic_capture.py (AuthEvidenceTests)"
+    ]
+  },
+  "PRD-API-OS-004": {
+    "status": "captured",
+    "implementation": [
+      "compatibility/opensubsonic/golden/ (browse, lists, media, annotation, playlists, community)",
+      "compatibility/opensubsonic/contracts/route-inventory.json (81 endpoints classified)"
+    ],
+    "tests": [
+      "tests/python/test_opensubsonic_capture.py"
+    ],
+    "note": "All current music-relevant groups have golden scenarios; conditional groups recorded with prerequisites."
+  },
+  "PRD-API-OS-005": {
+    "status": "captured",
+    "implementation": [
+      "compatibility/opensubsonic/golden/negative/ (all 410/501 routes automated)"
+    ],
+    "tests": [
+      "tests/python/test_opensubsonic_capture.py (NegativeAndConditionalTests)"
+    ]
+  },
+  "PRD-API-OS-006": {
+    "status": "captured",
+    "implementation": [
+      "compatibility/opensubsonic/golden/system/os-getopensubsonicextensions-* (advertised set incl. two non-functional entries)"
+    ],
+    "tests": [
+      "tests/python/test_opensubsonic_capture.py (test_extensions_advertised)"
+    ],
+    "note": "apiKeyAuthentication and transcodeOffset are advertised but non-functional at baseline — preserving the advertisement while not the false claim needs a product decision in Phase 8."
+  },
+  "PRD-API-OS-007": {
+    "status": "in-progress",
+    "implementation": [
+      "design/evidence/phase-0/opensubsonic-capture.md (server-side evidence for login/browse/search/stream+seek/playlists/download/star)"
+    ],
+    "tests": [
+      "tests/python/test_opensubsonic_capture.py"
+    ],
+    "note": "Real third-party OpenSubsonic client smoke (PRD-STREAM-003 analog) deferred to Phase 8 client-verification work; server-side contract fully captured."
+  },
+  "PRD-API-JF-001": {
+    "status": "captured",
+    "implementation": [
+      "compatibility/jellyfin/contracts/route-inventory.json (60 routes, music-focused subset)",
+      "compatibility/jellyfin/golden/"
+    ],
+    "tests": [
+      "tests/python/test_jellyfin_capture.py"
+    ]
+  },
+  "PRD-API-JF-002": {
+    "status": "captured",
+    "implementation": [
+      "compatibility/jellyfin/golden/discovery/ (middleware allowlist, marker triggers, root probe, fallthrough)",
+      "design/evidence/phase-0/jellyfin-capture.md section 1"
+    ],
+    "tests": [
+      "tests/python/test_jellyfin_capture.py (RoutingEvidenceTests)"
+    ]
+  },
+  "PRD-API-JF-003": {
+    "status": "captured",
+    "implementation": [
+      "compatibility/jellyfin/golden/auth/ (issuance, all 5 token transports, failures, logout revocation)"
+    ],
+    "tests": [
+      "tests/python/test_jellyfin_capture.py (AuthEvidenceTests)"
+    ]
+  },
+  "PRD-API-JF-004": {
+    "status": "captured",
+    "implementation": [
+      "compatibility/jellyfin/golden/{browse,playback,userstate,playlists,images,extra}/",
+      "compatibility/jellyfin/contracts/route-inventory.json (100% scenario coverage)"
+    ],
+    "tests": [
+      "tests/python/test_jellyfin_capture.py"
+    ]
+  },
+  "PRD-API-JF-005": {
+    "status": "captured",
+    "implementation": [
+      "compatibility/jellyfin/golden/discovery/ (unsupported video/TV/books scope: plain 404, no simulation)"
+    ],
+    "tests": [
+      "tests/python/test_jellyfin_capture.py (test_unsupported_scope_is_404)"
+    ]
+  },
+  "PRD-API-JF-006": {
+    "status": "in-progress",
+    "implementation": [
+      "design/evidence/phase-0/jellyfin-capture.md section 9 (documented music-client smoke path covered server-side)"
+    ],
+    "tests": [],
+    "note": "Real Finamp/Feishin/Streamyfin client smoke remains a Phase 8 verification activity; server-side contract for the documented workflow is fully captured."
+  },
+  "PRD-MEDIA-001": {
+    "status": "captured",
+    "implementation": [
+      "compatibility/media/baseline.json + cases/ (31 synthetic cases: formats, metadata, conversion, artwork, validation, classification, failures)",
+      "scripts/generate_media_corpus.py",
+      "scripts/capture_media_baseline.py",
+      "design/evidence/phase-0/media-baseline.md"
+    ],
+    "tests": [
+      "tests/python/test_media_baseline.py"
+    ]
+  },
+  "PRD-MEDIA-002": {
+    "status": "captured",
+    "implementation": [
+      "compatibility/media/baseline.json environment.seededSettings (conversion.* measured: MP3 384k VBR-q4 48kHz; transcoding.* templates are malformed/unconsumed)",
+      "design/evidence/phase-0/media-baseline.md section 4 (legacy behavior vs new Rust canonical policy separated)"
+    ],
+    "tests": [
+      "tests/python/test_media_baseline.py (test_seeded_conversion_settings)"
+    ],
+    "note": "Legacy ingest behavior captured. The canonical VBR-MP3 canonical-storage policy is a NEW Rust product requirement — see media-baseline.md section 4 for the explicit CURRENT-vs-NEW separation. Re-encoding media already in canonical form is also new."
+  },
+  "PRD-MEDIA-003": {
+    "status": "captured",
+    "implementation": [
+      "design/evidence/phase-0/media-baseline.md section 12 (eight classified legacy deficiencies incl. F1 metadata-container gate, F2 destructive same-size dedupe, no resumability, no crash-safety)"
+    ],
+    "tests": [
+      "tests/python/test_media_baseline.py (test_metadata_container_gate, test_same_size_deletion_bug)"
+    ]
+  },
+  "PRD-INGEST-001": {
+    "status": "in-progress",
+    "implementation": [
+      "design/evidence/phase-0/media-baseline.md sections 2-9 (current pipeline stages, validation reasons, artist-resolution attempt order, destructive-rule inventory)",
+      "compatibility/media/baseline.json"
+    ],
+    "tests": [
+      "tests/python/test_media_baseline.py"
+    ],
+    "note": "Observed current behavior documented end-to-end. Actual Phase 1 observability implementation begins in Phase 1A."
+  },
+  "PRD-INGEST-002": {
+    "status": "captured",
+    "implementation": [
+      "design/evidence/phase-0/media-baseline.md section 10 (validation reasons categorized: structural vs metadata vs enrichment vs artwork vs policy)"
+    ],
+    "tests": [
+      "tests/python/test_media_baseline.py"
+    ]
+  },
+  "PRD-INGEST-003": {
+    "status": "in-progress",
+    "implementation": [
+      "design/evidence/phase-0/media-baseline.md sections 2, 8, 11, 12 (F1/F2 documented as the primary determinism/idempotency hazards)"
+    ],
+    "tests": [
+      "tests/python/test_media_baseline.py"
+    ],
+    "note": "The requirements themselves govern Phase 2 implementation; Phase 0 evidence identifies the measured hazards they must fix."
+  },
+  "PRD-INGEST-004": {
+    "status": "in-progress",
+    "implementation": [
+      "design/evidence/phase-0/media-baseline.md section 9 (sidecar behavior incl. lyrics plugin gating)"
+    ],
+    "tests": [],
+    "note": "Lyrics/missing-media/external-ID new behaviors are Phase 2 work; current sidecar behavior captured."
+  },
+  "PRD-INGEST-005": {
+    "status": "in-progress",
+    "implementation": [
+      "design/evidence/phase-0/media-baseline.md section 11 (interruption/non-atomicity evidence)"
+    ],
+    "tests": [],
+    "note": "Durable work-item claiming/retries is Phase 1A; baseline proves the need (no transactional semantics anywhere in the legacy pipeline)."
+  },
+  "PRD-PERF-001": {
+    "status": "in-progress",
+    "implementation": [
+      "compatibility/benchmarks/ (datasets, results with environment metadata, SUMMARY.md)",
+      "scripts/generate_benchmark_dataset.py",
+      "scripts/run_benchmarks.py",
+      "design/evidence/phase-0/scale-baseline.md"
+    ],
+    "tests": [
+      "tests/python/test_benchmark_baseline.py"
+    ],
+    "note": "Legacy reference benchmarks exist and are repeatable. Rust-side benchmark suites continue in Phases 2-8."
+  },
+  "PRD-PERF-002": {
+    "status": "captured",
+    "implementation": [
+      "scripts/generate_benchmark_dataset.py (three deterministic SQL tiers)",
+      "scripts/generate_media_corpus.py (deterministic ffmpeg media corpus)"
+    ],
+    "tests": [
+      "tests/python/test_benchmark_baseline.py",
+      "tests/python/test_media_baseline.py"
+    ]
+  },
+  "PRD-PERF-003": {
+    "status": "in-progress",
+    "implementation": [
+      "compatibility/benchmarks/results/ (wall-clock cold/warm, response sizes, server memory at Tier C)"
+    ],
+    "tests": [
+      "tests/python/test_benchmark_baseline.py"
+    ],
+    "note": "Wall-clock and memory captured. DB query counts and queue age require instrumentation deferred to the Rust performance suite (recorded as gap in scale-baseline.md)."
+  },
+  "PRD-PERF-004": {
+    "status": "in-progress",
+    "implementation": [
+      "design/evidence/phase-0/scale-baseline.md section 4 (per-Release pipeline cost shape ~3s; non-transactional restart behavior evidence)"
+    ],
+    "tests": [],
+    "note": "The 200-Release crash/restart benchmark targets the Rust pipeline (Phase 1A+); legacy per-Release cost shape and durability hazards are baselined."
+  },
+  "PRD-PERF-005": {
+    "status": "in-progress",
+    "implementation": [
+      "design/evidence/phase-0/scale-baseline.md sections 3, 5 (bottlenecks + proposed budgets labeled requirement-vs-proposal)"
+    ],
+    "tests": [
+      "tests/python/test_benchmark_baseline.py"
+    ]
+  },
+  "PRD-TEST-001": {
+    "status": "in-progress",
+    "implementation": [
+      "compatibility/scenarios/*.json (22 scenario files, declarative flows)",
+      "scripts/capture_baseline.py + scripts/compare_captures.py (deterministic A/B comparison)",
+      "compatibility/*/golden/ (424 promoted captures with provenance)"
+    ],
+    "tests": [
+      "tests/python/test_native_v1_capture.py",
+      "tests/python/test_opensubsonic_capture.py",
+      "tests/python/test_jellyfin_capture.py",
+      "tests/python/test_media_baseline.py",
+      "tests/python/test_benchmark_baseline.py"
+    ],
+    "note": "Golden fixture infrastructure exists for all three API surfaces + media. Rust-side differential suites activate in Phases 2-8."
+  },
+  "PRD-TEST-002": {
+    "status": "in-progress",
+    "implementation": [
+      "compatibility/melodee-api-v1/golden/ + opensubsonic/golden/ + jellyfin/golden/ (normalized golden request/response fixtures incl. negative paths)"
+    ],
+    "tests": [
+      "tests/python/test_native_v1_capture.py (GoldenFixtureTests)",
+      "tests/python/test_opensubsonic_capture.py",
+      "tests/python/test_jellyfin_capture.py"
+    ]
+  },
+  "PRD-TEST-005": {
+    "status": "in-progress",
+    "implementation": [
+      "compatibility/media/ (31-case synthetic corpus incl. malformed tags, corrupt/truncated audio, invalid artwork, duplicate track numbers)"
+    ],
+    "tests": [
+      "tests/python/test_media_baseline.py"
+    ]
+  },
+  "PRD-TEST-006": {
+    "status": "in-progress",
+    "implementation": [
+      "design/evidence/phase-0/media-baseline.md section 11 (interruption/non-atomicity evidence)",
+      "compatibility/melodee-api-v1/golden/native-auth/ (refresh replay/rotation fault evidence)"
+    ],
+    "tests": [],
+    "note": "Crash/retry/idempotency fault-injection harness targets the Rust pipeline (Phase 1A+); legacy fault behavior baselined."
+  },
+  "PRD-TEST-007": {
+    "status": "in-progress",
+    "implementation": [
+      "compatibility/benchmarks/ (3 tiers, environment metadata, machine-readable results)",
+      "design/evidence/phase-0/scale-baseline.md (budgets labeled requirement-vs-proposal)"
+    ],
+    "tests": [
+      "tests/python/test_benchmark_baseline.py"
+    ]
   }
 }

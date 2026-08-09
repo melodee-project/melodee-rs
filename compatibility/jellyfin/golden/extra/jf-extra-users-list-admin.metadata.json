@@ -1,0 +1,34 @@
+{
+  "name": "jf-extra/users-list-admin",
+  "surface": "jellyfin",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/Users",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "MediaBrowser <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "jf-extra-users-list-admin.json",
+    "sha256": "04c3290487a06118e9e4039c6e5b1b9ebb9a86deff57bf1644cea3710c1da564",
+    "bytes": 1386
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$[*].LastLoginDate",
+      "$[*].LastActivityDate",
+      "$[*].Configuration"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

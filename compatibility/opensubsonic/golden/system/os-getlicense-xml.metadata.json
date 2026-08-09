@@ -1,0 +1,40 @@
+{
+  "name": "os-getlicense-xml",
+  "surface": "opensubsonic",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/rest/getLicense.view?v=1.16.1&c=melodee-rs-phase0",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-length": "310",
+      "content-type": "application/xml",
+      "x-total-count": "0"
+    },
+    "bodyFile": "os-getlicense-xml.xml",
+    "sha256": "42e634fd186bec4b4593432a66479adb0b87a44c6ba15e8a17e9d8245725b651",
+    "bytes": 284
+  },
+  "normalize": {
+    "maskRegex": [
+      {
+        "pattern": "serverVersion=\"[^\"]*\"",
+        "replace": "serverVersion=\"<volatile>\""
+      },
+      {
+        "pattern": "(licenseExpires|trialExpires|email)=\"[^\"]*\"",
+        "replace": "\\1=\"<volatile>\""
+      }
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

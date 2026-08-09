@@ -1,0 +1,144 @@
+{
+  "subsonic-response": {
+    "status": "ok",
+    "version": "1.16.1",
+    "type": "Melodee",
+    "serverVersion": "<volatile>",
+    "openSubsonic": true,
+    "starred": {
+      "artist": [
+        {
+          "id": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+          "name": "Aurora Fields",
+          "albumCount": 1,
+          "userRating": 5,
+          "averageRating": 0.0,
+          "coverArt": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+          "artistImageUrl": "/images/813c11e0-61cd-5204-ae0f-ce68386eacec/medium",
+          "userStarred": "2026-08-07T00:00:00Z",
+          "starred": "2026-08-07T00:00:00Z"
+        }
+      ],
+      "album": [
+        {
+          "id": "album_69d97699-74c5-5403-878f-87f42d9d9fbb",
+          "parent": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+          "isDir": true,
+          "title": "Northern Lights",
+          "album": "Northern Lights",
+          "artist": "Aurora Fields",
+          "year": 2021,
+          "coverArt": "album_69d97699-74c5-5403-878f-87f42d9d9fbb",
+          "starred": "",
+          "duration": 8,
+          "playCount": 12,
+          "played": "2026-08-06T12:00:00Z",
+          "created": "2026-01-02T00:00:00Z",
+          "albumId": "album_69d97699-74c5-5403-878f-87f42d9d9fbb",
+          "artistId": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+          "type": "music",
+          "mediaType": "album",
+          "isVideo": false,
+          "sortName": "Northern Lights",
+          "genres": [
+            {
+              "value": "Ambient",
+              "songCount": 0,
+              "albumCount": 0
+            },
+            {
+              "value": "Electronic",
+              "songCount": 0,
+              "albumCount": 0
+            }
+          ],
+          "artists": [],
+          "displayArtist": "Aurora Fields",
+          "albumArtists": [
+            {
+              "id": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+              "name": "Aurora Fields",
+              "coverArt": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+              "albumCount": 1,
+              "userRating": 0,
+              "artistImageUrl": "URL",
+              "sortName": "Aurora Fields"
+            }
+          ],
+          "displayAlbumArtist": "Aurora Fields",
+          "contributors": [],
+          "replayGain": {},
+          "averageRating": 0,
+          "userRating": 5,
+          "playerId": 0,
+          "genre": "Ambient"
+        }
+      ],
+      "song": [
+        {
+          "id": "song_ea26fc59-a545-51c2-94c4-702e1f97b80a",
+          "parent": "album_69d97699-74c5-5403-878f-87f42d9d9fbb",
+          "isDir": false,
+          "title": "Polar Veil",
+          "album": "Northern Lights",
+          "artist": "Aurora Fields",
+          "song": 2,
+          "year": 2021,
+          "coverArt": "song_ea26fc59-a545-51c2-94c4-702e1f97b80a",
+          "size": 264644,
+          "contentType": "audio/wav",
+          "suffix": ".wav",
+          "starred": "",
+          "duration": 3,
+          "bitRate": 1411,
+          "bitDepth": 16,
+          "samplingRate": 44100,
+          "path": "Northern Lights/02 - Polar Veil.wav",
+          "playCount": 4,
+          "discNumber": 1,
+          "created": "2026-01-01T00:02:02Z",
+          "albumId": "album_69d97699-74c5-5403-878f-87f42d9d9fbb",
+          "artistId": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+          "type": "music",
+          "mediaType": "song",
+          "isVideo": false,
+          "bpm": 100,
+          "sortName": "Polar Veil",
+          "genres": [
+            {
+              "value": "Ambient",
+              "songCount": 0,
+              "albumCount": 0
+            },
+            {
+              "value": "Electronic",
+              "songCount": 0,
+              "albumCount": 0
+            }
+          ],
+          "artists": [],
+          "displayArtist": "Aurora Fields",
+          "albumArtists": [
+            {
+              "id": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+              "name": "Aurora Fields",
+              "coverArt": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+              "albumCount": 1,
+              "userRating": 0,
+              "artistImageUrl": "URL",
+              "sortName": "Aurora Fields"
+            }
+          ],
+          "displayAlbumArtist": "Aurora Fields",
+          "contributors": [],
+          "replayGain": {},
+          "averageRating": 0,
+          "userRating": 5,
+          "playerId": 0,
+          "track": 2,
+          "genre": "Ambient"
+        }
+      ]
+    }
+  }
+}

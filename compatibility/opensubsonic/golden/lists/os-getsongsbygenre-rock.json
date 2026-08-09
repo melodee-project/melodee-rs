@@ -1,0 +1,125 @@
+{
+  "subsonic-response": {
+    "status": "ok",
+    "version": "1.16.1",
+    "type": "Melodee",
+    "serverVersion": "<volatile>",
+    "openSubsonic": true,
+    "songsByGenre": {
+      "song": [
+        {
+          "id": "song_c418d383-13f5-598d-94a8-c15e5d2df348",
+          "parent": "album_263ebba5-739c-5cb9-987f-b2d2bbfbd0ad",
+          "isDir": false,
+          "title": "Sandstone",
+          "album": "Desert Rock Radio",
+          "artist": "Dune",
+          "song": 1,
+          "year": 2019,
+          "coverArt": "song_c418d383-13f5-598d-94a8-c15e5d2df348",
+          "size": 211724,
+          "contentType": "audio/wav",
+          "suffix": ".wav",
+          "duration": 2,
+          "bitRate": 1411,
+          "bitDepth": 16,
+          "samplingRate": 44100,
+          "path": "Desert Rock Radio/01 - Sandstone.wav",
+          "playCount": 0,
+          "discNumber": 1,
+          "created": "2026-01-01T00:04:04Z",
+          "albumId": "album_263ebba5-739c-5cb9-987f-b2d2bbfbd0ad",
+          "artistId": "artist_5bf951d5-7afe-5c50-8941-145b7095902b",
+          "type": "music",
+          "mediaType": "song",
+          "isVideo": false,
+          "bpm": 120,
+          "sortName": "Sandstone",
+          "genres": [
+            {
+              "value": "Rock",
+              "songCount": 0,
+              "albumCount": 0
+            }
+          ],
+          "artists": [],
+          "displayArtist": "Dune",
+          "albumArtists": [
+            {
+              "id": "artist_5bf951d5-7afe-5c50-8941-145b7095902b",
+              "name": "Dune",
+              "coverArt": "artist_5bf951d5-7afe-5c50-8941-145b7095902b",
+              "albumCount": 1,
+              "userRating": 0,
+              "artistImageUrl": "URL",
+              "sortName": "Dune"
+            }
+          ],
+          "displayAlbumArtist": "Dune",
+          "contributors": [],
+          "replayGain": {},
+          "averageRating": 0,
+          "playerId": 0,
+          "track": 1,
+          "genre": "Rock"
+        },
+        {
+          "id": "song_3e185e31-88b5-519b-b830-1ae915e80ba5",
+          "parent": "album_263ebba5-739c-5cb9-987f-b2d2bbfbd0ad",
+          "isDir": false,
+          "title": "Caravan",
+          "album": "Desert Rock Radio",
+          "artist": "Dune",
+          "song": 2,
+          "year": 2019,
+          "coverArt": "song_3e185e31-88b5-519b-b830-1ae915e80ba5",
+          "size": 229364,
+          "contentType": "audio/wav",
+          "suffix": ".wav",
+          "duration": 3,
+          "bitRate": 1411,
+          "bitDepth": 16,
+          "samplingRate": 44100,
+          "path": "Desert Rock Radio/02 - Caravan.wav",
+          "playCount": 0,
+          "discNumber": 1,
+          "created": "2026-01-01T00:05:05Z",
+          "albumId": "album_263ebba5-739c-5cb9-987f-b2d2bbfbd0ad",
+          "artistId": "artist_5bf951d5-7afe-5c50-8941-145b7095902b",
+          "type": "music",
+          "mediaType": "song",
+          "isVideo": false,
+          "bpm": 118,
+          "sortName": "Caravan",
+          "genres": [
+            {
+              "value": "Rock",
+              "songCount": 0,
+              "albumCount": 0
+            }
+          ],
+          "artists": [],
+          "displayArtist": "Dune",
+          "albumArtists": [
+            {
+              "id": "artist_5bf951d5-7afe-5c50-8941-145b7095902b",
+              "name": "Dune",
+              "coverArt": "artist_5bf951d5-7afe-5c50-8941-145b7095902b",
+              "albumCount": 1,
+              "userRating": 0,
+              "artistImageUrl": "URL",
+              "sortName": "Dune"
+            }
+          ],
+          "displayAlbumArtist": "Dune",
+          "contributors": [],
+          "replayGain": {},
+          "averageRating": 0,
+          "playerId": 0,
+          "track": 2,
+          "genre": "Rock"
+        }
+      ]
+    }
+  }
+}

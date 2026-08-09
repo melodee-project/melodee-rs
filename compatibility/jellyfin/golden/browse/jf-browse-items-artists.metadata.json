@@ -1,0 +1,28 @@
+{
+  "name": "jf-browse/items-artists",
+  "surface": "jellyfin",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/Items?includeItemTypes=MusicArtist&startIndex=0&limit=5",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "MediaBrowser <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "jf-browse-items-artists.json",
+    "sha256": "8f6ae2a3089e78224de9ea7c7bc3ea77a5c7902e061efe84c5c23bd9342fccd5",
+    "bytes": 7950
+  },
+  "normalize": {},
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

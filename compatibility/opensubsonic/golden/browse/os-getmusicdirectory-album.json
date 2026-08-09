@@ -1,0 +1,245 @@
+{
+  "subsonic-response": {
+    "status": "ok",
+    "version": "1.16.1",
+    "type": "Melodee",
+    "serverVersion": "<volatile>",
+    "openSubsonic": true,
+    "directory": {
+      "id": "album_645680d3-704a-5b83-a734-42a3fa88c3ed",
+      "parent": "album_645680d3-704a-5b83-a734-42a3fa88c3ed",
+      "name": "Anthology of Echoes",
+      "starred": "",
+      "averageRating": 0.0,
+      "playCount": 0,
+      "played": "2026-08-05T12:00:00Z",
+      "child": [
+        {
+          "id": "song_0892324b-d44d-5bf5-a46c-8fe22ce5a38d",
+          "parent": "album_645680d3-704a-5b83-a734-42a3fa88c3ed",
+          "isDir": false,
+          "title": "Gatefold",
+          "album": "Anthology of Echoes",
+          "artist": "The Obsidian Collective",
+          "song": 101,
+          "year": 2018,
+          "coverArt": "song_0892324b-d44d-5bf5-a46c-8fe22ce5a38d",
+          "size": 202902,
+          "contentType": "audio/wav",
+          "suffix": ".wav",
+          "duration": 2,
+          "bitRate": 1411,
+          "bitDepth": 16,
+          "samplingRate": 44100,
+          "path": "Anthology of Echoes/101 - Gatefold.wav",
+          "playCount": 0,
+          "discNumber": 1,
+          "created": "2026-01-01T00:15:15Z",
+          "albumId": "album_645680d3-704a-5b83-a734-42a3fa88c3ed",
+          "artistId": "artist_0bdebd7d-8597-5891-b6e4-88f7762370b9",
+          "type": "music",
+          "mediaType": "song",
+          "isVideo": false,
+          "bpm": 60,
+          "sortName": "Gatefold",
+          "genres": [
+            {
+              "value": "Classical",
+              "songCount": 0,
+              "albumCount": 0
+            }
+          ],
+          "artists": [],
+          "displayArtist": "The Obsidian Collective",
+          "albumArtists": [
+            {
+              "id": "artist_0bdebd7d-8597-5891-b6e4-88f7762370b9",
+              "name": "The Obsidian Collective",
+              "coverArt": "artist_0bdebd7d-8597-5891-b6e4-88f7762370b9",
+              "albumCount": 1,
+              "userRating": 0,
+              "artistImageUrl": "URL",
+              "sortName": "Obsidian Collective, The"
+            }
+          ],
+          "displayAlbumArtist": "The Obsidian Collective",
+          "contributors": [],
+          "replayGain": {},
+          "averageRating": 0,
+          "playerId": 0,
+          "track": 101,
+          "genre": "Classical"
+        },
+        {
+          "id": "song_e952d1c4-9de7-51cb-9954-83185eece2ba",
+          "parent": "album_645680d3-704a-5b83-a734-42a3fa88c3ed",
+          "isDir": false,
+          "title": "Marble",
+          "album": "Anthology of Echoes",
+          "artist": "The Obsidian Collective",
+          "song": 102,
+          "year": 2018,
+          "coverArt": "song_e952d1c4-9de7-51cb-9954-83185eece2ba",
+          "size": 220544,
+          "contentType": "audio/wav",
+          "suffix": ".wav",
+          "duration": 2,
+          "bitRate": 1411,
+          "bitDepth": 16,
+          "samplingRate": 44100,
+          "path": "Anthology of Echoes/102 - Marble.wav",
+          "playCount": 0,
+          "discNumber": 1,
+          "created": "2026-01-01T00:16:16Z",
+          "albumId": "album_645680d3-704a-5b83-a734-42a3fa88c3ed",
+          "artistId": "artist_0bdebd7d-8597-5891-b6e4-88f7762370b9",
+          "type": "music",
+          "mediaType": "song",
+          "isVideo": false,
+          "bpm": 63,
+          "sortName": "Marble",
+          "genres": [
+            {
+              "value": "Classical",
+              "songCount": 0,
+              "albumCount": 0
+            }
+          ],
+          "artists": [],
+          "displayArtist": "The Obsidian Collective",
+          "albumArtists": [
+            {
+              "id": "artist_0bdebd7d-8597-5891-b6e4-88f7762370b9",
+              "name": "The Obsidian Collective",
+              "coverArt": "artist_0bdebd7d-8597-5891-b6e4-88f7762370b9",
+              "albumCount": 1,
+              "userRating": 0,
+              "artistImageUrl": "URL",
+              "sortName": "Obsidian Collective, The"
+            }
+          ],
+          "displayAlbumArtist": "The Obsidian Collective",
+          "contributors": [],
+          "replayGain": {},
+          "averageRating": 0,
+          "playerId": 0,
+          "track": 102,
+          "genre": "Classical"
+        },
+        {
+          "id": "song_a39f05c4-2783-53c1-aa3c-e4e9d6a6f0a3",
+          "parent": "album_645680d3-704a-5b83-a734-42a3fa88c3ed",
+          "isDir": false,
+          "title": "Coda",
+          "album": "Anthology of Echoes",
+          "artist": "The Obsidian Collective",
+          "song": 201,
+          "year": 2018,
+          "coverArt": "song_a39f05c4-2783-53c1-aa3c-e4e9d6a6f0a3",
+          "size": 238184,
+          "contentType": "audio/wav",
+          "suffix": ".wav",
+          "duration": 3,
+          "bitRate": 1411,
+          "bitDepth": 16,
+          "samplingRate": 44100,
+          "path": "Anthology of Echoes/201 - Coda.wav",
+          "playCount": 9,
+          "discNumber": 1,
+          "created": "2026-01-01T00:17:17Z",
+          "albumId": "album_645680d3-704a-5b83-a734-42a3fa88c3ed",
+          "artistId": "artist_0bdebd7d-8597-5891-b6e4-88f7762370b9",
+          "type": "music",
+          "mediaType": "song",
+          "isVideo": false,
+          "bpm": 58,
+          "sortName": "Coda",
+          "genres": [
+            {
+              "value": "Classical",
+              "songCount": 0,
+              "albumCount": 0
+            }
+          ],
+          "artists": [],
+          "displayArtist": "The Obsidian Collective",
+          "albumArtists": [
+            {
+              "id": "artist_0bdebd7d-8597-5891-b6e4-88f7762370b9",
+              "name": "The Obsidian Collective",
+              "coverArt": "artist_0bdebd7d-8597-5891-b6e4-88f7762370b9",
+              "albumCount": 1,
+              "userRating": 0,
+              "artistImageUrl": "URL",
+              "sortName": "Obsidian Collective, The"
+            }
+          ],
+          "displayAlbumArtist": "The Obsidian Collective",
+          "contributors": [],
+          "replayGain": {},
+          "averageRating": 0,
+          "userRating": 4,
+          "playerId": 0,
+          "track": 201,
+          "genre": "Classical"
+        },
+        {
+          "id": "song_c28e96d1-04d4-5e6a-a984-1544a9a5ebd6",
+          "parent": "album_645680d3-704a-5b83-a734-42a3fa88c3ed",
+          "isDir": false,
+          "title": "Recessional",
+          "album": "Anthology of Echoes",
+          "artist": "The Obsidian Collective",
+          "song": 202,
+          "year": 2018,
+          "coverArt": "song_c28e96d1-04d4-5e6a-a984-1544a9a5ebd6",
+          "size": 185264,
+          "contentType": "audio/wav",
+          "suffix": ".wav",
+          "duration": 2,
+          "bitRate": 1411,
+          "bitDepth": 16,
+          "samplingRate": 44100,
+          "path": "Anthology of Echoes/202 - Recessional.wav",
+          "playCount": 0,
+          "discNumber": 1,
+          "created": "2026-01-01T00:18:18Z",
+          "albumId": "album_645680d3-704a-5b83-a734-42a3fa88c3ed",
+          "artistId": "artist_0bdebd7d-8597-5891-b6e4-88f7762370b9",
+          "type": "music",
+          "mediaType": "song",
+          "isVideo": false,
+          "bpm": 55,
+          "sortName": "Recessional",
+          "genres": [
+            {
+              "value": "Classical",
+              "songCount": 0,
+              "albumCount": 0
+            }
+          ],
+          "artists": [],
+          "displayArtist": "The Obsidian Collective",
+          "albumArtists": [
+            {
+              "id": "artist_0bdebd7d-8597-5891-b6e4-88f7762370b9",
+              "name": "The Obsidian Collective",
+              "coverArt": "artist_0bdebd7d-8597-5891-b6e4-88f7762370b9",
+              "albumCount": 1,
+              "userRating": 0,
+              "artistImageUrl": "URL",
+              "sortName": "Obsidian Collective, The"
+            }
+          ],
+          "displayAlbumArtist": "The Obsidian Collective",
+          "contributors": [],
+          "replayGain": {},
+          "averageRating": 0,
+          "playerId": 0,
+          "track": 202,
+          "genre": "Classical"
+        }
+      ]
+    }
+  }
+}

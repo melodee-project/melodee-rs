@@ -1,0 +1,149 @@
+{
+  "subsonic-response": {
+    "status": "ok",
+    "version": "1.16.1",
+    "type": "Melodee",
+    "serverVersion": "<volatile>",
+    "openSubsonic": true,
+    "indexes": {
+      "ignoredArticles": "THE|EL|LA|LOS|LAS|LE|LES|OS|AS|O|A",
+      "lastModified": "",
+      "shortcut": [],
+      "index": [
+        {
+          "name": "A",
+          "artist": [
+            {
+              "id": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+              "name": "Aurora Fields",
+              "albumCount": 1,
+              "userRating": 5,
+              "averageRating": 0.0,
+              "coverArt": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+              "artistImageUrl": "http://127.0.0.1:5157/images/artist_813c11e0-61cd-5204-ae0f-ce68386eacec/large",
+              "userStarred": "2026-08-07T00:00:00Z",
+              "starred": "2026-08-07T00:00:00Z"
+            }
+          ]
+        },
+        {
+          "name": "B",
+          "artist": [
+            {
+              "id": "artist_f993419e-f96f-5383-9c60-7f075c806943",
+              "name": "Nora Beacon",
+              "albumCount": 1,
+              "userRating": 0,
+              "averageRating": 0.0,
+              "coverArt": "artist_f993419e-f96f-5383-9c60-7f075c806943",
+              "artistImageUrl": "http://127.0.0.1:5157/images/artist_f993419e-f96f-5383-9c60-7f075c806943/large"
+            }
+          ]
+        },
+        {
+          "name": "D",
+          "artist": [
+            {
+              "id": "artist_5bf951d5-7afe-5c50-8941-145b7095902b",
+              "name": "Dune",
+              "albumCount": 1,
+              "userRating": 0,
+              "averageRating": 0.0,
+              "coverArt": "artist_5bf951d5-7afe-5c50-8941-145b7095902b",
+              "artistImageUrl": "http://127.0.0.1:5157/images/artist_5bf951d5-7afe-5c50-8941-145b7095902b/large"
+            },
+            {
+              "id": "artist_503f045f-1bd6-5ea7-9e32-14632344680c",
+              "name": "Düné",
+              "albumCount": 1,
+              "userRating": 0,
+              "averageRating": 0.0,
+              "coverArt": "artist_503f045f-1bd6-5ea7-9e32-14632344680c",
+              "artistImageUrl": "http://127.0.0.1:5157/images/artist_503f045f-1bd6-5ea7-9e32-14632344680c/large"
+            }
+          ]
+        },
+        {
+          "name": "G",
+          "artist": [
+            {
+              "id": "artist_eebcf6e2-4cbb-5177-be07-42a2dacec3b5",
+              "name": "Guest Vocalist",
+              "albumCount": 0,
+              "userRating": 0,
+              "averageRating": 0.0,
+              "coverArt": "artist_eebcf6e2-4cbb-5177-be07-42a2dacec3b5",
+              "artistImageUrl": "http://127.0.0.1:5157/images/artist_eebcf6e2-4cbb-5177-be07-42a2dacec3b5/large"
+            }
+          ]
+        },
+        {
+          "name": "H",
+          "artist": [
+            {
+              "id": "artist_4f6a5272-9529-5a24-92a0-a3ede6a73d59",
+              "name": "The Harbour Lights",
+              "albumCount": 2,
+              "userRating": 0,
+              "averageRating": 0.0,
+              "coverArt": "artist_4f6a5272-9529-5a24-92a0-a3ede6a73d59",
+              "artistImageUrl": "http://127.0.0.1:5157/images/artist_4f6a5272-9529-5a24-92a0-a3ede6a73d59/large"
+            }
+          ]
+        },
+        {
+          "name": "O",
+          "artist": [
+            {
+              "id": "artist_0bdebd7d-8597-5891-b6e4-88f7762370b9",
+              "name": "The Obsidian Collective",
+              "albumCount": 1,
+              "userRating": 0,
+              "averageRating": 0.0,
+              "coverArt": "artist_0bdebd7d-8597-5891-b6e4-88f7762370b9",
+              "artistImageUrl": "http://127.0.0.1:5157/images/artist_0bdebd7d-8597-5891-b6e4-88f7762370b9/large"
+            }
+          ]
+        },
+        {
+          "name": "V",
+          "artist": [
+            {
+              "id": "artist_89eb2dc1-fd4c-5a57-99e5-480c96b292fc",
+              "name": "Various Artists",
+              "albumCount": 1,
+              "userRating": 0,
+              "averageRating": 0.0,
+              "coverArt": "artist_89eb2dc1-fd4c-5a57-99e5-480c96b292fc",
+              "artistImageUrl": "http://127.0.0.1:5157/images/artist_89eb2dc1-fd4c-5a57-99e5-480c96b292fc/large"
+            }
+          ]
+        },
+        {
+          "name": "",
+          "artist": [
+            {
+              "id": "artist_8bf87c33-f669-5a85-a315-654f79fb895b",
+              "name": "Sæglópur 日本",
+              "albumCount": 1,
+              "userRating": 0,
+              "averageRating": 0.0,
+              "coverArt": "artist_8bf87c33-f669-5a85-a315-654f79fb895b",
+              "artistImageUrl": "http://127.0.0.1:5157/images/artist_8bf87c33-f669-5a85-a315-654f79fb895b/large"
+            },
+            {
+              "id": "artist_708790f0-57b5-5a45-a746-dd36634e8872",
+              "name": "Cassette Ghost",
+              "albumCount": 1,
+              "userRating": 0,
+              "averageRating": 0.0,
+              "coverArt": "artist_708790f0-57b5-5a45-a746-dd36634e8872",
+              "artistImageUrl": "http://127.0.0.1:5157/images/artist_708790f0-57b5-5a45-a746-dd36634e8872/large"
+            }
+          ]
+        }
+      ],
+      "child": []
+    }
+  }
+}

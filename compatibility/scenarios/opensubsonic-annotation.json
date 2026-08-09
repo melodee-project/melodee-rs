@@ -1,0 +1,333 @@
+[
+  {
+    "schemaVersion": 2,
+    "name": "os-annotation-star",
+    "surface": "opensubsonic",
+    "flow": [
+      {
+        "name": "star-song",
+        "method": "GET",
+        "path": "/rest/star.view?f=json&v=1.16.1&c=phase0&id=song_c418d383-13f5-598d-94a8-c15e5d2df348&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion"
+          ]
+        },
+        "notes": "Star a song (single effective id per call despite docs suggesting multiples)."
+      },
+      {
+        "name": "verify-starred2-after-star",
+        "method": "GET",
+        "path": "/rest/getStarred2.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.starred2.song[*].starred"
+          ]
+        },
+        "notes": "STATE VERIFICATION: Sandstone must appear in starred2.song with a starred timestamp (volatile -> masked)."
+      },
+      {
+        "name": "unstar-song",
+        "method": "GET",
+        "path": "/rest/unstar.view?f=json&v=1.16.1&c=phase0&id=song_c418d383-13f5-598d-94a8-c15e5d2df348&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion"
+          ]
+        },
+        "notes": ""
+      },
+      {
+        "name": "verify-starred2-after-unstar",
+        "method": "GET",
+        "path": "/rest/getStarred2.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.starred2.song[*].starred"
+          ]
+        },
+        "notes": "Sandstone gone; seeded stars (Aurora Fields / Northern Lights / Polar Veil) remain."
+      },
+      {
+        "name": "star-album-via-albumid",
+        "method": "GET",
+        "path": "/rest/star.view?f=json&v=1.16.1&c=phase0&albumId=album_263ebba5-739c-5cb9-987f-b2d2bbfbd0ad&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion"
+          ]
+        },
+        "notes": "Star via albumId param (coalesced id ?? albumId ?? artistId)."
+      },
+      {
+        "name": "verify-starred2-album",
+        "method": "GET",
+        "path": "/rest/getStarred2.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.starred2.album[*].starred",
+            "$.subsonic-response.starred2.song[*].starred"
+          ]
+        },
+        "notes": "Desert Rock Radio present in starred2.album."
+      },
+      {
+        "name": "unstar-album",
+        "method": "GET",
+        "path": "/rest/unstar.view?f=json&v=1.16.1&c=phase0&albumId=album_263ebba5-739c-5cb9-987f-b2d2bbfbd0ad&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion"
+          ]
+        },
+        "notes": ""
+      },
+      {
+        "name": "star-malformed-id",
+        "method": "GET",
+        "path": "/rest/star.view?f=json&v=1.16.1&c=phase0&id=garbage&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion"
+          ]
+        },
+        "notes": "Unparseable id -> error 44 (InvalidApiKeyError)."
+      }
+    ]
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-annotation-rating",
+    "surface": "opensubsonic",
+    "flow": [
+      {
+        "name": "setrating-song-4",
+        "method": "GET",
+        "path": "/rest/setRating.view?f=json&v=1.16.1&c=phase0&id=song_3e185e31-88b5-519b-b830-1ae915e80ba5&rating=4&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion"
+          ]
+        },
+        "notes": ""
+      },
+      {
+        "name": "verify-rating",
+        "method": "GET",
+        "path": "/rest/getSong.view?f=json&v=1.16.1&c=phase0&id=song_3e185e31-88b5-519b-b830-1ae915e80ba5&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion"
+          ]
+        },
+        "notes": "STATE VERIFICATION: userRating 4 in getSong."
+      },
+      {
+        "name": "setrating-clear",
+        "method": "GET",
+        "path": "/rest/setRating.view?f=json&v=1.16.1&c=phase0&id=song_3e185e31-88b5-519b-b830-1ae915e80ba5&rating=0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion"
+          ]
+        },
+        "notes": "rating=0 clears."
+      },
+      {
+        "name": "verify-rating-cleared",
+        "method": "GET",
+        "path": "/rest/getSong.view?f=json&v=1.16.1&c=phase0&id=song_3e185e31-88b5-519b-b830-1ae915e80ba5&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion"
+          ]
+        },
+        "notes": ""
+      },
+      {
+        "name": "setrating-invalid-id",
+        "method": "GET",
+        "path": "/rest/setRating.view?f=json&v=1.16.1&c=phase0&id=garbage&rating=3&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion"
+          ]
+        },
+        "notes": "Invalid id -> error 44."
+      }
+    ]
+  },
+  {
+    "schemaVersion": 2,
+    "name": "os-annotation-scrobble",
+    "surface": "opensubsonic",
+    "flow": [
+      {
+        "name": "scrobble-nowplaying",
+        "method": "GET",
+        "path": "/rest/scrobble.view?f=json&v=1.16.1&c=phase0&id=song_d493e627-df71-50ed-93fb-c29b9f6ec96a&submission=false&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion"
+          ]
+        },
+        "notes": "submission=false registers now-playing."
+      },
+      {
+        "name": "verify-nowplaying",
+        "method": "GET",
+        "path": "/rest/getNowPlaying.view?f=json&v=1.16.1&c=phase0&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion",
+            "$.subsonic-response.nowPlaying.entry[*].minutesAgo",
+            "$.subsonic-response.nowPlaying.entry[*].playerName"
+          ]
+        },
+        "notes": "STATE VERIFICATION: Lantern present in nowPlaying (volatile time fields masked)."
+      },
+      {
+        "name": "scrobble-submission",
+        "method": "GET",
+        "path": "/rest/scrobble.view?f=json&v=1.16.1&c=phase0&id=song_d493e627-df71-50ed-93fb-c29b9f6ec96a&submission=true&time=1786050060000&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion"
+          ]
+        },
+        "notes": "submission=true scrobbles ONLY because a matching now-playing entry exists (dedupe by user+song hash). time is ms since epoch."
+      },
+      {
+        "name": "scrobble-submission-repeat",
+        "method": "GET",
+        "path": "/rest/scrobble.view?f=json&v=1.16.1&c=phase0&id=song_d493e627-df71-50ed-93fb-c29b9f6ec96a&submission=true&time=1786050060000&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion"
+          ]
+        },
+        "notes": "Repeated identical submission: dedupe behavior (no matching now-playing anymore / same entry) — response shape is the evidence."
+      },
+      {
+        "name": "scrobble-default-submission",
+        "method": "GET",
+        "path": "/rest/scrobble.view?f=json&v=1.16.1&c=phase0&id=song_2b8eab4b-235d-5892-99f8-c0f5f54e8ab4&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion"
+          ]
+        },
+        "notes": "submission omitted defaults to TRUE (no now-playing entry -> no scrobble effect, ok envelope)."
+      },
+      {
+        "name": "scrobble-time-mismatch",
+        "method": "GET",
+        "path": "/rest/scrobble.view?f=json&v=1.16.1&c=phase0&id=song_2b8eab4b-235d-5892-99f8-c0f5f54e8ab4&id=song_c418d383-13f5-598d-94a8-c15e5d2df348&time=1786050060000&submission=true&u=phase0-fixture&t={{env:PHASE0_SUBSONIC_TOKEN}}&s={{env:PHASE0_SUBSONIC_SALT}}",
+        "auth": "none",
+        "headers": {
+          "X-Forwarded-For": "203.0.113.7",
+          "X-Forwarded-Host": "capture-fixture.example.test"
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.subsonic-response.serverVersion"
+          ]
+        },
+        "notes": "time array length != id array length -> generic error 0 'Wrong number of timestamps.'"
+      }
+    ]
+  }
+]

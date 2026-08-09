@@ -1,0 +1,23 @@
+{
+  "OperatingSystemDisplayName": "Unix 7.1.5.201",
+  "HasPendingRestart": false,
+  "IsShuttingDown": false,
+  "SupportsLibraryMonitor": true,
+  "WebSocketPortNumber": "<volatile>",
+  "CanSelfRestart": false,
+  "CanLaunchWebBrowser": false,
+  "ProgramDataPath": null,
+  "ItemsByNamePath": null,
+  "CachePath": null,
+  "LogPath": null,
+  "InternalMetadataPath": null,
+  "TranscodingTempPath": null,
+  "HasUpdateAvailable": false,
+  "LocalAddress": "<volatile>",
+  "ServerName": "Melodee",
+  "Version": "<volatile>",
+  "ProductName": "Melodee",
+  "OperatingSystem": "Unix",
+  "Id": "<volatile>",
+  "StartupWizardCompleted": true
+}

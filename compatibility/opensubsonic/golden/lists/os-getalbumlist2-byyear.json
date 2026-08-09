@@ -1,0 +1,74 @@
+{
+  "subsonic-response": {
+    "status": "ok",
+    "version": "1.16.1",
+    "type": "Melodee",
+    "serverVersion": "<volatile>",
+    "openSubsonic": true,
+    "albumList2": {
+      "album": [
+        {
+          "id": "album_69d97699-74c5-5403-878f-87f42d9d9fbb",
+          "album": "Northern Lights",
+          "title": "Northern Lights",
+          "name": "Northern Lights",
+          "coverArt": "album_69d97699-74c5-5403-878f-87f42d9d9fbb",
+          "songCount": 3,
+          "created": "2026-01-02T00:00:00Z",
+          "duration": 8,
+          "playedCount": 12,
+          "artistId": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+          "artist": "Aurora Fields",
+          "year": 2021,
+          "userRating": 5,
+          "genres": [
+            "Ambient",
+            "Electronic"
+          ],
+          "genre": "Ambient",
+          "parent": "library_c598e196-db6f-582e-b110-1726c138bd4f"
+        },
+        {
+          "id": "album_263ebba5-739c-5cb9-987f-b2d2bbfbd0ad",
+          "album": "Desert Rock Radio",
+          "title": "Desert Rock Radio",
+          "name": "Desert Rock Radio",
+          "coverArt": "album_263ebba5-739c-5cb9-987f-b2d2bbfbd0ad",
+          "songCount": 2,
+          "created": "2026-01-04T00:00:00Z",
+          "duration": 5,
+          "playedCount": 0,
+          "artistId": "artist_5bf951d5-7afe-5c50-8941-145b7095902b",
+          "artist": "Dune",
+          "year": 2019,
+          "userRating": 0,
+          "genres": [
+            "Rock"
+          ],
+          "genre": "Rock",
+          "parent": "library_c598e196-db6f-582e-b110-1726c138bd4f"
+        },
+        {
+          "id": "album_b6716af3-7988-52bd-8e12-91fca722cf56",
+          "album": "Dansk Sessions",
+          "title": "Dansk Sessions",
+          "name": "Dansk Sessions",
+          "coverArt": "album_b6716af3-7988-52bd-8e12-91fca722cf56",
+          "songCount": 1,
+          "created": "2026-01-06T00:00:00Z",
+          "duration": 2,
+          "playedCount": 0,
+          "artistId": "artist_503f045f-1bd6-5ea7-9e32-14632344680c",
+          "artist": "Düné",
+          "year": 2020,
+          "userRating": 0,
+          "genres": [
+            "Pop"
+          ],
+          "genre": "Pop",
+          "parent": "library_c598e196-db6f-582e-b110-1726c138bd4f"
+        }
+      ]
+    }
+  }
+}

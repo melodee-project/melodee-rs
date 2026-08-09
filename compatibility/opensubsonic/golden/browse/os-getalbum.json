@@ -1,0 +1,243 @@
+{
+  "subsonic-response": {
+    "status": "ok",
+    "version": "1.16.1",
+    "type": "Melodee",
+    "serverVersion": "<volatile>",
+    "openSubsonic": true,
+    "album": {
+      "id": "album_69d97699-74c5-5403-878f-87f42d9d9fbb",
+      "name": "Northern Lights",
+      "title": "Northern Lights",
+      "artist": "Aurora Fields",
+      "year": 2021,
+      "coverArt": "album_69d97699-74c5-5403-878f-87f42d9d9fbb",
+      "starred": "2026-08-07T00:00:00Z",
+      "duration": 8,
+      "playCount": 12,
+      "genre": "Ambient,Electronic",
+      "created": "2026-01-02T00:00:00Z",
+      "artistId": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+      "songCount": 3,
+      "played": "2026-08-06T12:00:00Z",
+      "userRating": 5,
+      "genres": [
+        {
+          "name": "Ambient"
+        },
+        {
+          "name": "Electronic"
+        }
+      ],
+      "artists": [],
+      "displayArtist": "Aurora Fields",
+      "moods": [],
+      "sortName": "Northern Lights",
+      "originalAlbumDate": {
+        "year": 2021,
+        "month": 3,
+        "day": 15
+      },
+      "albumDate": {
+        "year": 2021,
+        "month": 3,
+        "day": 15
+      },
+      "isCompilation": false,
+      "discTitles": [],
+      "song": [
+        {
+          "id": "song_2b8eab4b-235d-5892-99f8-c0f5f54e8ab4",
+          "parent": "album_69d97699-74c5-5403-878f-87f42d9d9fbb",
+          "isDir": false,
+          "title": "Solar Wind",
+          "album": "Northern Lights",
+          "artist": "Aurora Fields",
+          "song": 1,
+          "year": 2021,
+          "coverArt": "song_2b8eab4b-235d-5892-99f8-c0f5f54e8ab4",
+          "size": 220544,
+          "contentType": "audio/wav",
+          "suffix": ".wav",
+          "duration": 2,
+          "bitRate": 1411,
+          "bitDepth": 16,
+          "samplingRate": 44100,
+          "path": "Northern Lights/01 - Solar Wind.wav",
+          "playCount": 5,
+          "discNumber": 1,
+          "created": "2026-01-01T00:01:01Z",
+          "albumId": "album_69d97699-74c5-5403-878f-87f42d9d9fbb",
+          "artistId": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+          "type": "music",
+          "mediaType": "song",
+          "isVideo": false,
+          "bpm": 92,
+          "sortName": "Solar Wind",
+          "genres": [
+            {
+              "value": "Ambient",
+              "songCount": 0,
+              "albumCount": 0
+            },
+            {
+              "value": "Electronic",
+              "songCount": 0,
+              "albumCount": 0
+            }
+          ],
+          "artists": [],
+          "displayArtist": "Aurora Fields",
+          "albumArtists": [
+            {
+              "id": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+              "name": "Aurora Fields",
+              "coverArt": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+              "albumCount": 1,
+              "userRating": 0,
+              "artistImageUrl": "URL",
+              "sortName": "Aurora Fields"
+            }
+          ],
+          "displayAlbumArtist": "Aurora Fields",
+          "contributors": [],
+          "replayGain": {},
+          "averageRating": 0,
+          "playerId": 0,
+          "track": 1,
+          "genre": "Ambient"
+        },
+        {
+          "id": "song_ea26fc59-a545-51c2-94c4-702e1f97b80a",
+          "parent": "album_69d97699-74c5-5403-878f-87f42d9d9fbb",
+          "isDir": false,
+          "title": "Polar Veil",
+          "album": "Northern Lights",
+          "artist": "Aurora Fields",
+          "song": 2,
+          "year": 2021,
+          "coverArt": "song_ea26fc59-a545-51c2-94c4-702e1f97b80a",
+          "size": 264644,
+          "contentType": "audio/wav",
+          "suffix": ".wav",
+          "starred": "",
+          "duration": 3,
+          "bitRate": 1411,
+          "bitDepth": 16,
+          "samplingRate": 44100,
+          "path": "Northern Lights/02 - Polar Veil.wav",
+          "playCount": 4,
+          "discNumber": 1,
+          "created": "2026-01-01T00:02:02Z",
+          "albumId": "album_69d97699-74c5-5403-878f-87f42d9d9fbb",
+          "artistId": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+          "type": "music",
+          "mediaType": "song",
+          "isVideo": false,
+          "bpm": 100,
+          "sortName": "Polar Veil",
+          "genres": [
+            {
+              "value": "Ambient",
+              "songCount": 0,
+              "albumCount": 0
+            },
+            {
+              "value": "Electronic",
+              "songCount": 0,
+              "albumCount": 0
+            }
+          ],
+          "artists": [],
+          "displayArtist": "Aurora Fields",
+          "albumArtists": [
+            {
+              "id": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+              "name": "Aurora Fields",
+              "coverArt": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+              "albumCount": 1,
+              "userRating": 0,
+              "artistImageUrl": "URL",
+              "sortName": "Aurora Fields"
+            }
+          ],
+          "displayAlbumArtist": "Aurora Fields",
+          "contributors": [],
+          "replayGain": {},
+          "averageRating": 0,
+          "userRating": 5,
+          "playerId": 0,
+          "track": 2,
+          "genre": "Ambient"
+        },
+        {
+          "id": "song_e068e9f1-b7a1-58b9-9aaa-47c954694634",
+          "parent": "album_69d97699-74c5-5403-878f-87f42d9d9fbb",
+          "isDir": false,
+          "title": "Midnight Sun",
+          "album": "Northern Lights",
+          "artist": "Aurora Fields",
+          "song": 3,
+          "year": 2021,
+          "coverArt": "song_e068e9f1-b7a1-58b9-9aaa-47c954694634",
+          "size": 194084,
+          "contentType": "audio/wav",
+          "suffix": ".wav",
+          "duration": 2,
+          "bitRate": 1411,
+          "bitDepth": 16,
+          "samplingRate": 44100,
+          "path": "Northern Lights/03 - Midnight Sun.wav",
+          "playCount": 3,
+          "discNumber": 1,
+          "created": "2026-01-01T00:03:03Z",
+          "albumId": "album_69d97699-74c5-5403-878f-87f42d9d9fbb",
+          "artistId": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+          "type": "music",
+          "mediaType": "song",
+          "isVideo": false,
+          "bpm": 88,
+          "sortName": "Midnight Sun",
+          "genres": [
+            {
+              "value": "Ambient",
+              "songCount": 0,
+              "albumCount": 0
+            },
+            {
+              "value": "Electronic",
+              "songCount": 0,
+              "albumCount": 0
+            }
+          ],
+          "artists": [],
+          "displayArtist": "Aurora Fields",
+          "albumArtists": [
+            {
+              "id": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+              "name": "Aurora Fields",
+              "coverArt": "artist_813c11e0-61cd-5204-ae0f-ce68386eacec",
+              "albumCount": 1,
+              "userRating": 0,
+              "artistImageUrl": "URL",
+              "sortName": "Aurora Fields"
+            }
+          ],
+          "displayAlbumArtist": "Aurora Fields",
+          "contributors": [],
+          "replayGain": {},
+          "averageRating": 0,
+          "playerId": 0,
+          "track": 3,
+          "genre": "Ambient"
+        }
+      ],
+      "parent": "album_69d97699-74c5-5403-878f-87f42d9d9fbb",
+      "originalReleaseDate": {
+        "year": 2021,
+        "month": 3,
+        "day": 15
+      }
+    }
+  }
+}

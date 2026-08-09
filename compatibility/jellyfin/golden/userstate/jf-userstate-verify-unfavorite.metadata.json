@@ -1,0 +1,28 @@
+{
+  "name": "jf-userstate/verify-unfavorite",
+  "surface": "jellyfin",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/Items/c418d38313f5598d94a8c15e5d2df348?enableUserData=true",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "MediaBrowser <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "jf-userstate-verify-unfavorite.json",
+    "sha256": "1dac958ae9c9e1d405a19f0b80b950dc5739ff53147979a58760f74000fa7302",
+    "bytes": 3234
+  },
+  "normalize": {},
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

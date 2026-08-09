@@ -8,18 +8,19 @@
     "headers": {
       "User-Agent": "melodee-rs-phase0-capture/1"
     },
-    "jsonTemplate": null
+    "jsonTemplate": null,
+    "bodyTemplate": null
   },
   "response": {
     "status": 200,
     "headers": {
-      "content-length": "146872",
+      "content-length": "785",
       "content-type": "image/jpeg",
-      "etag": "ccc89ad4fb2d635f7abeda4b7fc48922b10a338f47e6e546bfbae7d929fec9ff"
+      "etag": "95ac253b24e8feb7528f3a050b2212ac777cddded53ab5a58ec58051b4a5a692"
     },
     "bodyFile": "catalog-images-image-album-large.bin",
-    "sha256": "87fd84fb5a894c1861a3176e778964a5ac9d090e39cccc587c56435c040c9e82",
-    "bytes": 146872
+    "sha256": "ea00fc2fbab43a129b5f4793c3014200b72b5fffc7a3e88dbb5371c0d681f618",
+    "bytes": 785
   },
   "normalize": {
     "dropHeaders": [

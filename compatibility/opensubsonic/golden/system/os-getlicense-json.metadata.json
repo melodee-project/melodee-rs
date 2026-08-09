@@ -1,0 +1,36 @@
+{
+  "name": "os-getlicense-json",
+  "surface": "opensubsonic",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/rest/getLicense.view?f=json&v=1.16.1&c=melodee-rs-phase0",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-length": "252",
+      "content-type": "application/json; charset=utf-8",
+      "x-total-count": "0"
+    },
+    "bodyFile": "os-getlicense-json.json",
+    "sha256": "37845123f9e20397465e9de2ecedadff80cc0903dbd16f27c73c5e2715725b60",
+    "bytes": 308
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.subsonic-response.serverVersion",
+      "$.subsonic-response.license.licenseExpires",
+      "$.subsonic-response.license.trailExpires",
+      "$.subsonic-response.license.email"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

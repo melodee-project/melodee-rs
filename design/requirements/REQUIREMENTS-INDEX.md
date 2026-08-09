@@ -23,19 +23,19 @@ Total requirements: **232**
 | `PRD-ARCH-004` | Tantivy is a projection | 1 | planned | — | — |
 | `PRD-ARCH-005` | Filesystem is canonical for media bytes, not identity | 1 | planned | — | — |
 | `PRD-ARCH-006` | Avoid unnecessary infrastructure | 1 | planned | — | — |
-| `PRD-INGEST-001` | Per-Release retry | 2 | planned | — | — |
-| `PRD-INGEST-002` | Lease-based concurrency | 2 | planned | — | — |
-| `PRD-INGEST-003` | Watchers are accelerators only | 2 | planned | — | — |
-| `PRD-INGEST-004` | Settling detection | 2 | planned | — | — |
-| `PRD-INGEST-005` | Source safety | 2 | planned | — | — |
+| `PRD-INGEST-001` | Per-Release retry | 2 | in-progress | design/evidence/phase-0/media-baseline.md sections 2-9 (current pipeline stages, validation reasons, artist-resolution attempt order, destructive-rule inventory); compatibility/media/baseline.json | tests/python/test_media_baseline.py |
+| `PRD-INGEST-002` | Lease-based concurrency | 2 | captured | design/evidence/phase-0/media-baseline.md section 10 (validation reasons categorized: structural vs metadata vs enrichment vs artwork vs policy) | tests/python/test_media_baseline.py |
+| `PRD-INGEST-003` | Watchers are accelerators only | 2 | in-progress | design/evidence/phase-0/media-baseline.md sections 2, 8, 11, 12 (F1/F2 documented as the primary determinism/idempotency hazards) | tests/python/test_media_baseline.py |
+| `PRD-INGEST-004` | Settling detection | 2 | in-progress | design/evidence/phase-0/media-baseline.md section 9 (sidecar behavior incl. lyrics plugin gating) | — |
+| `PRD-INGEST-005` | Source safety | 2 | in-progress | design/evidence/phase-0/media-baseline.md section 11 (interruption/non-atomicity evidence) | — |
 | `PRD-INGEST-006` | Safe staging/publishing | 2 | planned | — | — |
 | `PRD-INGEST-007` | Versioned manifest | 2 | planned | — | — |
 | `PRD-INGEST-008` | Structural validity is independent of enrichment | 2 | planned | — | — |
 | `PRD-INGEST-009` | Bounded resource pools | 2 | planned | — | — |
 | `PRD-INGEST-010` | Operator visibility | 2 | planned | — | — |
-| `PRD-MEDIA-001` | PRD-MEDIA-001 | 3 | planned | — | — |
-| `PRD-MEDIA-002` | Canonical format policy | 3 | planned | — | — |
-| `PRD-MEDIA-003` | Use mature media tools | 3 | planned | — | — |
+| `PRD-MEDIA-001` | PRD-MEDIA-001 | 3 | captured | compatibility/media/baseline.json + cases/ (31 synthetic cases: formats, metadata, conversion, artwork, validation, classification, failures); scripts/generate_media_corpus.py; scripts/capture_media_baseline.py; design/evidence/phase-0/media-baseline.md | tests/python/test_media_baseline.py |
+| `PRD-MEDIA-002` | Canonical format policy | 3 | captured | compatibility/media/baseline.json environment.seededSettings (conversion.* measured: MP3 384k VBR-q4 48kHz; transcoding.* templates are malformed/unconsumed); design/evidence/phase-0/media-baseline.md section 4 (legacy behavior vs new Rust canonical policy separated) | tests/python/test_media_baseline.py (test_seeded_conversion_settings) |
+| `PRD-MEDIA-003` | Use mature media tools | 3 | captured | design/evidence/phase-0/media-baseline.md section 12 (eight classified legacy deficiencies incl. F1 metadata-container gate, F2 destructive same-size dedupe, no resumability, no crash-safety) | tests/python/test_media_baseline.py (test_metadata_container_gate, test_same_size_deletion_bug) |
 | `PRD-MEDIA-004` | Metadata reading | 3 | planned | — | — |
 | `PRD-MEDIA-005` | Artwork | 3 | planned | — | — |
 | `PRD-MEDIA-006` | Sidecar files | 3 | planned | — | — |
@@ -106,19 +106,19 @@ Total requirements: **232**
 | `PRD-STREAM-001` | PRD-STREAM-001 | 7,8 | captured | compatibility/melodee-api-v1/golden/native-stream/ (URL shape, HMAC semantics, 200/206/400/401/302 matrix); design/evidence/phase-0/native-api-v1-capture.md section 4 | tests/python/test_native_v1_capture.py (test_stream_range_semantics_evidence) |
 | `PRD-STREAM-002` | PRD-STREAM-002 | 7,8 | in-progress | compatibility/melodee-api-v1/golden/native-stream/ (direct play, ranges, content type/length) | tests/python/test_native_v1_capture.py |
 | `PRD-STREAM-003` | Android/Android Auto release gate | 7,8 | in-progress | design/evidence/phase-0/native-client-route-inventory.md (Android/Android Auto route inventory and gate prerequisites) | — |
-| `PRD-API-OS-001` | PRD-API-OS-001 | 8 | planned | — | — |
-| `PRD-API-OS-002` | PRD-API-OS-002 | 8 | planned | — | — |
-| `PRD-API-OS-003` | PRD-API-OS-003 | 8 | planned | — | — |
-| `PRD-API-OS-004` | Current supported groups | 8 | planned | — | — |
-| `PRD-API-OS-005` | Preserve intentional unsupported behavior | 8 | planned | — | — |
-| `PRD-API-OS-006` | Advertised extensions | 8 | planned | — | — |
-| `PRD-API-OS-007` | Client verification | 8 | planned | — | — |
-| `PRD-API-JF-001` | PRD-API-JF-001 | 8 | planned | — | — |
-| `PRD-API-JF-002` | PRD-API-JF-002 | 8 | planned | — | — |
-| `PRD-API-JF-003` | PRD-API-JF-003 | 8 | planned | — | — |
-| `PRD-API-JF-004` | PRD-API-JF-004 | 8 | planned | — | — |
-| `PRD-API-JF-005` | PRD-API-JF-005 | 8 | planned | — | — |
-| `PRD-API-JF-006` | PRD-API-JF-006 | 8 | planned | — | — |
+| `PRD-API-OS-001` | PRD-API-OS-001 | 8 | captured | compatibility/opensubsonic/contracts/route-inventory.json (164 routes; plain and .view forms) | tests/python/test_opensubsonic_capture.py |
+| `PRD-API-OS-002` | PRD-API-OS-002 | 8 | captured | compatibility/opensubsonic/golden/system/ (JSON/XML/JSONP envelope evidence incl. quirks) | tests/python/test_opensubsonic_capture.py (SystemAndFormatTests) |
+| `PRD-API-OS-003` | PRD-API-OS-003 | 8 | captured | compatibility/opensubsonic/golden/auth/ (token/salt, plain+enc password, JWT, apiKey, form POST, bypass); design/evidence/phase-0/opensubsonic-capture.md section 3 | tests/python/test_opensubsonic_capture.py (AuthEvidenceTests) |
+| `PRD-API-OS-004` | Current supported groups | 8 | captured | compatibility/opensubsonic/golden/ (browse, lists, media, annotation, playlists, community); compatibility/opensubsonic/contracts/route-inventory.json (81 endpoints classified) | tests/python/test_opensubsonic_capture.py |
+| `PRD-API-OS-005` | Preserve intentional unsupported behavior | 8 | captured | compatibility/opensubsonic/golden/negative/ (all 410/501 routes automated) | tests/python/test_opensubsonic_capture.py (NegativeAndConditionalTests) |
+| `PRD-API-OS-006` | Advertised extensions | 8 | captured | compatibility/opensubsonic/golden/system/os-getopensubsonicextensions-* (advertised set incl. two non-functional entries) | tests/python/test_opensubsonic_capture.py (test_extensions_advertised) |
+| `PRD-API-OS-007` | Client verification | 8 | in-progress | design/evidence/phase-0/opensubsonic-capture.md (server-side evidence for login/browse/search/stream+seek/playlists/download/star) | tests/python/test_opensubsonic_capture.py |
+| `PRD-API-JF-001` | PRD-API-JF-001 | 8 | captured | compatibility/jellyfin/contracts/route-inventory.json (60 routes, music-focused subset); compatibility/jellyfin/golden/ | tests/python/test_jellyfin_capture.py |
+| `PRD-API-JF-002` | PRD-API-JF-002 | 8 | captured | compatibility/jellyfin/golden/discovery/ (middleware allowlist, marker triggers, root probe, fallthrough); design/evidence/phase-0/jellyfin-capture.md section 1 | tests/python/test_jellyfin_capture.py (RoutingEvidenceTests) |
+| `PRD-API-JF-003` | PRD-API-JF-003 | 8 | captured | compatibility/jellyfin/golden/auth/ (issuance, all 5 token transports, failures, logout revocation) | tests/python/test_jellyfin_capture.py (AuthEvidenceTests) |
+| `PRD-API-JF-004` | PRD-API-JF-004 | 8 | captured | compatibility/jellyfin/golden/{browse,playback,userstate,playlists,images,extra}/; compatibility/jellyfin/contracts/route-inventory.json (100% scenario coverage) | tests/python/test_jellyfin_capture.py |
+| `PRD-API-JF-005` | PRD-API-JF-005 | 8 | captured | compatibility/jellyfin/golden/discovery/ (unsupported video/TV/books scope: plain 404, no simulation) | tests/python/test_jellyfin_capture.py (test_unsupported_scope_is_404) |
+| `PRD-API-JF-006` | PRD-API-JF-006 | 8 | in-progress | design/evidence/phase-0/jellyfin-capture.md section 9 (documented music-client smoke path covered server-side) | — |
 | `PRD-API-ADMIN-001` | PRD-API-ADMIN-001 | 10 | planned | — | — |
 | `PRD-API-ADMIN-002` | PRD-API-ADMIN-002 | 10 | planned | — | — |
 | `PRD-API-ADMIN-003` | PRD-API-ADMIN-003 | 10 | planned | — | — |
@@ -204,11 +204,11 @@ Total requirements: **232**
 | `PRD-OBS-003` | PRD-OBS-003 | 1,2 | planned | — | — |
 | `PRD-OBS-004` | PRD-OBS-004 | 1,2 | planned | — | — |
 | `PRD-OBS-005` | PRD-OBS-005 | 1,2 | planned | — | — |
-| `PRD-PERF-001` | PRD-PERF-001 | 0,all | planned | — | — |
-| `PRD-PERF-002` | PRD-PERF-002 | 0,all | planned | — | — |
-| `PRD-PERF-003` | PRD-PERF-003 | 0,all | planned | — | — |
-| `PRD-PERF-004` | PRD-PERF-004 | 0,all | planned | — | — |
-| `PRD-PERF-005` | PRD-PERF-005 | 0,all | planned | — | — |
+| `PRD-PERF-001` | PRD-PERF-001 | 0,all | in-progress | compatibility/benchmarks/ (datasets, results with environment metadata, SUMMARY.md); scripts/generate_benchmark_dataset.py; scripts/run_benchmarks.py; design/evidence/phase-0/scale-baseline.md | tests/python/test_benchmark_baseline.py |
+| `PRD-PERF-002` | PRD-PERF-002 | 0,all | captured | scripts/generate_benchmark_dataset.py (three deterministic SQL tiers); scripts/generate_media_corpus.py (deterministic ffmpeg media corpus) | tests/python/test_benchmark_baseline.py; tests/python/test_media_baseline.py |
+| `PRD-PERF-003` | PRD-PERF-003 | 0,all | in-progress | compatibility/benchmarks/results/ (wall-clock cold/warm, response sizes, server memory at Tier C) | tests/python/test_benchmark_baseline.py |
+| `PRD-PERF-004` | PRD-PERF-004 | 0,all | in-progress | design/evidence/phase-0/scale-baseline.md section 4 (per-Release pipeline cost shape ~3s; non-transactional restart behavior evidence) | — |
+| `PRD-PERF-005` | PRD-PERF-005 | 0,all | in-progress | design/evidence/phase-0/scale-baseline.md sections 3, 5 (bottlenecks + proposed budgets labeled requirement-vs-proposal) | tests/python/test_benchmark_baseline.py |
 | `PRD-PERF-006` | PRD-PERF-006 | 0,all | planned | — | — |
 | `PRD-MIG-001` | Preserve media | 11 | planned | — | — |
 | `PRD-MIG-002` | Preserve public identity | 11 | planned | — | — |
@@ -217,13 +217,13 @@ Total requirements: **232**
 | `PRD-MIG-005` | No mandatory upfront fingerprint of every byte | 11 | planned | — | — |
 | `PRD-MIG-006` | Search is rebuildable | 11 | planned | — | — |
 | `PRD-MIG-007` | Rollback | 11 | planned | — | — |
-| `PRD-TEST-001` | C# server as oracle | 0,all | planned | — | — |
-| `PRD-TEST-002` | Differential API harness | 0,all | planned | — | — |
+| `PRD-TEST-001` | C# server as oracle | 0,all | in-progress | compatibility/scenarios/*.json (22 scenario files, declarative flows); scripts/capture_baseline.py + scripts/compare_captures.py (deterministic A/B comparison); compatibility/*/golden/ (424 promoted captures with provenance) | tests/python/test_native_v1_capture.py; tests/python/test_opensubsonic_capture.py; tests/python/test_jellyfin_capture.py; tests/python/test_media_baseline.py; tests/python/test_benchmark_baseline.py |
+| `PRD-TEST-002` | Differential API harness | 0,all | in-progress | compatibility/melodee-api-v1/golden/ + opensubsonic/golden/ + jellyfin/golden/ (normalized golden request/response fixtures incl. negative paths) | tests/python/test_native_v1_capture.py (GoldenFixtureTests); tests/python/test_opensubsonic_capture.py; tests/python/test_jellyfin_capture.py |
 | `PRD-TEST-003` | Golden contracts | 0,all | planned | — | — |
 | `PRD-TEST-004` | Real-client compatibility | 0,all | planned | — | — |
-| `PRD-TEST-005` | Media corpus | 0,all | planned | — | — |
-| `PRD-TEST-006` | Fault injection | 0,all | planned | — | — |
-| `PRD-TEST-007` | Invariant | 0,all | planned | — | — |
+| `PRD-TEST-005` | Media corpus | 0,all | in-progress | compatibility/media/ (31-case synthetic corpus incl. malformed tags, corrupt/truncated audio, invalid artwork, duplicate track numbers) | tests/python/test_media_baseline.py |
+| `PRD-TEST-006` | Fault injection | 0,all | in-progress | design/evidence/phase-0/media-baseline.md section 11 (interruption/non-atomicity evidence); compatibility/melodee-api-v1/golden/native-auth/ (refresh replay/rotation fault evidence) | — |
+| `PRD-TEST-007` | Invariant | 0,all | in-progress | compatibility/benchmarks/ (3 tiers, environment metadata, machine-readable results); design/evidence/phase-0/scale-baseline.md (budgets labeled requirement-vs-proposal) | tests/python/test_benchmark_baseline.py |
 | `PRD-TEST-008` | UI testing | 0,all | planned | — | — |
 | `PRD-SEC-001` | PRD-SEC-001 | all | planned | — | — |
 | `PRD-SEC-002` | PRD-SEC-002 | all | planned | — | — |

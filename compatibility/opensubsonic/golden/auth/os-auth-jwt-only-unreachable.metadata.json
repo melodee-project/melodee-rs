@@ -1,0 +1,35 @@
+{
+  "name": "os-auth-jwt-only-unreachable",
+  "surface": "opensubsonic",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/rest/getMusicFolders.view?f=json&v=1.16.1&c=melodee-rs-phase0&u=phase0-fixture&jwt=%3Credacted%3E",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-length": "182",
+      "content-type": "application/json; charset=utf-8",
+      "x-total-count": "0"
+    },
+    "bodyFile": "os-auth-jwt-only-unreachable.json",
+    "sha256": "a8618afac95a7e68bb74ab28d312919b031c31ed75f0decabf611537e0de510b",
+    "bytes": 251
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.subsonic-response.serverVersion"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

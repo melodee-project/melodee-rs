@@ -1,0 +1,28 @@
+{
+  "name": "jf-playlists/playlist-items",
+  "surface": "jellyfin",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/Playlists/b16ae181fc405cd5ba7b0cf9f5b4c89d/Items",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "MediaBrowser <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "jf-playlists-playlist-items.json",
+    "sha256": "58963704f9ae4b8bf899f4d5f2382ad6dd212d3368fbbcd602a7ab7703152e26",
+    "bytes": 7189
+  },
+  "normalize": {},
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

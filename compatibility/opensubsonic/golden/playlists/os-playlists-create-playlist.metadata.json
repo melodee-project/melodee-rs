@@ -1,0 +1,40 @@
+{
+  "name": "os-playlists/create-playlist",
+  "surface": "opensubsonic",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/rest/createPlaylist.view?f=json&v=1.16.1&c=phase0&name=OS-Probe&songId=song_2b8eab4b-235d-5892-99f8-c0f5f54e8ab4&songId=song_b3297a8f-5e2b-5ade-98ea-f899d38059e0&u=phase0-fixture&t=%3Credacted%3E&s=%3Credacted%3E",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "X-Forwarded-For": "203.0.113.7",
+      "X-Forwarded-Host": "capture-fixture.example.test"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-length": "2974",
+      "content-type": "application/json; charset=utf-8",
+      "x-total-count": "0"
+    },
+    "bodyFile": "os-playlists-create-playlist.json",
+    "sha256": "69af9268b671280aaebee7a396c16d42908ad2d2c2e869b758376a8ed5c036da",
+    "bytes": 4458
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.subsonic-response.serverVersion",
+      "$.subsonic-response.playlist.id",
+      "$.subsonic-response.playlist.created",
+      "$.subsonic-response.playlist.changed",
+      "$.subsonic-response.playlist.coverArt"
+    ],
+    "maskBaseUrl": true
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

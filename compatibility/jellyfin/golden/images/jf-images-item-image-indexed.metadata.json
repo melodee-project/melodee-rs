@@ -1,0 +1,35 @@
+{
+  "name": "jf-images/item-image-indexed",
+  "surface": "jellyfin",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/Items/69d9769974c55403878f87f42d9d9fbb/Images/Primary/0",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "MediaBrowser <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-length": "136",
+      "content-type": "image/png",
+      "cache-control": "public, max-age=86400",
+      "etag": "\"17673120000000000\""
+    },
+    "bodyFile": "jf-images-item-image-indexed.bin",
+    "sha256": "5a98b5e7629cf8f4915c4c91dcfdd8149708d6f0ba647b121f07f0c72a45dcc3",
+    "bytes": 136
+  },
+  "normalize": {
+    "dropHeaders": [
+      "etag"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

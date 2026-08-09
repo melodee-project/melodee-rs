@@ -1,0 +1,8 @@
+{
+  "type": "about:blank",
+  "title": "Unauthorized",
+  "status": 401,
+  "detail": "Missing or invalid authentication token.",
+  "traceId": "<volatile>",
+  "errorCode": null
+}

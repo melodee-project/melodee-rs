@@ -1,0 +1,18 @@
+{
+  "subsonic-response": {
+    "status": "ok",
+    "version": "1.16.1",
+    "type": "Melodee",
+    "serverVersion": "<volatile>",
+    "openSubsonic": true,
+    "albumInfo": {
+      "id": "album_69d97699-74c5-5403-878f-87f42d9d9fbb",
+      "name": "Northern Lights",
+      "songCount": 3,
+      "albumCount": 1,
+      "smallImageUrl": "http://127.0.0.1:5157/images/album_69d97699-74c5-5403-878f-87f42d9d9fbb/thumbnail",
+      "mediumImageUrl": "http://127.0.0.1:5157/images/album_69d97699-74c5-5403-878f-87f42d9d9fbb/medium",
+      "largeImageUrl": "http://127.0.0.1:5157/images/album_69d97699-74c5-5403-878f-87f42d9d9fbb/large"
+    }
+  }
+}

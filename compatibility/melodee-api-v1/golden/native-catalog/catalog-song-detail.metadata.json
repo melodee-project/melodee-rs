@@ -9,7 +9,8 @@
       "User-Agent": "melodee-rs-phase0-capture/1",
       "Authorization": "Bearer <redacted>"
     },
-    "jsonTemplate": null
+    "jsonTemplate": null,
+    "bodyTemplate": null
   },
   "response": {
     "status": 200,
@@ -17,7 +18,7 @@
       "content-type": "application/json; charset=utf-8"
     },
     "bodyFile": "catalog-song-detail.json",
-    "sha256": "020b12627dbbecbf922b593c7da6a03eba0f1186aa01019c1f8a717609837480",
+    "sha256": "41b547190c276dd79df320e57aa49655f776a7b6489132ffc32d6007075834e4",
     "bytes": 1918
   },
   "normalize": {
@@ -34,7 +35,7 @@
       "type": "streamAuthToken",
       "valid": true,
       "binding": "127.0.0.1",
-      "expiresAt": "2026-08-14T21:23:33Z",
+      "expiresAt": "2026-08-16T19:54:26Z",
       "expiresInFuture": true,
       "expiresInDays": 7,
       "hmacShape": "base64-sha256",

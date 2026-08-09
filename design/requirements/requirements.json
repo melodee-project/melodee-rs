@@ -175,9 +175,14 @@
     "phase": "2",
     "source": "PRD.md",
     "line": 492,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "in-progress",
+    "implementation": [
+      "design/evidence/phase-0/media-baseline.md sections 2-9 (current pipeline stages, validation reasons, artist-resolution attempt order, destructive-rule inventory)",
+      "compatibility/media/baseline.json"
+    ],
+    "tests": [
+      "tests/python/test_media_baseline.py"
+    ]
   },
   {
     "id": "PRD-INGEST-002",
@@ -185,9 +190,13 @@
     "phase": "2",
     "source": "PRD.md",
     "line": 496,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "captured",
+    "implementation": [
+      "design/evidence/phase-0/media-baseline.md section 10 (validation reasons categorized: structural vs metadata vs enrichment vs artwork vs policy)"
+    ],
+    "tests": [
+      "tests/python/test_media_baseline.py"
+    ]
   },
   {
     "id": "PRD-INGEST-003",
@@ -195,9 +204,13 @@
     "phase": "2",
     "source": "PRD.md",
     "line": 502,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "in-progress",
+    "implementation": [
+      "design/evidence/phase-0/media-baseline.md sections 2, 8, 11, 12 (F1/F2 documented as the primary determinism/idempotency hazards)"
+    ],
+    "tests": [
+      "tests/python/test_media_baseline.py"
+    ]
   },
   {
     "id": "PRD-INGEST-004",
@@ -205,8 +218,10 @@
     "phase": "2",
     "source": "PRD.md",
     "line": 506,
-    "status": "planned",
-    "implementation": [],
+    "status": "in-progress",
+    "implementation": [
+      "design/evidence/phase-0/media-baseline.md section 9 (sidecar behavior incl. lyrics plugin gating)"
+    ],
     "tests": []
   },
   {
@@ -215,8 +230,10 @@
     "phase": "2",
     "source": "PRD.md",
     "line": 520,
-    "status": "planned",
-    "implementation": [],
+    "status": "in-progress",
+    "implementation": [
+      "design/evidence/phase-0/media-baseline.md section 11 (interruption/non-atomicity evidence)"
+    ],
     "tests": []
   },
   {
@@ -275,9 +292,16 @@
     "phase": "3",
     "source": "PRD.md",
     "line": 576,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "captured",
+    "implementation": [
+      "compatibility/media/baseline.json + cases/ (31 synthetic cases: formats, metadata, conversion, artwork, validation, classification, failures)",
+      "scripts/generate_media_corpus.py",
+      "scripts/capture_media_baseline.py",
+      "design/evidence/phase-0/media-baseline.md"
+    ],
+    "tests": [
+      "tests/python/test_media_baseline.py"
+    ]
   },
   {
     "id": "PRD-MEDIA-002",
@@ -285,9 +309,14 @@
     "phase": "3",
     "source": "PRD.md",
     "line": 582,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "captured",
+    "implementation": [
+      "compatibility/media/baseline.json environment.seededSettings (conversion.* measured: MP3 384k VBR-q4 48kHz; transcoding.* templates are malformed/unconsumed)",
+      "design/evidence/phase-0/media-baseline.md section 4 (legacy behavior vs new Rust canonical policy separated)"
+    ],
+    "tests": [
+      "tests/python/test_media_baseline.py (test_seeded_conversion_settings)"
+    ]
   },
   {
     "id": "PRD-MEDIA-003",
@@ -295,9 +324,13 @@
     "phase": "3",
     "source": "PRD.md",
     "line": 588,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "captured",
+    "implementation": [
+      "design/evidence/phase-0/media-baseline.md section 12 (eight classified legacy deficiencies incl. F1 metadata-container gate, F2 destructive same-size dedupe, no resumability, no crash-safety)"
+    ],
+    "tests": [
+      "tests/python/test_media_baseline.py (test_metadata_container_gate, test_same_size_deletion_bug)"
+    ]
   },
   {
     "id": "PRD-MEDIA-004",
@@ -1037,9 +1070,13 @@
     "phase": "8",
     "source": "PRD.md",
     "line": 1302,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "captured",
+    "implementation": [
+      "compatibility/opensubsonic/contracts/route-inventory.json (164 routes; plain and .view forms)"
+    ],
+    "tests": [
+      "tests/python/test_opensubsonic_capture.py"
+    ]
   },
   {
     "id": "PRD-API-OS-002",
@@ -1047,9 +1084,13 @@
     "phase": "8",
     "source": "PRD.md",
     "line": 1306,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "captured",
+    "implementation": [
+      "compatibility/opensubsonic/golden/system/ (JSON/XML/JSONP envelope evidence incl. quirks)"
+    ],
+    "tests": [
+      "tests/python/test_opensubsonic_capture.py (SystemAndFormatTests)"
+    ]
   },
   {
     "id": "PRD-API-OS-003",
@@ -1057,9 +1098,14 @@
     "phase": "8",
     "source": "PRD.md",
     "line": 1310,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "captured",
+    "implementation": [
+      "compatibility/opensubsonic/golden/auth/ (token/salt, plain+enc password, JWT, apiKey, form POST, bypass)",
+      "design/evidence/phase-0/opensubsonic-capture.md section 3"
+    ],
+    "tests": [
+      "tests/python/test_opensubsonic_capture.py (AuthEvidenceTests)"
+    ]
   },
   {
     "id": "PRD-API-OS-004",
@@ -1067,9 +1113,14 @@
     "phase": "8",
     "source": "PRD.md",
     "line": 1314,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "captured",
+    "implementation": [
+      "compatibility/opensubsonic/golden/ (browse, lists, media, annotation, playlists, community)",
+      "compatibility/opensubsonic/contracts/route-inventory.json (81 endpoints classified)"
+    ],
+    "tests": [
+      "tests/python/test_opensubsonic_capture.py"
+    ]
   },
   {
     "id": "PRD-API-OS-005",
@@ -1077,9 +1128,13 @@
     "phase": "8",
     "source": "PRD.md",
     "line": 1337,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "captured",
+    "implementation": [
+      "compatibility/opensubsonic/golden/negative/ (all 410/501 routes automated)"
+    ],
+    "tests": [
+      "tests/python/test_opensubsonic_capture.py (NegativeAndConditionalTests)"
+    ]
   },
   {
     "id": "PRD-API-OS-006",
@@ -1087,9 +1142,13 @@
     "phase": "8",
     "source": "PRD.md",
     "line": 1343,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "captured",
+    "implementation": [
+      "compatibility/opensubsonic/golden/system/os-getopensubsonicextensions-* (advertised set incl. two non-functional entries)"
+    ],
+    "tests": [
+      "tests/python/test_opensubsonic_capture.py (test_extensions_advertised)"
+    ]
   },
   {
     "id": "PRD-API-OS-007",
@@ -1097,9 +1156,13 @@
     "phase": "8",
     "source": "PRD.md",
     "line": 1347,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "in-progress",
+    "implementation": [
+      "design/evidence/phase-0/opensubsonic-capture.md (server-side evidence for login/browse/search/stream+seek/playlists/download/star)"
+    ],
+    "tests": [
+      "tests/python/test_opensubsonic_capture.py"
+    ]
   },
   {
     "id": "PRD-API-JF-001",
@@ -1107,9 +1170,14 @@
     "phase": "8",
     "source": "PRD.md",
     "line": 1365,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "captured",
+    "implementation": [
+      "compatibility/jellyfin/contracts/route-inventory.json (60 routes, music-focused subset)",
+      "compatibility/jellyfin/golden/"
+    ],
+    "tests": [
+      "tests/python/test_jellyfin_capture.py"
+    ]
   },
   {
     "id": "PRD-API-JF-002",
@@ -1117,9 +1185,14 @@
     "phase": "8",
     "source": "PRD.md",
     "line": 1369,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "captured",
+    "implementation": [
+      "compatibility/jellyfin/golden/discovery/ (middleware allowlist, marker triggers, root probe, fallthrough)",
+      "design/evidence/phase-0/jellyfin-capture.md section 1"
+    ],
+    "tests": [
+      "tests/python/test_jellyfin_capture.py (RoutingEvidenceTests)"
+    ]
   },
   {
     "id": "PRD-API-JF-003",
@@ -1127,9 +1200,13 @@
     "phase": "8",
     "source": "PRD.md",
     "line": 1373,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "captured",
+    "implementation": [
+      "compatibility/jellyfin/golden/auth/ (issuance, all 5 token transports, failures, logout revocation)"
+    ],
+    "tests": [
+      "tests/python/test_jellyfin_capture.py (AuthEvidenceTests)"
+    ]
   },
   {
     "id": "PRD-API-JF-004",
@@ -1137,9 +1214,14 @@
     "phase": "8",
     "source": "PRD.md",
     "line": 1377,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "captured",
+    "implementation": [
+      "compatibility/jellyfin/golden/{browse,playback,userstate,playlists,images,extra}/",
+      "compatibility/jellyfin/contracts/route-inventory.json (100% scenario coverage)"
+    ],
+    "tests": [
+      "tests/python/test_jellyfin_capture.py"
+    ]
   },
   {
     "id": "PRD-API-JF-005",
@@ -1147,9 +1229,13 @@
     "phase": "8",
     "source": "PRD.md",
     "line": 1391,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "captured",
+    "implementation": [
+      "compatibility/jellyfin/golden/discovery/ (unsupported video/TV/books scope: plain 404, no simulation)"
+    ],
+    "tests": [
+      "tests/python/test_jellyfin_capture.py (test_unsupported_scope_is_404)"
+    ]
   },
   {
     "id": "PRD-API-JF-006",
@@ -1157,8 +1243,10 @@
     "phase": "8",
     "source": "PRD.md",
     "line": 1395,
-    "status": "planned",
-    "implementation": [],
+    "status": "in-progress",
+    "implementation": [
+      "design/evidence/phase-0/jellyfin-capture.md section 9 (documented music-client smoke path covered server-side)"
+    ],
     "tests": []
   },
   {
@@ -2017,9 +2105,16 @@
     "phase": "0,all",
     "source": "PRD.md",
     "line": 2088,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "in-progress",
+    "implementation": [
+      "compatibility/benchmarks/ (datasets, results with environment metadata, SUMMARY.md)",
+      "scripts/generate_benchmark_dataset.py",
+      "scripts/run_benchmarks.py",
+      "design/evidence/phase-0/scale-baseline.md"
+    ],
+    "tests": [
+      "tests/python/test_benchmark_baseline.py"
+    ]
   },
   {
     "id": "PRD-PERF-002",
@@ -2027,9 +2122,15 @@
     "phase": "0,all",
     "source": "PRD.md",
     "line": 2092,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "captured",
+    "implementation": [
+      "scripts/generate_benchmark_dataset.py (three deterministic SQL tiers)",
+      "scripts/generate_media_corpus.py (deterministic ffmpeg media corpus)"
+    ],
+    "tests": [
+      "tests/python/test_benchmark_baseline.py",
+      "tests/python/test_media_baseline.py"
+    ]
   },
   {
     "id": "PRD-PERF-003",
@@ -2037,9 +2138,13 @@
     "phase": "0,all",
     "source": "PRD.md",
     "line": 2100,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "in-progress",
+    "implementation": [
+      "compatibility/benchmarks/results/ (wall-clock cold/warm, response sizes, server memory at Tier C)"
+    ],
+    "tests": [
+      "tests/python/test_benchmark_baseline.py"
+    ]
   },
   {
     "id": "PRD-PERF-004",
@@ -2047,8 +2152,10 @@
     "phase": "0,all",
     "source": "PRD.md",
     "line": 2112,
-    "status": "planned",
-    "implementation": [],
+    "status": "in-progress",
+    "implementation": [
+      "design/evidence/phase-0/scale-baseline.md section 4 (per-Release pipeline cost shape ~3s; non-transactional restart behavior evidence)"
+    ],
     "tests": []
   },
   {
@@ -2057,9 +2164,13 @@
     "phase": "0,all",
     "source": "PRD.md",
     "line": 2116,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "in-progress",
+    "implementation": [
+      "design/evidence/phase-0/scale-baseline.md sections 3, 5 (bottlenecks + proposed budgets labeled requirement-vs-proposal)"
+    ],
+    "tests": [
+      "tests/python/test_benchmark_baseline.py"
+    ]
   },
   {
     "id": "PRD-PERF-006",
@@ -2147,9 +2258,19 @@
     "phase": "0,all",
     "source": "PRD.md",
     "line": 2200,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "in-progress",
+    "implementation": [
+      "compatibility/scenarios/*.json (22 scenario files, declarative flows)",
+      "scripts/capture_baseline.py + scripts/compare_captures.py (deterministic A/B comparison)",
+      "compatibility/*/golden/ (424 promoted captures with provenance)"
+    ],
+    "tests": [
+      "tests/python/test_native_v1_capture.py",
+      "tests/python/test_opensubsonic_capture.py",
+      "tests/python/test_jellyfin_capture.py",
+      "tests/python/test_media_baseline.py",
+      "tests/python/test_benchmark_baseline.py"
+    ]
   },
   {
     "id": "PRD-TEST-002",
@@ -2157,9 +2278,15 @@
     "phase": "0,all",
     "source": "PRD.md",
     "line": 2204,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "in-progress",
+    "implementation": [
+      "compatibility/melodee-api-v1/golden/ + opensubsonic/golden/ + jellyfin/golden/ (normalized golden request/response fixtures incl. negative paths)"
+    ],
+    "tests": [
+      "tests/python/test_native_v1_capture.py (GoldenFixtureTests)",
+      "tests/python/test_opensubsonic_capture.py",
+      "tests/python/test_jellyfin_capture.py"
+    ]
   },
   {
     "id": "PRD-TEST-003",
@@ -2187,9 +2314,13 @@
     "phase": "0,all",
     "source": "PRD.md",
     "line": 2233,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "in-progress",
+    "implementation": [
+      "compatibility/media/ (31-case synthetic corpus incl. malformed tags, corrupt/truncated audio, invalid artwork, duplicate track numbers)"
+    ],
+    "tests": [
+      "tests/python/test_media_baseline.py"
+    ]
   },
   {
     "id": "PRD-TEST-006",
@@ -2197,8 +2328,11 @@
     "phase": "0,all",
     "source": "PRD.md",
     "line": 2257,
-    "status": "planned",
-    "implementation": [],
+    "status": "in-progress",
+    "implementation": [
+      "design/evidence/phase-0/media-baseline.md section 11 (interruption/non-atomicity evidence)",
+      "compatibility/melodee-api-v1/golden/native-auth/ (refresh replay/rotation fault evidence)"
+    ],
     "tests": []
   },
   {
@@ -2207,9 +2341,14 @@
     "phase": "0,all",
     "source": "PRD.md",
     "line": 2275,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "in-progress",
+    "implementation": [
+      "compatibility/benchmarks/ (3 tiers, environment metadata, machine-readable results)",
+      "design/evidence/phase-0/scale-baseline.md (budgets labeled requirement-vs-proposal)"
+    ],
+    "tests": [
+      "tests/python/test_benchmark_baseline.py"
+    ]
   },
   {
     "id": "PRD-TEST-008",

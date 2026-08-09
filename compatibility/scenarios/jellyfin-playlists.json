@@ -1,0 +1,321 @@
+[
+  {
+    "schemaVersion": 2,
+    "name": "jf-playlists",
+    "surface": "jellyfin",
+    "flow": [
+      {
+        "name": "login",
+        "method": "POST",
+        "path": "/Users/AuthenticateByName",
+        "json": {
+          "Username": "phase0-fixture",
+          "Pw": "Mel0deeR0cks!"
+        },
+        "capture": {
+          "jfToken": "$.AccessToken"
+        },
+        "secretCapture": [
+          "jfToken"
+        ],
+        "normalize": {
+          "maskJsonPaths": [
+            "$.AccessToken",
+            "$.SessionInfo",
+            "$.User.LastLoginDate",
+            "$.User.LastActivityDate",
+            "$.User.Configuration"
+          ]
+        }
+      },
+      {
+        "name": "playlists-list",
+        "method": "GET",
+        "path": "/Playlists",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {},
+        "notes": "User's playlists as BaseItems (Type Playlist, ChildCount, Overview=Comment)."
+      },
+      {
+        "name": "playlist-detail",
+        "method": "GET",
+        "path": "/Playlists/b16ae181fc405cd5ba7b0cf9f5b4c89d",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {
+          "dropHeaders": [
+            "etag"
+          ]
+        },
+        "notes": "Detail with item ETag."
+      },
+      {
+        "name": "playlist-items",
+        "method": "GET",
+        "path": "/Playlists/b16ae181fc405cd5ba7b0cf9f5b4c89d/Items",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {},
+        "notes": "Songs with ParentIndexNumber = playlist position."
+      },
+      {
+        "name": "create-playlist-empty",
+        "method": "POST",
+        "path": "/Playlists",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.Id"
+          ]
+        },
+        "notes": "Create with empty Ids works; returns {Id} (dashes stripped); id captured.",
+        "json": {
+          "Name": "JF-Probe-Empty",
+          "Ids": [],
+          "IsPublic": false
+        },
+        "capture": {
+          "jfPlaylistId": "$.Id"
+        },
+        "secretCapture": [
+          "jfPlaylistId"
+        ]
+      },
+      {
+        "name": "add-first-empty",
+        "method": "POST",
+        "path": "/Playlists/{{jfPlaylistId}}/Items?ids=a39f05c4278353c1aa3ce4e9d6a6f0a3",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {},
+        "notes": "Add to an EMPTY playlist succeeds (204). NOTE: the inserted PlaylistSong row has SongApiKey=Guid.Empty (Jellyfin add does not populate it) — latent corruption, though list/items keep working.",
+        "expectStatus": 204
+      },
+      {
+        "name": "items-after-first-add",
+        "method": "GET",
+        "path": "/Playlists/{{jfPlaylistId}}/Items",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {},
+        "notes": "VERIFICATION: exactly one song present."
+      },
+      {
+        "name": "add-second-nonempty",
+        "method": "POST",
+        "path": "/Playlists/{{jfPlaylistId}}/Items?ids=2b8eab4b235d589299f8c0f5f54e8ab4",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.correlationId"
+          ]
+        },
+        "notes": "PRECISE BUG BOUNDARY: adding to a NON-EMPTY playlist 500s (PlaylistService.AddSongsToPlaylistAsync recomputes Duration via the Song navigation, which is not included for existing rows). Same root cause family as native add-songs and OS playlist mutations.",
+        "expectStatus": 500
+      },
+      {
+        "name": "delete-created-playlist",
+        "method": "DELETE",
+        "path": "/Playlists/{{jfPlaylistId}}",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {},
+        "notes": "204.",
+        "expectStatus": 204
+      },
+      {
+        "name": "move-item",
+        "method": "POST",
+        "path": "/Playlists/b16ae181fc405cd5ba7b0cf9f5b4c89d/Items/a39f05c4278353c1aa3ce4e9d6a6f0a3/Move/0",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {},
+        "notes": "Reorder on the SEEDED playlist: move Coda (position 3) to index 0. 204.",
+        "expectStatus": 204
+      },
+      {
+        "name": "items-after-move",
+        "method": "GET",
+        "path": "/Playlists/b16ae181fc405cd5ba7b0cf9f5b4c89d/Items",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {},
+        "notes": "ORDER VERIFICATION after move (Coda first)."
+      },
+      {
+        "name": "remove-item",
+        "method": "DELETE",
+        "path": "/Playlists/b16ae181fc405cd5ba7b0cf9f5b4c89d/Items?entryIds=2b8eab4b235d589299f8c0f5f54e8ab4",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {},
+        "notes": "entryIds are actually SONG ApiKeys (quirk). 204.",
+        "expectStatus": 204
+      },
+      {
+        "name": "items-after-remove",
+        "method": "GET",
+        "path": "/Playlists/b16ae181fc405cd5ba7b0cf9f5b4c89d/Items",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {},
+        "notes": "CONTENT VERIFICATION after remove."
+      },
+      {
+        "name": "update-playlist",
+        "method": "POST",
+        "path": "/Playlists/b16ae181fc405cd5ba7b0cf9f5b4c89d",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {},
+        "notes": "POST update Name/IsPublic only (Genres/ProviderIds ignored). 204.",
+        "expectStatus": 204,
+        "json": {
+          "Name": "Phase0 Mix (renamed)",
+          "IsPublic": true
+        }
+      },
+      {
+        "name": "delete-seeded-playlist",
+        "method": "DELETE",
+        "path": "/Playlists/b16ae181fc405cd5ba7b0cf9f5b4c89d",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {},
+        "notes": "204 (reseed restores the fixture).",
+        "expectStatus": 204
+      },
+      {
+        "name": "detail-after-delete",
+        "method": "GET",
+        "path": "/Playlists/b16ae181fc405cd5ba7b0cf9f5b4c89d",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {
+          "maskJsonPaths": [
+            "$.TraceId",
+            "$.traceId"
+          ]
+        },
+        "notes": "Deleted playlist -> 404 JellyfinProblemDetails (clean, unlike native 500 / OS quirks).",
+        "expectStatus": 404
+      }
+    ]
+  },
+  {
+    "schemaVersion": 2,
+    "name": "jf-playlists-create-with-songs",
+    "surface": "jellyfin",
+    "flow": [
+      {
+        "name": "login",
+        "method": "POST",
+        "path": "/Users/AuthenticateByName",
+        "json": {
+          "Username": "phase0-fixture",
+          "Pw": "Mel0deeR0cks!"
+        },
+        "capture": {
+          "jfToken": "$.AccessToken"
+        },
+        "secretCapture": [
+          "jfToken"
+        ],
+        "normalize": {
+          "maskJsonPaths": [
+            "$.AccessToken",
+            "$.SessionInfo",
+            "$.User.LastLoginDate",
+            "$.User.LastActivityDate",
+            "$.User.Configuration"
+          ]
+        }
+      },
+      {
+        "name": "create-with-songs",
+        "method": "POST",
+        "path": "/Playlists",
+        "json": {
+          "Name": "JF-WithSongs",
+          "Ids": [
+            "2b8eab4b235d589299f8c0f5f54e8ab4",
+            "a39f05c4278353c1aa3ce4e9d6a6f0a3"
+          ],
+          "IsPublic": false
+        },
+        "capture": {
+          "jfPlaylistId2": "$.Id"
+        },
+        "secretCapture": [
+          "jfPlaylistId2"
+        ],
+        "normalize": {
+          "maskJsonPaths": [
+            "$.Id"
+          ]
+        },
+        "notes": "Create WITH Ids succeeds on a clean database (CreatePlaylistAsync is correct — proper SongApiKeys, 0-based PlaylistOrder). CORRECTION from live investigation: earlier 500s on this route traced to pre-existing poisoned rows left by the OpenSubsonic createPlaylist partial-failure path (see os-playlists/create-playlist golden), not to the Jellyfin create itself.",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "auth": "none"
+      },
+      {
+        "name": "items-of-created",
+        "method": "GET",
+        "path": "/Playlists/{{jfPlaylistId2}}/Items",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "normalize": {},
+        "notes": "Two songs in creation order."
+      },
+      {
+        "name": "delete-created",
+        "method": "DELETE",
+        "path": "/Playlists/{{jfPlaylistId2}}",
+        "auth": "none",
+        "headers": {
+          "Authorization": "MediaBrowser Client=\"Phase0Capture\", Device=\"Capture\", DeviceId=\"phase0-capture-1\", Version=\"1.0\", Token=\"{{jfToken}}\""
+        },
+        "expectStatus": 204,
+        "normalize": {},
+        "notes": "Cleanup (reseed also restores)."
+      }
+    ]
+  }
+]

@@ -1,0 +1,35 @@
+{
+  "name": "jf-system-info",
+  "surface": "jellyfin",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/System/Info",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "MediaBrowser <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "jf-system-info.json",
+    "sha256": "bf4a66262f1e86cc0e44cec1d1913440aaea5584f60e0e76d49e5d6f22ee6562",
+    "bytes": 629
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.Version",
+      "$.LocalAddress",
+      "$.Id",
+      "$.WebSocketPortNumber"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

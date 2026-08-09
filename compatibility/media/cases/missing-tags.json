@@ -1,0 +1,203 @@
+{
+  "slug": "missing-tags",
+  "description": "No tags at all (bare MP3 stream).",
+  "expected": {
+    "fallback": "filename/directory",
+    "validation": "fails or flags"
+  },
+  "input": {
+    "files": [
+      "01 First Light.mp3",
+      "02 Second Wave.mp3",
+      "03 Third Echo.mp3"
+    ],
+    "sizes": {
+      "03 Third Echo.mp3": 55841,
+      "02 Second Wave.mp3": 52706,
+      "01 First Light.mp3": 49572
+    },
+    "sha256": {
+      "03 Third Echo.mp3": "3cfc7e0fe75e2e5106027c60f7f174b30d2438b63fcefdae2bf95cfb6d6be96e",
+      "02 Second Wave.mp3": "2ced28909bbb2227e674ff6fc553b8c1f34a3e0922413e9159c6fbe2c4061d3f",
+      "01 First Light.mp3": "e5ec763c77f2ed805d28cb13df2fced2b3d611d74ad002b51e1ea0afe5740918"
+    }
+  },
+  "extraction": {
+    "extractions": [
+      {
+        "file": "01 First Light.mp3",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {},
+        "mediaAudios": {},
+        "imageCount": 0,
+        "crcHash": null
+      },
+      {
+        "file": "02 Second Wave.mp3",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {},
+        "mediaAudios": {},
+        "imageCount": 0,
+        "crcHash": null
+      }
+    ]
+  },
+  "pipeline": {
+    "processExitCode": 0,
+    "processSummary": {
+      "Elapsed Time": "00:00:02",
+      "Directories Processed": "1",
+      "Albums Processed": "1",
+      "Valid Albums": "0 (0%)",
+      "New Artists": "1",
+      "New Albums": "1",
+      "New Songs": "3"
+    },
+    "processErrorTail": null,
+    "stagingTree": [
+      {
+        "path": "Missing - [] 1395155023/0000 03 Third Echo.Mp3.mp3",
+        "size": 55859
+      },
+      {
+        "path": "Missing - [] 1395155023/melodee.json",
+        "size": 5014,
+        "sha256": null
+      }
+    ],
+    "albums": [
+      {
+        "directory": "Missing - [] 1395155023",
+        "status": "Invalid",
+        "statusReasons": "HasInvalidSongs, HasInvalidYear, HasNoImages, HasSongsWithUnwantedText, IsNotStudioTypeAlbum, TitleIsInvalid, HasLessThanMinimumDuration",
+        "albumType": "NotSet",
+        "validationMessages": [
+          {
+            "message": "Album has invalid songs.",
+            "severity": 2
+          },
+          {
+            "message": "Album has invalid year.",
+            "severity": 2
+          },
+          {
+            "message": "Album title is invalid.",
+            "severity": 2
+          },
+          {
+            "message": "Some Songs have unwanted text: [ArtistId [] AlbumId [] SongId [8c3f03fb-5f9c-4d3f-81fe-605cfc491667] File [UniqueId [2062886481] Size [55841] Name [0000 03 Third Echo.Mp3.mp3]]][ArtistId [] AlbumId [] SongId [24dee351-3ec2-40ce-9b4e-7d98777248c3] File [UniqueId [672313523] Size [52706] Name [02 Second Wave.mp3]]][ArtistId [] AlbumId [] SongId [8b5765f9-faa4-4018-ab18-4a470f5d1a53] File [UniqueId [2526504679] Size [49572] Name [01 First Light.mp3]]]",
+            "severity": 1
+          },
+          {
+            "message": "Album does not have cover image.",
+            "severity": 2
+          },
+          {
+            "message": "Album is not studio type, will need manual validation.",
+            "severity": 2
+          },
+          {
+            "message": "Album duration is less than the minimum album duration.",
+            "severity": 2
+          }
+        ],
+        "songCount": 3,
+        "songs": [
+          {
+            "fileName": "0000 03 Third Echo.Mp3.mp3",
+            "size": 55841,
+            "title": null,
+            "songNumber": 1,
+            "mediaNumber": null,
+            "sortOrder": 0,
+            "crcHash": "B9DE5187"
+          },
+          {
+            "fileName": "02 Second Wave.mp3",
+            "size": 52706,
+            "title": null,
+            "songNumber": 2,
+            "mediaNumber": null,
+            "sortOrder": 0,
+            "crcHash": "79A01134"
+          },
+          {
+            "fileName": "01 First Light.mp3",
+            "size": 49572,
+            "title": null,
+            "songNumber": 3,
+            "mediaNumber": null,
+            "sortOrder": 0,
+            "crcHash": "22EEBFB3"
+          }
+        ],
+        "images": [],
+        "displaySummary": "003 : "
+      }
+    ],
+    "inboundLeftovers": [
+      {
+        "path": "03 Third Echo.mp3",
+        "size": 55841
+      },
+      {
+        "path": "melodee.json",
+        "size": 4183
+      }
+    ],
+    "validations": [
+      {
+        "album": "Missing - [] 1395155023",
+        "exitCode": 0,
+        "result": {
+          "data": {
+            "albumStatus": 3,
+            "albumStatusReasons": 37785776,
+            "isValid": false,
+            "messages ": [
+              {
+                "message": "Album has invalid  songs.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album has invalid  year.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album title is  invalid.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Some Songs have unwanted text: [ArtistId [] AlbumId [] SongId [8c3f03fb-5f9c-4d3f-81fe-605cfc491667] File  [UniqueId [2062886481] Size [55841] Name [0000 03 Third Echo.Mp3.mp3]]][ArtistId [] AlbumId [] SongId [24dee351-3ec2-40ce-9b4e-7d98777248c3] File [UniqueId  [672313523] Size [52706] Name [02 Second Wave.mp3]]][ArtistId [] AlbumId []  SongId [8b5765f9-faa4-4018-ab18-4a470f5d1a53] File [UniqueId [2526504679] Size  [49572] Name [01 First  Light.mp3]]]",
+                "sortOrder": 0,
+                "severity": 1
+              },
+              {
+                "message": "Album does not have cover  image.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album is not studio type, will  need manual validation.",
+                "sortOrder": 0,
+                "severity": 2
+              },
+              {
+                "message": "Album duration  is less than the minimum album  duration.",
+                "sortOrder": 0,
+                "severity": 2
+              }
+            ]
+          },
+          "isSuccess": true,
+          "type": 200
+        }
+      }
+    ]
+  }
+}

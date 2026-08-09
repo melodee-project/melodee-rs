@@ -1,0 +1,68 @@
+{
+  "slug": "not-mp3-named-mp3",
+  "description": "WAV content in an .mp3 filename (forces conversion).",
+  "expected": {
+    "conversion": "mp3 despite extension"
+  },
+  "input": {
+    "files": [
+      "01 First Light.mp3",
+      "02 Second Wave.mp3",
+      "03 Third Echo.mp3"
+    ],
+    "sizes": {
+      "03 Third Echo.mp3": 199374,
+      "02 Second Wave.mp3": 187910,
+      "01 First Light.mp3": 176444
+    },
+    "sha256": {
+      "03 Third Echo.mp3": "a9d8c271f333d97835226c2f9c7c331c1e1529a2a3a61b040f0e9b04e37f1342",
+      "02 Second Wave.mp3": "fffedc39ae78b24127fbf7a20e9345711cba610da626f2cdb43120f8886074a4",
+      "01 First Light.mp3": "6eeac52dee136c0aad6fb24b408b60e9d515c5a52ceea6c63737c14f68bfbcd6"
+    }
+  },
+  "extraction": {
+    "extractions": [
+      {
+        "file": "01 First Light.mp3",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {},
+        "mediaAudios": {},
+        "imageCount": 0,
+        "crcHash": null
+      },
+      {
+        "file": "02 Second Wave.mp3",
+        "exitCode": 1,
+        "exitCodeNote": "mcli tags show always exits 1 (isValid never set) — recorded CLI defect",
+        "tags": {},
+        "mediaAudios": {},
+        "imageCount": 0,
+        "crcHash": null
+      }
+    ]
+  },
+  "pipeline": {
+    "processExitCode": 1,
+    "processSummary": {},
+    "processErrorTail": null,
+    "stagingTree": [],
+    "albums": [],
+    "inboundLeftovers": [
+      {
+        "path": "01 First Light.mp3",
+        "size": 176444
+      },
+      {
+        "path": "02 Second Wave.mp3",
+        "size": 187910
+      },
+      {
+        "path": "03 Third Echo.mp3",
+        "size": 199374
+      }
+    ],
+    "validations": []
+  }
+}

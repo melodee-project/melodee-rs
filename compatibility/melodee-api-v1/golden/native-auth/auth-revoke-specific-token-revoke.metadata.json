@@ -12,7 +12,8 @@
     },
     "jsonTemplate": {
       "refreshToken": "<redacted>"
-    }
+    },
+    "bodyTemplate": null
   },
   "response": {
     "status": 200,

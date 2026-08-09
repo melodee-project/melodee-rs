@@ -1,0 +1,34 @@
+{
+  "name": "jf-auth/me-x-emby-token",
+  "surface": "jellyfin",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/Users/Me",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "X-Emby-Token": "<captured:jfToken>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "jf-auth-me-x-emby-token.json",
+    "sha256": "f2b734863727bd67064e7b178504e901d8176502398514b6790e77df7d62f209",
+    "bytes": 1306
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.LastLoginDate",
+      "$.LastActivityDate",
+      "$.Configuration"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

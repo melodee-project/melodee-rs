@@ -1,0 +1,825 @@
+{
+  "schemaVersion": 1,
+  "surface": "jellyfin",
+  "legacyBaselineCommit": "4028b58dbd3302ed431e2c5b32d9dde5634db218",
+  "routing": {
+    "middleware": "JellyfinRoutingMiddleware rewrites detected requests to /api/jf{path} before endpoint selection; excluded prefixes /api/, /rest/, /song/ pass through",
+    "detection": [
+      "allowlisted pre-auth paths (rewritten regardless of headers): /System/Info/Public, /System/Ping, /Users/AuthenticateByName, /Users/Public",
+      "Authorization or X-Emby-Authorization header starting with MediaBrowser",
+      "X-MediaBrowser-Token or X-Emby-Token header present",
+      "api_key query param AND path under a Jellyfin prefix (/Audio/, /Items/, /Users/, /UserViews, /System/, /Sessions/, /Artists/, /Playlists/, /Images/)"
+    ],
+    "disabled": "jellyfin.enabled=false -> explicit /api/jf/* gets a hard middleware 404; detected root-form requests pass through unmodified (Blazor app or natural 404)",
+    "root": "GET/HEAD / only rewritten when a Jellyfin marker is present (-> /api/jf, 200 empty); otherwise Blazor app"
+  },
+  "authModel": {
+    "issuance": "POST /Users/AuthenticateByName {Username, Pw} (no Password field) -> {User, SessionInfo, AccessToken(64-hex), ServerId}; token = 32 random bytes hex; HMAC-SHA256(pepper, salt+token) stored, prefix-cleartext lookup; expiry jellyfin.token.expiresAfterHours (default 168h); max-active 10 (oldest soft-revoked)",
+    "transports": [
+      "Authorization: MediaBrowser ... Token=",
+      "X-Emby-Authorization",
+      "X-MediaBrowser-Token",
+      "X-Emby-Token",
+      "api_key query"
+    ],
+    "failure": "401 JellyfinProblemDetails; revoked/expired tokens are indistinguishable from invalid",
+    "logout": "POST /Sessions/Logout revokes the presented token (204; idempotent); tokens are stateful — revoked tokens die immediately (unlike stateless native JWTs)"
+  },
+  "routeCount": 60,
+  "coveredCount": 60,
+  "unsupportedScope": "No controllers exist for video/TV/books/LiveTV/plugins/admin; detected requests to such paths get ASP.NET 404 (empty body); non-music includeItemTypes are silently dropped from Items queries",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/jf/",
+      "clientVisiblePath": "/",
+      "controller": "RootControllerController",
+      "action": "ServerRoot",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-root-no-markers"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jf/Artists",
+      "clientVisiblePath": "/Artists",
+      "controller": "ArtistsControllerController",
+      "action": "GetArtistsAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-artists-genres/artists-list"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jf/Artists/AlbumArtists",
+      "clientVisiblePath": "/Artists/AlbumArtists",
+      "controller": "ArtistsControllerController",
+      "action": "GetAlbumArtistsAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-artists-genres/albumartists-list"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jf/Artists/{}",
+      "clientVisiblePath": "/Artists/{}",
+      "controller": "ArtistsControllerController",
+      "action": "GetArtistAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-artists-genres/albumartists-list",
+        "jf-artists-genres/artist-detail"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jf/Artists/{}/Images/{}",
+      "clientVisiblePath": "/Artists/{}/Images/{}",
+      "controller": "ImagesControllerController",
+      "action": "GetArtistImageAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-images/artist-image"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jf/Artists/{}/Similar",
+      "clientVisiblePath": "/Artists/{}/Similar",
+      "controller": "ArtistsControllerController",
+      "action": "GetSimilarArtistsAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-artists-genres/artist-similar"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jf/Audio/{}/Lyrics",
+      "clientVisiblePath": "/Audio/{}/Lyrics",
+      "controller": "AudioControllerController",
+      "action": "GetLyricsAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-extra/audio-lyrics",
+        "jf-extra/audio-lyrics-none"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jf/Audio/{}/stream",
+      "clientVisiblePath": "/Audio/{}/stream",
+      "controller": "AudioControllerController",
+      "action": "StreamAudioAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-playback/stream-full",
+        "jf-playback/stream-range-end",
+        "jf-playback/stream-range-invalid",
+        "jf-playback/stream-range-middle",
+        "jf-playback/stream-range-start",
+        "jf-playback/stream-range-unsatisfiable",
+        "jf-playback/stream-unknown"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jf/Audio/{}/stream.{}",
+      "clientVisiblePath": "/Audio/{}/stream.{}",
+      "controller": "AudioControllerController",
+      "action": "StreamAudioWithContainerAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-playback/stream-extension-no-static",
+        "jf-playback/stream-extension-static"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jf/Audio/{}/universal",
+      "clientVisiblePath": "/Audio/{}/universal",
+      "controller": "AudioControllerController",
+      "action": "UniversalAudioAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-playback/stream-universal"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jf/Genres",
+      "clientVisiblePath": "/Genres",
+      "controller": "GenresControllerController",
+      "action": "GetGenresAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-artists-genres/genres-list"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jf/Items",
+      "clientVisiblePath": "/Items",
+      "controller": "ItemsControllerController",
+      "action": "GetItemsAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-browse/items-albums",
+        "jf-browse/items-artists",
+        "jf-browse/items-parent-album",
+        "jf-browse/items-parent-artist",
+        "jf-browse/items-searchterm-dune",
+        "jf-browse/items-songs",
+        "jf-browse/items-video-type-empty"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jf/Items/Filters",
+      "clientVisiblePath": "/Items/Filters",
+      "controller": "ItemsControllerController",
+      "action": "GetFiltersAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-browse/items-filters"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/jf/Items/{}",
+      "clientVisiblePath": "/Items/{}",
+      "controller": "ItemsControllerController",
+      "action": "DeleteItemAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-extra/delete-playlist-via-items",
+        "jf-extra/delete-song-via-items-404"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jf/Items/{}",
+      "clientVisiblePath": "/Items/{}",
+      "controller": "ItemsControllerController",
+      "action": "GetItemAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-browse/item-album-detail",
+        "jf-browse/item-artist-detail",
+        "jf-browse/item-song-detail",
+        "jf-browse/item-unknown",
+        "jf-browse/items-filters",
+        "jf-userstate/verify-favorite",
+        "jf-userstate/verify-unfavorite"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jf/Items/{}/Download",
+      "clientVisiblePath": "/Items/{}/Download",
+      "controller": "ItemsControllerController",
+      "action": "GetItemFileAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-playback/download-item"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jf/Items/{}/File",
+      "clientVisiblePath": "/Items/{}/File",
+      "controller": "ItemsControllerController",
+      "action": "GetItemFileAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-playback/file-item"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jf/Items/{}/Images/{}",
+      "clientVisiblePath": "/Items/{}/Images/{}",
+      "controller": "ImagesControllerController",
+      "action": "GetItemImageAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-images/image-maxwidth-bucket",
+        "jf-images/image-no-artwork-404",
+        "jf-images/image-unknown",
+        "jf-images/item-image-304",
+        "jf-images/item-image-primary"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jf/Items/{}/Images/{}/{}",
+      "clientVisiblePath": "/Items/{}/Images/{}/{}",
+      "controller": "ImagesControllerController",
+      "action": "GetItemImageByIndexAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-images/item-image-indexed"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jf/Items/{}/InstantMix",
+      "clientVisiblePath": "/Items/{}/InstantMix",
+      "controller": "ItemsControllerController",
+      "action": "GetInstantMixAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-browse/items-instantmix-song",
+        "jf-browse/items-instantmix-unknown"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jf/Items/{}/PlaybackInfo",
+      "clientVisiblePath": "/Items/{}/PlaybackInfo",
+      "controller": "ItemsControllerController",
+      "action": "GetPlaybackInfoAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-playback/playbackinfo"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/jf/Items/{}/PlaybackInfo",
+      "clientVisiblePath": "/Items/{}/PlaybackInfo",
+      "controller": "ItemsControllerController",
+      "action": "GetPlaybackInfoAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-extra/playbackinfo-post"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/jf/Items/{}/Refresh",
+      "clientVisiblePath": "/Items/{}/Refresh",
+      "controller": "ItemsControllerController",
+      "action": "RefreshItemAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-extra/item-refresh-noop"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jf/Items/{}/Similar",
+      "clientVisiblePath": "/Items/{}/Similar",
+      "controller": "ItemsControllerController",
+      "action": "GetSimilarItemsAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-browse/items-similar-artist-id",
+        "jf-browse/items-similar-song"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jf/MusicGenres",
+      "clientVisiblePath": "/MusicGenres",
+      "controller": "MusicGenresControllerController",
+      "action": "GetMusicGenresAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-artists-genres/musicgenres-list"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jf/Playlists",
+      "clientVisiblePath": "/Playlists",
+      "controller": "PlaylistsControllerController",
+      "action": "GetPlaylistsAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-playlists/playlists-list"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/jf/Playlists",
+      "clientVisiblePath": "/Playlists",
+      "controller": "PlaylistsControllerController",
+      "action": "CreatePlaylistAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-extra/create-for-items-delete",
+        "jf-playlists-create-with-songs/create-with-songs",
+        "jf-playlists/create-playlist-empty"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/jf/Playlists/{}",
+      "clientVisiblePath": "/Playlists/{}",
+      "controller": "PlaylistsControllerController",
+      "action": "DeletePlaylistAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-playlists-create-with-songs/delete-created",
+        "jf-playlists/delete-created-playlist",
+        "jf-playlists/delete-seeded-playlist"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jf/Playlists/{}",
+      "clientVisiblePath": "/Playlists/{}",
+      "controller": "PlaylistsControllerController",
+      "action": "GetPlaylistAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-playlists/detail-after-delete",
+        "jf-playlists/playlist-detail"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/jf/Playlists/{}",
+      "clientVisiblePath": "/Playlists/{}",
+      "controller": "PlaylistsControllerController",
+      "action": "UpdatePlaylistAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-playlists/update-playlist"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/jf/Playlists/{}/Items",
+      "clientVisiblePath": "/Playlists/{}/Items",
+      "controller": "PlaylistsControllerController",
+      "action": "RemoveItemsFromPlaylistAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-playlists/remove-item"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jf/Playlists/{}/Items",
+      "clientVisiblePath": "/Playlists/{}/Items",
+      "controller": "PlaylistsControllerController",
+      "action": "GetPlaylistItemsAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-playlists-create-with-songs/items-of-created",
+        "jf-playlists/items-after-first-add",
+        "jf-playlists/items-after-move",
+        "jf-playlists/items-after-remove",
+        "jf-playlists/playlist-items"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/jf/Playlists/{}/Items",
+      "clientVisiblePath": "/Playlists/{}/Items",
+      "controller": "PlaylistsControllerController",
+      "action": "AddItemsToPlaylistAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-playlists/add-first-empty",
+        "jf-playlists/add-second-nonempty"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/jf/Playlists/{}/Items/{}/Move/{}",
+      "clientVisiblePath": "/Playlists/{}/Items/{}/Move/{}",
+      "controller": "PlaylistsControllerController",
+      "action": "MovePlaylistItemAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-playlists/move-item"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jf/Sessions",
+      "clientVisiblePath": "/Sessions",
+      "controller": "SessionsControllerController",
+      "action": "GetSessionsAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-userstate/sessions-list",
+        "jf-userstate/sessions-list-after-stop"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/jf/Sessions/Capabilities",
+      "clientVisiblePath": "/Sessions/Capabilities",
+      "controller": "SessionsControllerController",
+      "action": "PostCapabilitiesAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-extra/capabilities"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/jf/Sessions/Capabilities/Full",
+      "clientVisiblePath": "/Sessions/Capabilities/Full",
+      "controller": "SessionsControllerController",
+      "action": "PostCapabilitiesFullAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-userstate/capabilities-full"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/jf/Sessions/Logout",
+      "clientVisiblePath": "/Sessions/Logout",
+      "controller": "SessionsControllerController",
+      "action": "LogoutAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-auth-negative/logout-unauthenticated",
+        "jf-auth/logout"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/jf/Sessions/Playing",
+      "clientVisiblePath": "/Sessions/Playing",
+      "controller": "SessionsControllerController",
+      "action": "ReportPlaybackStartAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-userstate/session-playing",
+        "jf-userstate/session-playing-unknown-item"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/jf/Sessions/Playing/Ping",
+      "clientVisiblePath": "/Sessions/Playing/Ping",
+      "controller": "SessionsControllerController",
+      "action": "PingPlaybackAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-userstate/session-ping"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/jf/Sessions/Playing/Progress",
+      "clientVisiblePath": "/Sessions/Playing/Progress",
+      "controller": "SessionsControllerController",
+      "action": "ReportPlaybackProgressAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-userstate/session-progress"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/jf/Sessions/Playing/Stopped",
+      "clientVisiblePath": "/Sessions/Playing/Stopped",
+      "controller": "SessionsControllerController",
+      "action": "ReportPlaybackStoppedAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-userstate/session-stopped"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jf/Songs/{}/InstantMix",
+      "clientVisiblePath": "/Songs/{}/InstantMix",
+      "controller": "SongsControllerController",
+      "action": "GetInstantMixAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-extra/songs-instantmix"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jf/System/Info",
+      "clientVisiblePath": "/System/Info",
+      "controller": "SystemControllerController",
+      "action": "GetSystemInfoAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-system-info",
+        "jf-system-info-fallthrough"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jf/System/Info/Public",
+      "clientVisiblePath": "/System/Info/Public",
+      "controller": "SystemControllerController",
+      "action": "GetPublicSystemInfoAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-system-info-public",
+        "jf-system-info-public-explicit"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jf/System/Ping",
+      "clientVisiblePath": "/System/Ping",
+      "controller": "SystemControllerController",
+      "action": "Ping",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-system-ping"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/jf/System/Ping",
+      "clientVisiblePath": "/System/Ping",
+      "controller": "SystemControllerController",
+      "action": "Ping",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-extra/system-ping-post"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jf/UserViews",
+      "clientVisiblePath": "/UserViews",
+      "controller": "UserViewsControllerController",
+      "action": "GetUserViewsAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-browse/userviews"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jf/Users",
+      "clientVisiblePath": "/Users",
+      "controller": "UsersControllerController",
+      "action": "GetUsersAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-extra/users-list-admin"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/jf/Users/AuthenticateByName",
+      "clientVisiblePath": "/Users/AuthenticateByName",
+      "controller": "UsersControllerController",
+      "action": "AuthenticateByNameAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-artists-genres/login",
+        "jf-auth-negative/missing-fields",
+        "jf-auth-negative/password-field-not-read",
+        "jf-auth-negative/unknown-user",
+        "jf-auth-negative/wrong-password",
+        "jf-auth/login",
+        "jf-browse/login",
+        "jf-extra/login",
+        "jf-images/login",
+        "jf-playback/login",
+        "jf-playlists-create-with-songs/login",
+        "jf-playlists/login",
+        "jf-userstate/login"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jf/Users/Me",
+      "clientVisiblePath": "/Users/Me",
+      "controller": "UsersControllerController",
+      "action": "GetCurrentUserAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-auth-negative/me-garbage-token",
+        "jf-auth-negative/me-no-token",
+        "jf-auth/me-after-logout",
+        "jf-auth/me-api-key-query",
+        "jf-auth/me-mediabrowser-header",
+        "jf-auth/me-x-emby-authorization",
+        "jf-auth/me-x-emby-token",
+        "jf-auth/me-x-mediabrowser-token"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jf/Users/Public",
+      "clientVisiblePath": "/Users/Public",
+      "controller": "UsersControllerController",
+      "action": "GetPublicUsersAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-users-public"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jf/Users/{}",
+      "clientVisiblePath": "/Users/{}",
+      "controller": "UsersControllerController",
+      "action": "GetUserByIdAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-auth-negative/me-garbage-token",
+        "jf-auth-negative/me-no-token",
+        "jf-auth/me-after-logout",
+        "jf-auth/me-api-key-query",
+        "jf-auth/me-mediabrowser-header",
+        "jf-auth/me-x-emby-authorization",
+        "jf-auth/me-x-emby-token",
+        "jf-auth/me-x-mediabrowser-token",
+        "jf-extra/users-by-id",
+        "jf-users-public"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/jf/Users/{}/FavoriteItems/{}",
+      "clientVisiblePath": "/Users/{}/FavoriteItems/{}",
+      "controller": "UsersControllerController",
+      "action": "RemoveFavoriteAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-userstate/unfavorite-song"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/jf/Users/{}/FavoriteItems/{}",
+      "clientVisiblePath": "/Users/{}/FavoriteItems/{}",
+      "controller": "UsersControllerController",
+      "action": "AddFavoriteAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-userstate/favorite-song",
+        "jf-userstate/favorite-unknown"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jf/Users/{}/Items",
+      "clientVisiblePath": "/Users/{}/Items",
+      "controller": "UsersControllerController",
+      "action": "GetUserItemsAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-extra/users-items-redirect"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jf/Users/{}/Items/{}",
+      "clientVisiblePath": "/Users/{}/Items/{}",
+      "controller": "UsersControllerController",
+      "action": "GetUserItemByIdAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-extra/users-item-redirect"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/jf/Users/{}/PlayedItems/{}",
+      "clientVisiblePath": "/Users/{}/PlayedItems/{}",
+      "controller": "UsersControllerController",
+      "action": "MarkUnplayedAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-userstate/unplayed-album"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "POST",
+      "path": "/api/jf/Users/{}/PlayedItems/{}",
+      "clientVisiblePath": "/Users/{}/PlayedItems/{}",
+      "controller": "UsersControllerController",
+      "action": "MarkPlayedAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-userstate/played-album"
+      ],
+      "hasGoldenScenario": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jf/Users/{}/Views",
+      "clientVisiblePath": "/Users/{}/Views",
+      "controller": "UsersControllerController",
+      "action": "GetUserViewsAsync",
+      "implementation": "implemented",
+      "scenarios": [
+        "jf-browse/user-views-by-id"
+      ],
+      "hasGoldenScenario": true
+    }
+  ]
+}

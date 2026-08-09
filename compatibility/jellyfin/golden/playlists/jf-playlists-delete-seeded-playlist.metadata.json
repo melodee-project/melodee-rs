@@ -1,0 +1,26 @@
+{
+  "name": "jf-playlists/delete-seeded-playlist",
+  "surface": "jellyfin",
+  "request": {
+    "method": "DELETE",
+    "url": "{melodee-origin}/Playlists/b16ae181fc405cd5ba7b0cf9f5b4c89d",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "MediaBrowser <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 204,
+    "headers": {},
+    "bodyFile": "jf-playlists-delete-seeded-playlist.bin",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "normalize": {},
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

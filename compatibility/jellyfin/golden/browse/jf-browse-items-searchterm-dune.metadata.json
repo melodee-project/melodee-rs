@@ -1,0 +1,28 @@
+{
+  "name": "jf-browse/items-searchterm-dune",
+  "surface": "jellyfin",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/Items?includeItemTypes=MusicArtist&searchTerm=Dune",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "MediaBrowser <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "jf-browse-items-searchterm-dune.json",
+    "sha256": "4b6ab56f902d22aa03945ce320407c94a8ab4f0ce3d01cfa020a02e3be63f34c",
+    "bytes": 3198
+  },
+  "normalize": {},
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

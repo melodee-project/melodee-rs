@@ -9,7 +9,8 @@
       "User-Agent": "melodee-rs-phase0-capture/1",
       "Authorization": "Bearer <redacted>"
     },
-    "jsonTemplate": null
+    "jsonTemplate": null,
+    "bodyTemplate": null
   },
   "response": {
     "status": 200,
@@ -17,7 +18,7 @@
       "content-type": "application/json; charset=utf-8"
     },
     "bodyFile": "catalog-scrobble-song-detail-before-scrobble.json",
-    "sha256": "9e76114ca1eca7d6c52010b98ece25f7dc6bc861501ae9aacb04213f49a6d1d0",
+    "sha256": "f481e161542045ad8e7e2c6964a96caa86a2092420a50e134a5cafdd559a4bec",
     "bytes": 1912
   },
   "normalize": {

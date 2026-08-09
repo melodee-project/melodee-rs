@@ -1,0 +1,32 @@
+{
+  "name": "jf-userstate/favorite-song",
+  "surface": "jellyfin",
+  "request": {
+    "method": "POST",
+    "url": "{melodee-origin}/Users/f78448cc82ec5864877c6c6163b00065/FavoriteItems/c418d38313f5598d94a8c15e5d2df348",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "MediaBrowser <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "jf-userstate-favorite-song.json",
+    "sha256": "f1b2196122065dd210a2fdc1ad83747eb2433fdba47fd0f6ad40cd8cdc2661ec",
+    "bytes": 141
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.Key"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

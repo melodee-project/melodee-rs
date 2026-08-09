@@ -1,0 +1,13 @@
+{
+  "subsonic-response": {
+    "status": "error",
+    "version": "1.16.1",
+    "type": "Melodee",
+    "serverVersion": "<volatile>",
+    "openSubsonic": true,
+    "error": {
+      "code": 70,
+      "message": "The requested data was not found."
+    }
+  }
+}
