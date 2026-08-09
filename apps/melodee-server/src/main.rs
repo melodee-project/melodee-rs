@@ -1,7 +1,10 @@
 use std::{env, error::Error, net::SocketAddr};
 
 use axum::{Json, Router, routing::get};
+use melodee_ingestion::{IngestionConfig, start_reconciliation_loop};
+use melodee_persistence::migrate;
 use serde::Serialize;
+use tokio::sync::oneshot;
 use tower_http::trace::TraceLayer;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
@@ -20,7 +23,7 @@ async fn healthz() -> Json<SystemInfo> {
         service: "melodee-server",
         version: env!("CARGO_PKG_VERSION"),
         status: "ok",
-        phase: "phase-0-bootstrap",
+        phase: "phase-1b-ingestion-foundation",
     })
 }
 
@@ -36,15 +39,53 @@ fn init_tracing() -> Result<(), Box<dyn Error + Send + Sync>> {
     Ok(())
 }
 
-async fn shutdown_signal() {
+async fn wait_for_shutdown_signal() {
     if let Err(error) = tokio::signal::ctrl_c().await {
         tracing::error!(%error, "unable to install CTRL+C signal handler");
+    }
+}
+
+fn database_url() -> String {
+    match env::var(melodee_persistence::ENV_DATABASE_URL) {
+        Ok(url) if !url.is_empty() => url,
+        _ => {
+            eprintln!(
+                "error: {} is required",
+                melodee_persistence::ENV_DATABASE_URL
+            );
+            std::process::exit(2);
+        }
     }
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     init_tracing()?;
+
+    let database_url = database_url();
+    let pool = sqlx::PgPool::connect(&database_url).await?;
+    migrate(&pool).await?;
+
+    let ingestion_config = match IngestionConfig::from_env() {
+        Ok(config) => config,
+        Err(error) => {
+            return Err(format!("invalid ingestion configuration: {error}").into());
+        }
+    };
+
+    let mut reconcile_handle = None;
+    if ingestion_config.enabled() {
+        info!(
+            sources = ingestion_config.sources.len(),
+            interval_ms = %ingestion_config.reconciliation_interval.whole_milliseconds(),
+            "starting periodic reconciliation loop"
+        );
+        reconcile_handle = Some(start_reconciliation_loop(
+            ingestion_config.clone(),
+            pool.clone(),
+            melodee_persistence::WorkItemStore,
+        ));
+    }
 
     let bind = env::var("MELODEE_BIND").unwrap_or_else(|_| "127.0.0.1:8080".to_owned());
     let address: SocketAddr = bind.parse()?;
@@ -54,12 +95,28 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .route("/api/admin/v1/system/info", get(healthz))
         .layer(TraceLayer::new_for_http());
 
+    let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
     let listener = tokio::net::TcpListener::bind(address).await?;
-    info!(%address, "Melodee Rust bootstrap server listening");
+    let server_handle = tokio::spawn(async move {
+        axum::serve(listener, app)
+            .with_graceful_shutdown(async move {
+                let _ = shutdown_rx.await;
+            })
+            .await
+    });
 
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
+    info!(%address, "Melodee Rust bootstrap server listening");
+    wait_for_shutdown_signal().await;
+    let _ = shutdown_tx.send(());
+
+    if let Ok(server_result) = server_handle.await {
+        server_result?;
+    }
+
+    if let Some(handle) = reconcile_handle {
+        let _ = handle.stop().await;
+    }
+    pool.close().await;
 
     Ok(())
 }

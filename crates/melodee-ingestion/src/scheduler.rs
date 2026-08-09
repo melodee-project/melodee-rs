@@ -1,0 +1,106 @@
+//! Periodic reconciliation scheduler.
+
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
+
+use melodee_persistence::WorkItemStore;
+use sqlx::PgPool;
+use tokio::time::{self, Duration as TokioDuration};
+use tracing::{error, info};
+
+use crate::{ReconcileResult, config::IngestionConfig};
+
+#[derive(Debug, Clone)]
+pub struct StopToken {
+    signal: Arc<tokio::sync::Notify>,
+}
+
+impl StopToken {
+    pub fn new() -> Self {
+        Self {
+            signal: Arc::new(tokio::sync::Notify::new()),
+        }
+    }
+
+    pub fn stop(&self) {
+        self.signal.notify_waiters();
+    }
+}
+
+impl Default for StopToken {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Debug)]
+pub struct SchedulerHandle {
+    join: tokio::task::JoinHandle<Vec<ReconcileResult>>,
+    stop: StopToken,
+}
+
+impl SchedulerHandle {
+    pub async fn stop(self) -> Vec<ReconcileResult> {
+        self.stop.stop();
+        self.join.await.unwrap_or_default()
+    }
+}
+
+pub fn start_reconciliation_loop(
+    config: IngestionConfig,
+    pool: PgPool,
+    store: WorkItemStore,
+) -> SchedulerHandle {
+    let reconciler_running = Arc::new(AtomicBool::new(false));
+    let stop = StopToken::new();
+    let notifier = stop.signal.clone();
+
+    let handle = tokio::spawn(async move {
+        let mut results = Vec::new();
+
+        if !config.enabled() {
+            info!("ingestion disabled: no periodic reconciliation started");
+            return results;
+        }
+
+        let reconciler = crate::reconcile::Reconciler::new(config.clone(), store);
+        let interval = TokioDuration::try_from(config.reconciliation_interval)
+            .unwrap_or_else(|_| TokioDuration::from_secs(30));
+        let mut ticker = time::interval(interval);
+
+        loop {
+            tokio::select! {
+                _ = ticker.tick() => {
+                    if reconciler_running
+                        .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+                        .is_err()
+                    {
+                        continue;
+                    }
+
+                    let now = ::time::OffsetDateTime::now_utc();
+                    match reconciler.reconcile_all_sources(&pool, now).await {
+                        Ok(recent) => {
+                            results = recent;
+                            info!("reconciliation loop completed");
+                        }
+                        Err(error) => {
+                            error!(%error, "reconciliation loop failed");
+                        }
+                    }
+                    reconciler_running.store(false, Ordering::Release);
+                }
+                _ = notifier.notified() => {
+                    reconciler_running.store(false, Ordering::Release);
+                    break;
+                }
+            }
+        }
+
+        results
+    });
+
+    SchedulerHandle { join: handle, stop }
+}

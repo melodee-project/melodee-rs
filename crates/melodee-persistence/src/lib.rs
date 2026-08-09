@@ -20,5 +20,5 @@ pub use config::{
 };
 pub use error::WorkStoreError;
 pub use migrate::{MIGRATOR, migrate};
-pub use work_items::{StateCount, WorkItemStore};
+pub use work_items::{SettlingSnapshot, SettlingSnapshotFile, StateCount, WorkItemStore};
 pub use worker::WorkerId;

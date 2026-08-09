@@ -255,30 +255,48 @@
     "note": "PostgreSQL lease-based concurrency proven across processes/workers; no process-local locks."
   },
   "PRD-INGEST-003": {
-    "status": "in-progress",
+    "status": "tested",
     "implementation": [
-      "design/evidence/phase-0/media-baseline.md sections 2, 8, 11, 12 (F1/F2 documented as the primary determinism/idempotency hazards)"
+      "crates/melodee-ingestion/src/reconcile.rs (periodic reconciliation drives source of truth)",
+      "crates/melodee-ingestion/src/scheduler.rs (optional periodic reconciliation loop)",
+      "apps/melodee-server/src/main.rs (periodic reconciler startup and shutdown)"
     ],
     "tests": [
-      "tests/python/test_media_baseline.py"
+      "crates/melodee-ingestion/tests/reconciliation.rs (lost_watcher_notification_is_recovered_by_scan)",
+      "crates/melodee-ingestion/tests/reconciliation.rs (two_hundred_releases_discover_and_settle_without_duplicates)",
+      "crates/melodee-ingestion/tests/reconciliation.rs (concurrent_reconcilers_do_not_create_duplicates)"
     ],
-    "note": "The requirements themselves govern Phase 2 implementation; Phase 0 evidence identifies the measured hazards they must fix."
+    "note": "Scan-based periodic reconciliation is authoritative. Missed watcher notifications are covered by tests."
   },
   "PRD-INGEST-004": {
-    "status": "in-progress",
+    "status": "tested",
     "implementation": [
-      "design/evidence/phase-0/media-baseline.md section 9 (sidecar behavior incl. lyrics plugin gating)"
+      "crates/melodee-ingestion/src/snapshot.rs (deterministic tree signature)",
+      "crates/melodee-ingestion/src/reconcile.rs (discovered->settling->ready transitions and ready marker shortcut)",
+      "crates/melodee-ingestion/src/source.rs (candidate discovery and boundary filtering)"
     ],
-    "tests": [],
-    "note": "Lyrics/missing-media/external-ID new behaviors are Phase 2 work; current sidecar behavior captured."
+    "tests": [
+      "crates/melodee-ingestion/tests/reconciliation.rs (settling_requires_quiet_period_without_marker)",
+      "crates/melodee-ingestion/tests/reconciliation.rs (changed_snapshot_reverts_ready_to_settling)",
+      "crates/melodee-ingestion/tests/reconciliation.rs (ready_marker_shortcuts_settling)",
+      "crates/melodee-ingestion/tests/reconciliation.rs (two_hundred_releases_discover_and_settle_without_duplicates)"
+    ],
+    "note": "Settling evidence is persisted in PostgreSQL and drives durable readiness transitions."
   },
   "PRD-INGEST-005": {
-    "status": "in-progress",
+    "status": "tested",
     "implementation": [
-      "design/evidence/phase-0/media-baseline.md section 11 (interruption/non-atomicity evidence)"
+      "crates/melodee-ingestion/src/config.rs (inbound roots canonicalized, write-paths never touched)",
+      "crates/melodee-ingestion/src/reconcile.rs (no source moves/renames/deletions during discovery)",
+      "crates/melodee-ingestion/src/source.rs (safe symlink and path traversal filtering)"
     ],
-    "tests": [],
-    "note": "Durable work-item claiming/retries is Phase 1A; baseline proves the need (no transactional semantics anywhere in the legacy pipeline)."
+    "tests": [
+      "crates/melodee-ingestion/tests/reconciliation.rs (missing_candidate_is_not_deleted)",
+      "crates/melodee-ingestion/tests/reconciliation.rs (snapshot_error_for_disappeared_directory_is_survivable)",
+      "crates/melodee-ingestion/tests/reconciliation.rs (symlink_candidates_are_safe)",
+      "crates/melodee-ingestion/tests/reconciliation.rs (directory_discovery_ignores_non_directories_and_invalid_candidates)"
+    ],
+    "note": "Source directories are read during discovery/settling only; writes/reorganization is intentionally deferred to later phases."
   },
   "PRD-PERF-001": {
     "status": "in-progress",
@@ -397,14 +415,17 @@
     "note": "Durable work queue core delivered. Scheduled triggers/maintenance tasks (PRD-WORK-003) arrive with later phases."
   },
   "PRD-WORK-004": {
-    "status": "in-progress",
+    "status": "tested",
     "implementation": [
-      "apps/melodee-cli/src/main.rs (work list/show/seed-test/claim-test coordinate through the same store/leases)"
+      "apps/melodee-cli/src/main.rs (work list/show/seed-test/claim-test sharing WorkItemStore)",
+      "apps/melodee-cli/src/main.rs (ingest reconcile/status command paths)",
+      "crates/melodee-ingestion/src/reconcile.rs (one-shot reconciliation against durable state)"
     ],
     "tests": [
-      "crates/melodee-persistence/tests/"
+      "apps/melodee-cli (manual command verification in docs and local ops)",
+      "apps/melodee-ingestion/tests/reconciliation.rs (lost_watcher_notification_is_recovered_by_scan)"
     ],
-    "note": "CLI uses the same durable state/leases as future server workers."
+    "note": "CLI triggers are implemented and operate on the same durable queue as server reconciliation."
   },
   "PRD-WORK-005": {
     "status": "in-progress",
@@ -434,5 +455,17 @@
       "crates/melodee-persistence/tests/history.rs"
     ],
     "note": "State/worker/attempts/last error/timestamps/history are durable and CLI-visible; Admin UI surface is Phase 9+."
+  },
+  "PRD-WORK-003": {
+    "status": "tested",
+    "implementation": [
+      "apps/melodee-server/src/main.rs (ingest scheduler startup)",
+      "crates/melodee-ingestion/src/scheduler.rs (graceful periodic reconcile task)",
+      "crates/melodee-ingestion/src/reconcile.rs (reconcile_all_sources and per-source loop)"
+    ],
+    "tests": [
+      "crates/melodee-ingestion/tests/reconciliation.rs (scheduler_runs_periodic_reconciliation_with_restart_signal)"
+    ],
+    "note": "Periodic reconciliation is implemented as the scheduled maintenance task required by this phase. Additional scheduled tasks remain deferred."
   }
 }

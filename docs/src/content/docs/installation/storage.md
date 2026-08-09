@@ -7,19 +7,19 @@ sidebar:
 
 Melodee separates **inbound** media from **library** storage:
 
-- **Inbound** is where you drop new or changed media for processing. Files here are inputs, never
-  catalog truth.
-- **Library storage** holds the canonical, normalized media and versioned manifests that the
-  catalog serves from.
+- **Inbound** is where new data is staged. In Phase 1B this path is discovered and snapshotted for
+  settling; it is not deleted or renamed by discovery.
+- **Library storage** holds stable canonical assets created in later phases.
 
-Important rules:
+Important rules for discovery/snapshot behavior:
 
-- Filesystem paths never determine semantic identity; a renamed or moved directory does not change
-  which Artist, Release, or Track something is.
-- Melodee never deletes source media because classification is uncertain.
-- File watchers only accelerate discovery; scans and durable work items are the source of truth.
+- Filesystem paths never determine semantic identity.
+- Inbound media is read-only during discovery and settling.
+- Watchers (if enabled in later phases) are accelerators only; reconciliation scans and durable work items are
+  the source of truth.
 
-:::caution[Planned documentation]
-Directory layout, permissions, and mount examples will be validated against the shipped Rust
-server during the ingestion phases of the rewrite.
-:::
+## Path safety rules
+
+- Candidate roots are canonicalized and path containment is enforced against each inbound root.
+- Symlink targets that escape an inbound root are ignored.
+- Discovery uses sorted, bounded reads to avoid loading the entire disk tree into memory for large libraries.

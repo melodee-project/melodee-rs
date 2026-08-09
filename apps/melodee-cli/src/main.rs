@@ -1,7 +1,10 @@
 use std::{env, process::Command};
 
+use std::collections::HashMap;
+
 use clap::{Parser, Subcommand};
 use melodee_domain::{IngestionState, ReleaseWorkItem};
+use melodee_ingestion::{IngestionConfig, reconcile_all_sources};
 use melodee_persistence::{WorkEngineConfig, WorkItemStore, WorkerId, migrate};
 use sqlx::PgPool;
 use time::OffsetDateTime;
@@ -30,6 +33,11 @@ enum Commands {
     Work {
         #[command(subcommand)]
         command: WorkCommands,
+    },
+    /// Development-only inbound discovery and settling diagnostics.
+    Ingest {
+        #[command(subcommand)]
+        command: IngestCommands,
     },
 }
 
@@ -69,6 +77,14 @@ enum WorkCommands {
         #[arg(long)]
         i_know_what_im_doing: bool,
     },
+}
+
+#[derive(Debug, Subcommand)]
+enum IngestCommands {
+    /// Development-only: run one reconciliation pass for configured inbound sources.
+    Reconcile,
+    /// Development-only: print a concise ingest queue summary.
+    Status,
 }
 
 fn command_available(command: &str, version_argument: &str) -> bool {
@@ -119,7 +135,7 @@ async fn main() {
 
     match cli.command {
         Commands::Plan => {
-            println!("Current phase: Phase 1A — durable Release work execution");
+            println!("Current phase: Phase 1B — durable inbound discovery and settling");
             println!("Read: PRD.md, SPEC.md, IMPLEMENTATION.md, AGENTS.md");
             println!("Phase 0 baseline: git tag phase-0-baseline");
         }
@@ -290,5 +306,87 @@ async fn main() {
                 }
             }
         }
+        Commands::Ingest { command } => {
+            let pool = pool().await;
+            let store = WorkItemStore;
+            let config = IngestionConfig::from_env().unwrap_or_else(|e| {
+                eprintln!("error: invalid ingestion configuration: {e}");
+                std::process::exit(2);
+            });
+
+            match command {
+                IngestCommands::Reconcile => {
+                    if config.sources.is_empty() {
+                        println!("no inbound sources configured");
+                        return;
+                    }
+                    let now = OffsetDateTime::now_utc();
+                    let results = match reconcile_all_sources(&config, &store, &pool, now).await {
+                        Ok(results) => results,
+                        Err(error) => match error {
+                            melodee_ingestion::IngestionError::Persistence(error) => {
+                                eprintln!("store error: {error}");
+                                std::process::exit(1);
+                            }
+                            melodee_ingestion::IngestionError::Config(message) => {
+                                eprintln!("config error: {message}");
+                                std::process::exit(2);
+                            }
+                            melodee_ingestion::IngestionError::Source(message) => {
+                                eprintln!("source error: {message}");
+                                std::process::exit(2);
+                            }
+                            melodee_ingestion::IngestionError::Snapshot(message) => {
+                                eprintln!("snapshot error: {message}");
+                                std::process::exit(2);
+                            }
+                        },
+                    };
+                    for result in results {
+                        print_reconcile_result(&result);
+                    }
+                    println!("reconciliation finished");
+                }
+                IngestCommands::Status => {
+                    let items = match store.list(&pool, None, 10_000, 0).await {
+                        Ok(items) => items,
+                        Err(e) => {
+                            eprintln!("error: {e}");
+                            std::process::exit(1);
+                        }
+                    };
+
+                    let mut states = HashMap::new();
+                    for item in &items {
+                        *states.entry(item.state).or_insert(0_u64) += 1;
+                    }
+                    println!("ingest work queue: {} total", items.len());
+                    if states.is_empty() {
+                        println!("no work items");
+                    } else {
+                        for (state, count) in states {
+                            println!("  {:<10} {count}", state.as_str());
+                        }
+                    }
+                }
+            }
+        }
     }
+}
+
+fn print_reconcile_result(result: &melodee_ingestion::ReconcileResult) {
+    println!("source: {}", result.source);
+    println!("  candidates_seen: {}", result.stats.candidates_seen);
+    println!("  new_work_items: {}", result.stats.new_work_items);
+    println!(
+        "  existing_work_items: {}",
+        result.stats.existing_work_items
+    );
+    println!("  settling_updated: {}", result.stats.settling_updated);
+    println!("  ready_promoted: {}", result.stats.ready_promoted);
+    println!("  ready_reverted: {}", result.stats.ready_reverted);
+    println!("  snapshot_changed: {}", result.stats.snapshot_changed);
+    println!("  missing_candidates: {}", result.stats.missing_candidates);
+    println!("  errors: {}", result.stats.errors);
+    println!("  duration_ms: {}", result.stats.duration_ms);
 }

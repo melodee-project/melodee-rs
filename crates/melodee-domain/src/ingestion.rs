@@ -151,6 +151,7 @@ impl IngestionState {
                 (Self::Discovered, Self::Settling)
                     | (Self::Settling, Self::Settling) // source changed; re-settle
                     | (Self::Settling, Self::Ready) // source stable
+                    | (Self::Ready, Self::Settling) // source changed after readiness
                     | (Self::Failed, Self::Ready) // retry eligibility reached (at claim)
             ),
             TransitionKind::Worker => matches!(
@@ -331,6 +332,9 @@ pub struct ReleaseWorkItem {
     pub lease_owner: Option<String>,
     pub lease_acquired_at: Option<OffsetDateTime>,
     pub lease_expires_at: Option<OffsetDateTime>,
+    pub latest_settling_snapshot_id: Option<i64>,
+    pub stable_since: Option<OffsetDateTime>,
+    pub last_observed_at: Option<OffsetDateTime>,
     pub last_error_code: Option<WorkErrorCode>,
     pub last_error_message: Option<String>,
     pub correlation_id: Uuid,
@@ -368,6 +372,9 @@ impl ReleaseWorkItem {
             lease_owner: None,
             lease_acquired_at: None,
             lease_expires_at: None,
+            latest_settling_snapshot_id: None,
+            stable_since: None,
+            last_observed_at: None,
             last_error_code: None,
             last_error_message: None,
             correlation_id,

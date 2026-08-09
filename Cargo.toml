@@ -5,6 +5,7 @@ members = [
   "apps/melodee-server",
   "crates/melodee-domain",
   "crates/melodee-persistence",
+  "crates/melodee-ingestion",
 ]
 
 [workspace.package]

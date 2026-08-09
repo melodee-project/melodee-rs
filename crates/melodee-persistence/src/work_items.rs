@@ -47,6 +47,9 @@ struct WorkItemRow {
     lease_owner: Option<String>,
     lease_acquired_at: Option<OffsetDateTime>,
     lease_expires_at: Option<OffsetDateTime>,
+    latest_settling_snapshot_id: Option<i64>,
+    stable_since: Option<OffsetDateTime>,
+    last_observed_at: Option<OffsetDateTime>,
     last_error_code: Option<String>,
     last_error_message: Option<String>,
     correlation_id: Uuid,
@@ -82,6 +85,9 @@ impl TryFrom<WorkItemRow> for ReleaseWorkItem {
             lease_owner: row.lease_owner,
             lease_acquired_at: row.lease_acquired_at,
             lease_expires_at: row.lease_expires_at,
+            latest_settling_snapshot_id: row.latest_settling_snapshot_id,
+            stable_since: row.stable_since,
+            last_observed_at: row.last_observed_at,
             last_error_code: row.last_error_code.map(WorkErrorCode::new),
             last_error_message: row.last_error_message,
             correlation_id: row.correlation_id,
@@ -107,6 +113,38 @@ struct EventRow {
     correlation_id: Uuid,
     created_at: OffsetDateTime,
     metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, FromRow)]
+struct SettlingSnapshotRow {
+    id: i64,
+    work_item_id: Uuid,
+    observed_at: OffsetDateTime,
+    signature: String,
+    file_count: i32,
+    total_bytes: i64,
+    ready_marker_seen: bool,
+    bypassed_settling: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct SettlingSnapshot {
+    pub id: i64,
+    pub work_item_id: Uuid,
+    pub observed_at: OffsetDateTime,
+    pub signature: String,
+    pub file_count: i32,
+    pub total_bytes: i64,
+    pub ready_marker_seen: bool,
+    pub bypassed_settling: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct SettlingSnapshotFile {
+    pub relative_path: String,
+    pub file_type: String,
+    pub file_size: i64,
+    pub modified_at: OffsetDateTime,
 }
 
 impl TryFrom<EventRow> for ReleaseWorkItemEvent {
@@ -155,10 +193,11 @@ impl WorkItemStore {
                 id, api_key, source_library_id, target_library_id, source_path,
                 current_path, target_path, source_fingerprint, manifest_hash, state,
                 state_reason, attempt_count, next_attempt_at, lease_owner,
-                lease_acquired_at, lease_expires_at, last_error_code,
-                last_error_message, correlation_id, discovered_at, first_started_at,
-                last_attempt_at, updated_at, created_at, completed_at
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)",
+                lease_acquired_at, lease_expires_at, latest_settling_snapshot_id,
+                stable_since, last_observed_at, last_error_code, last_error_message,
+                correlation_id, discovered_at, first_started_at, last_attempt_at,
+                updated_at, created_at, completed_at
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)",
         )
         .bind(item.id)
         .bind(item.api_key)
@@ -176,6 +215,9 @@ impl WorkItemStore {
         .bind(&item.lease_owner)
         .bind(item.lease_acquired_at)
         .bind(item.lease_expires_at)
+        .bind(item.latest_settling_snapshot_id)
+        .bind(item.stable_since)
+        .bind(item.last_observed_at)
         .bind(item.last_error_code.as_ref().map(|c| c.as_str().to_string()))
         .bind(&item.last_error_message)
         .bind(item.correlation_id)
@@ -202,6 +244,253 @@ impl WorkItemStore {
         .await?;
         tx.commit().await?;
         info!(work_item_id = %item.id, state = %item.state.as_str(), "work item created");
+        Ok(())
+    }
+
+    /// Creates the work item if absent by stable identity and returns the row plus a
+    /// `created` flag. `created == true` means this invocation inserted the row.
+    /// Stable identity is `(source_library_id, source_path)` with NULL libraries
+    /// grouped under a deterministic default identity.
+    #[instrument(
+        skip_all,
+        fields(work_item_id = %item.id, source_path = %item.source_path)
+    )]
+    pub async fn create_or_get(
+        &self,
+        pool: &PgPool,
+        item: &ReleaseWorkItem,
+    ) -> Result<(ReleaseWorkItem, bool), WorkStoreError> {
+        let mut tx = pool.begin().await?;
+        let inserted = sqlx::query_as::<_, WorkItemRow>(
+            "INSERT INTO release_work_items (
+                id, api_key, source_library_id, target_library_id, source_path,
+                current_path, target_path, source_fingerprint, manifest_hash, state,
+                state_reason, attempt_count, next_attempt_at, lease_owner,
+                lease_acquired_at, lease_expires_at, latest_settling_snapshot_id,
+                stable_since, last_observed_at, last_error_code, last_error_message,
+                correlation_id, discovered_at, first_started_at, last_attempt_at,
+                updated_at, created_at, completed_at
+            ) VALUES (
+                $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28
+            )
+            ON CONFLICT ((COALESCE(source_library_id::text, '__default__') || '|' || source_path))
+            DO NOTHING
+            RETURNING *",
+        )
+        .bind(item.id)
+        .bind(item.api_key)
+        .bind(item.source_library_id)
+        .bind(item.target_library_id)
+        .bind(&item.source_path)
+        .bind(&item.current_path)
+        .bind(&item.target_path)
+        .bind(&item.source_fingerprint)
+        .bind(&item.manifest_hash)
+        .bind(item.state.as_str())
+        .bind(&item.state_reason)
+        .bind(i32::try_from(item.attempt_count).unwrap_or(i32::MAX))
+        .bind(item.next_attempt_at)
+        .bind(&item.lease_owner)
+        .bind(item.lease_acquired_at)
+        .bind(item.lease_expires_at)
+        .bind(item.latest_settling_snapshot_id)
+        .bind(item.stable_since)
+        .bind(item.last_observed_at)
+        .bind(item.last_error_code.as_ref().map(|c| c.as_str().to_string()))
+        .bind(&item.last_error_message)
+        .bind(item.correlation_id)
+        .bind(item.discovered_at)
+        .bind(item.first_started_at)
+        .bind(item.last_attempt_at)
+        .bind(item.updated_at)
+        .bind(item.created_at)
+        .bind(item.completed_at)
+        .fetch_optional(&mut *tx)
+        .await?;
+
+        let row = match inserted {
+            Some(row) => {
+                let row_state = row.state.clone();
+                let state = IngestionState::parse(&row_state)
+                    .ok_or_else(|| WorkStoreError::CorruptState(row_state))?;
+                insert_event(
+                    &mut tx,
+                    row.id,
+                    WorkEventType::Created,
+                    None,
+                    Some(state),
+                    None,
+                    None,
+                    row.correlation_id,
+                    row.created_at,
+                    Some(serde_json::json!({
+                        "source_library_id": row.source_library_id,
+                        "source_path": row.source_path,
+                    })),
+                )
+                .await?;
+                (row, true)
+            }
+            None => {
+                let row = sqlx::query_as::<_, WorkItemRow>(
+                    "SELECT * FROM release_work_items
+                     WHERE source_library_id IS NOT DISTINCT FROM $1 AND source_path = $2",
+                )
+                .bind(item.source_library_id)
+                .bind(&item.source_path)
+                .fetch_optional(&mut *tx)
+                .await?;
+                (row.ok_or(WorkStoreError::NotFound(item.id))?, false)
+            }
+        };
+
+        tx.commit().await?;
+        Ok((ReleaseWorkItem::try_from(row.0)?, row.1))
+    }
+
+    /// Looks up a work item by durable source identity.
+    pub async fn get_by_source_identity(
+        &self,
+        pool: &PgPool,
+        source_library_id: Option<Uuid>,
+        source_path: &str,
+    ) -> Result<Option<ReleaseWorkItem>, WorkStoreError> {
+        let row = sqlx::query_as::<_, WorkItemRow>(
+            "SELECT * FROM release_work_items WHERE source_library_id IS NOT DISTINCT FROM $1 AND source_path = $2",
+        )
+        .bind(source_library_id)
+        .bind(source_path)
+        .fetch_optional(pool)
+        .await?;
+        row.map(ReleaseWorkItem::try_from).transpose()
+    }
+
+    /// Lists active discovery work items used by the reconciler (`discovered`,
+    /// `settling`, `ready`).
+    pub async fn list_active_for_reconciliation(
+        &self,
+        pool: &PgPool,
+    ) -> Result<Vec<ReleaseWorkItem>, WorkStoreError> {
+        let rows = sqlx::query_as::<_, WorkItemRow>(
+            "SELECT * FROM release_work_items
+             WHERE state IN ('discovered', 'settling', 'ready')
+             ORDER BY updated_at DESC",
+        )
+        .fetch_all(pool)
+        .await?;
+        rows.into_iter().map(ReleaseWorkItem::try_from).collect()
+    }
+
+    /// Inserts a new snapshot for a work item and returns the new snapshot id.
+    /// Snapshot files are persisted for operator observability and to keep
+    /// comparison deterministic.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn persist_settling_snapshot(
+        &self,
+        pool: &PgPool,
+        work_item_id: Uuid,
+        signature: &str,
+        file_count: i32,
+        total_bytes: i64,
+        ready_marker_seen: bool,
+        bypassed_settling: bool,
+        observed_at: OffsetDateTime,
+        files: &[SettlingSnapshotFile],
+    ) -> Result<i64, WorkStoreError> {
+        let mut tx = pool.begin().await?;
+        let snapshot = sqlx::query_as::<_, (i64,)>(
+            "INSERT INTO release_work_item_settling_snapshots (
+                work_item_id, observed_at, signature, file_count, total_bytes,
+                ready_marker_seen, bypassed_settling
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7)
+             RETURNING id",
+        )
+        .bind(work_item_id)
+        .bind(observed_at)
+        .bind(signature)
+        .bind(file_count)
+        .bind(total_bytes)
+        .bind(ready_marker_seen)
+        .bind(bypassed_settling)
+        .fetch_one(&mut *tx)
+        .await?;
+        let snapshot_id = snapshot.0;
+
+        for file in files {
+            sqlx::query(
+                "INSERT INTO release_work_item_settling_snapshot_files (
+                    snapshot_id, relative_path, file_type, file_size, modified_at
+                ) VALUES ($1,$2,$3,$4,$5)",
+            )
+            .bind(snapshot_id)
+            .bind(&file.relative_path)
+            .bind(&file.file_type)
+            .bind(file.file_size)
+            .bind(file.modified_at)
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        tx.commit().await?;
+        Ok(snapshot_id)
+    }
+
+    /// Fetches the latest persisted snapshot for an item.
+    pub async fn latest_snapshot(
+        &self,
+        pool: &PgPool,
+        work_item_id: Uuid,
+    ) -> Result<Option<SettlingSnapshot>, WorkStoreError> {
+        let row = sqlx::query_as::<_, SettlingSnapshotRow>(
+            "SELECT * FROM release_work_item_settling_snapshots
+             WHERE work_item_id = $1
+             ORDER BY observed_at DESC, id DESC
+             LIMIT 1",
+        )
+        .bind(work_item_id)
+        .fetch_optional(pool)
+        .await?;
+        let Some(row) = row else {
+            return Ok(None);
+        };
+        Ok(Some(SettlingSnapshot {
+            id: row.id,
+            work_item_id: row.work_item_id,
+            observed_at: row.observed_at,
+            signature: row.signature,
+            file_count: row.file_count,
+            total_bytes: row.total_bytes,
+            ready_marker_seen: row.ready_marker_seen,
+            bypassed_settling: row.bypassed_settling,
+        }))
+    }
+
+    /// Updates durable settling progress fields without changing core state.
+    pub async fn upsert_settling_progress(
+        &self,
+        pool: &PgPool,
+        work_item_id: Uuid,
+        stable_since: Option<OffsetDateTime>,
+        latest_snapshot_id: Option<i64>,
+        last_observed_at: OffsetDateTime,
+        state_reason: Option<&str>,
+    ) -> Result<(), WorkStoreError> {
+        sqlx::query(
+            "UPDATE release_work_items
+             SET stable_since = $2,
+                 latest_settling_snapshot_id = $3,
+                 last_observed_at = $4,
+                 state_reason = COALESCE($5, state_reason),
+                 updated_at = $4
+             WHERE id = $1",
+        )
+        .bind(work_item_id)
+        .bind(stable_since)
+        .bind(latest_snapshot_id)
+        .bind(last_observed_at)
+        .bind(state_reason)
+        .execute(pool)
+        .await?;
         Ok(())
     }
 

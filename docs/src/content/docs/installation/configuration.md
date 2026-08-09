@@ -5,35 +5,44 @@ sidebar:
   order: 2
 ---
 
-:::caution[Planned documentation]
-The Rust server's configuration surface is still being implemented (configuration layering is a
-Phase 1 deliverable). Settings documented here will be validated against the shipped server.
-:::
+Melodee reads settings from explicit environment variables only.
 
-Melodee configuration is layered, in increasing order of precedence:
+## Configuration sources
 
 1. built-in defaults;
-2. configuration file;
-3. environment variables;
-4. database-backed settings, where a setting is runtime-editable.
+2. environment variables;
+3. database-backed overrides where the setting is runtime-editable.
 
-The configuration reference will document every supported setting, its default, and its effect.
-New settings introduced by a change must be documented here in the same change.
+Only documented keys are supported.
 
 ## Implemented settings
 
-The following environment keys are implemented today (durable work execution, Phase 1A). Only
-explicitly documented keys are read — the server never absorbs arbitrary environment variables.
+### Core runtime
 
 | Key | Default | Effect |
 | --- | --- | --- |
-| `MELODEE__DATABASE__URL` | — (required) | PostgreSQL connection URL. Never logged (may contain a password). |
-| `MELODEE__WORK__LEASE_SECONDS` | `300` | Duration of a work-item lease claimed by a worker. Expired leases become recoverable automatically. |
-| `MELODEE__WORK__RETRY_BASE_SECONDS` | `60` | Base delay for exponential retry backoff (`base * 2^(attempt-1)`). |
-| `MELODEE__WORK__RETRY_MAX_SECONDS` | `3600` | Maximum retry backoff delay. |
-| `MELODEE__WORK__MAX_ATTEMPTS` | `5` | Automatic attempts before a Release work item parks for operator attention. |
-| `MELODEE__WORK__CLAIM_BATCH_SIZE` | `4` | Maximum work items claimed per worker poll (bounded queue fetch). |
+| `MELODEE__DATABASE__URL` | — (required) | PostgreSQL connection URL. |
+| `MELODEE__WORK__LEASE_SECONDS` | `300` | PostgreSQL lease duration for claimed work items. |
+| `MELODEE__WORK__RETRY_BASE_SECONDS` | `60` | Base retry delay (`base * 2^(attempt-1)`). |
+| `MELODEE__WORK__RETRY_MAX_SECONDS` | `3600` | Maximum retry delay. |
+| `MELODEE__WORK__MAX_ATTEMPTS` | `5` | Retry attempts before parking a failed item. |
+| `MELODEE__WORK__CLAIM_BATCH_SIZE` | `4` | Max items claimed in one SQL `FOR UPDATE SKIP LOCKED` poll. |
 
-The `melodee-cli` binary in the repository provides development diagnostics for this
-infrastructure (`migrate`, `work list`, `work show <id>`). It is not yet a shipped
-administrative tool; its user-facing command set will be documented when it ships.
+### Inbound discovery and settling (Phase 1B)
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `MELODEE__INGEST__ENABLED` | `true` | Whether inbound discovery/scheduler is enabled. |
+| `MELODEE__INGEST__SOURCES_JSON` | — | JSON array of inbound sources (`id?`, `root`, `name?`). Supports multiple source roots. |
+| `MELODEE__INGEST__SOURCE_ROOT` | — | Single inbound root (legacy compatibility path when JSON is not set). |
+| `MELODEE__INGEST__SOURCE_LIBRARY_ID` | — | Optional library id for the single-root mode. |
+| `MELODEE__INGEST__SOURCE_LIBRARY_NAME` | — | Optional source name for the single-root mode. |
+| `MELODEE__INGEST__RECONCILIATION_INTERVAL_SECONDS` | `30` | Period between periodic scans. |
+| `MELODEE__INGEST__SETTLING_QUIET_SECONDS` | `10` | Minimum quiet period before `Settling`→`Ready`. |
+| `MELODEE__INGEST__READY_MARKER_NAME` | `.melodee-ready` | Marker filename that can short-circuit settling. |
+| `MELODEE__INGEST__READY_MARKER_SHORTCUT_SECONDS` | `0` | Quiet-period override when marker is present. |
+
+### Notes
+
+- `MELODEE__INGEST__SOURCES_JSON` and the legacy single-root variables are mutually additive only through configuration code: JSON takes precedence when present.
+- If no inbound source is configured, startup remains healthy and periodic reconciliation is not started.
