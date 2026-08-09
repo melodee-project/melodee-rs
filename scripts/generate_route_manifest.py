@@ -224,7 +224,7 @@ def parse_controller(path: Path) -> list[dict[str, object]]:
                 {
                     "path": route,
                     "methods": verbs,
-                    "controller": f"{controller}Controller",
+                    "controller": controller,
                     "action": name,
                     "auth": auth_contract(class_attrs, method_attrs),
                     "apiVersion": api_version,

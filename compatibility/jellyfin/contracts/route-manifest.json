@@ -10,7 +10,7 @@
       "methods": [
         "GET"
       ],
-      "controller": "RootControllerController",
+      "controller": "RootController",
       "action": "ServerRoot",
       "auth": {
         "required": false
@@ -25,7 +25,7 @@
       "methods": [
         "GET"
       ],
-      "controller": "ArtistsControllerController",
+      "controller": "ArtistsController",
       "action": "GetArtistsAsync",
       "auth": {
         "required": false,
@@ -41,7 +41,7 @@
       "methods": [
         "GET"
       ],
-      "controller": "ArtistsControllerController",
+      "controller": "ArtistsController",
       "action": "GetAlbumArtistsAsync",
       "auth": {
         "required": false,
@@ -57,7 +57,7 @@
       "methods": [
         "GET"
       ],
-      "controller": "ArtistsControllerController",
+      "controller": "ArtistsController",
       "action": "GetArtistAsync",
       "auth": {
         "required": false,
@@ -73,7 +73,7 @@
       "methods": [
         "GET"
       ],
-      "controller": "ImagesControllerController",
+      "controller": "ImagesController",
       "action": "GetArtistImageAsync",
       "auth": {
         "required": false,
@@ -89,7 +89,7 @@
       "methods": [
         "GET"
       ],
-      "controller": "ArtistsControllerController",
+      "controller": "ArtistsController",
       "action": "GetSimilarArtistsAsync",
       "auth": {
         "required": false,
@@ -105,7 +105,7 @@
       "methods": [
         "GET"
       ],
-      "controller": "AudioControllerController",
+      "controller": "AudioController",
       "action": "GetLyricsAsync",
       "auth": {
         "required": false,
@@ -121,7 +121,7 @@
       "methods": [
         "GET"
       ],
-      "controller": "AudioControllerController",
+      "controller": "AudioController",
       "action": "StreamAudioAsync",
       "auth": {
         "required": false,
@@ -137,7 +137,7 @@
       "methods": [
         "GET"
       ],
-      "controller": "AudioControllerController",
+      "controller": "AudioController",
       "action": "StreamAudioWithContainerAsync",
       "auth": {
         "required": false,
@@ -153,7 +153,7 @@
       "methods": [
         "GET"
       ],
-      "controller": "AudioControllerController",
+      "controller": "AudioController",
       "action": "UniversalAudioAsync",
       "auth": {
         "required": false,
@@ -169,7 +169,7 @@
       "methods": [
         "GET"
       ],
-      "controller": "GenresControllerController",
+      "controller": "GenresController",
       "action": "GetGenresAsync",
       "auth": {
         "required": false,
@@ -185,7 +185,7 @@
       "methods": [
         "GET"
       ],
-      "controller": "ItemsControllerController",
+      "controller": "ItemsController",
       "action": "GetItemsAsync",
       "auth": {
         "required": false,
@@ -201,7 +201,7 @@
       "methods": [
         "GET"
       ],
-      "controller": "ItemsControllerController",
+      "controller": "ItemsController",
       "action": "GetFiltersAsync",
       "auth": {
         "required": false,
@@ -217,7 +217,7 @@
       "methods": [
         "DELETE"
       ],
-      "controller": "ItemsControllerController",
+      "controller": "ItemsController",
       "action": "DeleteItemAsync",
       "auth": {
         "required": false,
@@ -233,7 +233,7 @@
       "methods": [
         "GET"
       ],
-      "controller": "ItemsControllerController",
+      "controller": "ItemsController",
       "action": "GetItemAsync",
       "auth": {
         "required": false,
@@ -249,7 +249,7 @@
       "methods": [
         "GET"
       ],
-      "controller": "ItemsControllerController",
+      "controller": "ItemsController",
       "action": "GetItemFileAsync",
       "auth": {
         "required": false,
@@ -265,7 +265,7 @@
       "methods": [
         "GET"
       ],
-      "controller": "ItemsControllerController",
+      "controller": "ItemsController",
       "action": "GetItemFileAsync",
       "auth": {
         "required": false,
@@ -281,7 +281,7 @@
       "methods": [
         "GET"
       ],
-      "controller": "ImagesControllerController",
+      "controller": "ImagesController",
       "action": "GetItemImageAsync",
       "auth": {
         "required": false,
@@ -297,7 +297,7 @@
       "methods": [
         "GET"
       ],
-      "controller": "ImagesControllerController",
+      "controller": "ImagesController",
       "action": "GetItemImageByIndexAsync",
       "auth": {
         "required": false,
@@ -313,7 +313,7 @@
       "methods": [
         "GET"
       ],
-      "controller": "ItemsControllerController",
+      "controller": "ItemsController",
       "action": "GetInstantMixAsync",
       "auth": {
         "required": false,
@@ -330,7 +330,7 @@
         "GET",
         "POST"
       ],
-      "controller": "ItemsControllerController",
+      "controller": "ItemsController",
       "action": "GetPlaybackInfoAsync",
       "auth": {
         "required": false,
@@ -346,7 +346,7 @@
       "methods": [
         "POST"
       ],
-      "controller": "ItemsControllerController",
+      "controller": "ItemsController",
       "action": "RefreshItemAsync",
       "auth": {
         "required": false,
@@ -362,7 +362,7 @@
       "methods": [
         "GET"
       ],
-      "controller": "ItemsControllerController",
+      "controller": "ItemsController",
       "action": "GetSimilarItemsAsync",
       "auth": {
         "required": false,
@@ -378,7 +378,7 @@
       "methods": [
         "GET"
       ],
-      "controller": "MusicGenresControllerController",
+      "controller": "MusicGenresController",
       "action": "GetMusicGenresAsync",
       "auth": {
         "required": false,
@@ -394,7 +394,7 @@
       "methods": [
         "POST"
       ],
-      "controller": "PlaylistsControllerController",
+      "controller": "PlaylistsController",
       "action": "CreatePlaylistAsync",
       "auth": {
         "required": false,
@@ -410,7 +410,7 @@
       "methods": [
         "GET"
       ],
-      "controller": "PlaylistsControllerController",
+      "controller": "PlaylistsController",
       "action": "GetPlaylistsAsync",
       "auth": {
         "required": false,
@@ -426,7 +426,7 @@
       "methods": [
         "DELETE"
       ],
-      "controller": "PlaylistsControllerController",
+      "controller": "PlaylistsController",
       "action": "DeletePlaylistAsync",
       "auth": {
         "required": false,
@@ -442,7 +442,7 @@
       "methods": [
         "GET"
       ],
-      "controller": "PlaylistsControllerController",
+      "controller": "PlaylistsController",
       "action": "GetPlaylistAsync",
       "auth": {
         "required": false,
@@ -458,7 +458,7 @@
       "methods": [
         "POST"
       ],
-      "controller": "PlaylistsControllerController",
+      "controller": "PlaylistsController",
       "action": "UpdatePlaylistAsync",
       "auth": {
         "required": false,
@@ -474,7 +474,7 @@
       "methods": [
         "POST"
       ],
-      "controller": "PlaylistsControllerController",
+      "controller": "PlaylistsController",
       "action": "AddItemsToPlaylistAsync",
       "auth": {
         "required": false,
@@ -490,7 +490,7 @@
       "methods": [
         "GET"
       ],
-      "controller": "PlaylistsControllerController",
+      "controller": "PlaylistsController",
       "action": "GetPlaylistItemsAsync",
       "auth": {
         "required": false,
@@ -506,7 +506,7 @@
       "methods": [
         "DELETE"
       ],
-      "controller": "PlaylistsControllerController",
+      "controller": "PlaylistsController",
       "action": "RemoveItemsFromPlaylistAsync",
       "auth": {
         "required": false,
@@ -522,7 +522,7 @@
       "methods": [
         "POST"
       ],
-      "controller": "PlaylistsControllerController",
+      "controller": "PlaylistsController",
       "action": "MovePlaylistItemAsync",
       "auth": {
         "required": false,
@@ -538,7 +538,7 @@
       "methods": [
         "GET"
       ],
-      "controller": "SessionsControllerController",
+      "controller": "SessionsController",
       "action": "GetSessionsAsync",
       "auth": {
         "required": false,
@@ -554,7 +554,7 @@
       "methods": [
         "POST"
       ],
-      "controller": "SessionsControllerController",
+      "controller": "SessionsController",
       "action": "PostCapabilitiesAsync",
       "auth": {
         "required": false,
@@ -570,7 +570,7 @@
       "methods": [
         "POST"
       ],
-      "controller": "SessionsControllerController",
+      "controller": "SessionsController",
       "action": "PostCapabilitiesFullAsync",
       "auth": {
         "required": false,
@@ -586,7 +586,7 @@
       "methods": [
         "POST"
       ],
-      "controller": "SessionsControllerController",
+      "controller": "SessionsController",
       "action": "LogoutAsync",
       "auth": {
         "required": false,
@@ -602,7 +602,7 @@
       "methods": [
         "POST"
       ],
-      "controller": "SessionsControllerController",
+      "controller": "SessionsController",
       "action": "ReportPlaybackStartAsync",
       "auth": {
         "required": false,
@@ -618,7 +618,7 @@
       "methods": [
         "POST"
       ],
-      "controller": "SessionsControllerController",
+      "controller": "SessionsController",
       "action": "PingPlaybackAsync",
       "auth": {
         "required": false,
@@ -634,7 +634,7 @@
       "methods": [
         "POST"
       ],
-      "controller": "SessionsControllerController",
+      "controller": "SessionsController",
       "action": "ReportPlaybackProgressAsync",
       "auth": {
         "required": false,
@@ -650,7 +650,7 @@
       "methods": [
         "POST"
       ],
-      "controller": "SessionsControllerController",
+      "controller": "SessionsController",
       "action": "ReportPlaybackStoppedAsync",
       "auth": {
         "required": false,
@@ -666,7 +666,7 @@
       "methods": [
         "GET"
       ],
-      "controller": "SongsControllerController",
+      "controller": "SongsController",
       "action": "GetInstantMixAsync",
       "auth": {
         "required": false,
@@ -682,7 +682,7 @@
       "methods": [
         "GET"
       ],
-      "controller": "SystemControllerController",
+      "controller": "SystemController",
       "action": "GetSystemInfoAsync",
       "auth": {
         "required": false,
@@ -698,7 +698,7 @@
       "methods": [
         "GET"
       ],
-      "controller": "SystemControllerController",
+      "controller": "SystemController",
       "action": "GetPublicSystemInfoAsync",
       "auth": {
         "required": false
@@ -714,7 +714,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SystemControllerController",
+      "controller": "SystemController",
       "action": "Ping",
       "auth": {
         "required": false
@@ -729,7 +729,7 @@
       "methods": [
         "GET"
       ],
-      "controller": "UserViewsControllerController",
+      "controller": "UserViewsController",
       "action": "GetUserViewsAsync",
       "auth": {
         "required": false,
@@ -745,7 +745,7 @@
       "methods": [
         "GET"
       ],
-      "controller": "UsersControllerController",
+      "controller": "UsersController",
       "action": "GetUsersAsync",
       "auth": {
         "required": false,
@@ -761,7 +761,7 @@
       "methods": [
         "POST"
       ],
-      "controller": "UsersControllerController",
+      "controller": "UsersController",
       "action": "AuthenticateByNameAsync",
       "auth": {
         "required": false
@@ -776,7 +776,7 @@
       "methods": [
         "GET"
       ],
-      "controller": "UsersControllerController",
+      "controller": "UsersController",
       "action": "GetCurrentUserAsync",
       "auth": {
         "required": false,
@@ -792,7 +792,7 @@
       "methods": [
         "GET"
       ],
-      "controller": "UsersControllerController",
+      "controller": "UsersController",
       "action": "GetPublicUsersAsync",
       "auth": {
         "required": false
@@ -807,7 +807,7 @@
       "methods": [
         "GET"
       ],
-      "controller": "UsersControllerController",
+      "controller": "UsersController",
       "action": "GetUserByIdAsync",
       "auth": {
         "required": false,
@@ -823,7 +823,7 @@
       "methods": [
         "POST"
       ],
-      "controller": "UsersControllerController",
+      "controller": "UsersController",
       "action": "AddFavoriteAsync",
       "auth": {
         "required": false,
@@ -839,7 +839,7 @@
       "methods": [
         "DELETE"
       ],
-      "controller": "UsersControllerController",
+      "controller": "UsersController",
       "action": "RemoveFavoriteAsync",
       "auth": {
         "required": false,
@@ -855,7 +855,7 @@
       "methods": [
         "GET"
       ],
-      "controller": "UsersControllerController",
+      "controller": "UsersController",
       "action": "GetUserItemsAsync",
       "auth": {
         "required": false,
@@ -871,7 +871,7 @@
       "methods": [
         "GET"
       ],
-      "controller": "UsersControllerController",
+      "controller": "UsersController",
       "action": "GetUserItemByIdAsync",
       "auth": {
         "required": false,
@@ -887,7 +887,7 @@
       "methods": [
         "POST"
       ],
-      "controller": "UsersControllerController",
+      "controller": "UsersController",
       "action": "MarkPlayedAsync",
       "auth": {
         "required": false,
@@ -903,7 +903,7 @@
       "methods": [
         "DELETE"
       ],
-      "controller": "UsersControllerController",
+      "controller": "UsersController",
       "action": "MarkUnplayedAsync",
       "auth": {
         "required": false,
@@ -919,7 +919,7 @@
       "methods": [
         "GET"
       ],
-      "controller": "UsersControllerController",
+      "controller": "UsersController",
       "action": "GetUserViewsAsync",
       "auth": {
         "required": false,

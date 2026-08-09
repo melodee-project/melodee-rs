@@ -40,7 +40,7 @@
         "GET",
         "POST"
       ],
-      "controller": "ChatControllerController",
+      "controller": "ChatController",
       "classification": "gone",
       "prerequisite": null,
       "expectedUnsupportedStatus": 410,
@@ -63,7 +63,7 @@
         "GET",
         "POST"
       ],
-      "controller": "UserManagementControllerController",
+      "controller": "UserManagementController",
       "classification": "not-implemented",
       "prerequisite": null,
       "expectedUnsupportedStatus": 501,
@@ -86,7 +86,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BookmarksControllerController",
+      "controller": "BookmarksController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -107,7 +107,7 @@
         "GET",
         "POST"
       ],
-      "controller": "InternetRadioControllerController",
+      "controller": "InternetRadioController",
       "classification": "conditional",
       "prerequisite": "admin",
       "expectedUnsupportedStatus": null,
@@ -128,7 +128,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PlaylistControllerController",
+      "controller": "PlaylistController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -149,7 +149,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PodcastControllerController",
+      "controller": "PodcastController",
       "classification": "conditional",
       "prerequisite": "podcast.enabled (seeded true); podcast role; auth failures return HTTP 403 (unique to this controller); disabled -> HTTP 400 error 0",
       "expectedUnsupportedStatus": null,
@@ -170,7 +170,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SharingControllerController",
+      "controller": "SharingController",
       "classification": "conditional",
       "prerequisite": "user CanShare capability",
       "expectedUnsupportedStatus": null,
@@ -192,13 +192,14 @@
         "GET",
         "POST"
       ],
-      "controller": "UserManagementControllerController",
+      "controller": "UserManagementController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
       "intentionalStatuses": [],
       "scenarios": [
-        "os-createuser"
+        "os-createuser/create-duplicate-user",
+        "os-createuser/create-new-user"
       ],
       "hasGoldenScenario": true,
       "isMelodeeExtension": false
@@ -213,7 +214,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BookmarksControllerController",
+      "controller": "BookmarksController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -234,7 +235,7 @@
         "GET",
         "POST"
       ],
-      "controller": "InternetRadioControllerController",
+      "controller": "InternetRadioController",
       "classification": "conditional",
       "prerequisite": "admin",
       "expectedUnsupportedStatus": null,
@@ -255,12 +256,13 @@
         "GET",
         "POST"
       ],
-      "controller": "PlaylistControllerController",
+      "controller": "PlaylistController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
       "intentionalStatuses": [],
       "scenarios": [
+        "os-playlists/delete-created",
         "os-playlists/delete-playlist"
       ],
       "hasGoldenScenario": true,
@@ -276,7 +278,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PodcastControllerController",
+      "controller": "PodcastController",
       "classification": "conditional",
       "prerequisite": "podcast.enabled (seeded true); podcast role; auth failures return HTTP 403 (unique to this controller); disabled -> HTTP 400 error 0",
       "expectedUnsupportedStatus": null,
@@ -297,7 +299,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PodcastControllerController",
+      "controller": "PodcastController",
       "classification": "conditional",
       "prerequisite": "podcast.enabled (seeded true); podcast role; auth failures return HTTP 403 (unique to this controller); disabled -> HTTP 400 error 0",
       "expectedUnsupportedStatus": null,
@@ -318,7 +320,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SharingControllerController",
+      "controller": "SharingController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -339,7 +341,7 @@
         "GET",
         "POST"
       ],
-      "controller": "UserManagementControllerController",
+      "controller": "UserManagementController",
       "classification": "not-implemented",
       "prerequisite": null,
       "expectedUnsupportedStatus": 501,
@@ -362,7 +364,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaRetrievalControllerController",
+      "controller": "MediaRetrievalController",
       "classification": "conditional",
       "prerequisite": "system.isDownloadingEnabled (seeded true)",
       "expectedUnsupportedStatus": null,
@@ -384,7 +386,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PodcastControllerController",
+      "controller": "PodcastController",
       "classification": "conditional",
       "prerequisite": "podcast.enabled (seeded true); podcast role; auth failures return HTTP 403 (unique to this controller); disabled -> HTTP 400 error 0",
       "expectedUnsupportedStatus": null,
@@ -405,7 +407,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -430,7 +432,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -451,7 +453,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -472,7 +474,7 @@
         "GET",
         "POST"
       ],
-      "controller": "AlbumSongControllerController",
+      "controller": "AlbumSongController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -493,7 +495,7 @@
         "GET",
         "POST"
       ],
-      "controller": "AlbumSongControllerController",
+      "controller": "AlbumSongController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -520,7 +522,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -544,7 +546,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -565,7 +567,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -586,7 +588,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -608,7 +610,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaRetrievalControllerController",
+      "controller": "MediaRetrievalController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -629,7 +631,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BookmarksControllerController",
+      "controller": "BookmarksController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -652,7 +654,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaRetrievalControllerController",
+      "controller": "MediaRetrievalController",
       "classification": "gone",
       "prerequisite": null,
       "expectedUnsupportedStatus": 410,
@@ -675,7 +677,7 @@
         "GET",
         "POST"
       ],
-      "controller": "ChatControllerController",
+      "controller": "ChatController",
       "classification": "gone",
       "prerequisite": null,
       "expectedUnsupportedStatus": 410,
@@ -698,7 +700,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaRetrievalControllerController",
+      "controller": "MediaRetrievalController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -722,7 +724,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -743,7 +745,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -764,7 +766,7 @@
         "GET",
         "POST"
       ],
-      "controller": "InternetRadioControllerController",
+      "controller": "InternetRadioController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -787,7 +789,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SystemControllerController",
+      "controller": "SystemController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -809,7 +811,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaRetrievalControllerController",
+      "controller": "MediaRetrievalController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -831,7 +833,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaRetrievalControllerController",
+      "controller": "MediaRetrievalController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -853,7 +855,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -876,7 +878,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -914,7 +916,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PodcastControllerController",
+      "controller": "PodcastController",
       "classification": "conditional",
       "prerequisite": "podcast.enabled (seeded true); podcast role; auth failures return HTTP 403 (unique to this controller); disabled -> HTTP 400 error 0",
       "expectedUnsupportedStatus": null,
@@ -936,7 +938,7 @@
         "GET",
         "POST"
       ],
-      "controller": "AlbumSongControllerController",
+      "controller": "AlbumSongController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -958,7 +960,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SystemControllerController",
+      "controller": "SystemController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -980,7 +982,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BookmarksControllerController",
+      "controller": "BookmarksController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -1003,7 +1005,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PlaylistControllerController",
+      "controller": "PlaylistController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -1012,6 +1014,7 @@
         "os-playlists/get-private-playlist",
         "os-playlists/getplaylist",
         "os-playlists/getplaylist-unknown",
+        "os-playlists/verify-created",
         "os-playlists/verify-deleted",
         "os-playlists/verify-updated"
       ],
@@ -1028,7 +1031,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PlaylistControllerController",
+      "controller": "PlaylistController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -1049,7 +1052,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PodcastControllerController",
+      "controller": "PodcastController",
       "classification": "conditional",
       "prerequisite": "podcast.enabled (seeded true); podcast role; auth failures return HTTP 403 (unique to this controller); disabled -> HTTP 400 error 0",
       "expectedUnsupportedStatus": null,
@@ -1072,7 +1075,7 @@
         "GET",
         "POST"
       ],
-      "controller": "AlbumSongControllerController",
+      "controller": "AlbumSongController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -1093,7 +1096,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaLibraryScanningController",
+      "controller": "MediaLibraryScanning",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -1115,7 +1118,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SharingControllerController",
+      "controller": "SharingController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -1138,7 +1141,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -1159,7 +1162,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -1180,7 +1183,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -1205,7 +1208,7 @@
         "GET",
         "POST"
       ],
-      "controller": "AlbumSongControllerController",
+      "controller": "AlbumSongController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -1228,7 +1231,7 @@
         "GET",
         "POST"
       ],
-      "controller": "AlbumSongControllerController",
+      "controller": "AlbumSongController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -1249,7 +1252,7 @@
         "GET",
         "POST"
       ],
-      "controller": "AlbumSongControllerController",
+      "controller": "AlbumSongController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -1273,7 +1276,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -1294,7 +1297,7 @@
         "GET",
         "POST"
       ],
-      "controller": "UserManagementControllerController",
+      "controller": "UserManagementController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -1315,7 +1318,7 @@
         "GET",
         "POST"
       ],
-      "controller": "UserManagementControllerController",
+      "controller": "UserManagementController",
       "classification": "not-implemented",
       "prerequisite": null,
       "expectedUnsupportedStatus": 501,
@@ -1338,7 +1341,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "classification": "gone",
       "prerequisite": null,
       "expectedUnsupportedStatus": 410,
@@ -1361,7 +1364,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "classification": "gone",
       "prerequisite": null,
       "expectedUnsupportedStatus": 410,
@@ -1385,7 +1388,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaRetrievalControllerController",
+      "controller": "MediaRetrievalController",
       "classification": "gone",
       "prerequisite": null,
       "expectedUnsupportedStatus": 410,
@@ -1408,7 +1411,7 @@
         "GET",
         "POST"
       ],
-      "controller": "JukeboxControllerController",
+      "controller": "JukeboxController",
       "classification": "conditional",
       "prerequisite": "jukebox.enabled AND jukebox.backendType non-empty; else 410",
       "expectedUnsupportedStatus": null,
@@ -1432,7 +1435,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SystemControllerController",
+      "controller": "SystemController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -1457,7 +1460,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PodcastControllerController",
+      "controller": "PodcastController",
       "classification": "conditional",
       "prerequisite": "podcast.enabled (seeded true); podcast role; auth failures return HTTP 403 (unique to this controller); disabled -> HTTP 400 error 0",
       "expectedUnsupportedStatus": null,
@@ -1478,7 +1481,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BookmarksControllerController",
+      "controller": "BookmarksController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -1500,7 +1503,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaAnnotationControllerController",
+      "controller": "MediaAnnotationController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -1525,7 +1528,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SearchingControllerController",
+      "controller": "SearchingController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -1546,7 +1549,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SearchingControllerController",
+      "controller": "SearchingController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -1569,7 +1572,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SearchEngineControllerController",
+      "controller": "SearchEngineController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -1590,7 +1593,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SearchEngineControllerController",
+      "controller": "SearchEngineController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -1611,7 +1614,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SearchEngineControllerController",
+      "controller": "SearchEngineController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -1632,7 +1635,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaAnnotationControllerController",
+      "controller": "MediaAnnotationController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -1655,7 +1658,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaAnnotationControllerController",
+      "controller": "MediaAnnotationController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -1678,7 +1681,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaLibraryScanningController",
+      "controller": "MediaLibraryScanning",
       "classification": "conditional",
       "prerequisite": "no admin requirement at baseline (any authenticated user)",
       "expectedUnsupportedStatus": null,
@@ -1699,7 +1702,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaRetrievalControllerController",
+      "controller": "MediaRetrievalController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -1730,7 +1733,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PodcastControllerController",
+      "controller": "PodcastController",
       "classification": "conditional",
       "prerequisite": "podcast.enabled (seeded true); podcast role; auth failures return HTTP 403 (unique to this controller); disabled -> HTTP 400 error 0",
       "expectedUnsupportedStatus": null,
@@ -1751,7 +1754,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaAnnotationControllerController",
+      "controller": "MediaAnnotationController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -1773,7 +1776,7 @@
         "GET",
         "POST"
       ],
-      "controller": "InternetRadioControllerController",
+      "controller": "InternetRadioController",
       "classification": "conditional",
       "prerequisite": "admin",
       "expectedUnsupportedStatus": null,
@@ -1794,7 +1797,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PlaylistControllerController",
+      "controller": "PlaylistController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -1815,7 +1818,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SharingControllerController",
+      "controller": "SharingController",
       "classification": "supported",
       "prerequisite": null,
       "expectedUnsupportedStatus": null,
@@ -1836,7 +1839,7 @@
         "GET",
         "POST"
       ],
-      "controller": "UserManagementControllerController",
+      "controller": "UserManagementController",
       "classification": "not-implemented",
       "prerequisite": null,
       "expectedUnsupportedStatus": 501,

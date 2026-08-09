@@ -469,8 +469,8 @@
         "supported": 56,
         "conditional": 15
       },
-      "goldenCaptures": 179,
-      "goldenFiles": 369,
+      "goldenCaptures": 180,
+      "goldenFiles": 371,
       "plannedRustPhase": "Phase 8 (OpenSubsonic adapter)",
       "gaps": []
     },
@@ -493,61 +493,73 @@
       "id": "D1",
       "surface": "opensubsonic",
       "summary": "Unsigned-JWT acceptance with precedence over password auth (security-critical; do not preserve)",
-      "evidence": "golden/auth/os-auth-jwt-forged-unsigned"
+      "evidence": "golden/auth/os-auth-jwt-forged-unsigned",
+      "disposition": "approved-compatibility-deviation",
+      "decisionRef": "design/adr/ADR-0113-do-not-preserve-insecure-opensubsonic-unsigned-jwt-authentication.md"
     },
     {
       "id": "D2",
       "surface": "opensubsonic",
       "summary": "Double range-processing corrupts nonzero-offset seeks (416 or wrong bytes)",
-      "evidence": "golden/media/os-stream-range-middle*"
+      "evidence": "golden/media/os-stream-range-middle*",
+      "disposition": "do-not-preserve"
     },
     {
       "id": "D3",
       "surface": "all",
       "summary": "Unknown-ApiKey detail behavior differs per surface (native 500, OS ok+error or 302, Jellyfin clean 404)",
-      "evidence": "golden/*/…-unknown*"
+      "evidence": "golden/*/…-unknown*",
+      "disposition": "needs-explicit-decision"
     },
     {
       "id": "D4",
       "surface": "all",
       "summary": "Playlist mutation corruption class (native/JF add-to-nonempty 500; OS cover-dependent 302; zero-GUID SongApiKey rows)",
-      "evidence": "golden/*/…playlist*"
+      "evidence": "golden/*/…playlist*",
+      "disposition": "do-not-preserve"
     },
     {
       "id": "D5",
       "surface": "melodee-api-v1",
       "summary": "MeloAmp add-to-playlist posts object body; server binds bare Guid[] (400) — client feature broken at baseline",
-      "evidence": "golden/native-catalog/catalog-playlist-crud-add-songs-meloamp-shape"
+      "evidence": "golden/native-catalog/catalog-playlist-crud-add-songs-meloamp-shape",
+      "disposition": "needs-explicit-decision",
+      "decisionRef": "design/adr/ADR-0114-accept-meloamp-playlist-add-songs-object-body-alongside-canonical-array-form.md (Proposed: accept both shapes in Phase 7)"
     },
     {
       "id": "D6",
       "surface": "melodee-api-v1",
       "summary": "Queue + Party controllers are excluded from compilation (404 at runtime despite manifest presence)",
-      "evidence": "golden/native-catalog/catalog-queue-*"
+      "evidence": "golden/native-catalog/catalog-queue-*",
+      "disposition": "preserve-absence"
     },
     {
       "id": "D7",
       "surface": "melodee-api-v1",
       "summary": "JWT access tokens survive logout (stateless); refresh tokens revoked",
-      "evidence": "golden/native-auth/auth-refresh-rotation-access-after-logout"
+      "evidence": "golden/native-auth/auth-refresh-rotation-access-after-logout",
+      "disposition": "preserve-for-compatibility"
     },
     {
       "id": "D8",
       "surface": "opensubsonic",
       "summary": "Advertised extensions apiKeyAuthentication/transcodeOffset are non-functional",
-      "evidence": "golden/system/os-getopensubsonicextensions-*"
+      "evidence": "golden/system/os-getopensubsonicextensions-*",
+      "disposition": "needs-explicit-decision"
     },
     {
       "id": "D9",
       "surface": "media",
       "summary": "F1: metadata-container gate silently skips tagless WAV/AIFF; F2: same-size files deleted without content comparison",
-      "evidence": "compatibility/media/cases/{clean-wav,same-size-files}.json"
+      "evidence": "compatibility/media/cases/{clean-wav,same-size-files}.json",
+      "disposition": "do-not-preserve"
     },
     {
       "id": "D10",
       "surface": "all",
       "summary": "List sorts lack tiebreaks (recents, playlists, global song lists) — nondeterministic order on equal keys",
-      "evidence": "design/evidence/phase-0/native-api-v1-capture.md section 5"
+      "evidence": "design/evidence/phase-0/native-api-v1-capture.md section 5",
+      "disposition": "do-not-preserve"
     }
   ]
 }

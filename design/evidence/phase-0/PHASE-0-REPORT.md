@@ -4,6 +4,11 @@
 **Date:** 2026-08-09
 **Scope:** Issues 1-10 complete. This document is the canonical consolidation of all Phase 0
 evidence and the gate for Phase 1.
+**Baseline tag:** `phase-0-baseline` (annotated) marks the complete Phase 0 repository state,
+including this report. Resolve the tagged commit with `git rev-parse phase-0-baseline^{}` and
+the tag object with `git rev-parse phase-0-baseline`. The tag annotation enumerates the
+baseline contents; the SHA is deliberately not embedded here because this file is part of the
+tagged tree.
 
 ---
 
@@ -132,14 +137,18 @@ memory budgets are proposals requiring ratification).
 ## Compatibility Risks (ranked)
 
 1. **R1 — OpenSubsonic unsigned-JWT acceptance (security-critical).** Any username + forged
-   JWT authenticates. The Rust implementation must not preserve it; a product decision must
-   acknowledge that clients exploiting it (none known — Navidrome-compatible clients send
-   signed tokens) would break. *Decision needed: confirm intentional break.*
+   JWT authenticates. **RESOLVED (2026-08-09):**
+   [ADR-0113](../../adr/ADR-0113-do-not-preserve-insecure-opensubsonic-unsigned-jwt-authentication.md)
+   (Accepted) — the Rust implementation MUST reject unsigned/invalid JWTs; recorded as an
+   Approved Compatibility Deviation in the coverage matrix (D1).
 2. **R2 — OpenSubsonic seek repair.** Correcting double range-processing changes 416/mangled
    behavior some clients may have adapted to. *Intentional fix; documented.*
 3. **R3 — Playlist mutation repairs.** Fixing the corruption class changes error behavior;
    MeloAmp's object-body add-songs needs a product decision (accept the object form or keep
-   the 400). *Decision needed.*
+   the 400). **RECORDED (2026-08-09):**
+   [ADR-0114](../../adr/ADR-0114-accept-meloamp-playlist-add-songs-object-body-alongside-canonical-array-form.md)
+   (**Proposed**, Phase 7 scope): preserve the bare-array contract AND additionally accept
+   MeloAmp's object body. Does not block Phase 1A.
 4. **R4 — Public-ID preservation.** All golden evidence pins deterministic public IDs;
    migration must preserve them verbatim (PRD-API-M1-004).
 5. **R5 — Advertised-but-broken extensions** (`apiKeyAuthentication`, `transcodeOffset`):
@@ -223,6 +232,8 @@ memory budgets are proposals requiring ratification).
 | ADR-0110 SQLx + explicit SQL | Proposed | **Accepted** | SPEC.md selects SQLx 0.9.0; crates.io verified 0.9.0 MIT/Apache-2.0 (2026-05-21) |
 | ADR-0111 no broker/Redis initially | Proposed | **Accepted** | PRD-ARCH-006/PRD-WORK-001 explicit; Phase 0 ran brokerless throughout |
 | ADR-0112 Astro Starlight docs | Proposed | **Accepted** | Implemented in /docs with CI; astro 7.2.0 + starlight 0.41.7 MIT verified current (2026-08-09) |
+| ADR-0113 Do not preserve insecure OpenSubsonic unsigned-JWT auth | — (new) | **Accepted** | Security deviation for discrepancy D1/R1; explicitly authorized by the Phase 0 closure work package |
+| ADR-0114 Accept MeloAmp playlist add-songs object body | — (new) | **Proposed** | D5/R3 recorded for Phase 7; deliberately not Accepted (API phase is later) |
 
-No unresolved Proposed ADR blocks Phase 1. ADR-0109 is the only remaining Proposed ADR and is
-deliberately deferred to its Phase 9 validation.
+No unresolved Proposed ADR blocks Phase 1. ADR-0109 (Carbon) and ADR-0114 (playlist body
+shapes) remain Proposed for their respective later phases.

@@ -10,7 +10,7 @@
       "methods": [
         "GET"
       ],
-      "controller": "ImageControllerController",
+      "controller": "ImageController",
       "action": "GetImageAsync",
       "auth": {
         "required": false,
@@ -27,7 +27,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SystemControllerController",
+      "controller": "SystemController",
       "action": "Ping",
       "auth": {
         "required": false,
@@ -44,7 +44,7 @@
         "GET",
         "POST"
       ],
-      "controller": "ChatControllerController",
+      "controller": "ChatController",
       "action": "DeprecatedWontImplement",
       "auth": {
         "required": false,
@@ -63,7 +63,7 @@
         "GET",
         "POST"
       ],
-      "controller": "ChatControllerController",
+      "controller": "ChatController",
       "action": "DeprecatedWontImplement",
       "auth": {
         "required": false,
@@ -82,7 +82,7 @@
         "GET",
         "POST"
       ],
-      "controller": "UserManagementControllerController",
+      "controller": "UserManagementController",
       "action": "NotImplemented",
       "auth": {
         "required": false,
@@ -101,7 +101,7 @@
         "GET",
         "POST"
       ],
-      "controller": "UserManagementControllerController",
+      "controller": "UserManagementController",
       "action": "NotImplemented",
       "auth": {
         "required": false,
@@ -120,7 +120,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BookmarksControllerController",
+      "controller": "BookmarksController",
       "action": "CreateBookmarkAsync",
       "auth": {
         "required": false,
@@ -137,7 +137,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BookmarksControllerController",
+      "controller": "BookmarksController",
       "action": "CreateBookmarkAsync",
       "auth": {
         "required": false,
@@ -154,7 +154,7 @@
         "GET",
         "POST"
       ],
-      "controller": "InternetRadioControllerController",
+      "controller": "InternetRadioController",
       "action": "CreateInternetRadioStationAsync",
       "auth": {
         "required": false,
@@ -171,7 +171,7 @@
         "GET",
         "POST"
       ],
-      "controller": "InternetRadioControllerController",
+      "controller": "InternetRadioController",
       "action": "CreateInternetRadioStationAsync",
       "auth": {
         "required": false,
@@ -188,7 +188,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PlaylistControllerController",
+      "controller": "PlaylistController",
       "action": "CreatePlaylistAsync",
       "auth": {
         "required": false,
@@ -205,7 +205,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PlaylistControllerController",
+      "controller": "PlaylistController",
       "action": "CreatePlaylistAsync",
       "auth": {
         "required": false,
@@ -222,7 +222,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PodcastControllerController",
+      "controller": "PodcastController",
       "action": "CreatePodcastChannelAsync",
       "auth": {
         "required": false,
@@ -239,7 +239,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PodcastControllerController",
+      "controller": "PodcastController",
       "action": "CreatePodcastChannelAsync",
       "auth": {
         "required": false,
@@ -256,7 +256,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SharingControllerController",
+      "controller": "SharingController",
       "action": "CreateShareAsync",
       "auth": {
         "required": false,
@@ -273,7 +273,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SharingControllerController",
+      "controller": "SharingController",
       "action": "CreateShareAsync",
       "auth": {
         "required": false,
@@ -290,7 +290,7 @@
         "GET",
         "POST"
       ],
-      "controller": "UserManagementControllerController",
+      "controller": "UserManagementController",
       "action": "CreateUserAsync",
       "auth": {
         "required": false,
@@ -307,7 +307,7 @@
         "GET",
         "POST"
       ],
-      "controller": "UserManagementControllerController",
+      "controller": "UserManagementController",
       "action": "CreateUserAsync",
       "auth": {
         "required": false,
@@ -324,7 +324,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BookmarksControllerController",
+      "controller": "BookmarksController",
       "action": "DeleteBookmarkAsync",
       "auth": {
         "required": false,
@@ -341,7 +341,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BookmarksControllerController",
+      "controller": "BookmarksController",
       "action": "DeleteBookmarkAsync",
       "auth": {
         "required": false,
@@ -358,7 +358,7 @@
         "GET",
         "POST"
       ],
-      "controller": "InternetRadioControllerController",
+      "controller": "InternetRadioController",
       "action": "DeleteInternetRadioStationAsync",
       "auth": {
         "required": false,
@@ -375,7 +375,7 @@
         "GET",
         "POST"
       ],
-      "controller": "InternetRadioControllerController",
+      "controller": "InternetRadioController",
       "action": "DeleteInternetRadioStationAsync",
       "auth": {
         "required": false,
@@ -392,7 +392,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PlaylistControllerController",
+      "controller": "PlaylistController",
       "action": "DeletePlaylistAsync",
       "auth": {
         "required": false,
@@ -409,7 +409,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PlaylistControllerController",
+      "controller": "PlaylistController",
       "action": "DeletePlaylistAsync",
       "auth": {
         "required": false,
@@ -426,7 +426,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PodcastControllerController",
+      "controller": "PodcastController",
       "action": "DeletePodcastChannelAsync",
       "auth": {
         "required": false,
@@ -443,7 +443,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PodcastControllerController",
+      "controller": "PodcastController",
       "action": "DeletePodcastChannelAsync",
       "auth": {
         "required": false,
@@ -460,7 +460,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PodcastControllerController",
+      "controller": "PodcastController",
       "action": "DeletePodcastEpisodeAsync",
       "auth": {
         "required": false,
@@ -477,7 +477,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PodcastControllerController",
+      "controller": "PodcastController",
       "action": "DeletePodcastEpisodeAsync",
       "auth": {
         "required": false,
@@ -494,7 +494,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SharingControllerController",
+      "controller": "SharingController",
       "action": "DeleteShareAsync",
       "auth": {
         "required": false,
@@ -511,7 +511,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SharingControllerController",
+      "controller": "SharingController",
       "action": "DeleteShareAsync",
       "auth": {
         "required": false,
@@ -528,7 +528,7 @@
         "GET",
         "POST"
       ],
-      "controller": "UserManagementControllerController",
+      "controller": "UserManagementController",
       "action": "NotImplemented",
       "auth": {
         "required": false,
@@ -547,7 +547,7 @@
         "GET",
         "POST"
       ],
-      "controller": "UserManagementControllerController",
+      "controller": "UserManagementController",
       "action": "NotImplemented",
       "auth": {
         "required": false,
@@ -566,7 +566,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaRetrievalControllerController",
+      "controller": "MediaRetrievalController",
       "action": "DownloadAsync",
       "auth": {
         "required": false,
@@ -583,7 +583,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaRetrievalControllerController",
+      "controller": "MediaRetrievalController",
       "action": "DownloadAsync",
       "auth": {
         "required": false,
@@ -600,7 +600,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PodcastControllerController",
+      "controller": "PodcastController",
       "action": "DownloadPodcastEpisodeAsync",
       "auth": {
         "required": false,
@@ -617,7 +617,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PodcastControllerController",
+      "controller": "PodcastController",
       "action": "DownloadPodcastEpisodeAsync",
       "auth": {
         "required": false,
@@ -634,7 +634,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "action": "GetAlbumAsync",
       "auth": {
         "required": false,
@@ -651,7 +651,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "action": "GetAlbumAsync",
       "auth": {
         "required": false,
@@ -668,7 +668,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "action": "GetAlbumInfo",
       "auth": {
         "required": false,
@@ -685,7 +685,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "action": "GetAlbumInfo",
       "auth": {
         "required": false,
@@ -702,7 +702,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "action": "GetAlbumInfo",
       "auth": {
         "required": false,
@@ -719,7 +719,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "action": "GetAlbumInfo",
       "auth": {
         "required": false,
@@ -736,7 +736,7 @@
         "GET",
         "POST"
       ],
-      "controller": "AlbumSongControllerController",
+      "controller": "AlbumSongController",
       "action": "GetAlbumListAsync",
       "auth": {
         "required": false,
@@ -753,7 +753,7 @@
         "GET",
         "POST"
       ],
-      "controller": "AlbumSongControllerController",
+      "controller": "AlbumSongController",
       "action": "GetAlbumListAsync",
       "auth": {
         "required": false,
@@ -770,7 +770,7 @@
         "GET",
         "POST"
       ],
-      "controller": "AlbumSongControllerController",
+      "controller": "AlbumSongController",
       "action": "GetAlbumList2Async",
       "auth": {
         "required": false,
@@ -787,7 +787,7 @@
         "GET",
         "POST"
       ],
-      "controller": "AlbumSongControllerController",
+      "controller": "AlbumSongController",
       "action": "GetAlbumList2Async",
       "auth": {
         "required": false,
@@ -804,7 +804,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "action": "GetArtistAsync",
       "auth": {
         "required": false,
@@ -821,7 +821,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "action": "GetArtistAsync",
       "auth": {
         "required": false,
@@ -838,7 +838,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "action": "GetArtistInfo",
       "auth": {
         "required": false,
@@ -855,7 +855,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "action": "GetArtistInfo",
       "auth": {
         "required": false,
@@ -872,7 +872,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "action": "GetArtistInfo2",
       "auth": {
         "required": false,
@@ -889,7 +889,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "action": "GetArtistInfo2",
       "auth": {
         "required": false,
@@ -906,7 +906,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "action": "GetArtistsAsync",
       "auth": {
         "required": false,
@@ -923,7 +923,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "action": "GetArtistsAsync",
       "auth": {
         "required": false,
@@ -940,7 +940,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaRetrievalControllerController",
+      "controller": "MediaRetrievalController",
       "action": "GetAvatarAsync",
       "auth": {
         "required": false,
@@ -957,7 +957,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaRetrievalControllerController",
+      "controller": "MediaRetrievalController",
       "action": "GetAvatarAsync",
       "auth": {
         "required": false,
@@ -974,7 +974,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BookmarksControllerController",
+      "controller": "BookmarksController",
       "action": "GetBookmarksAsync",
       "auth": {
         "required": false,
@@ -991,7 +991,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BookmarksControllerController",
+      "controller": "BookmarksController",
       "action": "GetBookmarksAsync",
       "auth": {
         "required": false,
@@ -1008,7 +1008,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaRetrievalControllerController",
+      "controller": "MediaRetrievalController",
       "action": "DeprecatedWontImplement",
       "auth": {
         "required": false,
@@ -1027,7 +1027,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaRetrievalControllerController",
+      "controller": "MediaRetrievalController",
       "action": "DeprecatedWontImplement",
       "auth": {
         "required": false,
@@ -1046,7 +1046,7 @@
         "GET",
         "POST"
       ],
-      "controller": "ChatControllerController",
+      "controller": "ChatController",
       "action": "DeprecatedWontImplement",
       "auth": {
         "required": false,
@@ -1065,7 +1065,7 @@
         "GET",
         "POST"
       ],
-      "controller": "ChatControllerController",
+      "controller": "ChatController",
       "action": "DeprecatedWontImplement",
       "auth": {
         "required": false,
@@ -1084,7 +1084,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaRetrievalControllerController",
+      "controller": "MediaRetrievalController",
       "action": "GetCoverArtAsync",
       "auth": {
         "required": false,
@@ -1101,7 +1101,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaRetrievalControllerController",
+      "controller": "MediaRetrievalController",
       "action": "GetCoverArtAsync",
       "auth": {
         "required": false,
@@ -1118,7 +1118,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "action": "GetGenresAsync",
       "auth": {
         "required": false,
@@ -1135,7 +1135,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "action": "GetGenresAsync",
       "auth": {
         "required": false,
@@ -1152,7 +1152,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "action": "GetIndexesAsync",
       "auth": {
         "required": false,
@@ -1169,7 +1169,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "action": "GetIndexesAsync",
       "auth": {
         "required": false,
@@ -1186,7 +1186,7 @@
         "GET",
         "POST"
       ],
-      "controller": "InternetRadioControllerController",
+      "controller": "InternetRadioController",
       "action": "GetInternetRadioStationsAsync",
       "auth": {
         "required": false,
@@ -1203,7 +1203,7 @@
         "GET",
         "POST"
       ],
-      "controller": "InternetRadioControllerController",
+      "controller": "InternetRadioController",
       "action": "GetInternetRadioStationsAsync",
       "auth": {
         "required": false,
@@ -1220,7 +1220,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SystemControllerController",
+      "controller": "SystemController",
       "action": "GetLicenseAsync",
       "auth": {
         "required": false,
@@ -1237,7 +1237,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SystemControllerController",
+      "controller": "SystemController",
       "action": "GetLicenseAsync",
       "auth": {
         "required": false,
@@ -1254,7 +1254,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaRetrievalControllerController",
+      "controller": "MediaRetrievalController",
       "action": "GetLyricsAsync",
       "auth": {
         "required": false,
@@ -1271,7 +1271,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaRetrievalControllerController",
+      "controller": "MediaRetrievalController",
       "action": "GetLyricsAsync",
       "auth": {
         "required": false,
@@ -1288,7 +1288,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaRetrievalControllerController",
+      "controller": "MediaRetrievalController",
       "action": "GetLyricsAsync",
       "auth": {
         "required": false,
@@ -1305,7 +1305,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaRetrievalControllerController",
+      "controller": "MediaRetrievalController",
       "action": "GetLyricsAsync",
       "auth": {
         "required": false,
@@ -1322,7 +1322,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "action": "GetMusicDirectoryAsync",
       "auth": {
         "required": false,
@@ -1339,7 +1339,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "action": "GetMusicDirectoryAsync",
       "auth": {
         "required": false,
@@ -1356,7 +1356,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "action": "GetMusicFolders",
       "auth": {
         "required": false,
@@ -1373,7 +1373,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "action": "GetMusicFolders",
       "auth": {
         "required": false,
@@ -1390,7 +1390,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PodcastControllerController",
+      "controller": "PodcastController",
       "action": "GetNewestPodcastsAsync",
       "auth": {
         "required": false,
@@ -1407,7 +1407,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PodcastControllerController",
+      "controller": "PodcastController",
       "action": "GetNewestPodcastsAsync",
       "auth": {
         "required": false,
@@ -1424,7 +1424,7 @@
         "GET",
         "POST"
       ],
-      "controller": "AlbumSongControllerController",
+      "controller": "AlbumSongController",
       "action": "GetNowPlayingAsync",
       "auth": {
         "required": false,
@@ -1441,7 +1441,7 @@
         "GET",
         "POST"
       ],
-      "controller": "AlbumSongControllerController",
+      "controller": "AlbumSongController",
       "action": "GetNowPlayingAsync",
       "auth": {
         "required": false,
@@ -1458,7 +1458,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SystemControllerController",
+      "controller": "SystemController",
       "action": "GetOpenSubsonicExtensionsAsync",
       "auth": {
         "required": false,
@@ -1475,7 +1475,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SystemControllerController",
+      "controller": "SystemController",
       "action": "GetOpenSubsonicExtensionsAsync",
       "auth": {
         "required": false,
@@ -1492,7 +1492,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BookmarksControllerController",
+      "controller": "BookmarksController",
       "action": "GetPlayQueueAsync",
       "auth": {
         "required": false,
@@ -1509,7 +1509,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BookmarksControllerController",
+      "controller": "BookmarksController",
       "action": "GetPlayQueueAsync",
       "auth": {
         "required": false,
@@ -1526,7 +1526,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PlaylistControllerController",
+      "controller": "PlaylistController",
       "action": "GetPlaylistAsync",
       "auth": {
         "required": false,
@@ -1543,7 +1543,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PlaylistControllerController",
+      "controller": "PlaylistController",
       "action": "GetPlaylistAsync",
       "auth": {
         "required": false,
@@ -1560,7 +1560,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PlaylistControllerController",
+      "controller": "PlaylistController",
       "action": "GetPlaylistsAsync",
       "auth": {
         "required": false,
@@ -1577,7 +1577,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PlaylistControllerController",
+      "controller": "PlaylistController",
       "action": "GetPlaylistsAsync",
       "auth": {
         "required": false,
@@ -1594,7 +1594,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PodcastControllerController",
+      "controller": "PodcastController",
       "action": "GetPodcastsAsync",
       "auth": {
         "required": false,
@@ -1611,7 +1611,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PodcastControllerController",
+      "controller": "PodcastController",
       "action": "GetPodcastsAsync",
       "auth": {
         "required": false,
@@ -1628,7 +1628,7 @@
         "GET",
         "POST"
       ],
-      "controller": "AlbumSongControllerController",
+      "controller": "AlbumSongController",
       "action": "GetRandomSongsAsync",
       "auth": {
         "required": false,
@@ -1645,7 +1645,7 @@
         "GET",
         "POST"
       ],
-      "controller": "AlbumSongControllerController",
+      "controller": "AlbumSongController",
       "action": "GetRandomSongsAsync",
       "auth": {
         "required": false,
@@ -1662,7 +1662,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaLibraryScanningController",
+      "controller": "MediaLibraryScanning",
       "action": "GetScanStatusAsync",
       "auth": {
         "required": false,
@@ -1679,7 +1679,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaLibraryScanningController",
+      "controller": "MediaLibraryScanning",
       "action": "GetScanStatusAsync",
       "auth": {
         "required": false,
@@ -1696,7 +1696,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SharingControllerController",
+      "controller": "SharingController",
       "action": "GetSharesAsync",
       "auth": {
         "required": false,
@@ -1713,7 +1713,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SharingControllerController",
+      "controller": "SharingController",
       "action": "GetSharesAsync",
       "auth": {
         "required": false,
@@ -1730,7 +1730,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "action": "GetSimilarSongs",
       "auth": {
         "required": false,
@@ -1747,7 +1747,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "action": "GetSimilarSongs",
       "auth": {
         "required": false,
@@ -1764,7 +1764,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "action": "GetSimilarSongs2",
       "auth": {
         "required": false,
@@ -1781,7 +1781,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "action": "GetSimilarSongs2",
       "auth": {
         "required": false,
@@ -1798,7 +1798,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "action": "GetSongAsync",
       "auth": {
         "required": false,
@@ -1815,7 +1815,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "action": "GetSongAsync",
       "auth": {
         "required": false,
@@ -1832,7 +1832,7 @@
         "GET",
         "POST"
       ],
-      "controller": "AlbumSongControllerController",
+      "controller": "AlbumSongController",
       "action": "GetSongsByGenre",
       "auth": {
         "required": false,
@@ -1849,7 +1849,7 @@
         "GET",
         "POST"
       ],
-      "controller": "AlbumSongControllerController",
+      "controller": "AlbumSongController",
       "action": "GetSongsByGenre",
       "auth": {
         "required": false,
@@ -1866,7 +1866,7 @@
         "GET",
         "POST"
       ],
-      "controller": "AlbumSongControllerController",
+      "controller": "AlbumSongController",
       "action": "GetStarredAsync",
       "auth": {
         "required": false,
@@ -1883,7 +1883,7 @@
         "GET",
         "POST"
       ],
-      "controller": "AlbumSongControllerController",
+      "controller": "AlbumSongController",
       "action": "GetStarredAsync",
       "auth": {
         "required": false,
@@ -1900,7 +1900,7 @@
         "GET",
         "POST"
       ],
-      "controller": "AlbumSongControllerController",
+      "controller": "AlbumSongController",
       "action": "GetStarred2Async",
       "auth": {
         "required": false,
@@ -1917,7 +1917,7 @@
         "GET",
         "POST"
       ],
-      "controller": "AlbumSongControllerController",
+      "controller": "AlbumSongController",
       "action": "GetStarred2Async",
       "auth": {
         "required": false,
@@ -1934,7 +1934,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "action": "GetTopSongs",
       "auth": {
         "required": false,
@@ -1951,7 +1951,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "action": "GetTopSongs",
       "auth": {
         "required": false,
@@ -1968,7 +1968,7 @@
         "GET",
         "POST"
       ],
-      "controller": "UserManagementControllerController",
+      "controller": "UserManagementController",
       "action": "GetUserAsync",
       "auth": {
         "required": false,
@@ -1985,7 +1985,7 @@
         "GET",
         "POST"
       ],
-      "controller": "UserManagementControllerController",
+      "controller": "UserManagementController",
       "action": "GetUserAsync",
       "auth": {
         "required": false,
@@ -2002,7 +2002,7 @@
         "GET",
         "POST"
       ],
-      "controller": "UserManagementControllerController",
+      "controller": "UserManagementController",
       "action": "NotImplemented",
       "auth": {
         "required": false,
@@ -2021,7 +2021,7 @@
         "GET",
         "POST"
       ],
-      "controller": "UserManagementControllerController",
+      "controller": "UserManagementController",
       "action": "NotImplemented",
       "auth": {
         "required": false,
@@ -2040,7 +2040,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "action": "DeprecatedWontImplement",
       "auth": {
         "required": false,
@@ -2059,7 +2059,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "action": "DeprecatedWontImplement",
       "auth": {
         "required": false,
@@ -2078,7 +2078,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "action": "DeprecatedWontImplement",
       "auth": {
         "required": false,
@@ -2097,7 +2097,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BrowsingControllerController",
+      "controller": "BrowsingController",
       "action": "DeprecatedWontImplement",
       "auth": {
         "required": false,
@@ -2116,7 +2116,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaRetrievalControllerController",
+      "controller": "MediaRetrievalController",
       "action": "DeprecatedWontImplement",
       "auth": {
         "required": false,
@@ -2135,7 +2135,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaRetrievalControllerController",
+      "controller": "MediaRetrievalController",
       "action": "DeprecatedWontImplement",
       "auth": {
         "required": false,
@@ -2154,7 +2154,7 @@
         "GET",
         "POST"
       ],
-      "controller": "JukeboxControllerController",
+      "controller": "JukeboxController",
       "action": "JukeboxControl",
       "auth": {
         "required": false,
@@ -2173,7 +2173,7 @@
         "GET",
         "POST"
       ],
-      "controller": "JukeboxControllerController",
+      "controller": "JukeboxController",
       "action": "JukeboxControl",
       "auth": {
         "required": false,
@@ -2192,7 +2192,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SystemControllerController",
+      "controller": "SystemController",
       "action": "Ping",
       "auth": {
         "required": false,
@@ -2209,7 +2209,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SystemControllerController",
+      "controller": "SystemController",
       "action": "Ping",
       "auth": {
         "required": false,
@@ -2226,7 +2226,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PodcastControllerController",
+      "controller": "PodcastController",
       "action": "RefreshPodcastsAsync",
       "auth": {
         "required": false,
@@ -2243,7 +2243,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PodcastControllerController",
+      "controller": "PodcastController",
       "action": "RefreshPodcastsAsync",
       "auth": {
         "required": false,
@@ -2260,7 +2260,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BookmarksControllerController",
+      "controller": "BookmarksController",
       "action": "SavePlayQueueAsync",
       "auth": {
         "required": false,
@@ -2277,7 +2277,7 @@
         "GET",
         "POST"
       ],
-      "controller": "BookmarksControllerController",
+      "controller": "BookmarksController",
       "action": "SavePlayQueueAsync",
       "auth": {
         "required": false,
@@ -2294,7 +2294,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaAnnotationControllerController",
+      "controller": "MediaAnnotationController",
       "action": "ScrobbleAsync",
       "auth": {
         "required": false,
@@ -2311,7 +2311,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaAnnotationControllerController",
+      "controller": "MediaAnnotationController",
       "action": "ScrobbleAsync",
       "auth": {
         "required": false,
@@ -2328,7 +2328,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SearchingControllerController",
+      "controller": "SearchingController",
       "action": "Search2Async",
       "auth": {
         "required": false,
@@ -2345,7 +2345,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SearchingControllerController",
+      "controller": "SearchingController",
       "action": "Search2Async",
       "auth": {
         "required": false,
@@ -2362,7 +2362,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SearchingControllerController",
+      "controller": "SearchingController",
       "action": "Search3Async",
       "auth": {
         "required": false,
@@ -2379,7 +2379,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SearchingControllerController",
+      "controller": "SearchingController",
       "action": "Search3Async",
       "auth": {
         "required": false,
@@ -2396,7 +2396,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SearchEngineControllerController",
+      "controller": "SearchEngineController",
       "action": "SearchForAlbumImageAsync",
       "auth": {
         "required": false,
@@ -2413,7 +2413,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SearchEngineControllerController",
+      "controller": "SearchEngineController",
       "action": "SearchForAlbumImageAsync",
       "auth": {
         "required": false,
@@ -2430,7 +2430,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SearchEngineControllerController",
+      "controller": "SearchEngineController",
       "action": "SearchForArtistAsync",
       "auth": {
         "required": false,
@@ -2447,7 +2447,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SearchEngineControllerController",
+      "controller": "SearchEngineController",
       "action": "SearchForArtistAsync",
       "auth": {
         "required": false,
@@ -2464,7 +2464,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SearchEngineControllerController",
+      "controller": "SearchEngineController",
       "action": "SearchForAlbumImageAsync",
       "auth": {
         "required": false,
@@ -2481,7 +2481,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SearchEngineControllerController",
+      "controller": "SearchEngineController",
       "action": "SearchForAlbumImageAsync",
       "auth": {
         "required": false,
@@ -2498,7 +2498,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaAnnotationControllerController",
+      "controller": "MediaAnnotationController",
       "action": "SetRatingAsync",
       "auth": {
         "required": false,
@@ -2515,7 +2515,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaAnnotationControllerController",
+      "controller": "MediaAnnotationController",
       "action": "SetRatingAsync",
       "auth": {
         "required": false,
@@ -2532,7 +2532,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaAnnotationControllerController",
+      "controller": "MediaAnnotationController",
       "action": "StarAsync",
       "auth": {
         "required": false,
@@ -2549,7 +2549,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaAnnotationControllerController",
+      "controller": "MediaAnnotationController",
       "action": "StarAsync",
       "auth": {
         "required": false,
@@ -2566,7 +2566,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaLibraryScanningController",
+      "controller": "MediaLibraryScanning",
       "action": "StartScanAsync",
       "auth": {
         "required": false,
@@ -2583,7 +2583,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaLibraryScanningController",
+      "controller": "MediaLibraryScanning",
       "action": "StartScanAsync",
       "auth": {
         "required": false,
@@ -2600,7 +2600,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaRetrievalControllerController",
+      "controller": "MediaRetrievalController",
       "action": "StreamAsync",
       "auth": {
         "required": false,
@@ -2617,7 +2617,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaRetrievalControllerController",
+      "controller": "MediaRetrievalController",
       "action": "StreamAsync",
       "auth": {
         "required": false,
@@ -2634,7 +2634,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PodcastControllerController",
+      "controller": "PodcastController",
       "action": "StreamPodcastEpisodeAsync",
       "auth": {
         "required": false,
@@ -2651,7 +2651,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PodcastControllerController",
+      "controller": "PodcastController",
       "action": "StreamPodcastEpisodeAsync",
       "auth": {
         "required": false,
@@ -2668,7 +2668,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaAnnotationControllerController",
+      "controller": "MediaAnnotationController",
       "action": "UnstarAsync",
       "auth": {
         "required": false,
@@ -2685,7 +2685,7 @@
         "GET",
         "POST"
       ],
-      "controller": "MediaAnnotationControllerController",
+      "controller": "MediaAnnotationController",
       "action": "UnstarAsync",
       "auth": {
         "required": false,
@@ -2702,7 +2702,7 @@
         "GET",
         "POST"
       ],
-      "controller": "InternetRadioControllerController",
+      "controller": "InternetRadioController",
       "action": "UpdateInternetRadioStationAsync",
       "auth": {
         "required": false,
@@ -2719,7 +2719,7 @@
         "GET",
         "POST"
       ],
-      "controller": "InternetRadioControllerController",
+      "controller": "InternetRadioController",
       "action": "UpdateInternetRadioStationAsync",
       "auth": {
         "required": false,
@@ -2736,7 +2736,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PlaylistControllerController",
+      "controller": "PlaylistController",
       "action": "CreatePlaylistAsync",
       "auth": {
         "required": false,
@@ -2753,7 +2753,7 @@
         "GET",
         "POST"
       ],
-      "controller": "PlaylistControllerController",
+      "controller": "PlaylistController",
       "action": "CreatePlaylistAsync",
       "auth": {
         "required": false,
@@ -2770,7 +2770,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SharingControllerController",
+      "controller": "SharingController",
       "action": "UpdateShareAsync",
       "auth": {
         "required": false,
@@ -2787,7 +2787,7 @@
         "GET",
         "POST"
       ],
-      "controller": "SharingControllerController",
+      "controller": "SharingController",
       "action": "UpdateShareAsync",
       "auth": {
         "required": false,
@@ -2804,7 +2804,7 @@
         "GET",
         "POST"
       ],
-      "controller": "UserManagementControllerController",
+      "controller": "UserManagementController",
       "action": "NotImplemented",
       "auth": {
         "required": false,
@@ -2823,7 +2823,7 @@
         "GET",
         "POST"
       ],
-      "controller": "UserManagementControllerController",
+      "controller": "UserManagementController",
       "action": "NotImplemented",
       "auth": {
         "required": false,
