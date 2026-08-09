@@ -18,6 +18,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
+    services:
+      # Integration tests (melodee-persistence) run against real PostgreSQL.
+      # Port 5433 matches the documented dev database and the test default.
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: melodee
+          POSTGRES_PASSWORD: melodee-dev
+          POSTGRES_DB: postgres
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U melodee"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v6

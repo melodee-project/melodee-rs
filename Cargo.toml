@@ -4,6 +4,7 @@ members = [
   "apps/melodee-cli",
   "apps/melodee-server",
   "crates/melodee-domain",
+  "crates/melodee-persistence",
 ]
 
 [workspace.package]
@@ -18,7 +19,18 @@ axum = { version = "=0.8.9", features = ["http1", "json", "tokio"] }
 clap = { version = "=4.6.4", features = ["derive", "env"] }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.150"
+# ADR-0110: SQLx with explicit SQL against PostgreSQL. Runtime-checked queries
+# for now; compile-time/offline query metadata is a later hardening step.
+sqlx = { version = "=0.9.0", default-features = false, features = [
+  "macros",
+  "migrate",
+  "postgres",
+  "runtime-tokio",
+  "time",
+  "uuid",
+] }
 thiserror = "=2.0.19"
+time = { version = "=0.3.55", features = ["serde"] }
 tokio = { version = "=1.52.3", features = ["macros", "net", "rt-multi-thread", "signal"] }
 tower-http = { version = "=0.7.0", features = ["trace"] }
 tracing = "=0.1.44"

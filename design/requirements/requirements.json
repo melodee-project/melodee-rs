@@ -175,13 +175,15 @@
     "phase": "2",
     "source": "PRD.md",
     "line": 492,
-    "status": "in-progress",
+    "status": "implemented",
     "implementation": [
-      "design/evidence/phase-0/media-baseline.md sections 2-9 (current pipeline stages, validation reasons, artist-resolution attempt order, destructive-rule inventory)",
-      "compatibility/media/baseline.json"
+      "crates/melodee-domain/src/ingestion.rs (RetryPolicy, FailureClass)",
+      "crates/melodee-persistence/src/work_items.rs (record_failure, claim-time failed->ready requeue)"
     ],
     "tests": [
-      "tests/python/test_media_baseline.py"
+      "crates/melodee-persistence/tests/claiming.rs (future_next_attempt_blocks_claim_until_eligible, exhausted_retries_are_not_claimed)",
+      "crates/melodee-persistence/tests/recovery.rs (permanent/review failure classes)",
+      "crates/melodee-domain unit tests (retry backoff)"
     ]
   },
   {
@@ -190,12 +192,14 @@
     "phase": "2",
     "source": "PRD.md",
     "line": 496,
-    "status": "captured",
+    "status": "implemented",
     "implementation": [
-      "design/evidence/phase-0/media-baseline.md section 10 (validation reasons categorized: structural vs metadata vs enrichment vs artwork vs policy)"
+      "crates/melodee-persistence/src/work_items.rs (claim with FOR UPDATE SKIP LOCKED, leases, recovery, renewal)",
+      "crates/melodee-persistence/migrations/0001_release_work_items.sql"
     ],
     "tests": [
-      "tests/python/test_media_baseline.py"
+      "crates/melodee-persistence/tests/claiming.rs (exclusive claim, 1000x32 parallel queue, poll race, lease blocking/expiry)",
+      "crates/melodee-persistence/tests/recovery.rs (crash simulations)"
     ]
   },
   {
@@ -282,9 +286,14 @@
     "phase": "2",
     "source": "PRD.md",
     "line": 568,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "in-progress",
+    "implementation": [
+      "crates/melodee-persistence/migrations/0002_release_work_item_events.sql",
+      "apps/melodee-cli/src/main.rs (work show prints state, attempts, last error, event history)"
+    ],
+    "tests": [
+      "crates/melodee-persistence/tests/history.rs"
+    ]
   },
   {
     "id": "PRD-MEDIA-001",
@@ -2005,9 +2014,13 @@
     "phase": "1,2,9",
     "source": "PRD.md",
     "line": 1993,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "in-progress",
+    "implementation": [
+      "crates/melodee-persistence/ (durable work queue foundation: items, leases, retries, history)"
+    ],
+    "tests": [
+      "crates/melodee-persistence/tests/"
+    ]
   },
   {
     "id": "PRD-WORK-002",
@@ -2035,9 +2048,13 @@
     "phase": "1,2,9",
     "source": "PRD.md",
     "line": 2023,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "in-progress",
+    "implementation": [
+      "apps/melodee-cli/src/main.rs (work list/show/seed-test/claim-test coordinate through the same store/leases)"
+    ],
+    "tests": [
+      "crates/melodee-persistence/tests/"
+    ]
   },
   {
     "id": "PRD-WORK-005",
@@ -2045,9 +2062,13 @@
     "phase": "1,2,9",
     "source": "PRD.md",
     "line": 2027,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "in-progress",
+    "implementation": [
+      "crates/melodee-persistence/src/work_items.rs (operator transitions: quarantine/reprocess/retry; release_lease; append-only events)"
+    ],
+    "tests": [
+      "crates/melodee-persistence/tests/transitions.rs (operator_review_decisions_and_reprocess)"
+    ]
   },
   {
     "id": "PRD-OBS-001",
@@ -2055,8 +2076,10 @@
     "phase": "1,2",
     "source": "PRD.md",
     "line": 2054,
-    "status": "planned",
-    "implementation": [],
+    "status": "in-progress",
+    "implementation": [
+      "crates/melodee-persistence/src/work_items.rs (tracing events with work_item_id/worker_id/correlation_id/lease fields)"
+    ],
     "tests": []
   },
   {

@@ -9,5 +9,8 @@ mod ingestion;
 mod release;
 
 pub use artist::{ArtistId, ArtistType, ContributionRole};
-pub use ingestion::{Disposition, IngestionState, InvalidStateTransition};
+pub use ingestion::{
+    Disposition, FailureClass, IngestionState, InvalidStateTransition, ReleaseWorkItem,
+    ReleaseWorkItemEvent, RetryPolicy, TransitionKind, WorkErrorCode, WorkEventType,
+};
 pub use release::{ReleaseId, ReleaseTrait, TrackId};

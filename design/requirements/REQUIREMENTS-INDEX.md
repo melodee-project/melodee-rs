@@ -23,8 +23,8 @@ Total requirements: **232**
 | `PRD-ARCH-004` | Tantivy is a projection | 1 | planned | — | — |
 | `PRD-ARCH-005` | Filesystem is canonical for media bytes, not identity | 1 | planned | — | — |
 | `PRD-ARCH-006` | Avoid unnecessary infrastructure | 1 | planned | — | — |
-| `PRD-INGEST-001` | Per-Release retry | 2 | in-progress | design/evidence/phase-0/media-baseline.md sections 2-9 (current pipeline stages, validation reasons, artist-resolution attempt order, destructive-rule inventory); compatibility/media/baseline.json | tests/python/test_media_baseline.py |
-| `PRD-INGEST-002` | Lease-based concurrency | 2 | captured | design/evidence/phase-0/media-baseline.md section 10 (validation reasons categorized: structural vs metadata vs enrichment vs artwork vs policy) | tests/python/test_media_baseline.py |
+| `PRD-INGEST-001` | Per-Release retry | 2 | implemented | crates/melodee-domain/src/ingestion.rs (RetryPolicy, FailureClass); crates/melodee-persistence/src/work_items.rs (record_failure, claim-time failed->ready requeue) | crates/melodee-persistence/tests/claiming.rs (future_next_attempt_blocks_claim_until_eligible, exhausted_retries_are_not_claimed); crates/melodee-persistence/tests/recovery.rs (permanent/review failure classes); crates/melodee-domain unit tests (retry backoff) |
+| `PRD-INGEST-002` | Lease-based concurrency | 2 | implemented | crates/melodee-persistence/src/work_items.rs (claim with FOR UPDATE SKIP LOCKED, leases, recovery, renewal); crates/melodee-persistence/migrations/0001_release_work_items.sql | crates/melodee-persistence/tests/claiming.rs (exclusive claim, 1000x32 parallel queue, poll race, lease blocking/expiry); crates/melodee-persistence/tests/recovery.rs (crash simulations) |
 | `PRD-INGEST-003` | Watchers are accelerators only | 2 | in-progress | design/evidence/phase-0/media-baseline.md sections 2, 8, 11, 12 (F1/F2 documented as the primary determinism/idempotency hazards) | tests/python/test_media_baseline.py |
 | `PRD-INGEST-004` | Settling detection | 2 | in-progress | design/evidence/phase-0/media-baseline.md section 9 (sidecar behavior incl. lyrics plugin gating) | — |
 | `PRD-INGEST-005` | Source safety | 2 | in-progress | design/evidence/phase-0/media-baseline.md section 11 (interruption/non-atomicity evidence) | — |
@@ -32,7 +32,7 @@ Total requirements: **232**
 | `PRD-INGEST-007` | Versioned manifest | 2 | planned | — | — |
 | `PRD-INGEST-008` | Structural validity is independent of enrichment | 2 | planned | — | — |
 | `PRD-INGEST-009` | Bounded resource pools | 2 | planned | — | — |
-| `PRD-INGEST-010` | Operator visibility | 2 | planned | — | — |
+| `PRD-INGEST-010` | Operator visibility | 2 | in-progress | crates/melodee-persistence/migrations/0002_release_work_item_events.sql; apps/melodee-cli/src/main.rs (work show prints state, attempts, last error, event history) | crates/melodee-persistence/tests/history.rs |
 | `PRD-MEDIA-001` | PRD-MEDIA-001 | 3 | captured | compatibility/media/baseline.json + cases/ (31 synthetic cases: formats, metadata, conversion, artwork, validation, classification, failures); scripts/generate_media_corpus.py; scripts/capture_media_baseline.py; design/evidence/phase-0/media-baseline.md | tests/python/test_media_baseline.py |
 | `PRD-MEDIA-002` | Canonical format policy | 3 | captured | compatibility/media/baseline.json environment.seededSettings (conversion.* measured: MP3 384k VBR-q4 48kHz; transcoding.* templates are malformed/unconsumed); design/evidence/phase-0/media-baseline.md section 4 (legacy behavior vs new Rust canonical policy separated) | tests/python/test_media_baseline.py (test_seeded_conversion_settings) |
 | `PRD-MEDIA-003` | Use mature media tools | 3 | captured | design/evidence/phase-0/media-baseline.md section 12 (eight classified legacy deficiencies incl. F1 metadata-container gate, F2 destructive same-size dedupe, no resumability, no crash-safety) | tests/python/test_media_baseline.py (test_metadata_container_gate, test_same_size_deletion_bug) |
@@ -194,12 +194,12 @@ Total requirements: **232**
 | `PRD-CONFIG-001` | PRD-CONFIG-001 | 1,9 | planned | — | — |
 | `PRD-CONFIG-002` | PRD-CONFIG-002 | 1,9 | planned | — | — |
 | `PRD-CONFIG-003` | PRD-CONFIG-003 | 1,9 | planned | — | — |
-| `PRD-WORK-001` | PRD-WORK-001 | 1,2,9 | planned | — | — |
+| `PRD-WORK-001` | PRD-WORK-001 | 1,2,9 | in-progress | crates/melodee-persistence/ (durable work queue foundation: items, leases, retries, history) | crates/melodee-persistence/tests/ |
 | `PRD-WORK-002` | PRD-WORK-002 | 1,2,9 | planned | — | — |
 | `PRD-WORK-003` | PRD-WORK-003 | 1,2,9 | planned | — | — |
-| `PRD-WORK-004` | PRD-WORK-004 | 1,2,9 | planned | — | — |
-| `PRD-WORK-005` | PRD-WORK-005 | 1,2,9 | planned | — | — |
-| `PRD-OBS-001` | PRD-OBS-001 | 1,2 | planned | — | — |
+| `PRD-WORK-004` | PRD-WORK-004 | 1,2,9 | in-progress | apps/melodee-cli/src/main.rs (work list/show/seed-test/claim-test coordinate through the same store/leases) | crates/melodee-persistence/tests/ |
+| `PRD-WORK-005` | PRD-WORK-005 | 1,2,9 | in-progress | crates/melodee-persistence/src/work_items.rs (operator transitions: quarantine/reprocess/retry; release_lease; append-only events) | crates/melodee-persistence/tests/transitions.rs (operator_review_decisions_and_reprocess) |
+| `PRD-OBS-001` | PRD-OBS-001 | 1,2 | in-progress | crates/melodee-persistence/src/work_items.rs (tracing events with work_item_id/worker_id/correlation_id/lease fields) | — |
 | `PRD-OBS-002` | PRD-OBS-002 | 1,2 | planned | — | — |
 | `PRD-OBS-003` | PRD-OBS-003 | 1,2 | planned | — | — |
 | `PRD-OBS-004` | PRD-OBS-004 | 1,2 | planned | — | — |

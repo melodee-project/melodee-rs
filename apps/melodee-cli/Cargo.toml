@@ -8,6 +8,12 @@ publish = false
 
 [dependencies]
 clap.workspace = true
+melodee-domain = { path = "../../crates/melodee-domain", version = "0.1.0" }
+melodee-persistence = { path = "../../crates/melodee-persistence", version = "0.1.0" }
+sqlx.workspace = true
+time.workspace = true
+tokio.workspace = true
+uuid.workspace = true
 
 [lints]
 workspace = true
