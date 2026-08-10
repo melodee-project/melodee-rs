@@ -1,5 +1,5 @@
 {
-  "capturedAtUtc": "2026-08-10 11:57:21.413189081 +00:00:00",
+  "capturedAtUtc": "2026-08-10 11:59:03.31901539 +00:00:00",
   "claimBatchSize": 4,
   "claimQueryPlan": [
     "Limit  (cost=51.60..51.62 rows=2 width=506)",
@@ -21,13 +21,13 @@
     "                                ->  Bitmap Index Scan on release_work_items_state_idx  (cost=0.00..4.39 rows=15 width=0)",
     "                                      Index Cond: (state = 'failed'::text)"
   ],
-  "claimsPerSecond": 1791.0,
+  "claimsPerSecond": 1700.0,
   "duplicateClaims": 0,
   "kind": "work-claim-benchmark",
   "note": "Evidence only; no performance threshold asserted (PRD-PERF-001). Environment: dev PostgreSQL on localhost, debug build.",
   "queueSize": 10000,
   "schemaVersion": 1,
   "totalClaimed": 10000,
-  "wallClockMs": 5583,
+  "wallClockMs": 5883,
   "workerCount": 32
 }
