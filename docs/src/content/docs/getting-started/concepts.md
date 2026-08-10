@@ -32,9 +32,10 @@ appearances according to role.
 ## Media assets and manifests
 
 Inbound media is inspected and normalized into attempt-isolated temporary files with a versioned
-manifest describing content hashes, fingerprints, and metadata. Verification and atomic canonical
-library publication are the next pipeline stage and are not implemented yet. The eventual catalog
-is built from ratified manifests, not from repeated reads of audio files.
+manifest describing content hashes, fingerprints, and metadata. Structural validation upgrades an
+accepted result to manifest schema v3, then atomic, retry-safe publication creates an immutable-ID
+canonical Release bundle while retaining the inbound source. The future catalog is built from
+ratified manifests, not from repeated reads of audio files.
 
 ## Compatibility surfaces
 

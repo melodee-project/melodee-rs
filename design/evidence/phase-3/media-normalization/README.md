@@ -1,11 +1,17 @@
 # Phase 3.2 Evidence — Media normalization and acoustic fingerprinting
 
+> Subsequent status: Phase 3.3/3.4 validate and publish these temporary outputs as manifest v3
+> canonical Release bundles. See [canonical-publication evidence](../canonical-publication/README.md)
+> and the consolidated [Phase 3 report](../PHASE-3-REPORT.md). This page preserves the 3.2 slice
+> boundary/evidence and its then-current limitations.
+
 ## Scope and result
 
 Phase 3.2 implements the leased `Normalizing -> Validating` handoff. It creates
 verified, temporary output and publishes manifest schema v2 atomically with the
-state transition. It does **not** implement Phase 3.3 verification policy or
-canonical library publication.
+state transition. At the 3.2 slice boundary, it did **not** implement structural
+verification or canonical publication; Phase 3.3 now consumes this result and
+publishes manifest v3 bundles as documented in the links above.
 
 The independent hardening review ran on 2026-08-10 with:
 
@@ -262,11 +268,11 @@ discovery, settling, inspection, fixture work, assertions, and teardown.
 
 ## Known limitations and honest requirement boundary
 
-- Phase 3.3 canonical verification/publication is planned. Work-area output is
-  temporary and non-authoritative.
-- Successful attempt directories must remain for Phase 3.3; operational stale
-  attempt cleanup policy is not implemented yet, so disk usage must be
-  monitored.
+- Work-area output remains temporary and non-authoritative. Completed Phase 3.3
+  verifies it before publishing a separate canonical manifest v3 bundle.
+- Successful attempt directories must remain until Phase 3.3 publication
+  completes. Operational stale-attempt cleanup policy is still not implemented,
+  so disk usage must be monitored.
 - CUE-driven audio splitting is not implemented. PRD-MEDIA-006 remains
   `in-progress`.
 - The full artwork requirement includes later replacement, upload, thumbnail,

@@ -20,6 +20,7 @@ pub use config::{
 pub use error::WorkStoreError;
 pub use migrate::{MIGRATOR, migrate};
 pub use work_items::{
-    ActiveLease, SettlingSnapshot, SettlingSnapshotFile, StateCount, StoredManifest, WorkItemStore,
+    ActiveLease, PublicationJournalEntry, SettlingSnapshot, SettlingSnapshotFile, StateCount,
+    StoredManifest, StoredPublication, WorkItemStore,
 };
 pub use worker::WorkerId;

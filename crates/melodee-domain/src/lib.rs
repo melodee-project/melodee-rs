@@ -15,10 +15,14 @@ pub use ingestion::{
     ReleaseWorkItemEvent, RetryPolicy, TransitionKind, WorkErrorCode, WorkEventType,
 };
 pub use manifest::{
-    AudioTechnicalObservation, CANONICAL_MP3_PROFILE_VERSION, CURRENT_MANIFEST_VERSION, Finding,
-    FindingSeverity, FingerprintObservation, INSPECTION_MANIFEST_VERSION,
-    ManifestInspectionContext, ManifestReleaseObservation, NormalizationExecutionProvenance,
-    NormalizationObservations, NormalizedArtwork, NormalizedOutput, ObservedArtwork, ObservedFile,
-    ObservedFileKind, ObservedMetadata, ObservedTrack, ParsedSidecar, ReleaseManifest,
+    AudioTechnicalObservation, CANONICAL_LAYOUT_VERSION, CANONICAL_MP3_PROFILE_VERSION,
+    CURRENT_MANIFEST_VERSION, CanonicalAsset, CanonicalAssetKind, Finding, FindingSeverity,
+    FingerprintObservation, INSPECTION_MANIFEST_VERSION, ManifestInspectionContext,
+    ManifestPublication, ManifestReleaseObservation, NORMALIZATION_MANIFEST_VERSION,
+    NormalizationExecutionProvenance, NormalizationObservations, NormalizedArtwork,
+    NormalizedOutput, ObservedArtwork, ObservedFile, ObservedFileKind, ObservedMetadata,
+    ObservedTrack, PUBLICATION_MANIFEST_VERSION, ParsedSidecar, PublicationAuthorization,
+    PublicationInvariantError, PublicationJournalStep, PublicationPlan, ReleaseManifest,
+    SourceDisposition, StructuralValidation, ValidationOutcome,
 };
 pub use release::{ReleaseId, ReleaseTrait, TrackId};

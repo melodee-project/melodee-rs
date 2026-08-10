@@ -432,7 +432,7 @@ async fn normalize_one(
     Ok(NormalizationOutcome::Completed)
 }
 
-fn heartbeat_interval(lease_duration: ::time::Duration) -> Result<TokioDuration> {
+pub(crate) fn heartbeat_interval(lease_duration: ::time::Duration) -> Result<TokioDuration> {
     let lease = StdDuration::try_from(lease_duration)
         .map_err(|error| IngestionError::InspectionTask(error.to_string()))?;
     let interval = lease / 3;

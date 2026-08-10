@@ -8,11 +8,13 @@ this repository defines the new architecture, specifications, tests, and impleme
 
 ## Current phase
 
-**Phase 0 — Baseline freeze and compatibility capture**
+**Phase 3 — Media inspection, normalization, and manifests (complete)**
 
-The first work is to capture the observable behavior of the existing server, establish measurable
-performance baselines, and ratify the foundational ADRs. Do not start broad feature implementation
-until the Phase 0 exit criteria in [IMPLEMENTATION.md](IMPLEMENTATION.md) are satisfied.
+Phases 0–3 are complete. Phase 3 now publishes verified manifest v3 Release bundles through a
+durable, retry-safe, non-destructive canonical-publication protocol. Phase 4 (catalog, Artist
+identity, and contributions) is the next boundary, but schema work requires an assigned work
+package and accepted schema ADR. See [IMPLEMENTATION.md](IMPLEMENTATION.md) and the
+[Phase 3 report](design/evidence/phase-3/PHASE-3-REPORT.md).
 
 ## Non-negotiable product commitments
 
@@ -34,17 +36,20 @@ until the Phase 0 exit criteria in [IMPLEMENTATION.md](IMPLEMENTATION.md) are sa
 3. [SPEC.md](SPEC.md) — technical system specification and invariants.
 4. [IMPLEMENTATION.md](IMPLEMENTATION.md) — phased delivery plan and exit criteria.
 5. [design/adr/README.md](design/adr/README.md) — ADR process and current decisions.
-6. [design/agents/PHASE-0-WORK-PACKAGE.md](design/agents/PHASE-0-WORK-PACKAGE.md) — the first
-   executable work package.
+6. [design/agents/DEFINITION-OF-DONE.md](design/agents/DEFINITION-OF-DONE.md) — completion and
+   evidence requirements for every implementation slice.
 
 ## Repository structure
 
 ```text
 apps/                       Deployable Rust binaries
-  melodee-server/           Axum server bootstrap
-  melodee-cli/              Administrative CLI bootstrap
+  melodee-server/           Axum server, ingestion workers, and Admin diagnostics API
+  melodee-cli/              Administrative and ingestion diagnostics CLI
 crates/
   melodee-domain/           Framework-independent core vocabulary and invariants
+  melodee-persistence/      PostgreSQL migrations, durable work items, and leases
+  melodee-ingestion/        Reconciliation, inspection, normalization, and publication workers
+  melodee-media/            Media observation, conversion, artwork, and fingerprinting
 compatibility/              Captured external contracts and golden responses
 design/
   adr/                      Architecture Decision Records
@@ -54,8 +59,8 @@ design/
   ui/                       Carbon UI direction and canonical mockups
 tests/                       Compatibility, media, fault, and performance test homes
 scripts/                     Repository validation and baseline-capture utilities
-admin-ui/                    Reserved for the Carbon React admin SPA in its implementation phase
-migrations/                  Reserved for SQLx/PostgreSQL migrations after schema ADR acceptance
+admin-ui/                    Reserved for the admin SPA in its implementation phase
+migrations/                  Legacy placeholder; active SQLx migrations live with persistence
 ```
 
 ## Local bootstrap
@@ -82,12 +87,11 @@ Run the standard checks:
 
 The first successful Cargo resolution must produce `Cargo.lock`; commit it in the same change.
 
-## First agent assignment
+## Current implementation evidence
 
-Start with [design/agents/PHASE-0-WORK-PACKAGE.md](design/agents/PHASE-0-WORK-PACKAGE.md).
-The agent should complete one small issue at a time from
-[design/agents/FIRST-10-ISSUES.md](design/agents/FIRST-10-ISSUES.md), with a focused PR and evidence
-for every acceptance criterion.
+Completed phase reports live under `design/evidence/phase-0/` through `design/evidence/phase-3/`.
+The phase plan, accepted ADRs, and an assigned work package determine what may be implemented next;
+historical work packages remain as completed project evidence.
 
 ## Legacy repository relationship
 

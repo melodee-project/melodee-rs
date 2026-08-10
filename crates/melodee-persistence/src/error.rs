@@ -1,6 +1,6 @@
 //! Typed errors at the persistence boundary (root causes preserved via `source`).
 
-use melodee_domain::{IngestionState, InvalidStateTransition};
+use melodee_domain::{IngestionState, InvalidStateTransition, PublicationInvariantError};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -41,4 +41,16 @@ pub enum WorkStoreError {
 
     #[error("work item {0} has no persisted manifest")]
     ManifestNotFound(Uuid),
+
+    #[error("invalid canonical publication contract")]
+    InvalidPublication(#[from] PublicationInvariantError),
+
+    #[error("work item {0} has no durable publication plan")]
+    PublicationNotFound(Uuid),
+
+    #[error("durable publication intent conflicts for work item {0}")]
+    PublicationConflict(Uuid),
+
+    #[error("publication journal key {1} conflicts for work item {0}")]
+    PublicationJournalConflict(Uuid, String),
 }

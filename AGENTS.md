@@ -52,18 +52,23 @@ template.
 
 Do not silently resolve a material conflict; record it in the PR and propose an ADR when needed.
 
-## Current phase boundary: Phase 0 — Baseline freeze and compatibility capture
+## Current phase boundary: Phase 4 — Catalog, Artist identity, and contributions
 
-Allowed: capturing OpenAPI docs, routes, fixtures, and behavior snapshots from the C# server;
-compatibility harness infrastructure; synthetic baseline generators and benchmarks; validation,
-CI, and documentation improvements; the minimal server/CLI foundation already scaffolded;
-ratifying or revising proposed ADRs with evidence.
+Phases 0–3 are complete. The authoritative Phase 3 exit decision is in
+`design/evidence/phase-3/PHASE-3-REPORT.md`. Phase 4 is the next implementation boundary, but agents
+must not create its catalog/identity schema until an assigned work package and accepted schema ADR
+authorize it.
 
-Forbidden: broad catalog, ingestion, search, podcast, party, or UI features; redesigning Melodee
-API v1, OpenSubsonic, or Jellyfin contracts; any database schema without an accepted schema ADR;
-initializing the React admin UI unless explicitly assigned; message brokers, Redis,
-Elasticsearch/OpenSearch, GraphQL, microservices; copying C# service/class boundaries into Rust;
-destructive operations against an existing Melodee library.
+Allowed when explicitly assigned: Phase 4 Artist/Release/Track/MediaAsset catalog models,
+ReleaseArtist/TrackArtist/Contribution relationships, evidence-based identity matching,
+provisional identities, negative assertions, merge/split history, set-based manifest v3 import,
+legacy public-ID preservation, Phase 4 tests/evidence/traceability, CI, and documentation.
+
+Forbidden: Phase 5+ classification/novelty/policy features; search, podcast, party, native API,
+OpenSubsonic, Jellyfin, or UI implementation; redesigning captured external contracts; any database
+schema without an accepted schema ADR; message brokers, Redis, Elasticsearch/OpenSearch, GraphQL,
+microservices; copying C# service/class boundaries into Rust; destructive operations against an
+existing Melodee library. Phase 4 must reuse the Release IDs reserved by manifest v3 publication.
 
 ## Product language
 

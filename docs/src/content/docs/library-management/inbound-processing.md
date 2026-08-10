@@ -17,8 +17,13 @@ Inbound processing discovers candidate Releases from inbound roots and creates o
 5. **Normalization and fingerprinting** — a bounded leased worker produces verified MP3 work-area
    output, normalizes usable artwork, parses supported sidecars, and fingerprints source audio with
    Chromaprint. Successful work publishes manifest schema v2 and advances to `Validating`.
-6. **Verification handoff** — `Validating` is the boundary for the next phase. Canonical library
-   publication is not implemented yet.
+6. **Structural validation** — another fenced lease verifies required local metadata, every planned
+   work-area file, path containment, size, and BLAKE3 hash. Passing work receives one immutable
+   Release ID and a durable, non-destructive publication authorization; uncertainty goes to
+   `NeedsReview` instead of being guessed.
+7. **Canonical publication** — Melodee copies a complete schema-v3 Release bundle into a hidden
+   target-filesystem directory, verifies and flushes it, then atomically finalizes it without
+   replacing an existing target. A crash retry adopts an identical completed bundle.
 
 Discovery and settling are source-correctness gates only in this phase. The candidate is not interpreted as
 media yet.
@@ -33,7 +38,13 @@ For each discovered candidate the queue uses these states:
 - `Inspecting` — a leased worker is observing one coherent settled source snapshot.
 - `Normalizing` — a leased worker is creating and verifying attempt-isolated temporary output.
 - `Validating` — normalization observations were published atomically; canonical publication has
-  not occurred.
+  not occurred yet.
+- `NeedsReview` — required local presentation or ordering facts are ambiguous; Phase 3 does not
+  guess identity or run the later catalog-aware policy engine.
+- `Staged` — an immutable Release ID, structural authorization, and publication plan are durable.
+- `Publishing` — a fenced worker is copying, verifying, finalizing, or adopting the canonical
+  bundle.
+- `Published` — the complete canonical bundle and durable receipt agree; no active lease remains.
 
 The `transition` table is durable and persisted in PostgreSQL, so restart and missed scans recover correctly.
 
@@ -60,6 +71,10 @@ extensions or names as identity by themselves.
 - Source paths are canonicalized and candidates outside source roots (including symlink escapes) are ignored.
 - Disappearing or unreadable candidates do not delete work items; they keep durable history and are marked for
   operator review.
+- Canonical publication reads only planned regular, non-symlink work-area assets. Traversal,
+  symlink, size, or hash mismatches fail before a partial final Release can become visible.
+- A successful Phase 3 publication retains the inbound tree byte-for-byte. It is never authority to
+  move or delete the source.
 
 ## Inspection outcomes
 
@@ -70,6 +85,8 @@ inspection discards the in-progress result and returns the work item to `Settlin
 
 For development diagnostics, `melodee ingest inspect` runs one bounded inspection batch and
 `melodee ingest normalize` runs one bounded normalization batch.
+`melodee ingest validate` and `melodee ingest publish` do the same for their respective stages and
+require an explicit canonical storage root.
 `melodee ingest manifest <work-item-id>` prints the durable manifest. These commands are not a
 replacement for the server worker.
 

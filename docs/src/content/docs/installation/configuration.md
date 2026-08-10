@@ -10,10 +10,10 @@ Melodee reads settings from explicit environment variables only.
 ## Configuration sources
 
 1. built-in defaults;
-2. environment variables;
-3. database-backed overrides where the setting is runtime-editable.
+2. environment variables.
 
-Only documented keys are supported.
+Only documented keys are supported. Database-backed runtime overrides are planned but are not read
+by the current server.
 
 ## Implemented settings
 
@@ -21,6 +21,7 @@ Only documented keys are supported.
 
 | Key | Default | Effect |
 | --- | --- | --- |
+| `MELODEE__SERVER__BIND` | `127.0.0.1:8080` | HTTP listener address. Keep the loopback default unless trusted network controls protect the pre-release diagnostics API. |
 | `MELODEE__DATABASE__URL` | — (required) | PostgreSQL connection URL. |
 | `MELODEE__WORK__LEASE_SECONDS` | `300` | PostgreSQL lease duration for claimed work items. |
 | `MELODEE__WORK__RETRY_BASE_SECONDS` | `60` | Base retry delay (`base * 2^(attempt-1)`). |
@@ -61,6 +62,14 @@ Only documented keys are supported.
 | `MELODEE__NORMALIZATION__FPCALC_TIMEOUT_SECONDS` | `60` | Maximum time for one fingerprint operation. |
 | `MELODEE__NORMALIZATION__WORK_AREA` | `/tmp/melodee-work` | Temporary, non-authoritative root for attempt-isolated normalized output. |
 
+### Validation and canonical publication
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `MELODEE__VALIDATION__CONCURRENCY` | `2` | Maximum normalized Releases structurally validated simultaneously by one process. |
+| `MELODEE__PUBLICATION__CONCURRENCY` | `2` | Maximum complete Release bundles copied and finalized simultaneously by one process. |
+| `MELODEE__STORAGE__ROOT` | — (publication disabled) | Dedicated canonical-library root. Setting it enables validation/publication workers. |
+
 ### Notes
 
 - `MELODEE__INGEST__SOURCES_JSON` and the legacy single-root variables are mutually additive only through configuration code: JSON takes precedence when present.
@@ -69,6 +78,10 @@ Only documented keys are supported.
   `libmp3lame` and the Chromaprint `fpcalc` command.
 - Work leases, timeouts, retry settings, batch sizes, and concurrency must be positive. The
   normalization lease heartbeat is derived from the configured lease duration.
-- Inspection and normalization do not move, rename, rewrite, or delete source files. Normalized
-  files stay in the temporary work area until a later publication phase verifies and publishes
-  them; the current implementation does not publish canonical library files.
+- `MELODEE__STORAGE__ROOT`, every inbound root, and the normalization work area must be separate,
+  non-overlapping locations. Symlink roots are rejected. The server does not publish canonical
+  media unless the storage root is explicitly configured.
+- Inspection, normalization, validation, and publication do not move, rename, rewrite, or delete
+  inbound files. Successful publication records the source disposition as `retained`.
+- `MELODEE_BIND` remains a compatibility fallback for the earlier bootstrap, but
+  `MELODEE__SERVER__BIND` is the canonical key.

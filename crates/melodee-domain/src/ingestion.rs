@@ -100,7 +100,10 @@ impl IngestionState {
     /// States a worker may claim from the queue.
     #[must_use]
     pub const fn is_claimable(self) -> bool {
-        matches!(self, Self::Ready | Self::Normalizing)
+        matches!(
+            self,
+            Self::Ready | Self::Normalizing | Self::Validating | Self::Staged | Self::Publishing
+        )
     }
 
     /// States that may hold an active lease.

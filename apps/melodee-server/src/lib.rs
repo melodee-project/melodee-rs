@@ -2,3 +2,4 @@
 //! integration tests. The binary entry point lives in `main.rs`.
 
 pub mod admin;
+pub mod system;

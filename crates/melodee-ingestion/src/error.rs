@@ -9,6 +9,8 @@ use crate::snapshot::SnapshotCaptureError;
 use crate::source::SourceDiscoveryError;
 use melodee_media::InspectionError;
 
+use crate::{PublicationError, StructuralValidationError};
+
 #[derive(Debug, Error)]
 pub enum IngestionError {
     #[error("ingestion configuration is invalid: {0}")]
@@ -28,6 +30,12 @@ pub enum IngestionError {
 
     #[error("inspection task failed: {0}")]
     InspectionTask(String),
+
+    #[error("structural validation failed: {0}")]
+    Validation(#[from] StructuralValidationError),
+
+    #[error("canonical publication failed: {0}")]
+    Publication(#[from] PublicationError),
 }
 
 pub type Result<T> = std::result::Result<T, IngestionError>;

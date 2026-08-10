@@ -6,7 +6,8 @@
 [design/evidence/phase-1/PHASE-1-REPORT.md](design/evidence/phase-1/PHASE-1-REPORT.md);
 **Phase 2 complete (2026-08-09)**, see
 [design/evidence/phase-2/PHASE-2-REPORT.md](design/evidence/phase-2/PHASE-2-REPORT.md);
-**Phase 3 in progress** (sub-slices 3.1–3.2 complete; 3.3–3.4 planned).
+**Phase 3 complete (2026-08-10)**, see
+[design/evidence/phase-3/PHASE-3-REPORT.md](design/evidence/phase-3/PHASE-3-REPORT.md).
 **Date:** 2026-08-07  
 **Governing documents:** [PRD.md](PRD.md), [SPEC.md](SPEC.md), accepted ADRs
 
@@ -230,18 +231,24 @@ Produce validated, versioned manifests and canonical MP3 media safely.
   see [design/evidence/phase-3/media-normalization/README.md](design/evidence/phase-3/media-normalization/README.md).
 - **3.3 Verification and atomic canonical publication** — Release-level validation of the
   Phase 3.2 manifest/work-area result, atomic/resumable canonical storage publication
-  (PRD-INGEST-006), publication crash/retry safety, and source disposition. **Status: planned.**
+  (PRD-INGEST-006), publication crash/retry safety, and retained source disposition.
+  **Status: complete** — see
+  [design/evidence/phase-3/canonical-publication/README.md](design/evidence/phase-3/canonical-publication/README.md).
 - **3.4 Phase 3 integration / release gate** — representative MP3/FLAC/OGG/WAV and pathology
   corpus passes, manifest completeness for catalog insertion, conversion crash/retry source
-  safety. **Status: planned.**
+  safety, and a 200-Release bounded publication scenario. **Status: complete** — see
+  [design/evidence/phase-3/PHASE-3-REPORT.md](design/evidence/phase-3/PHASE-3-REPORT.md).
 
 ### Exit criteria
 
-- Representative MP3/FLAC/OGG/WAV and pathology corpus passes.
-- Manifests contain enough information for catalog insertion without rereading audio.
-- Conversion crashes/retries do not corrupt source or publish partial Releases.
+- Representative MP3/FLAC/OGG/WAV and pathology corpus passes. ✅
+- Manifests contain enough information for catalog insertion without rereading audio. ✅
+- Conversion crashes/retries do not corrupt source or publish partial Releases. ✅
 
-**Phase 3: IN PROGRESS** (sub-slices 3.1–3.2 complete; 3.3–3.4 planned).
+**Phase 3: COMPLETE (2026-08-10).** The consolidated decision and reproducible evidence are in
+[design/evidence/phase-3/PHASE-3-REPORT.md](design/evidence/phase-3/PHASE-3-REPORT.md). Phase 4 is the
+next implementation boundary; it must consume the reserved Release IDs/manifests and still requires
+an assigned work package and accepted schema ADR before schema implementation.
 
 ## 7. Phase 4 — Catalog, Artist identity, and contributions
 

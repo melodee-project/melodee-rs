@@ -1,21 +1,15 @@
 use std::{env, process::Command};
 
-use std::collections::HashMap;
-
 use clap::{Parser, Subcommand};
 use melodee_domain::{IngestionState, ReleaseWorkItem};
-use melodee_ingestion::{IngestionConfig, reconcile_all_sources};
+use melodee_ingestion::{IngestionConfig, publish_once, reconcile_all_sources, validate_once};
 use melodee_persistence::{WorkEngineConfig, WorkItemStore, WorkerId, migrate};
 use sqlx::PgPool;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
 #[derive(Debug, Parser)]
-#[command(
-    name = "melodee",
-    version,
-    about = "Melodee Rust administrative CLI bootstrap"
-)]
+#[command(name = "melodee", version, about = "Melodee Rust administrative CLI")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -34,7 +28,7 @@ enum Commands {
         #[command(subcommand)]
         command: WorkCommands,
     },
-    /// Development-only inbound discovery and settling diagnostics.
+    /// Phase 3 ingestion worker operations and diagnostics.
     Ingest {
         #[command(subcommand)]
         command: IngestCommands,
@@ -81,18 +75,27 @@ enum WorkCommands {
 
 #[derive(Debug, Subcommand)]
 enum IngestCommands {
-    /// Development-only: run one reconciliation pass for configured inbound sources.
+    /// Run one reconciliation pass for configured inbound sources.
     Reconcile,
-    /// Development-only: claim and inspect one bounded batch of Ready Releases.
+    /// Claim and inspect one bounded batch of Ready Releases.
     Inspect,
-    /// Development-only: claim and normalize one bounded batch of Normalizing Releases.
+    /// Claim and normalize one bounded batch of Normalizing Releases.
     Normalize,
-    /// Development-only: print the durable manifest for a work item.
+    /// Claim and structurally validate one bounded batch before canonical I/O.
+    Validate,
+    /// Publish one bounded batch to the configured canonical storage root.
+    Publish,
+    /// Print the durable manifest for a work item.
     Manifest {
         /// Work item id or API key.
         id: Uuid,
     },
-    /// Development-only: print a concise ingest queue summary.
+    /// Print durable validation, authorization, plan, receipt, and journal evidence.
+    Publication {
+        /// Work item id or API key.
+        id: Uuid,
+    },
+    /// Print a concise ingest queue and publication-configuration summary.
     Status,
 }
 
@@ -104,8 +107,8 @@ fn command_available(command: &str, version_argument: &str) -> bool {
 }
 
 /// The database URL comes from exactly one explicit key
-/// (MELODEE__DATABASE__URL) or --database-url style flag equivalent. It is
-/// never printed (may contain a password).
+/// (`MELODEE__DATABASE__URL`). It is never printed because it may contain a
+/// password.
 fn database_url() -> String {
     match env::var(melodee_persistence::ENV_DATABASE_URL) {
         Ok(url) if !url.is_empty() => url,
@@ -148,9 +151,7 @@ async fn main() {
             println!("Phase 0: complete — see design/evidence/phase-0/PHASE-0-REPORT.md");
             println!("Phase 1: complete — see design/evidence/phase-1/PHASE-1-REPORT.md");
             println!("Phase 2: complete — see design/evidence/phase-2/PHASE-2-REPORT.md");
-            println!(
-                "Phase 3: in progress — 3.1 inspection and 3.2 normalization complete; 3.3–3.4 planned"
-            );
+            println!("Phase 3: complete — see design/evidence/phase-3/PHASE-3-REPORT.md");
             println!("Read: PRD.md, SPEC.md, IMPLEMENTATION.md, AGENTS.md");
         }
         Commands::Doctor => {
@@ -167,6 +168,27 @@ async fn main() {
             for (name, available) in checks {
                 let status = if available { "ok" } else { "missing" };
                 println!("{name}: {status}");
+            }
+            match IngestionConfig::from_env() {
+                Ok(config) => match config.publication_roots() {
+                    Ok(Some(roots)) => {
+                        let scheduling = if config.publication_enabled() {
+                            "enabled"
+                        } else {
+                            "inactive (ingest disabled or no inbound source configured)"
+                        };
+                        println!(
+                            "canonical publication: configured ({}); worker scheduling: {scheduling}",
+                            roots.storage_root.display()
+                        );
+                    }
+                    Ok(None) => println!(
+                        "canonical publication: disabled ({} is not set)",
+                        melodee_ingestion::ENV_STORAGE_ROOT
+                    ),
+                    Err(error) => println!("canonical publication: invalid ({error})"),
+                },
+                Err(error) => println!("canonical publication: invalid ({error})"),
             }
         }
         Commands::Migrate => {
@@ -321,12 +343,15 @@ async fn main() {
             }
         }
         Commands::Ingest { command } => {
-            let pool = pool().await;
-            let store = WorkItemStore;
             let config = IngestionConfig::from_env().unwrap_or_else(|e| {
                 eprintln!("error: invalid ingestion configuration: {e}");
                 std::process::exit(2);
             });
+            if matches!(&command, IngestCommands::Validate | IngestCommands::Publish) {
+                require_publication_config(&config);
+            }
+            let pool = pool().await;
+            let store = WorkItemStore;
 
             match command {
                 IngestCommands::Reconcile => {
@@ -337,32 +362,10 @@ async fn main() {
                     let now = OffsetDateTime::now_utc();
                     let results = match reconcile_all_sources(&config, &store, &pool, now).await {
                         Ok(results) => results,
-                        Err(error) => match error {
-                            melodee_ingestion::IngestionError::Persistence(error) => {
-                                eprintln!("store error: {error}");
-                                std::process::exit(1);
-                            }
-                            melodee_ingestion::IngestionError::Config(message) => {
-                                eprintln!("config error: {message}");
-                                std::process::exit(2);
-                            }
-                            melodee_ingestion::IngestionError::Source(message) => {
-                                eprintln!("source error: {message}");
-                                std::process::exit(2);
-                            }
-                            melodee_ingestion::IngestionError::Snapshot(message) => {
-                                eprintln!("snapshot error: {message}");
-                                std::process::exit(2);
-                            }
-                            melodee_ingestion::IngestionError::Inspection(message) => {
-                                eprintln!("inspection error: {message}");
-                                std::process::exit(1);
-                            }
-                            melodee_ingestion::IngestionError::InspectionTask(message) => {
-                                eprintln!("inspection task error: {message}");
-                                std::process::exit(1);
-                            }
-                        },
+                        Err(error) => {
+                            eprintln!("error: {error}");
+                            std::process::exit(1);
+                        }
                     };
                     for result in results {
                         print_reconcile_result(&result);
@@ -370,24 +373,44 @@ async fn main() {
                     println!("reconciliation finished");
                 }
                 IngestCommands::Status => {
-                    let items = match store.list(&pool, None, 10_000, 0).await {
-                        Ok(items) => items,
+                    let counts = match store.counts_by_state(&pool).await {
+                        Ok(counts) => counts,
                         Err(e) => {
                             eprintln!("error: {e}");
                             std::process::exit(1);
                         }
                     };
 
-                    let mut states = HashMap::new();
-                    for item in &items {
-                        *states.entry(item.state).or_insert(0_u64) += 1;
-                    }
-                    println!("ingest work queue: {} total", items.len());
-                    if states.is_empty() {
+                    let total: i64 = counts.iter().map(|count| count.count).sum();
+                    println!("ingest work queue: {total} total");
+                    if counts.is_empty() {
                         println!("no work items");
                     } else {
-                        for (state, count) in states {
-                            println!("  {:<10} {count}", state.as_str());
+                        for state in IngestionState::ALL {
+                            if let Some(count) = counts.iter().find(|count| count.state == state) {
+                                println!("  {:<12} {}", state.as_str(), count.count);
+                            }
+                        }
+                    }
+                    match config.publication_roots() {
+                        Ok(Some(roots)) => {
+                            let scheduling = if config.publication_enabled() {
+                                "enabled"
+                            } else {
+                                "inactive (ingest disabled or no inbound source configured)"
+                            };
+                            println!(
+                                "canonical publication: configured ({}); worker scheduling: {scheduling}",
+                                roots.storage_root.display()
+                            );
+                        }
+                        Ok(None) => println!(
+                            "canonical publication: disabled ({} is not set)",
+                            melodee_ingestion::ENV_STORAGE_ROOT
+                        ),
+                        Err(error) => {
+                            eprintln!("error: invalid publication configuration: {error}");
+                            std::process::exit(2);
                         }
                     }
                 }
@@ -449,6 +472,64 @@ async fn main() {
                         }
                     }
                 }
+                IngestCommands::Validate => {
+                    let work_config = WorkEngineConfig::from_env().unwrap_or_else(|error| {
+                        eprintln!("error: invalid work configuration: {error}");
+                        std::process::exit(2);
+                    });
+                    match validate_once(
+                        &config,
+                        &store,
+                        &pool,
+                        &work_config,
+                        OffsetDateTime::now_utc(),
+                    )
+                    .await
+                    {
+                        Ok(stats) => println!(
+                            "validation: claimed={} completed={} needs_review={} failed={} errors={} duration_ms={}",
+                            stats.claimed,
+                            stats.completed,
+                            stats.needs_review,
+                            stats.failed,
+                            stats.errors,
+                            stats.duration_ms,
+                        ),
+                        Err(error) => {
+                            eprintln!("error: {error}");
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                IngestCommands::Publish => {
+                    let work_config = WorkEngineConfig::from_env().unwrap_or_else(|error| {
+                        eprintln!("error: invalid work configuration: {error}");
+                        std::process::exit(2);
+                    });
+                    match publish_once(
+                        &config,
+                        &store,
+                        &pool,
+                        &work_config,
+                        OffsetDateTime::now_utc(),
+                    )
+                    .await
+                    {
+                        Ok(stats) => println!(
+                            "publication: claimed={} completed={} adopted={} failed={} errors={} duration_ms={}",
+                            stats.claimed,
+                            stats.completed,
+                            stats.adopted,
+                            stats.failed,
+                            stats.errors,
+                            stats.duration_ms,
+                        ),
+                        Err(error) => {
+                            eprintln!("error: {error}");
+                            std::process::exit(1);
+                        }
+                    }
+                }
                 IngestCommands::Manifest { id } => match store.get(&pool, id).await {
                     Ok(item) => match store.get_manifest(&pool, item.id).await {
                         Ok(Some(manifest)) => {
@@ -473,7 +554,96 @@ async fn main() {
                         std::process::exit(1);
                     }
                 },
+                IngestCommands::Publication { id } => match store.get(&pool, id).await {
+                    Ok(item) => match store.get_publication(&pool, item.id).await {
+                        Ok(Some(publication)) => {
+                            println!("work_item_id:        {}", publication.work_item_id);
+                            println!("release_id:          {}", publication.release_id);
+                            println!(
+                                "authorization:       {} v{} ({})",
+                                publication.authorization.name,
+                                publication.authorization.version,
+                                publication.authorization.id
+                            );
+                            println!(
+                                "validation:          {} ({} finding(s))",
+                                match publication.validation.outcome {
+                                    melodee_domain::ValidationOutcome::Passed => "passed",
+                                    melodee_domain::ValidationOutcome::NeedsReview => {
+                                        "needs_review"
+                                    }
+                                },
+                                publication.validation.findings.len()
+                            );
+                            println!("plan_hash:           {}", publication.plan_hash);
+                            println!("layout_version:      {}", publication.plan.layout_version);
+                            println!(
+                                "target_path:         {}",
+                                publication.plan.target_relative_path
+                            );
+                            println!(
+                                "manifest_path:       {}",
+                                publication.plan.manifest_relative_path
+                            );
+                            println!("canonical_assets:    {}", publication.plan.assets.len());
+                            println!("source_disposition: retained");
+                            println!("authorized_at:       {}", publication.authorized_at);
+                            println!("published_at:        {:?}", publication.published_at);
+                            println!(
+                                "sealed_manifest_hash:{:?}",
+                                publication.sealed_manifest_hash
+                            );
+                            match store.list_publication_journal(&pool, item.id).await {
+                                Ok(entries) => {
+                                    println!("journal:");
+                                    for entry in entries {
+                                        println!(
+                                            "  [{}] {} asset={:?} worker={}",
+                                            entry.created_at,
+                                            entry.step.as_str(),
+                                            entry.asset_path,
+                                            entry.worker_id
+                                        );
+                                    }
+                                }
+                                Err(error) => {
+                                    eprintln!("error: {error}");
+                                    std::process::exit(1);
+                                }
+                            }
+                        }
+                        Ok(None) => {
+                            eprintln!("no publication authorization or plan for {id}");
+                            std::process::exit(1);
+                        }
+                        Err(error) => {
+                            eprintln!("error: {error}");
+                            std::process::exit(1);
+                        }
+                    },
+                    Err(error) => {
+                        eprintln!("error: {error}");
+                        std::process::exit(1);
+                    }
+                },
             }
+        }
+    }
+}
+
+fn require_publication_config(config: &IngestionConfig) {
+    match config.publication_roots() {
+        Ok(Some(_)) => {}
+        Ok(None) => {
+            eprintln!(
+                "error: {} must be explicitly configured for validation/publication",
+                melodee_ingestion::ENV_STORAGE_ROOT
+            );
+            std::process::exit(2);
+        }
+        Err(error) => {
+            eprintln!("error: invalid publication configuration: {error}");
+            std::process::exit(2);
         }
     }
 }
@@ -493,4 +663,48 @@ fn print_reconcile_result(result: &melodee_ingestion::ReconcileResult) {
     println!("  missing_candidates: {}", result.stats.missing_candidates);
     println!("  errors: {}", result.stats.errors);
     println!("  duration_ms: {}", result.stats.duration_ms);
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::expect_used)]
+
+    use super::*;
+
+    #[test]
+    fn publication_diagnostics_command_accepts_work_item_identifier() {
+        let id = Uuid::now_v7();
+        let cli = Cli::try_parse_from(["melodee", "ingest", "publication", &id.to_string()])
+            .expect("valid publication diagnostics command");
+        assert!(matches!(
+            &cli.command,
+            Commands::Ingest {
+                command: IngestCommands::Publication { id: parsed }
+            } if *parsed == id
+        ));
+    }
+
+    #[test]
+    fn validation_and_publication_batch_commands_are_exposed() {
+        for (name, expected_validation) in [("validate", true), ("publish", false)] {
+            let cli = Cli::try_parse_from(["melodee", "ingest", name])
+                .expect("valid bounded stage command");
+            assert!(
+                matches!(
+                    &cli.command,
+                    Commands::Ingest {
+                        command: IngestCommands::Validate
+                    }
+                ) == expected_validation
+            );
+            assert!(
+                matches!(
+                    &cli.command,
+                    Commands::Ingest {
+                        command: IngestCommands::Publish
+                    }
+                ) != expected_validation
+            );
+        }
+    }
 }

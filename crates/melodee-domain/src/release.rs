@@ -7,6 +7,12 @@ use uuid::Uuid;
 pub struct ReleaseId(Uuid);
 
 impl ReleaseId {
+    /// Allocates a new time-ordered Melodee-owned Release identity.
+    #[must_use]
+    pub fn new() -> Self {
+        Self(Uuid::now_v7())
+    }
+
     #[must_use]
     pub const fn from_uuid(value: Uuid) -> Self {
         Self(value)
@@ -15,6 +21,18 @@ impl ReleaseId {
     #[must_use]
     pub const fn into_uuid(self) -> Uuid {
         self.0
+    }
+}
+
+impl Default for ReleaseId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl std::fmt::Display for ReleaseId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
     }
 }
 

@@ -1,36 +1,16 @@
 use std::{env, error::Error, net::SocketAddr};
 
-use axum::{Json, Router, routing::get};
+use axum::{Router, routing::get};
 use melodee_ingestion::{
-    IngestionConfig, start_inspection_loop, start_normalization_loop, start_reconciliation_loop,
+    IngestionConfig, SchedulerHandle, start_inspection_loop, start_normalization_loop,
+    start_publication_loop, start_reconciliation_loop, start_validation_loop,
 };
 use melodee_persistence::{WorkEngineConfig, WorkItemStore, migrate};
-use melodee_server::admin;
-use serde::Serialize;
+use melodee_server::{admin, system};
 use tokio::sync::oneshot;
 use tower_http::trace::TraceLayer;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
-
-/// Runtime health/version metadata (SPEC section 27). Describes service health
-/// and version only — it intentionally does NOT carry an internal implementation
-/// phase label (those belong in IMPLEMENTATION.md/design/evidence, not runtime
-/// status, where they go stale after every session).
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct SystemInfo {
-    service: &'static str,
-    version: &'static str,
-    status: &'static str,
-}
-
-async fn healthz() -> Json<SystemInfo> {
-    Json(SystemInfo {
-        service: "melodee-server",
-        version: env!("CARGO_PKG_VERSION"),
-        status: "ok",
-    })
-}
 
 fn init_tracing() -> Result<(), Box<dyn Error + Send + Sync>> {
     let filter = EnvFilter::try_from_default_env()
@@ -47,6 +27,12 @@ fn init_tracing() -> Result<(), Box<dyn Error + Send + Sync>> {
 async fn wait_for_shutdown_signal() {
     if let Err(error) = tokio::signal::ctrl_c().await {
         tracing::error!(%error, "unable to install CTRL+C signal handler");
+    }
+}
+
+async fn stop_worker(handle: Option<SchedulerHandle>) {
+    if let Some(handle) = handle {
+        let _ = handle.stop().await;
     }
 }
 
@@ -79,9 +65,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     };
 
     let work_config = WorkEngineConfig::from_env()?;
+    let publication_roots = ingestion_config.publication_roots()?;
     let mut reconcile_handle = None;
     let mut inspection_handle = None;
     let mut normalization_handle = None;
+    let mut validation_handle = None;
+    let mut publication_handle = None;
     if ingestion_config.enabled() {
         info!(
             sources = ingestion_config.sources.len(),
@@ -105,9 +94,41 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             melodee_persistence::WorkItemStore,
             work_config,
         ));
+        match publication_roots {
+            Some(roots) => {
+                info!(
+                    storage_root = %roots.storage_root.display(),
+                    validation_concurrency = ingestion_config.validation_concurrency,
+                    publication_concurrency = ingestion_config.publication_concurrency,
+                    "starting structural validation and canonical publication loops"
+                );
+                validation_handle = Some(start_validation_loop(
+                    ingestion_config.clone(),
+                    pool.clone(),
+                    melodee_persistence::WorkItemStore,
+                    work_config,
+                ));
+                publication_handle = Some(start_publication_loop(
+                    ingestion_config.clone(),
+                    pool.clone(),
+                    melodee_persistence::WorkItemStore,
+                    work_config,
+                ));
+            }
+            None => info!(
+                setting = melodee_ingestion::ENV_STORAGE_ROOT,
+                "canonical validation/publication disabled: storage root is not configured"
+            ),
+        }
+    } else {
+        info!(
+            ingest_enabled = ingestion_config.enabled,
+            sources = ingestion_config.sources.len(),
+            "ingestion workers disabled: enable ingest and configure at least one inbound source"
+        );
     }
 
-    let bind = env::var("MELODEE_BIND").unwrap_or_else(|_| "127.0.0.1:8080".to_owned());
+    let bind = system::configured_bind();
     let address: SocketAddr = bind.parse()?;
 
     let admin_state = admin::AdminState {
@@ -115,8 +136,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         store: WorkItemStore,
     };
     let app = Router::new()
-        .route("/healthz", get(healthz))
-        .route("/api/admin/v1/system/info", get(healthz))
+        .route("/healthz", get(system::healthz))
+        .route(
+            "/readyz",
+            get(system::readyz).with_state(system::ReadinessState::new(pool.clone())),
+        )
+        .route("/api/admin/v1/system/info", get(system::healthz))
         .route(
             "/api/admin/v1/ingest/work-items/counts",
             get(admin::work_item_counts),
@@ -154,19 +179,18 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     wait_for_shutdown_signal().await;
     let _ = shutdown_tx.send(());
 
-    if let Ok(server_result) = server_handle.await {
-        server_result?;
-    }
-
-    if let Some(handle) = reconcile_handle {
-        let _ = handle.stop().await;
-    }
-    if let Some(handle) = inspection_handle {
-        let _ = handle.stop().await;
-    }
-    if let Some(handle) = normalization_handle {
-        let _ = handle.stop().await;
-    }
+    // Signal every worker immediately, then await server drain and worker
+    // cancellation together while PostgreSQL is still available for safe
+    // lease/error bookkeeping.
+    let (server_result, (), (), (), (), ()) = tokio::join!(
+        server_handle,
+        stop_worker(reconcile_handle),
+        stop_worker(inspection_handle),
+        stop_worker(normalization_handle),
+        stop_worker(validation_handle),
+        stop_worker(publication_handle),
+    );
+    server_result??;
     pool.close().await;
 
     Ok(())

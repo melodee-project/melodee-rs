@@ -1,5 +1,9 @@
 # Phase 3 Evidence — Media inspection and versioned Release manifests
 
+> Subsequent status: Phase 3.3 upgrades completed normalization manifests to publication v3 and
+> publishes canonical Release bundles. See the consolidated
+> [Phase 3 report](../PHASE-3-REPORT.md). This page preserves the 3.1 slice boundary/evidence.
+
 ## Scope
 
 Phase 3 sub-slice 3.1 adds the read-only media observation stage after Phase 2
@@ -78,5 +82,5 @@ normal workspace suite. Measurements are observations of this development host, 
 ## Requirements and references
 
 Traceability is recorded in `design/requirements/status-overrides.json` and the generated
-`design/requirements/REQUIREMENTS-INDEX.md`. The material architecture decision is Proposed in
+`design/requirements/REQUIREMENTS-INDEX.md`. The material architecture decision is Accepted in
 `design/adr/ADR-0115-media-inspection-boundary-and-manifest-byte-hashing.md`.

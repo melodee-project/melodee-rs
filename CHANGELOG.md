@@ -13,6 +13,23 @@ by an accepted ADR and release gate.
 - Product requirements, technical specification, implementation plan, ADR program, and agent guide.
 - Minimal Rust server, CLI, and domain workspace.
 - Phase 0 compatibility-capture and repository-validation scaffolding.
+- Phase 1 Rust foundation: the Axum/Tokio composition root, PostgreSQL pool and migration runner,
+  structured tracing and graceful shutdown, health/system information routes, administrative CLI,
+  and dependency-policy gates.
+- Phase 2 durable ingestion engine: PostgreSQL-backed per-Release work items, leases, retries,
+  transition history, reconciliation and settling, failure isolation, operator CLI commands, and
+  the Rust-native Admin diagnostics API.
+- Phase 3.1 media inspection with Lofty/ffprobe observations, streaming byte hashes, and durable,
+  schema-versioned Release manifests.
+- Phase 3.2 bounded FFmpeg normalization, output verification, artwork normalization, semantic
+  sidecar parsing, Chromaprint observations, and the leased `Normalizing` to `Validating` handoff.
+- Phase 3.3/3.4 structural validation and manifest v3, durable publication authorization/plan/
+  journal/receipt evidence, immutable UUIDv7 Release IDs, exact hash-derived canonical layout,
+  verified no-clobber atomic publication, exact-final retry adoption, and retained inbound sources.
+- Independently bounded validation/publication workers, canonical-publication CLI diagnostics, and
+  an additive PostgreSQL-backed `/readyz` readiness probe.
+- Additive canonical-publication migration `0006` and the ADR-0116 `rustix` dependency decision for
+  safe Unix no-follow/no-replace filesystem operations.
 - Canonical Carbon admin UI reference mockups.
 - Astro Starlight public documentation platform under `/docs`, with GitHub Pages deployment,
   PR validation, and documentation-impact rules in the Definition of Done.

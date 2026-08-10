@@ -12,6 +12,12 @@ API v1, OpenSubsonic, and Jellyfin compatibility surfaces. It uses Melodee's own
 It is intended for operators and administrators monitoring ingestion, diagnosing failures, and
 eventually curating the catalog. It is **not** a compatibility surface for existing clients.
 
+:::caution[Pre-release access control]
+The current Rust development server does not yet have an application authentication layer. Its
+listener defaults to `127.0.0.1`; do not expose these operator diagnostics to an untrusted network.
+Authentication and permission behavior will be documented when that implementation ships.
+:::
+
 ## Implemented endpoints
 
 The following diagnostics endpoints are implemented and tested against real PostgreSQL. They

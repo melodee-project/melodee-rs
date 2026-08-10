@@ -6,7 +6,11 @@ rust-version.workspace = true
 license.workspace = true
 publish = false
 
+[features]
+test-support = []
+
 [dependencies]
+blake3.workspace = true
 melodee-domain = { path = "../melodee-domain", version = "0.1.0" }
 melodee-persistence = { path = "../melodee-persistence", version = "0.1.0" }
 melodee-media = { path = "../melodee-media", version = "0.1.0" }
@@ -19,8 +23,10 @@ tokio.workspace = true
 tracing.workspace = true
 uuid.workspace = true
 
+[target.'cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))'.dependencies]
+rustix = { workspace = true, features = ["std"] }
+
 [dev-dependencies]
-blake3.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
 [lints]

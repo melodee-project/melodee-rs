@@ -1,6 +1,6 @@
 # Technology Baseline
 
-**Audit date:** 2026-08-07  
+**Audit date:** 2026-08-07; updated 2026-08-10 for the Phase 3 publication dependency
 **Policy:** Candidate versions are revalidated and locked when first used. Required functionality must
 remain fully FOSS.
 
@@ -14,6 +14,7 @@ remain fully FOSS.
 | Serialization | Serde / serde_json | 1.0.229 / 1.0.150 | MIT/Apache-2.0 | Scaffolded |
 | Domain errors | thiserror | 2.0.19 | MIT/Apache-2.0 | Scaffolded |
 | IDs | uuid | 1.24.0 | MIT/Apache-2.0 | Scaffolded |
+| Filesystem primitives | rustix | 1.1.4 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | Accepted — ADR-0116; safe Unix no-follow/no-replace publication boundary |
 | Tracing | tracing / tracing-subscriber | 0.1.44 / 0.3.23 | MIT | Scaffolded |
 | Database | PostgreSQL | 18.4; 17 supported target | PostgreSQL License | Accepted concept |
 | Data access | SQLx | 0.9.0 stable line | MIT/Apache-2.0 | Proposed ADR-0110 |

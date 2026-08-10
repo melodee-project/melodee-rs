@@ -22,7 +22,7 @@ and dependency/FOSS policy.
 | Graceful shutdown and structured tracing | ✅ present | `with_graceful_shutdown`, `wait_for_shutdown_signal`, `tracing_subscriber`, `TraceLayer` |
 | Configuration layering: defaults, file, environment, database settings when appropriate | ✅ present | explicit env-var configuration (`melodee-persistence/src/config.rs`, `melodee-ingestion/src/config.rs`); only documented keys honored; database-backed overrides deferred to later phases as documented |
 | PostgreSQL connection pool and migration runner after schema ADR acceptance | ✅ present | `sqlx::PgPool::connect`, `migrate(&pool)` (ADR-0105/0110 accepted) |
-| Health, readiness, version, and diagnostics endpoints | ✅ present | `/healthz`, `/api/admin/v1/system/info` (service/version/status; no stale phase metadata) |
+| Health, readiness, version, and diagnostics endpoints | ✅ present | `/healthz` (liveness), `/readyz` (bounded PostgreSQL readiness), `/api/admin/v1/system/info` (service/version/status; no stale phase metadata) |
 | CLI command framework and doctor command | ✅ present | `apps/melodee-cli/src/main.rs` (clap `Plan`/`Doctor`/`Migrate`/`Work`/`Ingest` commands) |
 | Error envelope and correlation conventions for the new admin API only | ✅ present | `apps/melodee-server/src/admin.rs` (`AdminApiErrorBody` with `code`/`message`/`correlationId`); established with the diagnostics API |
 | Integration-test harness using disposable PostgreSQL | ✅ present | `crates/melodee-persistence/tests/common/mod.rs` (per-test fresh databases, migrated from empty, dropped on completion) |
@@ -34,7 +34,7 @@ and dependency/FOSS policy.
 |---|---|
 | Server starts, reports health, connects to PostgreSQL, and shuts down cleanly | ✅ `apps/melodee-server/src/main.rs` |
 | CI passes format, clippy, tests, docs validation, and dependency policy | ✅ `./scripts/check.sh` exit 0 |
-| No compatibility route is falsely advertised as implemented | ✅ only `/healthz` and `/api/admin/v1/*` admin diagnostics exist; no Melodee v1/OpenSubsonic/Jellyfin route is advertised |
+| No compatibility route is falsely advertised as implemented | ✅ only Rust-native `/healthz`, `/readyz`, and `/api/admin/v1/*` operational/admin routes exist; no Melodee v1/OpenSubsonic/Jellyfin route is advertised |
 | Configuration and secret handling are documented | ✅ `docs/src/content/docs/installation/configuration.md`; database URL never printed; secrets redacted from logs/diagnostics |
 
 ## Architecture and dependencies
@@ -64,6 +64,14 @@ later phases.
 - Full admin UI is Phase 10; Phase 1 ships API/operational visibility only.
 - No compatibility API routes (Melodee v1/OpenSubsonic/Jellyfin) are implemented yet — they are
   Phases 7–8 and are not falsely advertised.
+
+## Subsequent readiness hardening
+
+Phase 3 closure split process liveness from database readiness. `/healthz` remains an unconditional
+HTTP-process liveness response; `/readyz` performs a bounded PostgreSQL `SELECT 1`, returning
+`200/ready` or fail-closed `503/not_ready` without exposing connection details. Executable coverage
+is in `apps/melodee-server/tests/system_api.rs`. This additive operational hardening completes the
+readiness item above without changing any compatibility adapter.
 
 ## Phase 1 is complete.
 

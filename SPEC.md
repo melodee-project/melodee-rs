@@ -425,6 +425,19 @@ Normalization produces a versioned manifest that includes:
 Catalog insertion consumes manifests instead of reopening every audio file. Manifest upgrades are
 explicit, versioned, and tested.
 
+Phase 3's implemented manifest evolution is:
+
+- v1: inspection observations;
+- v2: normalization, acoustic fingerprints, normalized artwork, and parsed sidecars; and
+- v3: stable Release ID, structural validation, durable publication authorization, retained source
+  disposition, canonical layout/plan identity, and the sorted source-to-normalized-to-canonical
+  asset inventory.
+
+V1/v2 remain readable. The v2-to-v3 upgrade preserves the semantic observed-media hash because
+publication intent/provenance is a separate fact. Phase 4 consumes the reserved Release ID and v3
+facts rather than allocating a replacement identity or reopening audio to rediscover them. See
+ADR-0115 and ADR-0116.
+
 ## 14. Media inspection and normalization
 
 - Use Lofty for supported tag formats when accepted by ADR.
@@ -471,23 +484,30 @@ Policies support dry-run/testing against the catalog before activation.
 
 ## 16. Canonical storage
 
-The preferred design is Release-centric and sharded by stable ID, not Artist folder ownership:
+Canonical layout v1 is Release-centric and sharded by stable ID, never Artist folder ownership:
 
 ```text
 storage/
   releases/
-    01/
-      9a/
-        rel_019.../
+    <release-id-blake3-byte-0-hex>/
+      <release-id-blake3-byte-1-hex>/
+        rel_<release-uuid-simple>/
           manifest.json
-          cover.jpg
-          01 - Track.mp3
+          media/<blake3>.mp3
+          artwork/<blake3>.jpg
 ```
 
-A human-readable title may appear in a directory name, but identity is the stable ID. Generated
-`by-artist` views may use links and are always disposable.
+The shards are the first two bytes of BLAKE3 over the Release UUID's raw 16 bytes, encoded as
+separate lowercase hexadecimal components. Canonical asset paths derive from asset kind and BLAKE3
+byte hash. Paths stored in PostgreSQL are storage-root-relative. Layout v1 does not include a
+human-readable prefix; future generated `by-artist` views may use display values/links and are always
+disposable.
 
 Merge/split/rename operations must not require moving media merely because identity metadata changed.
+Publication persists immutable authorization/plan intent before filesystem I/O, seals and fsyncs a
+hidden incoming bundle, uses a no-replace directory rename, and records the receipt only after final
+verification. Retry adopts an exact final and fails closed on a conflict. Phase 3 always retains the
+inbound source. See ADR-0106 and ADR-0116 for the binding layout/publication decision.
 
 ## 17. Catalog persistence
 

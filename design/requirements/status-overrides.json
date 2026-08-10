@@ -1,5 +1,76 @@
 {
   "comment": "Status/evidence overrides merged by scripts/extract_requirements.py. The requirements index is generated; record implementation/test evidence here. Controlled status vocabulary: planned, in-progress, captured, implemented, tested, deferred, superseded. 'captured' means Phase 0 behavioral evidence exists; it does not mean the Rust implementation exists.",
+  "PRD-ARCH-001": {
+    "status": "in-progress",
+    "implementation": [
+      "Cargo.toml (single Rust workspace with one primary server executable and capability crates)",
+      "apps/melodee-server/src/main.rs (modular-monolith composition root)",
+      "design/adr/ADR-0104-start-as-a-modular-monolith.md"
+    ],
+    "tests": [
+      "scripts/check.sh (workspace-wide compile, lint, and test gate)"
+    ],
+    "note": "The one-server/one-PostgreSQL modular-monolith and canonical media publication are implemented. The local rebuildable search index remains Phase 6 work, so the full requirement stays in progress."
+  },
+  "PRD-ARCH-002": {
+    "status": "implemented",
+    "implementation": [
+      "Cargo.toml and crates/*/Cargo.toml (compile-time capability dependency graph)",
+      "crates/melodee-domain/Cargo.toml (domain boundary has no web, SQL, or filesystem dependency)",
+      "design/adr/ADR-0104-start-as-a-modular-monolith.md"
+    ],
+    "tests": [
+      "scripts/check.sh (cargo clippy and cargo test across the complete workspace graph)"
+    ],
+    "note": "Capability boundaries are Rust crates within one deployable server; no deployable microservice boundary has been introduced."
+  },
+  "PRD-ARCH-003": {
+    "status": "in-progress",
+    "implementation": [
+      "design/adr/ADR-0105-postgresql-is-authoritative-state-store.md",
+      "crates/melodee-persistence/migrations/ (durable ingestion state, leases, history, manifests, and provenance)",
+      "crates/melodee-persistence/src/work_items.rs (transactional authoritative work state)"
+    ],
+    "tests": [
+      "crates/melodee-persistence/tests/ (migration, claiming, recovery, history, and manifest integration tests against PostgreSQL)"
+    ],
+    "note": "PostgreSQL is authoritative for the implemented ingestion and audit state. Catalog, user, identity, policy, and search-outbox state arrive in later phases, so the full cross-product requirement remains in progress."
+  },
+  "PRD-ARCH-004": {
+    "status": "planned",
+    "implementation": [
+      "design/adr/ADR-0107-use-tantivy-as-search-projection.md (accepted architecture decision)"
+    ],
+    "tests": [],
+    "note": "The rebuildable-projection decision is accepted, but no Tantivy index or rebuild path is implemented yet. This remains Phase 6 work rather than being overstated as shipped."
+  },
+  "PRD-ARCH-005": {
+    "status": "tested",
+    "implementation": [
+      "crates/melodee-domain/src/artist.rs and release.rs (stable Melodee-owned semantic IDs)",
+      "crates/melodee-domain/src/manifest.rs (ReleaseId and ID/hash-derived canonical publication plan)",
+      "crates/melodee-ingestion/src/source.rs (source-boundary discovery without semantic identity inference)",
+      "crates/melodee-ingestion/src/publication.rs (ADR-0116 Release-centric canonical layout)"
+    ],
+    "tests": [
+      "crates/melodee-domain/tests/manifest_versions.rs (canonical_release_layout_has_a_stable_golden_vector)",
+      "crates/melodee-ingestion/tests/publication.rs (canonical paths ignore observed Artist/Release display values)",
+      "crates/melodee-ingestion/tests/reconciliation.rs (path safety and idempotent rediscovery)"
+    ],
+    "note": "The canonical filesystem stores media bytes under immutable Release IDs and byte hashes. Artist/title/source values remain observations and cannot determine identity or relocation."
+  },
+  "PRD-ARCH-006": {
+    "status": "implemented",
+    "implementation": [
+      "Cargo.toml and Cargo.lock (brokerless modular-monolith dependency set)",
+      "compose.dev.yaml (PostgreSQL is the only required development service)",
+      "design/adr/ADR-0111-do-not-require-broker-or-redis-initially.md"
+    ],
+    "tests": [
+      "scripts/check.sh (dependency policy and complete workspace gate)"
+    ],
+    "note": "The implemented server requires no RabbitMQ, Kafka, Redis, Elasticsearch, OpenSearch, or Kubernetes. Any later addition still requires measured evidence and an ADR."
+  },
   "PRD-API-M1-001": {
     "status": "in-progress",
     "implementation": [
@@ -297,15 +368,39 @@
     "implementation": [
       "crates/melodee-ingestion/src/config.rs (inbound roots canonicalized, write-paths never touched)",
       "crates/melodee-ingestion/src/reconcile.rs (no source moves/renames/deletions during discovery)",
-      "crates/melodee-ingestion/src/source.rs (safe symlink and path traversal filtering)"
+      "crates/melodee-ingestion/src/source.rs (safe symlink and path traversal filtering)",
+      "crates/melodee-ingestion/src/validate.rs and publication.rs (read-only work/source validation and retained source disposition)",
+      "design/adr/ADR-0116-use-immutable-release-ids-and-convergent-canonical-publication.md"
     ],
     "tests": [
       "crates/melodee-ingestion/tests/reconciliation.rs (missing_candidate_is_not_deleted)",
       "crates/melodee-ingestion/tests/reconciliation.rs (snapshot_error_for_disappeared_directory_is_survivable)",
       "crates/melodee-ingestion/tests/reconciliation.rs (symlink_candidates_are_safe)",
-      "crates/melodee-ingestion/tests/reconciliation.rs (directory_discovery_ignores_non_directories_and_invalid_candidates)"
+      "crates/melodee-ingestion/tests/reconciliation.rs (directory_discovery_ignores_non_directories_and_invalid_candidates)",
+      "crates/melodee-ingestion/tests/publication.rs (source snapshots unchanged across success, tamper, symlink, cancellation, and conflicts)",
+      "crates/melodee-ingestion/tests/normalization.rs (source unchanged across real pathology, crash recovery, fencing, and 200-Release publication)"
     ],
-    "note": "Source directories are read during discovery/settling only; writes/reorganization is intentionally deferred to later phases."
+    "note": "Inbound trees remain read-only throughout Phase 3. Canonical publication always records source disposition retained; move/delete requires a later, separate durable policy decision."
+  },
+  "PRD-INGEST-006": {
+    "status": "tested",
+    "implementation": [
+      "crates/melodee-domain/src/manifest.rs (immutable publication plan, manifest v3, canonical asset invariants)",
+      "crates/melodee-ingestion/src/validate.rs (structural preflight before canonical target I/O)",
+      "crates/melodee-ingestion/src/publication.rs (copy, streamed size/hash verify, fsync, sealed verification, no-replace rename, exact-final adoption)",
+      "crates/melodee-ingestion/src/publication_worker.rs (leased validation/publication, heartbeat, cancellation, durable convergence)",
+      "crates/melodee-persistence/migrations/0006_canonical_publication.sql",
+      "crates/melodee-persistence/src/work_items.rs (authorization, immutable plan, idempotent journal, receipt, fenced completion)",
+      "design/adr/ADR-0116-use-immutable-release-ids-and-convergent-canonical-publication.md"
+    ],
+    "tests": [
+      "crates/melodee-ingestion/src/publication.rs (deterministic asset/manifest/tree fsync, final-rename, and post-rename parent-fsync fault injection with retry convergence)",
+      "crates/melodee-ingestion/tests/publication.rs (validation, path/symlink/tamper rejection, resumable incoming, no-clobber final, cancellation, source retention)",
+      "crates/melodee-persistence/tests/publication.rs (fenced durable intent/journal/receipt and direct reclaim)",
+      "crates/melodee-ingestion/tests/normalization.rs (rename-before-database-completion adoption, concurrent fencing, real pathology, and 200-Release Published scenario)",
+      "crates/melodee-ingestion/tests/normalization.rs (feature-gated deterministic lease theft during copy: stale cancellation, no final/receipt, direct retry convergence, source retention)"
+    ],
+    "note": "Phase 3 publication is safe to retry and exposes only an absent or complete canonical Release. Source removal is intentionally not part of this non-destructive authorization."
   },
   "PRD-PERF-001": {
     "status": "in-progress",
@@ -460,13 +555,17 @@
       "crates/melodee-persistence/migrations/0002_release_work_item_events.sql",
       "apps/melodee-cli/src/main.rs (work show prints state, attempts, last error, event history)",
       "apps/melodee-server/src/admin.rs (Admin diagnostics API: state counts, bounded listing, work-item detail, event history, active leases)",
-      "apps/melodee-server/src/main.rs (admin diagnostics routes wired into the server router)"
+      "apps/melodee-server/src/main.rs (admin diagnostics and PostgreSQL readiness routes wired into the server router)",
+      "apps/melodee-cli/src/main.rs (ingest status/manifest/publication diagnostics expose durable authorization, plan, receipt, and journal evidence)",
+      "crates/melodee-persistence/migrations/0006_canonical_publication.sql (durable decision/publication evidence)"
     ],
     "tests": [
       "crates/melodee-persistence/tests/history.rs",
-      "apps/melodee-server/tests/admin_diagnostics_api.rs (13 integration tests against real PostgreSQL)"
+      "apps/melodee-server/tests/admin_diagnostics_api.rs (13 integration tests against real PostgreSQL)",
+      "apps/melodee-server/tests/system_api.rs (bounded positive and fail-closed PostgreSQL readiness)",
+      "crates/melodee-persistence/tests/publication.rs (durable publication evidence and operator-safe problem state)"
     ],
-    "note": "State/worker/attempts/last error/timestamps/history are durable and visible through both the CLI and the Admin diagnostics API. The Admin UI surface is a later phase."
+    "note": "State/worker/attempts/last error/timestamps/history and Phase 3 decision/publication evidence are durable and visible through the CLI and Rust-native Admin API. The requirement permits Admin UI/API; the graphical UI is a later phase."
   },
   "PRD-WORK-003": {
     "status": "tested",
@@ -572,30 +671,36 @@
        "crates/melodee-domain/src/manifest.rs (schema-versioned ReleaseManifest and semantic hash input)",
        "crates/melodee-persistence/migrations/0004_release_work_item_manifests.sql",
        "crates/melodee-persistence/migrations/0005_normalization_provenance.sql",
-       "crates/melodee-persistence/src/work_items.rs (transactional manifest publication, claim_normalizing, publish_normalization)",
+       "crates/melodee-persistence/migrations/0006_canonical_publication.sql",
+       "crates/melodee-persistence/src/work_items.rs (transactional v1/v2/v3 manifest and immutable publication-plan persistence)",
        "crates/melodee-media/src/lib.rs (deterministic media observations)",
-       "crates/melodee-media/src/normalize.rs (normalization observations embedded in manifest)"
+       "crates/melodee-media/src/normalize.rs (normalization observations embedded in manifest)",
+       "crates/melodee-ingestion/src/validate.rs and publication.rs (complete canonical asset mapping and explicit v3 upgrade)"
      ],
      "tests": [
        "crates/melodee-media/src/lib.rs (manifest_hash_excludes_volatile_provenance)",
-       "crates/melodee-domain/tests/manifest_versions.rs (v1 compatibility, v2 round trip, provenance exclusion)",
+       "crates/melodee-domain/tests/manifest_versions.rs (v1/v2 compatibility, deterministic layout, v2-to-v3 upgrade, semantic-hash stability)",
        "crates/melodee-media/tests/normalization_real.rs (semantic hash determinism with normalization facts)",
        "crates/melodee-persistence/tests/manifests.rs",
        "crates/melodee-persistence/tests/normalization.rs",
-       "crates/melodee-ingestion/tests/inspection.rs"
+       "crates/melodee-ingestion/tests/inspection.rs",
+       "crates/melodee-ingestion/tests/publication.rs (complete v3 canonical inventory)",
+       "crates/melodee-ingestion/tests/normalization.rs (real-format/pathology and 200-Release v3 publication)"
      ],
-     "note": "Inspection v1 and normalization v2 manifests are versioned, durable, deterministic, and atomically handed to Validating. Catalog insertion completeness cannot be closed before the Phase 3.3 verification and Phase 4 catalog consumers exist."
+     "note": "Manifest v3 satisfies the Phase 3 handoff without audio reread by adding stable Release identity, structural validation, authorization, retained disposition, and canonical mappings. The broad requirement remains in progress until the Phase 4 catalog consumer proves end-to-end insertion completeness."
    },
    "PRD-INGEST-008": {
      "status": "tested",
      "implementation": [
        "crates/melodee-media/src/lib.rs (structured findings and tag-independent ffprobe validation)",
-       "crates/melodee-media/src/normalize.rs (NormalizationReport.findings aggregate findings across audio, artwork, and sidecars)"
+       "crates/melodee-media/src/normalize.rs (NormalizationReport.findings aggregate findings across audio, artwork, and sidecars)",
+       "crates/melodee-ingestion/src/validate.rs (structural validation independent of identity/enrichment; uncertainty routes to NeedsReview)"
      ],
      "tests": [
        "crates/melodee-media/src/lib.rs (valid_tagless_wav_is_inspected_as_audio)",
        "crates/melodee-ingestion/tests/inspection.rs",
-       "crates/melodee-ingestion/tests/normalization.rs (fingerprint failure is retryable and does not classify playable media as structurally invalid)"
+       "crates/melodee-ingestion/tests/normalization.rs (fingerprint failure is retryable and does not classify playable media as structurally invalid)",
+       "crates/melodee-ingestion/tests/publication.rs (structurally complete local observations pass; missing presentation facts need review)"
      ]
    },
    "PRD-INGEST-009": {
@@ -605,12 +710,53 @@
        "crates/melodee-ingestion/src/config.rs (normalization concurrency, ffmpeg/fpcalc timeouts, work-area base)",
        "crates/melodee-ingestion/src/inspect.rs (bounded claim batch and spawn_blocking boundary)",
        "crates/melodee-ingestion/src/normalize.rs (bounded normalization concurrency with lease heartbeat)",
+       "crates/melodee-ingestion/src/publication_worker.rs (independently bounded validation/publication JoinSet workers with lease heartbeat and cancellation)",
        "crates/melodee-media/src/lib.rs (streaming hashes and bounded tool output/artwork limits)"
      ],
      "tests": [
        "crates/melodee-ingestion/tests/inspection.rs",
-       "crates/melodee-ingestion/tests/normalization.rs (measured Release normalization concurrency reaches 8 and never exceeds 8)"
+       "crates/melodee-ingestion/tests/normalization.rs (measured normalization concurrency reaches 8 and never exceeds 8; validation/publication claim pools configured independently to 8; 200 Releases reach Published)"
      ],
-     "note": "Inspection and normalization are separately bounded and normalization bounds all child processes. The full requirement also calls for separate image, hashing/fingerprinting, conversion, and external-enrichment resource classes; those later-stage pools do not yet exist."
+     "note": "Inspection, normalization, validation, and publication are separately bounded, and normalization bounds child processes. The full requirement also calls for separate image, hashing/fingerprinting, conversion, external-enrichment, catalog-write, and search-index resource classes; those later-stage pools do not all exist."
+   },
+   "PRD-STORAGE-001": {
+     "status": "tested",
+     "implementation": [
+       "crates/melodee-domain/src/manifest.rs (immutable ReleaseId and canonical layout invariants)",
+       "crates/melodee-ingestion/src/publication.rs (ID/hash-derived canonical paths without Artist/title components)",
+       "design/adr/ADR-0106-use-release-centric-canonical-storage.md",
+       "design/adr/ADR-0116-use-immutable-release-ids-and-convergent-canonical-publication.md"
+     ],
+     "tests": [
+       "crates/melodee-domain/tests/manifest_versions.rs (stable UUID-to-layout golden vector)",
+       "crates/melodee-ingestion/tests/publication.rs (canonical publication from Unicode/display-derived source observations uses lowercase ID/hash path)"
+     ],
+     "note": "Canonical media paths contain only immutable Release identity and byte hashes. Artist identity correction cannot determine or require a canonical media move."
+   },
+   "PRD-STORAGE-002": {
+     "status": "tested",
+     "implementation": [
+       "crates/melodee-domain/src/manifest.rs (canonical layout v1 and stable shard derivation)",
+       "crates/melodee-ingestion/src/publication.rs (no-clobber Release-centric publication)",
+       "crates/melodee-persistence/migrations/0006_canonical_publication.sql (portable target/manifest path constraints)",
+       "design/adr/ADR-0116-use-immutable-release-ids-and-convergent-canonical-publication.md"
+     ],
+     "tests": [
+       "crates/melodee-domain/tests/manifest_versions.rs (canonical_release_layout_has_a_stable_golden_vector)",
+       "crates/melodee-ingestion/tests/publication.rs (complete manifest/media/artwork layout, adoption, and conflict protection)",
+       "crates/melodee-ingestion/tests/normalization.rs (real-format and 200-Release canonical publication)"
+     ],
+     "note": "ADR-0116 accepted and Phase 3 implemented the exact immutable-ID-centric layout required before storage implementation."
+   },
+   "PRD-STORAGE-004": {
+     "status": "in-progress",
+     "implementation": [
+       "crates/melodee-media/src/normalize.rs (valid existing MP3 bytes retained without re-encoding during ingestion)",
+       "design/adr/ADR-0116-use-immutable-release-ids-and-convergent-canonical-publication.md (portable paths and explicit legacy-location follow-up)"
+     ],
+     "tests": [
+       "crates/melodee-media/tests/normalization_real.rs (valid existing VBR/CBR MP3 bytes retained exactly)"
+     ],
+     "note": "New ingestion avoids unnecessary re-encoding of valid MP3. Phase 11 registration of an existing canonical library without forced relocation or re-encoding is not implemented, so the broad migration requirement remains in progress."
    }
 }

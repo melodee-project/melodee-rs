@@ -60,7 +60,7 @@ async fn illegal_transition_fails_without_changing_state() {
 }
 
 #[tokio::test]
-async fn worker_happy_path_to_terminal_clears_lease_and_sets_completed() {
+async fn generic_transition_cannot_bypass_durable_publication_intent() {
     let db = TestDb::create("transition_happy").await;
     let store = WorkItemStore;
     let config = test_config();
@@ -76,13 +76,6 @@ async fn worker_happy_path_to_terminal_clears_lease_and_sets_completed() {
         IngestionState::Inspecting,
         IngestionState::Normalizing,
         IngestionState::Validating,
-        IngestionState::Staged,
-        IngestionState::Publishing,
-        IngestionState::Published,
-        IngestionState::Cataloging,
-        IngestionState::Cataloged,
-        IngestionState::Indexing,
-        IngestionState::Indexed,
     ];
     for next in path {
         store
@@ -99,18 +92,23 @@ async fn worker_happy_path_to_terminal_clears_lease_and_sets_completed() {
             .unwrap_or_else(|e| panic!("transition to {next:?}: {e}"));
     }
 
-    let item = store.get(&db.pool, id).await.expect("get");
-    assert_eq!(item.state, IngestionState::Indexed);
-    assert!(item.completed_at.is_some(), "terminal completion timestamp");
-    assert_eq!(item.lease_owner, None, "terminal state releases the lease");
-
-    let events = store.list_events(&db.pool, id).await.expect("events");
+    let result = store
+        .transition(
+            &db.pool,
+            id,
+            Some(&worker),
+            TransitionKind::Worker,
+            IngestionState::Staged,
+            None,
+            T0,
+        )
+        .await;
     assert!(
-        events
-            .iter()
-            .any(|e| e.event_type == melodee_domain::WorkEventType::Completed),
-        "completed event recorded"
+        result.is_err(),
+        "staging requires immutable publication intent"
     );
+    let item = store.get(&db.pool, id).await.expect("get");
+    assert_eq!(item.state, IngestionState::Validating);
     db.drop().await;
 }
 

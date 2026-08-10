@@ -10,8 +10,10 @@
 //! clocks in this module (testable, deterministic).
 
 use melodee_domain::{
-    FailureClass, IngestionState, ReleaseManifest, ReleaseWorkItem, ReleaseWorkItemEvent,
-    RetryPolicy, TransitionKind, WorkErrorCode, WorkEventType,
+    FailureClass, IngestionState, ManifestPublication, PublicationAuthorization,
+    PublicationJournalStep, PublicationPlan, ReleaseId, ReleaseManifest, ReleaseWorkItem,
+    ReleaseWorkItemEvent, RetryPolicy, SourceDisposition, StructuralValidation, TransitionKind,
+    ValidationOutcome, WorkErrorCode, WorkEventType,
 };
 use sqlx::{FromRow, PgPool, Postgres, Transaction};
 use time::OffsetDateTime;
@@ -178,6 +180,147 @@ pub struct StoredManifest {
     pub source_snapshot_id: Option<i64>,
     pub source_signature: Option<String>,
     pub generated_at: OffsetDateTime,
+}
+
+/// Durable immutable publication intent plus an optional completion receipt.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoredPublication {
+    pub work_item_id: Uuid,
+    pub release_id: ReleaseId,
+    pub authorization: PublicationAuthorization,
+    pub validation: StructuralValidation,
+    pub source_disposition: SourceDisposition,
+    pub plan: PublicationPlan,
+    pub plan_hash: String,
+    pub authorized_at: OffsetDateTime,
+    pub published_at: Option<OffsetDateTime>,
+    pub sealed_manifest_hash: Option<String>,
+}
+
+/// One append-only, idempotency-keyed publication progress record.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PublicationJournalEntry {
+    pub id: i64,
+    pub work_item_id: Uuid,
+    pub journal_key: String,
+    pub step: PublicationJournalStep,
+    pub asset_path: Option<String>,
+    pub size_bytes: Option<u64>,
+    pub byte_hash: Option<String>,
+    pub worker_id: String,
+    pub metadata: Option<serde_json::Value>,
+    pub created_at: OffsetDateTime,
+}
+
+#[derive(Debug, FromRow)]
+struct PublicationRow {
+    work_item_id: Uuid,
+    authorization_id: Uuid,
+    release_id: Uuid,
+    authorization_name: String,
+    authorization_version: i32,
+    validation_profile_name: String,
+    validation_profile_version: i32,
+    validation_outcome: String,
+    validation_payload: serde_json::Value,
+    source_disposition: String,
+    authorized_at: OffsetDateTime,
+    plan_hash: String,
+    plan_payload: serde_json::Value,
+    published_at: Option<OffsetDateTime>,
+    sealed_manifest_hash: Option<String>,
+}
+
+#[derive(Debug, FromRow)]
+struct PublicationJournalRow {
+    id: i64,
+    work_item_id: Uuid,
+    journal_key: String,
+    step: String,
+    asset_path: Option<String>,
+    size_bytes: Option<i64>,
+    byte_hash: Option<String>,
+    worker_id: String,
+    metadata: Option<serde_json::Value>,
+    created_at: OffsetDateTime,
+}
+
+impl TryFrom<PublicationRow> for StoredPublication {
+    type Error = WorkStoreError;
+
+    fn try_from(row: PublicationRow) -> Result<Self, Self::Error> {
+        let authorization_version = u16::try_from(row.authorization_version).map_err(|_| {
+            WorkStoreError::CorruptState(format!(
+                "invalid publication authorization version on {}",
+                row.work_item_id
+            ))
+        })?;
+        let plan: PublicationPlan = serde_json::from_value(row.plan_payload)?;
+        let validation: StructuralValidation = serde_json::from_value(row.validation_payload)?;
+        validation.validate()?;
+        let authorization = PublicationAuthorization {
+            id: row.authorization_id,
+            name: row.authorization_name,
+            version: authorization_version,
+        };
+        if plan.release_id != ReleaseId::from_uuid(row.release_id)
+            || plan.authorization != authorization
+            || row.source_disposition != "retained"
+            || validation.profile_name != row.validation_profile_name
+            || i32::from(validation.profile_version) != row.validation_profile_version
+            || row.validation_outcome != "passed"
+            || validation.outcome != ValidationOutcome::Passed
+            || plan.plan_hash()? != row.plan_hash
+        {
+            return Err(WorkStoreError::CorruptState(format!(
+                "publication identity mismatch on {}",
+                row.work_item_id
+            )));
+        }
+        plan.validate()?;
+        Ok(Self {
+            work_item_id: row.work_item_id,
+            release_id: plan.release_id,
+            authorization,
+            validation,
+            source_disposition: SourceDisposition::Retained,
+            plan,
+            plan_hash: row.plan_hash,
+            authorized_at: row.authorized_at,
+            published_at: row.published_at,
+            sealed_manifest_hash: row.sealed_manifest_hash,
+        })
+    }
+}
+
+impl TryFrom<PublicationJournalRow> for PublicationJournalEntry {
+    type Error = WorkStoreError;
+
+    fn try_from(row: PublicationJournalRow) -> Result<Self, Self::Error> {
+        Ok(Self {
+            id: row.id,
+            work_item_id: row.work_item_id,
+            journal_key: row.journal_key,
+            step: PublicationJournalStep::parse(&row.step)
+                .ok_or_else(|| WorkStoreError::CorruptState(row.step.clone()))?,
+            asset_path: row.asset_path,
+            size_bytes: row
+                .size_bytes
+                .map(|value| {
+                    u64::try_from(value).map_err(|_| {
+                        WorkStoreError::CorruptState(format!(
+                            "negative publication journal size on {}",
+                            row.work_item_id
+                        ))
+                    })
+                })
+                .transpose()?,
+            byte_hash: row.byte_hash,
+            worker_id: row.worker_id,
+            metadata: row.metadata,
+            created_at: row.created_at,
+        })
+    }
 }
 
 impl TryFrom<EventRow> for ReleaseWorkItemEvent {
@@ -608,12 +751,11 @@ impl WorkItemStore {
         let candidates = sqlx::query_as::<_, WorkItemRow>(
             "SELECT * FROM release_work_items
              WHERE state = 'normalizing'
-               AND (lease_expires_at IS NULL OR lease_expires_at <= $2)
+               AND (lease_expires_at IS NULL OR lease_expires_at <= $1)
              ORDER BY updated_at, id
-             LIMIT $3
+             LIMIT $2
              FOR UPDATE SKIP LOCKED",
         )
-        .bind(worker.as_str())
         .bind(now)
         .bind(i64::from(config.claim_batch_size))
         .fetch_all(&mut *tx)
@@ -671,6 +813,120 @@ impl WorkItemStore {
             info!(worker_id = %worker, claimed = items.len(), "normalization lease acquired");
         }
         Ok(items)
+    }
+
+    /// Claims normalized manifests awaiting structural validation. Validation
+    /// has its own lease so a completed normalization never retains authority
+    /// across the stage boundary.
+    #[instrument(skip_all, fields(worker_id = %worker, batch = config.claim_batch_size))]
+    pub async fn claim_validating(
+        &self,
+        pool: &PgPool,
+        worker: &WorkerId,
+        config: &WorkEngineConfig,
+        now: OffsetDateTime,
+    ) -> Result<Vec<ReleaseWorkItem>, WorkStoreError> {
+        let lease_expiry = now + config.lease_duration;
+        let mut tx = pool.begin().await?;
+        let candidates = sqlx::query_as::<_, WorkItemRow>(
+            "SELECT * FROM release_work_items
+             WHERE state = 'validating'
+               AND (lease_expires_at IS NULL OR lease_expires_at <= $1)
+             ORDER BY updated_at, id
+             LIMIT $2
+             FOR UPDATE SKIP LOCKED",
+        )
+        .bind(now)
+        .bind(i64::from(config.claim_batch_size))
+        .fetch_all(&mut *tx)
+        .await?;
+
+        let mut items = Vec::with_capacity(candidates.len());
+        for candidate in candidates {
+            let row = sqlx::query_as::<_, WorkItemRow>(
+                "UPDATE release_work_items
+                 SET lease_owner = $1, lease_acquired_at = $2,
+                     lease_expires_at = $3, updated_at = $2
+                 WHERE id = $4
+                 RETURNING *",
+            )
+            .bind(worker.as_str())
+            .bind(now)
+            .bind(lease_expiry)
+            .bind(candidate.id)
+            .fetch_one(&mut *tx)
+            .await?;
+            let item = ReleaseWorkItem::try_from(row)?;
+            insert_event(
+                &mut tx,
+                item.id,
+                WorkEventType::Claimed,
+                None,
+                None,
+                Some("validation.claimed"),
+                Some(worker.as_str()),
+                item.correlation_id,
+                now,
+                Some(serde_json::json!({ "lease_expires_at": lease_expiry.to_string() })),
+            )
+            .await?;
+            items.push(item);
+        }
+        tx.commit().await?;
+        Ok(items)
+    }
+
+    /// Parks structurally uncertain work for operator review without treating
+    /// uncertainty as a failed attempt. Full file-level findings remain in
+    /// the atomic transition event.
+    #[instrument(skip_all, fields(work_item_id = %id, worker_id = %worker))]
+    pub async fn record_validation_review(
+        &self,
+        pool: &PgPool,
+        id: Uuid,
+        worker: &WorkerId,
+        validation: &StructuralValidation,
+        now: OffsetDateTime,
+    ) -> Result<ReleaseWorkItem, WorkStoreError> {
+        validation.validate()?;
+        if validation.outcome != ValidationOutcome::NeedsReview {
+            return Err(WorkStoreError::PublicationConflict(id));
+        }
+        let mut tx = pool.begin().await?;
+        let item = lock_for_update(&mut tx, id).await?;
+        ensure_active_lease(&item, worker, now)?;
+        if item.state != IngestionState::Validating {
+            return Err(WorkStoreError::InvalidState(id, item.state));
+        }
+        item.state
+            .ensure_transition(IngestionState::NeedsReview, TransitionKind::Worker)?;
+        let row = sqlx::query_as::<_, WorkItemRow>(
+            "UPDATE release_work_items
+             SET state = 'needs_review', state_reason = 'validation.needs_review',
+                 lease_owner = NULL, lease_acquired_at = NULL,
+                 lease_expires_at = NULL, updated_at = $2
+             WHERE id = $1
+             RETURNING *",
+        )
+        .bind(id)
+        .bind(now)
+        .fetch_one(&mut *tx)
+        .await?;
+        insert_event(
+            &mut tx,
+            id,
+            WorkEventType::Transitioned,
+            Some(IngestionState::Validating),
+            Some(IngestionState::NeedsReview),
+            Some("validation.needs_review"),
+            Some(worker.as_str()),
+            item.correlation_id,
+            now,
+            Some(serde_json::to_value(validation)?),
+        )
+        .await?;
+        tx.commit().await?;
+        ReleaseWorkItem::try_from(row)
     }
 
     /// Publishes normalization observations for a work item and transitions
@@ -815,6 +1071,603 @@ impl WorkItemStore {
                 generated_at,
             },
         ))
+    }
+
+    /// Atomically persists immutable authorization and publication intent,
+    /// upgrades the authoritative manifest to v3, and transitions
+    /// `validating -> staged`. Staged work intentionally holds no lease.
+    #[instrument(skip_all, fields(work_item_id = %id, worker_id = %worker))]
+    pub async fn stage_authorized_publication(
+        &self,
+        pool: &PgPool,
+        id: Uuid,
+        worker: &WorkerId,
+        manifest: &ReleaseManifest,
+        plan: &PublicationPlan,
+        now: OffsetDateTime,
+    ) -> Result<StoredPublication, WorkStoreError> {
+        if manifest.schema_version != melodee_domain::PUBLICATION_MANIFEST_VERSION
+            || manifest.normalization.is_none()
+        {
+            return Err(WorkStoreError::PublicationConflict(id));
+        }
+        let publication = manifest
+            .publication
+            .as_ref()
+            .ok_or(WorkStoreError::PublicationConflict(id))?;
+        publication.validate_against(plan)?;
+        if manifest.work_item_id != id {
+            return Err(WorkStoreError::PublicationConflict(id));
+        }
+
+        let mut tx = pool.begin().await?;
+        let item = lock_for_update(&mut tx, id).await?;
+        ensure_active_lease(&item, worker, now)?;
+        if item.state != IngestionState::Validating {
+            return Err(WorkStoreError::InvalidState(id, item.state));
+        }
+        item.state
+            .ensure_transition(IngestionState::Staged, TransitionKind::Worker)?;
+
+        let stored_manifest = sqlx::query_as::<_, (i32, String)>(
+            "SELECT schema_version, manifest_hash FROM release_work_item_manifests
+             WHERE work_item_id = $1 FOR UPDATE",
+        )
+        .bind(id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or(WorkStoreError::ManifestNotFound(id))?;
+        if stored_manifest.0 != i32::from(melodee_domain::NORMALIZATION_MANIFEST_VERSION)
+            || stored_manifest.1 != plan.input_manifest_hash
+            || item.manifest_hash.as_deref() != Some(plan.input_manifest_hash.as_str())
+        {
+            return Err(WorkStoreError::PublicationConflict(id));
+        }
+
+        let validation_payload = serde_json::to_value(&publication.validation)?;
+        let plan_payload = serde_json::to_value(plan)?;
+        let manifest_payload = serde_json::to_value(manifest)?;
+        sqlx::query(
+            "INSERT INTO release_publication_authorizations (
+                authorization_id, work_item_id, release_id, authorization_name,
+                authorization_version, validation_profile_name,
+                validation_profile_version, validation_outcome, validation_payload,
+                source_disposition, authorized_at
+             ) VALUES ($1,$2,$3,$4,$5,$6,$7,'passed',$8,'retained',$9)",
+        )
+        .bind(publication.authorization.id)
+        .bind(id)
+        .bind(publication.release_id.into_uuid())
+        .bind(&publication.authorization.name)
+        .bind(i32::from(publication.authorization.version))
+        .bind(&publication.validation.profile_name)
+        .bind(i32::from(publication.validation.profile_version))
+        .bind(validation_payload)
+        .bind(now)
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query(
+            "INSERT INTO release_publication_plans (
+                work_item_id, authorization_id, release_id, layout_version,
+                input_manifest_hash, target_relative_path, manifest_relative_path,
+                plan_hash, plan_payload, created_at
+             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
+        )
+        .bind(id)
+        .bind(plan.authorization.id)
+        .bind(plan.release_id.into_uuid())
+        .bind(i32::from(plan.layout_version))
+        .bind(&plan.input_manifest_hash)
+        .bind(&plan.target_relative_path)
+        .bind(&plan.manifest_relative_path)
+        .bind(&publication.plan_hash)
+        .bind(plan_payload)
+        .bind(now)
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query(
+            "UPDATE release_work_item_manifests
+             SET schema_version = $2, manifest_payload = $3
+             WHERE work_item_id = $1",
+        )
+        .bind(id)
+        .bind(i32::from(manifest.schema_version))
+        .bind(manifest_payload)
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query(
+            "UPDATE release_work_items
+             SET state = 'staged', state_reason = 'phase3.structural-publication',
+                 target_path = $2, lease_owner = NULL, lease_acquired_at = NULL,
+                 lease_expires_at = NULL, updated_at = $3
+             WHERE id = $1",
+        )
+        .bind(id)
+        .bind(&plan.target_relative_path)
+        .bind(now)
+        .execute(&mut *tx)
+        .await?;
+        insert_event(
+            &mut tx,
+            id,
+            WorkEventType::Transitioned,
+            Some(IngestionState::Validating),
+            Some(IngestionState::Staged),
+            Some(PublicationAuthorization::PHASE3_STRUCTURAL_NAME),
+            Some(worker.as_str()),
+            item.correlation_id,
+            now,
+            Some(serde_json::json!({
+                "release_id": publication.release_id,
+                "authorization_id": publication.authorization.id,
+                "plan_hash": publication.plan_hash,
+                "source_disposition": publication.source_disposition,
+            })),
+        )
+        .await?;
+        tx.commit().await?;
+
+        Ok(stored_publication_from_staged(id, publication, plan, now))
+    }
+
+    /// Claims new staged publications and directly reclaims convergent
+    /// `publishing` work after lease expiry. Reclamation never routes through
+    /// the ordinary Failed retry queue.
+    #[instrument(skip_all, fields(worker_id = %worker, batch = config.claim_batch_size))]
+    pub async fn claim_publication(
+        &self,
+        pool: &PgPool,
+        worker: &WorkerId,
+        config: &WorkEngineConfig,
+        now: OffsetDateTime,
+    ) -> Result<Vec<ReleaseWorkItem>, WorkStoreError> {
+        let lease_expiry = now + config.lease_duration;
+        let mut tx = pool.begin().await?;
+        let candidates = sqlx::query_as::<_, WorkItemRow>(
+            "SELECT * FROM release_work_items
+             WHERE state IN ('staged', 'publishing')
+               AND (lease_expires_at IS NULL OR lease_expires_at <= $1)
+               AND EXISTS (
+                   SELECT 1 FROM release_publication_plans p WHERE p.work_item_id = release_work_items.id
+               )
+             ORDER BY updated_at, id
+             LIMIT $2
+             FOR UPDATE SKIP LOCKED",
+        )
+        .bind(now)
+        .bind(i64::from(config.claim_batch_size))
+        .fetch_all(&mut *tx)
+        .await?;
+
+        let mut items = Vec::with_capacity(candidates.len());
+        for candidate in candidates {
+            let from = IngestionState::parse(&candidate.state)
+                .ok_or_else(|| WorkStoreError::CorruptState(candidate.state.clone()))?;
+            if from == IngestionState::Staged {
+                from.ensure_transition(IngestionState::Publishing, TransitionKind::Worker)?;
+            }
+            let row = sqlx::query_as::<_, WorkItemRow>(
+                "UPDATE release_work_items
+                 SET state = 'publishing', state_reason = $1,
+                     lease_owner = $2, lease_acquired_at = $3,
+                     lease_expires_at = $4, updated_at = $3
+                 WHERE id = $5
+                 RETURNING *",
+            )
+            .bind(if from == IngestionState::Staged {
+                "publication.started"
+            } else {
+                "publication.reclaimed"
+            })
+            .bind(worker.as_str())
+            .bind(now)
+            .bind(lease_expiry)
+            .bind(candidate.id)
+            .fetch_one(&mut *tx)
+            .await?;
+            let item = ReleaseWorkItem::try_from(row)?;
+            if from == IngestionState::Staged {
+                insert_event(
+                    &mut tx,
+                    item.id,
+                    WorkEventType::Transitioned,
+                    Some(IngestionState::Staged),
+                    Some(IngestionState::Publishing),
+                    Some("publication.started"),
+                    Some(worker.as_str()),
+                    item.correlation_id,
+                    now,
+                    None,
+                )
+                .await?;
+            }
+            insert_event(
+                &mut tx,
+                item.id,
+                WorkEventType::Claimed,
+                None,
+                None,
+                Some(if from == IngestionState::Staged {
+                    "publication.claimed"
+                } else {
+                    "publication.reclaimed"
+                }),
+                Some(worker.as_str()),
+                item.correlation_id,
+                now,
+                Some(serde_json::json!({ "lease_expires_at": lease_expiry.to_string() })),
+            )
+            .await?;
+            items.push(item);
+        }
+        tx.commit().await?;
+        Ok(items)
+    }
+
+    /// Appends an idempotency-keyed publication milestone under the active
+    /// publishing lease. Reusing a key with different evidence fails closed.
+    #[allow(clippy::too_many_arguments)]
+    #[instrument(skip_all, fields(work_item_id = %id, worker_id = %worker, step = step.as_str()))]
+    pub async fn record_publication_progress(
+        &self,
+        pool: &PgPool,
+        id: Uuid,
+        worker: &WorkerId,
+        journal_key: &str,
+        step: PublicationJournalStep,
+        asset_path: Option<&str>,
+        size_bytes: Option<u64>,
+        byte_hash: Option<&str>,
+        metadata: Option<serde_json::Value>,
+        now: OffsetDateTime,
+    ) -> Result<PublicationJournalEntry, WorkStoreError> {
+        if journal_key.is_empty() {
+            return Err(WorkStoreError::PublicationJournalConflict(
+                id,
+                journal_key.to_owned(),
+            ));
+        }
+        let stored_size = size_bytes
+            .map(|value| i64::try_from(value).map_err(|_| WorkStoreError::PublicationConflict(id)))
+            .transpose()?;
+        let mut tx = pool.begin().await?;
+        let item = lock_for_update(&mut tx, id).await?;
+        ensure_active_lease(&item, worker, now)?;
+        if item.state != IngestionState::Publishing {
+            return Err(WorkStoreError::InvalidState(id, item.state));
+        }
+
+        let existing = sqlx::query_as::<_, PublicationJournalRow>(
+            "SELECT * FROM release_publication_journal
+             WHERE work_item_id = $1 AND journal_key = $2",
+        )
+        .bind(id)
+        .bind(journal_key)
+        .fetch_optional(&mut *tx)
+        .await?;
+        if let Some(row) = existing {
+            let entry = PublicationJournalEntry::try_from(row)?;
+            if entry.step != step
+                || entry.asset_path.as_deref() != asset_path
+                || entry.size_bytes != size_bytes
+                || entry.byte_hash.as_deref() != byte_hash
+                || entry.metadata != metadata
+            {
+                return Err(WorkStoreError::PublicationJournalConflict(
+                    id,
+                    journal_key.to_owned(),
+                ));
+            }
+            tx.commit().await?;
+            return Ok(entry);
+        }
+
+        if step == PublicationJournalStep::AssetCopied {
+            let plan_payload: (serde_json::Value,) = sqlx::query_as(
+                "SELECT plan_payload FROM release_publication_plans WHERE work_item_id = $1",
+            )
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await?
+            .ok_or(WorkStoreError::PublicationNotFound(id))?;
+            let plan: PublicationPlan = serde_json::from_value(plan_payload.0)?;
+            let matches_plan = plan.assets.iter().any(|asset| {
+                Some(asset.canonical_path.as_str()) == asset_path
+                    && Some(asset.size_bytes) == size_bytes
+                    && Some(asset.byte_hash.as_str()) == byte_hash
+            });
+            if !matches_plan {
+                return Err(WorkStoreError::PublicationConflict(id));
+            }
+        }
+
+        let row = sqlx::query_as::<_, PublicationJournalRow>(
+            "INSERT INTO release_publication_journal (
+                work_item_id, journal_key, step, asset_path, size_bytes,
+                byte_hash, worker_id, metadata, created_at
+             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+             RETURNING *",
+        )
+        .bind(id)
+        .bind(journal_key)
+        .bind(step.as_str())
+        .bind(asset_path)
+        .bind(stored_size)
+        .bind(byte_hash)
+        .bind(worker.as_str())
+        .bind(metadata)
+        .bind(now)
+        .fetch_one(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        PublicationJournalEntry::try_from(row)
+    }
+
+    /// Records a convergent publication problem without discarding durable
+    /// intent or routing the item through the ordinary Failed retry queue.
+    /// The cleared lease makes Publishing directly reclaimable.
+    #[allow(clippy::too_many_arguments)]
+    #[instrument(skip_all, fields(work_item_id = %id, worker_id = %worker, step = step.as_str(), error_code = %code.as_str()))]
+    pub async fn record_publication_problem(
+        &self,
+        pool: &PgPool,
+        id: Uuid,
+        worker: &WorkerId,
+        step: PublicationJournalStep,
+        code: WorkErrorCode,
+        message: &str,
+        metadata: Option<serde_json::Value>,
+        now: OffsetDateTime,
+    ) -> Result<ReleaseWorkItem, WorkStoreError> {
+        if !matches!(
+            step,
+            PublicationJournalStep::TargetConflict | PublicationJournalStep::Failed
+        ) {
+            return Err(WorkStoreError::PublicationConflict(id));
+        }
+        let mut tx = pool.begin().await?;
+        let item = lock_for_update(&mut tx, id).await?;
+        ensure_active_lease(&item, worker, now)?;
+        if item.state != IngestionState::Publishing {
+            return Err(WorkStoreError::InvalidState(id, item.state));
+        }
+        let durable_plan_hash: (String,) = sqlx::query_as(
+            "SELECT plan_hash FROM release_publication_plans WHERE work_item_id = $1",
+        )
+        .bind(id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or(WorkStoreError::PublicationNotFound(id))?;
+        let journal_key = format!("{}:{}", step.as_str(), durable_plan_hash.0);
+        let journal_metadata = Some(serde_json::json!({
+            "error_code": code.as_str(),
+            "evidence": metadata,
+        }));
+        let existing = sqlx::query_as::<_, PublicationJournalRow>(
+            "SELECT * FROM release_publication_journal
+             WHERE work_item_id = $1 AND journal_key = $2",
+        )
+        .bind(id)
+        .bind(&journal_key)
+        .fetch_optional(&mut *tx)
+        .await?;
+        if let Some(existing) = existing {
+            let entry = PublicationJournalEntry::try_from(existing)?;
+            if entry.step != step
+                || entry.asset_path.is_some()
+                || entry.size_bytes.is_some()
+                || entry.byte_hash.is_some()
+                || entry.metadata != journal_metadata
+            {
+                return Err(WorkStoreError::PublicationJournalConflict(id, journal_key));
+            }
+        } else {
+            sqlx::query(
+                "INSERT INTO release_publication_journal (
+                    work_item_id, journal_key, step, worker_id, metadata, created_at
+                 ) VALUES ($1,$2,$3,$4,$5,$6)",
+            )
+            .bind(id)
+            .bind(&journal_key)
+            .bind(step.as_str())
+            .bind(worker.as_str())
+            .bind(&journal_metadata)
+            .bind(now)
+            .execute(&mut *tx)
+            .await?;
+        }
+        let row = sqlx::query_as::<_, WorkItemRow>(
+            "UPDATE release_work_items
+             SET state_reason = $2, last_error_code = $2,
+                 last_error_message = $3, lease_owner = NULL,
+                 lease_acquired_at = NULL, lease_expires_at = NULL,
+                 updated_at = $4
+             WHERE id = $1
+             RETURNING *",
+        )
+        .bind(id)
+        .bind(code.as_str())
+        .bind(message)
+        .bind(now)
+        .fetch_one(&mut *tx)
+        .await?;
+        insert_event(
+            &mut tx,
+            id,
+            WorkEventType::Transitioned,
+            Some(IngestionState::Publishing),
+            Some(IngestionState::Publishing),
+            Some(code.as_str()),
+            Some(worker.as_str()),
+            item.correlation_id,
+            now,
+            journal_metadata,
+        )
+        .await?;
+        tx.commit().await?;
+        ReleaseWorkItem::try_from(row)
+    }
+
+    /// Commits a final verified canonical publication receipt and transitions
+    /// `publishing -> published`, atomically clearing the publication lease.
+    /// Repeating an identical completion after uncertain commit is success.
+    #[instrument(skip_all, fields(work_item_id = %id, worker_id = %worker))]
+    pub async fn complete_publication(
+        &self,
+        pool: &PgPool,
+        id: Uuid,
+        worker: &WorkerId,
+        plan_hash: &str,
+        sealed_manifest_hash: &str,
+        now: OffsetDateTime,
+    ) -> Result<ReleaseWorkItem, WorkStoreError> {
+        let mut tx = pool.begin().await?;
+        let item = lock_for_update(&mut tx, id).await?;
+        let plan_row = sqlx::query_as::<_, (Uuid, String, String, serde_json::Value)>(
+            "SELECT release_id, plan_hash, target_relative_path, plan_payload
+             FROM release_publication_plans WHERE work_item_id = $1",
+        )
+        .bind(id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or(WorkStoreError::PublicationNotFound(id))?;
+        let plan: PublicationPlan = serde_json::from_value(plan_row.3.clone())?;
+        plan.validate()?;
+        if plan_row.0 != plan.release_id.into_uuid()
+            || plan_row.1 != plan_hash
+            || plan.plan_hash()? != plan_hash
+        {
+            return Err(WorkStoreError::PublicationConflict(id));
+        }
+
+        let journal_rows = sqlx::query_as::<_, PublicationJournalRow>(
+            "SELECT * FROM release_publication_journal
+             WHERE work_item_id = $1 ORDER BY created_at, id",
+        )
+        .bind(id)
+        .fetch_all(&mut *tx)
+        .await?;
+        let journal = journal_rows
+            .into_iter()
+            .map(PublicationJournalEntry::try_from)
+            .collect::<Result<Vec<_>, _>>()?;
+        if !has_complete_publication_evidence(&plan, plan_hash, sealed_manifest_hash, &journal) {
+            return Err(WorkStoreError::PublicationConflict(id));
+        }
+
+        if item.state == IngestionState::Published {
+            let receipt = sqlx::query_as::<_, (String, String)>(
+                "SELECT plan_hash, sealed_manifest_hash
+                 FROM release_publication_receipts WHERE work_item_id = $1",
+            )
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await?
+            .ok_or(WorkStoreError::PublicationNotFound(id))?;
+            if receipt.0 != plan_hash || receipt.1 != sealed_manifest_hash {
+                return Err(WorkStoreError::PublicationConflict(id));
+            }
+            tx.commit().await?;
+            return Ok(item);
+        }
+
+        ensure_active_lease(&item, worker, now)?;
+        if item.state != IngestionState::Publishing {
+            return Err(WorkStoreError::InvalidState(id, item.state));
+        }
+        item.state
+            .ensure_transition(IngestionState::Published, TransitionKind::Worker)?;
+        sqlx::query(
+            "INSERT INTO release_publication_receipts (
+                work_item_id, release_id, plan_hash, sealed_manifest_hash,
+                source_disposition, published_at
+             ) VALUES ($1,$2,$3,$4,'retained',$5)",
+        )
+        .bind(id)
+        .bind(plan_row.0)
+        .bind(plan_hash)
+        .bind(sealed_manifest_hash)
+        .bind(now)
+        .execute(&mut *tx)
+        .await?;
+        let row = sqlx::query_as::<_, WorkItemRow>(
+            "UPDATE release_work_items
+             SET state = 'published', state_reason = 'publication.verified',
+                 target_path = $2, lease_owner = NULL, lease_acquired_at = NULL,
+                 lease_expires_at = NULL, updated_at = $3
+             WHERE id = $1
+             RETURNING *",
+        )
+        .bind(id)
+        .bind(&plan_row.2)
+        .bind(now)
+        .fetch_one(&mut *tx)
+        .await?;
+        insert_event(
+            &mut tx,
+            id,
+            WorkEventType::Transitioned,
+            Some(IngestionState::Publishing),
+            Some(IngestionState::Published),
+            Some("publication.verified"),
+            Some(worker.as_str()),
+            item.correlation_id,
+            now,
+            Some(serde_json::json!({
+                "release_id": plan_row.0,
+                "plan_hash": plan_hash,
+                "sealed_manifest_hash": sealed_manifest_hash,
+                "source_disposition": "retained",
+            })),
+        )
+        .await?;
+        tx.commit().await?;
+        ReleaseWorkItem::try_from(row)
+    }
+
+    /// Fetches immutable publication intent and its optional completion receipt.
+    pub async fn get_publication(
+        &self,
+        pool: &PgPool,
+        work_item_id: Uuid,
+    ) -> Result<Option<StoredPublication>, WorkStoreError> {
+        let row = sqlx::query_as::<_, PublicationRow>(
+            "SELECT p.work_item_id, a.authorization_id, p.release_id,
+                    a.authorization_name, a.authorization_version,
+                    a.validation_profile_name, a.validation_profile_version,
+                    a.validation_outcome, a.validation_payload,
+                    a.source_disposition, a.authorized_at,
+                    p.plan_hash, p.plan_payload, r.published_at,
+                    r.sealed_manifest_hash
+             FROM release_publication_plans p
+             JOIN release_publication_authorizations a
+               ON a.authorization_id = p.authorization_id
+             LEFT JOIN release_publication_receipts r
+               ON r.work_item_id = p.work_item_id
+             WHERE p.work_item_id = $1",
+        )
+        .bind(work_item_id)
+        .fetch_optional(pool)
+        .await?;
+        row.map(StoredPublication::try_from).transpose()
+    }
+
+    /// Lists append-only canonical publication progress, oldest first.
+    pub async fn list_publication_journal(
+        &self,
+        pool: &PgPool,
+        work_item_id: Uuid,
+    ) -> Result<Vec<PublicationJournalEntry>, WorkStoreError> {
+        let rows = sqlx::query_as::<_, PublicationJournalRow>(
+            "SELECT * FROM release_publication_journal
+             WHERE work_item_id = $1 ORDER BY created_at, id",
+        )
+        .bind(work_item_id)
+        .fetch_all(pool)
+        .await?;
+        rows.into_iter()
+            .map(PublicationJournalEntry::try_from)
+            .collect()
     }
 
     /// Updates durable settling progress fields without changing core state.
@@ -1016,6 +1869,17 @@ impl WorkItemStore {
         let mut tx = pool.begin().await?;
         let item = lock_for_update(&mut tx, id).await?;
 
+        // These boundaries have additional durable invariants and must use
+        // stage_authorized_publication, claim_publication, and
+        // complete_publication respectively. A generic state-only transition
+        // could otherwise create unpublishable or falsely published work.
+        if matches!(
+            to,
+            IngestionState::Staged | IngestionState::Publishing | IngestionState::Published
+        ) {
+            return Err(WorkStoreError::InvalidState(id, item.state));
+        }
+
         // Ownership rules: workers must hold an active lease; operators must
         // not race someone else's active lease.
         match kind {
@@ -1043,8 +1907,12 @@ impl WorkItemStore {
         // Leases belong to active processing: terminal states, operator
         // decisions, and parking in NeedsReview all release the lease so the
         // item is never stranded behind a dead lease.
-        let clear_lease =
-            terminal || kind == TransitionKind::Operator || to == IngestionState::NeedsReview;
+        let clear_lease = terminal
+            || kind == TransitionKind::Operator
+            || matches!(
+                to,
+                IngestionState::NeedsReview | IngestionState::Staged | IngestionState::Published
+            );
 
         let row = sqlx::query_as::<_, WorkItemRow>(
             "UPDATE release_work_items
@@ -1321,19 +2189,25 @@ impl WorkItemStore {
         for row in rows {
             let item = ReleaseWorkItem::try_from(row)?;
             let attempt_count = item.attempt_count + 1;
-            let next_attempt_at = if policy.can_retry(attempt_count) {
+            let convergent_publication = item.state == IngestionState::Publishing;
+            let interrupted_processing =
+                item.state.is_active_processing() && !convergent_publication;
+            let next_attempt_at = if interrupted_processing && policy.can_retry(attempt_count) {
                 policy.next_attempt_at(attempt_count, now)
             } else {
                 None
             };
             // Items merely claimed (still ready) return to the queue without a
             // failure mark; items interrupted mid-stage become failed/lease.lost.
-            let (new_state, error_code): (IngestionState, Option<&str>) =
-                if item.state.is_active_processing() {
-                    (IngestionState::Failed, Some(WorkErrorCode::LEASE_LOST))
-                } else {
-                    (item.state, None)
-                };
+            // Publishing is different: its durable plan and filesystem truth
+            // must converge, so expiry only fences the stale worker and leaves
+            // the item directly reclaimable in Publishing.
+            let (new_state, error_code): (IngestionState, Option<&str>) = if interrupted_processing
+            {
+                (IngestionState::Failed, Some(WorkErrorCode::LEASE_LOST))
+            } else {
+                (item.state, None)
+            };
             sqlx::query(
                 "UPDATE release_work_items
                  SET state = $2,
@@ -1351,7 +2225,7 @@ impl WorkItemStore {
             )
             .bind(item.id)
             .bind(new_state.as_str())
-            .bind(item.state.is_active_processing())
+            .bind(interrupted_processing)
             .bind(i32::try_from(attempt_count).unwrap_or(i32::MAX))
             .bind(now)
             .bind(error_code)
@@ -1372,7 +2246,7 @@ impl WorkItemStore {
                 None,
             )
             .await?;
-            if item.state.is_active_processing() {
+            if interrupted_processing {
                 insert_event(
                     &mut tx,
                     item.id,
@@ -1545,6 +2419,83 @@ impl WorkItemStore {
             .map(ReleaseWorkItemEvent::try_from)
             .collect::<Result<Vec<_>, _>>()
     }
+}
+
+fn stored_publication_from_staged(
+    work_item_id: Uuid,
+    publication: &ManifestPublication,
+    plan: &PublicationPlan,
+    authorized_at: OffsetDateTime,
+) -> StoredPublication {
+    StoredPublication {
+        work_item_id,
+        release_id: publication.release_id,
+        authorization: publication.authorization.clone(),
+        validation: publication.validation.clone(),
+        source_disposition: publication.source_disposition,
+        plan: plan.clone(),
+        plan_hash: publication.plan_hash.clone(),
+        authorized_at,
+        published_at: None,
+        sealed_manifest_hash: None,
+    }
+}
+
+fn has_complete_publication_evidence(
+    plan: &PublicationPlan,
+    plan_hash: &str,
+    sealed_manifest_hash: &str,
+    journal: &[PublicationJournalEntry],
+) -> bool {
+    let bundle_key = format!("bundle_sealed:{plan_hash}");
+    let bundle_sealed = journal.iter().any(|entry| {
+        entry.journal_key == bundle_key
+            && entry.step == PublicationJournalStep::BundleSealed
+            && entry.asset_path.is_none()
+            && entry.size_bytes.is_none()
+            && entry.byte_hash.is_none()
+    });
+    if !bundle_sealed {
+        return false;
+    }
+
+    let mut unique_paths = std::collections::BTreeSet::new();
+    for asset in &plan.assets {
+        if !unique_paths.insert(asset.canonical_path.as_str()) {
+            continue;
+        }
+        let asset_key = format!("asset:{}", asset.canonical_path);
+        if !journal.iter().any(|entry| {
+            entry.journal_key == asset_key
+                && entry.step == PublicationJournalStep::AssetCopied
+                && entry.asset_path.as_deref() == Some(asset.canonical_path.as_str())
+                && entry.size_bytes == Some(asset.size_bytes)
+                && entry.byte_hash.as_deref() == Some(asset.byte_hash.as_str())
+        }) {
+            return false;
+        }
+    }
+
+    [
+        (
+            PublicationJournalStep::Finalized,
+            format!("finalized:{plan_hash}"),
+        ),
+        (
+            PublicationJournalStep::FinalAdopted,
+            format!("final_adopted:{plan_hash}"),
+        ),
+    ]
+    .into_iter()
+    .any(|(step, key)| {
+        journal.iter().any(|entry| {
+            entry.journal_key == key
+                && entry.step == step
+                && entry.asset_path.as_deref() == Some(plan.manifest_relative_path.as_str())
+                && entry.size_bytes.is_some_and(|size| size > 0)
+                && entry.byte_hash.as_deref() == Some(sealed_manifest_hash)
+        })
+    })
 }
 
 /// Locks a work item row for update inside a transaction.
