@@ -1,4 +1,4 @@
--- Phase 1A: append-only work-item transition history (SPEC.md section 11;
+-- Append-only work-item transition history (SPEC.md section 11;
 -- PRD-INGEST-010 operator visibility: "what happened to this Release and why").
 --
 -- Append-only by convention and by constraint surface: no UPDATE/DELETE paths

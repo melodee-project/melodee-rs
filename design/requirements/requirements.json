@@ -324,13 +324,16 @@
     "phase": "2",
     "source": "PRD.md",
     "line": 568,
-    "status": "in-progress",
+    "status": "tested",
     "implementation": [
       "crates/melodee-persistence/migrations/0002_release_work_item_events.sql",
-      "apps/melodee-cli/src/main.rs (work show prints state, attempts, last error, event history)"
+      "apps/melodee-cli/src/main.rs (work show prints state, attempts, last error, event history)",
+      "apps/melodee-server/src/admin.rs (Admin diagnostics API: state counts, bounded listing, work-item detail, event history, active leases)",
+      "apps/melodee-server/src/main.rs (admin diagnostics routes wired into the server router)"
     ],
     "tests": [
-      "crates/melodee-persistence/tests/history.rs"
+      "crates/melodee-persistence/tests/history.rs",
+      "apps/melodee-server/tests/admin_diagnostics_api.rs (13 integration tests against real PostgreSQL)"
     ]
   },
   {

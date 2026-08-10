@@ -7,7 +7,7 @@ sidebar:
 
 Melodee separates **inbound** media from **library** storage:
 
-- **Inbound** is where new data is staged. In Phase 1B this path is discovered and snapshotted for
+- **Inbound** is where new data is staged. This path is discovered and snapshotted for
   settling; it is not deleted or renamed by discovery.
 - **Library storage** holds stable canonical assets created in later phases.
 

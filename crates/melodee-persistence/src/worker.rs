@@ -1,4 +1,4 @@
-//! Process-unique worker identity (Phase 1A work-package part XVII).
+//! Process-unique worker identity.
 //!
 //! Format: `{hostname}-{pid}-{uuidv7}`.
 //!

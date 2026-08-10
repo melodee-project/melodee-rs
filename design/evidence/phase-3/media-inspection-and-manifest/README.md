@@ -1,22 +1,23 @@
-# Phase 1C evidence — media inspection and versioned Release manifests
+# Phase 3 Evidence — Media inspection and versioned Release manifests
 
 ## Scope
 
-Phase 1C adds the read-only media observation stage after Phase 1B settling:
+Phase 3 sub-slice 3.1 adds the read-only media observation stage after Phase 2
+settling:
 
 ```text
 Ready -> Inspecting -> Normalizing
 ```
 
-`Normalizing` is the durable handoff state only; media normalization/transcoding is deliberately not
-implemented here.
+`Normalizing` is the durable handoff state only; media normalization/transcoding
+is deliberately not implemented in this sub-slice.
 
 ## Architecture
 
 - `crates/melodee-media` is the compile-time boundary around Lofty and ffprobe. It returns Melodee-owned
   manifest types and never exposes third-party parser/probe structures.
-- `crates/melodee-ingestion/src/inspect.rs` claims Ready work with the Phase 1A PostgreSQL lease, checks
-  the Phase 1B settling signature before and after inspection, runs blocking media work on the Tokio
+- `crates/melodee-ingestion/src/inspect.rs` claims Ready work with the Phase 2 PostgreSQL lease, checks
+  the Phase 2 settling signature before and after inspection, runs blocking media work on the Tokio
   blocking pool, and releases or fails the lease through the existing store.
 - `release_work_item_manifests` stores one schema-versioned JSONB manifest per work item. Publication,
   `manifest_hash`, `Inspecting -> Normalizing`, lease release, and history event are one PostgreSQL
@@ -54,8 +55,8 @@ returns to Settling.
   handling before inspection, and a source change during a deliberately delayed ffprobe call.
 - The same test creates 200 stable synthetic Releases, repeatedly claims/inspects them, and asserts 200
   work items, 200 manifests, and zero duplicate manifest rows. PostgreSQL's unique `(work_item_id)`
-  manifest constraint and Phase 1A lease claim provide the concurrent-worker proof.
-- A worker crash before publication leaves `Inspecting` leased; Phase 1A lease recovery records the loss
+  manifest constraint and the Phase 2 lease claim provide the concurrent-worker proof.
+- A worker crash before publication leaves `Inspecting` leased; the Phase 2 lease recovery records the loss
   and schedules retry. Publication checks lease ownership again, so expired workers cannot publish stale
   results.
 
@@ -71,7 +72,7 @@ normal workspace suite. Measurements are observations of this development host, 
   and canonical artwork publication remain later phases.
 - The current manifest is stored in PostgreSQL JSONB. A future accepted ADR may add a filesystem work-area
   copy for very large manifests, but no second authoritative store exists now.
-- Sidecars are inventoried in Phase 1C; complete CUE/NFO/playlist/lyrics semantic parsing remains later
+- Sidecars are inventoried in this sub-slice; complete CUE/NFO/playlist/lyrics semantic parsing remains later
   work.
 
 ## Requirements and references

@@ -77,7 +77,7 @@ pub enum InspectionError {
 }
 
 /// Inspect all files below `release_root` without writing to the source.
-/// `expected_signature` is the Phase 1B settling signature; callers compare it
+/// `expected_signature` is the settling signature; callers compare it
 /// before and after this operation as well, because a stable source can change
 /// during a long inspection.
 pub fn inspect_release(

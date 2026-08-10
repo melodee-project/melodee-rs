@@ -191,7 +191,7 @@ minutes, `validation.maximumSongNumber=9999`, years 1860..2150. Measured per cas
   reprocess event (LibraryInsertJob.cs:539-556, code-verified).
 - **No atomicity guarantees**: partial mutations persist (matching the API-layer findings
   cluster). Interruption/restart semantics are not transactional anywhere in the pipeline —
-  the primary motivation for Phase 1A durable work items.
+  the primary motivation for durable work items (Phase 2).
 
 ## 12. Key legacy deficiencies (input to Rust requirements, NOT things to preserve)
 

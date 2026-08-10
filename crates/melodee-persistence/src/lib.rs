@@ -1,10 +1,9 @@
 //! PostgreSQL persistence for Melodee (ADR-0105, ADR-0110).
 //!
-//! Phase 1A scope: durable Release work items — schema migrations, transactional
-//! claiming (`FOR UPDATE SKIP LOCKED`), leases, recovery, retries, failure
-//! evidence, and append-only transition history. Domain rules live in
-//! `melodee-domain`; this crate maps them to SQL and never invents state
-//! transitions itself.
+//! Durable Release work items: schema migrations, transactional claiming
+//! (`FOR UPDATE SKIP LOCKED`), leases, recovery, retries, failure evidence,
+//! and append-only transition history. Domain rules live in `melodee-domain`;
+//! this crate maps them to SQL and never invents state transitions itself.
 
 #![forbid(unsafe_code)]
 
@@ -21,6 +20,6 @@ pub use config::{
 pub use error::WorkStoreError;
 pub use migrate::{MIGRATOR, migrate};
 pub use work_items::{
-    SettlingSnapshot, SettlingSnapshotFile, StateCount, StoredManifest, WorkItemStore,
+    ActiveLease, SettlingSnapshot, SettlingSnapshotFile, StateCount, StoredManifest, WorkItemStore,
 };
 pub use worker::WorkerId;

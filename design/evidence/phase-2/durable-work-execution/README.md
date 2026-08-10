@@ -1,7 +1,7 @@
-# Phase 1A Evidence — Durable PostgreSQL-backed Release Work Execution
+# Phase 2 Evidence — Durable PostgreSQL-backed Release Work Execution
 
-**Work package:** Phase 1A (durable Release work items, state transitions, leasing, retries,
-recovery, failure evidence)
+**Work package:** Phase 2 sub-slice 2.1 — durable Release work items, state
+transitions, leasing, retries, recovery, failure evidence
 **Date:** 2026-08-09
 **Status:** Complete
 **Authority:** SPEC.md section 11, PRD-INGEST-001/002, PRD-WORK-001/004/005, PRD-OBS-001,
@@ -16,7 +16,7 @@ ADR-0105 (PostgreSQL), ADR-0110 (SQLx/explicit SQL), ADR-0111 (no broker/Redis)
 | Migrations (explicit SQL) | `crates/melodee-persistence/migrations/0001_*.sql`, `0002_*.sql` |
 | CLI diagnostics | `apps/melodee-cli/src/main.rs` (`migrate`, `work list/show/seed-test/claim-test`) |
 | Integration tests (real PostgreSQL) | `crates/melodee-persistence/tests/` |
-| Claim benchmark evidence | `design/evidence/phase-1a/work-claim-benchmark.json` |
+| Claim benchmark evidence | `design/evidence/phase-2/durable-work-execution/work-claim-benchmark.json` |
 
 ## 2. Schema
 
@@ -99,7 +99,7 @@ clocks and never sleep.
 Persisted errors are operator-safe strings + machine-readable codes only. No secrets are
 written to `last_error_*`, `state_reason`, event metadata, or logs: the repository never
 receives credentials (the database URL lives only in the CLI pool factory and is never
-printed). Secret-scan gate: `tests/python` suite + repo grep in the Phase 1A validation run.
+printed). Secret-scan gate: `tests/python` suite + repo grep in the durable-work validation run.
 
 ## 7. Configuration
 

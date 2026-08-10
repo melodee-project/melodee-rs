@@ -240,7 +240,7 @@
       "crates/melodee-persistence/tests/recovery.rs (permanent/review failure classes)",
       "crates/melodee-domain unit tests (retry backoff)"
     ],
-    "note": "Per-Release retry with bounded exponential backoff operates on durable work items (no root rescans). Media-stage retries arrive with Phase 1B+ stages."
+    "note": "Per-Release retry with bounded exponential backoff operates on durable work items (no root rescans). Media-stage retries arrive with later phases."
   },
   "PRD-INGEST-002": {
     "status": "implemented",
@@ -338,7 +338,7 @@
       "design/evidence/phase-0/scale-baseline.md section 4 (per-Release pipeline cost shape ~3s; non-transactional restart behavior evidence)"
     ],
     "tests": [],
-    "note": "The 200-Release crash/restart benchmark targets the Rust pipeline (Phase 1A+); legacy per-Release cost shape and durability hazards are baselined."
+    "note": "The 200-Release crash/restart benchmark targets the Rust pipeline; legacy per-Release cost shape and durability hazards are baselined."
   },
   "PRD-PERF-005": {
     "status": "in-progress",
@@ -392,7 +392,7 @@
       "compatibility/melodee-api-v1/golden/native-auth/ (refresh replay/rotation fault evidence)"
     ],
     "tests": [],
-    "note": "Crash/retry/idempotency fault-injection harness targets the Rust pipeline (Phase 1A+); legacy fault behavior baselined."
+    "note": "Crash/retry/idempotency fault-injection harness targets the Rust pipeline; legacy fault behavior baselined."
   },
   "PRD-TEST-007": {
     "status": "in-progress",
@@ -446,15 +446,18 @@
     "note": "Structured tracing across work execution; API/provider correlation propagation arrives with those surfaces."
   },
   "PRD-INGEST-010": {
-    "status": "in-progress",
+    "status": "tested",
     "implementation": [
       "crates/melodee-persistence/migrations/0002_release_work_item_events.sql",
-      "apps/melodee-cli/src/main.rs (work show prints state, attempts, last error, event history)"
+      "apps/melodee-cli/src/main.rs (work show prints state, attempts, last error, event history)",
+      "apps/melodee-server/src/admin.rs (Admin diagnostics API: state counts, bounded listing, work-item detail, event history, active leases)",
+      "apps/melodee-server/src/main.rs (admin diagnostics routes wired into the server router)"
     ],
     "tests": [
-      "crates/melodee-persistence/tests/history.rs"
+      "crates/melodee-persistence/tests/history.rs",
+      "apps/melodee-server/tests/admin_diagnostics_api.rs (13 integration tests against real PostgreSQL)"
     ],
-    "note": "State/worker/attempts/last error/timestamps/history are durable and CLI-visible; Admin UI surface is Phase 9+."
+    "note": "State/worker/attempts/last error/timestamps/history are durable and visible through both the CLI and the Admin diagnostics API. The Admin UI surface is a later phase."
   },
   "PRD-WORK-003": {
     "status": "tested",
@@ -481,7 +484,7 @@
       "crates/melodee-persistence/tests/manifests.rs",
       "crates/melodee-ingestion/tests/inspection.rs"
     ],
-    "note": "Phase 1C publishes inspection manifests and hands work to Normalizing; normalization and catalog publication remain later phases."
+    "note": "Phase 3 sub-slice 3.1 publishes inspection manifests and hands work to Normalizing; normalization and catalog publication remain later sub-slices."
   },
   "PRD-INGEST-008": {
     "status": "tested",
@@ -514,7 +517,7 @@
       "crates/melodee-media/src/lib.rs",
       "crates/melodee-ingestion/tests/inspection.rs"
     ],
-    "note": "Observed tags are preserved; canonical identity resolution is not part of Phase 1C."
+    "note": "Observed tags are preserved; canonical identity resolution is not part of media inspection."
   },
   "PRD-MEDIA-005": {
     "status": "tested",
@@ -534,7 +537,7 @@
     "tests": [
       "crates/melodee-media/src/lib.rs (classification_preserves_control_and_sidecars)"
     ],
-    "note": "Phase 1C inventories sidecars; it does not implement policy or complete sidecar parsing."
+    "note": "Media inspection inventories sidecars; it does not implement policy or complete sidecar parsing."
   },
   "PRD-FP-001": {
     "status": "tested",
@@ -554,6 +557,6 @@
     "tests": [
       "crates/melodee-media/src/lib.rs (byte_hash_distinguishes_same_size_content)"
     ],
-    "note": "No acoustic fingerprint or underlying-audio identity is implemented in Phase 1C."
+    "note": "No acoustic fingerprint or underlying-audio identity is implemented in media inspection."
   }
 }

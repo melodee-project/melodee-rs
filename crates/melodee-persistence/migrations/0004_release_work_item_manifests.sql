@@ -1,4 +1,4 @@
--- Phase 1C: durable versioned manifest publication and inspection evidence.
+-- Durable versioned manifest publication and inspection evidence (Phase 3).
 
 CREATE TABLE release_work_item_manifests (
     id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

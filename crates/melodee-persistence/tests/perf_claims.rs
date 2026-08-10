@@ -1,6 +1,6 @@
 //! Performance evidence for work claiming (work-package part XXVIII):
 //! a nontrivial queue, many workers, zero duplicate ownership, query plan
-//! capture. Writes `design/evidence/phase-1a/work-claim-benchmark.json`.
+//! capture. Writes `design/evidence/phase-2/durable-work-execution/work-claim-benchmark.json`.
 //!
 //! These measurements are evidence, not user-facing performance claims; no
 //! thresholds are asserted (PRD-PERF-001).
@@ -107,8 +107,8 @@ async fn claim_benchmark_10k_queue_32_workers() {
         "claimQueryPlan": plan_text,
         "note": "Evidence only; no performance threshold asserted (PRD-PERF-001). Environment: dev PostgreSQL on localhost, debug build.",
     });
-    let out_dir =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../design/evidence/phase-1a");
+    let out_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../design/evidence/phase-2/durable-work-execution");
     std::fs::create_dir_all(&out_dir).expect("evidence dir");
     std::fs::write(
         out_dir.join("work-claim-benchmark.json"),

@@ -34,5 +34,5 @@ test ergonomics before acceptance.
   legacy schema's unique constraints and leasing needs are documented (Issue 8/9 evidence).
 - **Technology revalidation (2026-08-09):** crates.io — sqlx 0.9.0 (2026-05-21),
   MIT OR Apache-2.0, active. No commercial boundary.
-- The ADR's prototype validation (work-item claiming, offline query metadata) is Phase 1A
+- The ADR's prototype validation (work-item claiming, offline query metadata) is Phase 2
   scope and remains the implementation gate.

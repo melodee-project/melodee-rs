@@ -2,20 +2,24 @@ use std::{env, error::Error, net::SocketAddr};
 
 use axum::{Json, Router, routing::get};
 use melodee_ingestion::{IngestionConfig, start_inspection_loop, start_reconciliation_loop};
-use melodee_persistence::{WorkEngineConfig, migrate};
+use melodee_persistence::{WorkEngineConfig, WorkItemStore, migrate};
+use melodee_server::admin;
 use serde::Serialize;
 use tokio::sync::oneshot;
 use tower_http::trace::TraceLayer;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
 
+/// Runtime health/version metadata (SPEC section 27). Describes service health
+/// and version only — it intentionally does NOT carry an internal implementation
+/// phase label (those belong in IMPLEMENTATION.md/design/evidence, not runtime
+/// status, where they go stale after every session).
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct SystemInfo {
     service: &'static str,
     version: &'static str,
     status: &'static str,
-    phase: &'static str,
 }
 
 async fn healthz() -> Json<SystemInfo> {
@@ -23,7 +27,6 @@ async fn healthz() -> Json<SystemInfo> {
         service: "melodee-server",
         version: env!("CARGO_PKG_VERSION"),
         status: "ok",
-        phase: "phase-1c-media-inspection",
     })
 }
 
@@ -98,9 +101,34 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let bind = env::var("MELODEE_BIND").unwrap_or_else(|_| "127.0.0.1:8080".to_owned());
     let address: SocketAddr = bind.parse()?;
 
+    let admin_state = admin::AdminState {
+        pool: pool.clone(),
+        store: WorkItemStore,
+    };
     let app = Router::new()
         .route("/healthz", get(healthz))
         .route("/api/admin/v1/system/info", get(healthz))
+        .route(
+            "/api/admin/v1/ingest/work-items/counts",
+            get(admin::work_item_counts),
+        )
+        .route(
+            "/api/admin/v1/ingest/work-items",
+            get(admin::list_work_items),
+        )
+        .route(
+            "/api/admin/v1/ingest/work-items/{id}",
+            get(admin::get_work_item),
+        )
+        .route(
+            "/api/admin/v1/ingest/work-items/{id}/events",
+            get(admin::list_work_item_events),
+        )
+        .route(
+            "/api/admin/v1/ingest/leases",
+            get(admin::list_active_leases),
+        )
+        .with_state(admin_state)
         .layer(TraceLayer::new_for_http());
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();

@@ -1,4 +1,4 @@
-//! Explicit work-engine configuration (Phase 1A work-package part XXV).
+//! Explicit work-engine configuration.
 //!
 //! Only these keys are read from the environment. The legacy server's
 //! indiscriminate absorption of every process environment variable is

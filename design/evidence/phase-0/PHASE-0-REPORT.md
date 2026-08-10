@@ -47,7 +47,7 @@ changes observable behavior for clients that worked around it; (R3) playlist mut
 change error behavior MeloAmp partially depends on (its add-to-playlist is already broken);
 (R4) public-ID preservation across migration is mandatory and evidenced.
 
-**Readiness for Phase 1:** all foundational decisions needed for Phase 1A are ratified
+**Readiness for Phase 1:** all foundational decisions needed for Phase 1 are ratified
 (ADR-0106/0107/0108/0110/0111/0112 accepted this phase; ADR-0109 Carbon remains Proposed for
 Phase 9 validation). No unidentified foundational blocker remains.
 
@@ -148,7 +148,7 @@ memory budgets are proposals requiring ratification).
    the 400). **RECORDED (2026-08-09):**
    [ADR-0114](../../adr/ADR-0114-accept-meloamp-playlist-add-songs-object-body-alongside-canonical-array-form.md)
    (**Proposed**, Phase 7 scope): preserve the bare-array contract AND additionally accept
-   MeloAmp's object body. Does not block Phase 1A.
+    MeloAmp's object body. Does not block Phase 1.
 4. **R4 — Public-ID preservation.** All golden evidence pins deterministic public IDs;
    migration must preserve them verbatim (PRD-API-M1-004).
 5. **R5 — Advertised-but-broken extensions** (`apiKeyAuthentication`, `transcodeOffset`):

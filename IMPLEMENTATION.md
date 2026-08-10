@@ -1,7 +1,12 @@
 # Melodee Rust Rewrite — Implementation Guide
 
-**Status:** Phased execution plan — **Phase 0 complete (2026-08-09)**; see
-[design/evidence/phase-0/PHASE-0-REPORT.md](design/evidence/phase-0/PHASE-0-REPORT.md)  
+**Status:** Phased execution plan — **Phase 0 complete (2026-08-09)**, see
+[design/evidence/phase-0/PHASE-0-REPORT.md](design/evidence/phase-0/PHASE-0-REPORT.md);
+**Phase 1 complete (2026-08-09)**, see
+[design/evidence/phase-1/PHASE-1-REPORT.md](design/evidence/phase-1/PHASE-1-REPORT.md);
+**Phase 2 complete (2026-08-09)**, see
+[design/evidence/phase-2/PHASE-2-REPORT.md](design/evidence/phase-2/PHASE-2-REPORT.md);
+**Phase 3 in progress** (sub-slice 3.1 complete; 3.2–3.4 planned).
 **Date:** 2026-08-07  
 **Governing documents:** [PRD.md](PRD.md), [SPEC.md](SPEC.md), accepted ADRs
 
@@ -154,12 +159,44 @@ Replace broad filesystem sweeps and in-memory progress with one durable work ite
 - Idempotency keys and stage orchestration.
 - Processing queue/worker diagnostics API.
 
+### Sub-slices
+
+Sub-slices are work-management units **within** this official phase. They are never referred to
+as "Phase 1A/1B/etc."; they exist only to bound work packages for coding agents.
+
+- **2.1 Durable work execution** — ReleaseWorkItem schema, state machine, leasing, retries,
+  recovery, failure evidence, transition history. **Status: complete** — see
+  [design/evidence/phase-2/durable-work-execution/README.md](design/evidence/phase-2/durable-work-execution/README.md).
+- **2.2 Discovery and settling** — inbound discovery, periodic reconciliation, settling
+  snapshots, ready markers, source safety, idempotent rediscovery. **Status: complete** — see
+  [design/evidence/phase-2/discovery-and-settling/README.md](design/evidence/phase-2/discovery-and-settling/README.md).
+- **2.3 Diagnostics and Phase 2 closure** — processing queue/worker diagnostics API
+  (state counts, bounded listing, work-item detail, event history, active-lease evidence),
+  failure-isolation acceptance test, consolidated exit evidence. **Status: complete** — see
+  [design/evidence/phase-2/PHASE-2-REPORT.md](design/evidence/phase-2/PHASE-2-REPORT.md).
+
+### Watcher acceleration
+
+PRD-INGEST-003 and SPEC section 11.3 establish that filesystem watchers are **optional
+accelerators only**; periodic reconciliation is the authoritative correctness mechanism and
+guarantees eventual discovery when watcher events are lost or unsupported. The current
+implementation intentionally relies on periodic reconciliation as authoritative truth and does
+**not** add a filesystem-watcher dependency. This satisfies PRD-INGEST-003: missed watcher
+events cannot lose work because reconciliation recovers them (proven by
+`lost_watcher_notification_is_recovered_by_scan`). A watcher may be added later as an
+optimization that wakes/schedules reconciliation; it must never let watcher events directly
+become authoritative durable state. Adding a watcher is **deferred** as an optional optimization
+and is not required for Phase 2 completion.
+
 ### Exit criteria
 
-- 200 candidates become independent durable work items.
-- Process termination at each stage is recoverable.
-- One failed Release does not block others.
-- No Release disappears due to a global scan timestamp.
+- 200 candidates become independent durable work items. ✅
+- Process termination at each stage is recoverable. ✅ (Phase 2 work-engine stages proven)
+- One failed Release does not block others. ✅
+- No Release disappears due to a global scan timestamp. ✅ (per-item durable state, no global
+  scan timestamp gates discovery)
+
+**Phase 2: COMPLETE (2026-08-09).**
 
 ## 6. Phase 3 — Media inspection, normalization, and manifests
 
@@ -178,11 +215,32 @@ Produce validated, versioned manifests and canonical MP3 media safely.
 - Temp work directories, verification, atomic/resumable publication.
 - Versioned manifest schema and upgrade tests.
 
+### Sub-slices
+
+- **3.1 Media inspection and Release manifest v1** — `melodee-media` boundary, Lofty/ffprobe
+  observation, source file classification, artwork observation, sidecar inventory, streaming
+  BLAKE3 byte hashing, ReleaseManifest schema v1, semantic manifest hashing, PostgreSQL JSONB
+  manifest persistence, inspection worker, source-change-before/during-inspection protection,
+  Ready→Inspecting→Normalizing handoff, 200-Release inspection scenario. **Status: complete** —
+  see [design/evidence/phase-3/media-inspection-and-manifest/README.md](design/evidence/phase-3/media-inspection-and-manifest/README.md).
+- **3.2 Media normalization and acoustic fingerprinting** — canonical high-quality VBR MP3
+  normalization (PRD-MEDIA-002), FFmpeg child-process runner with bounded conversion concurrency
+  and cancellation, Chromaprint/fpcalc acoustic fingerprints (PRD-FP-003), artwork
+  extraction/validation/normalization, semantic sidecar parsing required for parity. **Status: planned.**
+- **3.3 Verification and atomic canonical publication** — staging temp work directories,
+  output verification, atomic/resumable publication, canonical storage publication
+  (PRD-INGEST-006), crash/retry safety, versioned manifest update/upgrade semantics. **Status: planned.**
+- **3.4 Phase 3 integration / release gate** — representative MP3/FLAC/OGG/WAV and pathology
+  corpus passes, manifest completeness for catalog insertion, conversion crash/retry source
+  safety. **Status: planned.**
+
 ### Exit criteria
 
 - Representative MP3/FLAC/OGG/WAV and pathology corpus passes.
 - Manifests contain enough information for catalog insertion without rereading audio.
 - Conversion crashes/retries do not corrupt source or publish partial Releases.
+
+**Phase 3: IN PROGRESS** (sub-slice 3.1 complete; 3.2–3.4 planned).
 
 ## 7. Phase 4 — Catalog, Artist identity, and contributions
 

@@ -142,9 +142,12 @@ async fn main() {
 
     match cli.command {
         Commands::Plan => {
-            println!("Current phase: Phase 1B — durable inbound discovery and settling");
+            println!("Official roadmap: IMPLEMENTATION.md");
+            println!("Phase 0: complete — see design/evidence/phase-0/PHASE-0-REPORT.md");
+            println!("Phase 1: complete — see design/evidence/phase-1/PHASE-1-REPORT.md");
+            println!("Phase 2: complete — see design/evidence/phase-2/PHASE-2-REPORT.md");
+            println!("Phase 3: in progress — media inspection complete; normalization/pending");
             println!("Read: PRD.md, SPEC.md, IMPLEMENTATION.md, AGENTS.md");
-            println!("Phase 0 baseline: git tag phase-0-baseline");
         }
         Commands::Doctor => {
             let checks = [

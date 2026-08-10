@@ -83,7 +83,7 @@ of remaining iterations (A/B: 5 iterations; C: 3).
   per-file ATL reads, conversion, artwork, validation). This is NOT a throughput-optimized
   figure — it establishes the per-Release cost shape. A 200-Release burst (PRD reference
   scenario) at this shape is ~10 minutes of pipeline time; crash/restart behavior is
-  non-transactional (media-baseline.md §11) — the Phase 1A durable-work-item motivation.
+  non-transactional (media-baseline.md §11) — the durable-work-item motivation (Phase 2).
 - No-op/already-processed scan: directories with an up-to-date melodee.json and no modified
   files are skipped by mtime rules (code-verified, FileSystemDirectoryInfoExtensions.cs:303-386);
   timing at scale was not meaningfully measurable in the fixture environment and is recorded

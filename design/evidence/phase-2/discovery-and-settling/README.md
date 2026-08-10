@@ -1,5 +1,7 @@
-# Phase 1B Evidence — Durable Inbound Discovery and Settling
+# Phase 2 Evidence — Durable Inbound Discovery and Settling
 
+**Work package:** Phase 2 sub-slice 2.2 — inbound discovery, reconciliation,
+settling, ready markers
 **Date:** 2026-08-09  
 **Status:** Complete  
 **Authority:** SPEC.md sections 11, 11.3, 11.4, 12–14; PRD-INGEST-003/004/005; PRD-WORK-003/004
@@ -115,7 +117,7 @@ Reconciliation and settling paths emit structured trace events for discovery and
 
 ## 9) Performance evidence
 
-`design/evidence/phase-1b/perf-settling-benchmark.json` was produced from ignored benchmark test
+`design/evidence/phase-2/discovery-and-settling/perf-settling-benchmark.json` was produced from ignored benchmark test
 `melodee-ingestion::performance_snapshot_settling` with:
 
 - small Release baseline pass

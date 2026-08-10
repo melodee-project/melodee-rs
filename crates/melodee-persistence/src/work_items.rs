@@ -29,6 +29,26 @@ pub struct StateCount {
     pub count: i64,
 }
 
+/// An active lease proven by PostgreSQL evidence (PRD-WORK-002, PRD-INGEST-010).
+///
+/// This is what the durable store can prove: a row currently holds an
+/// unexpired lease. It is **not** a live-worker liveness claim — there is no
+/// heartbeat/liveness store yet, so a lease owner string proves "some worker
+/// claimed this item and the lease has not expired", not "that worker process
+/// is alive right now". The diagnostics API exposes exactly this and nothing
+/// more, so operators are never misled about worker liveness.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActiveLease {
+    pub work_item_id: Uuid,
+    pub api_key: Uuid,
+    pub state: IngestionState,
+    pub lease_owner: String,
+    pub lease_acquired_at: OffsetDateTime,
+    pub lease_expires_at: OffsetDateTime,
+    /// Most recent durable activity (state update timestamp).
+    pub last_activity_at: OffsetDateTime,
+}
+
 #[derive(Debug, FromRow)]
 struct WorkItemRow {
     id: Uuid,
@@ -753,7 +773,7 @@ impl WorkItemStore {
 
     /// System-kind transitions (discovery, settling, retry requeue): no lease
     /// required, but an active lease held by a worker blocks system moves.
-    /// Used by discovery/settling (Phase 1B) and by tests/diagnostics.
+    /// Used by discovery/settling and by tests/diagnostics.
     #[instrument(skip_all, fields(work_item_id = %id, to_state = to.as_str()))]
     pub async fn system_transition(
         &self,
@@ -1057,7 +1077,7 @@ impl WorkItemStore {
     }
 
     /// Renews a held, unexpired lease (heartbeat). Deferred long-running stages
-    /// can call this without any schema change — proof the Phase 1A design
+    /// can call this without any schema change — proof the durable-work design
     /// supports renewal without redesign.
     #[instrument(skip_all, fields(work_item_id = %id, worker_id = %worker))]
     pub async fn renew_lease(
@@ -1270,6 +1290,62 @@ impl WorkItemStore {
                     state: IngestionState::parse(&state)
                         .ok_or(WorkStoreError::CorruptState(state))?,
                     count,
+                })
+            })
+            .collect()
+    }
+
+    /// Active (unexpired) leases proven by PostgreSQL evidence, bounded by
+    /// `limit` (newest expiry first). This is lease evidence only — it proves a
+    /// row holds an unexpired lease, not that the owner process is alive (there
+    /// is no heartbeat store yet). Used by the diagnostics API to show what is
+    /// currently claimed without overclaiming worker liveness.
+    pub async fn list_active_leases(
+        &self,
+        pool: &PgPool,
+        now: OffsetDateTime,
+        limit: u32,
+    ) -> Result<Vec<ActiveLease>, WorkStoreError> {
+        let rows = sqlx::query_as::<_, WorkItemRow>(
+            "SELECT * FROM release_work_items
+             WHERE lease_expires_at IS NOT NULL AND lease_expires_at > $1
+             ORDER BY lease_expires_at DESC, id
+             LIMIT $2",
+        )
+        .bind(now)
+        .bind(i64::from(limit.min(500)))
+        .fetch_all(pool)
+        .await?;
+        rows.into_iter()
+            .map(|row| {
+                let lease_owner =
+                    row.lease_owner
+                        .clone()
+                        .ok_or(WorkStoreError::CorruptState(format!(
+                            "missing lease_owner on {}",
+                            row.id
+                        )))?;
+                let lease_acquired_at =
+                    row.lease_acquired_at
+                        .ok_or(WorkStoreError::CorruptState(format!(
+                            "missing lease_acquired_at on {}",
+                            row.id
+                        )))?;
+                let lease_expires_at =
+                    row.lease_expires_at
+                        .ok_or(WorkStoreError::CorruptState(format!(
+                            "missing lease_expires_at on {}",
+                            row.id
+                        )))?;
+                Ok(ActiveLease {
+                    work_item_id: row.id,
+                    api_key: row.api_key,
+                    state: IngestionState::parse(&row.state)
+                        .ok_or_else(|| WorkStoreError::CorruptState(row.state.clone()))?,
+                    lease_owner,
+                    lease_acquired_at,
+                    lease_expires_at,
+                    last_activity_at: row.updated_at,
                 })
             })
             .collect()

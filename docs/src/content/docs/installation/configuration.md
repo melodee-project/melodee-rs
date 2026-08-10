@@ -28,7 +28,7 @@ Only documented keys are supported.
 | `MELODEE__WORK__MAX_ATTEMPTS` | `5` | Retry attempts before parking a failed item. |
 | `MELODEE__WORK__CLAIM_BATCH_SIZE` | `4` | Max items claimed in one SQL `FOR UPDATE SKIP LOCKED` poll. |
 
-### Inbound discovery and settling (Phase 1B)
+### Inbound discovery and settling
 
 | Key | Default | Effect |
 | --- | --- | --- |
@@ -42,7 +42,7 @@ Only documented keys are supported.
 | `MELODEE__INGEST__READY_MARKER_NAME` | `.melodee-ready` | Marker filename that can short-circuit settling. |
 | `MELODEE__INGEST__READY_MARKER_SHORTCUT_SECONDS` | `0` | Quiet-period override when marker is present. |
 
-### Media inspection (Phase 1C)
+### Media inspection
 
 | Key | Default | Effect |
 | --- | --- | --- |
@@ -54,5 +54,5 @@ Only documented keys are supported.
 
 - `MELODEE__INGEST__SOURCES_JSON` and the legacy single-root variables are mutually additive only through configuration code: JSON takes precedence when present.
 - If no inbound source is configured, startup remains healthy and periodic reconciliation is not started.
-- Phase 1C inspection requires a working `ffprobe` executable. It reads source media and stores a
+- Media inspection requires a working `ffprobe` executable. It reads source media and stores a
   versioned manifest in PostgreSQL; it does not normalize, move, rename, or delete source files.

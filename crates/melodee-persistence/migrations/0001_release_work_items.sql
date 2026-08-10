@@ -1,4 +1,4 @@
--- Phase 1A: durable Release work items (SPEC.md section 11.1).
+-- Durable Release work items (SPEC.md section 11.1).
 --
 -- Processing state only: this table is never the catalog Release entity.
 -- All timestamps are UTC (timestamptz).
