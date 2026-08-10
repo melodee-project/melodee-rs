@@ -5,6 +5,7 @@ use melodee_catalog::{CatalogConfig, import_once};
 use melodee_domain::{IngestionState, ReleaseWorkItem};
 use melodee_ingestion::{IngestionConfig, publish_once, reconcile_all_sources, validate_once};
 use melodee_persistence::{CatalogStore, WorkEngineConfig, WorkItemStore, WorkerId, migrate};
+use melodee_policy::{PolicyConfig, PolicyDryRunner, PolicyEngine};
 use sqlx::PgPool;
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -38,6 +39,11 @@ enum Commands {
     Catalog {
         #[command(subcommand)]
         command: CatalogCommands,
+    },
+    /// Phase 5 policy classification, novelty, and dry-run diagnostics.
+    Policy {
+        #[command(subcommand)]
+        command: PolicyCommands,
     },
 }
 
@@ -116,6 +122,20 @@ enum CatalogCommands {
         /// Work item id or API key.
         id: Uuid,
     },
+}
+
+#[derive(Debug, Subcommand)]
+enum PolicyCommands {
+    /// Dry-run policy evaluation against the catalog (no destructive action).
+    DryRun {
+        /// Maximum number of Releases to evaluate.
+        #[arg(long, default_value_t = 100)]
+        limit: u32,
+    },
+    /// Show default policy rules.
+    Rules,
+    /// Show current policy configuration.
+    Config,
 }
 
 fn command_available(command: &str, version_argument: &str) -> bool {
@@ -649,6 +669,51 @@ async fn main() {
                 },
             }
         }
+        Commands::Policy { command } => {
+            let policy_config = match PolicyConfig::from_env() {
+                Ok(c) => c,
+                Err(error) => {
+                    eprintln!("error: invalid policy configuration: {error}");
+                    std::process::exit(2);
+                }
+            };
+            let pool = pool().await;
+            let engine = PolicyEngine::new(policy_config.clone());
+            let store = melodee_persistence::PolicyStore;
+            match command {
+                PolicyCommands::DryRun { limit } => {
+                    let now = OffsetDateTime::now_utc();
+                    match run_policy_dry_run(&engine, &store, &pool, limit, now).await {
+                        Ok(stats) => {
+                            println!(
+                                "dry-run: evaluated={} decisions={} errors={} duration_ms={}",
+                                stats.evaluated, stats.decisions, stats.errors, stats.duration_ms
+                            );
+                        }
+                        Err(error) => {
+                            eprintln!("error: {error}");
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                PolicyCommands::Rules => {
+                    println!("rule_set_version: {}", engine.rule_set_version());
+                    println!("phase5-default-rules:");
+                    for rule in &melodee_policy::default_rules().rules {
+                        println!("  {}", rule);
+                    }
+                }
+                PolicyCommands::Config => {
+                    println!("policy config:");
+                    println!("  batch_size: {}", policy_config.batch_size);
+                    println!("  concurrency: {}", policy_config.concurrency);
+                    println!(
+                        "  destructive_confidence_bps: {}",
+                        policy_config.destructive_confidence_bps
+                    );
+                }
+            }
+        }
         Commands::Catalog { command } => {
             let catalog_config = CatalogConfig::from_env().unwrap_or_else(|error| {
                 eprintln!("error: invalid catalog configuration: {error}");
@@ -787,6 +852,41 @@ fn print_reconcile_result(result: &melodee_ingestion::ReconcileResult) {
     println!("  missing_candidates: {}", result.stats.missing_candidates);
     println!("  errors: {}", result.stats.errors);
     println!("  duration_ms: {}", result.stats.duration_ms);
+}
+
+async fn run_policy_dry_run(
+    engine: &PolicyEngine,
+    _store: &melodee_persistence::PolicyStore,
+    pool: &PgPool,
+    limit: u32,
+    now: OffsetDateTime,
+) -> Result<melodee_policy::PolicyPassStats, Box<dyn std::error::Error>> {
+    let rows: Vec<(uuid::Uuid, String)> =
+        sqlx::query_as(r#"SELECT id, title FROM releases ORDER BY id LIMIT $1"#)
+            .bind(i64::from(limit.min(500)))
+            .fetch_all(pool)
+            .await?;
+
+    let inputs: Vec<melodee_policy::PolicyInput> = rows
+        .iter()
+        .map(|(id, title)| melodee_policy::PolicyInput {
+            release_id: melodee_domain::ReleaseId::from_uuid(*id),
+            title: Some(title.clone()),
+            directory_name: None,
+            parent_directory_name: None,
+            structured_tag_traits: vec![],
+            embedded_external_id_traits: vec![],
+            catalog_known_release_traits: vec![],
+            existing_classification_traits: std::collections::BTreeSet::new(),
+            actors: Vec::new(),
+            novelty_category: melodee_policy::NoveltyCategory::Unknown,
+            now,
+        })
+        .collect();
+
+    let runner = PolicyDryRunner::new(engine.clone());
+    let results = runner.run_dry_run(inputs, now);
+    Ok(results.stats)
 }
 
 #[cfg(test)]

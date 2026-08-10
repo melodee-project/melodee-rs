@@ -53,6 +53,22 @@ pub enum DomainInvariantError {
     SelfOverlayPredecessor,
     #[error("semantic overlay references must be unique")]
     DuplicateOverlayReference,
+    #[error("classification evidence confidence must be between 0 and 10000 basis points")]
+    InvalidClassificationConfidence,
+    #[error("a policy rule identifier must not be blank")]
+    BlankPolicyRuleId,
+    #[error("a policy ruleset version must be greater than zero")]
+    InvalidPolicyVersion,
+    #[error("policy decision evidence summary must not be blank")]
+    BlankPolicyEvidenceSummary,
+    #[error("a policy decision actor must not be blank")]
+    BlankPolicyActor,
+    #[error("classification evidence does not belong to the owning classification")]
+    ForeignClassificationEvidence,
+    #[error("novelty evaluation category counts do not match the total track count")]
+    NoveltyCountMismatch,
+    #[error("policy decision completion state transition is invalid")]
+    InvalidDecisionCompletionTransition,
 }
 
 /// Inclusive confidence in basis points, avoiding floating-point persistence ambiguity.

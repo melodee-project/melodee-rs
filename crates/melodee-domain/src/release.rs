@@ -20,7 +20,7 @@ impl ReleaseId {
 }
 
 /// Non-exclusive classification inferred for a Release in Phase 5.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReleaseTrait {
     Studio,
@@ -48,6 +48,73 @@ pub enum ReleaseTrait {
     Remaster,
     Other,
     Unknown,
+}
+
+impl ReleaseTrait {
+    /// Every trait in canonical order.
+    pub const ALL: [Self; 25] = [
+        Self::Studio,
+        Self::Ep,
+        Self::Single,
+        Self::Live,
+        Self::Compilation,
+        Self::GreatestHits,
+        Self::Collection,
+        Self::BoxSet,
+        Self::Bootleg,
+        Self::Demo,
+        Self::Promo,
+        Self::Broadcast,
+        Self::RadioShow,
+        Self::DjMix,
+        Self::Remix,
+        Self::Tribute,
+        Self::Soundtrack,
+        Self::CastRecording,
+        Self::SpokenWord,
+        Self::Comedy,
+        Self::Audiobook,
+        Self::Reissue,
+        Self::Remaster,
+        Self::Other,
+        Self::Unknown,
+    ];
+
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Studio => "studio",
+            Self::Ep => "ep",
+            Self::Single => "single",
+            Self::Live => "live",
+            Self::Compilation => "compilation",
+            Self::GreatestHits => "greatest_hits",
+            Self::Collection => "collection",
+            Self::BoxSet => "box_set",
+            Self::Bootleg => "bootleg",
+            Self::Demo => "demo",
+            Self::Promo => "promo",
+            Self::Broadcast => "broadcast",
+            Self::RadioShow => "radio_show",
+            Self::DjMix => "dj_mix",
+            Self::Remix => "remix",
+            Self::Tribute => "tribute",
+            Self::Soundtrack => "soundtrack",
+            Self::CastRecording => "cast_recording",
+            Self::SpokenWord => "spoken_word",
+            Self::Comedy => "comedy",
+            Self::Audiobook => "audiobook",
+            Self::Reissue => "reissue",
+            Self::Remaster => "remaster",
+            Self::Other => "other",
+            Self::Unknown => "unknown",
+        }
+    }
+
+    #[must_use]
+    pub fn parse(value: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|s| s.as_str() == value)
+    }
 }
 
 /// Catalog Release created from an already-published manifest or migrated legacy row.

@@ -5,12 +5,15 @@
 //! This crate must not depend on Axum, SQLx, Tokio, filesystem implementations, or protocol DTOs.
 
 mod artist;
+mod classification;
 mod credit;
 mod identity;
 mod ids;
 mod ingestion;
 mod manifest;
+mod novelty;
 mod overlay;
+mod policy;
 mod release;
 mod values;
 
@@ -18,6 +21,9 @@ pub use artist::{
     Artist, ArtistAlias, ArtistAliasType, ArtistRelationship, ArtistRelationshipKind, ArtistStatus,
     ArtistType, ExternalIdentity, ExternalIdentityOwner, GroupMembership, MembershipRole,
     NewArtist,
+};
+pub use classification::{
+    ClassificationEvidence, ClassificationEvidenceKind, EvidenceSource, ReleaseClassification,
 };
 pub use credit::{
     ArtistTrackAssociation, Contribution, ContributionRole, ContributionTarget, DisplayArtist,
@@ -36,8 +42,10 @@ pub use ids::{
     ArtistNegativeAssertionId, ArtistPublicId, ArtistRelationshipId, ArtistSplitId,
     AudioIdentityDecisionId, AudioIdentityEvidenceId, AudioIdentityId, AudioIdentityMergeId,
     AudioIdentitySplitId, CatalogImportId, CatalogSemanticOverlayId, ContributionId,
-    ExternalIdentityId, GroupMembershipId, MediaAssetId, ObservedArtistId, ReleaseArtistId,
-    ReleaseId, ReleasePublicId, TrackArtistId, TrackId, TrackPublicId,
+    ExternalIdentityId, GroupMembershipId, MediaAssetId, ObservedArtistId, PolicyRuleId,
+    PolicyRuleSetId, PolicyTestRunId, ReleaseArtistId, ReleaseClassificationId, ReleaseId,
+    ReleasePolicyDecisionId, ReleasePublicId, TrackArtistId, TrackId, TrackNoveltyId,
+    TrackPublicId,
 };
 pub use ingestion::{
     Disposition, FailureClass, IngestionState, InvalidStateTransition, ReleaseWorkItem,
@@ -54,9 +62,14 @@ pub use manifest::{
     PublicationInvariantError, PublicationJournalStep, PublicationPlan, ReleaseManifest,
     SourceDisposition, StructuralValidation, ValidationOutcome,
 };
+pub use novelty::{NoveltyEvaluation, NoveltyEvidenceKind, TrackNovelty, TrackNoveltyCategory};
 pub use overlay::{
     CatalogSemanticOverlay, DisplayArtistOwner, NewCatalogSemanticOverlay, OverlayArtistResolution,
     OverlayAudioIdentityLink, OverlayDisplayArtist, OverlayReferences,
+};
+pub use policy::{
+    DecisionCompletionState, PolicyActor, PolicyEvaluation, PolicyRule, PolicyRuleSet,
+    PolicyRuleType, PolicyTestSummary, ReleasePolicyDecision,
 };
 pub use release::{
     AudioIdentity, AudioIdentityArtist, AudioIdentityMerge, AudioIdentitySplit,

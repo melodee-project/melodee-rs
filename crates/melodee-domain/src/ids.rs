@@ -141,6 +141,24 @@ internal_id!(
     CatalogSemanticOverlayId,
     "Stable semantic overlay revision identity."
 );
+internal_id!(
+    ReleaseClassificationId,
+    "Stable Release classification record identity."
+);
+internal_id!(TrackNoveltyId, "Stable Track novelty assessment identity.");
+internal_id!(
+    PolicyRuleSetId,
+    "Stable versioned policy rule-set identity."
+);
+internal_id!(PolicyRuleId, "Stable policy rule identity.");
+internal_id!(
+    ReleasePolicyDecisionId,
+    "Stable durable Release policy decision identity."
+);
+internal_id!(
+    PolicyTestRunId,
+    "Stable policy dry-run/test result identity."
+);
 
 public_id!(
     ArtistPublicId,

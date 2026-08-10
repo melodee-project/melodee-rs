@@ -13,6 +13,7 @@ mod catalog_mutations;
 mod config;
 mod error;
 mod migrate;
+mod policy;
 mod work_items;
 mod worker;
 
@@ -30,6 +31,9 @@ pub use config::{
 };
 pub use error::WorkStoreError;
 pub use migrate::{MIGRATOR, migrate};
+pub use policy::{
+    CatalogTrackFact, MAX_POLICY_TEST_SAMPLES, PolicyStore, PolicyStoreError, StoredPolicyDecision,
+};
 pub use work_items::{
     ActiveLease, PublicationJournalEntry, SettlingSnapshot, SettlingSnapshotFile, StateCount,
     StoredManifest, StoredPublication, WorkItemStore,

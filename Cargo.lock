@@ -1030,6 +1030,7 @@ dependencies = [
  "melodee-domain",
  "melodee-ingestion",
  "melodee-persistence",
+ "melodee-policy",
  "serde_json",
  "sqlx",
  "time",
@@ -1094,6 +1095,21 @@ dependencies = [
  "thiserror",
  "time",
  "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "melodee-policy"
+version = "0.1.0"
+dependencies = [
+ "melodee-domain",
+ "melodee-persistence",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror",
+ "time",
  "tracing",
  "uuid",
 ]

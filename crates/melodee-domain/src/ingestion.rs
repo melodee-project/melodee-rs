@@ -315,6 +315,39 @@ pub enum Disposition {
     Delete,
 }
 
+impl Disposition {
+    /// Every disposition in canonical order.
+    pub const ALL: [Self; 5] = [
+        Self::Accept,
+        Self::Review,
+        Self::Ignore,
+        Self::Quarantine,
+        Self::Delete,
+    ];
+
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Accept => "accept",
+            Self::Review => "review",
+            Self::Ignore => "ignore",
+            Self::Quarantine => "quarantine",
+            Self::Delete => "delete",
+        }
+    }
+
+    #[must_use]
+    pub fn parse(value: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|s| s.as_str() == value)
+    }
+
+    /// Whether this disposition is destructive (Delete).
+    #[must_use]
+    pub const fn is_destructive(self) -> bool {
+        matches!(self, Self::Delete)
+    }
+}
+
 /// A durable Release work item (SPEC 11.1). Processing state only — never
 /// conflated with the catalog `Release` entity.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

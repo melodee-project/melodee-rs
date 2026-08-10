@@ -1056,9 +1056,14 @@
     "phase": "5",
     "source": "PRD.md",
     "line": 889,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "crates/melodee-domain/src/classification.rs (ReleaseClassification with multi-valued traits)",
+      "crates/melodee-policy/src/classifier.rs (Classifier::classify populates traits and evidence)"
+    ],
+    "tests": [
+      "crates/melodee-policy/tests/policy_acceptance.rs (class_001_title_pattern_identifies_greatest_hits)"
+    ]
   },
   {
     "id": "PRD-CLASS-002",
@@ -1066,9 +1071,14 @@
     "phase": "5",
     "source": "PRD.md",
     "line": 929,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "crates/melodee-domain/src/classification.rs (Confidence, EvidenceSource, ClassificationEvidenceKind)",
+      "crates/melodee-policy/src/classifier.rs (confidence-per-evidence-source assignment)"
+    ],
+    "tests": [
+      "crates/melodee-policy/tests/policy_acceptance.rs (class_002_confidence_reflects_evidence_quality)"
+    ]
   },
   {
     "id": "PRD-CLASS-003",
@@ -1076,9 +1086,14 @@
     "phase": "5",
     "source": "PRD.md",
     "line": 944,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "crates/melodee-domain/src/classification.rs (EvidenceSource hierarchy with trust_rank)",
+      "crates/melodee-policy/src/classifier.rs (strongest_source_is_directory_only guard)"
+    ],
+    "tests": [
+      "crates/melodee-policy/tests/policy_acceptance.rs (class_003_directory_only_evidence_never_produces_destructive_disposition, class_005_directory_only_evidence_never_produces_destructive_disposition)"
+    ]
   },
   {
     "id": "PRD-POLICY-001",
@@ -1086,9 +1101,14 @@
     "phase": "5",
     "source": "PRD.md",
     "line": 966,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "crates/melodee-domain/src/ingestion.rs (Disposition enum: Accept, Review, Ignore, Quarantine, Delete)",
+      "crates/melodee-policy/src/engine.rs (PolicyEngine maps classification + novelty to disposition)"
+    ],
+    "tests": [
+      "crates/melodee-policy/tests/policy_acceptance.rs (pol_001_through_pol_010)"
+    ]
   },
   {
     "id": "PRD-POLICY-002",
@@ -1096,8 +1116,12 @@
     "phase": "5",
     "source": "PRD.md",
     "line": 978,
-    "status": "planned",
-    "implementation": [],
+    "status": "implemented",
+    "implementation": [
+      "crates/melodee-domain/src/classification.rs (ReleaseTrait enum)",
+      "crates/melodee-domain/src/ingestion.rs (Disposition semantics)",
+      "crates/melodee-policy/src/classifier.rs (trait extraction from observations)"
+    ],
     "tests": []
   },
   {
@@ -1106,9 +1130,14 @@
     "phase": "5",
     "source": "PRD.md",
     "line": 986,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "crates/melodee-policy/src/classifier.rs (greatest_hits_title_traits helper)",
+      "crates/melodee-domain/src/release.rs (ReleaseTrait::GreatestHits, Compilation)"
+    ],
+    "tests": [
+      "crates/melodee-policy/tests/policy_acceptance.rs (class_001_title_pattern_identifies_greatest_hits)"
+    ]
   },
   {
     "id": "PRD-POLICY-004",
@@ -1116,9 +1145,14 @@
     "phase": "5",
     "source": "PRD.md",
     "line": 998,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "crates/melodee-domain/src/novelty.rs (TrackNoveltyCategory)",
+      "crates/melodee-policy/src/novelty.rs (NoveltyCategory release-level summarization)"
+    ],
+    "tests": [
+      "crates/melodee-policy/tests/policy_acceptance.rs (nov_001_through_nov_004, pol_004b_brand_new_release_novelty_requires_review)"
+    ]
   },
   {
     "id": "PRD-POLICY-005",
@@ -1126,9 +1160,14 @@
     "phase": "5",
     "source": "PRD.md",
     "line": 1008,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "crates/melodee-policy/src/novelty.rs (NoveltyCategory::is_novel, is_redundant, is_unsafe_to_auto_delete)",
+      "crates/melodee-policy/src/engine.rs (POL-004 rule routes novel content to Review)"
+    ],
+    "tests": [
+      "crates/melodee-policy/tests/policy_acceptance.rs (pol_004_brand_new_release_requires_manual_review, pol_008_remaster_with_no_operator_yields_review)"
+    ]
   },
   {
     "id": "PRD-POLICY-006",
@@ -1136,9 +1175,14 @@
     "phase": "5",
     "source": "PRD.md",
     "line": 1018,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "crates/melodee-policy/src/engine.rs (default_rules, DefaultPolicyRuleSet)",
+      "apps/melodee-cli/src/main.rs (policy rules command)"
+    ],
+    "tests": [
+      "crates/melodee-policy/tests/policy_acceptance.rs (pol_007_durable_decision_recorded_with_correct_metadata)"
+    ]
   },
   {
     "id": "PRD-POLICY-007",
@@ -1146,9 +1190,16 @@
     "phase": "5",
     "source": "PRD.md",
     "line": 1041,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "crates/melodee-domain/src/policy.rs (ReleasePolicyDecision with durable fields)",
+      "crates/melodee-persistence/src/policy.rs (record_decision, get_decision)",
+      "crates/melodee-persistence/migrations/0008_phase5_policy.sql (policy_decisions + audit)",
+      "crates/melodee-policy/src/engine.rs (decision populated before any destructive action)"
+    ],
+    "tests": [
+      "crates/melodee-policy/tests/policy_acceptance.rs (pol_007_durable_decision_recorded_with_correct_metadata)"
+    ]
   },
   {
     "id": "PRD-POLICY-008",
@@ -1156,9 +1207,16 @@
     "phase": "5",
     "source": "PRD.md",
     "line": 1055,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "crates/melodee-domain/src/policy.rs (PolicyTestSummary)",
+      "crates/melodee-persistence/src/policy.rs (store_test_run, PolicyStoreError types)",
+      "crates/melodee-policy/src/dry_run.rs (PolicyDryRunner, PolicyDryRun)",
+      "crates/melodee-persistence/migrations/0008_phase5_policy.sql (policy_test_runs table)"
+    ],
+    "tests": [
+      "crates/melodee-policy/tests/policy_acceptance.rs (pol_010_dry_run_produces_stats_without_database)"
+    ]
   },
   {
     "id": "PRD-STORAGE-001",
