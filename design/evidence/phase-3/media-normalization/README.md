@@ -1,123 +1,291 @@
-# Phase 3 Evidence — Media normalization, fingerprinting, and canonical storage
+# Phase 3.2 Evidence — Media normalization and acoustic fingerprinting
 
-## Scope
+## Scope and result
 
-Phase 3 sub-slice 3.2 adds the media normalization stage between inspection and
-validation:
+Phase 3.2 implements the leased `Normalizing -> Validating` handoff. It creates
+verified, temporary output and publishes manifest schema v2 atomically with the
+state transition. It does **not** implement Phase 3.3 verification policy or
+canonical library publication.
 
-```text
-Normalizing -> Validating
-```
+The independent hardening review ran on 2026-08-10 with:
 
-During `Normalizing`, each Release's source media is processed in an isolated
-work-area staging directory:
+- FFmpeg/ffprobe 8.1.2 (Fedora build with `libmp3lame`);
+- Chromaprint `fpcalc` 1.6.0;
+- PostgreSQL 18.4-alpine on the documented local port 5433;
+- Rust 1.97.1.
 
-- **Audio normalization** (PRD-MEDIA-002): canonical MP3 via FFmpeg `libmp3lame`
-  VBR quality 4, max 384 kbps, 48 kHz sample rate, channels preserved. Files
-  already in canonical form are retained without re-encoding.
-- **Acoustic fingerprinting** (PRD-FP-003/004): Chromaprint fingerprint via
-  `fpcalc -json -length` on the source audio file (not the normalized output),
-  for stable acoustic identity independent of encoding.
-- **Artwork normalization** (PRD-MEDIA-005): embedded and external artwork
-  extracted and normalized to JPEG via FFmpeg, bounded by `max_artwork_bytes`
-  and a maximum dimension of 1600px.
-- **Sidecar parsing** (PRD-MEDIA-006): CUE, M3U, SFV, NFO, and LRC files are
-  parsed into structured `ParsedSidecar` observations with findings.
+CI installs `ffmpeg` and `libchromaprint-tools`; the real media tests are normal
+correctness gates, not ignored evidence harnesses.
 
-Source media is never modified, moved, renamed, or deleted. All output paths
-are constrained to the work-area directory via path normalization that
-resolves `..` and `.` components without filesystem access.
+## Conversion profile and MP3 retention
 
-## Architecture
-
-- `crates/melodee-media/src/normalize.rs` is the compile-time boundary around
-  FFmpeg and fpcalc. It produces Melodee-owned manifest types and never exposes
-  third-party tool structures.
-- `crates/melodee-ingestion/src/normalize.rs` contains the leased normalization
-  worker. It claims `Normalizing` work items with a PostgreSQL lease, renews the
-  lease via a heartbeat while blocking FFmpeg/fpcalc work runs on the Tokio
-  blocking pool, and publishes results atomically with the `Normalizing ->
-  Validating` transition.
-- `crates/melodee-persistence/migrations/0005_normalization_provenance.sql`
-  adds dedicated `normalization_provenance`, `normalization_started_at`, and
-  `normalization_completed_at` columns to the manifest table, plus a claim
-  index for pending `normalizing` items.
-- `crates/melodee-persistence/src/work_items.rs` adds `claim_normalizing` and
-  `publish_normalization`. Publication re-checks lease ownership inside its
-  transaction, so a worker that loses its lease can never publish stale
-  authoritative results.
-
-## Manifest contract
-
-Normalization observations are embedded in the existing
-`ReleaseManifest.normalization` field as `NormalizationObservations`:
+The versioned converted-output profile is
+`mp3-libmp3lame-vbr-q4-48khz-v1`. FFmpeg receives separate argv entries (never
+a shell command), with stdin closed:
 
 ```text
-profile_version: string
-outputs: Vec<NormalizedOutput>          # canonical MP3 metadata + byte hash
-fingerprints: Vec<FingerprintObservation> # Chromaprint fingerprint + duration
-normalized_artwork: Vec<NormalizedArtwork>
-parsed_sidecars: Vec<ParsedSidecar>
-provenance: NormalizationExecutionProvenance  # volatile, excluded from hash
-findings: Vec<Finding>
+-y
+-v error
+-xerror
+-i INPUT
+-vn
+-map 0:a:0
+-c:a libmp3lame
+-q:a 4
+-b:a 384k
+-ar 48000
+-map_metadata 0
+OUTPUT
 ```
 
-The semantic manifest hash is BLAKE3 over deterministic JSON after removing
-volatile fields: manifest/work-item ids, source library/path, source snapshot,
-inspection context, and normalization provenance. This means normalization
-observations (fingerprints, output hashes, parsed sidecars) are part of the
-manifest's semantic identity, while execution metadata (tool paths, worker id,
-elapsed time, timestamps) is not.
+This preserves the exact seeded legacy flags captured in
+`compatibility/media/baseline.json`. The flags do not mean “VBR with a 384 kbps
+maximum”: FFmpeg's libmp3lame implementation selects the VBR branch when global
+quality (`-q:a`) is set and only applies `bit_rate` in the non-quality branch.
+The `-b:a 384k` argument is therefore inert in this profile. This behavior was
+verified against the [official FFmpeg codec documentation](https://ffmpeg.org/ffmpeg-all.html#libmp3lame)
+and [libmp3lame wrapper source](https://ffmpeg.org/doxygen/trunk/libmp3lame_8c_source.html).
 
-## Canonical MP3 profile
+Conversion forces 48 kHz. Mono and stereo inputs retain their channel count;
+formats wider than libmp3lame's mono/stereo support are downmixed to stereo.
+`-map_metadata 0` preserves supported container metadata; the real FLAC test
+proves title and ReplayGain track gain reach the MP3 output. `-vn` prevents
+attached pictures or other video from entering converted audio output. Artwork
+is handled separately.
 
-| Parameter    | Value      | Legacy evidence |
-|-------------|------------|-----------------|
-| Codec       | libmp3lame | PRD-MEDIA-002 captured baseline |
-| VBR quality | 4          | `compatibility/media/baseline.json` env.seededSettings |
-| Max bitrate | 384 kbps   | Same |
-| Sample rate | 48 kHz     | Same |
-| Video       | None (`-vn`) | Same |
-| Channels    | Preserved  | Legacy did not force stereo |
+The captured legacy policy retains existing MP3 rather than forcing it through
+the conversion settings. Retention requires:
 
-A file already in canonical form (MP3, 48 kHz, <= 384 kbps, any channel count,
-no video) is retained by copy rather than re-encoded.
+1. an MP3 codec in an MP3 container;
+2. exactly one audio stream;
+3. successful complete decode with `ffmpeg -xerror -f null`;
+4. byte-for-byte copy followed by the same strict output checks used below.
 
-## Restart and concurrency proof
+Sample rate, VBR/CBR mode, encoder label, bitrate, metadata, and attached
+artwork do not trigger re-encoding of an otherwise valid existing MP3. This is
+why the real 44.1 kHz MP3 fixture is retained unchanged. Corrupt,
+multiple-audio-stream, and non-MP3 inputs do not qualify by probe fields alone.
 
-- `crates/melodee-persistence/tests/normalization.rs` proves `claim_normalizing`
-  leases `Normalizing` items, `publish_normalization` advances to `Validating`
-  and clears the lease, and stale workers cannot publish.
-- The normalization worker uses `spawn_blocking` for the blocking media work
-  and a heartbeat task for lease renewal. If lease renewal fails (e.g. the row
-  was transitioned by an operator), the cancellation flag is set and the
-  in-flight normalization is discarded.
-- A crash before publication leaves the item `Normalizing` with an active lease;
-  the Phase 2 lease recovery (`recover_expired_leases`) records the loss and
-  schedules retry.
+Every output must exist, be non-empty and hashable, probe as an MP3 container
+with exactly one MP3 audio stream, have the expected sample rate and channel
+behavior, and remain within `max(250 ms, 2%)` of source duration. Essential
+verification failure prevents publication. Source files are BLAKE3-checked
+against inspection evidence and again after processing; the full source tree
+snapshot is also compared before and after the attempt.
 
-## Tooling
+## Fingerprints
 
-- FFmpeg: invoked with `Command::new` and separate arguments, never through a
-  shell. Output and errors are bounded. Processes have a configurable timeout.
-- fpcalc: invoked with `-json -length` flags. Output is bounded and parsed
-  into `FingerprintObservation`.
-- Source media is read-only; only the work-area staging directory receives
-  writes.
+Fingerprint argv is:
 
-## Known limitations
+```text
+fpcalc -json -length 120 -- INPUT
+```
 
-- Canonical publication (Phase 3.3) is not implemented. Normalized output
-  remains in the work-area staging directory rather than being promoted to the
-  library.
-- Physical byte deduplication across releases (PRD-FP-005) is not implemented;
-  normalized outputs are hashed but not deduplicated.
-- Tantivy indexing of normalization observations is deferred to later phases.
+The `--` terminator protects leading-dash names. Fingerprints are computed from
+source audio, not normalized output. `DURATION` is converted to milliseconds;
+missing/non-finite/non-positive duration, empty fingerprint, malformed or
+oversized JSON, timeout, cancellation, and non-zero exit are failures. A
+fingerprint failure is retryable normalization failure, not structural media
+invalidity.
 
-## Requirements and references
+BLAKE3 remains exact byte evidence. Chromaprint remains acoustic evidence.
+Neither is promoted to a Track or underlying-performance identity decision in
+Phase 3.2; PRD-FP-004 remains planned pending its required naming/schema ADR.
 
-Traceability is recorded in `design/requirements/status-overrides.json` and the
-generated `design/requirements/REQUIREMENTS-INDEX.md`. The canonical MP3 policy
-decision is evidenced in `compatibility/media/baseline.json` and
-`design/evidence/phase-0/media-baseline.md` section 4. The FFmpeg/fpcalc tool
-choice is recorded in `design/adr/ADR-0108-use-ffmpeg-ffprobe-and-chromaprint-tools.md`.
+## Leases, cancellation, and concurrency
+
+`MELODEE__NORMALIZATION__CONCURRENCY` is actual simultaneous Release execution,
+implemented with a Tokio `JoinSet`. A batch claims at most that many items and
+spawns one independent task per item; each task owns one lease, cancellation
+flag, blocking media execution, and physical attempt directory. A failed item
+does not stop siblings.
+
+The heartbeat interval is:
+
+```text
+min(lease_duration / 3, 30 seconds)
+```
+
+Non-positive work configuration and durations too short to yield a renewal
+tick are rejected. Tokio missed ticks use delay behavior. Renewal uses the
+actual current UTC time, not the batch claim timestamp. Publication and failure
+recording also use current time, so a stale timestamp cannot make an expired
+lease appear valid.
+
+Lease-renewal failure sets only that item's cancellation flag. Graceful server
+shutdown sets a separate shared shutdown flag. FFmpeg, ffprobe, and fpcalc wait
+loops check both signals at 10 ms intervals, kill the child, and wait to reap it
+before returning `Canceled`. Canceled or stale work is never published. The
+PostgreSQL publication transaction re-locks the item and checks current lease
+owner and expiry as the final authority.
+
+Automated PostgreSQL evidence proves:
+
+- a 2-second lease renews at roughly 667 ms during a 3-second FFmpeg operation,
+  recording multiple `lease_renewed` events;
+- forced lease theft cancels a long child in under 3 seconds;
+- the stale worker publishes no `Validating` transition;
+- retry succeeds from a distinct attempt directory;
+- graceful scheduler stop cancels in-flight FFmpeg promptly;
+- configured concurrency 8 reached a measured maximum of 8 and never exceeded
+  8 in the 200-Release scenario.
+
+## Temporary attempt areas
+
+Physical layout is:
+
+```text
+{work-area}/
+  {work-item-id}/
+    attempts/
+      {attempt-id}/
+        audio/{source-relative-path}.{source-extension}.mp3
+        artwork/external/{source-relative-path}.{source-extension}.jpg
+        artwork/embedded/{embedded-content-hash}.embedded.jpg
+```
+
+No attempt removes its work-item parent or another attempt. Source-relative
+directories and original extensions remain in logical names, preventing
+same-stem collisions such as `track.wav` versus `track.m4a` or two discs with
+`01.flac`. Attempt ids and physical roots are execution provenance excluded
+from semantic hashing; logical output paths are deterministic semantic facts.
+
+## Manifest versioning and determinism
+
+Inspection continues to create schema v1. Successful normalization upgrades
+the manifest to schema v2. Normalized output hash/codec/rate/channels/duration
+fields are required in v2 rather than accepting empty defaults. PostgreSQL
+publication updates `schema_version`, payload, hash, provenance, and completion
+time in one transaction before the `Validating` state update. A missing
+manifest row or stale lease rolls the transaction back.
+
+`normalization_started_at` is set when the attempt is claimed and resets for a
+retry; completion/provenance are cleared at claim and set only at successful
+publication. Tests prove a stored Phase 3.1 v1 fixture still deserializes, a v2
+manifest round-trips, semantic normalization facts affect the hash, and worker,
+attempt, tool, time, and physical work-area provenance do not.
+
+Two independent attempts over the same deterministic input produced identical:
+
+- semantic manifest hash;
+- normalized logical paths;
+- normalized audio and artwork byte hashes;
+- Chromaprint observations;
+- parsed sidecar observations.
+
+Their attempt ids, timestamps, elapsed time, and physical paths differed as
+expected.
+
+## Real format and process matrix
+
+| Case | Real-tool proof |
+| --- | --- |
+| FLAC -> MP3 | MP3/48 kHz, duration tolerance, output BLAKE3, title and ReplayGain preserved |
+| OGG/Vorbis -> MP3 | MP3/48 kHz, duration tolerance, output BLAKE3 |
+| WAV -> MP3 | MP3/48 kHz, duration tolerance, output BLAKE3 |
+| AAC/M4A -> MP3 | MP3/48 kHz, duration tolerance, output BLAKE3 |
+| existing MP3 | complete decode, 44.1 kHz VBR and 320 kbps CBR bytes retained exactly |
+| 5.1 WAV | verified libmp3lame-compatible stereo downmix |
+| all seven tracks across five formats | source unchanged and non-empty source Chromaprint produced |
+| FFmpeg | success, non-zero, timeout, cancellation/reap, unprobeable output, unhashable output |
+| fpcalc | success, non-zero, malformed/empty output, timeout, cancellation/reap |
+| paths | spaces, Unicode, metacharacters, and leading dash passed as argv without a shell |
+| failures | corrupt audio, source change/disappearance, and sibling failure isolation |
+
+Synthetic sine-wave media is generated during tests; no copyrighted fixture is
+used.
+
+## Artwork matrix
+
+Artwork is decoded and normalized, not copied into a misleading extension.
+Each successful output is a non-empty, hashable 1600x1600 JPEG padded with
+black while preserving aspect ratio. Source byte size is bounded at 16 MiB by
+default; external headers and embedded inspection dimensions are rejected when
+zero, malformed, over 16384 on either axis, or over 100 million pixels.
+
+| Input | Result/test |
+| --- | --- |
+| external JPEG | real FFmpeg normalization and strict JPEG/hash/dimension verification |
+| external PNG | same |
+| embedded JPEG | extracted by explicit picture stream index, decoded, normalized to JPEG |
+| embedded PNG | decoded rather than copied to a `.jpg` name, normalized to JPEG |
+| malformed image | skipped with `artwork.normalization_failed` finding |
+| byte-oversized image | rejected before FFmpeg |
+| absurd dimensions | rejected by bounded preflight |
+| multiple entries | deterministic distinct paths and hashes |
+
+Artwork failure does not discard otherwise valid audio normalization, but no
+failed artwork entry with width/height zero or an empty hash is published.
+
+## Sidecar matrix
+
+Sidecar reads are bounded to 4 MiB, accept UTF-8/BOM and record a Windows-1252
+fallback finding. Local parse findings are retained both on each
+`ParsedSidecar` and in aggregate normalization findings.
+
+| Type | Implemented semantics | Malformed behavior |
+| --- | --- | --- |
+| CUE | album title/performer; quoted FILE context; TRACK number/type; TITLE/PERFORMER; numbered INDEX timestamps | structured invalid FILE/TRACK/INDEX or no-tracks finding |
+| M3U | comments/BOM, EXTINF duration/title associated with following path, paths with spaces | orphan/replaced EXTINF finding |
+| SFV | filename preserved through final whitespace, uppercase 8-hex CRC32 | invalid-entry finding |
+| NFO | text vs XML-shaped raw content classification | malformed-XML finding from bounded structural check |
+| LRC | metadata tags and multiple timestamps per lyric line | unclosed/invalid/untimed finding |
+
+These are Phase 3.2 semantic observations. Legacy CUE audio splitting and a
+broader encoding/parity corpus remain later work, so the full PRD-MEDIA-006
+status is truthfully `in-progress`.
+
+## 200-Release acceptance result
+
+The non-ignored PostgreSQL vertical test executed discovery, settling,
+inspection, normalization, source fingerprinting, atomic manifest publication,
+and the transition to `Validating` for 200 synthetic Releases:
+
+```json
+{
+  "total": 200,
+  "successful": 200,
+  "expected_failure": 0,
+  "unexpected_failure": 0,
+  "lost": 0,
+  "duplicate_authoritative_result": 0,
+  "source_mutations": 0,
+  "validating": 200,
+  "configured_concurrency": 8,
+  "measured_concurrency": 8,
+  "elapsed_ms": 22254
+}
+```
+
+The test binary's total wall time was 75.92 seconds including database creation,
+discovery, settling, inspection, fixture work, assertions, and teardown.
+
+## Known limitations and honest requirement boundary
+
+- Phase 3.3 canonical verification/publication is planned. Work-area output is
+  temporary and non-authoritative.
+- Successful attempt directories must remain for Phase 3.3; operational stale
+  attempt cleanup policy is not implemented yet, so disk usage must be
+  monitored.
+- CUE-driven audio splitting is not implemented. PRD-MEDIA-006 remains
+  `in-progress`.
+- The full artwork requirement includes later replacement, upload, thumbnail,
+  and serving surfaces. PRD-MEDIA-005 remains `in-progress`.
+- Separate per-resource pools for every class named by PRD-INGEST-009 and
+  external enrichment do not yet exist. The requirement remains `in-progress`
+  even though Phase 3.2 Release/process concurrency is bounded and measured.
+- Underlying audio identity naming/schema and optional physical deduplication
+  remain planned (PRD-FP-004/005).
+- NFO XML is retained and structurally classified; Phase 3.2 does not introduce
+  a general XML interpretation framework.
+
+## Authorities
+
+- `PRD-MEDIA-002`, `PRD-MEDIA-003`, `PRD-FP-001`, and `PRD-FP-003`;
+- ADR-0108 for structured FFmpeg/ffprobe/fpcalc process boundaries;
+- ADR-0115 for the Melodee-owned manifest/media boundary;
+- `compatibility/media/baseline.json` and
+  `design/evidence/phase-0/media-baseline.md` for captured legacy policy;
+- `crates/melodee-media/tests/normalization_real.rs`,
+  `crates/melodee-ingestion/tests/normalization.rs`, and
+  `crates/melodee-persistence/tests/normalization.rs` for executable proof.

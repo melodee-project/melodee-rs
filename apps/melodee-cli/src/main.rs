@@ -149,7 +149,7 @@ async fn main() {
             println!("Phase 1: complete — see design/evidence/phase-1/PHASE-1-REPORT.md");
             println!("Phase 2: complete — see design/evidence/phase-2/PHASE-2-REPORT.md");
             println!(
-                "Phase 3: in progress — media inspection, normalization complete; validating/pending"
+                "Phase 3: in progress — 3.1 inspection and 3.2 normalization complete; 3.3–3.4 planned"
             );
             println!("Read: PRD.md, SPEC.md, IMPLEMENTATION.md, AGENTS.md");
         }

@@ -1,4 +1,0 @@
-mod ffmpeg;
-mod fingerprint;
-mod sidecar;
-mod artwork_norm;

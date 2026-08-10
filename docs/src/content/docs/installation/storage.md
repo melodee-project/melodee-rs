@@ -7,14 +7,16 @@ sidebar:
 
 Melodee separates **inbound** media from **library** storage:
 
-- **Inbound** is where new data is staged. This path is discovered and snapshotted for
-  settling; it is not deleted or renamed by discovery.
+- **Inbound** is where new data is staged. This path is discovered, snapshotted, inspected, and
+  normalized read-only; it is not deleted, renamed, or rewritten by those stages.
+- **Normalization work area** holds attempt-isolated temporary output. It is non-authoritative and
+  must not be treated as the library.
 - **Library storage** holds stable canonical assets created in later phases.
 
-Important rules for discovery/snapshot behavior:
+Important rules for current inbound processing:
 
 - Filesystem paths never determine semantic identity.
-- Inbound media is read-only during discovery and settling.
+- Inbound media is read-only during discovery, settling, inspection, and normalization.
 - Watchers (if enabled in later phases) are accelerators only; reconciliation scans and durable work items are
   the source of truth.
 

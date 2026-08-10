@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "manifest_id": "0198f100-0000-7000-8000-000000000001",
+  "work_item_id": "0198f100-0000-7000-8000-000000000002",
+  "source_library_id": null,
+  "source_path": "Artist/Release",
+  "source_snapshot_id": 42,
+  "release_observation": {
+    "title": "Synthetic Release",
+    "artists": ["Synthetic Artist"],
+    "date": "2026",
+    "source_labels": {}
+  },
+  "files": [],
+  "tracks": [],
+  "artwork": [],
+  "sidecars": [],
+  "findings": [],
+  "inspection": {
+    "generated_at": [2026, 222, 12, 0, 0, 0, 0, 0, 0],
+    "source_snapshot_id": 42,
+    "source_signature": "stable",
+    "source_library_id": null,
+    "source_path": "Artist/Release",
+    "ffprobe_version": "ffprobe synthetic",
+    "ffprobe_path": "ffprobe",
+    "ffprobe_exit_code": 0,
+    "timeout_ms": 30000,
+    "source_stable": true
+  }
+}

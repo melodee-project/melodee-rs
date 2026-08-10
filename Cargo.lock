@@ -1031,6 +1031,7 @@ dependencies = [
 name = "melodee-ingestion"
 version = "0.1.0"
 dependencies = [
+ "blake3",
  "melodee-domain",
  "melodee-media",
  "melodee-persistence",

@@ -14,8 +14,11 @@ Inbound processing discovers candidate Releases from inbound roots and creates o
    promoted to `Ready`.
 4. **Inspection** — a leased worker reads native tags with Lofty, obtains technical facts from ffprobe,
    inventories artwork and sidecars, and streams a BLAKE3 byte hash for audio files.
-5. **Processing pipeline handoff** — successful inspection publishes one schema-versioned manifest and
-   advances the item to `Normalizing`; later phases consume that manifest.
+5. **Normalization and fingerprinting** — a bounded leased worker produces verified MP3 work-area
+   output, normalizes usable artwork, parses supported sidecars, and fingerprints source audio with
+   Chromaprint. Successful work publishes manifest schema v2 and advances to `Validating`.
+6. **Verification handoff** — `Validating` is the boundary for the next phase. Canonical library
+   publication is not implemented yet.
 
 Discovery and settling are source-correctness gates only in this phase. The candidate is not interpreted as
 media yet.
@@ -28,8 +31,9 @@ For each discovered candidate the queue uses these states:
 - `Settling` — snapshotted and waiting for stability.
 - `Ready` — stable evidence exists and the candidate can be claimed by workers.
 - `Inspecting` — a leased worker is observing one coherent settled source snapshot.
-- `Normalizing` — inspection has published the durable manifest for the next phase; normalization is not
-  implemented yet.
+- `Normalizing` — a leased worker is creating and verifying attempt-isolated temporary output.
+- `Validating` — normalization observations were published atomically; canonical publication has
+  not occurred.
 
 The `transition` table is durable and persisted in PostgreSQL, so restart and missed scans recover correctly.
 
@@ -48,8 +52,11 @@ extensions or names as identity by themselves.
 ## Safety constraints
 
 - Inbound source locations are treated as read-only by discovery/settling.
-- Inspection is also observationally read-only. It never rewrites tags, extracts artwork into the source,
-  renames files, or deletes candidates.
+- Inspection and normalization are observationally read-only with respect to inbound files. They
+  never rewrite tags, extract artwork into the source, rename files, or delete candidates.
+- Each normalization execution owns a distinct temporary attempt directory. A stale worker cannot
+  remove or overwrite a retry's files, and lease loss cancels and reaps active FFmpeg or `fpcalc`
+  processes before results are discarded.
 - Source paths are canonicalized and candidates outside source roots (including symlink escapes) are ignored.
 - Disappearing or unreadable candidates do not delete work items; they keep durable history and are marked for
   operator review.
@@ -62,5 +69,23 @@ audio produces a durable failure instead of a partial manifest. A source change 
 inspection discards the in-progress result and returns the work item to `Settling`.
 
 For development diagnostics, `melodee ingest inspect` runs one bounded inspection batch and
-`melodee ingest manifest <work-item-id>` prints the durable manifest. These commands are not a replacement
-for the server worker.
+`melodee ingest normalize` runs one bounded normalization batch.
+`melodee ingest manifest <work-item-id>` prints the durable manifest. These commands are not a
+replacement for the server worker.
+
+## Normalization policy
+
+- Existing, probeable MP3 files with exactly one audio stream are completely decode-verified and
+  retained byte-for-byte. They are not re-encoded merely to force 48 kHz or a VBR setting.
+- Other supported audio is converted with `libmp3lame`, VBR quality 4, and a 48 kHz sample rate.
+  FFmpeg receives the legacy-seeded `-b:a 384k` argument too, but libmp3lame ignores that bitrate
+  setting when VBR quality mode is active; it is not a 384 kbps cap.
+- Converted output must be non-empty, hashable, probeable as one MP3 audio stream, have the expected
+  sample rate and channel behavior, and remain within duration tolerance. Any essential verification
+  failure prevents the transition to `Validating`.
+- BLAKE3 records exact source and output bytes. Chromaprint records acoustic evidence from the source
+  audio. Neither hash alone decides Track identity.
+- External and embedded JPEG/PNG artwork within resource bounds is decoded and written as padded
+  1600×1600 JPEG. Malformed or unsafe artwork is skipped with a structured manifest finding.
+- CUE, M3U, SFV, NFO, and LRC sidecars are parsed into structured observations. Malformed content is
+  retained as findings; CUE-driven audio splitting is not part of this sub-slice.

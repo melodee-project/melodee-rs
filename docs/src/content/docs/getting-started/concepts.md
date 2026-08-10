@@ -31,9 +31,10 @@ appearances according to role.
 
 ## Media assets and manifests
 
-Ingested media is normalized into canonical files with a versioned manifest describing content
-hashes, fingerprints, and metadata. The catalog is built from manifests, not from repeated reads of
-audio files.
+Inbound media is inspected and normalized into attempt-isolated temporary files with a versioned
+manifest describing content hashes, fingerprints, and metadata. Verification and atomic canonical
+library publication are the next pipeline stage and are not implemented yet. The eventual catalog
+is built from ratified manifests, not from repeated reads of audio files.
 
 ## Compatibility surfaces
 

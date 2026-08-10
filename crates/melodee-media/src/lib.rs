@@ -10,6 +10,7 @@ use std::{
     io::{self, Read},
     path::{Path, PathBuf},
     process::{Command, Stdio},
+    sync::atomic::{AtomicBool, Ordering},
     thread,
     time::{Duration as StdDuration, Instant},
 };
@@ -362,7 +363,7 @@ fn inspect_file(
             }
         }
 
-        match read_native_metadata(path, options.max_artwork_bytes) {
+        match read_native_metadata(path, relative_path, options.max_artwork_bytes) {
             Ok((observed, embedded_artwork, native_findings)) => {
                 file.metadata = Some(observed);
                 file.embedded_artwork = embedded_artwork.clone();
@@ -456,6 +457,23 @@ fn inspect_file(
                 file: Some(relative_path.to_owned()),
                 evidence: serde_json::json!({}),
             });
+        }
+    } else if is_sidecar(kind) {
+        match hash_file(path) {
+            Ok((hash, bytes)) => {
+                file.content_hash = Some(hash);
+                *bytes_hashed = bytes_hashed.saturating_add(bytes);
+            }
+            Err(error) => {
+                file.bytes_read_errors = true;
+                file.findings.push(Finding {
+                    code: "file.hash_failed".to_owned(),
+                    message: error.to_string(),
+                    severity: FindingSeverity::Error,
+                    file: Some(relative_path.to_owned()),
+                    evidence: serde_json::json!({}),
+                });
+            }
         }
     }
 
@@ -553,6 +571,7 @@ pub(crate) fn hash_file(path: &Path) -> io::Result<(String, u64)> {
 
 fn read_native_metadata(
     path: &Path,
+    relative_path: &str,
     max_artwork_bytes: usize,
 ) -> Result<(ObservedMetadata, Vec<ObservedArtwork>, Vec<Finding>), String> {
     let tagged = read_from_path(path).map_err(|error| error.to_string())?;
@@ -596,7 +615,7 @@ fn read_native_metadata(
                 code: "artwork.embedded_oversized".to_owned(),
                 message: "embedded artwork exceeds the configured observation bound".to_owned(),
                 severity: FindingSeverity::Warning,
-                file: Some(path.display().to_string()),
+                file: Some(relative_path.to_owned()),
                 evidence: serde_json::json!({
                     "index": index,
                     "size_bytes": size,
@@ -607,7 +626,7 @@ fn read_native_metadata(
         }
         let (width, height) = image_dimensions(picture.data()).unwrap_or((0, 0));
         artwork.push(ObservedArtwork {
-            relative_path: format!("{}#embedded-{index}", path.display()),
+            relative_path: format!("{relative_path}#embedded-{index}"),
             source: "embedded".to_owned(),
             width: Some(width),
             height: Some(height),
@@ -637,8 +656,9 @@ fn artwork_from_external(file: &ObservedFile) -> ObservedArtwork {
 
 #[derive(Debug)]
 pub(crate) struct ProbeResult {
-    audio: AudioTechnicalObservation,
-    mime_type: Option<String>,
+    pub(crate) audio: AudioTechnicalObservation,
+    pub(crate) mime_type: Option<String>,
+    pub(crate) audio_stream_count: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -668,6 +688,16 @@ pub(crate) struct ProbeFormat {
 }
 
 pub(crate) fn run_ffprobe(path: &Path, options: &InspectionOptions) -> Result<ProbeResult, String> {
+    let cancellation = AtomicBool::new(false);
+    run_ffprobe_cancellable(path, options, &cancellation, None)
+}
+
+pub(crate) fn run_ffprobe_cancellable(
+    path: &Path,
+    options: &InspectionOptions,
+    cancellation: &AtomicBool,
+    shutdown: Option<&AtomicBool>,
+) -> Result<ProbeResult, String> {
     let mut child = Command::new(&options.ffprobe_path)
         .args([
             "-v",
@@ -678,6 +708,7 @@ pub(crate) fn run_ffprobe(path: &Path, options: &InspectionOptions) -> Result<Pr
             "-show_streams",
         ])
         .arg(path)
+        .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -698,13 +729,25 @@ pub(crate) fn run_ffprobe(path: &Path, options: &InspectionOptions) -> Result<Pr
     let status = loop {
         match child.try_wait() {
             Ok(Some(status)) => break Ok(status),
+            Ok(None)
+                if cancellation.load(Ordering::SeqCst)
+                    || shutdown.is_some_and(|signal| signal.load(Ordering::SeqCst)) =>
+            {
+                let _ = child.kill();
+                let _ = child.wait();
+                break Err("ffprobe canceled".to_owned());
+            }
             Ok(None) if Instant::now() >= deadline => {
                 let _ = child.kill();
                 let _ = child.wait();
                 break Err("ffprobe timed out".to_owned());
             }
             Ok(None) => thread::sleep(StdDuration::from_millis(10)),
-            Err(error) => break Err(format!("unable to wait for ffprobe: {error}")),
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                break Err(format!("unable to wait for ffprobe: {error}"));
+            }
         }
     };
     let stdout = stdout_reader
@@ -740,6 +783,11 @@ pub(crate) fn run_ffprobe(path: &Path, options: &InspectionOptions) -> Result<Pr
         .as_deref()
         .or(document.format.bit_rate.as_deref())
         .and_then(|value| value.parse::<u64>().ok());
+    let audio_stream_count = document
+        .streams
+        .iter()
+        .filter(|candidate| candidate.codec_type.as_deref() == Some("audio"))
+        .count();
     Ok(ProbeResult {
         audio: AudioTechnicalObservation {
             container: document.format.format_name,
@@ -754,12 +802,14 @@ pub(crate) fn run_ffprobe(path: &Path, options: &InspectionOptions) -> Result<Pr
             stream_index: stream.index,
         },
         mime_type: None,
+        audio_stream_count: u32::try_from(audio_stream_count).unwrap_or(u32::MAX),
     })
 }
 
 pub(crate) fn tool_version(path: &Path, max_output: usize) -> Option<String> {
     let mut child = Command::new(path)
         .arg("-version")
+        .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -770,14 +820,19 @@ pub(crate) fn tool_version(path: &Path, max_output: usize) -> Option<String> {
     let stderr_reader = thread::spawn(move || read_limited(stderr, max_output));
     let deadline = Instant::now() + StdDuration::from_secs(2);
     let status = loop {
-        match child.try_wait().ok()? {
-            Some(status) => break status,
-            None if Instant::now() >= deadline => {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if Instant::now() >= deadline => {
                 let _ = child.kill();
                 let _ = child.wait();
                 return None;
             }
-            None => thread::sleep(StdDuration::from_millis(10)),
+            Ok(None) => thread::sleep(StdDuration::from_millis(10)),
+            Err(_) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return None;
+            }
         }
     };
     let stdout = stdout_reader.join().ok()?.ok()?;

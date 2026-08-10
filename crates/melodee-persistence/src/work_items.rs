@@ -637,6 +637,17 @@ impl WorkItemStore {
             .bind(candidate.id)
             .fetch_one(&mut *tx)
             .await?;
+            sqlx::query(
+                "UPDATE release_work_item_manifests
+                 SET normalization_started_at = $2,
+                     normalization_completed_at = NULL,
+                     normalization_provenance = NULL
+                 WHERE work_item_id = $1",
+            )
+            .bind(candidate.id)
+            .bind(now)
+            .execute(&mut *tx)
+            .await?;
             let item = ReleaseWorkItem::try_from(row)?;
             insert_event(
                 &mut tx,
@@ -697,25 +708,27 @@ impl WorkItemStore {
 
         item.state
             .ensure_transition(IngestionState::Validating, TransitionKind::Worker)?;
-        sqlx::query(
+        let manifest_update = sqlx::query(
             "UPDATE release_work_item_manifests
-             SET manifest_payload = $2,
-                 manifest_hash = $3,
-                 normalization_provenance = $4,
-                 normalization_started_at = COALESCE(normalization_started_at, $5),
-                 normalization_completed_at = $5
+             SET schema_version = $2,
+                 manifest_payload = $3,
+                 manifest_hash = $4,
+                 normalization_provenance = $5,
+                 normalization_completed_at = $6
              WHERE work_item_id = $1",
         )
         .bind(id)
+        .bind(i32::from(manifest.schema_version))
         .bind(payload)
         .bind(manifest_hash)
         .bind(provenance)
         .bind(now)
         .execute(&mut *tx)
         .await?;
+        if manifest_update.rows_affected() != 1 {
+            return Err(WorkStoreError::ManifestNotFound(id));
+        }
 
-        item.state
-            .ensure_transition(IngestionState::Validating, TransitionKind::Worker)?;
         sqlx::query(
             "UPDATE release_work_items
              SET state = 'validating',

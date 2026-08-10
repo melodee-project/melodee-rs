@@ -5,10 +5,11 @@
 mod common;
 
 use melodee_domain::{
-    IngestionState, ManifestReleaseObservation, NormalizationExecutionProvenance,
-    NormalizationObservations, ReleaseManifest, TransitionKind,
+    CURRENT_MANIFEST_VERSION, IngestionState, ManifestReleaseObservation,
+    NormalizationExecutionProvenance, NormalizationObservations, ReleaseManifest, TransitionKind,
 };
-use melodee_persistence::{WorkItemStore, WorkerId};
+use melodee_persistence::{WorkItemStore, WorkStoreError, WorkerId};
+use time::Duration;
 
 async fn seed_normalizing_item(
     store: &WorkItemStore,
@@ -167,6 +168,9 @@ async fn publish_normalization_advances_to_validating() {
         },
         findings: Vec::new(),
     });
+    manifest.schema_version = CURRENT_MANIFEST_VERSION;
+
+    let completed_at = common::T0 + Duration::seconds(5);
 
     store
         .publish_normalization(
@@ -177,7 +181,7 @@ async fn publish_normalization_advances_to_validating() {
             "normalized-hash",
             "release/test",
             5000,
-            common::T0,
+            completed_at,
         )
         .await
         .expect("publish normalization");
@@ -196,6 +200,17 @@ async fn publish_normalization_advances_to_validating() {
         stored.payload.get("normalization").is_some(),
         "manifest should contain normalization observations"
     );
+    assert_eq!(i32::from(CURRENT_MANIFEST_VERSION), stored.schema_version);
+    let timestamps: (time::OffsetDateTime, time::OffsetDateTime) = sqlx::query_as(
+        "SELECT normalization_started_at, normalization_completed_at
+         FROM release_work_item_manifests WHERE work_item_id = $1",
+    )
+    .bind(id)
+    .fetch_one(&database.pool)
+    .await
+    .expect("normalization timestamps");
+    assert_eq!(common::T0, timestamps.0);
+    assert_eq!(completed_at, timestamps.1);
 
     database.drop().await;
 }
@@ -259,6 +274,64 @@ async fn publish_normalization_rejects_stale_lease() {
         )
         .await;
     assert!(result.is_err());
+
+    let expired = store
+        .publish_normalization(
+            &database.pool,
+            id,
+            &worker1,
+            &manifest,
+            "expired-hash",
+            "release/test",
+            5000,
+            common::T0 + common::test_config().lease_duration + Duration::seconds(1),
+        )
+        .await;
+    assert!(matches!(expired, Err(WorkStoreError::LeaseExpired(found)) if found == id));
+
+    let stored = store
+        .get_manifest(&database.pool, id)
+        .await
+        .expect("manifest")
+        .expect("manifest exists");
+    assert_eq!("manifest-hash", stored.manifest_hash);
+
+    database.drop().await;
+}
+
+#[tokio::test]
+async fn missing_manifest_row_cannot_silently_advance_state() {
+    let database = common::TestDb::create("normalization-missing-manifest").await;
+    let store = WorkItemStore;
+    let (id, manifest) = seed_normalizing_item(&store, &database.pool, "release/test").await;
+    let worker = WorkerId::new();
+    let claimed = store
+        .claim_normalizing(&database.pool, &worker, &common::test_config(), common::T0)
+        .await
+        .expect("claim normalizing");
+    assert_eq!(1, claimed.len());
+    sqlx::query("DELETE FROM release_work_item_manifests WHERE work_item_id = $1")
+        .bind(id)
+        .execute(&database.pool)
+        .await
+        .expect("remove manifest fixture");
+
+    let result = store
+        .publish_normalization(
+            &database.pool,
+            id,
+            &worker,
+            &manifest,
+            "must-not-publish",
+            "release/test",
+            1,
+            common::T0 + Duration::seconds(1),
+        )
+        .await;
+    assert!(matches!(result, Err(WorkStoreError::ManifestNotFound(found)) if found == id));
+    let item = store.get(&database.pool, id).await.expect("item");
+    assert_eq!(IngestionState::Normalizing, item.state);
+    assert_eq!(Some(worker.as_str()), item.lease_owner.as_deref());
 
     database.drop().await;
 }

@@ -1,6 +1,8 @@
 //! Performance evidence for work claiming (work-package part XXVIII):
 //! a nontrivial queue, many workers, zero duplicate ownership, query plan
-//! capture. Writes `design/evidence/phase-2/durable-work-execution/work-claim-benchmark.json`.
+//! capture. Set `MELODEE_WRITE_PERF_EVIDENCE=1` to refresh
+//! `design/evidence/phase-2/durable-work-execution/work-claim-benchmark.json`;
+//! normal correctness gates never rewrite tracked evidence.
 //!
 //! These measurements are evidence, not user-facing performance claims; no
 //! thresholds are asserted (PRD-PERF-001).
@@ -107,14 +109,16 @@ async fn claim_benchmark_10k_queue_32_workers() {
         "claimQueryPlan": plan_text,
         "note": "Evidence only; no performance threshold asserted (PRD-PERF-001). Environment: dev PostgreSQL on localhost, debug build.",
     });
-    let out_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../design/evidence/phase-2/durable-work-execution");
-    std::fs::create_dir_all(&out_dir).expect("evidence dir");
-    std::fs::write(
-        out_dir.join("work-claim-benchmark.json"),
-        serde_json::to_string_pretty(&evidence).expect("serialize") + "\n",
-    )
-    .expect("write evidence");
+    if std::env::var("MELODEE_WRITE_PERF_EVIDENCE").as_deref() == Ok("1") {
+        let out_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../design/evidence/phase-2/durable-work-execution");
+        std::fs::create_dir_all(&out_dir).expect("evidence dir");
+        std::fs::write(
+            out_dir.join("work-claim-benchmark.json"),
+            serde_json::to_string_pretty(&evidence).expect("serialize") + "\n",
+        )
+        .expect("write evidence");
+    }
     println!(
         "claimed {total_claims} items with {WORKERS} workers in {:?} ({} claims/s, {duplicates} duplicates)",
         elapsed,

@@ -15,7 +15,7 @@ mod worker;
 
 pub use config::{
     ENV_CLAIM_BATCH_SIZE, ENV_DATABASE_URL, ENV_LEASE_SECONDS, ENV_MAX_ATTEMPTS,
-    ENV_RETRY_BASE_SECONDS, ENV_RETRY_MAX_SECONDS, WorkEngineConfig,
+    ENV_RETRY_BASE_SECONDS, ENV_RETRY_MAX_SECONDS, WorkConfigError, WorkEngineConfig,
 };
 pub use error::WorkStoreError;
 pub use migrate::{MIGRATOR, migrate};

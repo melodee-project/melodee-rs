@@ -14,8 +14,11 @@
 
 use std::{
     path::{Component, Path, PathBuf},
-    sync::atomic::{AtomicBool, Ordering},
-    time::Instant,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::{Duration as StdDuration, Instant},
 };
 
 use ::time::OffsetDateTime;
@@ -23,13 +26,17 @@ use melodee_domain::{FailureClass, WorkErrorCode};
 use melodee_media::{NormalizationError, NormalizationOptions, normalize_release};
 use melodee_persistence::{WorkEngineConfig, WorkItemStore, WorkerId};
 use sqlx::PgPool;
-use tokio::time::{self, Duration as TokioDuration};
+use tokio::{
+    task::JoinSet,
+    time::{self, Duration as TokioDuration, MissedTickBehavior},
+};
 use tracing::{error, info, warn};
 
 use crate::{
     InboundSource, IngestionConfig, ReconcileResult, ReconcileStats,
     error::{IngestionError, Result},
     scheduler::StopToken,
+    snapshot::snapshot_release_directory,
 };
 use melodee_persistence::WorkStoreError;
 
@@ -49,6 +56,33 @@ pub async fn normalize_once(
     work_config: &WorkEngineConfig,
     now: OffsetDateTime,
 ) -> Result<NormalizationStats> {
+    normalize_once_with_shutdown(
+        ingestion,
+        store,
+        pool,
+        work_config,
+        now,
+        Arc::new(AtomicBool::new(false)),
+    )
+    .await
+}
+
+async fn normalize_once_with_shutdown(
+    ingestion: &IngestionConfig,
+    store: &WorkItemStore,
+    pool: &PgPool,
+    work_config: &WorkEngineConfig,
+    now: OffsetDateTime,
+    shutdown: Arc<AtomicBool>,
+) -> Result<NormalizationStats> {
+    work_config
+        .validate()
+        .map_err(|error| IngestionError::InspectionTask(error.to_string()))?;
+    if ingestion.normalization_concurrency == 0 {
+        return Err(IngestionError::InspectionTask(
+            "normalization concurrency must be greater than zero".to_owned(),
+        ));
+    }
     let started = Instant::now();
     let mut claim_config = *work_config;
     claim_config.claim_batch_size = ingestion.normalization_concurrency;
@@ -61,13 +95,38 @@ pub async fn normalize_once(
         ..NormalizationStats::default()
     };
 
+    let mut tasks = JoinSet::new();
     for item in items {
-        match normalize_one(ingestion, store, pool, &worker, item, work_config, now).await {
-            Ok(()) => stats.completed += 1,
-            Err(IngestionError::Inspection(_)) => stats.failed += 1,
-            Err(error) => {
+        let task_ingestion = ingestion.clone();
+        let task_store = *store;
+        let task_pool = pool.clone();
+        let task_worker = worker.clone();
+        let task_work_config = *work_config;
+        let task_shutdown = shutdown.clone();
+        tasks.spawn(async move {
+            normalize_one(
+                &task_ingestion,
+                &task_store,
+                &task_pool,
+                &task_worker,
+                item,
+                &task_work_config,
+                task_shutdown,
+            )
+            .await
+        });
+    }
+    while let Some(result) = tasks.join_next().await {
+        match result {
+            Ok(Ok(NormalizationOutcome::Completed)) => stats.completed += 1,
+            Ok(Ok(NormalizationOutcome::Failed)) => stats.failed += 1,
+            Ok(Err(error)) => {
                 stats.errors += 1;
                 error!(%error, "normalization item failed outside normal failure recording");
+            }
+            Err(error) => {
+                stats.errors += 1;
+                error!(%error, "normalization task failed to join");
             }
         }
     }
@@ -81,6 +140,12 @@ pub async fn normalize_once(
     Ok(stats)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NormalizationOutcome {
+    Completed,
+    Failed,
+}
+
 async fn normalize_one(
     ingestion: &IngestionConfig,
     store: &WorkItemStore,
@@ -88,8 +153,8 @@ async fn normalize_one(
     worker: &WorkerId,
     item: melodee_domain::ReleaseWorkItem,
     work_config: &WorkEngineConfig,
-    now: OffsetDateTime,
-) -> Result<()> {
+    shutdown: Arc<AtomicBool>,
+) -> Result<NormalizationOutcome> {
     let source = find_source(ingestion, &item);
     let Some(source) = source else {
         return record_normalization_failure(
@@ -101,10 +166,10 @@ async fn normalize_one(
             "normalization.source_not_found",
             "source library not configured for work item",
             FailureClass::Permanent,
-            now,
+            OffsetDateTime::now_utc(),
         )
         .await
-        .map(|_| ());
+        .map(|_| NormalizationOutcome::Failed);
     };
     let source_root = match resolve_candidate(source, &item.source_path) {
         Ok(root) => root,
@@ -118,25 +183,73 @@ async fn normalize_one(
                 "normalization.source_unresolvable",
                 &error,
                 FailureClass::Permanent,
-                now,
+                OffsetDateTime::now_utc(),
             )
             .await
-            .map(|_| ());
+            .map(|_| NormalizationOutcome::Failed);
         }
     };
 
     let stored = store.get_manifest(pool, item.id).await?;
-    let manifest_row = stored.ok_or_else(|| {
-        IngestionError::Inspection(melodee_media::InspectionError::SourceMissing(
-            item.source_path.clone().into(),
-        ))
-    })?;
+    let Some(manifest_row) = stored else {
+        return record_normalization_failure(
+            store,
+            pool,
+            worker,
+            item.id,
+            work_config,
+            "normalization.manifest_missing",
+            "normalizing work item has no persisted inspection manifest",
+            FailureClass::Permanent,
+            OffsetDateTime::now_utc(),
+        )
+        .await
+        .map(|_| NormalizationOutcome::Failed);
+    };
     let mut manifest: melodee_domain::ReleaseManifest =
         serde_json::from_value(manifest_row.payload).map_err(|e| {
             IngestionError::Inspection(melodee_media::InspectionError::Serialization(e))
         })?;
+    let expected_signature = manifest.inspection.source_signature.clone();
+    let before_snapshot =
+        match snapshot_release_directory(&source_root, &ingestion.ready_marker_name) {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                return record_normalization_failure(
+                    store,
+                    pool,
+                    worker,
+                    item.id,
+                    work_config,
+                    "normalization.source_changed",
+                    &error.to_string(),
+                    FailureClass::Retryable,
+                    OffsetDateTime::now_utc(),
+                )
+                .await
+                .map(|_| NormalizationOutcome::Failed);
+            }
+        };
+    if expected_signature
+        .as_ref()
+        .is_none_or(|expected| expected != &before_snapshot.signature)
+    {
+        return record_normalization_failure(
+            store,
+            pool,
+            worker,
+            item.id,
+            work_config,
+            "normalization.source_changed",
+            "source snapshot no longer matches the inspected manifest",
+            FailureClass::Retryable,
+            OffsetDateTime::now_utc(),
+        )
+        .await
+        .map(|_| NormalizationOutcome::Failed);
+    }
 
-    let cancellation = std::sync::Arc::new(AtomicBool::new(false));
+    let cancellation = Arc::new(AtomicBool::new(false));
     let cancellation_for_task = cancellation.clone();
     let options = NormalizationOptions {
         ffmpeg_path: ingestion.ffmpeg_path.clone(),
@@ -149,7 +262,9 @@ async fn normalize_one(
         ffprobe_timeout: std::time::Duration::try_from(ingestion.ffprobe_timeout)
             .map_err(|error| IngestionError::InspectionTask(error.to_string()))?,
         work_area: ingestion.work_area_base.clone(),
+        attempt_id: uuid::Uuid::now_v7(),
         cancellation: cancellation_for_task,
+        shutdown: Some(shutdown.clone()),
         ..NormalizationOptions::default()
     };
 
@@ -159,13 +274,19 @@ async fn normalize_one(
     let heartbeat_lease = work_config.lease_duration;
     let heartbeat_item_id = item.id;
     let heartbeat_cancellation = cancellation.clone();
+    let heartbeat_stop = Arc::new(AtomicBool::new(false));
+    let heartbeat_stop_for_task = heartbeat_stop.clone();
+    let heartbeat_interval = heartbeat_interval(work_config.lease_duration)?;
 
     let heartbeat_handle = tokio::spawn(async move {
-        let mut interval = time::interval(TokioDuration::from_secs(60));
+        let mut interval = time::interval(heartbeat_interval);
+        interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
         interval.tick().await; // skip initial tick
         loop {
             interval.tick().await;
-            if heartbeat_cancellation.load(Ordering::SeqCst) {
+            if heartbeat_stop_for_task.load(Ordering::SeqCst)
+                || heartbeat_cancellation.load(Ordering::SeqCst)
+            {
                 return;
             }
             match heartbeat_store
@@ -192,12 +313,15 @@ async fn normalize_one(
         }
     });
 
+    let normalization_root = source_root.clone();
     let normalization_result = tokio::task::spawn_blocking(move || {
-        normalize_release(&mut manifest, &source_root, &options)
+        normalize_release(&mut manifest, &normalization_root, &options)
     })
     .await;
 
+    heartbeat_stop.store(true, Ordering::SeqCst);
     heartbeat_handle.abort();
+    let _heartbeat_result = heartbeat_handle.await;
 
     // If the heartbeat set the cancellation flag, the normalization may have
     // already returned Canceled; either way we must not publish.
@@ -207,7 +331,7 @@ async fn normalize_one(
         ));
     }
 
-    let report = match normalization_result {
+    let mut report = match normalization_result {
         Ok(Ok(report)) => report,
         Ok(Err(NormalizationError::Canceled)) => {
             return Err(IngestionError::InspectionTask(
@@ -225,15 +349,56 @@ async fn normalize_one(
                 &classification.code,
                 &error.to_string(),
                 classification.class,
-                now,
+                OffsetDateTime::now_utc(),
             )
             .await
-            .map(|_| ());
+            .map(|_| NormalizationOutcome::Failed);
         }
         Err(join_error) => {
             return Err(IngestionError::InspectionTask(join_error.to_string()));
         }
     };
+    if let Some(normalization) = report.manifest.normalization.as_mut() {
+        normalization.provenance.worker_id = Some(worker.as_str().to_owned());
+    }
+    let after_snapshot =
+        match snapshot_release_directory(&source_root, &ingestion.ready_marker_name) {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                return record_normalization_failure(
+                    store,
+                    pool,
+                    worker,
+                    item.id,
+                    work_config,
+                    "normalization.source_changed",
+                    &error.to_string(),
+                    FailureClass::Retryable,
+                    OffsetDateTime::now_utc(),
+                )
+                .await
+                .map(|_| NormalizationOutcome::Failed);
+            }
+        };
+    if after_snapshot.signature != before_snapshot.signature
+        || expected_signature
+            .as_ref()
+            .is_none_or(|expected| expected != &after_snapshot.signature)
+    {
+        return record_normalization_failure(
+            store,
+            pool,
+            worker,
+            item.id,
+            work_config,
+            "normalization.source_changed",
+            "source changed during normalization",
+            FailureClass::Retryable,
+            OffsetDateTime::now_utc(),
+        )
+        .await
+        .map(|_| NormalizationOutcome::Failed);
+    }
 
     let publish_result = store
         .publish_normalization(
@@ -244,7 +409,7 @@ async fn normalize_one(
             &report.manifest_hash,
             &item.source_path,
             report.duration_ms,
-            now,
+            OffsetDateTime::now_utc(),
         )
         .await;
 
@@ -259,12 +424,24 @@ async fn normalize_one(
             }
             _ => {
                 error!(%error, work_item_id = %item.id, "normalization publish failed");
-                return Err(IngestionError::Persistence(error));
             }
         }
+        return Err(IngestionError::Persistence(error));
     }
 
-    Ok(())
+    Ok(NormalizationOutcome::Completed)
+}
+
+fn heartbeat_interval(lease_duration: ::time::Duration) -> Result<TokioDuration> {
+    let lease = StdDuration::try_from(lease_duration)
+        .map_err(|error| IngestionError::InspectionTask(error.to_string()))?;
+    let interval = lease / 3;
+    if interval.is_zero() {
+        return Err(IngestionError::InspectionTask(
+            "lease duration is too short for safe renewal".to_owned(),
+        ));
+    }
+    Ok(interval.min(StdDuration::from_secs(30)))
 }
 
 struct NormalizedErrorClassification {
@@ -290,6 +467,10 @@ fn classify_normalization_error(error: &NormalizationError) -> NormalizedErrorCl
                 class: FailureClass::Retryable,
             }
         }
+        NormalizationError::SourceChanged(_) => NormalizedErrorClassification {
+            code: "normalization.source_changed".to_owned(),
+            class: FailureClass::Retryable,
+        },
         _ => NormalizedErrorClassification {
             code: "normalization.execution_failed".to_owned(),
             class: FailureClass::Retryable,
@@ -382,21 +563,44 @@ pub fn start_normalization_loop(
         let mut ticker = time::interval(interval);
         let mut results = Vec::new();
         loop {
-            tokio::select! {
-                _ = ticker.tick() => {
-                    match normalize_once(&ingestion, &store, &pool, &work_config, OffsetDateTime::now_utc()).await {
-                        Ok(stats) => results.push(ReconcileResult {
-                            source: "normalization".to_owned(),
-                            stats: ReconcileStats {
-                                duration_ms: stats.duration_ms,
-                                errors: stats.errors,
-                                ..ReconcileStats::default()
-                            },
-                        }),
-                        Err(error) => error!(%error, "normalization loop failed"),
-                    }
+            let should_run = tokio::select! {
+                _ = ticker.tick() => true,
+                _ = notifier.notified() => false,
+            };
+            if !should_run {
+                break;
+            }
+
+            let shutdown = Arc::new(AtomicBool::new(false));
+            let batch = normalize_once_with_shutdown(
+                &ingestion,
+                &store,
+                &pool,
+                &work_config,
+                OffsetDateTime::now_utc(),
+                shutdown.clone(),
+            );
+            tokio::pin!(batch);
+            let (stopping, result) = tokio::select! {
+                result = &mut batch => (false, result),
+                _ = notifier.notified() => {
+                    shutdown.store(true, Ordering::SeqCst);
+                    (true, batch.await)
                 }
-                _ = notifier.notified() => break,
+            };
+            match result {
+                Ok(stats) => results.push(ReconcileResult {
+                    source: "normalization".to_owned(),
+                    stats: ReconcileStats {
+                        duration_ms: stats.duration_ms,
+                        errors: stats.errors,
+                        ..ReconcileStats::default()
+                    },
+                }),
+                Err(error) => error!(%error, "normalization loop failed"),
+            }
+            if stopping {
+                break;
             }
         }
         results
@@ -406,6 +610,8 @@ pub fn start_normalization_loop(
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
+
     use super::*;
 
     #[test]
@@ -438,6 +644,41 @@ mod tests {
         ));
         assert_eq!(classification.code, "normalization.source_error");
         assert_eq!(classification.class, FailureClass::Retryable);
+    }
+
+    #[test]
+    fn classify_source_changed_is_retryable_and_distinct() {
+        let classification = classify_normalization_error(&NormalizationError::SourceChanged(
+            "track.flac".to_owned(),
+        ));
+        assert_eq!(classification.code, "normalization.source_changed");
+        assert_eq!(classification.class, FailureClass::Retryable);
+    }
+
+    #[test]
+    fn heartbeat_cadence_is_derived_from_short_lease() {
+        assert_eq!(
+            heartbeat_interval(::time::Duration::seconds(3)).unwrap(),
+            StdDuration::from_secs(1)
+        );
+        assert_eq!(
+            heartbeat_interval(::time::Duration::seconds(30)).unwrap(),
+            StdDuration::from_secs(10)
+        );
+    }
+
+    #[test]
+    fn heartbeat_cadence_is_capped_well_below_long_lease() {
+        assert_eq!(
+            heartbeat_interval(::time::Duration::minutes(5)).unwrap(),
+            StdDuration::from_secs(30)
+        );
+    }
+
+    #[test]
+    fn heartbeat_rejects_non_positive_or_sub_tick_lease() {
+        assert!(heartbeat_interval(::time::Duration::ZERO).is_err());
+        assert!(heartbeat_interval(::time::Duration::nanoseconds(2)).is_err());
     }
 
     #[test]

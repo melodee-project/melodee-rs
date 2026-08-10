@@ -212,28 +212,31 @@
   "PRD-MEDIA-002": {
     "status": "tested",
     "implementation": [
-      "crates/melodee-media/src/normalize.rs (canonical MP3 encoding via FFmpeg libmp3lame VBR q4, 384k max, 48kHz)",
-      "crates/melodee-media/src/normalize.rs (is_canonical_mp3 retention: MP3 at 48kHz, <=384k, channels preserved)",
+      "crates/melodee-media/src/normalize.rs (versioned libmp3lame VBR q4 / 48 kHz conversion profile with strict output verification)",
+      "crates/melodee-media/src/normalize.rs (complete-decode verification and byte retention for existing single-audio-stream MP3)",
       "crates/melodee-persistence/migrations/0005_normalization_provenance.sql (provenance columns)",
       "crates/melodee-persistence/src/work_items.rs (publish_normalization with manifest update + Validating transition)",
-      "crates/melodee-ingestion/src/normalize.rs (normalization worker with lease heartbeat)"
+      "crates/melodee-ingestion/src/normalize.rs (bounded concurrent worker with lease-derived heartbeat and cancellation)"
     ],
     "tests": [
-      "crates/melodee-persistence/tests/normalization.rs (claim_normalizing, publish_normalization, stale lease rejection)",
-      "crates/melodee-ingestion/src/normalize.rs (classify_normalization_error unit tests)",
-      "crates/melodee-media/src/normalize.rs (is_canonical_mp3, output_name_replaces_extension)",
+      "crates/melodee-media/tests/normalization_real.rs (real FLAC/OGG/WAV/M4A conversion, existing MP3 retention, source safety, output verification, determinism)",
+      "crates/melodee-ingestion/tests/normalization.rs (lease renewal/loss, bounded concurrency, 200-Release vertical scenario)",
+      "crates/melodee-persistence/tests/normalization.rs (atomic publish, timestamp semantics, stale/missing manifest rejection)",
       "compatibility/media/baseline.json environment.seededSettings (legacy conversion profile preserved as evidence)"
     ],
-    "note": "Legacy ingest behavior captured in Phase 0. The canonical VBR-MP3 canonical-storage policy is implemented in the Rust normalization stage with bounded concurrency and lease-safe publication."
+    "note": "The legacy-seeded -b:a 384k argument is retained for profile fidelity, but official libmp3lame behavior confirms it is ignored when -q:a enables VBR; it is not a bitrate cap. Phase 3.2 produces verified temporary output, not Phase 3.3 canonical publication."
   },
   "PRD-MEDIA-003": {
-    "status": "captured",
+    "status": "tested",
     "implementation": [
-      "design/evidence/phase-0/media-baseline.md section 12 (eight classified legacy deficiencies incl. F1 metadata-container gate, F2 destructive same-size dedupe, no resumability, no crash-safety)"
+      "crates/melodee-media/src/lib.rs (ffprobe process boundary)",
+      "crates/melodee-media/src/normalize.rs (FFmpeg and Chromaprint/fpcalc process boundaries under ADR-0108)"
     ],
     "tests": [
-      "tests/python/test_media_baseline.py (test_metadata_container_gate, test_same_size_deletion_bug)"
-    ]
+      "crates/melodee-media/tests/normalization_real.rs",
+      "crates/melodee-media/src/normalize.rs (success, nonzero, timeout, cancellation, output-bound process tests)"
+    ],
+    "note": "Codec implementation remains delegated to mature external FOSS tools; Rust coordinates bounded structured subprocesses."
   },
   "PRD-INGEST-001": {
     "status": "implemented",
@@ -477,43 +480,6 @@
     ],
     "note": "Periodic reconciliation is implemented as the scheduled maintenance task required by this phase. Additional scheduled tasks remain deferred."
   },
-  "PRD-INGEST-007": {
-    "status": "tested",
-    "implementation": [
-      "crates/melodee-domain/src/manifest.rs (schema-versioned ReleaseManifest and semantic hash input)",
-      "crates/melodee-persistence/migrations/0004_release_work_item_manifests.sql",
-      "crates/melodee-persistence/src/work_items.rs (transactional manifest publication)",
-      "crates/melodee-media/src/lib.rs (deterministic media observations)"
-    ],
-    "tests": [
-      "crates/melodee-media/src/lib.rs (manifest_hash_excludes_volatile_provenance)",
-      "crates/melodee-persistence/tests/manifests.rs",
-      "crates/melodee-ingestion/tests/inspection.rs"
-    ],
-    "note": "Phase 3 sub-slice 3.1 publishes inspection manifests and hands work to Normalizing; normalization and catalog publication remain later sub-slices."
-  },
-  "PRD-INGEST-008": {
-    "status": "tested",
-    "implementation": [
-      "crates/melodee-media/src/lib.rs (structured findings and tag-independent ffprobe validation)"
-    ],
-    "tests": [
-      "crates/melodee-media/src/lib.rs (valid_tagless_wav_is_inspected_as_audio)",
-      "crates/melodee-ingestion/tests/inspection.rs"
-    ]
-  },
-  "PRD-INGEST-009": {
-    "status": "implemented",
-    "implementation": [
-      "crates/melodee-ingestion/src/config.rs (explicit inspection concurrency and ffprobe timeout)",
-      "crates/melodee-ingestion/src/inspect.rs (bounded claim batch and spawn_blocking boundary)",
-      "crates/melodee-media/src/lib.rs (streaming hashes and bounded tool output/artwork limits)"
-    ],
-    "tests": [
-      "crates/melodee-ingestion/tests/inspection.rs"
-    ],
-    "note": "Image processing and normalization pools remain later-stage concerns."
-  },
   "PRD-MEDIA-004": {
     "status": "tested",
     "implementation": [
@@ -526,27 +492,29 @@
     "note": "Observed tags are preserved; canonical identity resolution is not part of media inspection."
   },
   "PRD-MEDIA-005": {
-    "status": "tested",
+    "status": "in-progress",
     "implementation": [
       "crates/melodee-media/src/normalize.rs (extract and normalize embedded and external artwork via FFmpeg to JPEG, bounded by max_artwork_bytes, max dimension 1600px)",
-      "crates/melodee-media/src/normalize.rs (BLAKE3 byte hash of normalized output, work-area path containment via normalize_path)"
+      "crates/melodee-media/src/normalize.rs (strict non-empty JPEG/hash/dimension verification and bounded source preflight)"
     ],
     "tests": [
-      "crates/melodee-media/src/normalize.rs (ensure_within_accepts_nested_paths, ensure_within_rejects_escape)"
+      "crates/melodee-media/tests/normalization_real.rs (embedded/external JPEG and PNG, malformed/absurd artwork, multiple entries)",
+      "crates/melodee-media/src/normalize.rs (path containment and resource-bound tests)"
     ],
-    "note": "Media inspection inventories and extracts artwork. Normalization produces canonical JPEG in the work area with bounds and path containment."
+    "note": "Phase 3.2 extraction, validation, and 1600x1600 JPEG normalization are tested. Replacement, upload, thumbnail serving, and the rest of the full PRD-MEDIA-005 surface remain later work, so the overall requirement is not complete."
   },
   "PRD-MEDIA-006": {
-    "status": "tested",
+    "status": "in-progress",
     "implementation": [
-      "crates/melodee-media/src/normalize.rs (parse_sidecar_content: CUE, M3U, SFV, NFO, LRC structured parsing)",
+      "crates/melodee-media/src/normalize.rs (CUE FILE/TRACK/INDEX, M3U EXTINF, SFV paths, NFO type, LRC multi-timestamp semantics with structured findings)",
       "crates/melodee-media/src/normalize.rs (ParsedSidecar domain type with findings)",
       "crates/melodee-domain/src/manifest.rs (ParsedSidecar domain type)"
     ],
     "tests": [
-      "crates/melodee-media/src/normalize.rs (parse_m3u_extracts_entries, parse_sfv_extracts_crc32_entries, parse_lrc_extracts_timed_lines, parse_nfo_text_vs_xml, parse_cue_extracts_tracks)"
+      "crates/melodee-media/src/normalize.rs (sidecar semantic and malformed-input unit tests)",
+      "crates/melodee-media/tests/normalization_real.rs (five-type real-file sidecar matrix and two-run determinism)"
     ],
-    "note": "Media inspection inventories sidecars; the normalization stage parses them into structured observations with findings."
+    "note": "Phase 3.2 semantic observations are tested. Legacy CUE-driven track splitting and a broader parity corpus remain unimplemented, so the full sidecar requirement is not marked tested."
   },
   "PRD-FP-001": {
     "status": "tested",
@@ -561,16 +529,17 @@
     ]
   },
   "PRD-FP-002": {
-    "status": "tested",
+    "status": "in-progress",
     "implementation": [
       "crates/melodee-media/src/normalize.rs (FingerprintObservation: source-relative path, Chromaprint fingerprint, duration_ms)",
       "crates/melodee-domain/src/manifest.rs (FingerprintObservation domain type)",
       "crates/melodee-domain/src/manifest.rs (byte hash is an observation, not identity resolution)"
     ],
     "tests": [
-      "crates/melodee-media/src/lib.rs (byte_hash_distinguishes_same_size_content)"
+      "crates/melodee-media/src/lib.rs (byte_hash_distinguishes_same_size_content)",
+      "crates/melodee-media/tests/normalization_real.rs (deterministic BLAKE3 output hashes and source Chromaprint observations)"
     ],
-     "note": "Acoustic fingerprints are computed from source audio (not normalized) for stable identity independent of encoding. Underlying audio identity abstraction (PRD-FP-004) uses these fingerprints."
+     "note": "Byte identity and acoustic evidence are represented separately. Alternate-version and uncertain-similarity decisions belong to the later catalog identity model."
    },
    "PRD-FP-003": {
      "status": "tested",
@@ -580,34 +549,25 @@
        "crates/melodee-ingestion/src/config.rs (ENV_FPCALC_PATH, ENV_FPCALC_TIMEOUT_SECONDS, normalization_concurrency)"
      ],
      "tests": [
-       "crates/melodee-persistence/tests/normalization.rs"
+       "crates/melodee-media/tests/normalization_real.rs (real fpcalc across FLAC/OGG/WAV/M4A/MP3 and deterministic fingerprints)",
+       "crates/melodee-media/src/normalize.rs (fpcalc success, malformed/failure, timeout, cancellation, Unicode and leading-dash paths)"
      ],
      "note": "fpcalc is the preferred initial fingerprint tool (ADR-0108). Fingerprints are computed from source audio, not normalized output."
    },
    "PRD-FP-004": {
-     "status": "tested",
-     "implementation": [
-       "crates/melodee-media/src/normalize.rs (FingerprintObservation with source_file + fingerprint + duration_ms)",
-       "crates/melodee-media/src/normalize.rs (ManifestFingerprintObservations: aggregate fingerprints in NormalizationObservations)",
-       "crates/melodee-domain/src/manifest.rs (FingerprintObservation domain type)"
-     ],
-     "tests": [
-       "crates/melodee-persistence/tests/normalization.rs"
-     ],
-     "note": "Underlying audio identity abstraction is built on FingerprintObservation; full identity resolution and matching remain a later phase."
+     "status": "planned",
+     "implementation": [],
+     "tests": [],
+     "note": "FingerprintObservation is evidence, not the required catalog identity abstraction. The final ubiquitous-language name and schema still require the PRD-mandated ADR before catalog schema freeze."
    },
    "PRD-FP-005": {
-     "status": "implemented",
-     "implementation": [
-       "crates/melodee-media/src/normalize.rs (NormalizedOutput with byte_hash; retention of already-canonical sources without re-encoding)"
-     ],
-     "tests": [
-       "crates/melodee-media/src/normalize.rs (is_canonical_mp3_retains_canonical_source)"
-     ],
-     "note": "Physical byte deduplication is optional; normalized outputs are hashed but not yet deduplicated across releases."
+     "status": "planned",
+     "implementation": [],
+     "tests": [],
+     "note": "Physical deduplication remains optional, but the future catalog/storage schema that must not preclude shared MediaAssets has not been designed yet."
    },
    "PRD-INGEST-007": {
-     "status": "tested",
+     "status": "in-progress",
      "implementation": [
        "crates/melodee-domain/src/manifest.rs (schema-versioned ReleaseManifest and semantic hash input)",
        "crates/melodee-persistence/migrations/0004_release_work_item_manifests.sql",
@@ -618,11 +578,13 @@
      ],
      "tests": [
        "crates/melodee-media/src/lib.rs (manifest_hash_excludes_volatile_provenance)",
+       "crates/melodee-domain/tests/manifest_versions.rs (v1 compatibility, v2 round trip, provenance exclusion)",
+       "crates/melodee-media/tests/normalization_real.rs (semantic hash determinism with normalization facts)",
        "crates/melodee-persistence/tests/manifests.rs",
        "crates/melodee-persistence/tests/normalization.rs",
        "crates/melodee-ingestion/tests/inspection.rs"
      ],
-     "note": "Phase 3 sub-slice 3.1 publishes inspection manifests and hands work to Normalizing. Sub-slice 3.2 normalizes media and hands work to Validating atomically."
+     "note": "Inspection v1 and normalization v2 manifests are versioned, durable, deterministic, and atomically handed to Validating. Catalog insertion completeness cannot be closed before the Phase 3.3 verification and Phase 4 catalog consumers exist."
    },
    "PRD-INGEST-008": {
      "status": "tested",
@@ -632,11 +594,12 @@
      ],
      "tests": [
        "crates/melodee-media/src/lib.rs (valid_tagless_wav_is_inspected_as_audio)",
-       "crates/melodee-ingestion/tests/inspection.rs"
+       "crates/melodee-ingestion/tests/inspection.rs",
+       "crates/melodee-ingestion/tests/normalization.rs (fingerprint failure is retryable and does not classify playable media as structurally invalid)"
      ]
    },
    "PRD-INGEST-009": {
-     "status": "tested",
+     "status": "in-progress",
      "implementation": [
        "crates/melodee-ingestion/src/config.rs (explicit inspection concurrency and ffprobe timeout)",
        "crates/melodee-ingestion/src/config.rs (normalization concurrency, ffmpeg/fpcalc timeouts, work-area base)",
@@ -646,8 +609,8 @@
      ],
      "tests": [
        "crates/melodee-ingestion/tests/inspection.rs",
-       "crates/melodee-persistence/tests/normalization.rs"
+       "crates/melodee-ingestion/tests/normalization.rs (measured Release normalization concurrency reaches 8 and never exceeds 8)"
      ],
-     "note": "Image processing and normalization pools are implemented with bounded concurrency and explicit resource limits."
+     "note": "Inspection and normalization are separately bounded and normalization bounds all child processes. The full requirement also calls for separate image, hashing/fingerprinting, conversion, and external-enrichment resource classes; those later-stage pools do not yet exist."
    }
 }

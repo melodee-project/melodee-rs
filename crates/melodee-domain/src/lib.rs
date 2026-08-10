@@ -16,9 +16,9 @@ pub use ingestion::{
 };
 pub use manifest::{
     AudioTechnicalObservation, CANONICAL_MP3_PROFILE_VERSION, CURRENT_MANIFEST_VERSION, Finding,
-    FindingSeverity, FingerprintObservation, ManifestInspectionContext, ManifestReleaseObservation,
-    NormalizationExecutionProvenance, NormalizationObservations, NormalizedArtwork,
-    NormalizedOutput, ObservedArtwork, ObservedFile, ObservedFileKind, ObservedMetadata,
-    ObservedTrack, ParsedSidecar, ReleaseManifest,
+    FindingSeverity, FingerprintObservation, INSPECTION_MANIFEST_VERSION,
+    ManifestInspectionContext, ManifestReleaseObservation, NormalizationExecutionProvenance,
+    NormalizationObservations, NormalizedArtwork, NormalizedOutput, ObservedArtwork, ObservedFile,
+    ObservedFileKind, ObservedMetadata, ObservedTrack, ParsedSidecar, ReleaseManifest,
 };
 pub use release::{ReleaseId, ReleaseTrait, TrackId};

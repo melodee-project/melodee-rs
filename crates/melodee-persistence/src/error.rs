@@ -38,4 +38,7 @@ pub enum WorkStoreError {
 
     #[error("a different manifest is already authoritative for work item {0}")]
     ManifestConflict(Uuid),
+
+    #[error("work item {0} has no persisted manifest")]
+    ManifestNotFound(Uuid),
 }

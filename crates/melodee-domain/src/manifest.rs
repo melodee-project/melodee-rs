@@ -5,12 +5,20 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 /// Current manifest contract version.
-pub const CURRENT_MANIFEST_VERSION: u16 = 1;
+///
+/// Version 1 is the Phase 3.1 inspection-only contract. Version 2 adds the
+/// semantic normalization observations produced by Phase 3.2. The optional
+/// field remains deserializable on v1 payloads so stored inspection manifests
+/// can be upgraded in place by the normalization worker.
+pub const CURRENT_MANIFEST_VERSION: u16 = 2;
+
+/// Inspection-only manifest version written by Phase 3.1.
+pub const INSPECTION_MANIFEST_VERSION: u16 = 1;
 
 /// Canonical MP3 normalization profile version (PRD-MEDIA-002).
-/// Vorbis-comment-free, schema-stable identifier for the exact FFmpeg
-/// arguments that define canonical MP3 output.
-pub const CANONICAL_MP3_PROFILE_VERSION: &str = "mp3-vbr-q4-384k-48k";
+/// Schema-stable identifier for the exact FFmpeg arguments that define
+/// converted MP3 output.
+pub const CANONICAL_MP3_PROFILE_VERSION: &str = "mp3-libmp3lame-vbr-q4-48khz-v1";
 
 /// Structured finding/severity for inspection outcomes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -152,15 +160,15 @@ pub struct NormalizedOutput {
     /// Work-area relative path of the normalized/canonical output.
     pub output_path: String,
     /// BLAKE3 hex digest of the normalized output bytes.
-    pub byte_hash: Option<String>,
+    pub byte_hash: String,
     /// Canonical container/codec label (e.g. "mp3", "lame").
     pub container: String,
     /// Canonical codec name from ffprobe of the output.
-    pub codec: Option<String>,
-    pub sample_rate_hz: Option<u32>,
-    pub channels: Option<u32>,
+    pub codec: String,
+    pub sample_rate_hz: u32,
+    pub channels: u32,
     pub bitrate_bps: Option<u64>,
-    pub duration_ms: Option<u64>,
+    pub duration_ms: u64,
     /// True when the source was already canonical MP3 and was copied, not re-encoded.
     pub retained: bool,
     pub findings: Vec<Finding>,
@@ -171,10 +179,10 @@ pub struct NormalizedOutput {
 pub struct FingerprintObservation {
     /// Source-relative path of the audio file that was fingerprinted.
     pub source_file: String,
-    /// Chromaprint fingerprint (Base64 variant), as emitted by `fpcalc -plain`.
+    /// Chromaprint fingerprint as emitted by `fpcalc -json`.
     pub fingerprint: String,
     /// Duration in milliseconds from fpcalc `DURATION`.
-    pub duration_ms: Option<u64>,
+    pub duration_ms: u64,
     pub findings: Vec<Finding>,
 }
 
@@ -213,6 +221,7 @@ pub struct ParsedSidecar {
 /// normalization ran, not WHAT was observed.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct NormalizationExecutionProvenance {
+    pub attempt_id: Option<Uuid>,
     pub worker_id: Option<String>,
     pub normalized_at: Option<OffsetDateTime>,
     pub elapsed_ms: Option<u64>,
@@ -221,6 +230,7 @@ pub struct NormalizationExecutionProvenance {
     pub ffmpeg_exit_code: Option<i32>,
     pub fpcalc_path: Option<String>,
     pub fpcalc_version: Option<String>,
+    pub fpcalc_exit_code: Option<i32>,
     pub work_area: Option<String>,
 }
 
@@ -283,7 +293,7 @@ impl ReleaseManifest {
     ) -> Self {
         let source_path_for_context = source_path.clone();
         Self {
-            schema_version: CURRENT_MANIFEST_VERSION,
+            schema_version: INSPECTION_MANIFEST_VERSION,
             manifest_id: Uuid::now_v7(),
             work_item_id,
             source_library_id,

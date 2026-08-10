@@ -6,7 +6,8 @@
 //! to the work-area directory to prevent path traversal.
 
 use std::{
-    fs,
+    collections::HashSet,
+    fs::{self, File},
     path::{Component, Path, PathBuf},
     process::{Command, Stdio},
     sync::Arc,
@@ -16,10 +17,10 @@ use std::{
 };
 
 use melodee_domain::{
-    CANONICAL_MP3_PROFILE_VERSION, Finding, FindingSeverity, FingerprintObservation,
-    NormalizationExecutionProvenance, NormalizationObservations, NormalizedArtwork,
-    NormalizedOutput, ObservedArtwork, ObservedFile, ObservedFileKind, ParsedSidecar,
-    ReleaseManifest,
+    CANONICAL_MP3_PROFILE_VERSION, CURRENT_MANIFEST_VERSION, Finding, FindingSeverity,
+    FingerprintObservation, INSPECTION_MANIFEST_VERSION, NormalizationExecutionProvenance,
+    NormalizationObservations, NormalizedArtwork, NormalizedOutput, ObservedArtwork, ObservedFile,
+    ObservedFileKind, ParsedSidecar, ReleaseManifest,
 };
 use serde::Deserialize;
 use thiserror::Error;
@@ -29,17 +30,23 @@ use uuid::Uuid;
 
 use crate::{
     InspectionOptions, ProbeResult, hash_file, image_dimensions, path_to_posix, read_limited,
-    run_ffprobe, tool_version,
+    run_ffprobe_cancellable, tool_version,
 };
 
-/// Canonical MP3 profile parameters (PRD-MEDIA-002). Matches the legacy
-/// seeded settings: VBR quality 4, 384 kbps maximum bitrate, 48 kHz sample rate,
-/// no video streams, channels preserved.
+/// Converted MP3 profile parameters (PRD-MEDIA-002). The legacy-seeded FFmpeg
+/// arguments combine VBR quality 4 with `-b:a 384k`; libmp3lame's VBR path
+/// ignores the bitrate argument, so it is not a maximum. Conversion forces
+/// 48 kHz, drops video, preserves mono/stereo, and downmixes wider layouts to
+/// libmp3lame's stereo limit.
 const CANONICAL_SAMPLE_RATE_HZ: u32 = 48_000;
-const CANONICAL_MAX_BITRATE_BPS: u64 = 384_000;
 const CANONICAL_ARTWORK_MAX_DIMENSION: u32 = 1600;
+const MAX_ARTWORK_SOURCE_DIMENSION: u32 = 16_384;
+const MAX_ARTWORK_SOURCE_PIXELS: u64 = 100_000_000;
+const FINGERPRINT_LENGTH_SECONDS: u32 = 120;
+const OUTPUT_DURATION_TOLERANCE_MS: u64 = 250;
 const DEFAULT_MAX_TOOL_OUTPUT_BYTES: usize = 1_048_576;
 const DEFAULT_MAX_ARTWORK_BYTES: usize = 16 * 1024 * 1024;
+const MAX_SIDECAR_BYTES: u64 = 4 * 1024 * 1024;
 const DEFAULT_TIMEOUT_FFMPEG: StdDuration = StdDuration::from_secs(300);
 const DEFAULT_TIMEOUT_FPCALC: StdDuration = StdDuration::from_secs(60);
 const DEFAULT_TIMEOUT_FFPROBE: StdDuration = StdDuration::from_secs(30);
@@ -57,8 +64,14 @@ pub struct NormalizationOptions {
     pub max_tool_output_bytes: usize,
     pub max_artwork_bytes: usize,
     pub work_area: PathBuf,
+    /// Unique physical execution attempt. It is provenance, never semantic
+    /// output identity.
+    pub attempt_id: Uuid,
     pub profile_version: String,
     pub cancellation: Arc<AtomicBool>,
+    /// Optional process-wide graceful-shutdown signal. Lease cancellation is
+    /// kept separate so one lost item never cancels sibling work.
+    pub shutdown: Option<Arc<AtomicBool>>,
 }
 
 impl Default for NormalizationOptions {
@@ -73,8 +86,10 @@ impl Default for NormalizationOptions {
             max_tool_output_bytes: DEFAULT_MAX_TOOL_OUTPUT_BYTES,
             max_artwork_bytes: DEFAULT_MAX_ARTWORK_BYTES,
             work_area: PathBuf::from("/tmp/melodee-work"),
+            attempt_id: Uuid::now_v7(),
             profile_version: CANONICAL_MP3_PROFILE_VERSION.to_owned(),
             cancellation: Arc::new(AtomicBool::new(false)),
+            shutdown: None,
         }
     }
 }
@@ -100,12 +115,16 @@ pub enum NormalizationError {
     SourceMissing(PathBuf),
     #[error("source directory cannot be read: {path}: {message}")]
     SourceUnreadable { path: PathBuf, message: String },
+    #[error("source changed since inspection: {0}")]
+    SourceChanged(String),
     #[error("work area could not be created or cleaned: {path}: {message}")]
     WorkAreaCreation { path: PathBuf, message: String },
     #[error("ffmpeg process failed: {0}")]
     Ffmpeg(String),
     #[error("fpcalc process failed: {0}")]
     Fpcalc(String),
+    #[error("normalized output verification failed: {0}")]
+    Verification(String),
     #[error("path escaped the work-area boundary: {0}")]
     PathEscape(String),
     #[error("manifest hashing failed: {0}")]
@@ -116,6 +135,8 @@ pub enum NormalizationError {
     Canceled,
     #[error("missing manifest field: {0}")]
     MissingField(&'static str),
+    #[error("manifest schema version {0} cannot be normalized")]
+    UnsupportedManifestVersion(u16),
 }
 
 /// Normalizes all audio, artwork, and sidecars described by `manifest`.
@@ -136,12 +157,24 @@ pub fn normalize_release(
         return Err(NormalizationError::SourceMissing(source_root.to_path_buf()));
     }
 
-    if options.cancellation.load(Ordering::SeqCst) {
+    if manifest.schema_version != INSPECTION_MANIFEST_VERSION
+        && manifest.schema_version != CURRENT_MANIFEST_VERSION
+    {
+        return Err(NormalizationError::UnsupportedManifestVersion(
+            manifest.schema_version,
+        ));
+    }
+
+    if is_canceled(options) {
         return Err(NormalizationError::Canceled);
     }
 
     let started = Instant::now();
-    let work_dir = create_work_area(&options.work_area, manifest.work_item_id)?;
+    let work_dir = create_work_area(
+        &options.work_area,
+        manifest.work_item_id,
+        options.attempt_id,
+    )?;
 
     let ffmpeg_version = tool_version(&options.ffmpeg_path, options.max_tool_output_bytes);
     let fpcalc_version = tool_version(&options.fpcalc_path, options.max_tool_output_bytes);
@@ -161,14 +194,15 @@ pub fn normalize_release(
     let mut parsed_sidecars: Vec<ParsedSidecar> = Vec::new();
     let mut findings: Vec<Finding> = Vec::new();
     let mut bytes_processed: u64 = 0;
+    let mut artwork_paths = HashSet::new();
 
     for file in &manifest.files {
-        if options.cancellation.load(Ordering::SeqCst) {
+        if is_canceled(options) {
             return Err(NormalizationError::Canceled);
         }
         match file.kind {
             ObservedFileKind::Audio => {
-                let source = source_root.join(&file.relative_path);
+                let source = resolve_source_file(source_root, &file.relative_path)?;
                 let result = process_audio_file(file, &source, &work_dir, options)?;
                 outputs.push(result.output);
                 if let Some(fp) = result.fingerprint {
@@ -177,35 +211,62 @@ pub fn normalize_release(
                 bytes_processed = bytes_processed.saturating_add(result.bytes);
             }
             ObservedFileKind::Artwork => {
-                let source = source_root.join(&file.relative_path);
-                if let Some(art) = process_external_artwork(file, &source, &work_dir, options)? {
-                    normalized_artwork.push(art);
+                let source = resolve_source_file(source_root, &file.relative_path)?;
+                verify_observed_source(file, &source)?;
+                match process_external_artwork(file, &source, &work_dir, options) {
+                    Ok(Some(art)) if artwork_paths.insert(art.output_path.clone()) => {
+                        normalized_artwork.push(art);
+                    }
+                    Ok(_) => {}
+                    Err(NormalizationError::Canceled) => {
+                        return Err(NormalizationError::Canceled);
+                    }
+                    Err(error) => findings.push(artwork_failure(file, &error)),
                 }
+                verify_observed_source(file, &source)?;
             }
             _ => {}
         }
 
         if file.kind == ObservedFileKind::Audio {
             // Embedded artwork extraction from audio files.
-            for embedded in &file.embedded_artwork {
-                if options.cancellation.load(Ordering::SeqCst) {
+            for (picture_index, embedded) in file.embedded_artwork.iter().enumerate() {
+                if is_canceled(options) {
                     return Err(NormalizationError::Canceled);
                 }
-                let source = source_root.join(&file.relative_path);
-                if let Some(art) = process_embedded_artwork(embedded, &source, &work_dir, options)?
-                {
-                    normalized_artwork.push(art);
+                let source = resolve_source_file(source_root, &file.relative_path)?;
+                match process_embedded_artwork(
+                    embedded,
+                    &file.relative_path,
+                    picture_index,
+                    &source,
+                    &work_dir,
+                    options,
+                ) {
+                    Ok(Some(art)) if artwork_paths.insert(art.output_path.clone()) => {
+                        normalized_artwork.push(art);
+                    }
+                    Ok(_) => {}
+                    Err(NormalizationError::Canceled) => {
+                        return Err(NormalizationError::Canceled);
+                    }
+                    Err(error) => findings.push(artwork_failure(file, &error)),
                 }
             }
+            let source = resolve_source_file(source_root, &file.relative_path)?;
+            verify_observed_source(file, &source)?;
         }
 
-        if let Some(_sidecar_kind) = parse_sidecar_for_file(file) {
-            if options.cancellation.load(Ordering::SeqCst) {
+        if let Some(sidecar_kind) = parse_sidecar_for_file(file) {
+            if is_canceled(options) {
                 return Err(NormalizationError::Canceled);
             }
-            let source = source_root.join(&file.relative_path);
-            match parse_sidecar_content(file, &source) {
-                Ok(parsed) => parsed_sidecars.push(parsed),
+            let source = resolve_source_file(source_root, &file.relative_path)?;
+            match parse_sidecar_content(file, &source, sidecar_kind) {
+                Ok(parsed) => {
+                    findings.extend(parsed.findings.clone());
+                    parsed_sidecars.push(parsed);
+                }
                 Err(error) => findings.push(Finding {
                     code: "sidecar.parse_failed".to_owned(),
                     message: truncate_message(&error.to_string()),
@@ -217,6 +278,7 @@ pub fn normalize_release(
         }
     }
 
+    manifest.schema_version = CURRENT_MANIFEST_VERSION;
     manifest.normalization = Some(NormalizationObservations {
         profile_version: options.profile_version.clone(),
         outputs,
@@ -224,6 +286,7 @@ pub fn normalize_release(
         normalized_artwork,
         parsed_sidecars,
         provenance: NormalizationExecutionProvenance {
+            attempt_id: Some(options.attempt_id),
             worker_id: None,
             normalized_at: Some(OffsetDateTime::now_utc()),
             elapsed_ms: Some(started.elapsed().as_millis().try_into().unwrap_or(u64::MAX)),
@@ -231,14 +294,15 @@ pub fn normalize_release(
                 .as_ref()
                 .and_then(|v| extract_tool_path(v, &options.ffmpeg_path)),
             ffmpeg_version,
-            ffmpeg_exit_code: None,
+            ffmpeg_exit_code: Some(0),
             fpcalc_path: fpcalc_version
                 .as_ref()
                 .and_then(|v| extract_tool_path(v, &options.fpcalc_path)),
             fpcalc_version,
+            fpcalc_exit_code: Some(0),
             work_area: Some(path_to_posix(&work_dir)),
         },
-        findings: Vec::new(),
+        findings: findings.clone(),
     });
 
     let manifest_hash = crate::hash_manifest(manifest).map_err(NormalizationError::ManifestHash)?;
@@ -320,38 +384,24 @@ fn process_audio_file(
     options: &NormalizationOptions,
 ) -> Result<AudioProcessResult, NormalizationError> {
     let relative = &file.relative_path;
-    let source_bytes = file.size_bytes;
-
-    if !source.exists() {
-        let finding = Finding {
-            code: "normalization.source_missing".to_owned(),
-            message: format!("source file disappeared: {relative}"),
-            severity: FindingSeverity::Warning,
-            file: Some(relative.clone()),
-            evidence: serde_json::json!({}),
-        };
-        let output = NormalizedOutput {
-            source_file: relative.clone(),
-            output_path: String::new(),
-            byte_hash: None,
-            container: "mp3".to_owned(),
-            codec: None,
-            sample_rate_hz: None,
-            channels: None,
-            bitrate_bps: None,
-            duration_ms: None,
-            retained: false,
-            findings: vec![finding.clone()],
-        };
-        return Ok(AudioProcessResult {
-            output,
-            fingerprint: None,
-            bytes: 0,
-        });
+    let (source_hash_before, source_bytes) = hash_source(source)?;
+    if file
+        .content_hash
+        .as_deref()
+        .is_none_or(|expected| expected != source_hash_before)
+    {
+        return Err(NormalizationError::SourceChanged(relative.clone()));
     }
 
-    let output_name = output_name_for(relative, "mp3");
-    let output_path = work_dir.join("audio").join(&output_name);
+    let source_probe = run_ffprobe_safe(source, options)?;
+    if source_probe.audio_stream_count != 1 {
+        return Err(NormalizationError::Verification(format!(
+            "source {relative} contains {} audio streams; exactly one is required",
+            source_probe.audio_stream_count
+        )));
+    }
+
+    let output_path = output_path_for(work_dir, "audio", relative, "mp3")?;
     ensure_within(&output_path, work_dir)?;
     fs::create_dir_all(output_path.parent().unwrap_or(work_dir)).map_err(|error| {
         NormalizationError::WorkAreaCreation {
@@ -360,9 +410,10 @@ fn process_audio_file(
         }
     })?;
 
-    let retained = is_canonical_mp3(file);
+    let retained = is_retainable_mp3(&source_probe);
 
     if retained {
+        verify_audio_decodes(source, options)?;
         fs::copy(source, &output_path).map_err(|error| {
             NormalizationError::Ffmpeg(format!(
                 "failed to copy canonical source {relative}: {error}"
@@ -372,65 +423,63 @@ fn process_audio_file(
         run_ffmpeg_encode(source, &output_path, options)?;
     }
 
-    let byte_hash = hash_file(&output_path).map(|(h, _)| h).ok();
+    let (byte_hash, output_bytes) = hash_file(&output_path).map_err(|error| {
+        NormalizationError::Verification(format!(
+            "normalized output for {relative} could not be hashed: {error}"
+        ))
+    })?;
+    if output_bytes == 0 {
+        return Err(NormalizationError::Verification(format!(
+            "normalized output for {relative} is empty"
+        )));
+    }
 
-    let mut findings = Vec::new();
-
-    let probe = run_ffprobe_safe(&output_path, options);
-    let (codec, sample_rate_hz, channels, bitrate_bps, duration_ms, _stream_count, container) =
-        match probe {
-            Ok(result) => (
-                result.audio.codec,
-                result.audio.sample_rate_hz,
-                result.audio.channels,
-                result.audio.bitrate_bps,
-                result.audio.duration_ms,
-                result.audio.stream_count,
-                result.audio.container,
-            ),
-            Err(message) => {
-                findings.push(Finding {
-                    code: "normalization.probe_output_failed".to_owned(),
-                    message: truncate_message(&message),
-                    severity: FindingSeverity::Warning,
-                    file: Some(relative.clone()),
-                    evidence: serde_json::json!({ "tool": "ffprobe" }),
-                });
-                (None, None, None, None, None, None, None)
-            }
-        };
+    let probe = run_ffprobe_safe(&output_path, options)?;
+    verify_normalized_audio(relative, &source_probe, &probe, retained)?;
 
     let output_relative = path_to_posix(output_path.strip_prefix(work_dir).unwrap_or(&output_path));
-
-    if !byte_hash.is_some() {
-        findings.push(Finding {
-            code: "normalization.output_hash_failed".to_owned(),
-            message: "could not hash normalized output".to_owned(),
-            severity: FindingSeverity::Error,
-            file: Some(relative.clone()),
-            evidence: serde_json::json!({}),
-        });
-    }
 
     let output = NormalizedOutput {
         source_file: relative.clone(),
         output_path: output_relative,
         byte_hash,
-        container: container.unwrap_or_else(|| "mp3".to_owned()),
-        codec,
-        sample_rate_hz,
-        channels,
-        bitrate_bps,
-        duration_ms,
+        container: probe
+            .audio
+            .container
+            .clone()
+            .ok_or(NormalizationError::MissingField("output container"))?,
+        codec: probe
+            .audio
+            .codec
+            .clone()
+            .ok_or(NormalizationError::MissingField("output codec"))?,
+        sample_rate_hz: probe
+            .audio
+            .sample_rate_hz
+            .ok_or(NormalizationError::MissingField("output sample rate"))?,
+        channels: probe
+            .audio
+            .channels
+            .ok_or(NormalizationError::MissingField("output channels"))?,
+        bitrate_bps: probe.audio.bitrate_bps,
+        duration_ms: probe
+            .audio
+            .duration_ms
+            .ok_or(NormalizationError::MissingField("output duration"))?,
         retained,
-        findings,
+        findings: Vec::new(),
     };
 
-    let fingerprint = if !options.cancellation.load(Ordering::SeqCst) {
+    let fingerprint = if !is_canceled(options) {
         Some(fingerprint_file(source, relative, options)?)
     } else {
-        None
+        return Err(NormalizationError::Canceled);
     };
+
+    let (source_hash_after, _) = hash_source(source)?;
+    if source_hash_after != source_hash_before {
+        return Err(NormalizationError::SourceChanged(relative.clone()));
+    }
 
     Ok(AudioProcessResult {
         output,
@@ -439,79 +488,210 @@ fn process_audio_file(
     })
 }
 
+fn hash_source(source: &Path) -> Result<(String, u64), NormalizationError> {
+    hash_file(source).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            NormalizationError::SourceMissing(source.to_path_buf())
+        } else {
+            NormalizationError::SourceUnreadable {
+                path: source.to_path_buf(),
+                message: error.to_string(),
+            }
+        }
+    })
+}
+
+fn verify_observed_source(file: &ObservedFile, source: &Path) -> Result<(), NormalizationError> {
+    let (actual, _) = hash_source(source)?;
+    if file.content_hash.as_deref() != Some(actual.as_str()) {
+        return Err(NormalizationError::SourceChanged(
+            file.relative_path.clone(),
+        ));
+    }
+    Ok(())
+}
+
 fn process_external_artwork(
     file: &ObservedFile,
     source: &Path,
     work_dir: &Path,
     options: &NormalizationOptions,
 ) -> Result<Option<NormalizedArtwork>, NormalizationError> {
-    if file.size_bytes > options.max_artwork_bytes as u64 {
-        return Ok(None);
-    }
-    let output_name = output_name_for(&file.relative_path, "jpg");
-    let output_path = work_dir.join("artwork").join(&output_name);
-    ensure_within(&output_path, work_dir)?;
-    fs::create_dir_all(output_path.parent().unwrap_or(work_dir)).map_err(|error| {
-        NormalizationError::WorkAreaCreation {
-            path: output_path.clone(),
-            message: error.to_string(),
-        }
-    })?;
+    preflight_artwork(source, options)?;
+    let output_path = output_path_for(work_dir, "artwork/external", &file.relative_path, "jpg")?;
 
-    run_ffmpeg_image_normalize(source, &output_path, options)?;
-
-    let (width, height) =
-        image_dimensions(&fs::read(&output_path).unwrap_or_default()).unwrap_or((0, 0));
-    let output_hash = hash_file(&output_path).map(|(h, _)| h).ok();
-    let output_relative = path_to_posix(output_path.strip_prefix(work_dir).unwrap_or(&output_path));
+    run_ffmpeg_image_normalize(source, &output_path, None, options)?;
+    let verified = verify_normalized_artwork(&output_path, work_dir, options)?;
 
     Ok(Some(NormalizedArtwork {
         source: "external".to_owned(),
         source_file: file.relative_path.clone(),
-        output_path: output_relative,
+        output_path: verified.relative_path,
         mime_type: "image/jpeg".to_owned(),
-        width,
-        height,
-        byte_hash: output_hash.unwrap_or_default(),
+        width: verified.width,
+        height: verified.height,
+        byte_hash: verified.byte_hash,
     }))
 }
 
 fn process_embedded_artwork(
     embedded: &ObservedArtwork,
+    source_relative: &str,
+    picture_index: usize,
     source: &Path,
     work_dir: &Path,
     options: &NormalizationOptions,
 ) -> Result<Option<NormalizedArtwork>, NormalizationError> {
-    let output_name = format!(
-        "embedded-{}_{}.jpg",
-        embedded.picture_type.as_deref().unwrap_or("front"),
-        uuid::Uuid::now_v7().simple()
-    );
-    let output_path = work_dir.join("artwork").join(&output_name);
-    ensure_within(&output_path, work_dir)?;
-    fs::create_dir_all(output_path.parent().unwrap_or(work_dir)).map_err(|error| {
-        NormalizationError::WorkAreaCreation {
-            path: output_path.clone(),
-            message: error.to_string(),
-        }
-    })?;
+    if embedded.size_bytes > options.max_artwork_bytes as u64 {
+        return Err(NormalizationError::Verification(format!(
+            "embedded artwork {picture_index} in {source_relative} exceeds the {} byte limit",
+            options.max_artwork_bytes
+        )));
+    }
+    let (Some(width), Some(height)) = (embedded.width, embedded.height) else {
+        return Err(NormalizationError::Verification(format!(
+            "embedded artwork {picture_index} in {source_relative} has no valid dimensions"
+        )));
+    };
+    if width == 0
+        || height == 0
+        || width > MAX_ARTWORK_SOURCE_DIMENSION
+        || height > MAX_ARTWORK_SOURCE_DIMENSION
+        || u64::from(width).saturating_mul(u64::from(height)) > MAX_ARTWORK_SOURCE_PIXELS
+    {
+        return Err(NormalizationError::Verification(format!(
+            "embedded artwork {picture_index} in {source_relative} has unsafe dimensions {width}x{height}"
+        )));
+    }
+    let stable_name = embedded.content_hash.clone().unwrap_or_else(|| {
+        blake3::hash(format!("{source_relative}#{picture_index}").as_bytes())
+            .to_hex()
+            .to_string()
+    });
+    let logical_source = format!("{source_relative}#embedded-{picture_index}");
+    let output_path = output_path_for(
+        work_dir,
+        "artwork/embedded",
+        &format!("{stable_name}.embedded"),
+        "jpg",
+    )?;
 
-    run_ffmpeg_extract_image(source, &output_path, options)?;
-
-    let output_hash = hash_file(&output_path).map(|(h, _)| h).ok();
-    let (width, height) =
-        image_dimensions(&fs::read(&output_path).unwrap_or_default()).unwrap_or((0, 0));
-    let output_relative = path_to_posix(output_path.strip_prefix(work_dir).unwrap_or(&output_path));
+    run_ffmpeg_image_normalize(source, &output_path, Some(picture_index), options)?;
+    let verified = verify_normalized_artwork(&output_path, work_dir, options)?;
 
     Ok(Some(NormalizedArtwork {
         source: "embedded".to_owned(),
-        source_file: source.to_string_lossy().to_string(),
-        output_path: output_relative,
+        source_file: logical_source,
+        output_path: verified.relative_path,
         mime_type: "image/jpeg".to_owned(),
+        width: verified.width,
+        height: verified.height,
+        byte_hash: verified.byte_hash,
+    }))
+}
+
+struct VerifiedArtwork {
+    relative_path: String,
+    width: u32,
+    height: u32,
+    byte_hash: String,
+}
+
+fn preflight_artwork(
+    source: &Path,
+    options: &NormalizationOptions,
+) -> Result<(), NormalizationError> {
+    let metadata = fs::metadata(source).map_err(|error| NormalizationError::SourceUnreadable {
+        path: source.to_path_buf(),
+        message: error.to_string(),
+    })?;
+    if metadata.len() == 0 || metadata.len() > options.max_artwork_bytes as u64 {
+        return Err(NormalizationError::Verification(format!(
+            "artwork byte size {} is outside 1..={} bytes",
+            metadata.len(),
+            options.max_artwork_bytes
+        )));
+    }
+    let file = File::open(source).map_err(|error| NormalizationError::SourceUnreadable {
+        path: source.to_path_buf(),
+        message: error.to_string(),
+    })?;
+    let bytes = read_limited(file, options.max_artwork_bytes).map_err(|error| {
+        NormalizationError::SourceUnreadable {
+            path: source.to_path_buf(),
+            message: error.to_string(),
+        }
+    })?;
+    let (width, height) = image_dimensions(&bytes).ok_or_else(|| {
+        NormalizationError::Verification("unsupported or malformed artwork header".to_owned())
+    })?;
+    if width == 0
+        || height == 0
+        || width > MAX_ARTWORK_SOURCE_DIMENSION
+        || height > MAX_ARTWORK_SOURCE_DIMENSION
+        || u64::from(width).saturating_mul(u64::from(height)) > MAX_ARTWORK_SOURCE_PIXELS
+    {
+        return Err(NormalizationError::Verification(format!(
+            "artwork dimensions {width}x{height} exceed resource limits"
+        )));
+    }
+    Ok(())
+}
+
+fn verify_normalized_artwork(
+    output: &Path,
+    work_dir: &Path,
+    options: &NormalizationOptions,
+) -> Result<VerifiedArtwork, NormalizationError> {
+    let (byte_hash, size) = hash_file(output).map_err(|error| {
+        NormalizationError::Verification(format!("normalized artwork could not be hashed: {error}"))
+    })?;
+    if size == 0 || size > options.max_artwork_bytes as u64 {
+        return Err(NormalizationError::Verification(format!(
+            "normalized artwork byte size {size} is outside 1..={} bytes",
+            options.max_artwork_bytes
+        )));
+    }
+    let file = File::open(output).map_err(|error| {
+        NormalizationError::Verification(format!("normalized artwork could not be opened: {error}"))
+    })?;
+    let bytes = read_limited(file, options.max_artwork_bytes).map_err(|error| {
+        NormalizationError::Verification(format!("normalized artwork could not be read: {error}"))
+    })?;
+    if !bytes.starts_with(&[0xff, 0xd8]) {
+        return Err(NormalizationError::Verification(
+            "normalized artwork is not JPEG".to_owned(),
+        ));
+    }
+    let (width, height) = image_dimensions(&bytes).ok_or_else(|| {
+        NormalizationError::Verification("normalized artwork has no valid dimensions".to_owned())
+    })?;
+    if width != CANONICAL_ARTWORK_MAX_DIMENSION || height != CANONICAL_ARTWORK_MAX_DIMENSION {
+        return Err(NormalizationError::Verification(format!(
+            "normalized artwork is {width}x{height}, expected {0}x{0}",
+            CANONICAL_ARTWORK_MAX_DIMENSION
+        )));
+    }
+    let relative_path = output
+        .strip_prefix(work_dir)
+        .map(path_to_posix)
+        .map_err(|_| NormalizationError::PathEscape(output.display().to_string()))?;
+    Ok(VerifiedArtwork {
+        relative_path,
         width,
         height,
-        byte_hash: output_hash.unwrap_or_default(),
-    }))
+        byte_hash,
+    })
+}
+
+fn artwork_failure(file: &ObservedFile, error: &NormalizationError) -> Finding {
+    Finding {
+        code: "artwork.normalization_failed".to_owned(),
+        message: truncate_message(&error.to_string()),
+        severity: FindingSeverity::Warning,
+        file: Some(file.relative_path.clone()),
+        evidence: serde_json::json!({ "error": error.to_string() }),
+    }
 }
 
 fn fingerprint_file(
@@ -525,42 +705,121 @@ fn fingerprint_file(
         NormalizationError::Fpcalc(format!("invalid fpcalc JSON output: {error}"))
     })?;
 
-    let duration_ms = parsed.duration.map(|d| {
-        let millis = (d * 1000.0).round();
-        if millis > 0.0 && millis <= f64::from(u32::MAX) {
-            millis as u64
-        } else {
-            0
-        }
-    });
-
-    if parsed.fingerprint.is_empty() {
-        Err(NormalizationError::Fpcalc(
-            "fpcalc produced empty fingerprint".to_owned(),
-        ))
-    } else {
-        Ok(FingerprintObservation {
-            source_file: relative_path.to_owned(),
-            fingerprint: parsed.fingerprint,
-            duration_ms,
-            findings: Vec::new(),
-        })
+    let duration = parsed
+        .duration
+        .filter(|value| value.is_finite() && *value > 0.0)
+        .ok_or_else(|| NormalizationError::Fpcalc("fpcalc produced invalid duration".to_owned()))?;
+    let duration_ms = (duration * 1000.0).round();
+    if !(1.0..=(u64::MAX as f64)).contains(&duration_ms) {
+        return Err(NormalizationError::Fpcalc(
+            "fpcalc duration is outside the supported range".to_owned(),
+        ));
     }
+
+    let fingerprint = parsed.fingerprint.trim();
+    if fingerprint.is_empty() {
+        return Err(NormalizationError::Fpcalc(
+            "fpcalc produced empty fingerprint".to_owned(),
+        ));
+    }
+    Ok(FingerprintObservation {
+        source_file: relative_path.to_owned(),
+        fingerprint: fingerprint.to_owned(),
+        duration_ms: duration_ms as u64,
+        findings: Vec::new(),
+    })
 }
 
-/// Determines whether a source file is already in the canonical MP3 profile and
-/// can be copied rather than re-encoded.
-fn is_canonical_mp3(file: &ObservedFile) -> bool {
-    let audio = match &file.audio {
-        Some(audio) => audio,
-        None => return false,
-    };
-    audio.codec.as_deref() == Some("mp3")
-        && audio.sample_rate_hz == Some(CANONICAL_SAMPLE_RATE_HZ)
-        && audio
-            .bitrate_bps
-            .is_some_and(|b| b <= CANONICAL_MAX_BITRATE_BPS)
-        && audio.stream_count.is_some_and(|s| s <= 1)
+/// Legacy-compatible retention policy: an existing MP3 is not re-encoded
+/// merely to force the conversion profile's sample rate or VBR mode. It must
+/// still have exactly one audio stream and pass a complete decode check before
+/// its bytes are copied. Attached artwork and other non-audio streams remain
+/// intact because retention is byte-for-byte.
+fn is_retainable_mp3(probe: &ProbeResult) -> bool {
+    probe.audio.codec.as_deref() == Some("mp3")
+        && probe
+            .audio
+            .container
+            .as_deref()
+            .is_some_and(|container| container.split(',').any(|name| name == "mp3"))
+        && probe.audio_stream_count == 1
+}
+
+fn verify_normalized_audio(
+    relative: &str,
+    source: &ProbeResult,
+    output: &ProbeResult,
+    retained: bool,
+) -> Result<(), NormalizationError> {
+    if output.audio_stream_count != 1 {
+        return Err(NormalizationError::Verification(format!(
+            "normalized output for {relative} contains {} audio streams",
+            output.audio_stream_count
+        )));
+    }
+    if output.audio.codec.as_deref() != Some("mp3") {
+        return Err(NormalizationError::Verification(format!(
+            "normalized output for {relative} is not MP3"
+        )));
+    }
+    let container_is_mp3 = output
+        .audio
+        .container
+        .as_deref()
+        .is_some_and(|container| container.split(',').any(|name| name == "mp3"));
+    if !container_is_mp3 {
+        return Err(NormalizationError::Verification(format!(
+            "normalized output for {relative} is not in an MP3 container"
+        )));
+    }
+
+    let output_rate = output
+        .audio
+        .sample_rate_hz
+        .ok_or(NormalizationError::MissingField("output sample rate"))?;
+    if retained {
+        if source.audio.sample_rate_hz != Some(output_rate) {
+            return Err(NormalizationError::Verification(format!(
+                "retained MP3 sample rate changed for {relative}"
+            )));
+        }
+    } else if output_rate != CANONICAL_SAMPLE_RATE_HZ {
+        return Err(NormalizationError::Verification(format!(
+            "encoded output for {relative} has sample rate {output_rate}, expected {CANONICAL_SAMPLE_RATE_HZ}"
+        )));
+    }
+
+    let source_channels = source
+        .audio
+        .channels
+        .ok_or(NormalizationError::MissingField("source channels"))?;
+    let output_channels = output
+        .audio
+        .channels
+        .ok_or(NormalizationError::MissingField("output channels"))?;
+    let expected_channels = source_channels.min(2);
+    if output_channels != expected_channels {
+        return Err(NormalizationError::Verification(format!(
+            "normalized output for {relative} has {output_channels} channels, expected {expected_channels}"
+        )));
+    }
+
+    let source_duration = source
+        .audio
+        .duration_ms
+        .ok_or(NormalizationError::MissingField("source duration"))?;
+    let output_duration = output
+        .audio
+        .duration_ms
+        .ok_or(NormalizationError::MissingField("output duration"))?;
+    let tolerance = OUTPUT_DURATION_TOLERANCE_MS.max(source_duration / 50);
+    if source_duration.abs_diff(output_duration) > tolerance {
+        return Err(NormalizationError::Verification(format!(
+            "normalized output duration for {relative} differs by {} ms (allowed {tolerance} ms)",
+            source_duration.abs_diff(output_duration)
+        )));
+    }
+    Ok(())
 }
 
 fn run_ffmpeg_encode(
@@ -572,6 +831,7 @@ fn run_ffmpeg_encode(
         "-y".to_string(),
         "-v".to_string(),
         "error".to_string(),
+        "-xerror".to_string(),
         "-i".to_string(),
         input.to_string_lossy().to_string(),
         "-vn".to_string(),
@@ -585,6 +845,8 @@ fn run_ffmpeg_encode(
         "384k".to_string(),
         "-ar".to_string(),
         "48000".to_string(),
+        "-map_metadata".to_string(),
+        "0".to_string(),
         output.to_string_lossy().to_string(),
     ];
 
@@ -593,6 +855,8 @@ fn run_ffmpeg_encode(
         &args,
         options.ffmpeg_timeout,
         options.max_tool_output_bytes,
+        &options.cancellation,
+        options.shutdown.as_deref(),
     )?;
 
     if exit_code != 0 {
@@ -608,12 +872,17 @@ fn run_ffmpeg_process(
     args: &[String],
     timeout: StdDuration,
     max_output: usize,
+    cancellation: &AtomicBool,
+    shutdown: Option<&AtomicBool>,
 ) -> Result<(i32, String), NormalizationError> {
     let mut command = Command::new(ffmpeg_path);
     for arg in args {
         command.arg(arg);
     }
-    command.stdout(Stdio::null()).stderr(Stdio::piped());
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped());
 
     let mut child = command
         .spawn()
@@ -623,7 +892,7 @@ fn run_ffmpeg_process(
         stderr.map(|stderr| thread::spawn(move || read_limited(stderr, max_output)));
     let deadline = Instant::now() + timeout;
 
-    let status = run_child_wait_ffmpeg(child, deadline)?;
+    let status = run_child_wait_ffmpeg(child, deadline, cancellation, shutdown)?;
 
     let stderr_output = stderr_reader
         .and_then(|h| h.join().ok())
@@ -637,17 +906,26 @@ fn run_ffmpeg_process(
 fn run_child_wait_ffmpeg(
     mut child: std::process::Child,
     deadline: Instant,
+    cancellation: &AtomicBool,
+    shutdown: Option<&AtomicBool>,
 ) -> Result<std::process::ExitStatus, NormalizationError> {
     loop {
         match child.try_wait() {
             Ok(Some(status)) => return Ok(status),
+            Ok(None)
+                if cancellation.load(Ordering::SeqCst)
+                    || shutdown.is_some_and(|signal| signal.load(Ordering::SeqCst)) =>
+            {
+                terminate_and_reap(&mut child);
+                return Err(NormalizationError::Canceled);
+            }
             Ok(None) if Instant::now() >= deadline => {
-                let _ = child.kill();
-                let _ = child.wait();
+                terminate_and_reap(&mut child);
                 return Err(NormalizationError::Ffmpeg("ffmpeg timed out".to_owned()));
             }
             Ok(None) => thread::sleep(StdDuration::from_millis(10)),
             Err(error) => {
+                terminate_and_reap(&mut child);
                 return Err(NormalizationError::Ffmpeg(format!(
                     "unable to wait for ffmpeg: {error}"
                 )));
@@ -660,7 +938,10 @@ fn run_fpcalc(input: &Path, options: &NormalizationOptions) -> Result<String, No
     let mut child = Command::new(&options.fpcalc_path)
         .arg("-json")
         .arg("-length")
+        .arg(FINGERPRINT_LENGTH_SECONDS.to_string())
+        .arg("--")
         .arg(input)
+        .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -676,7 +957,13 @@ fn run_fpcalc(input: &Path, options: &NormalizationOptions) -> Result<String, No
 
     let deadline = Instant::now() + options.fpcalc_timeout;
     let mut child_for_wait = child;
-    let status = run_child_wait_generic(&mut child_for_wait, deadline, "fpcalc")?;
+    let status = run_child_wait_generic(
+        &mut child_for_wait,
+        deadline,
+        "fpcalc",
+        &options.cancellation,
+        options.shutdown.as_deref(),
+    )?;
 
     let stdout_output = stdout_reader
         .and_then(|h| h.join().ok())
@@ -709,17 +996,26 @@ fn run_child_wait_generic(
     child: &mut std::process::Child,
     deadline: Instant,
     name: &str,
+    cancellation: &AtomicBool,
+    shutdown: Option<&AtomicBool>,
 ) -> Result<std::process::ExitStatus, NormalizationError> {
     loop {
         match child.try_wait() {
             Ok(Some(status)) => return Ok(status),
+            Ok(None)
+                if cancellation.load(Ordering::SeqCst)
+                    || shutdown.is_some_and(|signal| signal.load(Ordering::SeqCst)) =>
+            {
+                terminate_and_reap(child);
+                return Err(NormalizationError::Canceled);
+            }
             Ok(None) if Instant::now() >= deadline => {
-                let _ = child.kill();
-                let _ = child.wait();
+                terminate_and_reap(child);
                 return Err(NormalizationError::Fpcalc(format!("{name} timed out")));
             }
             Ok(None) => thread::sleep(StdDuration::from_millis(10)),
             Err(error) => {
+                terminate_and_reap(child);
                 return Err(NormalizationError::Fpcalc(format!(
                     "unable to wait for {name}: {error}"
                 )));
@@ -728,9 +1024,47 @@ fn run_child_wait_generic(
     }
 }
 
+fn terminate_and_reap(child: &mut std::process::Child) {
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+fn verify_audio_decodes(
+    input: &Path,
+    options: &NormalizationOptions,
+) -> Result<(), NormalizationError> {
+    let args = vec![
+        "-v".to_owned(),
+        "error".to_owned(),
+        "-xerror".to_owned(),
+        "-i".to_owned(),
+        input.to_string_lossy().into_owned(),
+        "-map".to_owned(),
+        "0:a:0".to_owned(),
+        "-f".to_owned(),
+        "null".to_owned(),
+        "-".to_owned(),
+    ];
+    let (exit_code, stderr) = run_ffmpeg_process(
+        &options.ffmpeg_path,
+        &args,
+        options.ffmpeg_timeout,
+        options.max_tool_output_bytes,
+        &options.cancellation,
+        options.shutdown.as_deref(),
+    )?;
+    if exit_code != 0 {
+        return Err(NormalizationError::Verification(format!(
+            "source MP3 failed complete decode (exit {exit_code}): {stderr}"
+        )));
+    }
+    Ok(())
+}
+
 fn run_ffmpeg_image_normalize(
     input: &Path,
     output: &Path,
+    embedded_picture_index: Option<usize>,
     options: &NormalizationOptions,
 ) -> Result<(), NormalizationError> {
     let scale_arg = format!(
@@ -741,10 +1075,23 @@ fn run_ffmpeg_image_normalize(
         "-y".to_string(),
         "-v".to_string(),
         "error".to_string(),
+        "-xerror".to_string(),
         "-i".to_string(),
         input.to_string_lossy().to_string(),
+        "-map".to_string(),
+        embedded_picture_index
+            .map(|index| format!("0:v:{index}"))
+            .unwrap_or_else(|| "0:v:0".to_owned()),
+        "-frames:v".to_string(),
+        "1".to_string(),
         "-vf".to_string(),
         scale_arg,
+        "-c:v".to_string(),
+        "mjpeg".to_string(),
+        "-q:v".to_string(),
+        "2".to_string(),
+        "-map_metadata".to_string(),
+        "-1".to_string(),
         output.to_string_lossy().to_string(),
     ];
 
@@ -753,6 +1100,8 @@ fn run_ffmpeg_image_normalize(
         &args,
         options.ffmpeg_timeout,
         options.max_tool_output_bytes,
+        &options.cancellation,
+        options.shutdown.as_deref(),
     )?;
 
     if exit_code != 0 {
@@ -763,61 +1112,52 @@ fn run_ffmpeg_image_normalize(
     Ok(())
 }
 
-fn run_ffmpeg_extract_image(
-    input: &Path,
-    output: &Path,
+fn run_ffprobe_safe(
+    path: &Path,
     options: &NormalizationOptions,
-) -> Result<(), NormalizationError> {
-    let args: Vec<String> = vec![
-        "-y".to_string(),
-        "-v".to_string(),
-        "error".to_string(),
-        "-i".to_string(),
-        input.to_string_lossy().to_string(),
-        "-an".to_string(),
-        "-vcodec".to_string(),
-        "copy".to_string(),
-        output.to_string_lossy().to_string(),
-    ];
-
-    let (exit_code, stderr) = run_ffmpeg_process(
-        &options.ffmpeg_path,
-        &args,
-        options.ffmpeg_timeout,
-        options.max_tool_output_bytes,
-    )?;
-
-    if exit_code != 0 {
-        return Err(NormalizationError::Ffmpeg(format!(
-            "ffmpeg image extract failed (exit {exit_code}): {stderr}"
-        )));
-    }
-    Ok(())
-}
-
-fn run_ffprobe_safe(path: &Path, options: &NormalizationOptions) -> Result<ProbeResult, String> {
+) -> Result<ProbeResult, NormalizationError> {
     let probe_options = InspectionOptions {
         ffprobe_path: options.ffprobe_path.clone(),
         ffprobe_timeout: options.ffprobe_timeout,
         max_tool_output_bytes: options.max_tool_output_bytes,
         max_artwork_bytes: options.max_artwork_bytes,
     };
-    run_ffprobe(path, &probe_options)
+    run_ffprobe_cancellable(
+        path,
+        &probe_options,
+        &options.cancellation,
+        options.shutdown.as_deref(),
+    )
+    .map_err(|message| {
+        if is_canceled(options) || message == "ffprobe canceled" {
+            NormalizationError::Canceled
+        } else {
+            NormalizationError::Verification(format!(
+                "ffprobe verification failed for {}: {message}",
+                path.display()
+            ))
+        }
+    })
 }
 
-fn create_work_area(base: &Path, work_item_id: Uuid) -> Result<PathBuf, NormalizationError> {
+fn create_work_area(
+    base: &Path,
+    work_item_id: Uuid,
+    attempt_id: Uuid,
+) -> Result<PathBuf, NormalizationError> {
     fs::create_dir_all(base).map_err(|error| NormalizationError::WorkAreaCreation {
         path: base.to_path_buf(),
         message: error.to_string(),
     })?;
-    let work_dir = base.join(work_item_id.simple().to_string());
-    if work_dir.exists() {
-        fs::remove_dir_all(&work_dir).map_err(|error| NormalizationError::WorkAreaCreation {
-            path: work_dir.clone(),
-            message: error.to_string(),
-        })?;
-    }
-    fs::create_dir_all(&work_dir).map_err(|error| NormalizationError::WorkAreaCreation {
+    let attempts_dir = base
+        .join(work_item_id.simple().to_string())
+        .join("attempts");
+    fs::create_dir_all(&attempts_dir).map_err(|error| NormalizationError::WorkAreaCreation {
+        path: attempts_dir.clone(),
+        message: error.to_string(),
+    })?;
+    let work_dir = attempts_dir.join(attempt_id.simple().to_string());
+    fs::create_dir(&work_dir).map_err(|error| NormalizationError::WorkAreaCreation {
         path: work_dir.clone(),
         message: error.to_string(),
     })?;
@@ -834,6 +1174,99 @@ fn create_work_area(base: &Path, work_item_id: Uuid) -> Result<PathBuf, Normaliz
         }
     })?;
     Ok(work_dir)
+}
+
+fn resolve_source_file(source_root: &Path, relative: &str) -> Result<PathBuf, NormalizationError> {
+    let relative_path = Path::new(relative);
+    if relative_path.is_absolute()
+        || relative_path.components().any(|component| {
+            matches!(
+                component,
+                Component::ParentDir | Component::RootDir | Component::Prefix(_)
+            )
+        })
+    {
+        return Err(NormalizationError::PathEscape(relative.to_owned()));
+    }
+    let root =
+        source_root
+            .canonicalize()
+            .map_err(|error| NormalizationError::SourceUnreadable {
+                path: source_root.to_path_buf(),
+                message: error.to_string(),
+            })?;
+    let candidate = source_root.join(relative_path);
+    let metadata = fs::symlink_metadata(&candidate).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            NormalizationError::SourceMissing(candidate.clone())
+        } else {
+            NormalizationError::SourceUnreadable {
+                path: candidate.clone(),
+                message: error.to_string(),
+            }
+        }
+    })?;
+    if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
+        return Err(NormalizationError::PathEscape(format!(
+            "source is not a regular non-symlink file: {}",
+            candidate.display()
+        )));
+    }
+    let canonical =
+        candidate
+            .canonicalize()
+            .map_err(|error| NormalizationError::SourceUnreadable {
+                path: candidate.clone(),
+                message: error.to_string(),
+            })?;
+    canonical
+        .strip_prefix(&root)
+        .map_err(|_| NormalizationError::PathEscape(relative.to_owned()))?;
+    Ok(canonical)
+}
+
+fn output_path_for(
+    work_dir: &Path,
+    category: &str,
+    relative: &str,
+    extension: &str,
+) -> Result<PathBuf, NormalizationError> {
+    let relative_path = Path::new(relative);
+    if relative_path.is_absolute()
+        || relative_path.components().any(|component| {
+            matches!(
+                component,
+                Component::ParentDir | Component::RootDir | Component::Prefix(_)
+            )
+        })
+    {
+        return Err(NormalizationError::PathEscape(relative.to_owned()));
+    }
+    let mut output_relative = relative_path.to_path_buf();
+    let file_name = relative_path
+        .file_name()
+        .ok_or_else(|| NormalizationError::PathEscape(relative.to_owned()))?;
+    let mut output_name = file_name.to_os_string();
+    output_name.push(format!(".{extension}"));
+    output_relative.set_file_name(output_name);
+    let output = work_dir.join(category).join(output_relative);
+    ensure_within(&output, work_dir)?;
+    let parent = output.parent().ok_or_else(|| {
+        NormalizationError::PathEscape(format!("output has no parent: {}", output.display()))
+    })?;
+    fs::create_dir_all(parent).map_err(|error| NormalizationError::WorkAreaCreation {
+        path: parent.to_path_buf(),
+        message: error.to_string(),
+    })?;
+    Ok(output)
+}
+
+fn is_canceled(options: &NormalizationOptions) -> bool {
+    options.cancellation.load(Ordering::SeqCst)
+        || options
+            .shutdown
+            .as_ref()
+            .is_some_and(|signal| signal.load(Ordering::SeqCst))
 }
 
 fn ensure_within(path: &Path, base: &Path) -> Result<(), NormalizationError> {
@@ -867,14 +1300,6 @@ fn normalize_path(path: &Path) -> PathBuf {
     resolved
 }
 
-fn output_name_for(relative: &str, extension: &str) -> String {
-    let stem = Path::new(relative)
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("audio");
-    format!("{stem}.{extension}")
-}
-
 fn parse_sidecar_for_file(file: &ObservedFile) -> Option<ObservedFileKind> {
     if file.sidecar_type.is_some() {
         match file.sidecar_type.as_deref() {
@@ -902,8 +1327,9 @@ fn parse_sidecar_for_file(file: &ObservedFile) -> Option<ObservedFileKind> {
 fn parse_sidecar_content(
     file: &ObservedFile,
     source: &Path,
+    kind: ObservedFileKind,
 ) -> Result<ParsedSidecar, NormalizationError> {
-    let sidecar_type = match file.kind {
+    let sidecar_type = match kind {
         ObservedFileKind::CueSheet => "cue",
         ObservedFileKind::Playlist => "m3u",
         ObservedFileKind::Nfo => "nfo",
@@ -912,27 +1338,109 @@ fn parse_sidecar_content(
         _ => "sidecar",
     };
 
-    let content =
-        fs::read_to_string(source).map_err(|error| NormalizationError::SourceUnreadable {
+    let metadata = fs::metadata(source).map_err(|error| NormalizationError::SourceUnreadable {
+        path: source.to_path_buf(),
+        message: error.to_string(),
+    })?;
+    if metadata.len() > MAX_SIDECAR_BYTES {
+        return Err(NormalizationError::Verification(format!(
+            "sidecar exceeds the {MAX_SIDECAR_BYTES} byte limit"
+        )));
+    }
+    let file_handle = File::open(source).map_err(|error| NormalizationError::SourceUnreadable {
+        path: source.to_path_buf(),
+        message: error.to_string(),
+    })?;
+    let limit = usize::try_from(MAX_SIDECAR_BYTES).unwrap_or(usize::MAX);
+    let bytes = read_limited(file_handle, limit.saturating_add(1)).map_err(|error| {
+        NormalizationError::SourceUnreadable {
             path: source.to_path_buf(),
             message: error.to_string(),
-        })?;
+        }
+    })?;
+    if bytes.len() > limit {
+        return Err(NormalizationError::Verification(format!(
+            "sidecar exceeds the {MAX_SIDECAR_BYTES} byte limit"
+        )));
+    }
+    let actual_hash = blake3::hash(&bytes).to_hex().to_string();
+    if file.content_hash.as_deref() != Some(actual_hash.as_str()) {
+        return Err(NormalizationError::SourceChanged(
+            file.relative_path.clone(),
+        ));
+    }
+    let (content, mut findings) = decode_sidecar(&bytes, &file.relative_path);
 
-    let parsed = match sidecar_type {
+    let (parsed, parser_findings) = match sidecar_type {
         "cue" => parse_cue(&content),
         "m3u" => parse_m3u(&content),
         "sfv" => parse_sfv(&content),
         "nfo" => parse_nfo(&content),
         "lrc" => parse_lrc(&content),
-        _ => serde_json::json!({ "raw": content }),
+        _ => (serde_json::json!({ "raw": content }), Vec::new()),
     };
+    findings.extend(parser_findings.into_iter().map(|mut finding| {
+        finding.file = Some(file.relative_path.clone());
+        finding
+    }));
 
     Ok(ParsedSidecar {
         sidecar_type: sidecar_type.to_owned(),
         relative_path: file.relative_path.clone(),
         parsed,
-        findings: Vec::new(),
+        findings,
     })
+}
+
+fn decode_sidecar(bytes: &[u8], relative: &str) -> (String, Vec<Finding>) {
+    let bytes = bytes.strip_prefix(&[0xef, 0xbb, 0xbf]).unwrap_or(bytes);
+    match String::from_utf8(bytes.to_vec()) {
+        Ok(content) => (content, Vec::new()),
+        Err(_) => (
+            bytes.iter().map(|byte| windows_1252_char(*byte)).collect(),
+            vec![Finding {
+                code: "sidecar.encoding_fallback".to_owned(),
+                message: "sidecar was decoded as Windows-1252 after UTF-8 decoding failed"
+                    .to_owned(),
+                severity: FindingSeverity::Warning,
+                file: Some(relative.to_owned()),
+                evidence: serde_json::json!({ "encoding": "windows-1252" }),
+            }],
+        ),
+    }
+}
+
+fn windows_1252_char(byte: u8) -> char {
+    match byte {
+        0x80 => '\u{20ac}',
+        0x82 => '\u{201a}',
+        0x83 => '\u{0192}',
+        0x84 => '\u{201e}',
+        0x85 => '\u{2026}',
+        0x86 => '\u{2020}',
+        0x87 => '\u{2021}',
+        0x88 => '\u{02c6}',
+        0x89 => '\u{2030}',
+        0x8a => '\u{0160}',
+        0x8b => '\u{2039}',
+        0x8c => '\u{0152}',
+        0x8e => '\u{017d}',
+        0x91 => '\u{2018}',
+        0x92 => '\u{2019}',
+        0x93 => '\u{201c}',
+        0x94 => '\u{201d}',
+        0x95 => '\u{2022}',
+        0x96 => '\u{2013}',
+        0x97 => '\u{2014}',
+        0x98 => '\u{02dc}',
+        0x99 => '\u{2122}',
+        0x9a => '\u{0161}',
+        0x9b => '\u{203a}',
+        0x9c => '\u{0153}',
+        0x9e => '\u{017e}',
+        0x9f => '\u{0178}',
+        _ => char::from(byte),
+    }
 }
 
 fn strip_quotes(s: &str) -> &str {
@@ -950,131 +1458,269 @@ fn strip_quotes(s: &str) -> &str {
     s
 }
 
-fn parse_cue(content: &str) -> serde_json::Value {
+fn parse_cue(content: &str) -> (serde_json::Value, Vec<Finding>) {
     let mut tracks = Vec::new();
     let mut current: Option<serde_json::Map<String, serde_json::Value>> = None;
-    for line in content.lines() {
+    let mut current_file: Option<String> = None;
+    let mut album = serde_json::Map::new();
+    let mut findings = Vec::new();
+    for (line_index, line) in content.lines().enumerate() {
         let trimmed = line.trim();
-        if trimmed.is_empty() {
+        if trimmed.is_empty() || trimmed.starts_with("REM ") {
             continue;
         }
-        if trimmed.starts_with("TRACK") {
-            if let Some(prev) = current.take() {
-                tracks.push(prev);
+        let (command, value) = trimmed
+            .split_once(char::is_whitespace)
+            .map_or((trimmed, ""), |(command, value)| (command, value.trim()));
+        match command.to_ascii_uppercase().as_str() {
+            "FILE" => match parse_cue_file(value) {
+                Some(file_name) => current_file = Some(file_name),
+                None => findings.push(parser_finding(
+                    "sidecar.cue.invalid_file",
+                    format!("invalid CUE FILE declaration on line {}", line_index + 1),
+                )),
+            },
+            "TRACK" => {
+                if let Some(prev) = current.take() {
+                    tracks.push(prev);
+                }
+                let mut fields = value.split_whitespace();
+                let number = fields.next().and_then(|part| part.parse::<u32>().ok());
+                let track_type = fields.next();
+                if number.is_none() || track_type.is_none() {
+                    findings.push(parser_finding(
+                        "sidecar.cue.invalid_track",
+                        format!("invalid CUE TRACK declaration on line {}", line_index + 1),
+                    ));
+                }
+                let mut track = serde_json::Map::new();
+                track.insert("number".to_owned(), serde_json::json!(number));
+                track.insert("type".to_owned(), serde_json::json!(track_type));
+                track.insert("file".to_owned(), serde_json::json!(current_file));
+                current = Some(track);
             }
-            current = Some(serde_json::Map::new());
-        }
-        if let Some(ref mut track) = current {
-            if trimmed.starts_with("TITLE") {
-                track.insert(
-                    "title".to_owned(),
-                    serde_json::json!(strip_quotes(
-                        trimmed.split_once(' ').map(|x| x.1).unwrap_or("").trim()
-                    )),
-                );
-            } else if trimmed.starts_with("PERFORMER") {
-                track.insert(
-                    "performer".to_owned(),
-                    serde_json::json!(strip_quotes(
-                        trimmed.split_once(' ').map(|x| x.1).unwrap_or("").trim()
-                    )),
-                );
-            } else if trimmed.starts_with("FILE") {
-                track.insert(
-                    "file".to_owned(),
-                    serde_json::json!(strip_quotes(
-                        trimmed.split_once(' ').map(|x| x.1).unwrap_or("").trim()
-                    )),
-                );
-            } else if trimmed.starts_with("INDEX") {
-                track.insert(
-                    "index".to_owned(),
-                    serde_json::json!(trimmed.splitn(3, ' ').nth(2).unwrap_or("").trim()),
-                );
+            "TITLE" | "PERFORMER" => {
+                let key = command.to_ascii_lowercase();
+                let parsed = serde_json::json!(strip_quotes(value));
+                if let Some(track) = current.as_mut() {
+                    track.insert(key, parsed);
+                } else {
+                    album.insert(key, parsed);
+                }
             }
+            "INDEX" => {
+                let mut fields = value.split_whitespace();
+                let number = fields.next().and_then(|part| part.parse::<u32>().ok());
+                let timestamp = fields.next();
+                if let (Some(track), Some(number), Some(timestamp)) =
+                    (current.as_mut(), number, timestamp)
+                {
+                    let indexes = track
+                        .entry("indexes".to_owned())
+                        .or_insert_with(|| serde_json::json!([]));
+                    if let Some(indexes) = indexes.as_array_mut() {
+                        indexes.push(serde_json::json!({
+                            "number": number,
+                            "time": timestamp,
+                        }));
+                    }
+                } else {
+                    findings.push(parser_finding(
+                        "sidecar.cue.invalid_index",
+                        format!("invalid CUE INDEX declaration on line {}", line_index + 1),
+                    ));
+                }
+            }
+            _ => {}
         }
     }
     if let Some(prev) = current {
         tracks.push(prev);
     }
-    serde_json::json!({ "tracks": tracks })
+    if tracks.is_empty() {
+        findings.push(parser_finding(
+            "sidecar.cue.no_tracks",
+            "CUE sheet contains no valid TRACK declarations".to_owned(),
+        ));
+    }
+    (
+        serde_json::json!({ "album": album, "tracks": tracks }),
+        findings,
+    )
 }
 
-fn parse_m3u(content: &str) -> serde_json::Value {
+fn parse_cue_file(value: &str) -> Option<String> {
+    let value = value.trim();
+    if let Some(rest) = value.strip_prefix('"') {
+        let end = rest.find('"')?;
+        return Some(rest[..end].to_owned());
+    }
+    value
+        .rsplit_once(char::is_whitespace)
+        .map(|(path, _kind)| path.trim().to_owned())
+        .filter(|path| !path.is_empty())
+}
+
+fn parse_m3u(content: &str) -> (serde_json::Value, Vec<Finding>) {
     let mut entries = Vec::new();
-    let mut lines = content.lines().peekable();
-    while let Some(line) = lines.next() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with("#") {
-            if trimmed.starts_with("#EXTINF") {
-                // Next line is the path
-                continue;
-            }
-            continue;
-        }
-        entries.push(serde_json::json!({
-            "path": trimmed,
-            "title": lines.clone().next().filter(|l| l.starts_with("#EXTINF"))
-                .and_then(|ext| ext.split(',').nth(1))
-                .unwrap_or(""),
-        }));
-    }
-    serde_json::json!({ "entries": entries })
-}
-
-fn parse_sfv(content: &str) -> serde_json::Value {
-    let mut entries = Vec::new();
-    for line in content.lines() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with(";") || trimmed.starts_with("SFV") {
-            continue;
-        }
-        let parts: Vec<&str> = trimmed.split_whitespace().collect();
-        if parts.len() >= 2 {
-            entries.push(serde_json::json!({
-                "file": parts[0],
-                "crc32": parts[1],
-            }));
-        }
-    }
-    serde_json::json!({ "entries": entries })
-}
-
-fn parse_nfo(content: &str) -> serde_json::Value {
-    let text = content.trim();
-    if text.starts_with("<?xml") || text.starts_with("<") {
-        serde_json::json!({ "type": "xml", "raw": text })
-    } else {
-        serde_json::json!({ "type": "text", "content": text })
-    }
-}
-
-fn parse_lrc(content: &str) -> serde_json::Value {
-    let mut lines = Vec::new();
-    for line in content.lines() {
+    let mut pending_extinf: Option<(Option<i64>, String)> = None;
+    let mut findings = Vec::new();
+    for (line_index, line) in content.lines().enumerate() {
         let trimmed = line.trim();
         if trimmed.is_empty() {
             continue;
         }
-        let (timestamp, text) = if trimmed.starts_with('[') {
-            let close = trimmed.find(']');
-            if let Some(close_pos) = close {
-                (
-                    trimmed[1..close_pos].to_string(),
-                    trimmed[close_pos + 1..].trim().to_string(),
-                )
-            } else {
-                (String::new(), trimmed.to_string())
+        if let Some(value) = trimmed.strip_prefix("#EXTINF:") {
+            if pending_extinf.is_some() {
+                findings.push(parser_finding(
+                    "sidecar.m3u.orphan_extinf",
+                    format!("EXTINF on line {} replaced a prior EXTINF", line_index + 1),
+                ));
             }
-        } else {
-            (String::new(), trimmed.to_string())
-        };
-        lines.push(serde_json::json!({
-            "time": timestamp,
-            "text": text,
+            let (duration, title) = value.split_once(',').unwrap_or((value, ""));
+            pending_extinf = Some((duration.trim().parse::<i64>().ok(), title.trim().to_owned()));
+            continue;
+        }
+        if trimmed.starts_with('#') {
+            continue;
+        }
+        let (duration_seconds, title) = pending_extinf.take().unwrap_or((None, String::new()));
+        entries.push(serde_json::json!({
+            "path": trimmed,
+            "title": title,
+            "duration_seconds": duration_seconds,
         }));
     }
-    serde_json::json!({ "lines": lines })
+    if pending_extinf.is_some() {
+        findings.push(parser_finding(
+            "sidecar.m3u.orphan_extinf",
+            "final EXTINF has no following media path".to_owned(),
+        ));
+    }
+    (serde_json::json!({ "entries": entries }), findings)
+}
+
+fn parse_sfv(content: &str) -> (serde_json::Value, Vec<Finding>) {
+    let mut entries = Vec::new();
+    let mut findings = Vec::new();
+    for (line_index, line) in content.lines().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with(";") || trimmed.starts_with("SFV") {
+            continue;
+        }
+        if let Some((file, crc32)) = trimmed.rsplit_once(char::is_whitespace)
+            && !file.trim().is_empty()
+            && crc32.len() == 8
+            && crc32.chars().all(|character| character.is_ascii_hexdigit())
+        {
+            entries.push(serde_json::json!({
+                "file": file.trim(),
+                "crc32": crc32.to_ascii_uppercase(),
+            }));
+        } else {
+            findings.push(parser_finding(
+                "sidecar.sfv.invalid_entry",
+                format!("invalid SFV entry on line {}", line_index + 1),
+            ));
+        }
+    }
+    (serde_json::json!({ "entries": entries }), findings)
+}
+
+fn parse_nfo(content: &str) -> (serde_json::Value, Vec<Finding>) {
+    let text = content.trim();
+    if text.starts_with("<?xml") || text.starts_with("<") {
+        let plausibly_well_formed = text.ends_with('>')
+            && (text.contains("</") || text.trim_end().ends_with("/>") || text.contains("?>"));
+        let findings = if plausibly_well_formed {
+            Vec::new()
+        } else {
+            vec![parser_finding(
+                "sidecar.nfo.malformed_xml",
+                "NFO appears to contain malformed XML".to_owned(),
+            )]
+        };
+        (
+            serde_json::json!({ "type": "xml", "raw": text, "well_formed": plausibly_well_formed }),
+            findings,
+        )
+    } else {
+        (
+            serde_json::json!({ "type": "text", "content": text }),
+            Vec::new(),
+        )
+    }
+}
+
+fn parse_lrc(content: &str) -> (serde_json::Value, Vec<Finding>) {
+    let mut lines = Vec::new();
+    let mut metadata = serde_json::Map::new();
+    let mut findings = Vec::new();
+    for (line_index, line) in content.lines().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let mut rest = trimmed;
+        let mut timestamps = Vec::new();
+        while let Some(after_open) = rest.strip_prefix('[') {
+            let Some(close) = after_open.find(']') else {
+                findings.push(parser_finding(
+                    "sidecar.lrc.unclosed_tag",
+                    format!("unclosed LRC tag on line {}", line_index + 1),
+                ));
+                break;
+            };
+            let tag = &after_open[..close];
+            rest = &after_open[close + 1..];
+            if is_lrc_timestamp(tag) {
+                timestamps.push(tag.to_owned());
+            } else if let Some((key, value)) = tag.split_once(':') {
+                metadata.insert(key.to_owned(), serde_json::json!(value));
+            } else {
+                findings.push(parser_finding(
+                    "sidecar.lrc.invalid_tag",
+                    format!("invalid LRC tag on line {}", line_index + 1),
+                ));
+            }
+        }
+        if timestamps.is_empty() && rest == trimmed {
+            findings.push(parser_finding(
+                "sidecar.lrc.untimed_line",
+                format!("untimed LRC line {}", line_index + 1),
+            ));
+        }
+        for timestamp in timestamps {
+            lines.push(serde_json::json!({
+                "time": timestamp,
+                "text": rest.trim(),
+            }));
+        }
+    }
+    (
+        serde_json::json!({ "metadata": metadata, "lines": lines }),
+        findings,
+    )
+}
+
+fn is_lrc_timestamp(value: &str) -> bool {
+    let Some((minutes, seconds)) = value.split_once(':') else {
+        return false;
+    };
+    minutes.parse::<u32>().is_ok()
+        && seconds
+            .parse::<f64>()
+            .is_ok_and(|seconds| (0.0..60.0).contains(&seconds))
+}
+
+fn parser_finding(code: &str, message: String) -> Finding {
+    Finding {
+        code: code.to_owned(),
+        message,
+        severity: FindingSeverity::Warning,
+        file: None,
+        evidence: serde_json::json!({}),
+    }
 }
 
 fn extract_tool_path(_version_output: &str, configured_path: &Path) -> Option<String> {
@@ -1101,162 +1747,360 @@ struct FpcalcResult {
 mod tests {
     #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
     use super::*;
+    use melodee_domain::AudioTechnicalObservation;
+
+    fn probe(container: &str, codec: &str, rate: u32, channels: u32) -> ProbeResult {
+        ProbeResult {
+            audio: AudioTechnicalObservation {
+                container: Some(container.to_owned()),
+                codec: Some(codec.to_owned()),
+                sample_rate_hz: Some(rate),
+                channels: Some(channels),
+                channel_layout: None,
+                bit_depth: None,
+                bitrate_bps: None,
+                stream_count: Some(1),
+                duration_ms: Some(10_000),
+                stream_index: Some(0),
+            },
+            mime_type: None,
+            audio_stream_count: 1,
+        }
+    }
+
+    fn test_temp_dir() -> PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "melodee-normalize-test-{}",
+            Uuid::now_v7().simple()
+        ));
+        fs::create_dir(&path).unwrap();
+        path
+    }
+
+    #[cfg(unix)]
+    fn write_script(directory: &Path, name: &str, body: &str) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+
+        let path = directory.join(name);
+        fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
+        let mut permissions = fs::metadata(&path).unwrap().permissions();
+        permissions.set_mode(0o700);
+        fs::set_permissions(&path, permissions).unwrap();
+        path
+    }
 
     #[test]
     fn canonical_mp3_profile_version_matches_domain() {
-        assert_eq!(CANONICAL_MP3_PROFILE_VERSION, "mp3-vbr-q4-384k-48k");
+        assert_eq!(
+            CANONICAL_MP3_PROFILE_VERSION,
+            "mp3-libmp3lame-vbr-q4-48khz-v1"
+        );
     }
 
     #[test]
-    fn is_canonical_mp3_true_for_48k_mp3() {
-        let audio = melodee_domain::AudioTechnicalObservation {
-            container: Some("mpeg".to_owned()),
-            codec: Some("mp3".to_owned()),
-            sample_rate_hz: Some(48_000),
-            channels: Some(2),
-            channel_layout: Some("stereo".to_owned()),
-            bit_depth: None,
-            bitrate_bps: Some(320_000),
-            stream_count: Some(1),
-            duration_ms: Some(10_000),
-            stream_index: Some(0),
-        };
-        let file = ObservedFile {
-            relative_path: "track.mp3".to_owned(),
-            kind: ObservedFileKind::Audio,
-            size_bytes: 1000,
-            modified_at: None,
-            content_hash: None,
-            mime_type: None,
-            kind_code: None,
-            metadata: None,
-            audio: Some(audio),
-            findings: Vec::new(),
-            embedded_artwork: Vec::new(),
-            sidecar_type: None,
-            bytes_read_errors: false,
-        };
-        assert!(is_canonical_mp3(&file));
+    fn retention_accepts_valid_mp3_without_requiring_conversion_profile_rate() {
+        assert!(is_retainable_mp3(&probe("mp3", "mp3", 44_100, 2)));
+        assert!(is_retainable_mp3(&probe("mp3", "mp3", 48_000, 1)));
     }
 
     #[test]
-    fn is_canonical_mp3_false_for_non_mp3() {
-        let audio = melodee_domain::AudioTechnicalObservation {
-            container: Some("flac".to_owned()),
-            codec: Some("flac".to_owned()),
-            sample_rate_hz: Some(48_000),
-            channels: Some(2),
-            channel_layout: None,
-            bit_depth: Some(16),
-            bitrate_bps: None,
-            stream_count: Some(1),
-            duration_ms: Some(10_000),
-            stream_index: Some(0),
-        };
-        let file = ObservedFile {
-            relative_path: "track.flac".to_owned(),
-            kind: ObservedFileKind::Audio,
-            size_bytes: 1000,
-            modified_at: None,
-            content_hash: None,
-            mime_type: None,
-            kind_code: None,
-            metadata: None,
-            audio: Some(audio),
-            findings: Vec::new(),
-            embedded_artwork: Vec::new(),
-            sidecar_type: None,
-            bytes_read_errors: false,
-        };
-        assert!(!is_canonical_mp3(&file));
+    fn retention_rejects_non_mp3_and_multiple_audio_streams() {
+        assert!(!is_retainable_mp3(&probe("flac", "flac", 48_000, 2)));
+        let mut multiple = probe("mp3", "mp3", 48_000, 2);
+        multiple.audio_stream_count = 2;
+        assert!(!is_retainable_mp3(&multiple));
     }
 
     #[test]
-    fn is_canonical_mp3_false_for_wrong_sample_rate() {
-        let audio = melodee_domain::AudioTechnicalObservation {
-            container: Some("mpeg".to_owned()),
-            codec: Some("mp3".to_owned()),
-            sample_rate_hz: Some(44_100),
-            channels: Some(2),
-            channel_layout: Some("stereo".to_owned()),
-            bit_depth: None,
-            bitrate_bps: Some(320_000),
-            stream_count: Some(1),
-            duration_ms: Some(10_000),
-            stream_index: Some(0),
-        };
-        let file = ObservedFile {
-            relative_path: "track.mp3".to_owned(),
-            kind: ObservedFileKind::Audio,
-            size_bytes: 1000,
-            modified_at: None,
-            content_hash: None,
-            mime_type: None,
-            kind_code: None,
-            metadata: None,
-            audio: Some(audio),
-            findings: Vec::new(),
-            embedded_artwork: Vec::new(),
-            sidecar_type: None,
-            bytes_read_errors: false,
-        };
-        assert!(!is_canonical_mp3(&file));
+    fn output_paths_preserve_directories_and_prevent_collisions() {
+        let temp = test_temp_dir();
+        let first = output_path_for(&temp, "audio", "disc1/01.flac", "mp3").unwrap();
+        let second = output_path_for(&temp, "audio", "disc2/01.flac", "mp3").unwrap();
+        assert_ne!(first, second);
+        assert!(first.ends_with("audio/disc1/01.flac.mp3"));
+        assert!(second.ends_with("audio/disc2/01.flac.mp3"));
+        assert!(output_path_for(&temp, "audio", "../escape.flac", "mp3").is_err());
+        fs::remove_dir_all(temp).unwrap();
     }
 
     #[test]
     fn parse_m3u_extracts_entries() {
         let content =
             "#EXTM3U\n#EXTINF:180,Artist - Title\ntrack01.mp3\n#EXTINF:200,Other\ntrack02.mp3\n";
-        let result = parse_m3u(content);
+        let (result, findings) = parse_m3u(content);
+        assert!(findings.is_empty());
         let entries = result["entries"].as_array().unwrap();
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0]["path"], "track01.mp3");
+        assert_eq!(entries[0]["title"], "Artist - Title");
+        assert_eq!(entries[0]["duration_seconds"], 180);
         assert_eq!(entries[1]["path"], "track02.mp3");
     }
 
     #[test]
-    fn parse_sfv_extracts_crc32_entries() {
-        let content = "SFV next 1.0\n\nfile1.mp3 12345678\nfile2.flac ABCDEF01\n;comment\n";
-        let result = parse_sfv(content);
+    fn parse_sfv_preserves_filenames_with_spaces() {
+        let content = "SFV next 1.0\n\nfile one.mp3 12345678\nfile2.flac ABCDEF01\n;comment\n";
+        let (result, findings) = parse_sfv(content);
+        assert!(findings.is_empty());
         let entries = result["entries"].as_array().expect("entries array");
         assert_eq!(entries.len(), 2);
-        assert_eq!(entries[0]["file"], "file1.mp3");
+        assert_eq!(entries[0]["file"], "file one.mp3");
         assert_eq!(entries[0]["crc32"], "12345678");
         assert_eq!(entries[1]["crc32"], "ABCDEF01");
     }
 
     #[test]
-    fn parse_lrc_extracts_timed_lines() {
-        let content = "[00:12.00]Hello\n[00:15.50]World\n";
-        let result = parse_lrc(content);
+    fn parse_lrc_extracts_multiple_timestamps() {
+        let content = "[ar:Artist]\n[00:12.00][00:15.50]Hello\n";
+        let (result, findings) = parse_lrc(content);
+        assert!(findings.is_empty());
         let lines = result["lines"].as_array().expect("lines array");
         assert_eq!(lines.len(), 2);
         assert_eq!(lines[0]["text"], "Hello");
-        assert_eq!(lines[1]["text"], "World");
+        assert_eq!(lines[1]["time"], "00:15.50");
+        assert_eq!(result["metadata"]["ar"], "Artist");
     }
 
     #[test]
     fn parse_nfo_text_vs_xml() {
-        let text_result = parse_nfo("some description text");
+        let (text_result, text_findings) = parse_nfo("some description text");
+        assert!(text_findings.is_empty());
         assert_eq!(text_result["type"], "text");
-        let xml_result = parse_nfo("<?xml version=\"1.0\"?><root/>");
+        let (xml_result, xml_findings) = parse_nfo("<?xml version=\"1.0\"?><root/>");
+        assert!(xml_findings.is_empty());
         assert_eq!(xml_result["type"], "xml");
     }
 
     #[test]
-    fn parse_cue_extracts_tracks() {
+    fn parse_cue_retains_file_context_and_track_numbers() {
         let content = "PERFORMER \"Artist\"\nTITLE \"Album\"\nFILE \"track1.wav\" WAVE\n  TRACK 01 AUDIO\n    TITLE \"Song\"\n    PERFORMER \"Artist\"\n";
-        let result = parse_cue(content);
+        let (result, findings) = parse_cue(content);
+        assert!(findings.is_empty());
         let tracks = result["tracks"].as_array().expect("tracks array");
         assert_eq!(tracks.len(), 1);
+        assert_eq!(tracks[0]["number"], 1);
+        assert_eq!(tracks[0]["file"], "track1.wav");
         assert_eq!(tracks[0]["title"], "Song");
+        assert_eq!(result["album"]["title"], "Album");
     }
 
     #[test]
-    fn output_name_replaces_extension() {
-        assert_eq!(output_name_for("disc/track.flac", "mp3"), "track.mp3");
-        assert_eq!(output_name_for("track.wav", "mp3"), "track.mp3");
-        assert_eq!(output_name_for("track.mp3", "mp3"), "track.mp3");
+    fn malformed_sidecars_produce_findings() {
+        assert!(!parse_cue("FILE broken").1.is_empty());
+        assert!(!parse_m3u("#EXTINF:12,title").1.is_empty());
+        assert!(!parse_sfv("not a valid crc").1.is_empty());
+        assert!(!parse_nfo("<root").1.is_empty());
+        assert!(!parse_lrc("[broken").1.is_empty());
+    }
+
+    #[test]
+    fn windows_1252_sidecar_fallback_is_structured() {
+        let (text, findings) = decode_sidecar(b"Beyonc\xe9", "release.nfo");
+        assert_eq!(text, "Beyonc\u{e9}");
+        assert_eq!(findings[0].code, "sidecar.encoding_fallback");
+    }
+
+    #[test]
+    fn attempt_work_areas_are_physically_isolated() {
+        let temp = test_temp_dir();
+        let work_item = Uuid::now_v7();
+        let first = create_work_area(&temp, work_item, Uuid::now_v7()).unwrap();
+        fs::write(first.join("audio/stale.mp3"), b"stale").unwrap();
+        let second = create_work_area(&temp, work_item, Uuid::now_v7()).unwrap();
+        fs::write(second.join("audio/current.mp3"), b"current").unwrap();
+        assert_ne!(first, second);
+        assert!(first.join("audio/stale.mp3").exists());
+        assert!(second.join("audio/current.mp3").exists());
+        fs::remove_dir_all(&first).unwrap();
+        assert!(second.join("audio/current.mp3").exists());
+        fs::remove_dir_all(temp).unwrap();
+    }
+
+    #[test]
+    fn artwork_preflight_rejects_byte_oversized_input() {
+        let temp = test_temp_dir();
+        let artwork = temp.join("oversized.jpg");
+        fs::write(&artwork, [0xff, 0xd8, 0xff, 0xd9, 0, 0, 0, 0]).unwrap();
+        let options = NormalizationOptions {
+            max_artwork_bytes: 4,
+            ..NormalizationOptions::default()
+        };
+        assert!(matches!(
+            preflight_artwork(&artwork, &options),
+            Err(NormalizationError::Verification(_))
+        ));
+        fs::remove_dir_all(temp).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ffmpeg_process_success_and_nonzero_are_reported() {
+        let temp = test_temp_dir();
+        let success = write_script(&temp, "success", "printf 'diagnostic' >&2\nexit 0");
+        let failure = write_script(&temp, "failure", "printf 'failed' >&2\nexit 23");
+        let cancellation = AtomicBool::new(false);
+        let (status, diagnostic) = run_ffmpeg_process(
+            &success,
+            &[],
+            StdDuration::from_secs(2),
+            1024,
+            &cancellation,
+            None,
+        )
+        .unwrap();
+        assert_eq!(status, 0);
+        assert_eq!(diagnostic, "diagnostic");
+        let (status, diagnostic) = run_ffmpeg_process(
+            &failure,
+            &[],
+            StdDuration::from_secs(2),
+            1024,
+            &cancellation,
+            None,
+        )
+        .unwrap();
+        assert_eq!(status, 23);
+        assert_eq!(diagnostic, "failed");
+        fs::remove_dir_all(temp).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ffmpeg_timeout_terminates_and_reaps_child() {
+        let temp = test_temp_dir();
+        let pid_file = temp.join("pid");
+        let script = write_script(
+            &temp,
+            "hang",
+            &format!(
+                "printf '%s' $$ > '{}'\nwhile :; do :; done",
+                pid_file.display()
+            ),
+        );
+        let cancellation = AtomicBool::new(false);
+        let error = run_ffmpeg_process(
+            &script,
+            &[],
+            StdDuration::from_millis(100),
+            1024,
+            &cancellation,
+            None,
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("timed out"));
+        let pid = fs::read_to_string(&pid_file).unwrap();
+        assert!(!Path::new("/proc").join(pid).exists());
+        fs::remove_dir_all(temp).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ffmpeg_cancellation_terminates_and_reaps_child_promptly() {
+        let temp = test_temp_dir();
+        let pid_file = temp.join("pid");
+        let script = write_script(
+            &temp,
+            "hang",
+            &format!(
+                "printf '%s' $$ > '{}'\nwhile :; do :; done",
+                pid_file.display()
+            ),
+        );
+        let cancellation = Arc::new(AtomicBool::new(false));
+        let signal = cancellation.clone();
+        let canceler = thread::spawn(move || {
+            thread::sleep(StdDuration::from_millis(100));
+            signal.store(true, Ordering::SeqCst);
+        });
+        let started = Instant::now();
+        let error = run_ffmpeg_process(
+            &script,
+            &[],
+            StdDuration::from_secs(30),
+            1024,
+            &cancellation,
+            None,
+        )
+        .unwrap_err();
+        canceler.join().unwrap();
+        assert!(matches!(error, NormalizationError::Canceled));
+        assert!(started.elapsed() < StdDuration::from_secs(2));
+        let pid = fs::read_to_string(&pid_file).unwrap();
+        assert!(!Path::new("/proc").join(pid).exists());
+        fs::remove_dir_all(temp).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn fpcalc_success_failure_timeout_and_cancellation_are_bounded() {
+        let temp = test_temp_dir();
+        let input = temp.join("-- leading 音楽.flac");
+        fs::write(&input, b"input").unwrap();
+        let success = write_script(
+            &temp,
+            "fp-success",
+            "printf '{\"duration\":12.5,\"fingerprint\":\"abc\"}'\nexit 0",
+        );
+        let failure = write_script(&temp, "fp-failure", "printf 'bad' >&2\nexit 9");
+        let malformed = write_script(&temp, "fp-malformed", "printf 'not-json'\nexit 0");
+        let empty = write_script(
+            &temp,
+            "fp-empty",
+            "printf '{\"duration\":5,\"fingerprint\":\" \"}'\nexit 0",
+        );
+        let hang = write_script(&temp, "fp-hang", "while :; do :; done");
+
+        let mut options = NormalizationOptions {
+            fpcalc_path: success,
+            fpcalc_timeout: StdDuration::from_secs(2),
+            work_area: temp.clone(),
+            ..NormalizationOptions::default()
+        };
+        let fingerprint = fingerprint_file(&input, "-- leading 音楽.flac", &options).unwrap();
+        assert_eq!(fingerprint.fingerprint, "abc");
+        assert_eq!(fingerprint.duration_ms, 12_500);
+
+        options.fpcalc_path = failure;
+        assert!(matches!(
+            run_fpcalc(&input, &options),
+            Err(NormalizationError::Fpcalc(_))
+        ));
+
+        options.fpcalc_path = malformed;
+        assert!(matches!(
+            fingerprint_file(&input, "track.flac", &options),
+            Err(NormalizationError::Fpcalc(_))
+        ));
+        options.fpcalc_path = empty;
+        assert!(matches!(
+            fingerprint_file(&input, "track.flac", &options),
+            Err(NormalizationError::Fpcalc(_))
+        ));
+
+        options.fpcalc_path = hang.clone();
+        options.fpcalc_timeout = StdDuration::from_millis(100);
+        assert!(
+            run_fpcalc(&input, &options)
+                .unwrap_err()
+                .to_string()
+                .contains("timed out")
+        );
+
+        options.fpcalc_timeout = StdDuration::from_secs(30);
+        options.cancellation = Arc::new(AtomicBool::new(false));
+        let signal = options.cancellation.clone();
+        let canceler = thread::spawn(move || {
+            thread::sleep(StdDuration::from_millis(100));
+            signal.store(true, Ordering::SeqCst);
+        });
+        let started = Instant::now();
+        assert!(matches!(
+            run_fpcalc(&input, &options),
+            Err(NormalizationError::Canceled)
+        ));
+        canceler.join().unwrap();
+        assert!(started.elapsed() < StdDuration::from_secs(2));
+        fs::remove_dir_all(temp).unwrap();
     }
 
     #[test]

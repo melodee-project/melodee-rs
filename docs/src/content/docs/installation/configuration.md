@@ -50,9 +50,25 @@ Only documented keys are supported.
 | `MELODEE__INSPECTION__FFPROBE_PATH` | `ffprobe` | Explicit ffprobe executable path. |
 | `MELODEE__INSPECTION__FFPROBE_TIMEOUT_SECONDS` | `30` | Maximum time allowed for one ffprobe process. |
 
+### Media normalization and fingerprints
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `MELODEE__NORMALIZATION__CONCURRENCY` | `2` | Maximum Releases normalized simultaneously by one server process. |
+| `MELODEE__NORMALIZATION__FFMPEG_PATH` | `ffmpeg` | Explicit FFmpeg executable path. |
+| `MELODEE__NORMALIZATION__FFMPEG_TIMEOUT_SECONDS` | `300` | Maximum time for one FFmpeg encode, decode verification, or artwork operation. |
+| `MELODEE__NORMALIZATION__FPCALC_PATH` | `fpcalc` | Explicit Chromaprint `fpcalc` executable path. |
+| `MELODEE__NORMALIZATION__FPCALC_TIMEOUT_SECONDS` | `60` | Maximum time for one fingerprint operation. |
+| `MELODEE__NORMALIZATION__WORK_AREA` | `/tmp/melodee-work` | Temporary, non-authoritative root for attempt-isolated normalized output. |
+
 ### Notes
 
 - `MELODEE__INGEST__SOURCES_JSON` and the legacy single-root variables are mutually additive only through configuration code: JSON takes precedence when present.
 - If no inbound source is configured, startup remains healthy and periodic reconciliation is not started.
-- Media inspection requires a working `ffprobe` executable. It reads source media and stores a
-  versioned manifest in PostgreSQL; it does not normalize, move, rename, or delete source files.
+- Media inspection requires `ffprobe`. Normalization also requires an FFmpeg build with
+  `libmp3lame` and the Chromaprint `fpcalc` command.
+- Work leases, timeouts, retry settings, batch sizes, and concurrency must be positive. The
+  normalization lease heartbeat is derived from the configured lease duration.
+- Inspection and normalization do not move, rename, rewrite, or delete source files. Normalized
+  files stay in the temporary work area until a later publication phase verifies and publishes
+  them; the current implementation does not publish canonical library files.
