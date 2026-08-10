@@ -25,7 +25,9 @@ pub use dry_run::{PolicyDryRun, PolicyDryRunResult, PolicyDryRunner};
 pub use engine::{
     DefaultPolicyRuleSet, DefaultRules, PolicyEngine, PolicyEvaluation, PolicyInput, default_rules,
 };
-pub use novelty::{NoveltyCategory, NoveltyEngine, NoveltyEngineError, NoveltyInput};
+pub use novelty::{
+    NoveltyAssessment, NoveltyCategory, NoveltyEngine, NoveltyEngineError, NoveltyInput,
+};
 
 /// Outcome of one bounded policy evaluation pass.
 #[derive(Debug, Clone, Default)]

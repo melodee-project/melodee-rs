@@ -169,6 +169,9 @@ impl IngestionState {
                     | (Self::Publishing, Self::Published)
                     | (Self::Published, Self::Cataloging)
                     | (Self::Cataloging, Self::Cataloged)
+                    | (Self::Cataloged, Self::NeedsReview)
+                    | (Self::Cataloged, Self::Quarantined)
+                    | (Self::Cataloged, Self::Ignored)
                     | (Self::Cataloged, Self::Indexing)
                     | (Self::Indexing, Self::Indexed)
                     | (Self::Inspecting, Self::Failed)
@@ -176,6 +179,7 @@ impl IngestionState {
                     | (Self::Validating, Self::Failed)
                     | (Self::Publishing, Self::Failed)
                     | (Self::Cataloging, Self::Failed)
+                    | (Self::Cataloged, Self::Failed)
                     | (Self::Indexing, Self::Failed)
             ),
             TransitionKind::Operator => matches!(
@@ -635,6 +639,30 @@ mod tests {
             IngestionState::Quarantined
                 .ensure_transition(IngestionState::Ready, TransitionKind::Worker)
                 .is_err()
+        );
+    }
+
+    #[test]
+    fn policy_worker_can_route_from_cataloged() {
+        for to in [
+            IngestionState::NeedsReview,
+            IngestionState::Quarantined,
+            IngestionState::Ignored,
+            IngestionState::Indexing,
+            IngestionState::Failed,
+        ] {
+            assert!(
+                IngestionState::Cataloged
+                    .ensure_transition(to, TransitionKind::Worker)
+                    .is_ok(),
+                "Cataloged -> {to:?} must be a legal worker (policy) transition"
+            );
+        }
+        assert!(
+            IngestionState::Cataloged
+                .ensure_transition(IngestionState::Deleted, TransitionKind::Worker)
+                .is_err(),
+            "Cataloged -> Deleted must require operator authorization"
         );
     }
 

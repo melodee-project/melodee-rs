@@ -79,6 +79,11 @@ pub struct Confidence(u16);
 impl Confidence {
     pub const MAX_BASIS_POINTS: u16 = 10_000;
 
+    /// Zero confidence, for use as a safe fallback in const contexts.
+    pub const fn zero() -> Self {
+        Self(0)
+    }
+
     pub fn new(basis_points: u16) -> Result<Self, DomainInvariantError> {
         if basis_points > Self::MAX_BASIS_POINTS {
             Err(DomainInvariantError::InvalidConfidence)

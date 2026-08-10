@@ -18,7 +18,7 @@ use melodee_domain::{
 use sqlx::{PgPool, Postgres, QueryBuilder, Transaction};
 use thiserror::Error;
 use time::{Date, Month, OffsetDateTime};
-use tracing::{info, instrument};
+use tracing::{info, instrument, warn};
 use uuid::Uuid;
 
 use crate::config::WorkEngineConfig;
@@ -231,6 +231,14 @@ pub struct StoredArtistCandidate {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct CatalogStore;
 
+/// A Cataloged work item eligible for policy evaluation, with its catalog
+/// release ID resolved from the import receipt.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PolicyEligibleWorkItem {
+    pub item: ReleaseWorkItem,
+    pub release_id: Uuid,
+}
+
 impl CatalogStore {
     /// Claims Published work and directly reclaims abandoned Cataloging work.
     #[instrument(skip_all, fields(worker_id = %worker, batch = config.claim_batch_size))]
@@ -346,6 +354,82 @@ impl CatalogStore {
         .bind(work_item_id)
         .fetch_optional(pool)
         .await?)
+    }
+
+    /// Claims up to `batch_size` work items in the `Cataloged` state that are
+    /// eligible for policy evaluation, establishing leases and returning each
+    /// item alongside its catalog `release_id`.
+    ///
+    /// Returns only work actually owned by this worker.
+    #[instrument(
+        skip_all,
+        fields(worker_id = %worker, batch = config.claim_batch_size)
+    )]
+    pub async fn claim_policy_eligible(
+        &self,
+        pool: &PgPool,
+        worker: &WorkerId,
+        config: &WorkEngineConfig,
+        now: OffsetDateTime,
+    ) -> Result<Vec<PolicyEligibleWorkItem>, CatalogStoreError> {
+        let lease_expiry = now + config.lease_duration;
+        let mut tx = pool.begin().await?;
+        let candidates: Vec<(Uuid, Option<Uuid>)> = sqlx::query_as(
+            "SELECT w.id, ci.release_id
+             FROM release_work_items w
+             JOIN catalog_imports ci ON ci.work_item_id = w.id
+             WHERE w.state = 'cataloged'
+               AND (w.lease_expires_at IS NULL OR w.lease_expires_at <= $1)
+               AND (w.next_attempt_at IS NULL OR w.next_attempt_at <= $1)
+             ORDER BY w.updated_at, w.id
+             LIMIT $2
+             FOR UPDATE OF w SKIP LOCKED",
+        )
+        .bind(now)
+        .bind(i64::from(config.claim_batch_size))
+        .fetch_all(&mut *tx)
+        .await?;
+
+        let mut claimed = Vec::with_capacity(candidates.len());
+        for (work_item_id, release_id) in candidates {
+            let release_id = match release_id {
+                Some(id) => id,
+                None => {
+                    warn!(%work_item_id, "cataloged work item has no release_id, skipping");
+                    continue;
+                }
+            };
+            let row = sqlx::query_as::<_, WorkItemRow>(
+                "UPDATE release_work_items
+                 SET lease_owner = $1, lease_acquired_at = $2,
+                     lease_expires_at = $3, updated_at = $2
+                 WHERE id = $4
+                 RETURNING *",
+            )
+            .bind(worker.as_str())
+            .bind(now)
+            .bind(lease_expiry)
+            .bind(work_item_id)
+            .fetch_one(&mut *tx)
+            .await?;
+            let item = ReleaseWorkItem::try_from(row)?;
+            insert_event(
+                &mut tx,
+                item.id,
+                WorkEventType::Claimed,
+                None,
+                None,
+                Some("policy.eligible_claimed"),
+                Some(worker.as_str()),
+                item.correlation_id,
+                now,
+                Some(serde_json::json!({ "lease_expires_at": lease_expiry.to_string() })),
+            )
+            .await?;
+            claimed.push(PolicyEligibleWorkItem { item, release_id });
+        }
+        tx.commit().await?;
+        Ok(claimed)
     }
 
     /// Returns bounded aggregate counts for operational diagnostics.

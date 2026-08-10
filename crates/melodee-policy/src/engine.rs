@@ -1,5 +1,5 @@
 //! Core policy engine: evaluates a Release's classification and novelty against
-//! the versioned ruleset to produce a disposition (PRD-POLICY-001 through 006).
+//! the versioned ruleset to produce a disposition (PRD-POLICY-001 through 008).
 
 use std::collections::BTreeSet;
 
@@ -13,30 +13,24 @@ use crate::classifier::{ClassificationInput, Classifier};
 use crate::config::PolicyConfig;
 use crate::novelty::NoveltyCategory;
 
-/// Constructs a Confidence from a known-valid basis-point value.
-/// Falls back to 0 (always valid) if the value exceeds the maximum.
-fn confidence(bp: u16) -> Confidence {
-    Confidence::new(bp).unwrap_or_else(|_| confidence(0))
-}
-
-/// Default policy rule set identifier for Phase 5.
+/// Default policy rule set identifier for Phase 5 (deterministic).
 pub const DEFAULT_RULE_SET_VERSION: u32 = 1;
 
-/// Default rule set ID (deterministic for reproducibility).
-pub fn default_rule_set_id() -> melodee_domain::PolicyRuleSetId {
-    melodee_domain::PolicyRuleSetId::new()
-}
+/// Default rule set name for traceability.
+pub const DEFAULT_RULE_SET_NAME: &str = "phase5-default-rules";
 
 /// All default policy rules as a static list for traceability.
 pub fn default_rules() -> DefaultRules {
     DefaultRules {
         rules: vec![
-            "POL-001: Destructive disposition requires confidence >= 80% and non-directory-only evidence source.",
-            "POL-002: Releases with AdminTag (Administrator) evidence cannot retain default Keep disposition.",
-            "POL-003: Releases classified as Bootleg or Tribute with non-directory evidence get Exclude disposition.",
-            "POL-004: BrandNewRelease or Remaster novelty requires manual review before destructive action.",
-            "POL-005: Directory-only evidence can never produce a destructive disposition.",
-            "POL-006: Releases classified as Unknown are deferred to ManualReview.",
+            "POL-001: Novel or uncertain content requires non-destructive disposition (Review/Accept).",
+            "POL-002: Administrator evidence cannot be auto-resolved; requires human Review.",
+            "POL-003: Bootleg or Tribute with non-directory evidence → Ignore (exclude from catalog).",
+            "POL-004: BrandNewRelease novelty → Review before any destructive action.",
+            "POL-005: Directory-only evidence never yields destructive disposition.",
+            "POL-006: Greatest Hits + fully redundant (Reissue) + high non-directory confidence → Delete (Administrator override only).",
+            "POL-007: Corrupt or unreadable media → Quarantine.",
+            "POL-008: Unknown classification → Review.",
         ],
     }
 }
@@ -46,19 +40,26 @@ pub struct DefaultRules {
     pub rules: Vec<&'static str>,
 }
 
-#[derive(Debug, Clone)]
-pub struct DefaultPolicyRuleSet {
-    pub id: melodee_domain::PolicyRuleSetId,
-    pub version: u32,
-    pub rules: DefaultRules,
-}
-
 pub fn default_rule_set() -> DefaultPolicyRuleSet {
     DefaultPolicyRuleSet {
         id: default_rule_set_id(),
+        name: DEFAULT_RULE_SET_NAME.to_string(),
         version: DEFAULT_RULE_SET_VERSION,
         rules: default_rules(),
     }
+}
+
+/// Deterministic rule set ID derived from the version (not random).
+pub fn default_rule_set_id() -> melodee_domain::PolicyRuleSetId {
+    melodee_domain::PolicyRuleSetId::from_uuid(uuid::Uuid::nil())
+}
+
+#[derive(Debug, Clone)]
+pub struct DefaultPolicyRuleSet {
+    pub id: melodee_domain::PolicyRuleSetId,
+    pub name: String,
+    pub version: u32,
+    pub rules: DefaultRules,
 }
 
 /// A rule match contributing to evidence for a decision.
@@ -70,6 +71,11 @@ pub struct RuleMatch {
 }
 
 /// Evaluated policy context for a Release.
+///
+/// `novelty_category` is the release-level assessment; `is_greatest_hits` and
+/// `is_fully_redundant` are derived by the engine from the classification and
+/// novelty category respectively — the engine does NOT trust caller-provided
+/// flags for destructive-action gating.
 #[derive(Debug, Clone)]
 pub struct PolicyInput {
     pub release_id: melodee_domain::ReleaseId,
@@ -82,6 +88,7 @@ pub struct PolicyInput {
     pub existing_classification_traits: BTreeSet<melodee_domain::ReleaseTrait>,
     pub actors: Vec<PolicyActor>,
     pub novelty_category: NoveltyCategory,
+    pub has_corrupt_media: bool,
     pub now: OffsetDateTime,
 }
 
@@ -114,16 +121,15 @@ impl PolicyEngine {
     /// Evaluates a Release and returns its classification, decision, and
     /// matched rules.
     ///
-    /// Dispositions:
-    /// - `Keep`: safe to retain (does not meet destructive thresholds)
-    /// - `Exclude`: classified as Bootleg/Tribute with sufficient evidence
-    /// - `ManualReview`: needs human inspection (BrandNewRelease, Remaster,
-    ///   Unknown classification)
-    /// - `FlagForDeletion`: confident destructive evidence from non-directory
-    ///   source, with operator override recorded
+    /// Disposition rules (ADR-0120, PRD-POLICY-001 through 008):
+    /// - `Accept`: safe to keep (no destructive rules matched)
+    /// - `Ignore`: Bootleg/Tribute with sufficient evidence (excluded from catalog)
+    /// - `Quarantine`: corrupt media
+    /// - `Review`: novel, remaster, unknown, admin evidence, or no operator override
+    /// - `Delete`: Greatest Hits + fully redundant novelty + high non-directory confidence + Administrator override
     ///
-    /// Directory-only evidence never yields a destructive disposition
-    /// (POL-005).
+    /// Only `Administrator` PolicyActor qualifies as an operator override.
+    /// `System` actor never authorizes deletion.
     pub fn evaluate(&self, input: &PolicyInput) -> PolicyEvaluation {
         let mut matched_rules: Vec<RuleMatch> = Vec::new();
 
@@ -147,6 +153,7 @@ impl PolicyEngine {
             .map(|e| e.confidence)
             .max()
             .unwrap_or(confidence(0));
+
         let best_source = classification
             .evidence
             .iter()
@@ -175,50 +182,52 @@ impl PolicyEngine {
             .traits
             .contains(&melodee_domain::ReleaseTrait::Unknown);
 
+        // The engine computes these from first principles — it does NOT
+        // trust caller-provided flags for destructive-action gating.
+        let is_greatest_hits = classification
+            .traits
+            .contains(&melodee_domain::ReleaseTrait::GreatestHits);
+        let is_fully_redundant = matches!(input.novelty_category, NoveltyCategory::Reissue);
+
         let threshold = Confidence::new(self.config.destructive_confidence_bps)
             .unwrap_or_else(|_| confidence(8_000));
 
-        // POL-001: Destructive disposition requires confidence >= threshold
-        // and non-directory-only evidence.
-        if best_confidence >= threshold && !evidence_source_is_directory_only {
+        // POL-001: Noveltity requires Review/Accept, never Delete without override.
+        if input.novelty_category.is_novel() && !input.novelty_category.is_redundant() {
             matched_rules.push(RuleMatch {
                 rule_id: "POL-001".to_string(),
                 description: format!(
-                    "Confidence {} basis points >= threshold {} from non-directory evidence source {:?}",
-                    best_confidence.basis_points(),
-                    threshold.basis_points(),
-                    best_source.unwrap_or(EvidenceSource::ReleaseTitle)
+                    "Novelty category {:?} is novel; non-destructive disposition required",
+                    input.novelty_category
                 ),
                 confidence: best_confidence,
             });
         }
 
-        // POL-002: Administrator evidence present.
+        // POL-002: Administrator evidence requires Review.
         if has_admin_evidence {
             matched_rules.push(RuleMatch {
                 rule_id: "POL-002".to_string(),
-                description: "Evidence includes Administrator (AdminTag) source".to_string(),
+                description: "Evidence includes Administrator source; requires Review".to_string(),
                 confidence: best_confidence,
             });
         }
 
-        // POL-003: Bootleg/Tribute with non-directory evidence → Exclude.
+        // POL-003: Bootleg/Tribute with non-directory evidence → Ignore.
         if has_bootleg_or_tribute && !evidence_source_is_directory_only {
             matched_rules.push(RuleMatch {
                 rule_id: "POL-003".to_string(),
                 description: format!(
-                    "Classified as Bootleg/Tribute with confidence {}; non-directory evidence source {:?}",
-                    best_confidence.basis_points(),
-                    best_source.unwrap_or(EvidenceSource::ReleaseTitle)
+                    "Classified as Bootleg/Tribute with confidence {}; non-directory evidence source",
+                    best_confidence.basis_points()
                 ),
                 confidence: best_confidence,
             });
         }
 
-        // POL-004: BrandNewRelease or Remaster novelty → ManualReview.
-        if input.novelty_category == NoveltyCategory::BrandNewRelease
-            || input.novelty_category == NoveltyCategory::Remaster
-        {
+        // POL-004: BrandNewRelease requires Review (Remaster is known content,
+        // not novel — see NoveltyCategory::is_novel).
+        if input.novelty_category == NoveltyCategory::BrandNewRelease {
             matched_rules.push(RuleMatch {
                 rule_id: "POL-004".to_string(),
                 description: format!(
@@ -229,13 +238,52 @@ impl PolicyEngine {
             });
         }
 
-        // POL-006: Unknown trait → ManualReview.
-        if has_unknown_trait {
+        // POL-005: Directory-only evidence can never produce destructive disposition.
+        if evidence_source_is_directory_only {
+            matched_rules.push(RuleMatch {
+                rule_id: "POL-005".to_string(),
+                description: "Evidence is directory-only; destructive disposition prohibited"
+                    .to_string(),
+                confidence: best_confidence,
+            });
+        }
+
+        // POL-006: Greatest Hits + fully redundant (Reissue) + high non-directory
+        // confidence → Delete (requires Administrator override; System never deletes).
+        if is_greatest_hits
+            && is_fully_redundant
+            && best_confidence >= threshold
+            && !evidence_source_is_directory_only
+        {
             matched_rules.push(RuleMatch {
                 rule_id: "POL-006".to_string(),
+                description: format!(
+                    "Greatest Hits redundant collection, confidence {} >= threshold {}, \
+                     non-directory evidence source {:?}",
+                    best_confidence.basis_points(),
+                    threshold.basis_points(),
+                    best_source.unwrap_or(EvidenceSource::ReleaseTitle)
+                ),
+                confidence: best_confidence,
+            });
+        }
+
+        // POL-008: Unknown classification → Review.
+        if has_unknown_trait {
+            matched_rules.push(RuleMatch {
+                rule_id: "POL-008".to_string(),
                 description: "Release classified as Unknown; deferring to manual review"
                     .to_string(),
                 confidence: confidence(1_000),
+            });
+        }
+
+        // POL-007: Corrupt/unreadable media → Quarantine (takes precedence).
+        if input.has_corrupt_media {
+            matched_rules.push(RuleMatch {
+                rule_id: "POL-007".to_string(),
+                description: "Release has corrupt or unreadable media; quarantining".to_string(),
+                confidence: confidence(9_500),
             });
         }
 
@@ -248,13 +296,13 @@ impl PolicyEngine {
             best_confidence,
             threshold,
             evidence_source_is_directory_only,
-            input.actors.is_empty(),
-            has_bootleg_or_tribute,
+            &input.actors,
         );
 
         let matched_rule_ids: BTreeSet<String> =
             matched_rules.iter().map(|r| r.rule_id.clone()).collect();
 
+        // Decision is Pending — no destructive action taken until completion.
         let actor = input
             .actors
             .first()
@@ -274,8 +322,8 @@ impl PolicyEngine {
             source_fingerprint: None,
             actor,
             decided_at: input.now,
-            completion_state: DecisionCompletionState::Completed,
-            completed_at: Some(input.now),
+            completion_state: DecisionCompletionState::Pending,
+            completed_at: None,
         };
 
         PolicyEvaluation {
@@ -293,26 +341,16 @@ impl PolicyEngine {
         confidence: Confidence,
         threshold: Confidence,
         evidence_source_is_directory_only: bool,
-        has_no_actor: bool,
-        has_bootleg_or_tribute: bool,
+        actors: &[PolicyActor],
     ) -> (Disposition, String) {
-        // POL-004: BrandNewRelease/Remaster → ManualReview (unless Exclude
-        // is also triggered by Bootleg/Tribute).
-        if rule_ids.contains("POL-004") {
-            if has_bootleg_or_tribute && !evidence_source_is_directory_only {
-                return (
-                    Disposition::Ignore,
-                    format!(
-                        "Bootleg/Tribute classification (confidence {}) with non-directory evidence; \
-                         novelty requires review but trait is destructive",
-                        confidence.basis_points()
-                    ),
-                );
-            }
+        let has_admin_override = actors.iter().any(|a| a.is_administrator());
+
+        // POL-007: Corrupt/unreadable media → Quarantine (highest precedence).
+        if rule_ids.contains("POL-007") {
             return (
-                Disposition::Review,
+                Disposition::Quarantine,
                 format!(
-                    "Novelty category requires manual review before destructive action; \
+                    "Release has corrupt or unreadable media; quarantining. \
                      confidence {} basis points; rules matched: {:?}",
                     confidence.basis_points(),
                     rule_ids
@@ -320,7 +358,7 @@ impl PolicyEngine {
             );
         }
 
-        // POL-003: Bootleg/Tribute with non-directory evidence → Exclude.
+        // POL-003: Bootleg/Tribute with non-directory evidence → Ignore.
         if rule_ids.contains("POL-003") && !evidence_source_is_directory_only {
             return (
                 Disposition::Ignore,
@@ -332,15 +370,28 @@ impl PolicyEngine {
             );
         }
 
-        // POL-001: High confidence non-directory evidence → FlagForDeletion
-        // (with operator override if actor present).
-        if rule_ids.contains("POL-001") {
-            if has_no_actor {
+        // POL-004: BrandNewRelease/Remaster → Review (unless Ignore already triggered).
+        if rule_ids.contains("POL-004") {
+            return (
+                Disposition::Review,
+                format!(
+                    "Novelty category requires manual review before destructive action; \
+                     confidence {} basis points; rules matched: {:?}",
+                    confidence.basis_points(),
+                    rule_ids
+                ),
+            );
+        }
+
+        // POL-006: Greatest Hits + redundant + high confidence + directory-only check
+        // → Delete (requires Administrator override; System never deletes).
+        if rule_ids.contains("POL-006") {
+            if !has_admin_override {
                 return (
                     Disposition::Review,
                     format!(
-                        "Confidence {} basis points >= threshold {} but no operator override \
-                         recorded; manual review required",
+                        "Confidence {} >= threshold {} for Greatest Hits redundant collection, \
+                         but no Administrator override recorded; manual review required",
                         confidence.basis_points(),
                         threshold.basis_points()
                     ),
@@ -349,16 +400,24 @@ impl PolicyEngine {
             return (
                 Disposition::Delete,
                 format!(
-                    "Confidence {} basis points >= threshold {} from non-directory evidence; \
-                     operator override present",
+                    "Confidence {} >= threshold {} for Greatest Hits redundant collection; \
+                     Administrator override present",
                     confidence.basis_points(),
                     threshold.basis_points()
                 ),
             );
         }
 
-        // POL-006: Unknown classification → ManualReview.
-        if rule_ids.contains("POL-006") {
+        // POL-002: Administrator evidence → Review.
+        if rule_ids.contains("POL-002") {
+            return (
+                Disposition::Review,
+                "Administrator evidence present; requires manual confirmation".to_string(),
+            );
+        }
+
+        // POL-008: Unknown classification → Review.
+        if rule_ids.contains("POL-008") {
             return (
                 Disposition::Review,
                 "Release classification is Unknown; insufficient evidence for automated decision"
@@ -366,7 +425,28 @@ impl PolicyEngine {
             );
         }
 
-        // Default: Keep.
+        // POL-005: Directory-only evidence → Accept (cannot be destructive).
+        if rule_ids.contains("POL-005") {
+            return (
+                Disposition::Accept,
+                "Evidence is directory-only; cannot authorize destructive action".to_string(),
+            );
+        }
+
+        // POL-001: Novel content → Review (never Accept, never auto-Delete).
+        if rule_ids.contains("POL-001") {
+            return (
+                Disposition::Review,
+                format!(
+                    "Release contains novel or uncertain content; \
+                     confidence {} basis points; rules matched: {:?}",
+                    confidence.basis_points(),
+                    rule_ids
+                ),
+            );
+        }
+
+        // Default: Accept (safe to retain).
         (
             Disposition::Accept,
             format!(
@@ -377,6 +457,11 @@ impl PolicyEngine {
             ),
         )
     }
+}
+
+/// Constructs a Confidence from a basis-point value, clamped to the valid range.
+fn confidence(bp: u16) -> Confidence {
+    Confidence::new(bp.min(Confidence::MAX_BASIS_POINTS)).unwrap_or(Confidence::zero())
 }
 
 /// Result of a single policy evaluation.

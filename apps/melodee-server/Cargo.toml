@@ -15,8 +15,9 @@ axum.workspace = true
 melodee-catalog = { path = "../../crates/melodee-catalog", version = "0.1.0" }
 melodee-domain = { path = "../../crates/melodee-domain", version = "0.1.0" }
 melodee-ingestion = { path = "../../crates/melodee-ingestion", version = "0.1.0" }
-melodee-persistence = { path = "../../crates/melodee-persistence", version = "0.1.0" }
-serde.workspace = true
+    melodee-persistence = { path = "../../crates/melodee-persistence", version = "0.1.0" }
+    melodee-policy = { path = "../../crates/melodee-policy", version = "0.1.0" }
+    serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 sqlx.workspace = true

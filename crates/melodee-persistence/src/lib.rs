@@ -22,8 +22,8 @@ pub use catalog::{
     CatalogStore, CatalogStoreError, LegacyCatalogEntityType, LegacyCatalogIdMapping,
     MAX_CATALOG_CORRECTION_IDENTITY_ROWS, MAX_CATALOG_CORRECTION_OVERLAY_REFERENCES,
     MAX_CATALOG_CORRECTION_RELEASES, MAX_CATALOG_CORRECTION_TRACKS, MAX_CATALOG_SPLIT_ASSIGNMENTS,
-    ProviderNegativeAssertion, StoredArtistCandidate, StoredArtistTrackAssociation,
-    StoredCatalogImport,
+    PolicyEligibleWorkItem, ProviderNegativeAssertion, StoredArtistCandidate,
+    StoredArtistTrackAssociation, StoredCatalogImport,
 };
 pub use config::{
     ENV_CLAIM_BATCH_SIZE, ENV_DATABASE_URL, ENV_LEASE_SECONDS, ENV_MAX_ATTEMPTS,

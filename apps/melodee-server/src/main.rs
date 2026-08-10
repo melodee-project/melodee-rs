@@ -7,7 +7,9 @@ use melodee_ingestion::{
     start_publication_loop, start_reconciliation_loop, start_validation_loop,
 };
 use melodee_persistence::{CatalogStore, WorkEngineConfig, WorkItemStore, migrate};
-use melodee_server::{admin, system};
+use melodee_policy::PolicyConfig;
+use melodee_server::policy_worker::start_policy_loop;
+use melodee_server::{admin, policy_worker, system};
 use tokio::sync::oneshot;
 use tower_http::trace::TraceLayer;
 use tracing::info;
@@ -40,6 +42,12 @@ async fn stop_worker(handle: Option<SchedulerHandle>) {
 async fn stop_catalog_worker(handle: Option<CatalogSchedulerHandle>) {
     if let Some(handle) = handle {
         let _ = handle.stop().await;
+    }
+}
+
+async fn stop_policy_worker(handle: Option<policy_worker::PolicySchedulerHandle>) {
+    if let Some(handle) = handle {
+        handle.stop().await;
     }
 }
 
@@ -155,6 +163,14 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         None
     };
 
+    let policy_handle = match PolicyConfig::from_env() {
+        Ok(config) => start_policy_loop(config, catalog_config, pool.clone()),
+        Err(e) => {
+            info!("invalid policy configuration: {e}, policy worker disabled");
+            None
+        }
+    };
+
     let bind = system::configured_bind();
     let address: SocketAddr = bind.parse()?;
 
@@ -209,7 +225,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     // Signal every worker immediately, then await server drain and worker
     // cancellation together while PostgreSQL is still available for safe
     // lease/error bookkeeping.
-    let (server_result, (), (), (), (), (), ()) = tokio::join!(
+    let (server_result, (), (), (), (), (), (), ()) = tokio::join!(
         server_handle,
         stop_worker(reconcile_handle),
         stop_worker(inspection_handle),
@@ -217,6 +233,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         stop_worker(validation_handle),
         stop_worker(publication_handle),
         stop_catalog_worker(catalog_handle),
+        stop_policy_worker(policy_handle),
     );
     server_result??;
     pool.close().await;

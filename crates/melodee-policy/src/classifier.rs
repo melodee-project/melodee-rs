@@ -10,15 +10,6 @@ use melodee_domain::{
 };
 use time::OffsetDateTime;
 
-/// Constructs a Confidence from a known-valid basis-point value.
-/// Falls back to 0 (always valid) if the value exceeds the maximum.
-fn confidence(bp: u16) -> Confidence {
-    match Confidence::new(bp) {
-        Ok(c) => c,
-        Err(_) => confidence(0),
-    }
-}
-
 /// Default classifier version string persisted with classifications.
 pub const DEFAULT_CLASSIFIER_VERSION: &str = "melodee.policy.classifier-v1";
 
@@ -56,130 +47,126 @@ impl Classifier {
         input: &ClassificationInput,
         now: OffsetDateTime,
     ) -> melodee_domain::ReleaseClassification {
+        let classification_id = melodee_domain::ReleaseClassificationId::new();
         let mut evidence: Vec<ClassificationEvidence> = Vec::new();
         let mut traits: BTreeSet<ReleaseTrait> = input.existing_classification_traits.clone();
+
+        // Helper to add evidence: all evidence records share the parent
+        // classification ID (domain invariant).
+        macro_rules! add_evidence {
+            ($trait_:expr, $source:expr, $kind:expr, $bp:expr, $detail:expr) => {
+                traits.insert($trait_);
+                evidence.push(ClassificationEvidence {
+                    id: classification_id,
+                    release_id: input.release_id,
+                    trait_: $trait_,
+                    source: $source,
+                    kind: $kind,
+                    confidence: confidence($bp),
+                    detail: $detail.to_string(),
+                });
+            };
+        }
 
         // Title-based evidence (tier 5).
         if let Some(title) = &input.title {
             for trait_value in greatest_hits_title_traits(title) {
-                traits.insert(trait_value);
-                evidence.push(ClassificationEvidence {
-                    id: melodee_domain::ReleaseClassificationId::new(),
-                    release_id: input.release_id,
-                    trait_: trait_value,
-                    source: EvidenceSource::ReleaseTitle,
-                    kind: ClassificationEvidenceKind::TitlePattern,
-                    confidence: confidence(4_000),
-                    detail: format!(
+                add_evidence!(
+                    trait_value,
+                    EvidenceSource::ReleaseTitle,
+                    ClassificationEvidenceKind::TitlePattern,
+                    4_000,
+                    format!(
                         "Release title '{}' matched a pattern for {:?}",
                         title, trait_value
-                    ),
-                });
+                    )
+                );
             }
         }
 
         // Directory-name evidence (tier 6, weakest).
         if let Some(dir) = &input.directory_name {
             for trait_value in greatest_hits_title_traits(dir) {
-                traits.insert(trait_value);
-                evidence.push(ClassificationEvidence {
-                    id: melodee_domain::ReleaseClassificationId::new(),
-                    release_id: input.release_id,
-                    trait_: trait_value,
-                    source: EvidenceSource::DirectoryName,
-                    kind: ClassificationEvidenceKind::DirectoryName,
-                    confidence: confidence(2_000),
-                    detail: format!(
+                add_evidence!(
+                    trait_value,
+                    EvidenceSource::DirectoryName,
+                    ClassificationEvidenceKind::DirectoryName,
+                    2_000,
+                    format!(
                         "Directory name '{}' matched a pattern for {:?}",
                         dir, trait_value
-                    ),
-                });
+                    )
+                );
             }
         }
 
         // Parent directory-name evidence (tier 7, weakest).
         if let Some(parent) = &input.parent_directory_name {
             for trait_value in greatest_hits_title_traits(parent) {
-                traits.insert(trait_value);
-                evidence.push(ClassificationEvidence {
-                    id: melodee_domain::ReleaseClassificationId::new(),
-                    release_id: input.release_id,
-                    trait_: trait_value,
-                    source: EvidenceSource::ParentDirectoryName,
-                    kind: ClassificationEvidenceKind::ParentDirectoryName,
-                    confidence: confidence(1_500),
-                    detail: format!(
+                add_evidence!(
+                    trait_value,
+                    EvidenceSource::ParentDirectoryName,
+                    ClassificationEvidenceKind::ParentDirectoryName,
+                    1_500,
+                    format!(
                         "Parent directory '{}' matched a pattern for {:?}",
                         parent, trait_value
-                    ),
-                });
+                    )
+                );
             }
         }
 
         // Structured tag evidence (tier 3).
         for &trait_value in &input.structured_tag_traits {
-            traits.insert(trait_value);
-            evidence.push(ClassificationEvidence {
-                id: melodee_domain::ReleaseClassificationId::new(),
-                release_id: input.release_id,
-                trait_: trait_value,
-                source: EvidenceSource::StructuredTags,
-                kind: ClassificationEvidenceKind::StructuredField,
-                confidence: confidence(7_000),
-                detail: format!("Structured tag field identified {:?}", trait_value),
-            });
+            add_evidence!(
+                trait_value,
+                EvidenceSource::StructuredTags,
+                ClassificationEvidenceKind::StructuredField,
+                7_000,
+                format!("Structured tag field identified {:?}", trait_value)
+            );
         }
 
         // Embedded external ID evidence (tier 2).
         for &trait_value in &input.embedded_external_id_traits {
-            traits.insert(trait_value);
-            evidence.push(ClassificationEvidence {
-                id: melodee_domain::ReleaseClassificationId::new(),
-                release_id: input.release_id,
-                trait_: trait_value,
-                source: EvidenceSource::EmbeddedExternalId,
-                kind: ClassificationEvidenceKind::EmbeddedExternalId,
-                confidence: confidence(8_500),
-                detail: format!("Embedded external ID identified {:?}", trait_value),
-            });
+            add_evidence!(
+                trait_value,
+                EvidenceSource::EmbeddedExternalId,
+                ClassificationEvidenceKind::EmbeddedExternalId,
+                8_500,
+                format!("Embedded external ID identified {:?}", trait_value)
+            );
         }
 
         // Catalog context evidence (tier 4).
         for &trait_value in &input.catalog_known_release_traits {
-            traits.insert(trait_value);
-            evidence.push(ClassificationEvidence {
-                id: melodee_domain::ReleaseClassificationId::new(),
-                release_id: input.release_id,
-                trait_: trait_value,
-                source: EvidenceSource::CatalogContext,
-                kind: ClassificationEvidenceKind::CatalogKnownRelease,
-                confidence: confidence(6_000),
-                detail: format!("Catalog context identified {:?}", trait_value),
-            });
+            add_evidence!(
+                trait_value,
+                EvidenceSource::CatalogContext,
+                ClassificationEvidenceKind::CatalogKnownRelease,
+                6_000,
+                format!("Catalog context identified {:?}", trait_value)
+            );
         }
 
         // If no traits were found, default to Unknown.
         if traits.is_empty() {
-            let trait_value = ReleaseTrait::Unknown;
-            traits.insert(trait_value);
-            evidence.push(ClassificationEvidence {
-                id: melodee_domain::ReleaseClassificationId::new(),
-                release_id: input.release_id,
-                trait_: trait_value,
-                source: EvidenceSource::ReleaseTitle,
-                kind: ClassificationEvidenceKind::TitlePattern,
-                confidence: confidence(100),
-                detail: "No classification evidence found; defaulting to Unknown".to_string(),
-            });
+            add_evidence!(
+                ReleaseTrait::Unknown,
+                EvidenceSource::ReleaseTitle,
+                ClassificationEvidenceKind::TitlePattern,
+                100,
+                "No classification evidence found; defaulting to Unknown"
+            );
         }
 
-        // Overall confidence = max evidence confidence, capped.
+        // Overall confidence = max evidence confidence.
         let max_confidence = evidence
             .iter()
             .map(|e| e.confidence)
             .max()
             .unwrap_or(confidence(0));
-        let classification_id = melodee_domain::ReleaseClassificationId::new();
+
         ReleaseClassification {
             id: classification_id,
             release_id: input.release_id,
@@ -191,7 +178,7 @@ impl Classifier {
         }
     }
 
-    /// Returns true if the given classification's strongest evidence source is
+    /// Returns true if the classification's strongest evidence source is
     /// directory-only (PRD-CLASS-003: directory evidence cannot trigger
     /// destructive action).
     #[must_use]
@@ -204,6 +191,11 @@ impl Classifier {
             .min_by_key(|e| e.source.trust_rank())
             .is_some_and(|e| e.source.is_directory_only())
     }
+}
+
+/// Constructs a Confidence from a basis-point value, clamped to the valid range.
+fn confidence(bp: u16) -> Confidence {
+    Confidence::new(bp.min(Confidence::MAX_BASIS_POINTS)).unwrap_or(Confidence::zero())
 }
 
 /// Heuristically matches title text against Greatest Hits/compilation patterns.
@@ -259,7 +251,10 @@ fn greatest_hits_title_traits(title: &str) -> Vec<ReleaseTrait> {
         traits.push(ReleaseTrait::DjMix);
     }
     if lower.contains("remix") {
-        traits.push(ReleaseTrait::Remix);
+        traits.push(ReleaseTrait::Remaster);
+    }
+    if lower.contains("greatest") || lower.contains("hits") {
+        traits.push(ReleaseTrait::GreatestHits);
     }
     traits
 }

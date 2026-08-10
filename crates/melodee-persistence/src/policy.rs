@@ -178,6 +178,19 @@ impl PolicyStore {
         classification: &ReleaseClassification,
     ) -> Result<(), PolicyStoreError> {
         let mut tx = pool.begin().await?;
+        self.store_classification_tx(&mut tx, classification)
+            .await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    /// Persists a Release classification within an existing transaction.
+    #[instrument(skip_all, fields(release_id = %classification.release_id))]
+    pub async fn store_classification_tx(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        classification: &ReleaseClassification,
+    ) -> Result<(), PolicyStoreError> {
         sqlx::query(
             r#"INSERT INTO release_classifications
                 (id, release_id, confidence, classifier_version, classified_at, created_at)
@@ -189,7 +202,7 @@ impl PolicyStore {
         .bind(&classification.classifier_version)
         .bind(classification.classified_at)
         .bind(classification.classified_at)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
 
         for trait_value in &classification.traits {
@@ -201,7 +214,7 @@ impl PolicyStore {
             .bind(classification.id.into_uuid())
             .bind(trait_value.as_str())
             .bind(classification.classified_at)
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await?;
         }
 
@@ -218,10 +231,9 @@ impl PolicyStore {
             .bind(i64::from(evidence.confidence.basis_points()))
             .bind(&evidence.detail)
             .bind(classification.classified_at)
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await?;
         }
-        tx.commit().await?;
         Ok(())
     }
 
@@ -238,7 +250,20 @@ impl PolicyStore {
         track_novelty: &[TrackNovelty],
     ) -> Result<(), PolicyStoreError> {
         let mut tx = pool.begin().await?;
+        self.store_novelty_tx(&mut tx, evaluation, track_novelty)
+            .await?;
+        tx.commit().await?;
+        Ok(())
+    }
 
+    /// Persists per-Track novelty assessments within an existing transaction.
+    #[instrument(skip_all, fields(release_id = %evaluation.release_id))]
+    pub async fn store_novelty_tx(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        evaluation: &NoveltyEvaluation,
+        track_novelty: &[TrackNovelty],
+    ) -> Result<(), PolicyStoreError> {
         sqlx::query(
             r#"INSERT INTO release_novelty_evaluations
                 (id, release_id, exact_duplicate_count, known_audio_identity_count,
@@ -257,7 +282,7 @@ impl PolicyStore {
         .bind(evaluation.evaluated_at)
         .bind(&evaluation.evaluator_version)
         .bind(evaluation.evaluated_at)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
 
         for novelty in track_novelty {
@@ -278,10 +303,9 @@ impl PolicyStore {
             .bind(&novelty.detail)
             .bind(novelty.evaluated_at)
             .bind(novelty.evaluated_at)
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await?;
         }
-        tx.commit().await?;
         Ok(())
     }
 
@@ -343,6 +367,97 @@ impl PolicyStore {
         .bind(decision.completed_at)
         .bind("created")
         .bind(decision.decided_at)
+        .execute(&mut **tx)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Records an administrator override on a pending decision (PRD-POLICY-007).
+    /// Only a Pending decision can be overridden. The actor must be Administrator.
+    #[instrument(skip_all, fields(decision_id = %decision_id.into_uuid()))]
+    pub async fn record_admin_override(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        decision_id: melodee_domain::ReleasePolicyDecisionId,
+        actor: &PolicyActor,
+        now: OffsetDateTime,
+    ) -> Result<(), PolicyStoreError> {
+        if !actor.is_administrator() {
+            return Err(PolicyStoreError::CorruptValue(format!(
+                "override requires Administrator actor, got {:?}",
+                actor
+            )));
+        }
+
+        sqlx::query(
+            r#"INSERT INTO policy_decision_audit
+                (id, release_id, rule_set_id, rule_set_version, matched_rule_ids,
+                 disposition, evidence_summary, source_fingerprint, actor,
+                 decided_at, completion_state, completed_at, event, created_at)
+             SELECT id, release_id, rule_set_id, rule_set_version, matched_rule_ids,
+                    disposition, evidence_summary, source_fingerprint, $1,
+                    decided_at, completion_state, completed_at, 'override', $2
+               FROM policy_decisions
+              WHERE id = $3"#,
+        )
+        .bind(serde_json::to_value(actor)?)
+        .bind(now)
+        .bind(decision_id.into_uuid())
+        .execute(&mut **tx)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Marks a pending decision as completed (PRD-POLICY-007, SPEC section 15).
+    /// This is the separate, recorded completion step required before any
+    /// destructive action is considered finished.
+    #[instrument(skip_all, fields(release_id = %decision.release_id))]
+    pub async fn complete_decision(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        decision: &ReleasePolicyDecision,
+        completed_at: OffsetDateTime,
+    ) -> Result<(), PolicyStoreError> {
+        let matched_ids = serde_json::to_value(&decision.matched_rule_ids)?;
+        let actor_json = serde_json::to_value(&decision.actor)?;
+
+        sqlx::query(
+            r#"UPDATE policy_decisions
+                SET completion_state = $1,
+                    completed_at = $2,
+                    source_fingerprint = $3
+              WHERE id = $4"#,
+        )
+        .bind("completed")
+        .bind(completed_at)
+        .bind(&decision.source_fingerprint)
+        .bind(decision.id.into_uuid())
+        .execute(&mut **tx)
+        .await?;
+
+        sqlx::query(
+            r#"INSERT INTO policy_decision_audit
+                (id, release_id, rule_set_id, rule_set_version, matched_rule_ids,
+                 disposition, evidence_summary, source_fingerprint, actor,
+                 decided_at, completion_state, completed_at, event, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)"#,
+        )
+        .bind(decision.id.into_uuid())
+        .bind(decision.release_id.into_uuid())
+        .bind(decision.rule_set_id.into_uuid())
+        .bind(i64::from(decision.rule_set_version))
+        .bind(matched_ids)
+        .bind(decision.disposition.as_str())
+        .bind(&decision.evidence_summary)
+        .bind(&decision.source_fingerprint)
+        .bind(actor_json)
+        .bind(decision.decided_at)
+        .bind("completed")
+        .bind(completed_at)
+        .bind("completed")
+        .bind(completed_at)
         .execute(&mut **tx)
         .await?;
 
@@ -457,6 +572,69 @@ impl PolicyStore {
             .collect())
     }
 
+    /// Loads the catalog novelty context for a Release: the set of AudioIdentity
+    /// IDs that have exact byte-duplicate media elsewhere in the catalog, and
+    /// the set of AudioIdentity IDs that are referenced by Tracks in other
+    /// Releases (known identities).
+    #[instrument(skip_all, fields(release_id = %release_id))]
+    pub async fn load_catalog_novelty_context(
+        &self,
+        pool: &PgPool,
+        release_id: melodee_domain::ReleaseId,
+    ) -> Result<
+        (
+            std::collections::BTreeSet<melodee_domain::AudioIdentityId>,
+            std::collections::BTreeSet<melodee_domain::AudioIdentityId>,
+        ),
+        PolicyStoreError,
+    > {
+        let release_uuid = release_id.into_uuid();
+
+        let exact_dup_rows: Vec<(Uuid,)> = sqlx::query_as(
+            r#"SELECT DISTINCT t.audio_identity_id
+               FROM tracks t
+               JOIN media_assets m ON m.id = t.playable_media_asset_id
+               JOIN track_media_assets tma ON tma.track_id = t.id
+               JOIN media_assets m2 ON m2.id = tma.media_asset_id
+               WHERE t.release_id = $1
+                 AND m2.byte_hash = m.byte_hash
+                 AND EXISTS (
+                     SELECT 1 FROM tracks t3
+                     JOIN track_media_assets tma3 ON tma3.track_id = t3.id
+                     WHERE tma3.media_asset_id = m2.id
+                       AND t3.release_id <> $1
+                 )"#,
+        )
+        .bind(release_uuid)
+        .fetch_all(pool)
+        .await?;
+
+        let known_rows: Vec<(Uuid,)> = sqlx::query_as(
+            r#"SELECT DISTINCT t.audio_identity_id
+               FROM tracks t
+               WHERE t.release_id = $1
+                 AND EXISTS (
+                     SELECT 1 FROM tracks t2
+                     WHERE t2.audio_identity_id = t.audio_identity_id
+                       AND t2.release_id <> $1
+                 )"#,
+        )
+        .bind(release_uuid)
+        .fetch_all(pool)
+        .await?;
+
+        let exact_dup: std::collections::BTreeSet<_> = exact_dup_rows
+            .into_iter()
+            .map(|(id,)| melodee_domain::AudioIdentityId::from_uuid(id))
+            .collect();
+        let known: std::collections::BTreeSet<_> = known_rows
+            .into_iter()
+            .map(|(id,)| melodee_domain::AudioIdentityId::from_uuid(id))
+            .collect();
+
+        Ok((exact_dup, known))
+    }
+
     /// Checks whether a given AudioIdentity is already referenced by catalog
     /// Tracks outside of the given Release.
     #[instrument(skip_all)]
@@ -555,9 +733,9 @@ impl PolicyStore {
                 .await?;
 
         let evidence_rows: Vec<StoredEvidenceRow> = sqlx::query_as(
-            r#"SELECT trait, source, kind, confidence, detail
-               FROM release_classification_evidence
-              WHERE id = $1"#,
+            r#"SELECT trait AS trait_, source, kind, confidence, detail
+                FROM release_classification_evidence
+               WHERE id = $1"#,
         )
         .bind(row.id)
         .fetch_all(pool)
@@ -635,7 +813,7 @@ pub struct StoredReleaseClassification {
 struct StoredClassificationRow {
     id: Uuid,
     release_id: Uuid,
-    confidence: i64,
+    confidence: i32,
     classifier_version: String,
     classified_at: OffsetDateTime,
 }
@@ -645,7 +823,7 @@ struct StoredEvidenceRow {
     trait_: String,
     source: String,
     kind: String,
-    confidence: i64,
+    confidence: i32,
     detail: String,
 }
 
@@ -676,7 +854,7 @@ impl std::convert::TryFrom<StoredPolicyDecisionRow> for StoredPolicyDecision {
             rule_set_id: melodee_domain::PolicyRuleSetId::from_uuid(row.rule_set_id),
             rule_set_version: u32::try_from(row.rule_set_version)
                 .map_err(|_| PolicyStoreError::NumericOverflow)?,
-            matched_rule_ids: row.matched_rule_ids,
+            matched_rule_ids: row.matched_rule_ids.0,
             disposition: Disposition::parse(&row.disposition)
                 .ok_or_else(|| PolicyStoreError::CorruptValue(row.disposition))?,
             evidence_summary: row.evidence_summary,
@@ -695,8 +873,8 @@ struct StoredPolicyDecisionRow {
     id: Uuid,
     release_id: Uuid,
     rule_set_id: Uuid,
-    rule_set_version: i64,
-    matched_rule_ids: Vec<String>,
+    rule_set_version: i32,
+    matched_rule_ids: sqlx::types::Json<Vec<String>>,
     disposition: String,
     evidence_summary: String,
     source_fingerprint: Option<String>,

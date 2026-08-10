@@ -42,6 +42,7 @@ fn make_input(release_id: ReleaseId, title: &str, directory: &str) -> PolicyInpu
         existing_classification_traits: BTreeSet::new(),
         actors: Vec::new(),
         novelty_category: NoveltyCategory::Unknown,
+        has_corrupt_media: false,
         now: NOW,
     }
 }
@@ -206,13 +207,14 @@ fn nov_001_no_prior_releases_is_brand_new() {
 }
 
 #[test]
-fn nov_002_all_exact_duplicates_is_reissue() {
+fn nov_002_all_exact_duplicates_verified_in_catalog_is_reissue() {
     let engine = NoveltyEngine;
+    let audio_identity_id = AudioIdentityId::new();
     let track_novelty = vec![TrackNovelty {
         id: melodee_domain::TrackNoveltyId::new(),
         release_id: ReleaseId::new(),
         track_id: melodee_domain::TrackId::new(),
-        audio_identity_id: AudioIdentityId::new(),
+        audio_identity_id,
         media_asset_id: None,
         category: TrackNoveltyCategory::ExactDuplicate,
         confidence: confidence(9_000),
@@ -223,7 +225,7 @@ fn nov_002_all_exact_duplicates_is_reissue() {
     let input = NoveltyInput {
         release_id: ReleaseId::new(),
         track_audio: vec![],
-        catalog_exact_duplicates: BTreeSet::new(),
+        catalog_exact_duplicates: BTreeSet::from([audio_identity_id]),
         catalog_known_identities: BTreeSet::new(),
         track_novelty,
         evaluator_version: "v1".to_string(),
@@ -235,13 +237,14 @@ fn nov_002_all_exact_duplicates_is_reissue() {
 }
 
 #[test]
-fn nov_003_known_audio_identity_is_remaster() {
+fn nov_003_unverified_known_audio_identity_downgraded_to_uncertain() {
     let engine = NoveltyEngine;
+    let audio_identity_id = AudioIdentityId::new();
     let track_novelty = vec![TrackNovelty {
         id: melodee_domain::TrackNoveltyId::new(),
         release_id: ReleaseId::new(),
         track_id: melodee_domain::TrackId::new(),
-        audio_identity_id: AudioIdentityId::new(),
+        audio_identity_id,
         media_asset_id: None,
         category: TrackNoveltyCategory::KnownAudioIdentity,
         confidence: confidence(8_000),
@@ -249,6 +252,8 @@ fn nov_003_known_audio_identity_is_remaster() {
         detail: "Known identity, different encoding".to_string(),
         evaluated_at: NOW,
     }];
+    // catalog_known_identities is empty → caller-provided KnownAudioIdentity label
+    // is NOT verified → downgraded to Uncertain → Unknown.
     let input = NoveltyInput {
         release_id: ReleaseId::new(),
         track_audio: vec![],
@@ -259,20 +264,56 @@ fn nov_003_known_audio_identity_is_remaster() {
         now: NOW,
     };
     let assessment = engine.assess(&input).unwrap();
+    assert_eq!(assessment.category, NoveltyCategory::Unknown);
+    assert!(!assessment.category.is_novel());
+    assert!(assessment.category.is_unsafe_to_auto_delete());
+}
+
+#[test]
+fn nov_003b_verified_known_audio_identity_is_remaster_not_novel() {
+    let engine = NoveltyEngine;
+    let audio_identity_id = AudioIdentityId::new();
+    let track_novelty = vec![TrackNovelty {
+        id: melodee_domain::TrackNoveltyId::new(),
+        release_id: ReleaseId::new(),
+        track_id: melodee_domain::TrackId::new(),
+        audio_identity_id,
+        media_asset_id: None,
+        category: TrackNoveltyCategory::KnownAudioIdentity,
+        confidence: confidence(8_000),
+        evidence_kind: melodee_domain::NoveltyEvidenceKind::AudioIdentityMatch,
+        detail: "Known identity, different encoding".to_string(),
+        evaluated_at: NOW,
+    }];
+    // catalog_known_identities DOES contain the identity → label is verified.
+    let input = NoveltyInput {
+        release_id: ReleaseId::new(),
+        track_audio: vec![],
+        catalog_exact_duplicates: BTreeSet::new(),
+        catalog_known_identities: BTreeSet::from([audio_identity_id]),
+        track_novelty,
+        evaluator_version: "v1".to_string(),
+        now: NOW,
+    };
+    let assessment = engine.assess(&input).unwrap();
     assert_eq!(assessment.category, NoveltyCategory::Remaster);
-    assert!(assessment.category.is_novel());
+    // Remaster is known content (not novel), but unsafe to auto-delete
+    // (different encoding worth keeping).
+    assert!(!assessment.category.is_novel());
+    assert!(!assessment.category.is_redundant());
     assert!(assessment.category.is_unsafe_to_auto_delete());
 }
 
 #[test]
 fn nov_004_mixed_novelty_is_variant() {
     let engine = NoveltyEngine;
+    let exact_identity = AudioIdentityId::new();
     let track_novelty = vec![
         TrackNovelty {
             id: melodee_domain::TrackNoveltyId::new(),
             release_id: ReleaseId::new(),
             track_id: melodee_domain::TrackId::new(),
-            audio_identity_id: AudioIdentityId::new(),
+            audio_identity_id: exact_identity,
             media_asset_id: None,
             category: TrackNoveltyCategory::ExactDuplicate,
             confidence: confidence(9_000),
@@ -296,7 +337,7 @@ fn nov_004_mixed_novelty_is_variant() {
     let input = NoveltyInput {
         release_id: ReleaseId::new(),
         track_audio: vec![],
-        catalog_exact_duplicates: BTreeSet::new(),
+        catalog_exact_duplicates: BTreeSet::from([exact_identity]),
         catalog_known_identities: BTreeSet::new(),
         track_novelty,
         evaluator_version: "v1".to_string(),
@@ -313,7 +354,32 @@ fn nov_004_mixed_novelty_is_variant() {
 // ============================================================================
 
 #[test]
-fn pol_001_high_confidence_non_directory_yields_delete_with_operator() {
+fn pol_001_high_confidence_greatest_hits_reissue_yields_delete_with_administrator_override() {
+    let config = make_config();
+    let engine = PolicyEngine::new(config);
+    let release_id = ReleaseId::new();
+    let mut input = make_input_with_traits(
+        release_id,
+        "Greatest Hits",
+        vec![ReleaseTrait::GreatestHits],
+    );
+    // Embedded external ID gives 8_500 confidence (above 8_000 threshold).
+    input.embedded_external_id_traits = vec![ReleaseTrait::GreatestHits];
+    // Novelty must be Reissue (fully redundant) for Delete eligibility.
+    input.novelty_category = NoveltyCategory::Reissue;
+    // Only Administrator actors qualify as operator overrides for Delete.
+    // System actor NEVER authorizes deletion.
+    input.actors.push(PolicyActor::Administrator {
+        actor: "ops@test".to_string(),
+    });
+    let eval = engine.evaluate(&input);
+    assert_eq!(eval.decision.disposition, Disposition::Delete);
+    assert!(eval.matched_rules.iter().any(|r| r.rule_id == "POL-006"));
+    assert!(!eval.matched_rules.iter().any(|r| r.rule_id == "POL-004"));
+}
+
+#[test]
+fn pol_001a_system_actor_does_not_authorize_delete() {
     let config = make_config();
     let engine = PolicyEngine::new(config);
     let release_id = ReleaseId::new();
@@ -323,12 +389,37 @@ fn pol_001_high_confidence_non_directory_yields_delete_with_operator() {
         vec![ReleaseTrait::GreatestHits],
     );
     input.embedded_external_id_traits = vec![ReleaseTrait::GreatestHits];
+    input.novelty_category = NoveltyCategory::Reissue;
+    // System actor — must NOT authorize deletion.
     input.actors.push(PolicyActor::System {
         policy_rule_set_version: 1,
     });
     let eval = engine.evaluate(&input);
-    assert_eq!(eval.decision.disposition, Disposition::Delete);
-    assert!(eval.matched_rules.iter().any(|r| r.rule_id == "POL-001"));
+    // System actor — must NOT authorize deletion. POL-006 conditions may be
+    // met, but without Administrator override the disposition is Review.
+    assert_eq!(eval.decision.disposition, Disposition::Review);
+    assert!(eval.matched_rules.iter().any(|r| r.rule_id == "POL-006"));
+}
+
+#[test]
+fn pol_001b_greatest_hits_with_variant_novelty_does_not_delete() {
+    let config = make_config();
+    let engine = PolicyEngine::new(config);
+    let release_id = ReleaseId::new();
+    let mut input = make_input_with_traits(
+        release_id,
+        "Greatest Hits",
+        vec![ReleaseTrait::GreatestHits],
+    );
+    input.embedded_external_id_traits = vec![ReleaseTrait::GreatestHits];
+    // Variant novelty (has novel tracks) → not fully redundant → Review, not Delete.
+    input.novelty_category = NoveltyCategory::Variant;
+    input.actors.push(PolicyActor::Administrator {
+        actor: "ops@test".to_string(),
+    });
+    let eval = engine.evaluate(&input);
+    assert_eq!(eval.decision.disposition, Disposition::Review);
+    assert!(!eval.matched_rules.iter().any(|r| r.rule_id == "POL-006"));
 }
 
 #[test]
@@ -342,24 +433,22 @@ fn pol_001_requires_operator_override_without_actor() {
         vec![ReleaseTrait::GreatestHits],
     );
     input.embedded_external_id_traits = vec![ReleaseTrait::GreatestHits];
+    input.novelty_category = NoveltyCategory::Reissue;
     let eval = engine.evaluate(&input);
     // No operator actor → Review instead of Delete.
     assert_eq!(eval.decision.disposition, Disposition::Review);
 }
 
 #[test]
-fn pol_002_admin_evidence_present_flags_admin_tag_rule() {
+fn pol_002_admin_evidence_triggers_review() {
     let config = make_config();
     let engine = PolicyEngine::new(config);
     let release_id = ReleaseId::new();
-    let mut input = make_input(release_id, "Studio Album", "music");
-    input
-        .existing_classification_traits
-        .insert(ReleaseTrait::Unknown);
+    let input = make_input(release_id, "Studio Album", "music");
     let eval = engine.evaluate(&input);
-    // Unknown trait → Review (POL-006), no admin evidence since we don't inject Administrator source.
+    // Unknown classification → Review (POL-008).
     assert_eq!(eval.decision.disposition, Disposition::Review);
-    assert!(eval.matched_rules.iter().any(|r| r.rule_id == "POL-006"));
+    assert!(eval.matched_rules.iter().any(|r| r.rule_id == "POL-008"));
 }
 
 #[test]
@@ -385,9 +474,9 @@ fn pol_004_brand_new_release_requires_manual_review() {
     let release_id = ReleaseId::new();
     let input = make_input(release_id, "A Great Title", "some_directory");
     let eval = engine.evaluate(&input);
-    // Unknown trait → Review (POL-006), not POL-004 because novelty is Unknown.
+    // Unknown classification → Review (POL-008), not POL-004 because novelty is Unknown.
     assert_eq!(eval.decision.disposition, Disposition::Review);
-    assert!(eval.matched_rules.iter().any(|r| r.rule_id == "POL-006"));
+    assert!(eval.matched_rules.iter().any(|r| r.rule_id == "POL-008"));
 }
 
 #[test]
@@ -419,6 +508,7 @@ fn pol_005_directory_only_evidence_never_produces_destructive_disposition() {
         existing_classification_traits: BTreeSet::new(),
         actors: Vec::new(),
         novelty_category: NoveltyCategory::Unknown,
+        has_corrupt_media: false,
         now: NOW,
     };
     let eval = engine.evaluate(&input);
@@ -434,7 +524,7 @@ fn pol_006_unknown_classification_defers_to_review() {
     let input = make_input(release_id, "Mysterious Title", "mysterious_dir");
     let eval = engine.evaluate(&input);
     assert_eq!(eval.decision.disposition, Disposition::Review);
-    assert!(eval.matched_rules.iter().any(|r| r.rule_id == "POL-006"));
+    assert!(eval.matched_rules.iter().any(|r| r.rule_id == "POL-008"));
 }
 
 #[test]
@@ -449,21 +539,26 @@ fn pol_007_durable_decision_recorded_with_correct_metadata() {
     assert_eq!(eval.decision.rule_set_version, engine.rule_set_version());
     assert_eq!(
         eval.decision.completion_state,
-        DecisionCompletionState::Completed
+        DecisionCompletionState::Pending
     );
+    assert!(eval.decision.completed_at.is_none());
     assert!(!eval.decision.matched_rule_ids.is_empty());
 }
 
 #[test]
-fn pol_008_remaster_with_no_operator_yields_review() {
+fn pol_008_remaster_novelty_does_not_require_review_for_novelty() {
     let config = make_config();
     let engine = PolicyEngine::new(config);
     let release_id = ReleaseId::new();
     let mut input = make_input(release_id, "Remastered Album", "remaster_dir");
     input.novelty_category = NoveltyCategory::Remaster;
     let eval = engine.evaluate(&input);
-    assert_eq!(eval.decision.disposition, Disposition::Review);
-    assert!(eval.matched_rules.iter().any(|r| r.rule_id == "POL-004"));
+    // Remaster is NOT novel (known content in different encoding).
+    // Title "Remastered Album" yields Remaster trait (not Unknown), novelty is
+    // Remaster (not BrandNewRelease). No destructive rules matched → Accept.
+    assert_eq!(eval.decision.disposition, Disposition::Accept);
+    assert!(!eval.matched_rules.iter().any(|r| r.rule_id == "POL-004"));
+    assert!(!eval.matched_rules.iter().any(|r| r.rule_id == "POL-001"));
 }
 
 #[test]
@@ -473,9 +568,46 @@ fn pol_009_no_traits_yields_review_for_unknown() {
     let release_id = ReleaseId::new();
     let input = make_input(release_id, "Random Album Name", "random_dir");
     let eval = engine.evaluate(&input);
-    // No recognizable traits → Unknown → Review (POL-006).
+    // No recognizable traits → Unknown → Review (POL-008).
     assert_eq!(eval.decision.disposition, Disposition::Review);
-    assert!(eval.matched_rules.iter().any(|r| r.rule_id == "POL-006"));
+    assert!(eval.matched_rules.iter().any(|r| r.rule_id == "POL-008"));
+}
+
+#[test]
+fn pol_007_corrupt_media_yields_quarantine() {
+    let config = make_config();
+    let engine = PolicyEngine::new(config);
+    let release_id = ReleaseId::new();
+    let mut input = make_input(release_id, "Some Title", "some_dir");
+    input.has_corrupt_media = true;
+    let eval = engine.evaluate(&input);
+    assert_eq!(eval.decision.disposition, Disposition::Quarantine);
+    assert!(eval.matched_rules.iter().any(|r| r.rule_id == "POL-007"));
+    // POL-007 takes precedence even with Greatest Hits + Administrator override.
+    assert!(!eval.matched_rules.iter().any(|r| r.rule_id == "POL-006"));
+}
+
+#[test]
+fn pol_007_corrupt_media_quarantine_precedence_with_greatest_hits() {
+    let config = make_config();
+    let engine = PolicyEngine::new(config);
+    let release_id = ReleaseId::new();
+    let mut input = make_input_with_traits(
+        release_id,
+        "Greatest Hits",
+        vec![ReleaseTrait::GreatestHits],
+    );
+    input.embedded_external_id_traits = vec![ReleaseTrait::GreatestHits];
+    input.novelty_category = NoveltyCategory::Reissue;
+    input.has_corrupt_media = true;
+    // Even with Administrator override and Greatest Hits + Reissue,
+    // corrupt media takes precedence → Quarantine, not Delete.
+    input.actors.push(PolicyActor::Administrator {
+        actor: "ops@test".to_string(),
+    });
+    let eval = engine.evaluate(&input);
+    assert_eq!(eval.decision.disposition, Disposition::Quarantine);
+    assert!(eval.matched_rules.iter().any(|r| r.rule_id == "POL-007"));
 }
 
 #[test]

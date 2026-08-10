@@ -1982,6 +1982,96 @@ impl WorkItemStore {
         ReleaseWorkItem::try_from(row)
     }
 
+    /// Policy worker transition: advances a leased-work item from `Cataloged`
+    /// (or any worker-eligible state) to a policy-determined target state.
+    ///
+    /// Unlike `transition`, this method permits transitions **from** `Cataloged`
+    /// and `Cataloging` — the policy worker owns these transitions because
+    /// Phase 5 disposition routing (Cataloged → NeedsReview/Quarantined/Ignored/
+    /// Indexing) is a durable domain boundary (SPEC section 15). It still
+    /// delegates to `IngestionState::ensure_transition` for state-machine
+    /// validation and enforces lease ownership.
+    #[allow(clippy::too_many_arguments)]
+    #[instrument(skip_all, fields(work_item_id = %id, to_state = to.as_str(), ?kind))]
+    pub async fn transition_for_policy(
+        &self,
+        pool: &PgPool,
+        id: Uuid,
+        worker: &WorkerId,
+        kind: TransitionKind,
+        to: IngestionState,
+        reason: Option<&str>,
+        now: OffsetDateTime,
+    ) -> Result<ReleaseWorkItem, WorkStoreError> {
+        let mut tx = pool.begin().await?;
+        let item = lock_for_update(&mut tx, id).await?;
+
+        ensure_active_lease(&item, worker, now)?;
+        item.state.ensure_transition(to, kind)?;
+
+        let from = item.state;
+        let terminal = to.is_terminal();
+        let completed_at = if terminal { Some(now) } else { None };
+        let clear_lease = terminal
+            || matches!(
+                to,
+                IngestionState::NeedsReview | IngestionState::Staged | IngestionState::Published
+            );
+
+        let row = sqlx::query_as::<_, WorkItemRow>(
+            "UPDATE release_work_items
+             SET state = $2,
+                 state_reason = $3,
+                 updated_at = $4,
+                 completed_at = $5,
+                 lease_owner = CASE WHEN $6 THEN NULL ELSE lease_owner END,
+                 lease_acquired_at = CASE WHEN $6 THEN NULL ELSE lease_acquired_at END,
+                 lease_expires_at = CASE WHEN $6 THEN NULL ELSE lease_expires_at END
+             WHERE id = $1
+             RETURNING *",
+        )
+        .bind(id)
+        .bind(to.as_str())
+        .bind(reason)
+        .bind(now)
+        .bind(completed_at)
+        .bind(clear_lease)
+        .fetch_one(&mut *tx)
+        .await?;
+
+        insert_event(
+            &mut tx,
+            id,
+            WorkEventType::Transitioned,
+            Some(from),
+            Some(to),
+            reason,
+            Some(worker.as_str()),
+            item.correlation_id,
+            now,
+            None,
+        )
+        .await?;
+        if terminal {
+            insert_event(
+                &mut tx,
+                id,
+                WorkEventType::Completed,
+                None,
+                Some(to),
+                None,
+                Some(worker.as_str()),
+                item.correlation_id,
+                now,
+                None,
+            )
+            .await?;
+        }
+        tx.commit().await?;
+        info!(work_item_id = %id, from_state = %from.as_str(), to_state = %to.as_str(), "policy worker state transitioned");
+        ReleaseWorkItem::try_from(row)
+    }
+
     /// Records a processing failure with durable evidence and computes retry
     /// eligibility. Clears the lease. Classification decides the outcome:
     /// retryable (scheduled or exhausted), permanent, or review-required.

@@ -5,7 +5,7 @@ use melodee_catalog::{CatalogConfig, import_once};
 use melodee_domain::{IngestionState, ReleaseWorkItem};
 use melodee_ingestion::{IngestionConfig, publish_once, reconcile_all_sources, validate_once};
 use melodee_persistence::{CatalogStore, WorkEngineConfig, WorkItemStore, WorkerId, migrate};
-use melodee_policy::{PolicyConfig, PolicyDryRunner, PolicyEngine};
+use melodee_policy::{NoveltyEngine, NoveltyInput, PolicyConfig, PolicyDryRunner, PolicyEngine};
 use sqlx::PgPool;
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -131,6 +131,27 @@ enum PolicyCommands {
         /// Maximum number of Releases to evaluate.
         #[arg(long, default_value_t = 100)]
         limit: u32,
+    },
+    /// Test policy rules against a sample of existing catalog Releases.
+    /// Reports matched-rule counts, existing dispositions, and destructive impact.
+    Test {
+        /// Maximum number of Releases to test.
+        #[arg(long, default_value_t = 100)]
+        limit: u32,
+    },
+    /// Evaluate a single Release: classify, assess novelty, and produce a
+    /// disposition without persisting or executing.
+    Evaluate {
+        /// Release UUID (v7).
+        id: Uuid,
+    },
+    /// Record and optionally complete a policy decision for a Release.
+    Decide {
+        /// Release UUID (v7).
+        id: Uuid,
+        /// Apply the decision as completed (marks destructive action as done).
+        #[arg(long)]
+        complete: bool,
     },
     /// Show default policy rules.
     Rules,
@@ -696,6 +717,96 @@ async fn main() {
                         }
                     }
                 }
+                PolicyCommands::Test { limit } => {
+                    let now = OffsetDateTime::now_utc();
+                    match run_policy_test(&engine, &store, &pool, limit, now).await {
+                        Ok(summary) => {
+                            println!(
+                                "test: evaluated={} by_disposition={{accept={}, review={}, ignore={}, quarantine={}, delete={}}} destructive_impact={} samples={}",
+                                summary.total_releases_evaluated,
+                                summary
+                                    .disposition_counts
+                                    .iter()
+                                    .find(|(d, _)| d.as_str() == "accept")
+                                    .map(|(_, c)| c)
+                                    .unwrap_or(&0),
+                                summary
+                                    .disposition_counts
+                                    .iter()
+                                    .find(|(d, _)| d.as_str() == "review")
+                                    .map(|(_, c)| c)
+                                    .unwrap_or(&0),
+                                summary
+                                    .disposition_counts
+                                    .iter()
+                                    .find(|(d, _)| d.as_str() == "ignore")
+                                    .map(|(_, c)| c)
+                                    .unwrap_or(&0),
+                                summary
+                                    .disposition_counts
+                                    .iter()
+                                    .find(|(d, _)| d.as_str() == "quarantine")
+                                    .map(|(_, c)| c)
+                                    .unwrap_or(&0),
+                                summary
+                                    .disposition_counts
+                                    .iter()
+                                    .find(|(d, _)| d.as_str() == "delete")
+                                    .map(|(_, c)| c)
+                                    .unwrap_or(&0),
+                                summary.destructive_impact_count,
+                                summary.sample_release_ids.len()
+                            );
+                        }
+                        Err(error) => {
+                            eprintln!("error: {error}");
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                PolicyCommands::Evaluate { id } => {
+                    let now = OffsetDateTime::now_utc();
+                    let release_id = melodee_domain::ReleaseId::from_uuid(id);
+                    match run_policy_evaluate(&engine, &store, &pool, release_id, now).await {
+                        Ok(output) => {
+                            println!(
+                                "evaluate: release_id={} disposition={:?} confidence={} rules={:?}",
+                                id,
+                                output.decision.disposition,
+                                output.classification.confidence.basis_points(),
+                                output.decision.matched_rule_ids.iter().collect::<Vec<_>>()
+                            );
+                        }
+                        Err(error) => {
+                            eprintln!("error: {error}");
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                PolicyCommands::Decide { id, complete } => {
+                    let now = OffsetDateTime::now_utc();
+                    let release_id = melodee_domain::ReleaseId::from_uuid(id);
+                    match run_policy_decide(&engine, &store, &pool, release_id, now, complete).await
+                    {
+                        Ok(disposition) => {
+                            if complete {
+                                println!(
+                                    "decide: release_id={} disposition={:?} (completed)",
+                                    id, disposition
+                                );
+                            } else {
+                                println!(
+                                    "decide: release_id={} disposition={:?} (pending)",
+                                    id, disposition
+                                );
+                            }
+                        }
+                        Err(error) => {
+                            eprintln!("error: {error}");
+                            std::process::exit(1);
+                        }
+                    }
+                }
                 PolicyCommands::Rules => {
                     println!("rule_set_version: {}", engine.rule_set_version());
                     println!("phase5-default-rules:");
@@ -856,7 +967,7 @@ fn print_reconcile_result(result: &melodee_ingestion::ReconcileResult) {
 
 async fn run_policy_dry_run(
     engine: &PolicyEngine,
-    _store: &melodee_persistence::PolicyStore,
+    store: &melodee_persistence::PolicyStore,
     pool: &PgPool,
     limit: u32,
     now: OffsetDateTime,
@@ -867,26 +978,339 @@ async fn run_policy_dry_run(
             .fetch_all(pool)
             .await?;
 
-    let inputs: Vec<melodee_policy::PolicyInput> = rows
-        .iter()
-        .map(|(id, title)| melodee_policy::PolicyInput {
-            release_id: melodee_domain::ReleaseId::from_uuid(*id),
-            title: Some(title.clone()),
-            directory_name: None,
-            parent_directory_name: None,
-            structured_tag_traits: vec![],
-            embedded_external_id_traits: vec![],
-            catalog_known_release_traits: vec![],
-            existing_classification_traits: std::collections::BTreeSet::new(),
-            actors: Vec::new(),
-            novelty_category: melodee_policy::NoveltyCategory::Unknown,
-            now,
-        })
-        .collect();
-
+    let inputs = build_policy_inputs(store, pool, &rows, now).await?;
     let runner = PolicyDryRunner::new(engine.clone());
     let results = runner.run_dry_run(inputs, now);
     Ok(results.stats)
+}
+
+/// Builds PolicyInput for a batch of Releases by loading existing classifications,
+/// novelty assessments, and catalog context from the database.
+async fn build_policy_inputs(
+    store: &melodee_persistence::PolicyStore,
+    pool: &PgPool,
+    rows: &[(uuid::Uuid, String)],
+    now: OffsetDateTime,
+) -> Result<Vec<melodee_policy::PolicyInput>, Box<dyn std::error::Error>> {
+    let mut inputs = Vec::with_capacity(rows.len());
+    for (id, title) in rows {
+        let release_id = melodee_domain::ReleaseId::from_uuid(*id);
+
+        // Load existing classification if present.
+        let existing_traits = store
+            .load_classification(pool, release_id)
+            .await?
+            .map(|c| c.traits)
+            .unwrap_or_default();
+
+        // Load catalog tracks and compute novelty category.
+        let track_facts = store.load_release_tracks(pool, release_id).await?;
+        let novelty_category =
+            compute_novelty_category(store, pool, release_id, &track_facts).await?;
+
+        inputs.push(melodee_policy::PolicyInput {
+            release_id,
+            title: Some(title.clone()),
+            directory_name: None,
+            parent_directory_name: None,
+            structured_tag_traits: Vec::new(),
+            embedded_external_id_traits: Vec::new(),
+            catalog_known_release_traits: Vec::new(),
+            existing_classification_traits: existing_traits,
+            actors: Vec::new(),
+            novelty_category,
+            has_corrupt_media: false,
+            now,
+        });
+    }
+    Ok(inputs)
+}
+
+/// Computes the NoveltyCategory for a Release from its catalog Track facts,
+/// using the NoveltyEngine for verification against catalog sets.
+async fn compute_novelty_category(
+    store: &melodee_persistence::PolicyStore,
+    pool: &PgPool,
+    release_id: melodee_domain::ReleaseId,
+    track_facts: &[melodee_persistence::CatalogTrackFact],
+) -> Result<melodee_policy::NoveltyCategory, Box<dyn std::error::Error>> {
+    if track_facts.is_empty() {
+        return Ok(melodee_policy::NoveltyCategory::Unknown);
+    }
+
+    let mut catalog_exact_duplicates: std::collections::BTreeSet<melodee_domain::AudioIdentityId> =
+        std::collections::BTreeSet::new();
+    let mut catalog_known_identities: std::collections::BTreeSet<melodee_domain::AudioIdentityId> =
+        std::collections::BTreeSet::new();
+    let mut track_novelty: Vec<melodee_domain::TrackNovelty> =
+        Vec::with_capacity(track_facts.len());
+
+    for fact in track_facts {
+        let audio_identity_id = melodee_domain::AudioIdentityId::from_uuid(fact.audio_identity_id);
+        let track_id = melodee_domain::TrackId::from_uuid(fact.track_id);
+        let now = OffsetDateTime::UNIX_EPOCH;
+
+        let (category, evidence_kind, detail, confidence_bp) = if fact.has_confirmed_audio_identity
+        {
+            // Audio identity is confirmed. Check if it exists in other releases.
+            let other_count = store
+                .count_other_tracks_with_identity(pool, audio_identity_id, release_id)
+                .await?;
+            if other_count > 0 {
+                // Known identity exists in catalog — verify byte hash to
+                // distinguish ExactDuplicate vs KnownAudioIdentity.
+                if let Some(hash) = &fact.byte_hash {
+                    if store.has_known_byte_hash(pool, hash, release_id).await? {
+                        catalog_exact_duplicates.insert(audio_identity_id);
+                        (
+                            melodee_domain::TrackNoveltyCategory::ExactDuplicate,
+                            melodee_domain::NoveltyEvidenceKind::ByteHashMatch,
+                            "Byte hash matches catalog Track (exact duplicate)".to_string(),
+                            9_000u16,
+                        )
+                    } else {
+                        catalog_known_identities.insert(audio_identity_id);
+                        (
+                            melodee_domain::TrackNoveltyCategory::KnownAudioIdentity,
+                            melodee_domain::NoveltyEvidenceKind::AudioIdentityMatch,
+                            "Audio identity known in catalog (distinct encoding)".to_string(),
+                            8_500u16,
+                        )
+                    }
+                } else {
+                    catalog_known_identities.insert(audio_identity_id);
+                    (
+                        melodee_domain::TrackNoveltyCategory::KnownAudioIdentity,
+                        melodee_domain::NoveltyEvidenceKind::AudioIdentityMatch,
+                        "Audio identity known in catalog".to_string(),
+                        8_500u16,
+                    )
+                }
+            } else {
+                (
+                    melodee_domain::TrackNoveltyCategory::NewTrack,
+                    melodee_domain::NoveltyEvidenceKind::NoCatalogMatch,
+                    "No catalog match for audio identity".to_string(),
+                    9_500u16,
+                )
+            }
+        } else if let Some(hash) = &fact.byte_hash {
+            if store.has_known_byte_hash(pool, hash, release_id).await? {
+                catalog_exact_duplicates.insert(audio_identity_id);
+                (
+                    melodee_domain::TrackNoveltyCategory::ExactDuplicate,
+                    melodee_domain::NoveltyEvidenceKind::ByteHashMatch,
+                    "Byte hash matches catalog Track (exact duplicate)".to_string(),
+                    9_000u16,
+                )
+            } else if store
+                .count_other_tracks_with_identity(pool, audio_identity_id, release_id)
+                .await?
+                > 0
+            {
+                catalog_known_identities.insert(audio_identity_id);
+                (
+                    melodee_domain::TrackNoveltyCategory::KnownAudioIdentity,
+                    melodee_domain::NoveltyEvidenceKind::AudioIdentityMatch,
+                    "Audio identity known in catalog (distinct encoding)".to_string(),
+                    8_500u16,
+                )
+            } else {
+                (
+                    melodee_domain::TrackNoveltyCategory::NewTrack,
+                    melodee_domain::NoveltyEvidenceKind::NoCatalogMatch,
+                    "No catalog match for audio identity or byte hash".to_string(),
+                    9_500u16,
+                )
+            }
+        } else {
+            (
+                melodee_domain::TrackNoveltyCategory::Uncertain,
+                melodee_domain::NoveltyEvidenceKind::InsufficientEvidence,
+                "Insufficient evidence: no confirmed audio identity or byte hash".to_string(),
+                1_000u16,
+            )
+        };
+
+        track_novelty.push(melodee_domain::TrackNovelty {
+            id: melodee_domain::TrackNoveltyId::new(),
+            release_id,
+            track_id,
+            audio_identity_id,
+            media_asset_id: fact
+                .media_asset_id
+                .map(melodee_domain::MediaAssetId::from_uuid),
+            category,
+            confidence: melodee_domain::Confidence::new(confidence_bp)
+                .unwrap_or(melodee_domain::Confidence::zero()),
+            evidence_kind,
+            detail,
+            evaluated_at: now,
+        });
+    }
+
+    let novelty_input = NoveltyInput {
+        release_id,
+        track_audio: track_facts
+            .iter()
+            .map(|f| {
+                (
+                    melodee_domain::TrackId::from_uuid(f.track_id),
+                    melodee_domain::AudioIdentityId::from_uuid(f.audio_identity_id),
+                    f.byte_hash.clone(),
+                )
+            })
+            .collect(),
+        catalog_exact_duplicates,
+        catalog_known_identities,
+        track_novelty,
+        evaluator_version: "melodee-policy-novelty-v1".to_string(),
+        now: OffsetDateTime::UNIX_EPOCH,
+    };
+
+    let assessment = NoveltyEngine
+        .assess(&novelty_input)
+        .map_err(|e| format!("novelty engine error: {e}"))?;
+
+    Ok(assessment.category)
+}
+
+/// Runs a full catalog policy test: evaluates Releases against the ruleset,
+/// reports matched-rule counts, existing dispositions, samples, and destructive
+/// impact, and persists the test run result.
+async fn run_policy_test(
+    engine: &PolicyEngine,
+    store: &melodee_persistence::PolicyStore,
+    pool: &PgPool,
+    limit: u32,
+    now: OffsetDateTime,
+) -> Result<melodee_domain::PolicyTestSummary, Box<dyn std::error::Error>> {
+    let rows: Vec<(uuid::Uuid, String)> =
+        sqlx::query_as(r#"SELECT id, title FROM releases ORDER BY id LIMIT $1"#)
+            .bind(i64::from(limit.min(500)))
+            .fetch_all(pool)
+            .await?;
+
+    let inputs = build_policy_inputs(store, pool, &rows, now).await?;
+    let runner = PolicyDryRunner::new(engine.clone());
+    let results = runner.run_dry_run(inputs, now);
+
+    // Aggregate counts.
+    let mut total = 0u32;
+    let mut disposition_counts: std::collections::HashMap<melodee_domain::Disposition, u32> =
+        std::collections::HashMap::new();
+    let mut destructive_impact = 0u32;
+    let mut sample_ids: Vec<melodee_domain::ReleaseId> = Vec::new();
+
+    for result in &results.results {
+        match result {
+            melodee_policy::PolicyDryRunResult::Decision { evaluation, .. } => {
+                total += 1;
+                let count = disposition_counts
+                    .entry(evaluation.decision.disposition)
+                    .or_insert(0);
+                *count += 1;
+                if matches!(
+                    evaluation.decision.disposition,
+                    melodee_domain::Disposition::Delete
+                ) {
+                    destructive_impact += 1;
+                }
+                if sample_ids.len() < melodee_persistence::MAX_POLICY_TEST_SAMPLES {
+                    sample_ids.push(evaluation.decision.release_id);
+                }
+            }
+            melodee_policy::PolicyDryRunResult::Error { .. } => {}
+        }
+    }
+
+    let disposition_counts_vec: Vec<(melodee_domain::Disposition, u32)> =
+        disposition_counts.into_iter().collect();
+
+    let ran_by = melodee_domain::PolicyActor::Administrator {
+        actor: "melodee-cli".to_string(),
+    };
+
+    let summary = melodee_domain::PolicyTestSummary::new(melodee_domain::PolicyTestSummary {
+        test_run_id: melodee_domain::PolicyTestRunId::new(),
+        rule_set_id: engine.rule_set_id(),
+        rule_set_version: engine.rule_set_version(),
+        total_releases_evaluated: total,
+        disposition_counts: disposition_counts_vec,
+        destructive_impact_count: destructive_impact,
+        sample_release_ids: sample_ids,
+        ran_by,
+        ran_at: now,
+    })?;
+
+    // Persist the test run.
+    store.store_test_run(pool, &summary).await?;
+
+    Ok(summary)
+}
+
+/// Evaluates a single Release: classify, assess novelty, and produce a disposition.
+async fn run_policy_evaluate(
+    engine: &PolicyEngine,
+    store: &melodee_persistence::PolicyStore,
+    pool: &PgPool,
+    release_id: melodee_domain::ReleaseId,
+    now: OffsetDateTime,
+) -> Result<melodee_policy::PolicyEvaluation, Box<dyn std::error::Error>> {
+    let row: Option<(String,)> = sqlx::query_as(r#"SELECT title FROM releases WHERE id = $1"#)
+        .bind(release_id.into_uuid())
+        .fetch_optional(pool)
+        .await?;
+
+    let title = row.map(|(t,)| t).unwrap_or_default();
+    let existing_traits = store
+        .load_classification(pool, release_id)
+        .await?
+        .map(|c| c.traits)
+        .unwrap_or_default();
+
+    let track_facts = store.load_release_tracks(pool, release_id).await?;
+    let novelty_category = compute_novelty_category(store, pool, release_id, &track_facts).await?;
+
+    let input = melodee_policy::PolicyInput {
+        release_id,
+        title: Some(title),
+        directory_name: None,
+        parent_directory_name: None,
+        structured_tag_traits: Vec::new(),
+        embedded_external_id_traits: Vec::new(),
+        catalog_known_release_traits: Vec::new(),
+        existing_classification_traits: existing_traits,
+        actors: Vec::new(),
+        novelty_category,
+        has_corrupt_media: false,
+        now,
+    };
+
+    Ok(engine.evaluate(&input))
+}
+
+/// Records a policy decision for a Release, optionally marking it as completed.
+async fn run_policy_decide(
+    engine: &PolicyEngine,
+    store: &melodee_persistence::PolicyStore,
+    pool: &PgPool,
+    release_id: melodee_domain::ReleaseId,
+    now: OffsetDateTime,
+    complete: bool,
+) -> Result<melodee_domain::Disposition, Box<dyn std::error::Error>> {
+    let eval = run_policy_evaluate(engine, store, pool, release_id, now).await?;
+
+    let mut tx = pool.begin().await?;
+    store.record_decision(&mut tx, &eval.decision).await?;
+
+    if complete {
+        let completed = eval.decision.clone().mark_completed(now)?;
+        store.complete_decision(&mut tx, &completed, now).await?;
+    }
+
+    tx.commit().await?;
+    Ok(eval.decision.disposition)
 }
 
 #[cfg(test)]
