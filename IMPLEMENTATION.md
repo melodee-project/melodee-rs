@@ -246,9 +246,7 @@ Produce validated, versioned manifests and canonical MP3 media safely.
 - Conversion crashes/retries do not corrupt source or publish partial Releases. ✅
 
 **Phase 3: COMPLETE (2026-08-10).** The consolidated decision and reproducible evidence are in
-[design/evidence/phase-3/PHASE-3-REPORT.md](design/evidence/phase-3/PHASE-3-REPORT.md). Phase 4 is the
-next implementation boundary; it must consume the reserved Release IDs/manifests and still requires
-an assigned work package and accepted schema ADR before schema implementation.
+[design/evidence/phase-3/PHASE-3-REPORT.md](design/evidence/phase-3/PHASE-3-REPORT.md).
 
 ## 7. Phase 4 — Catalog, Artist identity, and contributions
 
@@ -274,7 +272,13 @@ Implement the Melodee-owned semantic catalog and migrate current identity/user-v
 - “Everything Colin Hay is on” includes solo, Men at Work, and guest participation according to role.
 - Merge/split does not require media relocation.
 
+**Phase 4: COMPLETE (2026-08-10).** The consolidated decision, exact acceptance metrics, and
+reproducible evidence are in
+[design/evidence/phase-4/PHASE-4-REPORT.md](design/evidence/phase-4/PHASE-4-REPORT.md).
+
 ## 8. Phase 5 — Classification, novelty, and policy
+
+**Status:** Current implementation boundary.
 
 ### Objective
 

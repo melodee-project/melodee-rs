@@ -59,6 +59,13 @@ owner process is currently alive.
   database URL variable is present. It does not connect to PostgreSQL.
 - `melodee work list` and `melodee work show <id>` inspect durable queue state and event history.
 - `melodee ingest status` prints a concise ingestion queue summary.
+- `melodee catalog status` prints bounded catalog entity/outbox counts and the effective worker
+  limits.
+- `melodee catalog inspect <id>` resolves a work-item ID or API key and prints its immutable catalog
+  import receipt. A pending or failed item reports `catalog_import: none` alongside its current
+  durable state, attempt count, next retry time, and last error.
+- `melodee catalog import` runs one bounded import pass using the same lease, retry, and catalog
+  concurrency configuration as the server worker.
 
 See [Troubleshooting](../troubleshooting/) for operational checks.
 

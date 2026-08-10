@@ -8,13 +8,13 @@ this repository defines the new architecture, specifications, tests, and impleme
 
 ## Current phase
 
-**Phase 3 — Media inspection, normalization, and manifests (complete)**
+**Phase 5 — Classification, novelty, and policy (active boundary)**
 
-Phases 0–3 are complete. Phase 3 now publishes verified manifest v3 Release bundles through a
-durable, retry-safe, non-destructive canonical-publication protocol. Phase 4 (catalog, Artist
-identity, and contributions) is the next boundary, but schema work requires an assigned work
-package and accepted schema ADR. See [IMPLEMENTATION.md](IMPLEMENTATION.md) and the
-[Phase 3 report](design/evidence/phase-3/PHASE-3-REPORT.md).
+Phases 0–4 are complete. Phase 4 implements the authoritative PostgreSQL catalog, evidence-based
+Artist resolution, AudioIdentity, contributions/participation, audited correction, immutable
+manifest-v3 overlays, bounded set-based import, and legacy public-ID mapping. Its exit decision and
+reproducible results are in the [Phase 4 report](design/evidence/phase-4/PHASE-4-REPORT.md). Phase 5
+is the next implementation boundary; see [IMPLEMENTATION.md](IMPLEMENTATION.md).
 
 ## Non-negotiable product commitments
 
@@ -43,11 +43,12 @@ package and accepted schema ADR. See [IMPLEMENTATION.md](IMPLEMENTATION.md) and 
 
 ```text
 apps/                       Deployable Rust binaries
-  melodee-server/           Axum server, ingestion workers, and Admin diagnostics API
-  melodee-cli/              Administrative and ingestion diagnostics CLI
+  melodee-server/           Axum server, ingestion/catalog workers, and Admin diagnostics API
+  melodee-cli/              Administrative, ingestion, and catalog diagnostics CLI
 crates/
+  melodee-catalog/          Bounded catalog import and provider-neutral evidence orchestration
   melodee-domain/           Framework-independent core vocabulary and invariants
-  melodee-persistence/      PostgreSQL migrations, durable work items, and leases
+  melodee-persistence/      PostgreSQL catalog, durable work items, and leases
   melodee-ingestion/        Reconciliation, inspection, normalization, and publication workers
   melodee-media/            Media observation, conversion, artwork, and fingerprinting
 compatibility/              Captured external contracts and golden responses
@@ -89,7 +90,7 @@ The first successful Cargo resolution must produce `Cargo.lock`; commit it in th
 
 ## Current implementation evidence
 
-Completed phase reports live under `design/evidence/phase-0/` through `design/evidence/phase-3/`.
+Completed phase reports live under `design/evidence/phase-0/` through `design/evidence/phase-4/`.
 The phase plan, accepted ADRs, and an assigned work package determine what may be implemented next;
 historical work packages remain as completed project evidence.
 

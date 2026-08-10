@@ -70,6 +70,15 @@ by the current server.
 | `MELODEE__PUBLICATION__CONCURRENCY` | `2` | Maximum complete Release bundles copied and finalized simultaneously by one process. |
 | `MELODEE__STORAGE__ROOT` | — (publication disabled) | Dedicated canonical-library root. Setting it enables validation/publication workers. |
 
+### Catalog import
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `MELODEE__CATALOG__ENABLED` | `true` | Whether the server claims published manifest-v3 Releases for catalog import. |
+| `MELODEE__CATALOG__CONCURRENCY` | `2` | Maximum catalog imports executed simultaneously by one server process. |
+| `MELODEE__CATALOG__BATCH_SIZE` | `16` | Configured claim ceiling; the effective per-process claim is the smaller of this value and catalog concurrency. |
+| `MELODEE__CATALOG__POLL_INTERVAL_SECONDS` | `5` | Period between PostgreSQL catalog-import polls. |
+
 ### Notes
 
 - `MELODEE__INGEST__SOURCES_JSON` and the legacy single-root variables are mutually additive only through configuration code: JSON takes precedence when present.
@@ -83,5 +92,10 @@ by the current server.
   media unless the storage root is explicitly configured.
 - Inspection, normalization, validation, and publication do not move, rename, rewrite, or delete
   inbound files. Successful publication records the source disposition as `retained`.
+- Catalog import reads the durable manifest-v3, publication-plan, and receipt records from
+  PostgreSQL. It does not reopen source or canonical media. Catalog concurrency and claim size are
+  independent of the ingestion-stage concurrency settings. The effective claim size is the lower
+  of catalog batch size and catalog concurrency, so a claimed lease never waits behind the same
+  process's concurrency queue.
 - `MELODEE_BIND` remains a compatibility fallback for the earlier bootstrap, but
   `MELODEE__SERVER__BIND` is the canonical key.

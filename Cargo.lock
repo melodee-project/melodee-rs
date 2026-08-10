@@ -1008,10 +1008,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "melodee-catalog"
+version = "0.1.0"
+dependencies = [
+ "melodee-domain",
+ "melodee-persistence",
+ "sqlx",
+ "thiserror",
+ "time",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "melodee-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "melodee-catalog",
  "melodee-domain",
  "melodee-ingestion",
  "melodee-persistence",
@@ -1089,6 +1104,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "http-body-util",
+ "melodee-catalog",
  "melodee-domain",
  "melodee-ingestion",
  "melodee-persistence",

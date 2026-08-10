@@ -24,6 +24,10 @@ Inbound processing discovers candidate Releases from inbound roots and creates o
 7. **Canonical publication** — Melodee copies a complete schema-v3 Release bundle into a hidden
    target-filesystem directory, verifies and flushes it, then atomically finalizes it without
    replacing an existing target. A crash retry adopts an identical completed bundle.
+8. **Catalog import** — an independently bounded worker consumes the PostgreSQL manifest-v3,
+   publication plan, and receipt without reopening media. One transaction creates the Release,
+   Tracks, MediaAssets, provisional local Artist and AudioIdentity records, semantic overlay,
+   aggregates, audit evidence, and future-projection outbox records.
 
 Discovery and settling are source-correctness gates only in this phase. The candidate is not interpreted as
 media yet.
@@ -44,7 +48,12 @@ For each discovered candidate the queue uses these states:
 - `Staged` — an immutable Release ID, structural authorization, and publication plan are durable.
 - `Publishing` — a fenced worker is copying, verifying, finalizing, or adopting the canonical
   bundle.
-- `Published` — the complete canonical bundle and durable receipt agree; no active lease remains.
+- `Published` — the complete canonical bundle and durable receipt agree; it is ready for catalog
+  import.
+- `Cataloging` — a fenced catalog worker owns a bounded PostgreSQL attempt, or a transient failure
+  is waiting for its durable retry time before another claim.
+- `Cataloged` — catalog rows, immutable semantic overlay, import receipt, and work-item transition
+  committed atomically; no active lease remains.
 
 The `transition` table is durable and persisted in PostgreSQL, so restart and missed scans recover correctly.
 
@@ -75,6 +84,8 @@ extensions or names as identity by themselves.
   symlink, size, or hash mismatches fail before a partial final Release can become visible.
 - A successful Phase 3 publication retains the inbound tree byte-for-byte. It is never authority to
   move or delete the source.
+- Catalog import does not read source media, canonical media, or the canonical `manifest.json`.
+  Artist identity correction changes PostgreSQL relationships and overlay history, never media.
 
 ## Inspection outcomes
 
@@ -89,6 +100,14 @@ For development diagnostics, `melodee ingest inspect` runs one bounded inspectio
 require an explicit canonical storage root.
 `melodee ingest manifest <work-item-id>` prints the durable manifest. These commands are not a
 replacement for the server worker.
+
+For the catalog handoff, `melodee catalog import` runs one bounded import pass,
+`melodee catalog status` prints catalog counts and worker limits, and
+`melodee catalog inspect <work-item-id>` prints the immutable import receipt when present. The
+periodic catalog worker runs independently from inbound discovery, so already-published work can
+continue to catalog while inbound scanning is disabled. During graceful server shutdown, a claimed
+Release whose catalog transaction has not started releases its lease for another worker. A fenced,
+atomic catalog transaction that has already started is allowed to finish before shutdown completes.
 
 ## Normalization policy
 

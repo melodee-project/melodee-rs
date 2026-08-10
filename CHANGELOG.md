@@ -30,6 +30,14 @@ by an accepted ADR and release gate.
   an additive PostgreSQL-backed `/readyz` readiness probe.
 - Additive canonical-publication migration `0006` and the ADR-0116 `rustix` dependency decision for
   safe Unix no-follow/no-replace filesystem operations.
+- Phase 4 PostgreSQL catalog schema and bounded manifest-v3 catalog importer, including independent
+  worker configuration and graceful shutdown plus `catalog import`, `catalog status`, and
+  `catalog inspect` operator commands. Import reuses the reserved Release ID and does not reread
+  media. A bounded deterministic local Artist resolver distinguishes provisional, proposed, and
+  confirmable evidence without string-only confirmation. A provider-neutral Artist evidence
+  interface retains provisional identities on provider failure and cannot outrank locked manual or
+  negative decisions. The complete Phase 4 acceptance decision and exact 200-Release metrics are in
+  `design/evidence/phase-4/PHASE-4-REPORT.md`.
 - Canonical Carbon admin UI reference mockups.
 - Astro Starlight public documentation platform under `/docs`, with GitHub Pages deployment,
   PR validation, and documentation-impact rules in the Definition of Done.

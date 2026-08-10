@@ -12,6 +12,7 @@ path = "src/lib.rs"
 
 [dependencies]
 axum.workspace = true
+melodee-catalog = { path = "../../crates/melodee-catalog", version = "0.1.0" }
 melodee-domain = { path = "../../crates/melodee-domain", version = "0.1.0" }
 melodee-ingestion = { path = "../../crates/melodee-ingestion", version = "0.1.0" }
 melodee-persistence = { path = "../../crates/melodee-persistence", version = "0.1.0" }

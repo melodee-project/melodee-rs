@@ -34,5 +34,5 @@ tokenization needs, and test corruption/rebuild recovery before acceptance.
   rebuildable projection is justified by measurement, not preference.
 - **Technology revalidation (2026-08-09):** crates.io — tantivy 0.26.1 (2026-04-21), MIT,
   actively maintained (quickwit-oss). No commercial feature boundary.
-- The ADR's 10M-Track Tantivy benchmark remains the Phase 5 exit criterion (validates the
+- The ADR's 10M-Track Tantivy benchmark remains the Phase 6 exit criterion (validates the
   implementation, not the decision).

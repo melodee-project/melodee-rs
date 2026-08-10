@@ -29,12 +29,13 @@
     "implementation": [
       "design/adr/ADR-0105-postgresql-is-authoritative-state-store.md",
       "crates/melodee-persistence/migrations/ (durable ingestion state, leases, history, manifests, and provenance)",
-      "crates/melodee-persistence/src/work_items.rs (transactional authoritative work state)"
+      "crates/melodee-persistence/src/work_items.rs (transactional authoritative work state)",
+      "crates/melodee-persistence/migrations/0007_phase4_catalog.sql and src/catalog*.rs (authoritative catalog, identity, audit, and projection-outbox state)"
     ],
     "tests": [
-      "crates/melodee-persistence/tests/ (migration, claiming, recovery, history, and manifest integration tests against PostgreSQL)"
+      "crates/melodee-persistence/tests/ (migration, claiming, recovery, history, manifest, and Phase 4 catalog integration tests against PostgreSQL)"
     ],
-    "note": "PostgreSQL is authoritative for the implemented ingestion and audit state. Catalog, user, identity, policy, and search-outbox state arrive in later phases, so the full cross-product requirement remains in progress."
+    "note": "PostgreSQL is authoritative for implemented ingestion, catalog, identity, audit, and projection-outbox state. User, policy, and later product state remain future phases, so the cross-product requirement remains in progress."
   },
   "PRD-ARCH-004": {
     "status": "planned",
@@ -49,13 +50,16 @@
     "implementation": [
       "crates/melodee-domain/src/artist.rs and release.rs (stable Melodee-owned semantic IDs)",
       "crates/melodee-domain/src/manifest.rs (ReleaseId and ID/hash-derived canonical publication plan)",
+      "crates/melodee-domain/src/ids.rs and identity.rs (owned catalog identities and evidence-based resolution)",
       "crates/melodee-ingestion/src/source.rs (source-boundary discovery without semantic identity inference)",
-      "crates/melodee-ingestion/src/publication.rs (ADR-0116 Release-centric canonical layout)"
+      "crates/melodee-ingestion/src/publication.rs (ADR-0116 Release-centric canonical layout)",
+      "crates/melodee-persistence/src/catalog_identity.rs (identity correction without media relocation)"
     ],
     "tests": [
       "crates/melodee-domain/tests/manifest_versions.rs (canonical_release_layout_has_a_stable_golden_vector)",
       "crates/melodee-ingestion/tests/publication.rs (canonical paths ignore observed Artist/Release display values)",
-      "crates/melodee-ingestion/tests/reconciliation.rs (path safety and idempotent rediscovery)"
+      "crates/melodee-ingestion/tests/reconciliation.rs (path safety and idempotent rediscovery)",
+      "crates/melodee-persistence/tests/catalog_merge_split.rs and catalog_audio_identity.rs (identity correction preserves every media path)"
     ],
     "note": "The canonical filesystem stores media bytes under immutable Release IDs and byte hashes. Artist/title/source values remain observations and cannot determine identity or relocation."
   },
@@ -88,12 +92,15 @@
     "status": "in-progress",
     "implementation": [
       "compatibility/fixtures/catalog-v1.json (deterministic fixture UUID namespace)",
-      "compatibility/melodee-api-v1/golden/ (stable public IDs across reseeds)"
+      "compatibility/melodee-api-v1/golden/ (stable public IDs across reseeds)",
+      "crates/melodee-persistence/migrations/0007_phase4_catalog.sql (separate immutable internal/public ID namespaces)",
+      "crates/melodee-persistence/src/catalog_mutations.rs (set-wise legacy public-ID mapping)"
     ],
     "tests": [
-      "tests/python/test_native_v1_capture.py (GoldenFixtureTests)"
+      "tests/python/test_native_v1_capture.py (GoldenFixtureTests)",
+      "crates/melodee-persistence/tests/catalog_legacy.rs (all frozen Artist/Release/Track public UUIDs round-trip verbatim)"
     ],
-    "note": "Public-ID shapes and stability evidenced; migration-time preservation remains Phase 11 work."
+    "note": "Phase 4 proves the catalog mapping for all frozen public UUIDs. Phase 11 still owns production migration/cutover and real-client state validation, so the broad API migration requirement remains in progress."
   },
   "PRD-API-M1-005": {
     "status": "in-progress",
@@ -408,41 +415,53 @@
       "compatibility/benchmarks/ (datasets, results with environment metadata, SUMMARY.md)",
       "scripts/generate_benchmark_dataset.py",
       "scripts/run_benchmarks.py",
-      "design/evidence/phase-0/scale-baseline.md"
-    ],
-    "tests": [
-      "tests/python/test_benchmark_baseline.py"
-    ],
-    "note": "Legacy reference benchmarks exist and are repeatable. Rust-side benchmark suites continue in Phases 2-8."
-  },
-  "PRD-PERF-002": {
-    "status": "captured",
-    "implementation": [
-      "scripts/generate_benchmark_dataset.py (three deterministic SQL tiers)",
-      "scripts/generate_media_corpus.py (deterministic ffmpeg media corpus)"
+      "design/evidence/phase-0/scale-baseline.md",
+      "crates/melodee-persistence/tests/catalog_performance.rs (repeatable 200-manifest PostgreSQL catalog workload)",
+      "design/evidence/phase-4/PHASE-4-REPORT.md (exact observed metrics and qualification)"
     ],
     "tests": [
       "tests/python/test_benchmark_baseline.py",
-      "tests/python/test_media_baseline.py"
+      "crates/melodee-persistence/tests/catalog_performance.rs"
+    ],
+    "note": "Legacy reference and Phase 4 catalog workloads are repeatable and reported without turning one host observation into a product threshold. Rust API/search suites continue in later phases."
+  },
+  "PRD-PERF-002": {
+    "status": "tested",
+    "implementation": [
+      "scripts/generate_benchmark_dataset.py (three deterministic SQL tiers)",
+      "scripts/generate_media_corpus.py (deterministic ffmpeg media corpus)",
+      "crates/melodee-persistence/tests/catalog_common/ (deterministic Published manifest-v3 and frozen legacy catalog fixture generators)"
+    ],
+    "tests": [
+      "tests/python/test_benchmark_baseline.py",
+      "tests/python/test_media_baseline.py",
+      "crates/melodee-persistence/tests/catalog_performance.rs and catalog_legacy.rs"
     ]
   },
   "PRD-PERF-003": {
     "status": "in-progress",
     "implementation": [
-      "compatibility/benchmarks/results/ (wall-clock cold/warm, response sizes, server memory at Tier C)"
+      "compatibility/benchmarks/results/ (wall-clock cold/warm, response sizes, server memory at Tier C)",
+      "crates/melodee-persistence/tests/catalog_performance.rs (catalog wall time, call time, peak RSS, SQL statement count, rows written, throughput inputs, and zero media reads)"
     ],
     "tests": [
-      "tests/python/test_benchmark_baseline.py"
+      "tests/python/test_benchmark_baseline.py",
+      "design/evidence/phase-4/PHASE-4-REPORT.md (exact Phase 4 metric record)"
     ],
-    "note": "Wall-clock and memory captured. DB query counts and queue age require instrumentation deferred to the Rust performance suite (recorded as gap in scale-baseline.md)."
+    "note": "Phase 4 adds repeatable catalog wall-time, memory, database statement, row-write, throughput, and no-file-read evidence. Queue age and later API/search metrics remain outstanding, so the broad requirement stays in progress."
   },
   "PRD-PERF-004": {
     "status": "in-progress",
     "implementation": [
-      "design/evidence/phase-0/scale-baseline.md section 4 (per-Release pipeline cost shape ~3s; non-transactional restart behavior evidence)"
+      "design/evidence/phase-0/scale-baseline.md section 4 (per-Release pipeline cost shape ~3s; non-transactional restart behavior evidence)",
+      "design/evidence/phase-3/PHASE-3-REPORT.md (bounded 200-Release normalization, validation, and canonical-publication result with zero loss/duplicate authority/source mutation)",
+      "design/evidence/phase-4/PHASE-4-REPORT.md (bounded 200-manifest catalog result with zero loss/duplicate/partial/media-read result)"
     ],
-    "tests": [],
-    "note": "The 200-Release crash/restart benchmark targets the Rust pipeline; legacy per-Release cost shape and durability hazards are baselined."
+    "tests": [
+      "crates/melodee-ingestion/tests/normalization.rs (200 Releases reach Published under independently bounded workers; crash/lease recovery cases)",
+      "crates/melodee-persistence/tests/catalog_performance.rs and catalog_import.rs (200 Cataloged plus lease expiry/theft/cancellation/retry recovery)"
+    ],
+    "note": "The Rust 200-Release publication and catalog workloads are measured and bounded with durable recovery tests. Repeated whole-process termination across the later search pipeline remains outstanding, so the broad requirement stays in progress."
   },
   "PRD-PERF-005": {
     "status": "in-progress",
@@ -458,16 +477,18 @@
     "implementation": [
       "compatibility/scenarios/*.json (22 scenario files, declarative flows)",
       "scripts/capture_baseline.py + scripts/compare_captures.py (deterministic A/B comparison)",
-      "compatibility/*/golden/ (424 promoted captures with provenance)"
+      "compatibility/*/golden/ (424 promoted captures with provenance)",
+      "crates/melodee-persistence/src/catalog_mutations.rs (frozen legacy catalog mapping into the Phase 4 model)"
     ],
     "tests": [
       "tests/python/test_native_v1_capture.py",
       "tests/python/test_opensubsonic_capture.py",
       "tests/python/test_jellyfin_capture.py",
       "tests/python/test_media_baseline.py",
-      "tests/python/test_benchmark_baseline.py"
+      "tests/python/test_benchmark_baseline.py",
+      "crates/melodee-persistence/tests/catalog_legacy.rs (frozen Phase 0 Artist/Release/Track/public-ID relationship mapping)"
     ],
-    "note": "Golden fixture infrastructure exists for all three API surfaces + media. Rust-side differential suites activate in Phases 2-8."
+    "note": "Golden fixture infrastructure exists for all three API surfaces and media; Phase 4 adds frozen catalog-mapping evidence. Route-level Rust differential suites activate with the compatibility adapters in later phases."
   },
   "PRD-TEST-002": {
     "status": "in-progress",
@@ -483,30 +504,58 @@
   "PRD-TEST-005": {
     "status": "in-progress",
     "implementation": [
-      "compatibility/media/ (31-case synthetic corpus incl. malformed tags, corrupt/truncated audio, invalid artwork, duplicate track numbers)"
+      "compatibility/media/ (31-case synthetic corpus incl. malformed tags, corrupt/truncated audio, invalid artwork, duplicate track numbers)",
+      "design/evidence/phase-3/PHASE-3-REPORT.md (real MP3/FLAC/OGG/WAV, Unicode/path, artwork, and sidecar publication coverage)",
+      "design/evidence/phase-4/PHASE-4-REPORT.md (same-name, alias/context, guest credit, membership, conflict, negative/manual, legacy, and AudioIdentity cases)"
     ],
     "tests": [
-      "tests/python/test_media_baseline.py"
-    ]
+      "tests/python/test_media_baseline.py",
+      "crates/melodee-media/tests/normalization_real.rs",
+      "crates/melodee-ingestion/tests/normalization.rs",
+      "crates/melodee-ingestion/tests/publication.rs",
+      "crates/melodee-catalog/src/resolver.rs",
+      "crates/melodee-persistence/tests/catalog_identity.rs, catalog_participation.rs, catalog_merge_split.rs, and catalog_audio_identity.rs"
+    ],
+    "note": "Phase 3 media/pathology and Phase 4 identity/credit/AudioIdentity ambiguity cases are implemented. Phase 5 classification and later compatibility-scale cases keep the cross-product requirement in progress."
   },
   "PRD-TEST-006": {
     "status": "in-progress",
     "implementation": [
       "design/evidence/phase-0/media-baseline.md section 11 (interruption/non-atomicity evidence)",
-      "compatibility/melodee-api-v1/golden/native-auth/ (refresh replay/rotation fault evidence)"
+      "compatibility/melodee-api-v1/golden/native-auth/ (refresh replay/rotation fault evidence)",
+      "design/evidence/phase-2/PHASE-2-REPORT.md (lease expiry, retry, PostgreSQL, and concurrent-claim recovery evidence)",
+      "design/evidence/phase-3/PHASE-3-REPORT.md (inspection/conversion/copy/fsync/rename/database-completion crash and retry evidence)",
+      "design/evidence/phase-4/PHASE-4-REPORT.md (catalog lease expiry/theft/renewal/cancellation, retryable failure, idempotency, and conflict evidence)"
     ],
-    "tests": [],
-    "note": "Crash/retry/idempotency fault-injection harness targets the Rust pipeline; legacy fault behavior baselined."
+    "tests": [
+      "crates/melodee-persistence/tests/recovery.rs",
+      "crates/melodee-persistence/tests/publication.rs",
+      "crates/melodee-ingestion/tests/reconciliation.rs",
+      "crates/melodee-ingestion/tests/inspection.rs",
+      "crates/melodee-ingestion/tests/normalization.rs",
+      "crates/melodee-ingestion/tests/publication.rs",
+      "crates/melodee-persistence/tests/catalog_import.rs",
+      "crates/melodee-catalog/src/authority.rs (deterministic provider-failure semantics)"
+    ],
+    "note": "Ingestion and catalog stages have deterministic crash/retry/lease/source-change/PostgreSQL/publication/provider-boundary fault coverage. Phase 6 search and later API failures keep the broad requirement in progress."
   },
   "PRD-TEST-007": {
     "status": "in-progress",
     "implementation": [
-      "compatibility/benchmarks/ (3 tiers, environment metadata, machine-readable results)",
-      "design/evidence/phase-0/scale-baseline.md (budgets labeled requirement-vs-proposal)"
+      "crates/melodee-domain/src/ingestion.rs (legal durable states/transitions and next-action vocabulary)",
+      "crates/melodee-persistence/src/work_items.rs (leased claims, append-only transition/failure history, retry/reprocess)",
+      "apps/melodee-server/src/admin.rs and apps/melodee-cli/src/main.rs (operator-visible state/history/next actions)",
+      "crates/melodee-persistence/src/catalog.rs and crates/melodee-catalog/src/importer.rs (Published/Cataloging/Cataloged lease, retry, cancellation, and diagnostics contract)"
     ],
     "tests": [
-      "tests/python/test_benchmark_baseline.py"
-    ]
+      "crates/melodee-domain unit tests (transition matrix and retry policy)",
+      "crates/melodee-persistence/tests/transitions.rs",
+      "crates/melodee-persistence/tests/recovery.rs",
+      "crates/melodee-ingestion/tests/reconciliation.rs",
+      "crates/melodee-ingestion/tests/normalization.rs",
+      "crates/melodee-persistence/tests/catalog_import.rs"
+    ],
+    "note": "The invariant is implemented and tested through Cataloged, including retryable Cataloging backoff and immediate cancellation reclaim. Phase 6 indexing must extend the same durable-state/next-action proof before the full pipeline requirement is complete."
   },
   "PRD-WORK-001": {
     "status": "in-progress",
@@ -544,10 +593,11 @@
   "PRD-OBS-001": {
     "status": "in-progress",
     "implementation": [
-      "crates/melodee-persistence/src/work_items.rs (tracing events with work_item_id/worker_id/correlation_id/lease fields)"
+      "crates/melodee-persistence/src/work_items.rs (tracing events with work_item_id/worker_id/correlation_id/lease fields)",
+      "crates/melodee-catalog/src/importer.rs (structured catalog-import spans, identity/count/result/failure evidence)"
     ],
     "tests": [],
-    "note": "Structured tracing across work execution; API/provider correlation propagation arrives with those surfaces."
+    "note": "Structured tracing spans ingestion and catalog worker execution. Later compatibility APIs and configured provider implementations must extend correlation propagation, so the broad requirement remains in progress."
   },
   "PRD-INGEST-010": {
     "status": "tested",
@@ -557,15 +607,18 @@
       "apps/melodee-server/src/admin.rs (Admin diagnostics API: state counts, bounded listing, work-item detail, event history, active leases)",
       "apps/melodee-server/src/main.rs (admin diagnostics and PostgreSQL readiness routes wired into the server router)",
       "apps/melodee-cli/src/main.rs (ingest status/manifest/publication diagnostics expose durable authorization, plan, receipt, and journal evidence)",
-      "crates/melodee-persistence/migrations/0006_canonical_publication.sql (durable decision/publication evidence)"
+      "crates/melodee-persistence/migrations/0006_canonical_publication.sql (durable decision/publication evidence)",
+      "apps/melodee-cli/src/main.rs (catalog status/inspect exposes counts, retries, errors, and immutable import receipt)",
+      "crates/melodee-persistence/migrations/0007_phase4_catalog.sql (durable catalog audit, overlay, decision, and outbox evidence)"
     ],
     "tests": [
       "crates/melodee-persistence/tests/history.rs",
       "apps/melodee-server/tests/admin_diagnostics_api.rs (13 integration tests against real PostgreSQL)",
       "apps/melodee-server/tests/system_api.rs (bounded positive and fail-closed PostgreSQL readiness)",
-      "crates/melodee-persistence/tests/publication.rs (durable publication evidence and operator-safe problem state)"
+      "crates/melodee-persistence/tests/publication.rs (durable publication evidence and operator-safe problem state)",
+      "crates/melodee-persistence/tests/catalog_import.rs and catalog_identity.rs (durable retry/correction evidence)"
     ],
-    "note": "State/worker/attempts/last error/timestamps/history and Phase 3 decision/publication evidence are durable and visible through the CLI and Rust-native Admin API. The requirement permits Admin UI/API; the graphical UI is a later phase."
+    "note": "State/worker/attempt/error/history, publication, catalog-import, and identity evidence are durable and visible through Rust-native CLI/API diagnostics. The graphical UI is a later phase."
   },
   "PRD-WORK-003": {
     "status": "tested",
@@ -619,12 +672,14 @@
     "status": "tested",
     "implementation": [
       "crates/melodee-media/src/lib.rs (streaming BLAKE3 byte hashes in ReleaseManifest)",
-      "crates/melodee-media/src/normalize.rs (run_fpcalc: acoustic fingerprint via fpcalc -json, source audio file fingerprinting)"
+      "crates/melodee-media/src/normalize.rs (run_fpcalc: acoustic fingerprint via fpcalc -json, source audio file fingerprinting)",
+      "crates/melodee-persistence/src/catalog.rs (manifest hashes/fingerprints become durable MediaAsset/AudioIdentity evidence without audio reread)"
     ],
     "tests": [
       "crates/melodee-media/src/lib.rs (byte_hash_distinguishes_same_size_content)",
       "crates/melodee-ingestion/tests/inspection.rs",
-      "crates/melodee-persistence/tests/normalization.rs"
+      "crates/melodee-persistence/tests/normalization.rs",
+      "crates/melodee-persistence/tests/catalog_import.rs and catalog_audio_identity.rs"
     ]
   },
   "PRD-FP-002": {
@@ -632,13 +687,15 @@
     "implementation": [
       "crates/melodee-media/src/normalize.rs (FingerprintObservation: source-relative path, Chromaprint fingerprint, duration_ms)",
       "crates/melodee-domain/src/manifest.rs (FingerprintObservation domain type)",
-      "crates/melodee-domain/src/manifest.rs (byte hash is an observation, not identity resolution)"
+      "crates/melodee-domain/src/manifest.rs (byte hash is an observation, not identity resolution)",
+      "crates/melodee-domain/src/release.rs and identity.rs (Track/MediaAsset/AudioIdentity separation and conservative evidence decisions)"
     ],
     "tests": [
       "crates/melodee-media/src/lib.rs (byte_hash_distinguishes_same_size_content)",
-      "crates/melodee-media/tests/normalization_real.rs (deterministic BLAKE3 output hashes and source Chromaprint observations)"
+      "crates/melodee-media/tests/normalization_real.rs (deterministic BLAKE3 output hashes and source Chromaprint observations)",
+      "crates/melodee-persistence/tests/catalog_audio_identity.rs"
     ],
-     "note": "Byte identity and acoustic evidence are represented separately. Alternate-version and uncertain-similarity decisions belong to the later catalog identity model."
+     "note": "Byte identity, Track occurrence, and AudioIdentity are separate and fingerprint/byte evidence cannot auto-merge them. Phase 5 still owns explicit novelty/alternate-recording classification, so the broad requirement remains in progress."
    },
    "PRD-FP-003": {
      "status": "tested",
@@ -654,19 +711,30 @@
      "note": "fpcalc is the preferred initial fingerprint tool (ADR-0108). Fingerprints are computed from source audio, not normalized output."
    },
    "PRD-FP-004": {
-     "status": "planned",
-     "implementation": [],
-     "tests": [],
-     "note": "FingerprintObservation is evidence, not the required catalog identity abstraction. The final ubiquitous-language name and schema still require the PRD-mandated ADR before catalog schema freeze."
+     "status": "tested",
+     "implementation": [
+       "design/adr/ADR-0118-use-audioidentity-and-immutable-manifest-v3-semantic-overlays.md",
+       "crates/melodee-domain/src/release.rs (AudioIdentity distinct from Track and MediaAsset)",
+       "crates/melodee-persistence/migrations/0007_phase4_catalog.sql (AudioIdentity/evidence/decision/merge/split schema)"
+     ],
+     "tests": [
+       "crates/melodee-domain/tests/phase4_domain.rs",
+       "crates/melodee-persistence/tests/catalog_audio_identity.rs"
+     ]
    },
    "PRD-FP-005": {
-     "status": "planned",
-     "implementation": [],
-     "tests": [],
-     "note": "Physical deduplication remains optional, but the future catalog/storage schema that must not preclude shared MediaAssets has not been designed yet."
+     "status": "tested",
+     "implementation": [
+       "crates/melodee-domain/src/release.rs (TrackMediaAsset many-to-one MediaAsset relationship)",
+       "crates/melodee-persistence/migrations/0007_phase4_catalog.sql (logical Tracks can share one MediaAsset without requiring global deduplication)"
+     ],
+     "tests": [
+       "crates/melodee-domain/tests/phase4_domain.rs (Track/MediaAsset/AudioIdentity are independently shareable)"
+     ],
+     "note": "The schema permits shared MediaAssets; optional global physical-byte deduplication remains unimplemented as allowed by the requirement."
    },
    "PRD-INGEST-007": {
-     "status": "in-progress",
+     "status": "tested",
      "implementation": [
        "crates/melodee-domain/src/manifest.rs (schema-versioned ReleaseManifest and semantic hash input)",
        "crates/melodee-persistence/migrations/0004_release_work_item_manifests.sql",
@@ -675,7 +743,8 @@
        "crates/melodee-persistence/src/work_items.rs (transactional v1/v2/v3 manifest and immutable publication-plan persistence)",
        "crates/melodee-media/src/lib.rs (deterministic media observations)",
        "crates/melodee-media/src/normalize.rs (normalization observations embedded in manifest)",
-       "crates/melodee-ingestion/src/validate.rs and publication.rs (complete canonical asset mapping and explicit v3 upgrade)"
+       "crates/melodee-ingestion/src/validate.rs and publication.rs (complete canonical asset mapping and explicit v3 upgrade)",
+       "crates/melodee-persistence/src/catalog.rs (validated immutable v3/plan/receipt catalog consumer)"
      ],
      "tests": [
        "crates/melodee-media/src/lib.rs (manifest_hash_excludes_volatile_provenance)",
@@ -685,9 +754,10 @@
        "crates/melodee-persistence/tests/normalization.rs",
        "crates/melodee-ingestion/tests/inspection.rs",
        "crates/melodee-ingestion/tests/publication.rs (complete v3 canonical inventory)",
-       "crates/melodee-ingestion/tests/normalization.rs (real-format/pathology and 200-Release v3 publication)"
+       "crates/melodee-ingestion/tests/normalization.rs (real-format/pathology and 200-Release v3 publication)",
+       "crates/melodee-persistence/tests/catalog_import.rs and catalog_performance.rs (end-to-end v3 insertion without media reread)"
      ],
-     "note": "Manifest v3 satisfies the Phase 3 handoff without audio reread by adding stable Release identity, structural validation, authorization, retained disposition, and canonical mappings. The broad requirement remains in progress until the Phase 4 catalog consumer proves end-to-end insertion completeness."
+     "note": "Manifest v3 now has a tested end-to-end consumer through atomic Cataloged state without rereading source or canonical audio."
    },
    "PRD-INGEST-008": {
      "status": "tested",
@@ -711,13 +781,15 @@
        "crates/melodee-ingestion/src/inspect.rs (bounded claim batch and spawn_blocking boundary)",
        "crates/melodee-ingestion/src/normalize.rs (bounded normalization concurrency with lease heartbeat)",
        "crates/melodee-ingestion/src/publication_worker.rs (independently bounded validation/publication JoinSet workers with lease heartbeat and cancellation)",
-       "crates/melodee-media/src/lib.rs (streaming hashes and bounded tool output/artwork limits)"
+       "crates/melodee-media/src/lib.rs (streaming hashes and bounded tool output/artwork limits)",
+       "crates/melodee-catalog/src/config.rs and importer.rs (independent bounded catalog-write claim/concurrency, renewal, and cancellation)"
      ],
      "tests": [
        "crates/melodee-ingestion/tests/inspection.rs",
-       "crates/melodee-ingestion/tests/normalization.rs (measured normalization concurrency reaches 8 and never exceeds 8; validation/publication claim pools configured independently to 8; 200 Releases reach Published)"
+       "crates/melodee-ingestion/tests/normalization.rs (measured normalization concurrency reaches 8 and never exceeds 8; validation/publication claim pools configured independently to 8; 200 Releases reach Published)",
+       "crates/melodee-persistence/tests/catalog_performance.rs (catalog concurrency reaches and never exceeds four for 200 manifests)"
      ],
-     "note": "Inspection, normalization, validation, and publication are separately bounded, and normalization bounds child processes. The full requirement also calls for separate image, hashing/fingerprinting, conversion, external-enrichment, catalog-write, and search-index resource classes; those later-stage pools do not all exist."
+     "note": "Inspection, normalization, validation, publication, and catalog writes are separately bounded. Later external enrichment and Phase 6 search-index resource classes remain unimplemented, so the full requirement stays in progress."
    },
    "PRD-STORAGE-001": {
      "status": "tested",
@@ -758,5 +830,455 @@
        "crates/melodee-media/tests/normalization_real.rs (valid existing VBR/CBR MP3 bytes retained exactly)"
      ],
      "note": "New ingestion avoids unnecessary re-encoding of valid MP3. Phase 11 registration of an existing canonical library without forced relocation or re-encoding is not implemented, so the broad migration requirement remains in progress."
+   },
+   "PRD-ARTIST-001": {
+     "status": "tested",
+     "implementation": [
+       "crates/melodee-domain/src/artist.rs (Artist identity keeps names as non-key attributes)",
+       "crates/melodee-persistence/migrations/0007_phase4_catalog.sql (no uniqueness constraint on canonical or normalized Artist name)"
+     ],
+     "tests": [
+       "crates/melodee-domain/tests/phase4_domain.rs (same names retain distinct identities)",
+       "crates/melodee-persistence/tests/catalog_identity.rs (exact same names coexist in PostgreSQL)"
+     ]
+   },
+   "PRD-ARTIST-002": {
+     "status": "tested",
+     "implementation": [
+       "crates/melodee-domain/src/ids.rs (separate immutable internal and public Artist IDs)",
+       "crates/melodee-persistence/migrations/0007_phase4_catalog.sql (immutable public_api_id and merge tombstone constraints)"
+     ],
+     "tests": [
+       "crates/melodee-persistence/tests/catalog_identity.rs",
+       "crates/melodee-persistence/tests/catalog_legacy.rs (all frozen Artist public UUIDs round-trip verbatim)"
+     ]
+   },
+   "PRD-ARTIST-003": {
+     "status": "tested",
+     "implementation": [
+       "crates/melodee-domain/src/artist.rs (identity-oriented ArtistType including Ensemble)",
+       "crates/melodee-persistence/migrations/0007_phase4_catalog.sql (bounded Artist type vocabulary)"
+     ],
+     "tests": [
+       "crates/melodee-domain/tests/phase4_domain.rs",
+       "crates/melodee-persistence/tests/catalog_schema.rs"
+     ]
+   },
+   "PRD-ARTIST-004": {
+     "status": "tested",
+     "implementation": [
+       "crates/melodee-domain/src/artist.rs (ArtistAlias belongs to one Artist identity)",
+       "crates/melodee-persistence/src/catalog_mutations.rs (durable alias mutation)"
+     ],
+     "tests": [
+       "crates/melodee-domain/tests/phase4_domain.rs (aliases are not global identity keys)",
+       "crates/melodee-persistence/tests/catalog_identity.rs (alias evidence and constraints)"
+     ]
+   },
+   "PRD-ARTIST-005": {
+     "status": "tested",
+     "implementation": [
+       "crates/melodee-domain/src/artist.rs (provider-neutral ExternalIdentity rows)",
+       "crates/melodee-persistence/migrations/0007_phase4_catalog.sql (normalized provider/external_id uniqueness)"
+     ],
+     "tests": [
+       "crates/melodee-persistence/tests/catalog_identity.rs (provider scope and uniqueness fail closed)",
+       "crates/melodee-persistence/tests/catalog_merge_split.rs (external identity survives correction)"
+     ]
+   },
+   "PRD-ARTIST-006": {
+     "status": "tested",
+     "implementation": [
+       "crates/melodee-domain/src/artist.rs (ArtistRelationship connects distinct identities)",
+       "crates/melodee-persistence/migrations/0007_phase4_catalog.sql (relationship self-link rejection)"
+     ],
+     "tests": [
+       "crates/melodee-domain/tests/phase4_domain.rs",
+       "crates/melodee-persistence/tests/catalog_schema.rs"
+     ]
+   },
+   "PRD-ARTIST-007": {
+     "status": "tested",
+     "implementation": [
+       "crates/melodee-domain/src/artist.rs (date-bounded GroupMembership)",
+       "crates/melodee-persistence/src/catalog_mutations.rs (membership persistence and scoped projection rebuild)"
+     ],
+     "tests": [
+       "crates/melodee-domain/tests/phase4_domain.rs (inclusive/open membership date invariants)",
+       "crates/melodee-persistence/tests/catalog_participation.rs (date-valid Colin Hay inference)"
+     ]
+   },
+   "PRD-ARTIST-008": {
+     "status": "tested",
+     "implementation": [
+       "crates/melodee-domain/src/identity.rs (locked administrator decision authority)",
+       "crates/melodee-persistence/src/catalog_mutations.rs (locked current decision fencing)",
+       "crates/melodee-catalog/src/authority.rs (manual decision short-circuits provider access)"
+     ],
+     "tests": [
+       "crates/melodee-domain/tests/phase4_domain.rs",
+       "crates/melodee-persistence/tests/catalog_identity.rs",
+       "crates/melodee-catalog/src/authority.rs (locked manual decision dominates provider failure)"
+     ]
+   },
+   "PRD-ARTIST-009": {
+     "status": "tested",
+     "implementation": [
+       "crates/melodee-domain/src/identity.rs (scoped ArtistNegativeAssertion)",
+       "crates/melodee-persistence/src/catalog_mutations.rs (durable local/provider negative assertions)",
+       "crates/melodee-catalog/src/resolver.rs (negative candidates are ineligible)"
+     ],
+     "tests": [
+       "crates/melodee-persistence/tests/catalog_identity.rs",
+       "crates/melodee-catalog/src/authority.rs and resolver.rs (negative assertions dominate recommendations)"
+     ]
+   },
+   "PRD-ARTIST-010": {
+     "status": "tested",
+     "implementation": [
+       "crates/melodee-domain/src/identity.rs (merge tombstone and selected split assignment invariants)",
+       "crates/melodee-persistence/src/catalog_identity.rs (fenced Artist merge/split with audit, outbox, redirect, and scoped reassignment)",
+       "design/adr/ADR-0119-use-audit-only-corrections-for-legacy-releases-without-manifest-v3.md"
+     ],
+     "tests": [
+       "crates/melodee-persistence/tests/catalog_merge_split.rs (redirect, selected relationships, public IDs, overlays, and media immutability)",
+       "crates/melodee-persistence/tests/catalog_audio_identity.rs (correction safety for related recording identity)"
+     ]
+   },
+   "PRD-ARTIST-011": {
+     "status": "tested",
+     "implementation": [
+       "crates/melodee-catalog/src/resolver.rs (bounded evidence scoring retains provisional identity on weak or ambiguous input)",
+       "crates/melodee-persistence/src/catalog.rs (manifest import creates observation-scoped provisional Artists)"
+     ],
+     "tests": [
+       "crates/melodee-catalog/src/resolver.rs (same-name ambiguity and weak-name provisional tests)",
+       "crates/melodee-persistence/tests/catalog_import.rs (equal raw names are not merged)"
+     ]
+   },
+   "PRD-ARTIST-012": {
+     "status": "tested",
+     "implementation": [
+       "crates/melodee-catalog/src/authority.rs (provider-neutral evidence-only ArtistAuthority)",
+       "crates/melodee-catalog/src/resolver.rs (external-authority evidence cannot auto-confirm identity)"
+     ],
+     "tests": [
+       "crates/melodee-catalog/src/authority.rs (deterministic fake failure/manual/negative behavior)",
+       "crates/melodee-catalog/src/resolver.rs (provider evidence remains a proposal only)"
+     ]
+   },
+   "PRD-RESOLVE-001": {
+     "status": "tested",
+     "implementation": [
+       "crates/melodee-domain/src/identity.rs and credit.rs (ObservedArtist and exact DisplayArtist are separate from resolved identity)",
+       "crates/melodee-persistence/src/catalog.rs (manifest import persists raw observations and structured billing separately)"
+     ],
+     "tests": [
+       "crates/melodee-domain/tests/phase4_domain.rs (display text remains exact)",
+       "crates/melodee-persistence/tests/catalog_import.rs"
+     ]
+   },
+   "PRD-RESOLVE-002": {
+     "status": "tested",
+     "implementation": [
+       "crates/melodee-domain/src/identity.rs (accepted evidence dimensions and polarity)",
+       "crates/melodee-catalog/src/resolver.rs (deterministic scoring across name, alias, external ID, release/track, type/date/area/membership, and provider evidence)"
+     ],
+     "tests": [
+       "crates/melodee-catalog/src/resolver.rs (alias/context, external ID, conflict, ambiguity, and provider cases)"
+     ]
+   },
+   "PRD-RESOLVE-003": {
+     "status": "tested",
+     "implementation": [
+       "crates/melodee-domain/src/identity.rs (automatic name-only confirmation invariant)",
+       "crates/melodee-catalog/src/resolver.rs (name-only evidence cannot confirm)"
+     ],
+     "tests": [
+       "crates/melodee-domain/tests/phase4_domain.rs",
+       "crates/melodee-catalog/src/resolver.rs (weak and same-name cases retain provisional identity)"
+     ]
+   },
+   "PRD-RESOLVE-004": {
+     "status": "tested",
+     "implementation": [
+       "crates/melodee-catalog/src/resolver.rs (conflicting evidence is retained and subtracts from confidence)"
+     ],
+     "tests": [
+       "crates/melodee-catalog/src/resolver.rs (conflict lowers confirmable result to proposed)",
+       "crates/melodee-domain/tests/phase4_domain.rs (automatic conflicting confirmation rejected)"
+     ]
+   },
+   "PRD-RESOLVE-005": {
+     "status": "tested",
+     "implementation": [
+       "crates/melodee-catalog/src/authority.rs (async provider-neutral ArtistAuthority without provider SDK or canonical provider identity)"
+     ],
+     "tests": [
+       "crates/melodee-catalog/src/authority.rs (deterministic fake authority boundary and failure semantics)"
+     ]
+   },
+   "PRD-CREDIT-001": {
+     "status": "tested",
+     "implementation": [
+       "crates/melodee-domain/src/credit.rs (ordered ReleaseArtist)",
+       "crates/melodee-persistence/migrations/0007_phase4_catalog.sql and src/catalog.rs (structured Release billing)"
+     ],
+     "tests": [
+       "crates/melodee-domain/tests/phase4_domain.rs",
+       "crates/melodee-persistence/tests/catalog_import.rs"
+     ]
+   },
+   "PRD-CREDIT-002": {
+     "status": "tested",
+     "implementation": [
+       "crates/melodee-domain/src/credit.rs (ordered TrackArtist)",
+       "crates/melodee-persistence/migrations/0007_phase4_catalog.sql and src/catalog.rs (structured Track billing)"
+     ],
+     "tests": [
+       "crates/melodee-domain/tests/phase4_domain.rs",
+       "crates/melodee-persistence/tests/catalog_import.rs"
+     ]
+   },
+   "PRD-CREDIT-003": {
+     "status": "tested",
+     "implementation": [
+       "crates/melodee-domain/src/credit.rs (first-class Contribution and performance/non-performance roles including BandMember)",
+       "crates/melodee-persistence/migrations/0007_phase4_catalog.sql (Release/Track-scoped contribution rows)"
+     ],
+     "tests": [
+       "crates/melodee-domain/tests/phase4_domain.rs",
+       "crates/melodee-persistence/tests/catalog_participation.rs"
+     ]
+   },
+   "PRD-CREDIT-004": {
+     "status": "tested",
+     "implementation": [
+       "crates/melodee-domain/src/credit.rs (exact DisplayArtist plus ordered structured associations and join phrases)",
+       "crates/melodee-persistence/src/catalog.rs (raw billing display persisted separately)"
+     ],
+     "tests": [
+       "crates/melodee-domain/tests/phase4_domain.rs (exact display text independent of structured billing)",
+       "crates/melodee-persistence/tests/catalog_import.rs"
+     ]
+   },
+   "PRD-CREDIT-005": {
+     "status": "tested",
+     "implementation": [
+       "crates/melodee-domain/src/identity.rs (ParsedArtistCandidate cannot carry ArtistId)"
+     ],
+     "tests": [
+       "crates/melodee-domain/tests/phase4_domain.rs (parser candidates cannot claim identity)"
+     ]
+   },
+   "PRD-CREDIT-006": {
+     "status": "tested",
+     "implementation": [
+       "crates/melodee-persistence/src/catalog.rs (bounded list_artist_participation default/all-credit query)",
+       "crates/melodee-persistence/src/catalog_mutations.rs (set-based participation projection refresh)"
+     ],
+     "tests": [
+       "crates/melodee-persistence/tests/catalog_participation.rs (Colin Hay solo, guest, date-valid group inference, exclusion, and all credits)"
+     ]
+   },
+   "PRD-CREDIT-007": {
+     "status": "tested",
+     "implementation": [
+       "crates/melodee-domain/src/credit.rs (Direct and InferredGroup participation kinds)",
+       "crates/melodee-persistence/src/catalog_mutations.rs (date- and exclusion-scoped inference)"
+     ],
+     "tests": [
+       "crates/melodee-persistence/tests/catalog_participation.rs",
+       "crates/melodee-domain/tests/phase4_domain.rs"
+     ]
+   },
+   "PRD-CREDIT-008": {
+     "status": "tested",
+     "implementation": [
+       "crates/melodee-persistence/migrations/0007_phase4_catalog.sql (artist_track_participation projection)",
+       "crates/melodee-persistence/src/catalog_mutations.rs (scoped set-based rebuild)",
+       "crates/melodee-persistence/src/catalog.rs (indexed participation reads)"
+     ],
+     "tests": [
+       "crates/melodee-persistence/tests/catalog_participation.rs",
+       "crates/melodee-persistence/tests/catalog_performance.rs"
+     ]
+   },
+   "PRD-CATALOG-001": {
+     "status": "tested",
+     "implementation": [
+       "design/adr/ADR-0117-use-a-postgresql-catalog-identity-and-contribution-schema-with-set-based-manifest-import.md",
+       "crates/melodee-persistence/migrations/0007_phase4_catalog.sql",
+       "crates/melodee-persistence/src/catalog.rs, catalog_mutations.rs, and catalog_identity.rs"
+     ],
+     "tests": [
+       "crates/melodee-persistence/tests/catalog_*.rs (authoritative PostgreSQL catalog acceptance suite)"
+     ]
+   },
+   "PRD-CATALOG-002": {
+     "status": "tested",
+     "implementation": [
+       "crates/melodee-persistence/src/catalog.rs (constant set-based manifest-v3 mutations with explicit statement accounting)",
+       "crates/melodee-catalog/src/importer.rs (independently bounded catalog-write scheduling)"
+     ],
+     "tests": [
+       "crates/melodee-persistence/tests/catalog_performance.rs (200 manifests, bounded query/mutation count, exactly-once imports, no media reads)"
+     ]
+   },
+   "PRD-CATALOG-003": {
+     "status": "tested",
+     "implementation": [
+       "crates/melodee-persistence/src/catalog.rs (per-import set-based Release/Artist aggregates)",
+       "crates/melodee-persistence/src/catalog_mutations.rs (affected-Artist/Track-only projection and aggregate refresh)"
+     ],
+     "tests": [
+       "crates/melodee-persistence/tests/catalog_import.rs",
+       "crates/melodee-persistence/tests/catalog_participation.rs",
+       "crates/melodee-persistence/tests/catalog_performance.rs"
+     ]
+   },
+   "PRD-CATALOG-004": {
+     "status": "tested",
+     "implementation": [
+       "crates/melodee-persistence/migrations/0007_phase4_catalog.sql (deterministic additive schema)",
+       "design/runbooks/LOCAL-DEVELOPMENT.md (forward, evidence-retaining downgrade, and verified backup-restore guidance)"
+     ],
+     "tests": [
+       "crates/melodee-persistence/tests/catalog_schema.rs",
+       "crates/melodee-persistence/tests/catalog_legacy.rs",
+       "crates/melodee-persistence/tests/catalog_performance.rs"
+     ],
+     "note": "Operational downgrade retains Phase 4 evidence; full schema rollback is a verified pre-0007 database restore and never touches media."
+   },
+   "PRD-CATALOG-005": {
+     "status": "tested",
+     "implementation": [
+       "crates/melodee-persistence/migrations/0007_phase4_catalog.sql (transactional catalog_projection_outbox)",
+       "crates/melodee-persistence/src/catalog.rs, catalog_mutations.rs, and catalog_identity.rs (catalog writes and matching projection work commit together)"
+     ],
+     "tests": [
+       "crates/melodee-persistence/tests/catalog_import.rs",
+       "crates/melodee-persistence/tests/catalog_identity.rs",
+       "crates/melodee-persistence/tests/catalog_merge_split.rs",
+       "crates/melodee-persistence/tests/catalog_audio_identity.rs"
+     ]
+   },
+   "PRD-MIG-002": {
+     "status": "in-progress",
+     "implementation": [
+       "crates/melodee-persistence/migrations/0007_phase4_catalog.sql (separate immutable public_api_id columns and legacy mapping evidence)",
+       "crates/melodee-persistence/src/catalog_mutations.rs (set-wise conflict-checked legacy public-ID import)"
+     ],
+     "tests": [
+       "crates/melodee-persistence/tests/catalog_legacy.rs (all 39 frozen Artist/Release/Track UUIDs round-trip verbatim and idempotently)",
+       "crates/melodee-persistence/tests/catalog_merge_split.rs (correction preserves public IDs)"
+     ],
+     "note": "Phase 4 proves catalog public-ID mapping. Phase 11 still owns production migration of client/user references and cutover validation, so the broad requirement remains in progress."
+   },
+   "PRD-MIG-004": {
+     "status": "in-progress",
+     "implementation": [
+       "crates/melodee-persistence/src/catalog_mutations.rs (set-wise legacy Artist/Release/Track/relationship mapping)",
+       "design/adr/ADR-0119-use-audit-only-corrections-for-legacy-releases-without-manifest-v3.md (truthful correction provenance for legacy-only Releases)"
+     ],
+     "tests": [
+       "crates/melodee-persistence/tests/catalog_legacy.rs (frozen counts, parent ownership, relationships, public IDs, idempotency, and conflict handling)",
+       "crates/melodee-persistence/tests/catalog_merge_split.rs (legacy-only correction remains audited without fabricated v3)"
+     ],
+     "note": "Phase 4 proves the core catalog mapping on the frozen fixture. Phase 11 remains responsible for production-scale extraction, synchronization, and cutover."
+   },
+   "PRD-OBS-004": {
+     "status": "tested",
+     "implementation": [
+       "apps/melodee-cli/src/main.rs (work show, ingest manifest/publication, and catalog inspect/status error/history evidence)",
+       "apps/melodee-server/src/admin.rs (bounded work-item history/error diagnostics)",
+       "crates/melodee-persistence/migrations/0002_release_work_item_events.sql and 0007_phase4_catalog.sql (durable per-Release processing and catalog audit history)"
+     ],
+     "tests": [
+       "crates/melodee-persistence/tests/history.rs and catalog_import.rs",
+       "apps/melodee-server/tests/admin_diagnostics_api.rs"
+     ]
+   },
+   "PRD-PRINCIPLE-001": {
+     "status": "in-progress",
+     "implementation": [
+       "design/agents/PHASE-4-WORK-PACKAGE.md (requirements-first catalog implementation boundary)",
+       "crates/melodee-domain/ and crates/melodee-persistence/src/catalog*.rs (ground-up Rust domain/catalog design rather than C# service translation)"
+     ],
+     "tests": [
+       "crates/melodee-persistence/tests/catalog_legacy.rs (legacy facts mapped through the new domain model)"
+     ],
+     "note": "Phase 4 preserves required identity/public-ID behavior without copying legacy architecture. Full behavioral parity remains a multi-phase requirement."
+   },
+   "PRD-PRINCIPLE-002": {
+     "status": "in-progress",
+     "implementation": [
+       "crates/melodee-persistence/migrations/0007_phase4_catalog.sql (separate immutable public compatibility IDs)",
+       "compatibility/ (frozen external contract evidence remains unchanged)"
+     ],
+     "tests": [
+       "crates/melodee-persistence/tests/catalog_legacy.rs",
+       "tests/python/test_native_v1_capture.py, test_opensubsonic_capture.py, and test_jellyfin_capture.py"
+     ],
+     "note": "Phase 4 preserves public-ID mapping and changes no compatibility route. Adapter implementation and real-client gates remain later phases."
+   },
+   "PRD-PRINCIPLE-005": {
+     "status": "tested",
+     "implementation": [
+       "crates/melodee-domain/src/artist.rs and identity.rs (Melodee-owned Artist identity and durable decision authority)",
+       "crates/melodee-catalog/src/authority.rs and resolver.rs (external providers are evidence-only)"
+     ],
+     "tests": [
+       "crates/melodee-catalog/src/authority.rs and resolver.rs",
+       "crates/melodee-persistence/tests/catalog_identity.rs"
+     ]
+   },
+   "PRD-PRINCIPLE-006": {
+     "status": "in-progress",
+     "implementation": [
+       "crates/melodee-catalog/src/resolver.rs (weak/ambiguous/conflicting evidence retains provisional identity)",
+       "crates/melodee-persistence/src/catalog.rs (initial import is conservative and never deletes media)"
+     ],
+     "tests": [
+       "crates/melodee-catalog/src/resolver.rs",
+       "crates/melodee-persistence/tests/catalog_import.rs and catalog_audio_identity.rs"
+     ],
+     "note": "Phase 4 turns identity uncertainty into provisional state and never media deletion. Phase 5 must extend the principle to classification/disposition and destructive authorization."
+   },
+   "PRD-PRINCIPLE-008": {
+     "status": "tested",
+     "implementation": [
+       "design/adr/ADR-0117-use-a-postgresql-catalog-identity-and-contribution-schema-with-set-based-manifest-import.md",
+       "design/adr/ADR-0118-use-audioidentity-and-immutable-manifest-v3-semantic-overlays.md",
+       "design/adr/ADR-0119-use-audit-only-corrections-for-legacy-releases-without-manifest-v3.md",
+       "design/adr/README.md (accepted Phase 4 decision index)"
+     ],
+     "tests": [
+       "python3 scripts/validate_repository.py (ADR status/link validation)"
+     ]
+   },
+   "PRD-SCALE-001": {
+     "status": "in-progress",
+     "implementation": [
+       "crates/melodee-persistence/src/catalog.rs (set-based import and indexed bounded participation reads)",
+       "crates/melodee-persistence/src/catalog_mutations.rs (affected-scope correction/projection rebuilds)"
+     ],
+     "tests": [
+       "crates/melodee-persistence/tests/catalog_performance.rs (200 imports with constant set-based statement count)",
+       "crates/melodee-persistence/tests/catalog_participation.rs (indexed bounded participation query)"
+     ],
+     "note": "Normal Phase 4 catalog paths do not load or reshuffle the whole catalog. Later browse/search/API operations must preserve that invariant."
+   },
+   "PRD-SCALE-002": {
+     "status": "in-progress",
+     "implementation": [
+       "crates/melodee-persistence/migrations/0007_phase4_catalog.sql (catalog, participation, correction, and outbox indexes)",
+       "crates/melodee-persistence/src/catalog.rs (bounded participation and diagnostic queries)"
+     ],
+     "tests": [
+       "crates/melodee-persistence/tests/catalog_participation.rs (default-query index-plan assertion)",
+       "crates/melodee-persistence/tests/catalog_performance.rs"
+     ],
+     "note": "Phase 4 provides indexed bounded PostgreSQL foundations. Large-library API pagination and UI server-side operations remain their assigned later phases."
    }
 }

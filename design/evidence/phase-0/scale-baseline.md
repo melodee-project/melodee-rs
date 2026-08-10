@@ -94,7 +94,7 @@ of remaining iterations (A/B: 5 iterations; C: 3).
 | Budget | Value | Status |
 |---|---|---|
 | Warm search p95 (10M-track catalog) | < 50 ms | **Requirement already defined** (PRD-SEARCH-006) |
-| Search rebuild from PostgreSQL provable | required | **Requirement already defined** (ADR-0108, Phase 5 exit) |
+| Search rebuild from PostgreSQL provable | required | **Requirement already defined** (ADR-0107, Phase 6 exit) |
 | API browse p95 at 560k tracks (paged lists) | ≤ 50 ms | **Proposed target requiring ADR/PRD ratification** — legacy native already achieves ~10-48ms; Rust should not regress |
 | Random-songs endpoint p95 at 560k tracks | ≤ 500 ms | **Proposed target requiring ADR/PRD ratification** — legacy is 25s; anything reasonable is a 50x improvement; must not regress |
 | Server memory ceiling at 5M tracks | bounded (no full-catalog materialization; target < 4 GB) | **Proposed target requiring ADR/PRD ratification** — legacy measured 26-29 GB after random queries |

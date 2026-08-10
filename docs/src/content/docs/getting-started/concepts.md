@@ -21,7 +21,15 @@ on.
 
 ## Track
 
-A Track is a single recording within a Release (what compatibility APIs may call a "song").
+A Track is one playable occurrence within a Release (what compatibility APIs may call a "song").
+Two Tracks may refer to the same underlying recording or performance through `AudioIdentity`.
+
+## Audio identity
+
+An `AudioIdentity` represents one underlying audible recording or performance. It is separate from
+a Track occurrence and from the encoded bytes in a MediaAsset. A new catalog import creates
+provisional identities conservatively; a byte hash or fingerprint is evidence, not an automatic
+identity key.
 
 ## Contributions and credits
 
@@ -34,8 +42,13 @@ appearances according to role.
 Inbound media is inspected and normalized into attempt-isolated temporary files with a versioned
 manifest describing content hashes, fingerprints, and metadata. Structural validation upgrades an
 accepted result to manifest schema v3, then atomic, retry-safe publication creates an immutable-ID
-canonical Release bundle while retaining the inbound source. The future catalog is built from
-ratified manifests, not from repeated reads of audio files.
+canonical Release bundle while retaining the inbound source. The catalog worker builds normalized
+PostgreSQL rows from that ratified manifest and its publication receipt, not from repeated reads of
+audio files.
+
+Published manifest v3 remains immutable. Resolved Artist, contribution, and AudioIdentity facts are
+captured in an immutable semantic-overlay revision in PostgreSQL, so later corrections preserve the
+original media and publication evidence.
 
 ## Compatibility surfaces
 

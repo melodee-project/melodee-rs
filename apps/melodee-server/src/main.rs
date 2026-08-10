@@ -1,11 +1,12 @@
 use std::{env, error::Error, net::SocketAddr};
 
 use axum::{Router, routing::get};
+use melodee_catalog::{CatalogConfig, CatalogSchedulerHandle, start_catalog_loop};
 use melodee_ingestion::{
     IngestionConfig, SchedulerHandle, start_inspection_loop, start_normalization_loop,
     start_publication_loop, start_reconciliation_loop, start_validation_loop,
 };
-use melodee_persistence::{WorkEngineConfig, WorkItemStore, migrate};
+use melodee_persistence::{CatalogStore, WorkEngineConfig, WorkItemStore, migrate};
 use melodee_server::{admin, system};
 use tokio::sync::oneshot;
 use tower_http::trace::TraceLayer;
@@ -31,6 +32,12 @@ async fn wait_for_shutdown_signal() {
 }
 
 async fn stop_worker(handle: Option<SchedulerHandle>) {
+    if let Some(handle) = handle {
+        let _ = handle.stop().await;
+    }
+}
+
+async fn stop_catalog_worker(handle: Option<CatalogSchedulerHandle>) {
     if let Some(handle) = handle {
         let _ = handle.stop().await;
     }
@@ -65,6 +72,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     };
 
     let work_config = WorkEngineConfig::from_env()?;
+    let catalog_config = CatalogConfig::from_env()?;
     let publication_roots = ingestion_config.publication_roots()?;
     let mut reconcile_handle = None;
     let mut inspection_handle = None;
@@ -128,6 +136,25 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         );
     }
 
+    let catalog_handle = if catalog_config.enabled {
+        info!(
+            concurrency = catalog_config.concurrency,
+            batch_size = catalog_config.batch_size,
+            claim_limit = catalog_config.claim_limit(),
+            poll_interval_ms = %catalog_config.poll_interval.whole_milliseconds(),
+            "starting periodic catalog import loop"
+        );
+        Some(start_catalog_loop(
+            catalog_config,
+            pool.clone(),
+            CatalogStore,
+            work_config,
+        ))
+    } else {
+        info!("catalog import worker disabled by configuration");
+        None
+    };
+
     let bind = system::configured_bind();
     let address: SocketAddr = bind.parse()?;
 
@@ -182,13 +209,14 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     // Signal every worker immediately, then await server drain and worker
     // cancellation together while PostgreSQL is still available for safe
     // lease/error bookkeeping.
-    let (server_result, (), (), (), (), ()) = tokio::join!(
+    let (server_result, (), (), (), (), (), ()) = tokio::join!(
         server_handle,
         stop_worker(reconcile_handle),
         stop_worker(inspection_handle),
         stop_worker(normalization_handle),
         stop_worker(validation_handle),
         stop_worker(publication_handle),
+        stop_catalog_worker(catalog_handle),
     );
     server_result??;
     pool.close().await;

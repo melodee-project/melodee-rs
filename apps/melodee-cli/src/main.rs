@@ -1,9 +1,10 @@
 use std::{env, process::Command};
 
 use clap::{Parser, Subcommand};
+use melodee_catalog::{CatalogConfig, import_once};
 use melodee_domain::{IngestionState, ReleaseWorkItem};
 use melodee_ingestion::{IngestionConfig, publish_once, reconcile_all_sources, validate_once};
-use melodee_persistence::{WorkEngineConfig, WorkItemStore, WorkerId, migrate};
+use melodee_persistence::{CatalogStore, WorkEngineConfig, WorkItemStore, WorkerId, migrate};
 use sqlx::PgPool;
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -32,6 +33,11 @@ enum Commands {
     Ingest {
         #[command(subcommand)]
         command: IngestCommands,
+    },
+    /// Phase 4 PostgreSQL catalog import and diagnostics.
+    Catalog {
+        #[command(subcommand)]
+        command: CatalogCommands,
     },
 }
 
@@ -99,6 +105,19 @@ enum IngestCommands {
     Status,
 }
 
+#[derive(Debug, Subcommand)]
+enum CatalogCommands {
+    /// Claim and import one bounded batch of published manifest-v3 Releases.
+    Import,
+    /// Print catalog entity counts and worker configuration.
+    Status,
+    /// Show the immutable catalog-import receipt for one work item.
+    Inspect {
+        /// Work item id or API key.
+        id: Uuid,
+    },
+}
+
 fn command_available(command: &str, version_argument: &str) -> bool {
     Command::new(command)
         .arg(version_argument)
@@ -152,6 +171,8 @@ async fn main() {
             println!("Phase 1: complete — see design/evidence/phase-1/PHASE-1-REPORT.md");
             println!("Phase 2: complete — see design/evidence/phase-2/PHASE-2-REPORT.md");
             println!("Phase 3: complete — see design/evidence/phase-3/PHASE-3-REPORT.md");
+            println!("Phase 4: complete — see design/evidence/phase-4/PHASE-4-REPORT.md");
+            println!("Phase 5: active — see IMPLEMENTATION.md");
             println!("Read: PRD.md, SPEC.md, IMPLEMENTATION.md, AGENTS.md");
         }
         Commands::Doctor => {
@@ -628,6 +649,109 @@ async fn main() {
                 },
             }
         }
+        Commands::Catalog { command } => {
+            let catalog_config = CatalogConfig::from_env().unwrap_or_else(|error| {
+                eprintln!("error: invalid catalog configuration: {error}");
+                std::process::exit(2);
+            });
+            let pool = pool().await;
+            let store = CatalogStore;
+
+            match command {
+                CatalogCommands::Import => {
+                    let work_config = WorkEngineConfig::from_env().unwrap_or_else(|error| {
+                        eprintln!("error: invalid work configuration: {error}");
+                        std::process::exit(2);
+                    });
+                    match import_once(
+                        &catalog_config,
+                        &store,
+                        &pool,
+                        &work_config,
+                        OffsetDateTime::now_utc(),
+                    )
+                    .await
+                    {
+                        Ok(stats) => println!(
+                            "catalog import: claimed={} completed={} already_completed={} released={} failed={} errors={} duration_ms={}",
+                            stats.claimed,
+                            stats.completed,
+                            stats.already_completed,
+                            stats.released,
+                            stats.failed,
+                            stats.errors,
+                            stats.duration_ms,
+                        ),
+                        Err(error) => {
+                            eprintln!("error: {error}");
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                CatalogCommands::Status => match store.counts(&pool).await {
+                    Ok(counts) => {
+                        println!(
+                            "catalog worker: {} concurrency={} batch_size={} claim_limit={} poll_interval_seconds={}",
+                            if catalog_config.enabled {
+                                "enabled"
+                            } else {
+                                "disabled"
+                            },
+                            catalog_config.concurrency,
+                            catalog_config.batch_size,
+                            catalog_config.claim_limit(),
+                            catalog_config.poll_interval.whole_seconds(),
+                        );
+                        println!("artists:        {}", counts.artists);
+                        println!("releases:       {}", counts.releases);
+                        println!("tracks:         {}", counts.tracks);
+                        println!("media_assets:   {}", counts.media_assets);
+                        println!("imports:        {}", counts.imports);
+                        println!("pending_outbox: {}", counts.pending_outbox);
+                    }
+                    Err(error) => {
+                        eprintln!("error: {error}");
+                        std::process::exit(1);
+                    }
+                },
+                CatalogCommands::Inspect { id } => {
+                    let work_store = WorkItemStore;
+                    let item = match work_store.get(&pool, id).await {
+                        Ok(item) => item,
+                        Err(error) => {
+                            eprintln!("error: {error}");
+                            std::process::exit(1);
+                        }
+                    };
+                    println!("work_item_id:    {}", item.id);
+                    println!("work_item_key:   {}", item.api_key);
+                    println!("state:           {}", item.state.as_str());
+                    println!("attempts:        {}", item.attempt_count);
+                    println!("next_attempt_at: {:?}", item.next_attempt_at);
+                    println!("last_error_code: {:?}", item.last_error_code);
+                    println!("last_error:      {:?}", item.last_error_message);
+                    match store.get_import(&pool, item.id).await {
+                        Ok(Some(import)) => {
+                            println!("catalog_import:  {}", import.id);
+                            println!("release_id:      {}", import.release_id);
+                            println!("manifest_row_id: {}", import.manifest_row_id);
+                            println!("manifest_id:     {}", import.manifest_id);
+                            println!("manifest_schema: {}", import.manifest_schema_version);
+                            println!("manifest_hash:   {}", import.semantic_manifest_hash);
+                            println!("plan_hash:       {}", import.publication_plan_hash);
+                            println!("sealed_hash:     {}", import.sealed_manifest_hash);
+                            println!("resolver:        {}", import.resolver_version);
+                            println!("imported_at:     {}", import.imported_at);
+                        }
+                        Ok(None) => println!("catalog_import:  none"),
+                        Err(error) => {
+                            eprintln!("error: {error}");
+                            std::process::exit(1);
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -706,5 +830,37 @@ mod tests {
                 ) != expected_validation
             );
         }
+    }
+
+    #[test]
+    fn catalog_operator_commands_are_exposed() {
+        let import = Cli::try_parse_from(["melodee", "catalog", "import"])
+            .expect("valid catalog import command");
+        assert!(matches!(
+            import.command,
+            Commands::Catalog {
+                command: CatalogCommands::Import
+            }
+        ));
+
+        let status = Cli::try_parse_from(["melodee", "catalog", "status"])
+            .expect("valid catalog status command");
+        assert!(matches!(
+            status.command,
+            Commands::Catalog {
+                command: CatalogCommands::Status
+            }
+        ));
+
+        let id = Uuid::now_v7();
+        let inspect =
+            Cli::try_parse_from(["melodee", "catalog", "inspect", id.to_string().as_str()])
+                .expect("valid catalog inspect command");
+        assert!(matches!(
+            inspect.command,
+            Commands::Catalog {
+                command: CatalogCommands::Inspect { id: parsed }
+            } if parsed == id
+        ));
     }
 }

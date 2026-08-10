@@ -40,8 +40,14 @@ ADR-0100-short-kebab-case-title.md
 Use:
 
 ```bash
-python3 scripts/new-adr.py "short title"
+python3 scripts/new_adr.py "short title"
 ```
+
+## Current Phase 4 decisions
+
+- [ADR-0117: Use a PostgreSQL catalog, identity, and contribution schema with set-based manifest import](ADR-0117-use-a-postgresql-catalog-identity-and-contribution-schema-with-set-based-manifest-import.md)
+- [ADR-0118: Use AudioIdentity and immutable manifest v3 semantic overlays](ADR-0118-use-audioidentity-and-immutable-manifest-v3-semantic-overlays.md)
+- [ADR-0119: Use audit-only corrections for legacy Releases without manifest v3](ADR-0119-use-audit-only-corrections-for-legacy-releases-without-manifest-v3.md)
 
 ## ADR quality rules
 

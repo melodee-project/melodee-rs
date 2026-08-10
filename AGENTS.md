@@ -52,23 +52,23 @@ template.
 
 Do not silently resolve a material conflict; record it in the PR and propose an ADR when needed.
 
-## Current phase boundary: Phase 4 — Catalog, Artist identity, and contributions
+## Current phase boundary: Phase 5 — Classification, novelty, and policy
 
-Phases 0–3 are complete. The authoritative Phase 3 exit decision is in
-`design/evidence/phase-3/PHASE-3-REPORT.md`. Phase 4 is the next implementation boundary, but agents
-must not create its catalog/identity schema until an assigned work package and accepted schema ADR
-authorize it.
+Phases 0–4 are complete. The authoritative Phase 4 exit decision is in
+`design/evidence/phase-4/PHASE-4-REPORT.md`. Phase 5 is the next implementation boundary, but agents
+must not create its policy/classification schema or destructive-action behavior until an assigned
+work package and accepted schema/behavior ADR authorize it.
 
-Allowed when explicitly assigned: Phase 4 Artist/Release/Track/MediaAsset catalog models,
-ReleaseArtist/TrackArtist/Contribution relationships, evidence-based identity matching,
-provisional identities, negative assertions, merge/split history, set-based manifest v3 import,
-legacy public-ID preservation, Phase 4 tests/evidence/traceability, CI, and documentation.
+Allowed when explicitly assigned: Phase 5 ReleaseTrait classification/evidence, Track novelty
+categories, versioned policy rules and dispositions, catalog policy dry-run, durable decision/audit
+records before destructive execution, operator overrides, tests/evidence/traceability, CI, and
+documentation.
 
-Forbidden: Phase 5+ classification/novelty/policy features; search, podcast, party, native API,
+Forbidden: Phase 6+ search/MQL, podcast, party, native API,
 OpenSubsonic, Jellyfin, or UI implementation; redesigning captured external contracts; any database
 schema without an accepted schema ADR; message brokers, Redis, Elasticsearch/OpenSearch, GraphQL,
 microservices; copying C# service/class boundaries into Rust; destructive operations against an
-existing Melodee library. Phase 4 must reuse the Release IDs reserved by manifest v3 publication.
+existing Melodee library without the Phase 5 durable decision/audit/authorization contract.
 
 ## Product language
 

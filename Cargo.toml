@@ -3,6 +3,7 @@ resolver = "3"
 members = [
   "apps/melodee-cli",
   "apps/melodee-server",
+  "crates/melodee-catalog",
   "crates/melodee-domain",
   "crates/melodee-persistence",
   "crates/melodee-ingestion",

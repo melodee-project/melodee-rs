@@ -26,6 +26,22 @@ The readiness route is deliberately narrow. It does not yet report individual re
 filesystems, disk space, media tools, the future search index, or compatibility adapters. See
 [System and Diagnostics](../admin/system-diagnostics/) for the exact implemented boundary.
 
+## Catalog import checks
+
+- Run `melodee catalog status` to confirm whether the catalog worker is enabled and to compare
+  Release/import counts. `pending_outbox` is expected to grow until the later search projection
+  worker ships; it does not mean catalog import failed.
+- Run `melodee catalog inspect <work-item-id>` to compare the work item's durable state with its
+  immutable import receipt. `Published` is awaiting a claim, `Cataloging` is leased, waiting for its
+  retry time, or reclaimable, and `Cataloged` should have a receipt. Failed attempts include the
+  next retry time and last durable error.
+- Run `melodee catalog import` to execute one bounded pass while diagnosing the background worker.
+  This command uses PostgreSQL evidence only and does not require access to inbound or canonical
+  media roots.
+- Check `MELODEE__CATALOG__ENABLED`, the catalog concurrency/batch/poll settings, and the shared work
+  lease/retry settings in [Configuration](../installation/configuration/). Invalid zero or negative
+  bounds fail configuration rather than creating an unbounded worker.
+
 ## Media normalization checks
 
 Implemented normalization checks:

@@ -52,7 +52,7 @@ pub struct ActiveLease {
 }
 
 #[derive(Debug, FromRow)]
-struct WorkItemRow {
+pub(crate) struct WorkItemRow {
     id: Uuid,
     api_key: Uuid,
     source_library_id: Option<Uuid>,
@@ -1815,6 +1815,13 @@ impl WorkItemStore {
     ) -> Result<ReleaseWorkItem, WorkStoreError> {
         let mut tx = pool.begin().await?;
         let item = lock_for_update(&mut tx, id).await?;
+        if matches!(
+            item.state,
+            IngestionState::Cataloging | IngestionState::Cataloged
+        ) || matches!(to, IngestionState::Cataloging | IngestionState::Cataloged)
+        {
+            return Err(WorkStoreError::InvalidState(id, item.state));
+        }
         if item.has_active_lease(now) {
             return Err(WorkStoreError::LeaseConflict(id));
         }
@@ -1874,8 +1881,15 @@ impl WorkItemStore {
         // complete_publication respectively. A generic state-only transition
         // could otherwise create unpublishable or falsely published work.
         if matches!(
+            item.state,
+            IngestionState::Cataloging | IngestionState::Cataloged
+        ) || matches!(
             to,
-            IngestionState::Staged | IngestionState::Publishing | IngestionState::Published
+            IngestionState::Staged
+                | IngestionState::Publishing
+                | IngestionState::Published
+                | IngestionState::Cataloging
+                | IngestionState::Cataloged
         ) {
             return Err(WorkStoreError::InvalidState(id, item.state));
         }
@@ -2189,9 +2203,11 @@ impl WorkItemStore {
         for row in rows {
             let item = ReleaseWorkItem::try_from(row)?;
             let attempt_count = item.attempt_count + 1;
-            let convergent_publication = item.state == IngestionState::Publishing;
-            let interrupted_processing =
-                item.state.is_active_processing() && !convergent_publication;
+            let convergent_stage = matches!(
+                item.state,
+                IngestionState::Publishing | IngestionState::Cataloging
+            );
+            let interrupted_processing = item.state.is_active_processing() && !convergent_stage;
             let next_attempt_at = if interrupted_processing && policy.can_retry(attempt_count) {
                 policy.next_attempt_at(attempt_count, now)
             } else {
@@ -2199,9 +2215,10 @@ impl WorkItemStore {
             };
             // Items merely claimed (still ready) return to the queue without a
             // failure mark; items interrupted mid-stage become failed/lease.lost.
-            // Publishing is different: its durable plan and filesystem truth
-            // must converge, so expiry only fences the stale worker and leaves
-            // the item directly reclaimable in Publishing.
+            // Publishing and Cataloging are convergent stages. Publication has
+            // durable plan/filesystem truth; Cataloging is one PostgreSQL
+            // transaction. Expiry only fences the stale worker and leaves each
+            // stage directly reclaimable instead of restarting at inspection.
             let (new_state, error_code): (IngestionState, Option<&str>) = if interrupted_processing
             {
                 (IngestionState::Failed, Some(WorkErrorCode::LEASE_LOST))
@@ -2499,7 +2516,7 @@ fn has_complete_publication_evidence(
 }
 
 /// Locks a work item row for update inside a transaction.
-async fn lock_for_update(
+pub(crate) async fn lock_for_update(
     tx: &mut Transaction<'_, Postgres>,
     id: Uuid,
 ) -> Result<ReleaseWorkItem, WorkStoreError> {
@@ -2514,7 +2531,7 @@ async fn lock_for_update(
 }
 
 /// Requires an active lease held by `worker` at `now`.
-fn ensure_active_lease(
+pub(crate) fn ensure_active_lease(
     item: &ReleaseWorkItem,
     worker: &WorkerId,
     now: OffsetDateTime,
@@ -2530,7 +2547,7 @@ fn ensure_active_lease(
 
 /// Inserts one history event. Always called inside the mutation's transaction.
 #[allow(clippy::too_many_arguments)]
-async fn insert_event(
+pub(crate) async fn insert_event(
     tx: &mut Transaction<'_, Postgres>,
     work_item_id: Uuid,
     event_type: WorkEventType,
