@@ -1,8 +1,8 @@
 use std::{env, error::Error, net::SocketAddr};
 
 use axum::{Json, Router, routing::get};
-use melodee_ingestion::{IngestionConfig, start_reconciliation_loop};
-use melodee_persistence::migrate;
+use melodee_ingestion::{IngestionConfig, start_inspection_loop, start_reconciliation_loop};
+use melodee_persistence::{WorkEngineConfig, migrate};
 use serde::Serialize;
 use tokio::sync::oneshot;
 use tower_http::trace::TraceLayer;
@@ -23,7 +23,7 @@ async fn healthz() -> Json<SystemInfo> {
         service: "melodee-server",
         version: env!("CARGO_PKG_VERSION"),
         status: "ok",
-        phase: "phase-1b-ingestion-foundation",
+        phase: "phase-1c-media-inspection",
     })
 }
 
@@ -73,7 +73,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         }
     };
 
+    let work_config = WorkEngineConfig::from_env()?;
     let mut reconcile_handle = None;
+    let mut inspection_handle = None;
     if ingestion_config.enabled() {
         info!(
             sources = ingestion_config.sources.len(),
@@ -84,6 +86,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             ingestion_config.clone(),
             pool.clone(),
             melodee_persistence::WorkItemStore,
+        ));
+        inspection_handle = Some(start_inspection_loop(
+            ingestion_config.clone(),
+            pool.clone(),
+            melodee_persistence::WorkItemStore,
+            work_config,
         ));
     }
 
@@ -114,6 +122,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     }
 
     if let Some(handle) = reconcile_handle {
+        let _ = handle.stop().await;
+    }
+    if let Some(handle) = inspection_handle {
         let _ = handle.stop().await;
     }
     pool.close().await;

@@ -42,7 +42,17 @@ Only documented keys are supported.
 | `MELODEE__INGEST__READY_MARKER_NAME` | `.melodee-ready` | Marker filename that can short-circuit settling. |
 | `MELODEE__INGEST__READY_MARKER_SHORTCUT_SECONDS` | `0` | Quiet-period override when marker is present. |
 
+### Media inspection (Phase 1C)
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `MELODEE__INSPECTION__CONCURRENCY` | `2` | Maximum number of Release inspections claimed by one server worker batch. |
+| `MELODEE__INSPECTION__FFPROBE_PATH` | `ffprobe` | Explicit ffprobe executable path. |
+| `MELODEE__INSPECTION__FFPROBE_TIMEOUT_SECONDS` | `30` | Maximum time allowed for one ffprobe process. |
+
 ### Notes
 
 - `MELODEE__INGEST__SOURCES_JSON` and the legacy single-root variables are mutually additive only through configuration code: JSON takes precedence when present.
 - If no inbound source is configured, startup remains healthy and periodic reconciliation is not started.
+- Phase 1C inspection requires a working `ffprobe` executable. It reads source media and stores a
+  versioned manifest in PostgreSQL; it does not normalize, move, rename, or delete source files.

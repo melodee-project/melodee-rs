@@ -83,6 +83,13 @@ enum WorkCommands {
 enum IngestCommands {
     /// Development-only: run one reconciliation pass for configured inbound sources.
     Reconcile,
+    /// Development-only: claim and inspect one bounded batch of Ready Releases.
+    Inspect,
+    /// Development-only: print the durable manifest for a work item.
+    Manifest {
+        /// Work item id or API key.
+        id: Uuid,
+    },
     /// Development-only: print a concise ingest queue summary.
     Status,
 }
@@ -340,6 +347,14 @@ async fn main() {
                                 eprintln!("snapshot error: {message}");
                                 std::process::exit(2);
                             }
+                            melodee_ingestion::IngestionError::Inspection(message) => {
+                                eprintln!("inspection error: {message}");
+                                std::process::exit(1);
+                            }
+                            melodee_ingestion::IngestionError::InspectionTask(message) => {
+                                eprintln!("inspection task error: {message}");
+                                std::process::exit(1);
+                            }
                         },
                     };
                     for result in results {
@@ -369,6 +384,60 @@ async fn main() {
                         }
                     }
                 }
+                IngestCommands::Inspect => {
+                    let work_config = WorkEngineConfig::from_env().unwrap_or_else(|error| {
+                        eprintln!("error: invalid work configuration: {error}");
+                        std::process::exit(2);
+                    });
+                    match melodee_ingestion::inspect_ready_once(
+                        &config,
+                        &store,
+                        &pool,
+                        &work_config,
+                        OffsetDateTime::now_utc(),
+                    )
+                    .await
+                    {
+                        Ok(stats) => println!(
+                            "inspection: claimed={} completed={} invalid={} source_changed={} failed={} errors={} duration_ms={}",
+                            stats.claimed,
+                            stats.completed,
+                            stats.structurally_invalid,
+                            stats.source_changed,
+                            stats.failed,
+                            stats.errors,
+                            stats.duration_ms,
+                        ),
+                        Err(error) => {
+                            eprintln!("error: {error}");
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                IngestCommands::Manifest { id } => match store.get(&pool, id).await {
+                    Ok(item) => match store.get_manifest(&pool, item.id).await {
+                        Ok(Some(manifest)) => {
+                            println!("manifest_hash: {}", manifest.manifest_hash);
+                            println!(
+                                "{}",
+                                serde_json::to_string_pretty(&manifest.payload)
+                                    .unwrap_or_else(|_| "{}".to_owned())
+                            );
+                        }
+                        Ok(None) => {
+                            eprintln!("no manifest published for {id}");
+                            std::process::exit(1);
+                        }
+                        Err(error) => {
+                            eprintln!("error: {error}");
+                            std::process::exit(1);
+                        }
+                    },
+                    Err(error) => {
+                        eprintln!("error: {error}");
+                        std::process::exit(1);
+                    }
+                },
             }
         }
     }

@@ -14,7 +14,7 @@ use crate::{ReconcileResult, config::IngestionConfig};
 
 #[derive(Debug, Clone)]
 pub struct StopToken {
-    signal: Arc<tokio::sync::Notify>,
+    pub(crate) signal: Arc<tokio::sync::Notify>,
 }
 
 impl StopToken {
@@ -39,6 +39,15 @@ impl Default for StopToken {
 pub struct SchedulerHandle {
     join: tokio::task::JoinHandle<Vec<ReconcileResult>>,
     stop: StopToken,
+}
+
+impl SchedulerHandle {
+    pub(crate) const fn from_parts(
+        join: tokio::task::JoinHandle<Vec<ReconcileResult>>,
+        stop: StopToken,
+    ) -> Self {
+        Self { join, stop }
+    }
 }
 
 impl SchedulerHandle {

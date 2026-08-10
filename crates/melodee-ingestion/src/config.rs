@@ -17,12 +17,17 @@ pub const ENV_SOURCES_JSON: &str = "MELODEE__INGEST__SOURCES_JSON";
 pub const ENV_SOURCE_ROOT: &str = "MELODEE__INGEST__SOURCE_ROOT";
 pub const ENV_SOURCE_LIBRARY_ID: &str = "MELODEE__INGEST__SOURCE_LIBRARY_ID";
 pub const ENV_SOURCE_LIBRARY_NAME: &str = "MELODEE__INGEST__SOURCE_LIBRARY_NAME";
+pub const ENV_INSPECTION_CONCURRENCY: &str = "MELODEE__INSPECTION__CONCURRENCY";
+pub const ENV_FFPROBE_PATH: &str = "MELODEE__INSPECTION__FFPROBE_PATH";
+pub const ENV_FFPROBE_TIMEOUT_SECONDS: &str = "MELODEE__INSPECTION__FFPROBE_TIMEOUT_SECONDS";
 
 pub const DEFAULT_READY_MARKER: &str = ".melodee-ready";
 
 const DEFAULT_RECONCILIATION_INTERVAL_SECONDS: i64 = 30;
 const DEFAULT_SETTLING_QUIET_SECONDS: i64 = 10;
 const DEFAULT_READY_MARKER_SHORTCUT_SECONDS: i64 = 0;
+const DEFAULT_INSPECTION_CONCURRENCY: u32 = 2;
+const DEFAULT_FFPROBE_TIMEOUT_SECONDS: i64 = 30;
 
 #[derive(Debug, Clone)]
 pub struct IngestionConfig {
@@ -32,6 +37,9 @@ pub struct IngestionConfig {
     pub settling_quiet_period: Duration,
     pub ready_marker_name: String,
     pub ready_marker_shortcut: Duration,
+    pub inspection_concurrency: u32,
+    pub ffprobe_path: PathBuf,
+    pub ffprobe_timeout: Duration,
 }
 
 impl IngestionConfig {
@@ -49,6 +57,9 @@ impl IngestionConfig {
             settling_quiet_period: Duration::seconds(DEFAULT_SETTLING_QUIET_SECONDS),
             ready_marker_name: DEFAULT_READY_MARKER.to_owned(),
             ready_marker_shortcut: Duration::seconds(DEFAULT_READY_MARKER_SHORTCUT_SECONDS),
+            inspection_concurrency: DEFAULT_INSPECTION_CONCURRENCY,
+            ffprobe_path: PathBuf::from("ffprobe"),
+            ffprobe_timeout: Duration::seconds(DEFAULT_FFPROBE_TIMEOUT_SECONDS),
         }
     }
 
@@ -76,6 +87,17 @@ impl IngestionConfig {
             ready_marker_shortcut: parse_non_negative_duration_seconds(
                 ENV_READY_MARKER_SHORTCUT_SECONDS,
                 DEFAULT_READY_MARKER_SHORTCUT_SECONDS,
+            )?,
+            inspection_concurrency: parse_positive_u32(
+                ENV_INSPECTION_CONCURRENCY,
+                DEFAULT_INSPECTION_CONCURRENCY,
+            )?,
+            ffprobe_path: env::var(ENV_FFPROBE_PATH)
+                .map(PathBuf::from)
+                .unwrap_or_else(|_| PathBuf::from("ffprobe")),
+            ffprobe_timeout: parse_positive_duration_seconds(
+                ENV_FFPROBE_TIMEOUT_SECONDS,
+                DEFAULT_FFPROBE_TIMEOUT_SECONDS,
             )?,
         })
     }
@@ -198,6 +220,19 @@ fn parse_non_negative_duration_seconds(
         });
     }
     Ok(Duration::seconds(value))
+}
+
+fn parse_positive_u32(key: &str, default: u32) -> Result<u32, IngestionSourceParseError> {
+    let raw = env::var(key).unwrap_or_else(|_| default.to_string());
+    let value = raw.parse::<u32>().map_err(|_| IngestionSourceParseError {
+        detail: format!("{key} must be a positive integer"),
+    })?;
+    if value == 0 {
+        return Err(IngestionSourceParseError {
+            detail: format!("{key} must be positive"),
+        });
+    }
+    Ok(value)
 }
 
 fn canonicalize_root(root: PathBuf) -> Result<PathBuf, IngestionSourceParseError> {

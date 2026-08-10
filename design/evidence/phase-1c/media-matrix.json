@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "source": "compatibility/media/baseline.json",
+  "inspectionImplementation": "crates/melodee-media/src/lib.rs",
+  "rows": [
+    {"extension": "mp3", "container": "mpeg", "ffprobe": "tested", "nativeTags": "tested", "supported": true},
+    {"extension": "flac", "container": "flac", "ffprobe": "tested", "nativeTags": "tested", "supported": true},
+    {"extension": "ogg", "container": "ogg/vorbis", "ffprobe": "tested", "nativeTags": "tested", "supported": true},
+    {"extension": "opus", "container": "ogg/opus", "ffprobe": "tested", "nativeTags": "tested", "supported": true},
+    {"extension": "wav", "container": "wav/pcm", "ffprobe": "tested", "nativeTags": "tagless-tested", "supported": true},
+    {"extension": "aac", "container": "adts/aac", "ffprobe": "tested", "nativeTags": "fallback", "supported": true},
+    {"extension": "m4a", "container": "mp4/aac", "ffprobe": "tested", "nativeTags": "tested", "supported": true},
+    {"extension": "ac3", "container": "ac3", "ffprobe": "tested", "nativeTags": "fallback", "supported": true},
+    {"extension": "wma", "container": "asf/wmav2", "ffprobe": "tested", "nativeTags": "fallback", "supported": true},
+    {"extension": "ape", "container": "ape", "ffprobe": "probe-path-supported", "nativeTags": "format-dependent", "supported": true},
+    {"extension": "txt", "container": "unknown", "ffprobe": "not-invoked", "nativeTags": "not-applicable", "supported": false}
+  ],
+  "invalidCases": [
+    "corrupt audio produces media.ffprobe_failed",
+    "malformed artwork produces artwork.invalid or artwork.oversized"
+  ]
+}

@@ -10,8 +10,8 @@
 //! clocks in this module (testable, deterministic).
 
 use melodee_domain::{
-    FailureClass, IngestionState, ReleaseWorkItem, ReleaseWorkItemEvent, RetryPolicy,
-    TransitionKind, WorkErrorCode, WorkEventType,
+    FailureClass, IngestionState, ReleaseManifest, ReleaseWorkItem, ReleaseWorkItemEvent,
+    RetryPolicy, TransitionKind, WorkErrorCode, WorkEventType,
 };
 use sqlx::{FromRow, PgPool, Postgres, Transaction};
 use time::OffsetDateTime;
@@ -145,6 +145,19 @@ pub struct SettlingSnapshotFile {
     pub file_type: String,
     pub file_size: i64,
     pub modified_at: OffsetDateTime,
+}
+
+/// Durable manifest payload and integrity identity published for one work item.
+#[derive(Debug, Clone)]
+pub struct StoredManifest {
+    pub id: i64,
+    pub work_item_id: Uuid,
+    pub schema_version: i32,
+    pub manifest_hash: String,
+    pub payload: serde_json::Value,
+    pub source_snapshot_id: Option<i64>,
+    pub source_signature: Option<String>,
+    pub generated_at: OffsetDateTime,
 }
 
 impl TryFrom<EventRow> for ReleaseWorkItemEvent {
@@ -463,6 +476,148 @@ impl WorkItemStore {
             ready_marker_seen: row.ready_marker_seen,
             bypassed_settling: row.bypassed_settling,
         }))
+    }
+
+    /// Publishes a complete manifest and advances `inspecting -> normalizing`
+    /// in one transaction. The unique work-item constraint makes publication
+    /// idempotent and prevents competing workers from becoming authoritative.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn publish_manifest(
+        &self,
+        pool: &PgPool,
+        id: Uuid,
+        worker: &WorkerId,
+        manifest: &ReleaseManifest,
+        manifest_hash: &str,
+        source_snapshot_id: Option<i64>,
+        source_signature: Option<&str>,
+        generation_duration_ms: i64,
+        now: OffsetDateTime,
+    ) -> Result<(), WorkStoreError> {
+        let mut tx = pool.begin().await?;
+        let item = lock_for_update(&mut tx, id).await?;
+        ensure_active_lease(&item, worker, now)?;
+        if item.state != IngestionState::Inspecting {
+            return Err(WorkStoreError::InvalidState(id, item.state));
+        }
+        item.state
+            .ensure_transition(IngestionState::Normalizing, TransitionKind::Worker)?;
+        let payload = serde_json::to_value(manifest)?;
+        let existing = sqlx::query_as::<_, (String,)>(
+            "SELECT manifest_hash FROM release_work_item_manifests WHERE work_item_id = $1",
+        )
+        .bind(id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        if let Some((existing_hash,)) = existing {
+            if existing_hash != manifest_hash {
+                return Err(WorkStoreError::ManifestConflict(id));
+            }
+        } else {
+            sqlx::query(
+                "INSERT INTO release_work_item_manifests (
+                    work_item_id, schema_version, manifest_hash, source_snapshot_id,
+                    source_signature, manifest_payload, ffprobe_path, ffprobe_version,
+                    tool_metadata, source_stable, generation_duration_ms, generated_at
+                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)",
+            )
+            .bind(id)
+            .bind(i32::from(manifest.schema_version))
+            .bind(manifest_hash)
+            .bind(source_snapshot_id)
+            .bind(source_signature)
+            .bind(payload)
+            .bind(manifest.inspection.ffprobe_path.clone())
+            .bind(manifest.inspection.ffprobe_version.clone())
+            .bind(serde_json::json!({ "schema_version": manifest.schema_version }))
+            .bind(manifest.inspection.source_stable)
+            .bind(generation_duration_ms.max(0))
+            .bind(now)
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        sqlx::query(
+            "UPDATE release_work_items
+             SET state = 'normalizing', state_reason = 'inspection-complete',
+                 manifest_hash = $2, lease_owner = NULL, lease_acquired_at = NULL,
+                 lease_expires_at = NULL, updated_at = $3
+             WHERE id = $1",
+        )
+        .bind(id)
+        .bind(manifest_hash)
+        .bind(now)
+        .execute(&mut *tx)
+        .await?;
+        insert_event(
+            &mut tx,
+            id,
+            WorkEventType::Transitioned,
+            Some(IngestionState::Inspecting),
+            Some(IngestionState::Normalizing),
+            Some("inspection-complete"),
+            Some(worker.as_str()),
+            item.correlation_id,
+            now,
+            Some(serde_json::json!({
+                "manifest_hash": manifest_hash,
+                "schema_version": manifest.schema_version,
+            })),
+        )
+        .await?;
+        tx.commit().await?;
+        info!(work_item_id = %id, manifest_hash, "manifest published");
+        Ok(())
+    }
+
+    /// Returns the authoritative manifest for a work item, if inspection has
+    /// completed successfully.
+    pub async fn get_manifest(
+        &self,
+        pool: &PgPool,
+        work_item_id: Uuid,
+    ) -> Result<Option<StoredManifest>, WorkStoreError> {
+        let row = sqlx::query_as::<
+            _,
+            (
+                i64,
+                Uuid,
+                i32,
+                String,
+                serde_json::Value,
+                Option<i64>,
+                Option<String>,
+                OffsetDateTime,
+            ),
+        >(
+            "SELECT id, work_item_id, schema_version, manifest_hash, manifest_payload,
+                    source_snapshot_id, source_signature, generated_at
+             FROM release_work_item_manifests WHERE work_item_id = $1",
+        )
+        .bind(work_item_id)
+        .fetch_optional(pool)
+        .await?;
+        Ok(row.map(
+            |(
+                id,
+                work_item_id,
+                schema_version,
+                manifest_hash,
+                payload,
+                source_snapshot_id,
+                source_signature,
+                generated_at,
+            )| StoredManifest {
+                id,
+                work_item_id,
+                schema_version,
+                manifest_hash,
+                payload,
+                source_snapshot_id,
+                source_signature,
+                generated_at,
+            },
+        ))
     }
 
     /// Updates durable settling progress fields without changing core state.

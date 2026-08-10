@@ -157,6 +157,7 @@ impl IngestionState {
             TransitionKind::Worker => matches!(
                 (self, next),
                 (Self::Ready, Self::Inspecting)
+                    | (Self::Inspecting, Self::Settling)
                     | (Self::Inspecting, Self::Normalizing)
                     | (Self::Normalizing, Self::Validating)
                     | (Self::Validating, Self::Staged)
@@ -490,6 +491,16 @@ mod tests {
                 pair[1]
             );
         }
+    }
+
+    #[test]
+    fn inspect_to_settling_is_valid_worker_transition() {
+        assert!(
+            IngestionState::Inspecting
+                .ensure_transition(IngestionState::Settling, TransitionKind::Worker)
+                .is_ok(),
+            "source changes during inspection must allow inspect->settling"
+        );
     }
 
     #[test]

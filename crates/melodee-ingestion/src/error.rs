@@ -7,6 +7,7 @@ use melodee_persistence::WorkStoreError;
 use crate::config::IngestionSourceParseError;
 use crate::snapshot::SnapshotCaptureError;
 use crate::source::SourceDiscoveryError;
+use melodee_media::InspectionError;
 
 #[derive(Debug, Error)]
 pub enum IngestionError {
@@ -21,6 +22,12 @@ pub enum IngestionError {
 
     #[error("persistence failed: {0}")]
     Persistence(#[from] WorkStoreError),
+
+    #[error("media inspection failed: {0}")]
+    Inspection(#[from] InspectionError),
+
+    #[error("inspection task failed: {0}")]
+    InspectionTask(String),
 }
 
 pub type Result<T> = std::result::Result<T, IngestionError>;

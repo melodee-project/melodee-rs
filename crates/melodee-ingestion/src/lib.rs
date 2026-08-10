@@ -7,19 +7,22 @@
 
 mod config;
 mod error;
+mod inspect;
 mod reconcile;
 mod scheduler;
 mod snapshot;
 mod source;
 
 pub use config::{
-    DEFAULT_READY_MARKER, ENV_INGEST_ENABLED, ENV_READY_MARKER_NAME,
-    ENV_READY_MARKER_SHORTCUT_SECONDS, ENV_RECONCILIATION_INTERVAL_SECONDS,
-    ENV_SETTLING_QUIET_SECONDS, ENV_SOURCE_LIBRARY_ID, ENV_SOURCE_LIBRARY_NAME, ENV_SOURCE_ROOT,
-    ENV_SOURCES_JSON, IngestionConfig, IngestionSourceParseError,
+    DEFAULT_READY_MARKER, ENV_FFPROBE_PATH, ENV_FFPROBE_TIMEOUT_SECONDS, ENV_INGEST_ENABLED,
+    ENV_INSPECTION_CONCURRENCY, ENV_READY_MARKER_NAME, ENV_READY_MARKER_SHORTCUT_SECONDS,
+    ENV_RECONCILIATION_INTERVAL_SECONDS, ENV_SETTLING_QUIET_SECONDS, ENV_SOURCE_LIBRARY_ID,
+    ENV_SOURCE_LIBRARY_NAME, ENV_SOURCE_ROOT, ENV_SOURCES_JSON, IngestionConfig,
+    IngestionSourceParseError,
 };
 
 pub use error::{IngestionError, Result};
+pub use inspect::{InspectionStats, inspect_ready_once, start_inspection_loop};
 pub use reconcile::{
     ReconcileResult, ReconcileStats, Reconciler, reconcile_all_sources, reconcile_inbound_source,
 };

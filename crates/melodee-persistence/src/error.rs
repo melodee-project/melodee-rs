@@ -32,4 +32,10 @@ pub enum WorkStoreError {
 
     #[error("database error")]
     Database(#[from] sqlx::Error),
+
+    #[error("manifest serialization error")]
+    ManifestSerialization(#[from] serde_json::Error),
+
+    #[error("a different manifest is already authoritative for work item {0}")]
+    ManifestConflict(Uuid),
 }
