@@ -85,6 +85,8 @@ enum IngestCommands {
     Reconcile,
     /// Development-only: claim and inspect one bounded batch of Ready Releases.
     Inspect,
+    /// Development-only: claim and normalize one bounded batch of Normalizing Releases.
+    Normalize,
     /// Development-only: print the durable manifest for a work item.
     Manifest {
         /// Work item id or API key.
@@ -146,7 +148,9 @@ async fn main() {
             println!("Phase 0: complete — see design/evidence/phase-0/PHASE-0-REPORT.md");
             println!("Phase 1: complete — see design/evidence/phase-1/PHASE-1-REPORT.md");
             println!("Phase 2: complete — see design/evidence/phase-2/PHASE-2-REPORT.md");
-            println!("Phase 3: in progress — media inspection complete; normalization/pending");
+            println!(
+                "Phase 3: in progress — media inspection, normalization complete; validating/pending"
+            );
             println!("Read: PRD.md, SPEC.md, IMPLEMENTATION.md, AGENTS.md");
         }
         Commands::Doctor => {
@@ -407,6 +411,34 @@ async fn main() {
                             stats.completed,
                             stats.structurally_invalid,
                             stats.source_changed,
+                            stats.failed,
+                            stats.errors,
+                            stats.duration_ms,
+                        ),
+                        Err(error) => {
+                            eprintln!("error: {error}");
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                IngestCommands::Normalize => {
+                    let work_config = WorkEngineConfig::from_env().unwrap_or_else(|error| {
+                        eprintln!("error: invalid work configuration: {error}");
+                        std::process::exit(2);
+                    });
+                    match melodee_ingestion::normalize_once(
+                        &config,
+                        &store,
+                        &pool,
+                        &work_config,
+                        OffsetDateTime::now_utc(),
+                    )
+                    .await
+                    {
+                        Ok(stats) => println!(
+                            "normalization: claimed={} completed={} failed={} errors={} duration_ms={}",
+                            stats.claimed,
+                            stats.completed,
                             stats.failed,
                             stats.errors,
                             stats.duration_ms,

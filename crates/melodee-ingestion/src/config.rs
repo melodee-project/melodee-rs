@@ -20,6 +20,12 @@ pub const ENV_SOURCE_LIBRARY_NAME: &str = "MELODEE__INGEST__SOURCE_LIBRARY_NAME"
 pub const ENV_INSPECTION_CONCURRENCY: &str = "MELODEE__INSPECTION__CONCURRENCY";
 pub const ENV_FFPROBE_PATH: &str = "MELODEE__INSPECTION__FFPROBE_PATH";
 pub const ENV_FFPROBE_TIMEOUT_SECONDS: &str = "MELODEE__INSPECTION__FFPROBE_TIMEOUT_SECONDS";
+pub const ENV_NORMALIZATION_CONCURRENCY: &str = "MELODEE__NORMALIZATION__CONCURRENCY";
+pub const ENV_FFMPEG_PATH: &str = "MELODEE__NORMALIZATION__FFMPEG_PATH";
+pub const ENV_FFMPEG_TIMEOUT_SECONDS: &str = "MELODEE__NORMALIZATION__FFMPEG_TIMEOUT_SECONDS";
+pub const ENV_FPCALC_PATH: &str = "MELODEE__NORMALIZATION__FPCALC_PATH";
+pub const ENV_FPCALC_TIMEOUT_SECONDS: &str = "MELODEE__NORMALIZATION__FPCALC_TIMEOUT_SECONDS";
+pub const ENV_WORK_AREA_BASE: &str = "MELODEE__NORMALIZATION__WORK_AREA";
 
 pub const DEFAULT_READY_MARKER: &str = ".melodee-ready";
 
@@ -28,6 +34,10 @@ const DEFAULT_SETTLING_QUIET_SECONDS: i64 = 10;
 const DEFAULT_READY_MARKER_SHORTCUT_SECONDS: i64 = 0;
 const DEFAULT_INSPECTION_CONCURRENCY: u32 = 2;
 const DEFAULT_FFPROBE_TIMEOUT_SECONDS: i64 = 30;
+const DEFAULT_NORMALIZATION_CONCURRENCY: u32 = 2;
+const DEFAULT_FFMPEG_TIMEOUT_SECONDS: i64 = 300;
+const DEFAULT_FPCALC_TIMEOUT_SECONDS: i64 = 60;
+const DEFAULT_WORK_AREA_BASE: &str = "/tmp/melodee-work";
 
 #[derive(Debug, Clone)]
 pub struct IngestionConfig {
@@ -40,6 +50,12 @@ pub struct IngestionConfig {
     pub inspection_concurrency: u32,
     pub ffprobe_path: PathBuf,
     pub ffprobe_timeout: Duration,
+    pub normalization_concurrency: u32,
+    pub ffmpeg_path: PathBuf,
+    pub ffmpeg_timeout: Duration,
+    pub fpcalc_path: PathBuf,
+    pub fpcalc_timeout: Duration,
+    pub work_area_base: PathBuf,
 }
 
 impl IngestionConfig {
@@ -60,6 +76,12 @@ impl IngestionConfig {
             inspection_concurrency: DEFAULT_INSPECTION_CONCURRENCY,
             ffprobe_path: PathBuf::from("ffprobe"),
             ffprobe_timeout: Duration::seconds(DEFAULT_FFPROBE_TIMEOUT_SECONDS),
+            normalization_concurrency: DEFAULT_NORMALIZATION_CONCURRENCY,
+            ffmpeg_path: PathBuf::from("ffmpeg"),
+            ffmpeg_timeout: Duration::seconds(DEFAULT_FFMPEG_TIMEOUT_SECONDS),
+            fpcalc_path: PathBuf::from("fpcalc"),
+            fpcalc_timeout: Duration::seconds(DEFAULT_FPCALC_TIMEOUT_SECONDS),
+            work_area_base: PathBuf::from(DEFAULT_WORK_AREA_BASE),
         }
     }
 
@@ -99,6 +121,27 @@ impl IngestionConfig {
                 ENV_FFPROBE_TIMEOUT_SECONDS,
                 DEFAULT_FFPROBE_TIMEOUT_SECONDS,
             )?,
+            normalization_concurrency: parse_positive_u32(
+                ENV_NORMALIZATION_CONCURRENCY,
+                DEFAULT_NORMALIZATION_CONCURRENCY,
+            )?,
+            ffmpeg_path: env::var(ENV_FFMPEG_PATH)
+                .map(PathBuf::from)
+                .unwrap_or_else(|_| PathBuf::from("ffmpeg")),
+            ffmpeg_timeout: parse_positive_duration_seconds(
+                ENV_FFMPEG_TIMEOUT_SECONDS,
+                DEFAULT_FFMPEG_TIMEOUT_SECONDS,
+            )?,
+            fpcalc_path: env::var(ENV_FPCALC_PATH)
+                .map(PathBuf::from)
+                .unwrap_or_else(|_| PathBuf::from("fpcalc")),
+            fpcalc_timeout: parse_positive_duration_seconds(
+                ENV_FPCALC_TIMEOUT_SECONDS,
+                DEFAULT_FPCALC_TIMEOUT_SECONDS,
+            )?,
+            work_area_base: env::var(ENV_WORK_AREA_BASE)
+                .map(PathBuf::from)
+                .unwrap_or_else(|_| PathBuf::from(DEFAULT_WORK_AREA_BASE)),
         })
     }
 }

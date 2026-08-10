@@ -1,7 +1,9 @@
 use std::{env, error::Error, net::SocketAddr};
 
 use axum::{Json, Router, routing::get};
-use melodee_ingestion::{IngestionConfig, start_inspection_loop, start_reconciliation_loop};
+use melodee_ingestion::{
+    IngestionConfig, start_inspection_loop, start_normalization_loop, start_reconciliation_loop,
+};
 use melodee_persistence::{WorkEngineConfig, WorkItemStore, migrate};
 use melodee_server::admin;
 use serde::Serialize;
@@ -79,6 +81,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let work_config = WorkEngineConfig::from_env()?;
     let mut reconcile_handle = None;
     let mut inspection_handle = None;
+    let mut normalization_handle = None;
     if ingestion_config.enabled() {
         info!(
             sources = ingestion_config.sources.len(),
@@ -91,6 +94,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             melodee_persistence::WorkItemStore,
         ));
         inspection_handle = Some(start_inspection_loop(
+            ingestion_config.clone(),
+            pool.clone(),
+            melodee_persistence::WorkItemStore,
+            work_config,
+        ));
+        normalization_handle = Some(start_normalization_loop(
             ingestion_config.clone(),
             pool.clone(),
             melodee_persistence::WorkItemStore,
@@ -153,6 +162,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         let _ = handle.stop().await;
     }
     if let Some(handle) = inspection_handle {
+        let _ = handle.stop().await;
+    }
+    if let Some(handle) = normalization_handle {
         let _ = handle.stop().await;
     }
     pool.close().await;

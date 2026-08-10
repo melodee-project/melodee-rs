@@ -32,6 +32,12 @@ const DEFAULT_MAX_TOOL_OUTPUT: usize = 1_048_576;
 const DEFAULT_MAX_ARTWORK_BYTES: usize = 16 * 1024 * 1024;
 const HASH_BUFFER_SIZE: usize = 128 * 1024;
 
+mod normalize;
+
+pub use normalize::{
+    NormalizationError, NormalizationOptions, NormalizationReport, normalize_release,
+};
+
 /// Input/resource limits for one inspection. Each worker receives one copy,
 /// so the values also bound aggregate memory when worker concurrency is bounded.
 #[derive(Debug, Clone)]
@@ -529,7 +535,7 @@ fn mime_for_path(path: &str) -> Option<String> {
     Some(mime.to_owned())
 }
 
-fn hash_file(path: &Path) -> io::Result<(String, u64)> {
+pub(crate) fn hash_file(path: &Path) -> io::Result<(String, u64)> {
     let mut file = File::open(path)?;
     let mut hasher = Hasher::new();
     let mut buffer = vec![0_u8; HASH_BUFFER_SIZE];
@@ -630,19 +636,19 @@ fn artwork_from_external(file: &ObservedFile) -> ObservedArtwork {
 }
 
 #[derive(Debug)]
-struct ProbeResult {
+pub(crate) struct ProbeResult {
     audio: AudioTechnicalObservation,
     mime_type: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
-struct ProbeDocument {
+pub(crate) struct ProbeDocument {
     streams: Vec<ProbeStream>,
     format: ProbeFormat,
 }
 
 #[derive(Debug, Deserialize)]
-struct ProbeStream {
+pub(crate) struct ProbeStream {
     index: Option<u32>,
     codec_type: Option<String>,
     codec_name: Option<String>,
@@ -655,13 +661,13 @@ struct ProbeStream {
 }
 
 #[derive(Debug, Deserialize)]
-struct ProbeFormat {
+pub(crate) struct ProbeFormat {
     format_name: Option<String>,
     duration: Option<String>,
     bit_rate: Option<String>,
 }
 
-fn run_ffprobe(path: &Path, options: &InspectionOptions) -> Result<ProbeResult, String> {
+pub(crate) fn run_ffprobe(path: &Path, options: &InspectionOptions) -> Result<ProbeResult, String> {
     let mut child = Command::new(&options.ffprobe_path)
         .args([
             "-v",
@@ -751,7 +757,7 @@ fn run_ffprobe(path: &Path, options: &InspectionOptions) -> Result<ProbeResult, 
     })
 }
 
-fn tool_version(path: &Path, max_output: usize) -> Option<String> {
+pub(crate) fn tool_version(path: &Path, max_output: usize) -> Option<String> {
     let mut child = Command::new(path)
         .arg("-version")
         .stdout(Stdio::piped())
@@ -788,7 +794,7 @@ fn tool_version(path: &Path, max_output: usize) -> Option<String> {
     }
 }
 
-fn read_limited<R: Read>(mut reader: R, limit: usize) -> io::Result<Vec<u8>> {
+pub(crate) fn read_limited<R: Read>(mut reader: R, limit: usize) -> io::Result<Vec<u8>> {
     let mut output = Vec::new();
     let mut buffer = [0_u8; 8192];
     loop {
@@ -803,7 +809,7 @@ fn read_limited<R: Read>(mut reader: R, limit: usize) -> io::Result<Vec<u8>> {
     }
 }
 
-fn parse_milliseconds(value: &str) -> Option<u64> {
+pub(crate) fn parse_milliseconds(value: &str) -> Option<u64> {
     let seconds = value.parse::<f64>().ok()?;
     if !seconds.is_finite() || seconds < 0.0 {
         return None;
@@ -822,7 +828,7 @@ fn inspect_image_header(path: &Path) -> Result<(), String> {
         .ok_or_else(|| "unsupported or malformed image header".to_owned())
 }
 
-fn image_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
+pub(crate) fn image_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
     if bytes.starts_with(b"\x89PNG\r\n\x1a\n") && bytes.len() >= 24 {
         let width = u32::from_be_bytes(bytes[16..20].try_into().ok()?);
         let height = u32::from_be_bytes(bytes[20..24].try_into().ok()?);
@@ -883,14 +889,14 @@ fn push_unique(values: &mut Vec<String>, value: Option<String>) {
     }
 }
 
-fn path_to_posix(path: &Path) -> String {
+pub(crate) fn path_to_posix(path: &Path) -> String {
     path.iter()
         .map(|part| part.to_string_lossy())
         .collect::<Vec<_>>()
         .join("/")
 }
 
-fn truncate_bytes(bytes: &[u8]) -> String {
+pub(crate) fn truncate_bytes(bytes: &[u8]) -> String {
     String::from_utf8_lossy(&bytes[..bytes.len().min(512)]).into_owned()
 }
 

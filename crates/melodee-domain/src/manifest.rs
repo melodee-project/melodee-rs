@@ -7,6 +7,11 @@ use uuid::Uuid;
 /// Current manifest contract version.
 pub const CURRENT_MANIFEST_VERSION: u16 = 1;
 
+/// Canonical MP3 normalization profile version (PRD-MEDIA-002).
+/// Vorbis-comment-free, schema-stable identifier for the exact FFmpeg
+/// arguments that define canonical MP3 output.
+pub const CANONICAL_MP3_PROFILE_VERSION: &str = "mp3-vbr-q4-384k-48k";
+
 /// Structured finding/severity for inspection outcomes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -136,6 +141,104 @@ pub struct ManifestInspectionContext {
     pub source_stable: bool,
 }
 
+/// Per-file normalized output produced by the Phase 3.2 normalizer.
+///
+/// All paths are relative to the work-area staging directory; they are NOT
+/// canonical storage paths (Phase 3.3 publishes canonical paths).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct NormalizedOutput {
+    /// Source-relative path of the original audio file.
+    pub source_file: String,
+    /// Work-area relative path of the normalized/canonical output.
+    pub output_path: String,
+    /// BLAKE3 hex digest of the normalized output bytes.
+    pub byte_hash: Option<String>,
+    /// Canonical container/codec label (e.g. "mp3", "lame").
+    pub container: String,
+    /// Canonical codec name from ffprobe of the output.
+    pub codec: Option<String>,
+    pub sample_rate_hz: Option<u32>,
+    pub channels: Option<u32>,
+    pub bitrate_bps: Option<u64>,
+    pub duration_ms: Option<u64>,
+    /// True when the source was already canonical MP3 and was copied, not re-encoded.
+    pub retained: bool,
+    pub findings: Vec<Finding>,
+}
+
+/// Acoustic fingerprint observation for one audio file (PRD-FP-003).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct FingerprintObservation {
+    /// Source-relative path of the audio file that was fingerprinted.
+    pub source_file: String,
+    /// Chromaprint fingerprint (Base64 variant), as emitted by `fpcalc -plain`.
+    pub fingerprint: String,
+    /// Duration in milliseconds from fpcalc `DURATION`.
+    pub duration_ms: Option<u64>,
+    pub findings: Vec<Finding>,
+}
+
+/// Normalized artwork in the work area.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct NormalizedArtwork {
+    /// Where the artwork originated: "embedded" or "external".
+    pub source: String,
+    /// Source-relative path of the original file (or embedded pseudo-path).
+    pub source_file: String,
+    /// Work-area relative path of the normalized image.
+    pub output_path: String,
+    pub mime_type: String,
+    pub width: u32,
+    pub height: u32,
+    /// BLAKE3 hex digest of the normalized image bytes.
+    pub byte_hash: String,
+}
+
+/// Parsed semantic contents of a sidecar file.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ParsedSidecar {
+    /// Sidecar type label: "cue", "nfo", "m3u", "sfv", "lrc".
+    pub sidecar_type: String,
+    /// Source-relative path.
+    pub relative_path: String,
+    /// Structured parse result.
+    pub parsed: serde_json::Value,
+    pub findings: Vec<Finding>,
+}
+
+/// Volatile execution provenance for the normalization stage.
+///
+/// Excluded from the manifest semantic hash: tool paths/versions, worker
+/// identity, timestamps, and the work-area path. These describe HOW
+/// normalization ran, not WHAT was observed.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct NormalizationExecutionProvenance {
+    pub worker_id: Option<String>,
+    pub normalized_at: Option<OffsetDateTime>,
+    pub elapsed_ms: Option<u64>,
+    pub ffmpeg_path: Option<String>,
+    pub ffmpeg_version: Option<String>,
+    pub ffmpeg_exit_code: Option<i32>,
+    pub fpcalc_path: Option<String>,
+    pub fpcalc_version: Option<String>,
+    pub work_area: Option<String>,
+}
+
+/// Normalization and fingerprint observations for a Release (Phase 3.2).
+///
+/// `provenance` is volatile execution metadata excluded from the semantic
+/// hash; the rest are stable media observations.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct NormalizationObservations {
+    pub profile_version: String,
+    pub outputs: Vec<NormalizedOutput>,
+    pub fingerprints: Vec<FingerprintObservation>,
+    pub normalized_artwork: Vec<NormalizedArtwork>,
+    pub parsed_sidecars: Vec<ParsedSidecar>,
+    pub provenance: NormalizationExecutionProvenance,
+    pub findings: Vec<Finding>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ReleaseManifest {
     pub schema_version: u16,
@@ -151,6 +254,10 @@ pub struct ReleaseManifest {
     pub sidecars: Vec<ObservedFile>,
     pub findings: Vec<Finding>,
     pub inspection: ManifestInspectionContext,
+    /// Phase 3.2 normalization observations. `None` until normalization
+    /// completes; populated atomically with the Normalizing→Validating transition.
+    #[serde(default)]
+    pub normalization: Option<NormalizationObservations>,
 }
 
 impl ReleaseManifest {
@@ -188,6 +295,7 @@ impl ReleaseManifest {
             artwork,
             sidecars,
             findings,
+            normalization: None,
             inspection: ManifestInspectionContext {
                 generated_at: OffsetDateTime::now_utc(),
                 source_snapshot_id,
@@ -206,7 +314,9 @@ impl ReleaseManifest {
     /// Returns the stable semantic portion used for the manifest integrity
     /// hash. Database ids, source provenance, tool versions, and generation
     /// time are deliberately excluded: they describe this observation but do
-    /// not change the observed media facts.
+    /// not change the observed media facts. Normalization execution provenance
+    /// (`normalization.provenance`) is likewise excluded because it describes
+    /// how normalization ran, not what audio was observed.
     pub fn semantic_value(&self) -> Result<serde_json::Value, serde_json::Error> {
         let mut value = serde_json::to_value(self)?;
         if let Some(object) = value.as_object_mut() {
@@ -216,6 +326,12 @@ impl ReleaseManifest {
             object.remove("source_path");
             object.remove("source_snapshot_id");
             object.remove("inspection");
+            if let Some(normalization) = object
+                .get_mut("normalization")
+                .and_then(|v| v.as_object_mut())
+            {
+                normalization.remove("provenance");
+            }
         }
         Ok(value)
     }

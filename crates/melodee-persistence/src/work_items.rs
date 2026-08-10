@@ -590,6 +590,170 @@ impl WorkItemStore {
         Ok(())
     }
 
+    /// Atomically claims up to `config.claim_batch_size` work items in the
+    /// `normalizing` state that have no active lease, establishing leases for
+    /// `worker`. Returns only items actually owned by this worker.
+    #[instrument(skip_all, fields(worker_id = %worker, batch = config.claim_batch_size))]
+    pub async fn claim_normalizing(
+        &self,
+        pool: &PgPool,
+        worker: &WorkerId,
+        config: &WorkEngineConfig,
+        now: OffsetDateTime,
+    ) -> Result<Vec<ReleaseWorkItem>, WorkStoreError> {
+        let lease_expiry = now + config.lease_duration;
+        let mut tx = pool.begin().await?;
+        // Select candidates with row locks (skipped when locked by rivals).
+        // Only normalizing items with expired/no leases are eligible.
+        let candidates = sqlx::query_as::<_, WorkItemRow>(
+            "SELECT * FROM release_work_items
+             WHERE state = 'normalizing'
+               AND (lease_expires_at IS NULL OR lease_expires_at <= $2)
+             ORDER BY updated_at, id
+             LIMIT $3
+             FOR UPDATE SKIP LOCKED",
+        )
+        .bind(worker.as_str())
+        .bind(now)
+        .bind(i64::from(config.claim_batch_size))
+        .fetch_all(&mut *tx)
+        .await?;
+
+        let mut items = Vec::with_capacity(candidates.len());
+        for candidate in candidates {
+            let row = sqlx::query_as::<_, WorkItemRow>(
+                "UPDATE release_work_items w
+                 SET lease_owner = $1,
+                     lease_acquired_at = $2,
+                     lease_expires_at = $3,
+                     first_started_at = COALESCE(w.first_started_at, $2),
+                     updated_at = $2
+                 WHERE w.id = $4
+                 RETURNING w.*",
+            )
+            .bind(worker.as_str())
+            .bind(now)
+            .bind(lease_expiry)
+            .bind(candidate.id)
+            .fetch_one(&mut *tx)
+            .await?;
+            let item = ReleaseWorkItem::try_from(row)?;
+            insert_event(
+                &mut tx,
+                item.id,
+                WorkEventType::Claimed,
+                None,
+                None,
+                None,
+                Some(worker.as_str()),
+                item.correlation_id,
+                now,
+                Some(serde_json::json!({ "lease_expires_at": lease_expiry.to_string() })),
+            )
+            .await?;
+            items.push(item);
+        }
+        tx.commit().await?;
+        if items.is_empty() {
+            debug!(worker_id = %worker, "claim_normalizing: no eligible work");
+        } else {
+            info!(worker_id = %worker, claimed = items.len(), "normalization lease acquired");
+        }
+        Ok(items)
+    }
+
+    /// Publishes normalization observations for a work item and transitions
+    /// `normalizing -> validating` in one transaction. Updates the manifest
+    /// payload with the new normalization observations and provenance,
+    /// recomputes the semantic hash, and verifies the lease to prevent stale
+    /// workers from publishing authoritative state.
+    #[allow(clippy::too_many_arguments)]
+    #[instrument(skip_all, fields(work_item_id = %id, worker_id = %worker))]
+    pub async fn publish_normalization(
+        &self,
+        pool: &PgPool,
+        id: Uuid,
+        worker: &WorkerId,
+        manifest: &ReleaseManifest,
+        manifest_hash: &str,
+        source_file: &str,
+        duration_ms: u64,
+        now: OffsetDateTime,
+    ) -> Result<(), WorkStoreError> {
+        let mut tx = pool.begin().await?;
+        let item = lock_for_update(&mut tx, id).await?;
+        ensure_active_lease(&item, worker, now)?;
+        if item.state != IngestionState::Normalizing {
+            return Err(WorkStoreError::InvalidState(id, item.state));
+        }
+
+        let payload = serde_json::to_value(manifest)?;
+        let provenance = manifest
+            .normalization
+            .as_ref()
+            .map(|n| serde_json::to_value(&n.provenance))
+            .transpose()?
+            .unwrap_or(serde_json::Value::Null);
+
+        item.state
+            .ensure_transition(IngestionState::Validating, TransitionKind::Worker)?;
+        sqlx::query(
+            "UPDATE release_work_item_manifests
+             SET manifest_payload = $2,
+                 manifest_hash = $3,
+                 normalization_provenance = $4,
+                 normalization_started_at = COALESCE(normalization_started_at, $5),
+                 normalization_completed_at = $5
+             WHERE work_item_id = $1",
+        )
+        .bind(id)
+        .bind(payload)
+        .bind(manifest_hash)
+        .bind(provenance)
+        .bind(now)
+        .execute(&mut *tx)
+        .await?;
+
+        item.state
+            .ensure_transition(IngestionState::Validating, TransitionKind::Worker)?;
+        sqlx::query(
+            "UPDATE release_work_items
+             SET state = 'validating',
+                 state_reason = 'normalization-complete',
+                 manifest_hash = $2,
+                 lease_owner = NULL,
+                 lease_acquired_at = NULL,
+                 lease_expires_at = NULL,
+                 updated_at = $3
+             WHERE id = $1",
+        )
+        .bind(id)
+        .bind(manifest_hash)
+        .bind(now)
+        .execute(&mut *tx)
+        .await?;
+        insert_event(
+            &mut tx,
+            id,
+            WorkEventType::Transitioned,
+            Some(IngestionState::Normalizing),
+            Some(IngestionState::Validating),
+            Some("normalization-complete"),
+            Some(worker.as_str()),
+            item.correlation_id,
+            now,
+            Some(serde_json::json!({
+                "manifest_hash": manifest_hash,
+                "normalization_duration_ms": duration_ms,
+                "source_file": source_file,
+            })),
+        )
+        .await?;
+        tx.commit().await?;
+        info!(work_item_id = %id, manifest_hash, "normalization published");
+        Ok(())
+    }
+
     /// Returns the authoritative manifest for a work item, if inspection has
     /// completed successfully.
     pub async fn get_manifest(

@@ -8,6 +8,7 @@
 mod config;
 mod error;
 mod inspect;
+mod normalize;
 mod reconcile;
 mod scheduler;
 mod snapshot;
@@ -23,6 +24,7 @@ pub use config::{
 
 pub use error::{IngestionError, Result};
 pub use inspect::{InspectionStats, inspect_ready_once, start_inspection_loop};
+pub use normalize::{NormalizationStats, normalize_once, start_normalization_loop};
 pub use reconcile::{
     ReconcileResult, ReconcileStats, Reconciler, reconcile_all_sources, reconcile_inbound_source,
 };
