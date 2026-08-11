@@ -10,12 +10,11 @@ this repository defines the new architecture, specifications, tests, and impleme
 
 **Phase 6 — Search and MQL (active boundary)**
 
-Phases 0–5 are complete. Phase 5 implements explainable Release classification, complete Track
-novelty, immutable versioned policy rules, bounded dry-run, leased policy workers, and durable
-decision/audit and administrator-authorization boundaries without reopening or deleting media. Its
-exit decision and reproducible results are in the
-[Phase 5 report](design/evidence/phase-5/PHASE-5-REPORT.md). Phase 6 is the next implementation
-boundary; see [IMPLEMENTATION.md](IMPLEMENTATION.md).
+Phases 0–5 are complete. The Phase 6 implementation is a Candidate pending independent review: it
+adds bounded MQL, a disposable Tantivy projection, leased outbox consumption, generational rebuild,
+corruption recovery, operator tooling, and measured 10-million-Track evidence without reading
+media. See the [Phase 6 Candidate report](design/evidence/phase-6/PHASE-6-REPORT.md) and
+[IMPLEMENTATION.md](IMPLEMENTATION.md). Phase 7 is not active.
 
 ## Non-negotiable product commitments
 
@@ -52,6 +51,8 @@ crates/
   melodee-persistence/      PostgreSQL catalog, durable work items, and leases
   melodee-ingestion/        Reconciliation, inspection, normalization, and publication workers
   melodee-media/            Media observation, conversion, artwork, and fingerprinting
+  melodee-mql/              Pure bounded MQL lexer, parser, AST, and catalog query plan
+  melodee-search/           Tantivy projection, rebuild, query, and outbox worker
 compatibility/              Captured external contracts and golden responses
 design/
   adr/                      Architecture Decision Records
@@ -91,9 +92,10 @@ The first successful Cargo resolution must produce `Cargo.lock`; commit it in th
 
 ## Current implementation evidence
 
-Completed phase reports live under `design/evidence/phase-0/` through `design/evidence/phase-5/`.
-The phase plan, accepted ADRs, and an assigned work package determine what may be implemented next;
-historical work packages remain as completed project evidence.
+Completed phase reports live under `design/evidence/phase-0/` through `design/evidence/phase-5/`;
+the Phase 6 report is a Candidate pending independent review. The phase plan, accepted ADRs, and an
+assigned work package determine what may be implemented next; historical work packages remain as
+completed project evidence.
 
 ## Legacy repository relationship
 

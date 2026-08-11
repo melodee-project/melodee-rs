@@ -11,6 +11,9 @@ use melodee_persistence::{
 use melodee_policy::{
     PolicyConfig, PolicyEngine, PolicyEvaluation, default_rule_set, evaluate_catalog_context,
 };
+use melodee_search::{
+    SearchConfig, autocomplete_active, diagnostic, query_active, request_rebuild, run_rebuild_once,
+};
 use sqlx::PgPool;
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -50,6 +53,44 @@ enum Commands {
         #[command(subcommand)]
         command: PolicyCommands,
     },
+    /// Phase 6 MQL, Tantivy projection, rebuild, and diagnostics.
+    Search {
+        #[command(subcommand)]
+        command: SearchCommands,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum SearchCommands {
+    /// Show durable backlog, active generation, and on-disk health.
+    Status,
+    /// Build and atomically activate a fresh generation from PostgreSQL.
+    Rebuild {
+        /// Stable operator identity recorded with the durable request.
+        #[arg(long, value_parser = parse_nonblank)]
+        actor: String,
+    },
+    /// Execute a bounded MQL query against the active generation.
+    Query {
+        /// MQL expression.
+        expression: String,
+        #[arg(long, default_value_t = 200)]
+        limit: usize,
+        #[arg(long, default_value_t = 0)]
+        offset: usize,
+    },
+    /// Return bounded deterministic prefix suggestions.
+    Autocomplete {
+        /// artist, release, or track.
+        kind: String,
+        prefix: String,
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+    },
+    /// Parse MQL and print the pure AST as JSON.
+    Parse { expression: String },
+    /// Parse, validate, and print the framework-free query plan.
+    Explain { expression: String },
 }
 
 #[derive(Debug, Subcommand)]
@@ -986,6 +1027,110 @@ async fn main() {
                 }
             }
         }
+        Commands::Search { command } => {
+            let config = SearchConfig::from_env().unwrap_or_else(|error| {
+                eprintln!("error: invalid search configuration: {error}");
+                std::process::exit(2);
+            });
+            match command {
+                SearchCommands::Parse { expression } => {
+                    let ast = melodee_mql::parse_with_bounds(&expression, &config.mql_bounds())
+                        .unwrap_or_else(|error| {
+                            eprintln!("error: {error}");
+                            std::process::exit(2);
+                        });
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&ast).unwrap_or_else(|error| {
+                            eprintln!("error: cannot serialize MQL AST: {error}");
+                            std::process::exit(1);
+                        })
+                    );
+                }
+                SearchCommands::Explain { expression } => {
+                    let plan =
+                        melodee_mql::parse_and_plan_with_bounds(&expression, &config.mql_bounds())
+                            .unwrap_or_else(|error| {
+                                eprintln!("error: {error}");
+                                std::process::exit(2);
+                            });
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&plan).unwrap_or_else(|error| {
+                            eprintln!("error: cannot serialize MQL plan: {error}");
+                            std::process::exit(1);
+                        })
+                    );
+                }
+                SearchCommands::Status => {
+                    let pool = pool().await;
+                    let status = diagnostic(&config, &pool).await.unwrap_or_else(|error| {
+                        eprintln!("error: {error}");
+                        std::process::exit(1);
+                    });
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&status).unwrap_or_else(|error| {
+                            eprintln!("error: cannot serialize search status: {error}");
+                            std::process::exit(1);
+                        })
+                    );
+                }
+                SearchCommands::Rebuild { actor } => {
+                    let pool = pool().await;
+                    let job = request_rebuild(&config, &pool, &actor)
+                        .await
+                        .unwrap_or_else(|error| {
+                            eprintln!("error: {error}");
+                            std::process::exit(1);
+                        });
+                    println!("rebuild requested: {}", job.job_id);
+                    let completed =
+                        run_rebuild_once(&config, &pool)
+                            .await
+                            .unwrap_or_else(|error| {
+                                eprintln!("error: rebuild {} failed: {error}", job.job_id);
+                                std::process::exit(1);
+                            });
+                    println!("rebuild activated: {}", completed.unwrap_or(job.job_id));
+                }
+                SearchCommands::Query {
+                    expression,
+                    limit,
+                    offset,
+                } => {
+                    let pool = pool().await;
+                    let hits = query_active(&config, &pool, &expression, limit, offset)
+                        .await
+                        .unwrap_or_else(|error| {
+                            eprintln!("error: {error}");
+                            std::process::exit(1);
+                        });
+                    for hit in hits {
+                        println!(
+                            "{}\t{}\t{}\t{}",
+                            hit.kind, hit.internal_id, hit.public_id, hit.display
+                        );
+                    }
+                }
+                SearchCommands::Autocomplete {
+                    kind,
+                    prefix,
+                    limit,
+                } => {
+                    let pool = pool().await;
+                    let values = autocomplete_active(&config, &pool, &kind, &prefix, limit)
+                        .await
+                        .unwrap_or_else(|error| {
+                            eprintln!("error: {error}");
+                            std::process::exit(1);
+                        });
+                    for value in values {
+                        println!("{value}");
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1480,5 +1625,56 @@ mod tests {
             ])
             .is_err()
         );
+    }
+
+    #[test]
+    fn search_operator_and_mql_commands_are_bounded_and_explicit() {
+        assert!(matches!(
+            Cli::try_parse_from(["melodee", "search", "status"])
+                .expect("search status")
+                .command,
+            Commands::Search {
+                command: SearchCommands::Status
+            }
+        ));
+        assert!(matches!(
+            Cli::try_parse_from([
+                "melodee",
+                "search",
+                "rebuild",
+                "--actor",
+                "search-admin"
+            ])
+            .expect("search rebuild")
+            .command,
+            Commands::Search {
+                command: SearchCommands::Rebuild { actor }
+            } if actor == "search-admin"
+        ));
+        assert!(Cli::try_parse_from(["melodee", "search", "rebuild", "--actor", "   "]).is_err());
+        assert!(matches!(
+            Cli::try_parse_from([
+                "melodee",
+                "search",
+                "query",
+                "artist:Björk",
+                "--limit",
+                "25",
+                "--offset",
+                "50"
+            ])
+            .expect("search query")
+            .command,
+            Commands::Search {
+                command: SearchCommands::Query {
+                    expression,
+                    limit: 25,
+                    offset: 50
+                }
+            } if expression == "artist:Björk"
+        ));
+        for command in ["parse", "explain"] {
+            assert!(Cli::try_parse_from(["melodee", "search", command, "year:1990..1999"]).is_ok());
+        }
     }
 }

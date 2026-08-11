@@ -33,12 +33,14 @@ The same metadata is available to Admin API consumers at
 GET /readyz
 ```
 
-The readiness route performs a bounded PostgreSQL query. It returns HTTP 200 with
-`status: "ready"` when PostgreSQL answers and HTTP 503 with `status: "not_ready"` otherwise.
+The readiness route performs a bounded PostgreSQL query. When the search worker is enabled it also
+requires a readable, schema-compatible active search generation. It returns HTTP 200 with
+`status: "ready"` when those configured dependencies answer and HTTP 503 with
+`status: "not_ready"` otherwise.
 The server also connects to PostgreSQL and applies migrations before binding its listener.
 
-This is deliberately a basic dependency-readiness probe. It does not individually test media
-tools, filesystems, disk space, or worker processes; use the diagnostics below for those checks.
+It does not test media tools, disk space, or every worker process; use the diagnostics below for
+those checks.
 
 ## Queue and lease diagnostics
 
@@ -74,6 +76,11 @@ owner process is currently alive.
   `melodee policy inspect <release-id>` prints the current durable decision and audit history.
 - `melodee policy decide <release-id> <disposition> --actor <id> --reason <reason>` records an
   explicit administrator override. It does not complete or execute deletion.
+- `melodee search status` reports pending/permanently failed outbox rows, oldest availability,
+  leases, checkpoint, latest rebuild, active generation, document counts, and index-open errors.
+- `melodee search rebuild --actor <administrator-id>` synchronously builds, validates, catches up,
+  and activates a new generation. `search query`, `autocomplete`, `parse`, and `explain` exercise
+  the same bounded query contracts used by the worker.
 
 See [Policies](./policies/) for disposition and safety behavior, and
 [Troubleshooting](../troubleshooting/) for operational checks.

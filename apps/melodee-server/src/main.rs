@@ -8,6 +8,7 @@ use melodee_ingestion::{
 };
 use melodee_persistence::{CatalogStore, WorkEngineConfig, WorkItemStore, migrate};
 use melodee_policy::PolicyConfig;
+use melodee_search::{SearchConfig, SearchRoot, reject_root_overlap, start_search_loop};
 use melodee_server::policy_worker::{PolicyWorkerConfig, start_policy_loop};
 use melodee_server::{admin, policy_worker, system};
 use tokio::sync::oneshot;
@@ -51,6 +52,12 @@ async fn stop_policy_worker(handle: Option<policy_worker::PolicySchedulerHandle>
     }
 }
 
+async fn stop_search_worker(handle: Option<melodee_search::SearchSchedulerHandle>) {
+    if let Some(handle) = handle {
+        handle.stop().await;
+    }
+}
+
 fn database_url() -> String {
     match env::var(melodee_persistence::ENV_DATABASE_URL) {
         Ok(url) if !url.is_empty() => url,
@@ -84,6 +91,22 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let policy_config = PolicyConfig::from_env()?;
     let policy_worker_config = PolicyWorkerConfig::from_env()?;
     let publication_roots = ingestion_config.publication_roots()?;
+    let mut search_config = SearchConfig::from_env()
+        .map_err(|error| format!("invalid search configuration: {error}"))?;
+    if search_config.enabled {
+        let root = SearchRoot::open(&search_config.search_root)?;
+        let mut other_roots = ingestion_config
+            .sources
+            .iter()
+            .map(|source| source.root.clone())
+            .collect::<Vec<_>>();
+        if let Some(roots) = &publication_roots {
+            other_roots.push(roots.storage_root.clone());
+            other_roots.push(roots.work_area_base.clone());
+        }
+        reject_root_overlap(root.path(), &other_roots)?;
+        search_config.search_root = root.path().to_path_buf();
+    }
     let mut reconcile_handle = None;
     let mut inspection_handle = None;
     let mut normalization_handle = None;
@@ -173,6 +196,21 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     )
     .await?;
 
+    let search_handle = if search_config.enabled {
+        info!(
+            search_root = %search_config.search_root.display(),
+            batch_size = search_config.claim_batch_size,
+            "starting search projection and rebuild worker"
+        );
+        Some(start_search_loop(search_config.clone(), pool.clone()))
+    } else {
+        info!(
+            setting = melodee_search::ENV_SEARCH_ENABLED,
+            "search worker disabled"
+        );
+        None
+    };
+
     let bind = system::configured_bind();
     let address: SocketAddr = bind.parse()?;
 
@@ -180,12 +218,11 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         pool: pool.clone(),
         store: WorkItemStore,
     };
+    let readiness = system::ReadinessState::new(pool.clone())
+        .with_search(search_config.enabled.then_some(search_config.clone()));
     let app = Router::new()
         .route("/healthz", get(system::healthz))
-        .route(
-            "/readyz",
-            get(system::readyz).with_state(system::ReadinessState::new(pool.clone())),
-        )
+        .route("/readyz", get(system::readyz).with_state(readiness))
         .route("/api/admin/v1/system/info", get(system::healthz))
         .route(
             "/api/admin/v1/ingest/work-items/counts",
@@ -227,7 +264,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     // Signal every worker immediately, then await server drain and worker
     // cancellation together while PostgreSQL is still available for safe
     // lease/error bookkeeping.
-    let (server_result, (), (), (), (), (), (), ()) = tokio::join!(
+    let (server_result, (), (), (), (), (), (), (), ()) = tokio::join!(
         server_handle,
         stop_worker(reconcile_handle),
         stop_worker(inspection_handle),
@@ -236,6 +273,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         stop_worker(publication_handle),
         stop_catalog_worker(catalog_handle),
         stop_policy_worker(policy_handle),
+        stop_search_worker(search_handle),
     );
     server_result??;
     pool.close().await;

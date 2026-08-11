@@ -13,8 +13,8 @@ the relevant feature or configuration documentation.
 - Request `GET /healthz` to confirm that the HTTP service is running. Because the listener starts
   after PostgreSQL connection and migration, a connection failure during startup prevents this
   route from becoming available.
-- Request `GET /readyz` to run the bounded PostgreSQL readiness check. HTTP 503 with
-  `status: "not_ready"` means the process is live but PostgreSQL did not answer in time.
+- Request `GET /readyz` to run configured dependency checks. HTTP 503 means PostgreSQL did not
+  answer in time or, when search is enabled, no healthy active generation is available.
 - Use the [Admin diagnostics API](../api/admin-api/) to inspect queue counts, bounded work-item
   listings, one item's last error and history, and active lease evidence.
 - Run `melodee work list` or `melodee work show <id>` for the same durable work state from the CLI.
@@ -22,15 +22,15 @@ the relevant feature or configuration documentation.
 - Treat an active lease as database evidence, not worker liveness. An expired lease is recovered by
   the durable work engine; an unexpired lease does not prove its owner process is alive.
 
-The readiness route is deliberately narrow. It does not yet report individual readiness for
-filesystems, disk space, media tools, the future search index, or compatibility adapters. See
+The readiness route is deliberately narrow. It does not report disk space, media tools, or
+compatibility adapters. See
 [System and Diagnostics](../admin/system-diagnostics/) for the exact implemented boundary.
 
 ## Catalog import checks
 
-- Run `melodee catalog status` to confirm whether the catalog worker is enabled and to compare
-  Release/import counts. `pending_outbox` is expected to grow until the later search projection
-  worker ships; it does not mean catalog import failed.
+- Run `melodee catalog status` to confirm whether the catalog worker is enabled and compare
+  Release/import counts. `pending_outbox` represents work not yet acknowledged by the search
+  projection; inspect search status if it continues growing.
 - Run `melodee catalog inspect <work-item-id>` to compare the work item's durable state with its
   immutable import receipt. `Published` is awaiting a claim, `Cataloging` is leased, waiting for its
   retry time, or reclaimable, and `Cataloged` should have a receipt. Failed attempts include the
@@ -77,11 +77,24 @@ Implemented normalization checks:
   bounds, unsafe dispositions, and immutable rule-set conflicts stop startup rather than silently
   changing policy.
 
+## Search index checks
+
+- Run `melodee search status`. No active generation, a schema/open error, permanently failed rows,
+  or an old growing backlog is actionable; retryable rows remain scheduled by `available_at`.
+- Verify `MELODEE__SEARCH__ROOT` is absolute, dedicated, writable, and separate from inbound,
+  normalization, and canonical storage roots. Do not replace its ownership marker or insert
+  symlinks beneath it.
+- Run `melodee search rebuild --actor <administrator-id>` to recover a missing/corrupt index. The
+  command reads catalog rows from PostgreSQL in bounded pages and does not reopen media.
+- A crash after an index commit but before PostgreSQL acknowledgement is safe: the row is reclaimed
+  and revision fencing makes replay idempotent. A stale owner cannot acknowledge after lease loss.
+- If `/healthz` is healthy but `/readyz` reports not ready, compare PostgreSQL connectivity with
+  `melodee search status`; rebuild if the configured active generation is missing or incompatible.
+
 Remaining topics will be added as their behavior ships:
 
 - database connection and migration problems;
 - client connection and authentication problems;
-- search index rebuild and recovery.
 
 :::note[Rust pre-release]
 These checks describe the implemented Rust development server. If you hit a problem with the

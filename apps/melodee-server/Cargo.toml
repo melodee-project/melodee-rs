@@ -17,6 +17,7 @@ melodee-domain = { path = "../../crates/melodee-domain", version = "0.1.0" }
 melodee-ingestion = { path = "../../crates/melodee-ingestion", version = "0.1.0" }
 melodee-persistence = { path = "../../crates/melodee-persistence", version = "0.1.0" }
 melodee-policy = { path = "../../crates/melodee-policy", version = "0.1.0" }
+melodee-search = { path = "../../crates/melodee-search", version = "0.1.0" }
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
@@ -33,6 +34,7 @@ melodee-domain = { path = "../../crates/melodee-domain", version = "0.1.0" }
 melodee-persistence = { path = "../../crates/melodee-persistence", version = "0.1.0" }
 http-body-util = "=0.1.3"
 tower = { version = "=0.5.3", features = ["util"] }
+tempfile.workspace = true
 
 [lints]
 workspace = true

@@ -93,6 +93,19 @@ by the current server.
 | `MELODEE__POLICY__NOVEL_GREATEST_HITS_DISPOSITION` | `review` | Outcome when a Greatest Hits Release contains new/alternate material: `review` or `accept`. |
 | `MELODEE__POLICY__UNCERTAIN_GREATEST_HITS_DISPOSITION` | `review` | Outcome when Greatest Hits novelty is uncertain: `review` or `quarantine`. |
 
+### Search projection
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `MELODEE__SEARCH__ENABLED` | `false` | Starts the PostgreSQL outbox/rebuild worker. Enabling requires an explicit search root. |
+| `MELODEE__SEARCH__ROOT` | — when enabled | Absolute, dedicated root for owned Tantivy generations. It must not overlap inbound, work, or canonical storage roots. |
+| `MELODEE__SEARCH__LEASE_SECONDS` | `60` | PostgreSQL writer/rebuild lease duration. |
+| `MELODEE__SEARCH__BATCH_SIZE` | `256` | Outbox/catch-up rows per bounded pass (maximum `512`). |
+| `MELODEE__SEARCH__POLL_INTERVAL_MS` | `1000` | Delay between worker passes. |
+| `MELODEE__SEARCH__SNAPSHOT_PAGE_SIZE` | `1000` | Maximum PostgreSQL rows held per entity page during rebuild. |
+| `MELODEE__SEARCH__DEFAULT_LIMIT` | `200` | Default operator query limit. |
+| `MELODEE__SEARCH__MAX_LIMIT` | `1000` | Maximum operator query limit. |
+
 ### Notes
 
 - `MELODEE__INGEST__SOURCES_JSON` and the legacy single-root variables are mutually additive only through configuration code: JSON takes precedence when present.
@@ -120,3 +133,7 @@ by the current server.
   Phase 5 worker and CLI do not complete destructive actions or remove media.
 - `MELODEE_BIND` remains a compatibility fallback for the earlier bootstrap, but
   `MELODEE__SERVER__BIND` is the canonical key.
+- Search never reads audio. Its root is ownership-marked, symlink components and unowned non-empty
+  roots are rejected, and retirement only removes a validated direct generation child. When search
+  is enabled, missing/corrupt active-generation state makes `/readyz` return not ready while
+  `/healthz` remains a liveness check.

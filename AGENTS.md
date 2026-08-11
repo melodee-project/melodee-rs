@@ -54,10 +54,9 @@ Do not silently resolve a material conflict; record it in the PR and propose an 
 
 ## Current phase boundary: Phase 6 — Search and MQL
 
-Phases 0–5 are complete. The authoritative Phase 5 exit decision is in
-`design/evidence/phase-5/PHASE-5-REPORT.md`. Phase 6 is the next implementation boundary, but agents
-must not create its search schema, projection consumer, or MQL behavior until an assigned work
-package and accepted schema/behavior ADR authorize it.
+Phases 0–5 are complete. Phase 6 implementation and local acceptance are represented by
+`design/evidence/phase-6/PHASE-6-REPORT.md`, which remains Candidate pending independent review.
+ADR-0121/ADR-0122 and the assigned work package remain authoritative; Phase 7 is not active.
 
 Allowed when explicitly assigned: Phase 6 Tantivy schema and lifecycle, transactional-outbox
 consumer/checkpoints, full rebuild and incremental catch-up, Artist/Release/Track search documents,

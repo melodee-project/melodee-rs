@@ -9,6 +9,8 @@ members = [
   "crates/melodee-ingestion",
   "crates/melodee-media",
   "crates/melodee-policy",
+  "crates/melodee-mql",
+  "crates/melodee-search",
 ]
 
 [workspace.package]
@@ -21,6 +23,7 @@ authors = ["Melodee Project contributors"]
 [workspace.dependencies]
 axum = { version = "=0.8.9", features = ["http1", "json", "tokio"] }
 blake3 = "=1.8.6"
+tempfile = "=3.20.0"
 clap = { version = "=4.6.4", features = ["derive", "env"] }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.150"
@@ -38,6 +41,12 @@ sqlx = { version = "=0.9.0", default-features = false, features = [
   "time",
   "uuid",
 ] }
+# ADR-0107 (Tantivy as rebuildable search projection) + ADR-0121 (search
+# projection schema and lifecycle). Exact pin recorded at the Phase 0
+# revalidation: tantivy 0.26.1 (2026-04-21), MIT, quickwit-oss, no commercial
+# feature boundary. Unicode-aware simple/lowercase/ASCII-fold tokenizers are
+# used; no proprietary Tantivy features are enabled.
+tantivy = "=0.26.1"
 thiserror = "=2.0.19"
 time = { version = "=0.3.55", features = ["serde"] }
 tokio = { version = "=1.52.3", features = ["macros", "net", "rt-multi-thread", "signal"] }

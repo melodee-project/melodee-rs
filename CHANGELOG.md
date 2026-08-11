@@ -45,6 +45,12 @@ by an accepted ADR and release gate.
   worker and CLI consume PostgreSQL facts without reopening media; no deletion implementation was
   added. The complete acceptance decision and exact 200-Release metrics are in
   `design/evidence/phase-5/PHASE-5-REPORT.md`.
+- Phase 6 pure bounded MQL parsing/planning and rebuildable Tantivy catalog search for Artists,
+  Releases, Tracks, aliases, genres, display credits, and ID-backed participant roles. PostgreSQL
+  outbox leases fence multi-process writers; generation rebuilds stream bounded catalog pages,
+  validate/catch up, and activate atomically without reading media. Added search worker readiness,
+  status/rebuild/query/autocomplete/parse/explain CLI operations, compatibility/fault/path tests,
+  and a reproducible 10-million-Track benchmark harness.
 - Canonical Carbon admin UI reference mockups.
 - Astro Starlight public documentation platform under `/docs`, with GitHub Pages deployment,
   PR validation, and documentation-impact rules in the Definition of Done.

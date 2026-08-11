@@ -18,7 +18,7 @@ remain fully FOSS.
 | Tracing | tracing / tracing-subscriber | 0.1.44 / 0.3.23 | MIT | Scaffolded |
 | Database | PostgreSQL | 18.4; 17 supported target | PostgreSQL License | Accepted concept |
 | Data access | SQLx | 0.9.0 stable line | MIT/Apache-2.0 | Proposed ADR-0110 |
-| Search | Tantivy | 0.26.1 | MIT | Proposed ADR-0107 |
+| Search | Tantivy | 0.26.1 | MIT | Accepted ADR-0107 and ADR-0121; exact centralized dependency, revalidated 2026-08-11 |
 | Metadata | Lofty | 0.24.0 | MIT/Apache-2.0 | Proposed |
 | Media tools | FFmpeg/ffprobe | 8.1 stable line at PRD audit | LGPL/GPL | Proposed ADR-0108 |
 | Fingerprint | Chromaprint/fpcalc | 1.6.1 at PRD audit | MIT library | Proposed ADR-0108 |

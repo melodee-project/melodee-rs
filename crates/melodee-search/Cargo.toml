@@ -1,0 +1,28 @@
+[package]
+name = "melodee-search"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+melodee-mql = { path = "../melodee-mql", version = "0.1.0" }
+melodee-domain = { path = "../melodee-domain", version = "0.1.0" }
+melodee-persistence = { path = "../melodee-persistence", version = "0.1.0" }
+tantivy = { workspace = true }
+sqlx = { workspace = true }
+uuid = { workspace = true }
+time = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true }
+blake3 = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

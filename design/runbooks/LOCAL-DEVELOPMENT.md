@@ -3,9 +3,9 @@
 Phase 6 is the current implementation boundary. Phases 0–5 are complete: the server implements
 durable inbound processing through immutable manifest v3, the bounded PostgreSQL catalog and
 identity model, and explainable classification/novelty/policy evaluation with operator commands.
-The authoritative Phase 5 decision is in `design/evidence/phase-5/PHASE-5-REPORT.md`. Search/MQL is
-the next development boundary; compatibility APIs, playback, and authentication remain later-phase
-work.
+The authoritative Phase 5 decision is in `design/evidence/phase-5/PHASE-5-REPORT.md`. Phase 6 search
+and MQL are implemented under Candidate review; compatibility APIs, playback, and authentication
+remain later-phase work.
 
 ## Start PostgreSQL and the server
 
@@ -13,6 +13,7 @@ work.
 cp .env.example .env
 docker compose -f compose.dev.yaml up -d postgres
 mkdir -p /tmp/melodee-work /tmp/melodee-storage
+mkdir -p /tmp/melodee-search
 set -a
 source .env
 set +a
@@ -137,6 +138,28 @@ The restore target must be empty and disposable. Restoring PostgreSQL does not m
 retain the post-0008 database and its audit evidence unless an explicitly verified full restore is
 required.
 
+## Apply and recover the Phase 6 search migration
+
+Migration `0009_phase6_search.sql` additively extends the catalog projection outbox and adds search
+checkpoints, generations, rebuild jobs, and the active-generation pointer. It does not read or alter
+media. Back up and validate PostgreSQL before applying it to a database that matters:
+
+```bash
+pg_dump --format=custom --file=/safe/backup/location/melodee-pre-0009.dump "$MELODEE__DATABASE__URL"
+pg_restore --list /safe/backup/location/melodee-pre-0009.dump >/dev/null
+cargo run -p melodee-cli -- migrate
+psql "$MELODEE__DATABASE__URL" --set ON_ERROR_STOP=1 --command \
+  "SELECT version, description, success FROM _sqlx_migrations WHERE version = 9"
+psql "$MELODEE__DATABASE__URL" --set ON_ERROR_STOP=1 --command \
+  "SELECT to_regclass('public.search_projection_checkpoint'), to_regclass('public.search_generations'), to_regclass('public.search_rebuild_jobs'), to_regclass('public.search_active_generation')"
+```
+
+A binary downgrade leaves migration 0009 and its operational evidence intact. Stop search workers,
+test the exact older binary against an isolated database copy, and do not drop search tables in
+place. A full schema rollback is a drained restore of the verified pre-0009 backup into a new empty
+database. Tantivy generations are disposable: after forward migration, use
+`melodee search rebuild --actor <administrator-id>` rather than copying or editing generation files.
+
 ## Check the running process
 
 ```bash
@@ -146,11 +169,13 @@ cargo run -p melodee-cli -- doctor
 cargo run -p melodee-cli -- ingest status
 cargo run -p melodee-cli -- catalog status
 cargo run -p melodee-cli -- policy test --limit 100 --actor <administrator-id>
+cargo run -p melodee-cli -- search status
 ```
 
-`/healthz` is liveness only. `/readyz` performs a bounded PostgreSQL query and returns HTTP `503`
-with `status: "not_ready"` when the database is unavailable. It does not claim that media tools,
-storage roots, free space, or background workers are ready. `/api/admin/v1/system/info` returns the
+`/healthz` is liveness only. `/readyz` performs a bounded PostgreSQL query and, when search is
+enabled, verifies that the active generation opens with the expected schema. It returns HTTP `503`
+with `status: "not_ready"` when a configured dependency is unavailable. It does not claim that media
+tools, free space, or every background worker are ready. `/api/admin/v1/system/info` returns the
 same service/version liveness metadata as `/healthz`; the other `/api/admin/v1/ingest/*` routes are
 read-only queue and lease diagnostics.
 
@@ -195,6 +220,12 @@ Rule sets are immutable by name and version. When changing any policy preference
 `MELODEE__POLICY__RULE_SET_VERSION`; attempting to start with different rules at an already-stored
 version fails closed instead of silently changing the meaning of historical decisions.
 
+Search is independently enabled with `MELODEE__SEARCH__ENABLED=true` and requires an explicit,
+absolute `MELODEE__SEARCH__ROOT`. The root must not overlap inbound, work, or canonical storage.
+The worker consumes the transactional catalog outbox in bounded batches, builds generations from
+bounded PostgreSQL pages, and never opens media. A graceful stop releases a rebuild lease at a safe
+page boundary; an in-flight Tantivy commit completes before PostgreSQL acknowledgement.
+
 Useful one-shot development commands are:
 
 ```bash
@@ -212,6 +243,10 @@ cargo run -p melodee-cli -- policy test --limit 100 --actor <administrator-id>
 cargo run -p melodee-cli -- policy evaluate <release-uuid>
 cargo run -p melodee-cli -- policy inspect <release-uuid>
 cargo run -p melodee-cli -- policy decide <release-uuid> review --actor <administrator> --reason <reason>
+cargo run -p melodee-cli -- search status
+cargo run -p melodee-cli -- search rebuild --actor <administrator-id>
+cargo run -p melodee-cli -- search query 'artist:"Colin Hay" AND year>=2000' --limit 50
+cargo run -p melodee-cli -- search explain 'performer:"Guest Artist"'
 cargo run -p melodee-cli -- work show <work-item-uuid>
 ```
 

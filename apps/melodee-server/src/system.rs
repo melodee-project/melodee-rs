@@ -55,6 +55,7 @@ impl SystemInfo {
 pub struct ReadinessState {
     pool: sqlx::PgPool,
     timeout: Duration,
+    search: Option<melodee_search::SearchConfig>,
 }
 
 impl ReadinessState {
@@ -63,6 +64,7 @@ impl ReadinessState {
         Self {
             pool,
             timeout: DEFAULT_READINESS_TIMEOUT,
+            search: None,
         }
     }
 
@@ -73,6 +75,12 @@ impl ReadinessState {
         self.timeout = timeout;
         self
     }
+
+    #[must_use]
+    pub fn with_search(mut self, search: Option<melodee_search::SearchConfig>) -> Self {
+        self.search = search;
+        self
+    }
 }
 
 /// Liveness only: a successful response proves the HTTP process can serve a
@@ -81,15 +89,34 @@ pub async fn healthz() -> Json<SystemInfo> {
     Json(SystemInfo::new("ok"))
 }
 
-/// Basic service readiness: PostgreSQL must answer a bounded `SELECT 1`.
-/// Media tools, storage roots, disk space, and individual workers are outside
-/// this intentionally narrow contract.
+/// Basic service readiness: PostgreSQL must answer a bounded `SELECT 1`; when
+/// search is enabled, the active generation must also open with the current
+/// schema. Media tools and individual worker progress remain outside this
+/// intentionally narrow contract.
 pub async fn readyz(
     axum::extract::State(state): axum::extract::State<ReadinessState>,
 ) -> (StatusCode, Json<SystemInfo>) {
     let probe = sqlx::query_scalar::<_, i32>("SELECT 1").fetch_one(&state.pool);
     match tokio::time::timeout(state.timeout, probe).await {
-        Ok(Ok(1)) => (StatusCode::OK, Json(SystemInfo::new("ready"))),
+        Ok(Ok(1)) => {
+            if let Some(config) = &state.search {
+                let search = melodee_search::diagnostic(config, &state.pool);
+                match tokio::time::timeout(state.timeout, search).await {
+                    Ok(Ok(diagnostic))
+                        if diagnostic.generation.is_some()
+                            && diagnostic.generation_error.is_none() =>
+                    {
+                        (StatusCode::OK, Json(SystemInfo::new("ready")))
+                    }
+                    Ok(Ok(_)) | Ok(Err(_)) | Err(_) => (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        Json(SystemInfo::new("not_ready")),
+                    ),
+                }
+            } else {
+                (StatusCode::OK, Json(SystemInfo::new("ready")))
+            }
+        }
         Ok(Ok(_)) | Ok(Err(_)) | Err(_) => (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(SystemInfo::new("not_ready")),

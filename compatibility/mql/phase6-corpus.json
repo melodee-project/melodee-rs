@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "authority": {
+    "legacyCommit": "4028b58dbd3302ed431e2c5b32d9dde5634db218",
+    "sources": [
+      "src/Melodee.Mql/MqlTokenizer.cs",
+      "src/Melodee.Mql/MqlParser.cs",
+      "tests/Melodee.Mql.Tests/MqlTokenizerTests.cs",
+      "tests/Melodee.Mql.Tests/MqlCompilerTests.cs"
+    ],
+    "governingDecision": "design/adr/ADR-0122-mql-syntax-and-semantics.md"
+  },
+  "cases": [
+    {"id":"field-search","expression":"artist:\"Colin Hay\"","outcome":"valid","preservesLegacy":true},
+    {"id":"implicit-and","expression":"colin hay","outcome":"valid","preservesLegacy":true},
+    {"id":"boolean-precedence","expression":"title:Blue OR title:Red AND year>=2000","outcome":"valid","preservesLegacy":true},
+    {"id":"parentheses","expression":"(title:Blue OR title:Red) AND year>=2000","outcome":"valid","preservesLegacy":true},
+    {"id":"numeric-comparison","expression":"duration>=180000","outcome":"valid","preservesLegacy":true},
+    {"id":"inclusive-range","expression":"year:1990..1999","outcome":"valid","preservesLegacy":true},
+    {"id":"regex","expression":"track:/blue.*/","outcome":"valid","preservesLegacy":true},
+    {"id":"structured-role","expression":"featuredArtist:\"Guest Artist\"","outcome":"valid","preservesLegacy":false},
+    {"id":"case-insensitive-keywords","expression":"title:Blue or title:Red","outcome":"valid","preservesLegacy":false,"legacyBugNotPreserved":"boolean keywords are no longer case-sensitive"},
+    {"id":"uniform-bare-scope","expression":"Björk","outcome":"valid","preservesLegacy":false,"legacyBugNotPreserved":"bare terms uniformly expand across name/title/alias"},
+    {"id":"unicode-regex-token-stream","expression":"name:/bjork.*/","outcome":"valid","preservesLegacy":false,"legacyBugNotPreserved":"regex targets folded indexed tokens, never raw bytes"},
+    {"id":"overlong-is-explicit-error","expression":"__OVERLONG__","outcome":"exceeds_bound","preservesLegacy":false,"legacyBugNotPreserved":"overlong input is rejected instead of silently truncated"},
+    {"id":"unknown-escape","expression":"title:\"bad\\q\"","outcome":"syntax","preservesLegacy":false},
+    {"id":"invalid-calendar-date","expression":"date:2024-02-31","outcome":"type_mismatch","preservesLegacy":false},
+    {"id":"wildcard-unsupported","expression":"title:blue*","outcome":"syntax","preservesLegacy":false},
+    {"id":"fuzzy-unsupported","expression":"title:blue~","outcome":"syntax","preservesLegacy":false}
+  ]
+}

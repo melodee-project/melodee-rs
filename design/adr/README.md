@@ -53,6 +53,11 @@ python3 scripts/new_adr.py "short title"
 
 - [ADR-0120: Phase 5 classification, novelty, and policy schema](ADR-0120-phase5-classification-novelty-and-policy-schema.md)
 
+## Current Phase 6 decisions
+
+- [ADR-0121: Search projection schema and lifecycle](ADR-0121-search-projection-schema-and-lifecycle.md)
+- [ADR-0122: MQL syntax and semantics](ADR-0122-mql-syntax-and-semantics.md)
+
 ## ADR quality rules
 
 - State the decision, not merely the chosen technology.

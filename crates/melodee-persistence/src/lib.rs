@@ -14,6 +14,7 @@ mod config;
 mod error;
 mod migrate;
 mod policy;
+mod search;
 mod work_items;
 mod worker;
 
@@ -39,6 +40,12 @@ pub use policy::{
     PolicyCatalogContext, PolicyClaim, PolicyCommitResult, PolicyDecisionAuditEntry,
     PolicyDestructiveCompletion, PolicyEvaluationCommit, PolicyReleaseCatalogTraitAssertion,
     PolicyStore, PolicyStoreError, StoredPolicyDecision, StoredReleaseClassification,
+};
+pub use search::{
+    MAX_SEARCH_OUTBOX_BATCH, MAX_SEARCH_SNAPSHOT_PAGE, SEARCH_PROJECTION_NAME, SearchArtistRecord,
+    SearchCatalogRecord, SearchDocumentCounts, SearchEntityType, SearchOperation, SearchOutboxItem,
+    SearchProjectionStatus, SearchProjectionStore, SearchReleaseRecord, SearchSnapshotReader,
+    SearchStoreError, SearchTrackRecord, StoredSearchGeneration, StoredSearchRebuildJob,
 };
 pub use work_items::{
     ActiveLease, PublicationJournalEntry, SettlingSnapshot, SettlingSnapshotFile, StateCount,

@@ -90,3 +90,38 @@ async fn readyz_fails_closed_with_stable_body_when_pool_is_closed() {
     );
     assert!(!body.to_string().contains("secret"));
 }
+
+#[tokio::test]
+async fn enabled_search_is_not_ready_until_an_active_generation_opens() {
+    let db = common::TestDb::create("server_search_readyz").await;
+    let directory = tempfile::TempDir::new().expect("temp root");
+    let config = melodee_search::SearchConfig {
+        search_root: directory.path().join("search"),
+        enabled: true,
+        ..melodee_search::SearchConfig::default()
+    };
+    let not_ready = Router::new().route(
+        "/readyz",
+        get(readyz)
+            .with_state(ReadinessState::new(db.pool.clone()).with_search(Some(config.clone()))),
+    );
+    let (status, body) = request_json(not_ready, "/readyz").await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(body["status"], "not_ready");
+
+    melodee_search::request_rebuild(&config, &db.pool, "readiness-test")
+        .await
+        .expect("request empty rebuild");
+    melodee_search::run_rebuild_once(&config, &db.pool)
+        .await
+        .expect("activate empty generation");
+    let ready = Router::new().route(
+        "/readyz",
+        get(readyz)
+            .with_state(ReadinessState::new(db.pool.clone()).with_search(Some(config.clone()))),
+    );
+    let (status, body) = request_json(ready, "/readyz").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["status"], "ready");
+    db.drop().await;
+}
