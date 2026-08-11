@@ -117,6 +117,9 @@ impl IngestionState {
                 | Self::Validating
                 | Self::Publishing
                 | Self::Cataloging
+                // Phase 5 policy evaluates an already-cataloged Release under
+                // the same lease/fencing contract before it advances or parks.
+                | Self::Cataloged
                 | Self::Indexing
         )
     }
@@ -185,6 +188,7 @@ impl IngestionState {
             TransitionKind::Operator => matches!(
                 (self, next),
                 (Self::NeedsReview, Self::Staged)
+                    | (Self::NeedsReview, Self::Indexing)
                     | (Self::NeedsReview, Self::Quarantined)
                     | (Self::NeedsReview, Self::Ignored)
                     | (Self::NeedsReview, Self::Deleted)
@@ -664,6 +668,15 @@ mod tests {
                 .is_err(),
             "Cataloged -> Deleted must require operator authorization"
         );
+    }
+
+    #[test]
+    fn cataloged_may_hold_policy_lease_but_parked_outcomes_may_not() {
+        assert!(IngestionState::Cataloged.is_active_processing());
+        assert!(IngestionState::Cataloged.can_fail());
+        assert!(!IngestionState::NeedsReview.is_active_processing());
+        assert!(!IngestionState::Quarantined.is_active_processing());
+        assert!(!IngestionState::Ignored.is_active_processing());
     }
 
     #[test]

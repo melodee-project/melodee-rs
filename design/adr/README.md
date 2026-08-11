@@ -49,6 +49,10 @@ python3 scripts/new_adr.py "short title"
 - [ADR-0118: Use AudioIdentity and immutable manifest v3 semantic overlays](ADR-0118-use-audioidentity-and-immutable-manifest-v3-semantic-overlays.md)
 - [ADR-0119: Use audit-only corrections for legacy Releases without manifest v3](ADR-0119-use-audit-only-corrections-for-legacy-releases-without-manifest-v3.md)
 
+## Current Phase 5 decision
+
+- [ADR-0120: Phase 5 classification, novelty, and policy schema](ADR-0120-phase5-classification-novelty-and-policy-schema.md)
+
 ## ADR quality rules
 
 - State the decision, not merely the chosen technology.

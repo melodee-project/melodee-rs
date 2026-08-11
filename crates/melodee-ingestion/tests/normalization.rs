@@ -29,7 +29,7 @@ struct Scenario {
     root: PathBuf,
     config: IngestionConfig,
     pool: sqlx::PgPool,
-    database: common::TestDb,
+    database: Option<common::TestDb>,
 }
 
 impl Scenario {
@@ -50,7 +50,7 @@ impl Scenario {
             root,
             config,
             pool: database.pool.clone(),
-            database,
+            database: Some(database),
         }
     }
 
@@ -91,16 +91,53 @@ impl Scenario {
         storage_root
     }
 
-    async fn finish(self) {
+    async fn finish(mut self) {
+        self.finish_inner().await;
+    }
+
+    async fn finish_inner(&mut self) {
         let work_area = self.config.work_area_base.clone();
         let storage_root = self.config.storage_root.clone();
         let root = self.root.clone();
-        self.database.drop().await;
+        if let Some(database) = self.database.take() {
+            self.pool.close().await;
+            database.drop().await;
+        }
         let _ = fs::remove_dir_all(root);
         let _ = fs::remove_dir_all(work_area);
         if let Some(storage_root) = storage_root {
             let _ = fs::remove_dir_all(storage_root);
         }
+    }
+}
+
+impl Drop for Scenario {
+    fn drop(&mut self) {
+        let Some(database) = self.database.take() else {
+            return;
+        };
+        let pool = self.pool.clone();
+        let work_area = self.config.work_area_base.clone();
+        let storage_root = self.config.storage_root.clone();
+        let root = self.root.clone();
+        let _ = std::thread::Builder::new()
+            .name("scenario-cleanup".to_owned())
+            .spawn(move || {
+                let runtime = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .expect("cleanup runtime");
+                runtime.block_on(async move {
+                    pool.close().await;
+                    database.drop().await;
+                });
+                let _ = fs::remove_dir_all(root);
+                let _ = fs::remove_dir_all(work_area);
+                if let Some(storage_root) = storage_root {
+                    let _ = fs::remove_dir_all(storage_root);
+                }
+            })
+            .map(|handle| handle.join());
     }
 }
 
@@ -297,6 +334,91 @@ fn paths_with_fragment(root: &Path, fragment: &str) -> usize {
     count
 }
 
+async fn phase_diagnostics(pool: &sqlx::PgPool) -> String {
+    let state_counts: Vec<(String, i64)> = sqlx::query_as(
+        "SELECT state, COUNT(*)
+         FROM release_work_items
+         GROUP BY state
+         ORDER BY state",
+    )
+    .fetch_all(pool)
+    .await
+    .expect("state counts");
+    let leased_counts: Vec<(String, Option<String>, i64)> = sqlx::query_as(
+        "SELECT state, lease_owner, COUNT(*)
+         FROM release_work_items
+         WHERE lease_owner IS NOT NULL
+         GROUP BY state, lease_owner
+         ORDER BY state, lease_owner",
+    )
+    .fetch_all(pool)
+    .await
+    .expect("lease counts");
+    let event_counts: Vec<(Option<String>, Option<String>, i64)> = sqlx::query_as(
+        "SELECT from_state, to_state, COUNT(*)
+         FROM release_work_item_events
+         GROUP BY from_state, to_state
+         ORDER BY from_state, to_state",
+    )
+    .fetch_all(pool)
+    .await
+    .expect("event counts");
+
+    format!("states={state_counts:?}; leases={leased_counts:?}; events={event_counts:?}")
+}
+
+struct BatchProgress {
+    claimed: u64,
+    completed: u64,
+    needs_review: u64,
+    adopted: u64,
+    failed: u64,
+    errors: u64,
+    total: u64,
+    target: u64,
+}
+
+async fn assert_batch_progress(
+    phase: &str,
+    pool: &sqlx::PgPool,
+    progress: &BatchProgress,
+    extra: &str,
+) {
+    let BatchProgress {
+        claimed,
+        completed,
+        needs_review,
+        adopted,
+        failed,
+        errors,
+        total,
+        target,
+    } = *progress;
+    assert_eq!(
+        claimed,
+        completed + needs_review + failed + errors,
+        "{phase} batch accounting mismatch: claimed={claimed} completed={completed} needs_review={needs_review} adopted={adopted} failed={failed} errors={errors} total={total} target={target}; {extra}"
+    );
+    assert!(
+        adopted <= completed,
+        "{phase} batch reported adopted={adopted} greater than completed={completed}: claimed={claimed} needs_review={needs_review} failed={failed} errors={errors} total={total} target={target}; {extra}"
+    );
+    assert_eq!(
+        0, failed,
+        "{phase} batch reported unexpected failures: claimed={claimed} completed={completed} needs_review={needs_review} adopted={adopted} failed={failed} errors={errors} total={total} target={target}; {extra}"
+    );
+    assert_eq!(
+        0, errors,
+        "{phase} batch reported unexpected errors: claimed={claimed} completed={completed} needs_review={needs_review} adopted={adopted} failed={failed} errors={errors} total={total} target={target}; {extra}"
+    );
+    if claimed == 0 && total < target {
+        let diagnostics = phase_diagnostics(pool).await;
+        panic!(
+            "{phase} stalled before reaching {target}: claimed={claimed} completed={completed} needs_review={needs_review} adopted={adopted} failed={failed} errors={errors} total={total}; {extra}; {diagnostics}"
+        );
+    }
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn two_hundred_releases_reach_published_once_with_zero_loss_and_bounded_concurrency() {
@@ -363,6 +485,22 @@ async fn two_hundred_releases_reach_published_once_with_zero_loss_and_bounded_co
         normalized += stats.completed;
         expected_failures += stats.failed;
         unexpected_failures += stats.errors;
+        assert_batch_progress(
+            "normalization",
+            &scenario.pool,
+            &BatchProgress {
+                claimed: stats.claimed,
+                completed: stats.completed,
+                needs_review: 0,
+                adopted: 0,
+                failed: stats.failed,
+                errors: stats.errors,
+                total: normalized,
+                target: 200,
+            },
+            "normalization batches must complete without errors",
+        )
+        .await;
         if stats.claimed == 0 {
             break;
         }
@@ -411,11 +549,33 @@ async fn two_hundred_releases_reach_published_once_with_zero_loss_and_bounded_co
         )
         .await
         .expect("validation batch");
+        assert_batch_progress(
+            "validation",
+            &scenario.pool,
+            &BatchProgress {
+                claimed: stats.claimed,
+                completed: stats.completed,
+                needs_review: stats.needs_review,
+                adopted: 0,
+                failed: stats.failed,
+                errors: stats.errors,
+                total: validated + stats.completed + stats.needs_review,
+                target: 200,
+            },
+            "validation batches must complete without errors",
+        )
+        .await;
         validated += stats.completed;
         validation_review += stats.needs_review;
         validation_failures += stats.failed;
         validation_errors += stats.errors;
         if stats.claimed == 0 {
+            if validated != 200 {
+                let diagnostics = phase_diagnostics(&scenario.pool).await;
+                panic!(
+                    "validation stalled before reaching 200: validated={validated} review={validation_review} failed={validation_failures} errors={validation_errors}; {diagnostics}"
+                );
+            }
             break;
         }
     }
@@ -438,6 +598,22 @@ async fn two_hundred_releases_reach_published_once_with_zero_loss_and_bounded_co
         )
         .await
         .expect("publication batch");
+        assert_batch_progress(
+            "publication",
+            &scenario.pool,
+            &BatchProgress {
+                claimed: stats.claimed,
+                completed: stats.completed,
+                needs_review: 0,
+                adopted: stats.adopted,
+                failed: stats.failed,
+                errors: stats.errors,
+                total: published + stats.completed,
+                target: 200,
+            },
+            "publication batches must complete without errors",
+        )
+        .await;
         published += stats.completed;
         adopted += stats.adopted;
         publication_failures += stats.failed;

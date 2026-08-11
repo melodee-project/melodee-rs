@@ -43,8 +43,8 @@ For each discovered candidate the queue uses these states:
 - `Normalizing` — a leased worker is creating and verifying attempt-isolated temporary output.
 - `Validating` — normalization observations were published atomically; canonical publication has
   not occurred yet.
-- `NeedsReview` — required local presentation or ordering facts are ambiguous; Phase 3 does not
-  guess identity or run the later catalog-aware policy engine.
+- `NeedsReview` — local presentation/ordering facts require an operator, or a Phase 5 `Review` or
+  `Delete` policy decision is pending. Uncertainty never authorizes media deletion.
 - `Staged` — an immutable Release ID, structural authorization, and publication plan are durable.
 - `Publishing` — a fenced worker is copying, verifying, finalizing, or adopting the canonical
   bundle.
@@ -53,7 +53,11 @@ For each discovered candidate the queue uses these states:
 - `Cataloging` — a fenced catalog worker owns a bounded PostgreSQL attempt, or a transient failure
   is waiting for its durable retry time before another claim.
 - `Cataloged` — catalog rows, immutable semantic overlay, import receipt, and work-item transition
-  committed atomically; no active lease remains.
+  committed atomically and the Release is eligible for policy evaluation.
+- `Indexing` — an accepted policy decision is complete and the Release awaits the later search
+  projection worker.
+- `Ignored` — a non-destructive `Ignore` policy decision completed.
+- `Quarantined` — a non-destructive `Quarantine` policy decision completed.
 
 The `transition` table is durable and persisted in PostgreSQL, so restart and missed scans recover correctly.
 
@@ -108,6 +112,12 @@ periodic catalog worker runs independently from inbound discovery, so already-pu
 continue to catalog while inbound scanning is disabled. During graceful server shutdown, a claimed
 Release whose catalog transaction has not started releases its lease for another worker. A fenced,
 atomic catalog transaction that has already started is allowed to finish before shutdown completes.
+
+The independent policy worker claims at most the lower of its batch and concurrency limits. It
+renews leases before loading facts and before the atomic commit, evaluates only PostgreSQL catalog
+evidence, and releases pre-commit claims on graceful cancellation. `melodee policy test`,
+`evaluate`, `inspect`, and `decide` provide bounded operator diagnostics and audited review; see
+[Policies](../admin/policies/).
 
 ## Normalization policy
 

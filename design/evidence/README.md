@@ -6,3 +6,12 @@ sensitive raw captures stay outside Git and are referenced by immutable checksum
 
 Every evidence record states: date/time UTC, commit, legacy/Rust version, dataset identity/counts,
 configuration, hardware/environment, exact command, result, limitations, and related requirement/ADR.
+
+## Phase reports
+
+- [Phase 0](phase-0/PHASE-0-REPORT.md)
+- [Phase 1](phase-1/PHASE-1-REPORT.md)
+- [Phase 2](phase-2/PHASE-2-REPORT.md)
+- [Phase 3](phase-3/PHASE-3-REPORT.md)
+- [Phase 4](phase-4/PHASE-4-REPORT.md)
+- [Phase 5](phase-5/PHASE-5-REPORT.md)

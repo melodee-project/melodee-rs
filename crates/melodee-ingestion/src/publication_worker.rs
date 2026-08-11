@@ -99,6 +99,7 @@ async fn validate_once_with_shutdown(
     };
     let mut tasks = JoinSet::new();
     for item in items {
+        let item_id = item.id;
         let task_ingestion = ingestion.clone();
         let task_store = *store;
         let task_pool = pool.clone();
@@ -106,7 +107,7 @@ async fn validate_once_with_shutdown(
         let task_config = *work_config;
         let task_shutdown = shutdown.clone();
         tasks.spawn(async move {
-            validate_one(
+            let result = validate_one(
                 &task_ingestion,
                 &task_store,
                 &task_pool,
@@ -115,17 +116,19 @@ async fn validate_once_with_shutdown(
                 &task_config,
                 task_shutdown,
             )
-            .await
+            .await;
+            (item_id, result)
         });
     }
     while let Some(result) = tasks.join_next().await {
         match result {
-            Ok(Ok(ValidationWorkerOutcome::Completed)) => stats.completed += 1,
-            Ok(Ok(ValidationWorkerOutcome::NeedsReview)) => stats.needs_review += 1,
-            Ok(Ok(ValidationWorkerOutcome::Failed)) => stats.failed += 1,
-            Ok(Err(error)) => {
+            Ok((_, Ok(ValidationWorkerOutcome::Completed))) => stats.completed += 1,
+            Ok((_, Ok(ValidationWorkerOutcome::NeedsReview))) => stats.needs_review += 1,
+            Ok((_, Ok(ValidationWorkerOutcome::Failed))) => stats.failed += 1,
+            Ok((id, Err(error))) => {
                 stats.errors += 1;
-                error!(%error, "validation item failed outside durable failure recording");
+                error!(work_item_id = %id, %error, "validation item failed outside durable failure recording");
+                release_lease_after_unexpected_error(store, pool, id, &worker, "validation").await;
             }
             Err(error) => {
                 stats.errors += 1;
@@ -334,6 +337,7 @@ async fn publish_once_with_shutdown(
     };
     let mut tasks = JoinSet::new();
     for item in items {
+        let item_id = item.id;
         let task_ingestion = ingestion.clone();
         let task_store = *store;
         let task_pool = pool.clone();
@@ -342,7 +346,7 @@ async fn publish_once_with_shutdown(
         let task_shutdown = shutdown.clone();
         let storage_root = roots.storage_root.clone();
         tasks.spawn(async move {
-            publish_one(
+            let result = publish_one(
                 &task_ingestion,
                 &task_store,
                 &task_pool,
@@ -352,20 +356,22 @@ async fn publish_once_with_shutdown(
                 &storage_root,
                 task_shutdown,
             )
-            .await
+            .await;
+            (item_id, result)
         });
     }
     while let Some(result) = tasks.join_next().await {
         match result {
-            Ok(Ok(PublicationWorkerOutcome::Completed)) => stats.completed += 1,
-            Ok(Ok(PublicationWorkerOutcome::Adopted)) => {
+            Ok((_, Ok(PublicationWorkerOutcome::Completed))) => stats.completed += 1,
+            Ok((_, Ok(PublicationWorkerOutcome::Adopted))) => {
                 stats.completed += 1;
                 stats.adopted += 1;
             }
-            Ok(Ok(PublicationWorkerOutcome::Failed)) => stats.failed += 1,
-            Ok(Err(error)) => {
+            Ok((_, Ok(PublicationWorkerOutcome::Failed))) => stats.failed += 1,
+            Ok((id, Err(error))) => {
                 stats.errors += 1;
-                error!(%error, "publication item failed outside durable failure recording");
+                error!(work_item_id = %id, %error, "publication item failed outside durable failure recording");
+                release_lease_after_unexpected_error(store, pool, id, &worker, "publication").await;
             }
             Err(error) => {
                 stats.errors += 1;
@@ -382,6 +388,26 @@ async fn publish_once_with_shutdown(
         "publication batch completed"
     );
     Ok(stats)
+}
+
+async fn release_lease_after_unexpected_error(
+    store: &WorkItemStore,
+    pool: &PgPool,
+    id: uuid::Uuid,
+    worker: &WorkerId,
+    stage: &'static str,
+) {
+    if let Err(release_error) = store
+        .release_lease(pool, id, worker, OffsetDateTime::now_utc())
+        .await
+    {
+        error!(
+            work_item_id = %id,
+            %release_error,
+            stage,
+            "failed to release lease after unexpected per-item error"
+        );
+    }
 }
 
 #[derive(Debug, Clone, Copy)]

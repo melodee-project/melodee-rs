@@ -147,6 +147,28 @@ impl TrackNovelty {
             validate_internal_id(media_asset_id.is_uuid_v7(), "MediaAssetId")?;
         }
         validate_nonblank("track novelty detail", &value.detail)?;
+        let evidence_matches_category = matches!(
+            (value.category, value.evidence_kind),
+            (
+                TrackNoveltyCategory::ExactDuplicate,
+                NoveltyEvidenceKind::ByteHashMatch
+            ) | (
+                TrackNoveltyCategory::KnownAudioIdentity,
+                NoveltyEvidenceKind::AudioIdentityMatch
+            ) | (
+                TrackNoveltyCategory::AlternateRecording,
+                NoveltyEvidenceKind::AudioIdentityDistinct
+            ) | (
+                TrackNoveltyCategory::NewTrack,
+                NoveltyEvidenceKind::NoCatalogMatch
+            ) | (
+                TrackNoveltyCategory::Uncertain,
+                NoveltyEvidenceKind::InsufficientEvidence
+            )
+        );
+        if !evidence_matches_category {
+            return Err(DomainInvariantError::NoveltyCountMismatch);
+        }
         Ok(value)
     }
 }
@@ -170,11 +192,13 @@ impl NoveltyEvaluation {
     pub fn new(value: Self) -> Result<Self, DomainInvariantError> {
         validate_internal_id(value.release_id.is_uuid_v7(), "ReleaseId")?;
         validate_internal_id(value.policy_rule_set_id.is_uuid_v7(), "PolicyRuleSetId")?;
-        let sum = value.exact_duplicate_count
-            + value.known_audio_identity_count
-            + value.alternate_recording_count
-            + value.new_track_count
-            + value.uncertain_count;
+        let sum = value
+            .exact_duplicate_count
+            .checked_add(value.known_audio_identity_count)
+            .and_then(|sum| sum.checked_add(value.alternate_recording_count))
+            .and_then(|sum| sum.checked_add(value.new_track_count))
+            .and_then(|sum| sum.checked_add(value.uncertain_count))
+            .ok_or(DomainInvariantError::NoveltyCountMismatch)?;
         if sum != value.total_track_count {
             return Err(DomainInvariantError::NoveltyCountMismatch);
         }
@@ -185,20 +209,25 @@ impl NoveltyEvaluation {
     /// Count of Tracks that are genuinely new or alternate (PRD-POLICY-005).
     #[must_use]
     pub const fn novel_track_count(&self) -> u32 {
-        self.new_track_count + self.alternate_recording_count
+        self.new_track_count
+            .saturating_add(self.alternate_recording_count)
     }
 
     /// Count of Tracks that are redundant (exact duplicate or known audio identity).
     #[must_use]
     pub const fn redundant_track_count(&self) -> u32 {
-        self.exact_duplicate_count + self.known_audio_identity_count
+        self.exact_duplicate_count
+            .saturating_add(self.known_audio_identity_count)
     }
 
     /// Whether the Release is fully redundant with the existing catalog
     /// (no novel and no uncertain Tracks).
     #[must_use]
     pub fn is_redundant(&self) -> bool {
-        self.novel_track_count() == 0 && self.uncertain_count == 0
+        self.total_track_count > 0
+            && self.redundant_track_count() == self.total_track_count
+            && self.novel_track_count() == 0
+            && self.uncertain_count == 0
     }
 
     /// Whether the Release contains uncertain Tracks that prevent automatic

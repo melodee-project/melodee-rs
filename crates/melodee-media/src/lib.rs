@@ -604,6 +604,8 @@ fn read_native_metadata(
             "disc_total": tag.disk_total(),
             "date": tag.date().map(|value| value.to_string()),
             "genre": tag.genre().as_deref(),
+            "musicbrainz_release_type": tag.get_string(ItemKey::MusicBrainzReleaseType),
+            "flag_compilation": tag.get_string(ItemKey::FlagCompilation),
         }),
     };
     let mut artwork = Vec::new();
@@ -967,6 +969,10 @@ fn truncate_message(message: &str) -> String {
 #[allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use lofty::{
+        config::WriteOptions,
+        tag::{Tag, TagExt, TagType},
+    };
     use std::fs;
 
     fn temp_dir(name: &str) -> PathBuf {
@@ -1194,6 +1200,64 @@ mod tests {
                     .expect("native metadata");
                 assert_eq!(Some("Unicode 東京".to_owned()), metadata.artist);
             }
+        }
+    }
+
+    #[test]
+    fn native_release_type_and_compilation_signals_are_captured_verbatim() {
+        let root = temp_dir("classification-signals");
+        let cases = [
+            ("mp3", "libmp3lame", TagType::Id3v2, "compilation", "1"),
+            (
+                "flac",
+                "flac",
+                TagType::VorbisComments,
+                "album; compilation",
+                "0",
+            ),
+        ];
+
+        for (extension, codec, tag_type, expected_release_type, expected_compilation) in cases {
+            let path = root.join(format!("classification-signals.{extension}"));
+            let output = std::process::Command::new("ffmpeg")
+                .args([
+                    "-y",
+                    "-v",
+                    "error",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "sine=frequency=440:duration=0.2:sample_rate=8000",
+                    "-c:a",
+                    codec,
+                ])
+                .arg(&path)
+                .output()
+                .expect("ffmpeg");
+            assert!(output.status.success(), "ffmpeg failed for {extension}");
+
+            let mut tag = Tag::new(tag_type);
+            assert!(tag.insert_text(
+                ItemKey::MusicBrainzReleaseType,
+                expected_release_type.to_owned()
+            ));
+            assert!(tag.insert_text(ItemKey::FlagCompilation, expected_compilation.to_owned()));
+            tag.save_to_path(&path, WriteOptions::default())
+                .expect("write native tag");
+
+            let (metadata, _, _) =
+                read_native_metadata(&path, path.to_str().expect("UTF-8 path"), 0)
+                    .expect("read native metadata");
+            assert_eq!(
+                metadata.raw["musicbrainz_release_type"],
+                serde_json::json!(expected_release_type),
+                "release type from {extension}"
+            );
+            assert_eq!(
+                metadata.raw["flag_compilation"],
+                serde_json::json!(expected_compilation),
+                "compilation flag from {extension}"
+            );
         }
     }
 

@@ -278,7 +278,7 @@ reproducible evidence are in
 
 ## 8. Phase 5 — Classification, novelty, and policy
 
-**Status:** Current implementation boundary.
+**Status:** Complete (2026-08-10).
 
 ### Objective
 
@@ -300,7 +300,13 @@ Replace scattered regex/validation/deletion behavior with explainable classifica
 - Directory-name evidence alone cannot trigger destructive action.
 - Policy decisions are explainable in API/UI.
 
+**Phase 5: COMPLETE (2026-08-10).** The consolidated decision, exact acceptance metrics, and
+reproducible evidence are in
+[design/evidence/phase-5/PHASE-5-REPORT.md](design/evidence/phase-5/PHASE-5-REPORT.md).
+
 ## 9. Phase 6 — Search and MQL
+
+**Status:** Current implementation boundary.
 
 ### Objective
 

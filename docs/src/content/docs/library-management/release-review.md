@@ -9,9 +9,22 @@ Release review is the human gate between inbound processing and the published ca
 decisions are explainable and audited: policy says *why* a Release was flagged, and operator
 decisions are remembered.
 
-:::caution[Planned documentation]
-The review workflow is part of the Rust rewrite's classification/policy and admin UI phases.
-Screens, decision types, and keyboard/operator flows will be documented from the shipped
-implementation. Design mockups under `/design/ui/reference/` in the repository are references
-only and are not published here as product screenshots.
+The implemented CLI can inspect and override a pending decision:
+
+```bash
+melodee policy inspect <release-id>
+melodee policy decide <release-id> review \
+  --actor <administrator-id> \
+  --reason "<operator-safe reason>"
+```
+
+The override requires the exact current sealed-manifest fingerprint and records the administrator
+and reason in append-only audit history. Use `accept`, `ignore`, or `quarantine` to complete and
+route a non-destructive decision. Choosing `delete` leaves the Release pending in `NeedsReview`;
+Phase 5 does not execute deletion or access media. See [Policies](../admin/policies/) for the full
+command and safety contract.
+
+:::caution[Graphical review is planned]
+The durable decision and CLI review workflow are implemented. Screens and keyboard/operator flows
+remain planned; repository design mockups are not product screenshots.
 :::

@@ -8,7 +8,7 @@ use melodee_ingestion::{
 };
 use melodee_persistence::{CatalogStore, WorkEngineConfig, WorkItemStore, migrate};
 use melodee_policy::PolicyConfig;
-use melodee_server::policy_worker::start_policy_loop;
+use melodee_server::policy_worker::{PolicyWorkerConfig, start_policy_loop};
 use melodee_server::{admin, policy_worker, system};
 use tokio::sync::oneshot;
 use tower_http::trace::TraceLayer;
@@ -81,6 +81,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     let work_config = WorkEngineConfig::from_env()?;
     let catalog_config = CatalogConfig::from_env()?;
+    let policy_config = PolicyConfig::from_env()?;
+    let policy_worker_config = PolicyWorkerConfig::from_env()?;
     let publication_roots = ingestion_config.publication_roots()?;
     let mut reconcile_handle = None;
     let mut inspection_handle = None;
@@ -163,13 +165,13 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         None
     };
 
-    let policy_handle = match PolicyConfig::from_env() {
-        Ok(config) => start_policy_loop(config, catalog_config, pool.clone()),
-        Err(e) => {
-            info!("invalid policy configuration: {e}, policy worker disabled");
-            None
-        }
-    };
+    let policy_handle = start_policy_loop(
+        policy_config,
+        policy_worker_config,
+        pool.clone(),
+        work_config,
+    )
+    .await?;
 
     let bind = system::configured_bind();
     let address: SocketAddr = bind.parse()?;

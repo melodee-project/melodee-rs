@@ -1,471 +1,760 @@
-//! Phase 5 policy worker: periodically claims Cataloged work items, classifies
-//! Releases, assesses Track novelty against the catalog, evaluates policy, and
-//! records durable decisions before transitioning the work item.
-//!
-//! This worker integrates the melodee-policy engine with the ingestion
-//! state machine (SPEC section 15, PRD-POLICY-001 through PRD-POLICY-008).
-//! It does NOT perform filesystem deletion; Delete dispositions are recorded
-//! as Pending decisions and route the work item to NeedsReview for operator
-//! confirmation (SPEC section 11.2: `NeedsReview --> Deleted: authorized decision recorded`).
+//! Independently bounded Phase 5 policy evaluation over authoritative
+//! PostgreSQL catalog facts. This module never opens source or canonical media.
 
-use std::sync::Arc;
-
-use melodee_domain::{
-    Confidence, DecisionCompletionState, Disposition, IngestionState, PolicyActor,
-    ReleasePolicyDecision, ReleasePolicyDecisionId, TrackNovelty, TrackNoveltyCategory,
-    TrackNoveltyId, TransitionKind,
+use std::{
+    env, fmt,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+    },
+    time::Instant,
 };
+
+use melodee_domain::{FailureClass, WorkErrorCode};
 use melodee_persistence::{
-    CatalogStore, PolicyEligibleWorkItem, PolicyStore, WorkEngineConfig, WorkItemStore, WorkerId,
+    PolicyClaim, PolicyEvaluationCommit, PolicyStore, PolicyStoreError, WorkEngineConfig, WorkerId,
 };
 use melodee_policy::{
-    NoveltyAssessment, NoveltyEngine, NoveltyInput, PolicyConfig, PolicyEngine, PolicyInput,
+    PolicyConfig, PolicyEngine, PolicyEngineError, PolicyEvaluation, default_rule_set,
+    evaluate_catalog_context,
 };
 use sqlx::PgPool;
+use thiserror::Error;
 use time::OffsetDateTime;
-use tracing::{debug, error, info, warn};
+use tokio::{task::JoinSet, time::MissedTickBehavior};
+use tracing::{Instrument, debug, error, info, info_span, warn};
 
 /// Environment key for enabling the policy worker.
 pub const ENV_POLICY_WORKER_ENABLED: &str = "MELODEE__POLICY__WORKER__ENABLED";
 
-/// Polling interval for the policy worker loop.
-const POLICY_POLL_INTERVAL_SECONDS: u64 = 60;
+/// Environment key for the independently bounded policy polling interval.
+pub const ENV_POLICY_WORKER_POLL_INTERVAL_SECONDS: &str =
+    "MELODEE__POLICY__WORKER__POLL_INTERVAL_SECONDS";
 
-/// Scheduler handle for graceful shutdown of the policy worker loop.
+const DEFAULT_POLICY_POLL_INTERVAL_SECONDS: u64 = 60;
+
+/// Process-level controls for the periodic policy worker.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PolicyWorkerConfig {
+    pub enabled: bool,
+    pub poll_interval: std::time::Duration,
+}
+
+impl PolicyWorkerConfig {
+    /// Loads and validates only the documented policy-worker environment keys.
+    pub fn from_env() -> Result<Self, PolicyWorkerConfigError> {
+        let enabled = env::var(ENV_POLICY_WORKER_ENABLED)
+            .ok()
+            .map(|raw| parse_bool(ENV_POLICY_WORKER_ENABLED, &raw))
+            .transpose()?
+            .unwrap_or(true);
+        let poll_seconds = env::var(ENV_POLICY_WORKER_POLL_INTERVAL_SECONDS)
+            .ok()
+            .map(|raw| parse_positive_u64(ENV_POLICY_WORKER_POLL_INTERVAL_SECONDS, &raw))
+            .transpose()?
+            .unwrap_or(DEFAULT_POLICY_POLL_INTERVAL_SECONDS);
+
+        Ok(Self {
+            enabled,
+            poll_interval: std::time::Duration::from_secs(poll_seconds),
+        })
+    }
+}
+
+impl Default for PolicyWorkerConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            poll_interval: std::time::Duration::from_secs(DEFAULT_POLICY_POLL_INTERVAL_SECONDS),
+        }
+    }
+}
+
+/// Invalid process-level policy-worker configuration.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PolicyWorkerConfigError {
+    key: &'static str,
+    value: String,
+    expected: &'static str,
+}
+
+impl fmt::Display for PolicyWorkerConfigError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "{} must be {}, got '{}'",
+            self.key, self.expected, self.value
+        )
+    }
+}
+
+impl std::error::Error for PolicyWorkerConfigError {}
+
+fn parse_bool(key: &'static str, raw: &str) -> Result<bool, PolicyWorkerConfigError> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "true" | "1" | "yes" | "on" => Ok(true),
+        "false" | "0" | "no" | "off" => Ok(false),
+        _ => Err(PolicyWorkerConfigError {
+            key,
+            value: raw.to_owned(),
+            expected: "true or false",
+        }),
+    }
+}
+
+fn parse_positive_u64(key: &'static str, raw: &str) -> Result<u64, PolicyWorkerConfigError> {
+    raw.parse::<u64>()
+        .ok()
+        .filter(|value| *value > 0)
+        .ok_or_else(|| PolicyWorkerConfigError {
+            key,
+            value: raw.to_owned(),
+            expected: "a positive integer",
+        })
+}
+
+/// Failures before a bounded policy pass can account for individual work.
+#[derive(Debug, Error)]
+pub enum PolicyWorkerError {
+    #[error("policy persistence failed")]
+    Store(#[from] PolicyStoreError),
+    #[error("policy engine setup or evaluation failed")]
+    Engine(#[from] PolicyEngineError),
+    #[error("policy batch/concurrency does not fit the durable claim bound")]
+    ClaimLimit,
+}
+
+/// Observable result of one bounded policy pass.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct PolicyWorkerStats {
+    pub claimed: usize,
+    pub evaluated: usize,
+    pub decisions_inserted: usize,
+    pub decisions_adopted: usize,
+    pub released: usize,
+    pub failed: usize,
+    pub errors: usize,
+    pub max_in_flight: usize,
+    pub set_based_mutation_statement_count: u32,
+    pub duration_ms: u128,
+}
+
+/// Sticky cooperative cancellation for work that has not started its atomic
+/// policy commit.
+#[derive(Debug, Clone, Default)]
+pub struct PolicyCancellation {
+    cancelled: Arc<AtomicBool>,
+    signal: Arc<tokio::sync::Notify>,
+}
+
+impl PolicyCancellation {
+    pub fn cancel(&self) {
+        self.cancelled.store(true, Ordering::Release);
+        // There is one scheduler waiter; a stored permit closes the race
+        // between its atomic check and async notification registration.
+        self.signal.notify_one();
+    }
+
+    #[must_use]
+    pub fn is_cancelled(&self) -> bool {
+        self.cancelled.load(Ordering::Acquire)
+    }
+
+    async fn cancelled(&self) {
+        if !self.is_cancelled() {
+            self.signal.notified().await;
+        }
+    }
+}
+
+/// Scheduler handle for graceful shutdown of the policy loop.
+#[derive(Debug)]
 pub struct PolicySchedulerHandle {
-    handle: tokio::task::JoinHandle<()>,
-    stop: tokio::sync::watch::Sender<()>,
+    join: tokio::task::JoinHandle<Option<PolicyWorkerStats>>,
+    cancellation: PolicyCancellation,
 }
 
 impl PolicySchedulerHandle {
-    pub async fn stop(self) {
-        let _ = self.stop.send(());
-        self.handle.await.unwrap_or_else(|e| {
-            tracing::warn!("policy worker task did not shut down cleanly: {e}");
-        });
+    /// Stop claiming new work, release pre-commit claims, and wait for any
+    /// already-started fenced transaction to commit or roll back atomically.
+    pub async fn stop(self) -> Option<PolicyWorkerStats> {
+        self.cancellation.cancel();
+        match self.join.await {
+            Ok(stats) => stats,
+            Err(join_error) => {
+                error!(%join_error, "policy scheduler task failed during shutdown");
+                None
+            }
+        }
     }
 }
 
-/// Starts the periodic policy evaluation loop.
-pub fn start_policy_loop(
+/// Provisions the configured immutable rule set and starts periodic policy
+/// evaluation. Rule-set conflicts fail startup rather than changing history.
+pub async fn start_policy_loop(
     policy_config: PolicyConfig,
-    catalog_config: melodee_catalog::CatalogConfig,
+    worker_config: PolicyWorkerConfig,
     pool: PgPool,
-) -> Option<PolicySchedulerHandle> {
-    let enabled = std::env::var(ENV_POLICY_WORKER_ENABLED)
-        .map(|v| v == "true" || v == "1")
-        .unwrap_or(true);
-
-    if !enabled {
-        info!("policy worker disabled by configuration");
-        return None;
-    }
-
-    if !catalog_config.enabled {
+    work_config: WorkEngineConfig,
+) -> Result<Option<PolicySchedulerHandle>, PolicyWorkerError> {
+    let store = PolicyStore;
+    let proposed_rule_set = default_rule_set(&policy_config)?;
+    let persisted_rule_set = store
+        .ensure_rule_set(&pool, &proposed_rule_set, OffsetDateTime::now_utc())
+        .await?;
+    let engine = PolicyEngine::with_rule_set(policy_config.clone(), persisted_rule_set)?;
+    if !worker_config.enabled {
         info!(
-            "policy worker disabled: catalog import is not enabled (no catalog data to evaluate)"
+            rule_set_id = %engine.rule_set_id(),
+            rule_set_version = engine.rule_set_version(),
+            "policy rule set loaded; worker disabled by configuration"
         );
-        return None;
+        return Ok(None);
     }
-
-    let (stop_tx, stop_rx) = tokio::sync::watch::channel::<()>(());
-    let policy_config = Arc::new(policy_config);
-    let engine = PolicyEngine::new(PolicyConfig {
-        batch_size: policy_config.batch_size,
-        concurrency: policy_config.concurrency,
-        destructive_confidence_bps: policy_config.destructive_confidence_bps,
-    });
-    let novelty_engine = NoveltyEngine;
-    let work_config = WorkEngineConfig::from_env().unwrap_or_default();
-    let worker_id = WorkerId::new();
-
-    let handle = tokio::spawn(async move {
-        info!("starting policy worker loop");
-        let mut interval =
-            tokio::time::interval(std::time::Duration::from_secs(POLICY_POLL_INTERVAL_SECONDS));
-        let mut stop_rx = stop_rx.clone();
-
+    let cancellation = PolicyCancellation::default();
+    let task_cancellation = cancellation.clone();
+    let join = tokio::spawn(async move {
+        info!(
+            rule_set_id = %engine.rule_set_id(),
+            rule_set_version = engine.rule_set_version(),
+            concurrency = policy_config.concurrency,
+            batch_size = policy_config.batch_size,
+            "starting policy worker loop"
+        );
+        let mut ticker = tokio::time::interval(worker_config.poll_interval);
+        ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
+        let mut latest = None;
         loop {
+            if task_cancellation.is_cancelled() {
+                break;
+            }
             tokio::select! {
-                _ = interval.tick() => {
-                    if let Err(e) = process_policy_batch(
+                _ = ticker.tick() => {
+                    match run_policy_once_with_cancellation(
                         &engine,
-                        &novelty_engine,
-                        &pool,
                         &policy_config,
+                        &store,
+                        &pool,
                         &work_config,
-                        &worker_id,
-                    )
-                    .await
-                    {
-                        error!("policy worker batch error: {e}");
+                        OffsetDateTime::now_utc(),
+                        &task_cancellation,
+                    ).await {
+                        Ok(stats) => latest = Some(stats),
+                        Err(worker_error) => error!(%worker_error, "policy pass failed before completion"),
                     }
                 }
-                _ = stop_rx.changed() => {
-                    info!("policy worker shutting down");
-                    break;
-                }
+                () = task_cancellation.cancelled() => break,
             }
         }
+        latest
     });
 
-    Some(PolicySchedulerHandle {
-        handle,
-        stop: stop_tx,
+    Ok(Some(PolicySchedulerHandle { join, cancellation }))
+}
+
+/// Runs one independently bounded policy pass. Useful to a one-shot operator
+/// command or a runtime integration test without starting a scheduler.
+pub async fn run_policy_once(
+    engine: &PolicyEngine,
+    config: &PolicyConfig,
+    store: &PolicyStore,
+    pool: &PgPool,
+    work_config: &WorkEngineConfig,
+    now: OffsetDateTime,
+) -> Result<PolicyWorkerStats, PolicyWorkerError> {
+    run_policy_once_with_cancellation(
+        engine,
+        config,
+        store,
+        pool,
+        work_config,
+        now,
+        &PolicyCancellation::default(),
+    )
+    .await
+}
+
+/// Cancellation-aware form used by the periodic scheduler and integration
+/// tests proving graceful lease release.
+pub async fn run_policy_once_with_cancellation(
+    engine: &PolicyEngine,
+    config: &PolicyConfig,
+    store: &PolicyStore,
+    pool: &PgPool,
+    work_config: &WorkEngineConfig,
+    now: OffsetDateTime,
+    cancellation: &PolicyCancellation,
+) -> Result<PolicyWorkerStats, PolicyWorkerError> {
+    let started = Instant::now();
+    let worker = WorkerId::new();
+    let claim_config = bounded_claim_config(config, work_config)?;
+    let claims = store
+        .claim_cataloged(pool, &worker, &claim_config, now)
+        .await?;
+    let mut stats = PolicyWorkerStats {
+        claimed: claims.len(),
+        ..PolicyWorkerStats::default()
+    };
+    if claims.is_empty() {
+        debug!("policy worker: no eligible Cataloged work items");
+        return Ok(stats);
+    }
+
+    let mut tasks = JoinSet::new();
+    let active_tasks = Arc::new(AtomicUsize::new(0));
+    let max_active_tasks = Arc::new(AtomicUsize::new(0));
+    for claim in claims {
+        let store = *store;
+        let pool = pool.clone();
+        let worker = worker.clone();
+        let engine = engine.clone();
+        let cancellation = cancellation.clone();
+        let lease_duration = work_config.lease_duration;
+        let retry_policy = work_config.retry_policy;
+        let active_tasks = Arc::clone(&active_tasks);
+        let max_active_tasks = Arc::clone(&max_active_tasks);
+        let span = info_span!(
+            "policy_evaluation",
+            work_item_id = %claim.item.id,
+            release_id = %claim.release_id,
+            worker_id = %worker,
+        );
+        tasks.spawn(
+            async move {
+                let _activity = TaskActivity::enter(&active_tasks, &max_active_tasks);
+                process_claim(
+                    &engine,
+                    &store,
+                    &pool,
+                    &worker,
+                    claim,
+                    lease_duration,
+                    &retry_policy,
+                    &cancellation,
+                )
+                .await
+            }
+            .instrument(span),
+        );
+    }
+    while let Some(result) = tasks.join_next().await {
+        match result {
+            Ok(TaskOutcome::Committed {
+                inserted,
+                decision,
+                set_based_mutation_statement_count,
+            }) => {
+                stats.evaluated += 1;
+                stats.set_based_mutation_statement_count = stats
+                    .set_based_mutation_statement_count
+                    .saturating_add(set_based_mutation_statement_count);
+                if inserted {
+                    stats.decisions_inserted += 1;
+                } else {
+                    stats.decisions_adopted += 1;
+                }
+                info!(
+                    release_id = %decision.release_id,
+                    disposition = decision.disposition.as_str(),
+                    inserted,
+                    "policy evaluation committed"
+                );
+            }
+            Ok(TaskOutcome::Released {
+                work_item_id,
+                result,
+            }) => match result {
+                Ok(()) => {
+                    stats.released += 1;
+                    debug!(%work_item_id, "cancelled policy claim released");
+                }
+                Err(release_error) => {
+                    stats.errors += 1;
+                    error!(%work_item_id, %release_error, "failed to release cancelled policy claim");
+                }
+            },
+            Ok(TaskOutcome::Failed {
+                work_item_id,
+                error: task_error,
+                recorded,
+            }) => {
+                stats.failed += 1;
+                if let Err(record_error) = recorded {
+                    stats.errors += 1;
+                    error!(%work_item_id, %task_error, %record_error, "policy failure could not be durably recorded");
+                } else {
+                    warn!(%work_item_id, %task_error, "policy failure durably recorded");
+                }
+            }
+            Err(join_error) => {
+                stats.failed += 1;
+                stats.errors += 1;
+                error!(%join_error, "policy evaluation task failed to join");
+            }
+        }
+    }
+    stats.max_in_flight = max_active_tasks.load(Ordering::Acquire);
+
+    stats.duration_ms = started.elapsed().as_millis();
+    info!(
+        claimed = stats.claimed,
+        evaluated = stats.evaluated,
+        decisions_inserted = stats.decisions_inserted,
+        decisions_adopted = stats.decisions_adopted,
+        released = stats.released,
+        failed = stats.failed,
+        errors = stats.errors,
+        max_in_flight = stats.max_in_flight,
+        set_based_mutation_statement_count = stats.set_based_mutation_statement_count,
+        duration_ms = stats.duration_ms,
+        "bounded policy pass completed"
+    );
+    Ok(stats)
+}
+
+enum TaskOutcome {
+    Committed {
+        inserted: bool,
+        decision: melodee_persistence::StoredPolicyDecision,
+        set_based_mutation_statement_count: u32,
+    },
+    Released {
+        work_item_id: uuid::Uuid,
+        result: Result<(), PolicyStoreError>,
+    },
+    Failed {
+        work_item_id: uuid::Uuid,
+        error: String,
+        recorded: Result<(), PolicyStoreError>,
+    },
+}
+
+struct TaskActivity<'a> {
+    active: &'a AtomicUsize,
+}
+
+impl<'a> TaskActivity<'a> {
+    fn enter(active: &'a AtomicUsize, maximum: &AtomicUsize) -> Self {
+        let current = active.fetch_add(1, Ordering::AcqRel).saturating_add(1);
+        maximum.fetch_max(current, Ordering::AcqRel);
+        Self { active }
+    }
+}
+
+impl Drop for TaskActivity<'_> {
+    fn drop(&mut self) {
+        self.active.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn process_claim(
+    engine: &PolicyEngine,
+    store: &PolicyStore,
+    pool: &PgPool,
+    worker: &WorkerId,
+    claim: PolicyClaim,
+    lease_duration: time::Duration,
+    retry_policy: &melodee_domain::RetryPolicy,
+    cancellation: &PolicyCancellation,
+) -> TaskOutcome {
+    if cancellation.is_cancelled() {
+        return release_claim(store, pool, worker, claim.item.id).await;
+    }
+    if let Err(store_error) = store
+        .renew_lease(
+            pool,
+            claim.item.id,
+            worker,
+            lease_duration,
+            OffsetDateTime::now_utc(),
+        )
+        .await
+    {
+        return TaskOutcome::Failed {
+            work_item_id: claim.item.id,
+            error: store_error.to_string(),
+            recorded: Err(store_error),
+        };
+    }
+    if cancellation.is_cancelled() {
+        return release_claim(store, pool, worker, claim.item.id).await;
+    }
+
+    let context = match store.load_context(pool, &claim).await {
+        Ok(context) => context,
+        Err(store_error) => {
+            return record_failure(
+                store,
+                pool,
+                worker,
+                claim.item.id,
+                &store_error,
+                retry_policy,
+            )
+            .await;
+        }
+    };
+    let mut evaluation = match evaluate_catalog_context(engine, &context, OffsetDateTime::now_utc())
+    {
+        Ok(evaluation) => evaluation,
+        Err(engine_error) => {
+            let error = engine_error.to_string();
+            let recorded = store
+                .record_failure(
+                    pool,
+                    claim.item.id,
+                    worker,
+                    WorkErrorCode::new("policy.invalid_facts"),
+                    &error,
+                    FailureClass::Permanent,
+                    retry_policy,
+                    OffsetDateTime::now_utc(),
+                )
+                .await
+                .map(|_| ());
+            return TaskOutcome::Failed {
+                work_item_id: claim.item.id,
+                error,
+                recorded,
+            };
+        }
+    };
+    // A durable decision/fact set can predate the state transition after a
+    // crash in an older binary. Keep those authoritative IDs and facts so the
+    // fenced commit can verify and adopt them instead of generating a conflict
+    // from retry-time evidence ordering or timestamps.
+    if let Some(classification) = &context.current_classification {
+        evaluation.classification = stored_classification(classification);
+    }
+    if let Some(decision) = &context.current_decision {
+        evaluation.decision = stored_decision(decision);
+    }
+    if cancellation.is_cancelled() {
+        return release_claim(store, pool, worker, claim.item.id).await;
+    }
+    if let Err(store_error) = store
+        .renew_lease(
+            pool,
+            claim.item.id,
+            worker,
+            lease_duration,
+            OffsetDateTime::now_utc(),
+        )
+        .await
+    {
+        return TaskOutcome::Failed {
+            work_item_id: claim.item.id,
+            error: store_error.to_string(),
+            recorded: Err(store_error),
+        };
+    }
+    if cancellation.is_cancelled() {
+        return release_claim(store, pool, worker, claim.item.id).await;
+    }
+
+    let PolicyEvaluation {
+        classification,
+        novelty,
+        decision,
+        ..
+    } = evaluation;
+    let (_, novelty_evaluation, track_novelty) = novelty.into_parts();
+    let request = PolicyEvaluationCommit {
+        work_item_id: claim.item.id,
+        release_id: claim.release_id,
+        source_fingerprint: claim.source_fingerprint,
+        classification,
+        novelty_evaluation,
+        track_novelty,
+        decision,
+        now: OffsetDateTime::now_utc(),
+    };
+    match store.commit_evaluation(pool, worker, &request).await {
+        Ok(result) => TaskOutcome::Committed {
+            inserted: result.inserted,
+            decision: result.decision,
+            set_based_mutation_statement_count: result.set_based_mutation_statement_count,
+        },
+        Err(store_error) => {
+            record_failure(
+                store,
+                pool,
+                worker,
+                claim.item.id,
+                &store_error,
+                retry_policy,
+            )
+            .await
+        }
+    }
+}
+
+fn stored_classification(
+    stored: &melodee_persistence::StoredReleaseClassification,
+) -> melodee_domain::ReleaseClassification {
+    melodee_domain::ReleaseClassification {
+        id: stored.id,
+        release_id: stored.release_id,
+        traits: stored.traits.clone(),
+        evidence: stored.evidence.clone(),
+        confidence: stored.confidence,
+        classified_at: stored.classified_at,
+        classifier_version: stored.classifier_version.clone(),
+    }
+}
+
+fn stored_decision(
+    stored: &melodee_persistence::StoredPolicyDecision,
+) -> melodee_domain::ReleasePolicyDecision {
+    melodee_domain::ReleasePolicyDecision {
+        id: stored.id,
+        release_id: stored.release_id,
+        rule_set_id: stored.rule_set_id,
+        rule_set_version: stored.rule_set_version,
+        matched_rule_ids: stored.matched_rule_ids.clone(),
+        disposition: stored.disposition,
+        evidence_summary: stored.evidence_summary.clone(),
+        source_fingerprint: stored.source_fingerprint.clone(),
+        actor: stored.actor.clone(),
+        decided_at: stored.decided_at,
+        completion_state: stored.completion_state,
+        completed_at: stored.completed_at,
+    }
+}
+
+async fn release_claim(
+    store: &PolicyStore,
+    pool: &PgPool,
+    worker: &WorkerId,
+    work_item_id: uuid::Uuid,
+) -> TaskOutcome {
+    TaskOutcome::Released {
+        work_item_id,
+        result: store
+            .release_lease(pool, work_item_id, worker, OffsetDateTime::now_utc())
+            .await,
+    }
+}
+
+async fn record_failure(
+    store: &PolicyStore,
+    pool: &PgPool,
+    worker: &WorkerId,
+    work_item_id: uuid::Uuid,
+    store_error: &PolicyStoreError,
+    retry_policy: &melodee_domain::RetryPolicy,
+) -> TaskOutcome {
+    let (code, class) = failure_disposition(store_error);
+    let error = store_error.to_string();
+    let recorded = store
+        .record_failure(
+            pool,
+            work_item_id,
+            worker,
+            WorkErrorCode::new(code),
+            &error,
+            class,
+            retry_policy,
+            OffsetDateTime::now_utc(),
+        )
+        .await
+        .map(|_| ());
+    TaskOutcome::Failed {
+        work_item_id,
+        error,
+        recorded,
+    }
+}
+
+fn failure_disposition(error: &PolicyStoreError) -> (&'static str, FailureClass) {
+    match error {
+        PolicyStoreError::Database(_) | PolicyStoreError::Work(_) => {
+            ("policy.transient", FailureClass::Retryable)
+        }
+        PolicyStoreError::RuleSetNotFound(_) | PolicyStoreError::RuleSetConflict => {
+            ("policy.rule_set", FailureClass::Permanent)
+        }
+        PolicyStoreError::FingerprintMismatch => {
+            ("policy.fingerprint_mismatch", FailureClass::Permanent)
+        }
+        PolicyStoreError::ForeignFacts
+        | PolicyStoreError::IncompleteFacts
+        | PolicyStoreError::DecisionConflict
+        | PolicyStoreError::AuthorizationRequired
+        | PolicyStoreError::NotCataloged(_)
+        | PolicyStoreError::NumericOverflow
+        | PolicyStoreError::CorruptValue(_)
+        | PolicyStoreError::Serialization(_)
+        | PolicyStoreError::Domain(_)
+        | PolicyStoreError::ScopeExceeded { .. } => {
+            ("policy.invalid_facts", FailureClass::Permanent)
+        }
+    }
+}
+
+fn bounded_claim_config(
+    config: &PolicyConfig,
+    work_config: &WorkEngineConfig,
+) -> Result<WorkEngineConfig, PolicyWorkerError> {
+    let limit = config.batch_size.min(config.concurrency);
+    let claim_batch_size = u32::try_from(limit).map_err(|_| PolicyWorkerError::ClaimLimit)?;
+    if claim_batch_size == 0 {
+        return Err(PolicyWorkerError::ClaimLimit);
+    }
+    Ok(WorkEngineConfig {
+        claim_batch_size,
+        ..*work_config
     })
 }
 
-/// Processes one batch of Cataloged work items: classifies, assesses novelty,
-/// evaluates policy, and records durable decisions before state transitions.
-async fn process_policy_batch(
-    engine: &PolicyEngine,
-    novelty_engine: &NoveltyEngine,
-    pool: &PgPool,
-    _config: &PolicyConfig,
-    work_config: &WorkEngineConfig,
-    worker_id: &WorkerId,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let catalog_store = CatalogStore;
-    let policy_store = PolicyStore;
-    let work_store = WorkItemStore;
-    let now = OffsetDateTime::now_utc();
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::expect_used)]
 
-    let claimed = catalog_store
-        .claim_policy_eligible(pool, worker_id, work_config, now)
-        .await?;
+    use super::*;
 
-    if claimed.is_empty() {
-        debug!("policy worker: no eligible Cataloged work items");
-        return Ok(());
+    #[test]
+    fn policy_worker_config_defaults_are_enabled_and_bounded() {
+        let config = PolicyWorkerConfig::default();
+        assert!(config.enabled);
+        assert_eq!(config.poll_interval, std::time::Duration::from_secs(60));
     }
 
-    info!(
-        "policy worker: claimed {} Cataloged releases for policy evaluation",
-        claimed.len()
-    );
-
-    for work_item in &claimed {
-        if let Err(e) = process_single_release(
-            engine,
-            novelty_engine,
-            pool,
-            &work_store,
-            &catalog_store,
-            &policy_store,
-            worker_id,
-            work_item,
-            now,
-        )
-        .await
-        {
-            warn!(
-                "policy worker: error processing release work item {}: {}",
-                work_item.item.id, e
-            );
-            let _ = work_store
-                .transition_for_policy(
-                    pool,
-                    work_item.item.id,
-                    worker_id,
-                    TransitionKind::Worker,
-                    IngestionState::Failed,
-                    Some("policy_evaluation_error"),
-                    now,
-                )
-                .await;
-        }
+    #[test]
+    fn policy_worker_boolean_parser_is_strict_and_operator_friendly() {
+        assert_eq!(parse_bool(ENV_POLICY_WORKER_ENABLED, "yes"), Ok(true));
+        assert_eq!(parse_bool(ENV_POLICY_WORKER_ENABLED, "OFF"), Ok(false));
+        assert!(parse_bool(ENV_POLICY_WORKER_ENABLED, "sometimes").is_err());
     }
 
-    Ok(())
-}
-
-/// Processes a single Cataloged release through the policy pipeline.
-#[allow(clippy::too_many_arguments)]
-async fn process_single_release(
-    engine: &PolicyEngine,
-    novelty_engine: &NoveltyEngine,
-    pool: &PgPool,
-    work_store: &WorkItemStore,
-    _catalog_store: &CatalogStore,
-    policy_store: &PolicyStore,
-    worker_id: &WorkerId,
-    work_item: &PolicyEligibleWorkItem,
-    now: OffsetDateTime,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let release_id = melodee_domain::ReleaseId::from_uuid(work_item.release_id);
-
-    // Check if a policy decision already exists for this release.
-    if let Some(existing) = policy_store.get_decision(pool, release_id).await? {
-        debug!(
-            "policy worker: release {} already has decision {:?}, skipping",
-            release_id, existing.disposition
+    #[test]
+    fn policy_worker_poll_interval_rejects_zero_and_invalid_values() {
+        assert!(parse_positive_u64(ENV_POLICY_WORKER_POLL_INTERVAL_SECONDS, "0").is_err());
+        assert!(parse_positive_u64(ENV_POLICY_WORKER_POLL_INTERVAL_SECONDS, "soon").is_err());
+        assert_eq!(
+            parse_positive_u64(ENV_POLICY_WORKER_POLL_INTERVAL_SECONDS, "7"),
+            Ok(7)
         );
-        match existing.disposition {
-            Disposition::Accept => {
-                work_item
-                    .item
-                    .state
-                    .ensure_transition(IngestionState::Indexing, TransitionKind::Worker)?;
-                work_store
-                    .transition_for_policy(
-                        pool,
-                        work_item.item.id,
-                        worker_id,
-                        TransitionKind::Worker,
-                        IngestionState::Indexing,
-                        Some("policy_decision_applied"),
-                        now,
-                    )
-                    .await?;
-            }
-            Disposition::Ignore => {
-                work_store
-                    .transition_for_policy(
-                        pool,
-                        work_item.item.id,
-                        worker_id,
-                        TransitionKind::Worker,
-                        IngestionState::Ignored,
-                        Some("policy_decision_applied"),
-                        now,
-                    )
-                    .await?;
-            }
-            Disposition::Quarantine => {
-                work_store
-                    .transition_for_policy(
-                        pool,
-                        work_item.item.id,
-                        worker_id,
-                        TransitionKind::Worker,
-                        IngestionState::Quarantined,
-                        Some("policy_decision_applied"),
-                        now,
-                    )
-                    .await?;
-            }
-            Disposition::Delete | Disposition::Review => {
-                // Leave in Cataloged; operator must review or confirm.
-                debug!(
-                    "policy worker: release {} in state {:?} with disposition {:?}",
-                    release_id, work_item.item.state, existing.disposition
-                );
-            }
-        }
-        return Ok(());
     }
 
-    // Load catalog track facts for novelty analysis.
-    let track_facts = policy_store.load_release_tracks(pool, release_id).await?;
+    #[test]
+    fn policy_claim_is_bounded_by_batch_and_concurrency() {
+        let config = PolicyConfig {
+            batch_size: 200,
+            concurrency: 7,
+            ..PolicyConfig::default()
+        };
+        let bounded = bounded_claim_config(&config, &WorkEngineConfig::default())
+            .expect("validated policy bounds fit u32");
+        assert_eq!(bounded.claim_batch_size, 7);
+    }
 
-    // Load catalog novelty context (duplicate/identity sets) in a single query.
-    let (catalog_exact_duplicates, catalog_known_identities) = policy_store
-        .load_catalog_novelty_context(pool, release_id)
-        .await?;
-
-    // Build novelty input from catalog facts.
-    let novelty_input = build_novelty_input(
-        release_id,
-        &track_facts,
-        &catalog_exact_duplicates,
-        &catalog_known_identities,
-        now,
-    );
-    let assessment: NoveltyAssessment = novelty_engine
-        .assess(&novelty_input)
-        .map_err(|e| format!("novelty assessment failed: {e}"))?;
-
-    // Determine corrupt media from catalog findings.
-    let has_corrupt_media = track_facts
-        .iter()
-        .any(|f| f.byte_hash.is_none() && !f.has_confirmed_audio_identity);
-
-    // Build PolicyInput — the engine performs classification internally.
-    let policy_input = PolicyInput {
-        release_id,
-        title: None,
-        directory_name: Some(work_item.item.current_path.clone()),
-        parent_directory_name: Some(work_item.item.source_path.clone()),
-        structured_tag_traits: vec![],
-        embedded_external_id_traits: vec![],
-        catalog_known_release_traits: vec![],
-        existing_classification_traits: Default::default(),
-        actors: vec![PolicyActor::System {
-            policy_rule_set_version: engine.rule_set_version(),
-        }],
-        novelty_category: assessment.category,
-        has_corrupt_media,
-        now,
-    };
-
-    // Evaluate policy (engine classifies internally from PolicyInput).
-    let evaluation = engine.evaluate(&policy_input);
-
-    // Persist classification, novelty, and decision atomically.
-    let mut tx = pool.begin().await?;
-    policy_store
-        .store_classification_tx(&mut tx, &evaluation.classification)
-        .await?;
-
-    policy_store
-        .store_novelty_tx(&mut tx, &assessment.evaluation, &assessment.track_novelty)
-        .await?;
-
-    // Record the decision as Pending (not completed). Completion happens
-    // separately after destructive action is executed.
-    let decision = ReleasePolicyDecision {
-        id: ReleasePolicyDecisionId::new(),
-        release_id,
-        rule_set_id: engine.rule_set_id(),
-        rule_set_version: engine.rule_set_version(),
-        matched_rule_ids: evaluation.decision.matched_rule_ids.clone(),
-        disposition: evaluation.decision.disposition,
-        evidence_summary: evaluation.decision.evidence_summary.clone(),
-        source_fingerprint: Some(format!(
-            "policy_worker_v{}_{}",
-            engine.rule_set_version(),
-            now.unix_timestamp()
-        )),
-        actor: PolicyActor::System {
-            policy_rule_set_version: engine.rule_set_version(),
-        },
-        decided_at: now,
-        completion_state: DecisionCompletionState::Pending,
-        completed_at: None,
-    };
-
-    policy_store.record_decision(&mut tx, &decision).await?;
-
-    // Commit the transaction (atomic: classification + novelty + decision).
-    tx.commit().await?;
-
-    // Transition the work item based on disposition.
-    let target_state = match evaluation.decision.disposition {
-        Disposition::Accept => IngestionState::Indexing,
-        Disposition::Review => IngestionState::NeedsReview,
-        Disposition::Ignore => IngestionState::Ignored,
-        Disposition::Quarantine => IngestionState::Quarantined,
-        Disposition::Delete => {
-            // Delete requires operator authorization: route to NeedsReview
-            // with a Pending Delete decision. Operator confirms via the
-            // NeedsReview -> Deleted transition.
-            IngestionState::NeedsReview
-        }
-    };
-
-    work_item
-        .item
-        .state
-        .ensure_transition(target_state, TransitionKind::Worker)?;
-
-    let reason_str = format!(
-        "policy_disposition_{}",
-        evaluation.decision.disposition.as_str()
-    );
-
-    work_store
-        .transition_for_policy(
-            pool,
-            work_item.item.id,
-            worker_id,
-            TransitionKind::Worker,
-            target_state,
-            Some(&reason_str),
-            now,
-        )
-        .await?;
-
-    info!(
-        "policy worker: release {} -> {:?} (disposition: {:?})",
-        release_id, target_state, evaluation.decision.disposition
-    );
-
-    Ok(())
-}
-
-/// Builds a NoveltyInput from catalog track facts and catalog novelty context.
-fn build_novelty_input(
-    release_id: melodee_domain::ReleaseId,
-    track_facts: &[melodee_persistence::CatalogTrackFact],
-    catalog_exact_duplicates: &std::collections::BTreeSet<melodee_domain::AudioIdentityId>,
-    catalog_known_identities: &std::collections::BTreeSet<melodee_domain::AudioIdentityId>,
-    now: OffsetDateTime,
-) -> NoveltyInput {
-    let evaluator_version = "melodee-policy-novelty-v1".to_string();
-
-    let track_novelty: Vec<TrackNovelty> = track_facts
-        .iter()
-        .map(|f| {
-            let track_id = melodee_domain::TrackId::from_uuid(f.track_id);
-            let audio_identity_id = melodee_domain::AudioIdentityId::from_uuid(f.audio_identity_id);
-            let media_asset_id = f
-                .media_asset_id
-                .map(melodee_domain::MediaAssetId::from_uuid);
-
-            let (category, evidence_kind, confidence_bps, detail) =
-                if catalog_exact_duplicates.contains(&audio_identity_id) {
-                    (
-                        TrackNoveltyCategory::ExactDuplicate,
-                        melodee_domain::NoveltyEvidenceKind::ByteHashMatch,
-                        9_000u16,
-                        "byte-hash match found in catalog outside this Release",
-                    )
-                } else if catalog_known_identities.contains(&audio_identity_id) {
-                    (
-                        TrackNoveltyCategory::KnownAudioIdentity,
-                        melodee_domain::NoveltyEvidenceKind::AudioIdentityMatch,
-                        8_000u16,
-                        "audio identity confirmed in catalog outside this Release",
-                    )
-                } else if f.has_confirmed_audio_identity {
-                    (
-                        TrackNoveltyCategory::KnownAudioIdentity,
-                        melodee_domain::NoveltyEvidenceKind::AudioIdentityMatch,
-                        7_000u16,
-                        "audio identity has local match decision, not yet in catalog",
-                    )
-                } else {
-                    (
-                        TrackNoveltyCategory::NewTrack,
-                        melodee_domain::NoveltyEvidenceKind::NoCatalogMatch,
-                        5_000u16,
-                        "no catalog match for this Track's audio identity",
-                    )
-                };
-
-            let confidence = Confidence::new(confidence_bps).unwrap_or(Confidence::zero());
-
-            TrackNovelty {
-                id: TrackNoveltyId::new(),
-                release_id,
-                track_id,
-                audio_identity_id,
-                media_asset_id,
-                category,
-                confidence,
-                evidence_kind,
-                detail: detail.to_string(),
-                evaluated_at: now,
-            }
-        })
-        .collect();
-
-    NoveltyInput {
-        release_id,
-        track_audio: track_facts
-            .iter()
-            .map(|f| {
-                (
-                    melodee_domain::TrackId::from_uuid(f.track_id),
-                    melodee_domain::AudioIdentityId::from_uuid(f.audio_identity_id),
-                    f.byte_hash.clone(),
-                )
-            })
-            .collect(),
-        catalog_exact_duplicates: catalog_exact_duplicates.clone(),
-        catalog_known_identities: catalog_known_identities.clone(),
-        track_novelty,
-        evaluator_version,
-        now,
+    #[tokio::test]
+    async fn cancellation_is_sticky_before_waiter_registration() {
+        let cancellation = PolicyCancellation::default();
+        cancellation.cancel();
+        cancellation.cancelled().await;
+        assert!(cancellation.is_cancelled());
     }
 }

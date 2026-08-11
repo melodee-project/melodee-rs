@@ -67,6 +67,51 @@ pub async fn seed_published_release(
     ordinal: u32,
     presentation: CatalogFixturePresentation<'_>,
 ) -> PublishedCatalogFixture {
+    seed_published_release_with_normalized_hash(
+        db,
+        ordinal,
+        presentation,
+        deterministic_hash('a', ordinal),
+    )
+    .await
+}
+
+/// Variant for synthetic duplicate-catalog truth: the complete immutable v3
+/// handoff is constructed with the caller's already validated byte hash.
+pub async fn seed_published_release_with_normalized_hash(
+    db: &TestDb,
+    ordinal: u32,
+    presentation: CatalogFixturePresentation<'_>,
+    normalized_byte_hash: String,
+) -> PublishedCatalogFixture {
+    seed_published_release_with_options(db, ordinal, presentation, normalized_byte_hash, false)
+        .await
+}
+
+/// Complete immutable handoff carrying a real inspection read-error fact for
+/// Phase 5 quarantine acceptance.
+pub async fn seed_published_release_with_read_error(
+    db: &TestDb,
+    ordinal: u32,
+    presentation: CatalogFixturePresentation<'_>,
+) -> PublishedCatalogFixture {
+    seed_published_release_with_options(
+        db,
+        ordinal,
+        presentation,
+        deterministic_hash('a', ordinal),
+        true,
+    )
+    .await
+}
+
+async fn seed_published_release_with_options(
+    db: &TestDb,
+    ordinal: u32,
+    presentation: CatalogFixturePresentation<'_>,
+    normalized_byte_hash: String,
+    bytes_read_errors: bool,
+) -> PublishedCatalogFixture {
     let store = WorkItemStore;
     let config = test_config();
     let source_path = format!("phase4/source/release-{ordinal:04}");
@@ -93,7 +138,6 @@ pub async fn seed_published_release(
 
     let source_file = format!("disc-01/{ordinal:02} - {}.flac", presentation.track_title);
     let source_byte_hash = deterministic_hash('1', ordinal);
-    let normalized_byte_hash = deterministic_hash('a', ordinal);
     let observed_metadata = ObservedMetadata {
         album: Some(presentation.release_title.to_owned()),
         album_artist: Some(presentation.release_artist.to_owned()),
@@ -152,7 +196,7 @@ pub async fn seed_published_release(
             findings: Vec::new(),
             embedded_artwork: Vec::new(),
             sidecar_type: None,
-            bytes_read_errors: false,
+            bytes_read_errors,
         }],
         vec![ObservedTrack {
             file_path: source_file.clone(),

@@ -1,11 +1,16 @@
-use std::{env, process::Command};
+use std::{collections::BTreeMap, env, process::Command};
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use melodee_catalog::{CatalogConfig, import_once};
 use melodee_domain::{IngestionState, ReleaseWorkItem};
 use melodee_ingestion::{IngestionConfig, publish_once, reconcile_all_sources, validate_once};
-use melodee_persistence::{CatalogStore, WorkEngineConfig, WorkItemStore, WorkerId, migrate};
-use melodee_policy::{NoveltyEngine, NoveltyInput, PolicyConfig, PolicyDryRunner, PolicyEngine};
+use melodee_persistence::{
+    CatalogStore, PolicyAdminOverrideRequest, PolicyStore, WorkEngineConfig, WorkItemStore,
+    WorkerId, migrate,
+};
+use melodee_policy::{
+    PolicyConfig, PolicyEngine, PolicyEvaluation, default_rule_set, evaluate_catalog_context,
+};
 use sqlx::PgPool;
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -126,18 +131,19 @@ enum CatalogCommands {
 
 #[derive(Debug, Subcommand)]
 enum PolicyCommands {
-    /// Dry-run policy evaluation against the catalog (no destructive action).
-    DryRun {
-        /// Maximum number of Releases to evaluate.
-        #[arg(long, default_value_t = 100)]
-        limit: u32,
-    },
     /// Test policy rules against a sample of existing catalog Releases.
     /// Reports matched-rule counts, existing dispositions, and destructive impact.
     Test {
         /// Maximum number of Releases to test.
-        #[arg(long, default_value_t = 100)]
+        #[arg(
+            long,
+            default_value_t = 100,
+            value_parser = clap::value_parser!(u32).range(1..=10_000)
+        )]
         limit: u32,
+        /// Stable administrator identity recorded with the test summary.
+        #[arg(long, value_parser = parse_nonblank)]
+        actor: String,
     },
     /// Evaluate a single Release: classify, assess novelty, and produce a
     /// disposition without persisting or executing.
@@ -145,18 +151,49 @@ enum PolicyCommands {
         /// Release UUID (v7).
         id: Uuid,
     },
-    /// Record and optionally complete a policy decision for a Release.
+    /// Inspect the durable current policy decision and audit history.
+    Inspect {
+        /// Release UUID (v7).
+        id: Uuid,
+    },
+    /// Record an explicit Administrator override as a pending decision.
     Decide {
         /// Release UUID (v7).
         id: Uuid,
-        /// Apply the decision as completed (marks destructive action as done).
+        /// Administrator-selected disposition.
+        disposition: PolicyDispositionArg,
+        /// Stable administrator identity recorded in the audit trail.
         #[arg(long)]
-        complete: bool,
+        actor: String,
+        /// Operator-safe reason recorded with the override.
+        #[arg(long)]
+        reason: String,
     },
     /// Show default policy rules.
     Rules,
     /// Show current policy configuration.
     Config,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum PolicyDispositionArg {
+    Accept,
+    Review,
+    Ignore,
+    Quarantine,
+    Delete,
+}
+
+impl From<PolicyDispositionArg> for melodee_domain::Disposition {
+    fn from(value: PolicyDispositionArg) -> Self {
+        match value {
+            PolicyDispositionArg::Accept => Self::Accept,
+            PolicyDispositionArg::Review => Self::Review,
+            PolicyDispositionArg::Ignore => Self::Ignore,
+            PolicyDispositionArg::Quarantine => Self::Quarantine,
+            PolicyDispositionArg::Delete => Self::Delete,
+        }
+    }
 }
 
 fn command_available(command: &str, version_argument: &str) -> bool {
@@ -213,7 +250,8 @@ async fn main() {
             println!("Phase 2: complete — see design/evidence/phase-2/PHASE-2-REPORT.md");
             println!("Phase 3: complete — see design/evidence/phase-3/PHASE-3-REPORT.md");
             println!("Phase 4: complete — see design/evidence/phase-4/PHASE-4-REPORT.md");
-            println!("Phase 5: active — see IMPLEMENTATION.md");
+            println!("Phase 5: complete — see design/evidence/phase-5/PHASE-5-REPORT.md");
+            println!("Phase 6: active — see IMPLEMENTATION.md");
             println!("Read: PRD.md, SPEC.md, IMPLEMENTATION.md, AGENTS.md");
         }
         Commands::Doctor => {
@@ -699,63 +737,39 @@ async fn main() {
                 }
             };
             let pool = pool().await;
-            let engine = PolicyEngine::new(policy_config.clone());
             let store = melodee_persistence::PolicyStore;
-            match command {
-                PolicyCommands::DryRun { limit } => {
-                    let now = OffsetDateTime::now_utc();
-                    match run_policy_dry_run(&engine, &store, &pool, limit, now).await {
-                        Ok(stats) => {
-                            println!(
-                                "dry-run: evaluated={} decisions={} errors={} duration_ms={}",
-                                stats.evaluated, stats.decisions, stats.errors, stats.duration_ms
-                            );
-                        }
-                        Err(error) => {
-                            eprintln!("error: {error}");
-                            std::process::exit(1);
-                        }
-                    }
+            let now = OffsetDateTime::now_utc();
+            let engine = match load_policy_engine(&store, &pool, &policy_config, now).await {
+                Ok(engine) => engine,
+                Err(error) => {
+                    eprintln!("error: unable to load immutable policy rule set: {error}");
+                    std::process::exit(1);
                 }
-                PolicyCommands::Test { limit } => {
-                    let now = OffsetDateTime::now_utc();
-                    match run_policy_test(&engine, &store, &pool, limit, now).await {
-                        Ok(summary) => {
+            };
+            match command {
+                PolicyCommands::Test { limit, actor } => {
+                    match run_policy_test(&engine, &store, &pool, limit, actor, now).await {
+                        Ok(report) => {
                             println!(
-                                "test: evaluated={} by_disposition={{accept={}, review={}, ignore={}, quarantine={}, delete={}}} destructive_impact={} samples={}",
-                                summary.total_releases_evaluated,
-                                summary
-                                    .disposition_counts
-                                    .iter()
-                                    .find(|(d, _)| d.as_str() == "accept")
-                                    .map(|(_, c)| c)
-                                    .unwrap_or(&0),
-                                summary
-                                    .disposition_counts
-                                    .iter()
-                                    .find(|(d, _)| d.as_str() == "review")
-                                    .map(|(_, c)| c)
-                                    .unwrap_or(&0),
-                                summary
-                                    .disposition_counts
-                                    .iter()
-                                    .find(|(d, _)| d.as_str() == "ignore")
-                                    .map(|(_, c)| c)
-                                    .unwrap_or(&0),
-                                summary
-                                    .disposition_counts
-                                    .iter()
-                                    .find(|(d, _)| d.as_str() == "quarantine")
-                                    .map(|(_, c)| c)
-                                    .unwrap_or(&0),
-                                summary
-                                    .disposition_counts
-                                    .iter()
-                                    .find(|(d, _)| d.as_str() == "delete")
-                                    .map(|(_, c)| c)
-                                    .unwrap_or(&0),
-                                summary.destructive_impact_count,
-                                summary.sample_release_ids.len()
+                                "test: evaluated={} errors={} destructive_impact={} samples={}",
+                                report.summary.total_releases_evaluated,
+                                report.errors,
+                                report.summary.destructive_impact_count,
+                                report.summary.sample_release_ids.len()
+                            );
+                            println!(
+                                "  proposed_dispositions: {:?}",
+                                report.proposed_dispositions
+                            );
+                            println!("  matched_rules: {:?}", report.matched_rules);
+                            println!(
+                                "  existing_dispositions: {:?}",
+                                report.existing_dispositions
+                            );
+                            println!("  existing_states: {:?}", report.existing_states);
+                            println!(
+                                "  sample_release_ids: {:?}",
+                                report.summary.sample_release_ids
                             );
                         }
                         Err(error) => {
@@ -765,16 +779,20 @@ async fn main() {
                     }
                 }
                 PolicyCommands::Evaluate { id } => {
-                    let now = OffsetDateTime::now_utc();
                     let release_id = melodee_domain::ReleaseId::from_uuid(id);
                     match run_policy_evaluate(&engine, &store, &pool, release_id, now).await {
                         Ok(output) => {
                             println!(
-                                "evaluate: release_id={} disposition={:?} confidence={} rules={:?}",
+                                "evaluate: release_id={} disposition={} potential_destructive={} confidence={} existing_disposition={} rules={:?} evidence={}",
                                 id,
-                                output.decision.disposition,
+                                output.decision.disposition.as_str(),
+                                output.decision.disposition.is_destructive(),
                                 output.classification.confidence.basis_points(),
-                                output.decision.matched_rule_ids.iter().collect::<Vec<_>>()
+                                output
+                                    .existing_disposition
+                                    .map_or("none", melodee_domain::Disposition::as_str),
+                                output.decision.matched_rule_ids,
+                                output.decision.evidence_summary,
                             );
                         }
                         Err(error) => {
@@ -783,23 +801,43 @@ async fn main() {
                         }
                     }
                 }
-                PolicyCommands::Decide { id, complete } => {
-                    let now = OffsetDateTime::now_utc();
+                PolicyCommands::Inspect { id } => {
                     let release_id = melodee_domain::ReleaseId::from_uuid(id);
-                    match run_policy_decide(&engine, &store, &pool, release_id, now, complete).await
+                    match run_policy_inspect(&store, &pool, release_id).await {
+                        Ok(()) => {}
+                        Err(error) => {
+                            eprintln!("error: {error}");
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                PolicyCommands::Decide {
+                    id,
+                    disposition,
+                    actor,
+                    reason,
+                } => {
+                    let release_id = melodee_domain::ReleaseId::from_uuid(id);
+                    match run_policy_decide(
+                        &store,
+                        &pool,
+                        release_id,
+                        disposition.into(),
+                        actor,
+                        reason,
+                        now,
+                    )
+                    .await
                     {
-                        Ok(disposition) => {
-                            if complete {
-                                println!(
-                                    "decide: release_id={} disposition={:?} (completed)",
-                                    id, disposition
-                                );
-                            } else {
-                                println!(
-                                    "decide: release_id={} disposition={:?} (pending)",
-                                    id, disposition
-                                );
-                            }
+                        Ok(decision) => {
+                            println!(
+                                "decide: release_id={} disposition={} completion_state={} actor={:?} reason={}",
+                                id,
+                                decision.disposition.as_str(),
+                                decision.completion_state.as_str(),
+                                decision.actor,
+                                decision.override_reason.as_deref().unwrap_or("none"),
+                            );
                         }
                         Err(error) => {
                             eprintln!("error: {error}");
@@ -808,19 +846,39 @@ async fn main() {
                     }
                 }
                 PolicyCommands::Rules => {
+                    println!("rule_set_id: {}", engine.rule_set_id());
                     println!("rule_set_version: {}", engine.rule_set_version());
-                    println!("phase5-default-rules:");
-                    for rule in &melodee_policy::default_rules().rules {
-                        println!("  {}", rule);
+                    println!("rule_set_name: {}", engine.rule_set().name);
+                    for rule in &engine.rule_set().rules {
+                        println!(
+                            "  {} type={} disposition={} confidence_threshold={:?}",
+                            rule.id,
+                            rule.rule_type.as_str(),
+                            rule.disposition.as_str(),
+                            rule.confidence_threshold.map(|value| value.basis_points()),
+                        );
                     }
                 }
                 PolicyCommands::Config => {
                     println!("policy config:");
                     println!("  batch_size: {}", policy_config.batch_size);
                     println!("  concurrency: {}", policy_config.concurrency);
+                    println!("  rule_set_version: {}", policy_config.rule_set_version);
                     println!(
                         "  destructive_confidence_bps: {}",
                         policy_config.destructive_confidence_bps
+                    );
+                    println!(
+                        "  redundant_greatest_hits_disposition: {}",
+                        policy_config.redundant_greatest_hits_disposition.as_str()
+                    );
+                    println!(
+                        "  novel_greatest_hits_disposition: {}",
+                        policy_config.novel_greatest_hits_disposition.as_str()
+                    );
+                    println!(
+                        "  uncertain_greatest_hits_disposition: {}",
+                        policy_config.uncertain_greatest_hits_disposition.as_str()
                     );
                 }
             }
@@ -965,352 +1023,266 @@ fn print_reconcile_result(result: &melodee_ingestion::ReconcileResult) {
     println!("  duration_ms: {}", result.stats.duration_ms);
 }
 
-async fn run_policy_dry_run(
-    engine: &PolicyEngine,
-    store: &melodee_persistence::PolicyStore,
-    pool: &PgPool,
-    limit: u32,
-    now: OffsetDateTime,
-) -> Result<melodee_policy::PolicyPassStats, Box<dyn std::error::Error>> {
-    let rows: Vec<(uuid::Uuid, String)> =
-        sqlx::query_as(r#"SELECT id, title FROM releases ORDER BY id LIMIT $1"#)
-            .bind(i64::from(limit.min(500)))
-            .fetch_all(pool)
-            .await?;
-
-    let inputs = build_policy_inputs(store, pool, &rows, now).await?;
-    let runner = PolicyDryRunner::new(engine.clone());
-    let results = runner.run_dry_run(inputs, now);
-    Ok(results.stats)
+#[derive(Debug)]
+struct PolicyTestReport {
+    summary: melodee_domain::PolicyTestSummary,
+    proposed_dispositions: BTreeMap<String, u32>,
+    matched_rules: BTreeMap<String, u32>,
+    existing_dispositions: BTreeMap<String, u32>,
+    existing_states: BTreeMap<String, u32>,
+    errors: u32,
 }
 
-/// Builds PolicyInput for a batch of Releases by loading existing classifications,
-/// novelty assessments, and catalog context from the database.
-async fn build_policy_inputs(
-    store: &melodee_persistence::PolicyStore,
-    pool: &PgPool,
-    rows: &[(uuid::Uuid, String)],
-    now: OffsetDateTime,
-) -> Result<Vec<melodee_policy::PolicyInput>, Box<dyn std::error::Error>> {
-    let mut inputs = Vec::with_capacity(rows.len());
-    for (id, title) in rows {
-        let release_id = melodee_domain::ReleaseId::from_uuid(*id);
-
-        // Load existing classification if present.
-        let existing_traits = store
-            .load_classification(pool, release_id)
-            .await?
-            .map(|c| c.traits)
-            .unwrap_or_default();
-
-        // Load catalog tracks and compute novelty category.
-        let track_facts = store.load_release_tracks(pool, release_id).await?;
-        let novelty_category =
-            compute_novelty_category(store, pool, release_id, &track_facts).await?;
-
-        inputs.push(melodee_policy::PolicyInput {
-            release_id,
-            title: Some(title.clone()),
-            directory_name: None,
-            parent_directory_name: None,
-            structured_tag_traits: Vec::new(),
-            embedded_external_id_traits: Vec::new(),
-            catalog_known_release_traits: Vec::new(),
-            existing_classification_traits: existing_traits,
-            actors: Vec::new(),
-            novelty_category,
-            has_corrupt_media: false,
-            now,
-        });
-    }
-    Ok(inputs)
-}
-
-/// Computes the NoveltyCategory for a Release from its catalog Track facts,
-/// using the NoveltyEngine for verification against catalog sets.
-async fn compute_novelty_category(
-    store: &melodee_persistence::PolicyStore,
-    pool: &PgPool,
+#[derive(Debug)]
+struct PolicyTestEvaluationError {
     release_id: melodee_domain::ReleaseId,
-    track_facts: &[melodee_persistence::CatalogTrackFact],
-) -> Result<melodee_policy::NoveltyCategory, Box<dyn std::error::Error>> {
-    if track_facts.is_empty() {
-        return Ok(melodee_policy::NoveltyCategory::Unknown);
-    }
-
-    let mut catalog_exact_duplicates: std::collections::BTreeSet<melodee_domain::AudioIdentityId> =
-        std::collections::BTreeSet::new();
-    let mut catalog_known_identities: std::collections::BTreeSet<melodee_domain::AudioIdentityId> =
-        std::collections::BTreeSet::new();
-    let mut track_novelty: Vec<melodee_domain::TrackNovelty> =
-        Vec::with_capacity(track_facts.len());
-
-    for fact in track_facts {
-        let audio_identity_id = melodee_domain::AudioIdentityId::from_uuid(fact.audio_identity_id);
-        let track_id = melodee_domain::TrackId::from_uuid(fact.track_id);
-        let now = OffsetDateTime::UNIX_EPOCH;
-
-        let (category, evidence_kind, detail, confidence_bp) = if fact.has_confirmed_audio_identity
-        {
-            // Audio identity is confirmed. Check if it exists in other releases.
-            let other_count = store
-                .count_other_tracks_with_identity(pool, audio_identity_id, release_id)
-                .await?;
-            if other_count > 0 {
-                // Known identity exists in catalog — verify byte hash to
-                // distinguish ExactDuplicate vs KnownAudioIdentity.
-                if let Some(hash) = &fact.byte_hash {
-                    if store.has_known_byte_hash(pool, hash, release_id).await? {
-                        catalog_exact_duplicates.insert(audio_identity_id);
-                        (
-                            melodee_domain::TrackNoveltyCategory::ExactDuplicate,
-                            melodee_domain::NoveltyEvidenceKind::ByteHashMatch,
-                            "Byte hash matches catalog Track (exact duplicate)".to_string(),
-                            9_000u16,
-                        )
-                    } else {
-                        catalog_known_identities.insert(audio_identity_id);
-                        (
-                            melodee_domain::TrackNoveltyCategory::KnownAudioIdentity,
-                            melodee_domain::NoveltyEvidenceKind::AudioIdentityMatch,
-                            "Audio identity known in catalog (distinct encoding)".to_string(),
-                            8_500u16,
-                        )
-                    }
-                } else {
-                    catalog_known_identities.insert(audio_identity_id);
-                    (
-                        melodee_domain::TrackNoveltyCategory::KnownAudioIdentity,
-                        melodee_domain::NoveltyEvidenceKind::AudioIdentityMatch,
-                        "Audio identity known in catalog".to_string(),
-                        8_500u16,
-                    )
-                }
-            } else {
-                (
-                    melodee_domain::TrackNoveltyCategory::NewTrack,
-                    melodee_domain::NoveltyEvidenceKind::NoCatalogMatch,
-                    "No catalog match for audio identity".to_string(),
-                    9_500u16,
-                )
-            }
-        } else if let Some(hash) = &fact.byte_hash {
-            if store.has_known_byte_hash(pool, hash, release_id).await? {
-                catalog_exact_duplicates.insert(audio_identity_id);
-                (
-                    melodee_domain::TrackNoveltyCategory::ExactDuplicate,
-                    melodee_domain::NoveltyEvidenceKind::ByteHashMatch,
-                    "Byte hash matches catalog Track (exact duplicate)".to_string(),
-                    9_000u16,
-                )
-            } else if store
-                .count_other_tracks_with_identity(pool, audio_identity_id, release_id)
-                .await?
-                > 0
-            {
-                catalog_known_identities.insert(audio_identity_id);
-                (
-                    melodee_domain::TrackNoveltyCategory::KnownAudioIdentity,
-                    melodee_domain::NoveltyEvidenceKind::AudioIdentityMatch,
-                    "Audio identity known in catalog (distinct encoding)".to_string(),
-                    8_500u16,
-                )
-            } else {
-                (
-                    melodee_domain::TrackNoveltyCategory::NewTrack,
-                    melodee_domain::NoveltyEvidenceKind::NoCatalogMatch,
-                    "No catalog match for audio identity or byte hash".to_string(),
-                    9_500u16,
-                )
-            }
-        } else {
-            (
-                melodee_domain::TrackNoveltyCategory::Uncertain,
-                melodee_domain::NoveltyEvidenceKind::InsufficientEvidence,
-                "Insufficient evidence: no confirmed audio identity or byte hash".to_string(),
-                1_000u16,
-            )
-        };
-
-        track_novelty.push(melodee_domain::TrackNovelty {
-            id: melodee_domain::TrackNoveltyId::new(),
-            release_id,
-            track_id,
-            audio_identity_id,
-            media_asset_id: fact
-                .media_asset_id
-                .map(melodee_domain::MediaAssetId::from_uuid),
-            category,
-            confidence: melodee_domain::Confidence::new(confidence_bp)
-                .unwrap_or(melodee_domain::Confidence::zero()),
-            evidence_kind,
-            detail,
-            evaluated_at: now,
-        });
-    }
-
-    let novelty_input = NoveltyInput {
-        release_id,
-        track_audio: track_facts
-            .iter()
-            .map(|f| {
-                (
-                    melodee_domain::TrackId::from_uuid(f.track_id),
-                    melodee_domain::AudioIdentityId::from_uuid(f.audio_identity_id),
-                    f.byte_hash.clone(),
-                )
-            })
-            .collect(),
-        catalog_exact_duplicates,
-        catalog_known_identities,
-        track_novelty,
-        evaluator_version: "melodee-policy-novelty-v1".to_string(),
-        now: OffsetDateTime::UNIX_EPOCH,
-    };
-
-    let assessment = NoveltyEngine
-        .assess(&novelty_input)
-        .map_err(|e| format!("novelty engine error: {e}"))?;
-
-    Ok(assessment.category)
+    source: melodee_policy::PolicyEngineError,
 }
 
-/// Runs a full catalog policy test: evaluates Releases against the ruleset,
-/// reports matched-rule counts, existing dispositions, samples, and destructive
-/// impact, and persists the test run result.
+impl std::fmt::Display for PolicyTestEvaluationError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "policy test evaluation failed for Release {}: {}",
+            self.release_id, self.source
+        )
+    }
+}
+
+impl std::error::Error for PolicyTestEvaluationError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.source)
+    }
+}
+
+async fn load_policy_engine(
+    store: &PolicyStore,
+    pool: &PgPool,
+    config: &PolicyConfig,
+    now: OffsetDateTime,
+) -> Result<PolicyEngine, Box<dyn std::error::Error>> {
+    let proposed = default_rule_set(config)?;
+    let stored = store.ensure_rule_set(pool, &proposed, now).await?;
+    Ok(PolicyEngine::with_rule_set(config.clone(), stored)?)
+}
+
 async fn run_policy_test(
     engine: &PolicyEngine,
-    store: &melodee_persistence::PolicyStore,
+    store: &PolicyStore,
     pool: &PgPool,
     limit: u32,
+    actor: String,
     now: OffsetDateTime,
-) -> Result<melodee_domain::PolicyTestSummary, Box<dyn std::error::Error>> {
-    let rows: Vec<(uuid::Uuid, String)> =
-        sqlx::query_as(r#"SELECT id, title FROM releases ORDER BY id LIMIT $1"#)
-            .bind(i64::from(limit.min(500)))
-            .fetch_all(pool)
-            .await?;
-
-    let inputs = build_policy_inputs(store, pool, &rows, now).await?;
-    let runner = PolicyDryRunner::new(engine.clone());
-    let results = runner.run_dry_run(inputs, now);
-
-    // Aggregate counts.
-    let mut total = 0u32;
-    let mut disposition_counts: std::collections::HashMap<melodee_domain::Disposition, u32> =
-        std::collections::HashMap::new();
+) -> Result<PolicyTestReport, Box<dyn std::error::Error>> {
+    let contexts = store.load_test_contexts(pool, limit).await?;
+    let mut proposed_dispositions = BTreeMap::new();
+    let mut matched_rules = BTreeMap::new();
+    let mut existing_dispositions = BTreeMap::new();
+    let mut existing_states = BTreeMap::new();
+    let mut samples = Vec::new();
     let mut destructive_impact = 0u32;
-    let mut sample_ids: Vec<melodee_domain::ReleaseId> = Vec::new();
+    let mut evaluated = 0u32;
 
-    for result in &results.results {
-        match result {
-            melodee_policy::PolicyDryRunResult::Decision { evaluation, .. } => {
-                total += 1;
-                let count = disposition_counts
-                    .entry(evaluation.decision.disposition)
-                    .or_insert(0);
-                *count += 1;
-                if matches!(
-                    evaluation.decision.disposition,
-                    melodee_domain::Disposition::Delete
-                ) {
-                    destructive_impact += 1;
-                }
-                if sample_ids.len() < melodee_persistence::MAX_POLICY_TEST_SAMPLES {
-                    sample_ids.push(evaluation.decision.release_id);
-                }
-            }
-            melodee_policy::PolicyDryRunResult::Error { .. } => {}
+    for context in &contexts {
+        let evaluation = require_policy_test_evaluation(
+            context.claim.release_id,
+            evaluate_catalog_context(engine, context, now),
+        )?;
+        evaluated = evaluated.saturating_add(1);
+        increment(
+            &mut proposed_dispositions,
+            evaluation.decision.disposition.as_str(),
+        );
+        if evaluation.decision.disposition.is_destructive() {
+            destructive_impact = destructive_impact.saturating_add(1);
+        }
+        for matched in &evaluation.matched_rules {
+            increment(&mut matched_rules, &matched.rule_id);
+        }
+        increment(
+            &mut existing_dispositions,
+            context
+                .existing_disposition
+                .map_or("none", melodee_domain::Disposition::as_str),
+        );
+        increment(&mut existing_states, context.claim.item.state.as_str());
+        if samples.len() < melodee_persistence::MAX_POLICY_TEST_SAMPLES {
+            samples.push(context.claim.release_id);
         }
     }
 
-    let disposition_counts_vec: Vec<(melodee_domain::Disposition, u32)> =
-        disposition_counts.into_iter().collect();
-
-    let ran_by = melodee_domain::PolicyActor::Administrator {
-        actor: "melodee-cli".to_string(),
-    };
-
+    let disposition_counts = melodee_domain::Disposition::ALL
+        .into_iter()
+        .filter_map(|disposition| {
+            proposed_dispositions
+                .get(disposition.as_str())
+                .copied()
+                .filter(|count| *count > 0)
+                .map(|count| (disposition, count))
+        })
+        .collect();
+    let matched_rule_counts = matched_rules
+        .iter()
+        .map(|(rule, count)| (rule.clone(), *count))
+        .collect();
+    let mut existing_disposition_counts = existing_dispositions
+        .get("none")
+        .copied()
+        .filter(|count| *count > 0)
+        .map(|count| vec![(None, count)])
+        .unwrap_or_default();
+    existing_disposition_counts.extend(melodee_domain::Disposition::ALL.into_iter().filter_map(
+        |disposition| {
+            existing_dispositions
+                .get(disposition.as_str())
+                .copied()
+                .filter(|count| *count > 0)
+                .map(|count| (Some(disposition), count))
+        },
+    ));
     let summary = melodee_domain::PolicyTestSummary::new(melodee_domain::PolicyTestSummary {
         test_run_id: melodee_domain::PolicyTestRunId::new(),
         rule_set_id: engine.rule_set_id(),
         rule_set_version: engine.rule_set_version(),
-        total_releases_evaluated: total,
-        disposition_counts: disposition_counts_vec,
+        total_releases_evaluated: evaluated,
+        disposition_counts,
+        matched_rule_counts,
+        existing_disposition_counts,
         destructive_impact_count: destructive_impact,
-        sample_release_ids: sample_ids,
-        ran_by,
+        sample_release_ids: samples,
+        ran_by: melodee_domain::PolicyActor::Administrator { actor },
         ran_at: now,
     })?;
-
-    // Persist the test run.
     store.store_test_run(pool, &summary).await?;
 
-    Ok(summary)
+    Ok(PolicyTestReport {
+        summary,
+        proposed_dispositions,
+        matched_rules,
+        existing_dispositions,
+        existing_states,
+        errors: 0,
+    })
 }
 
-/// Evaluates a single Release: classify, assess novelty, and produce a disposition.
+fn require_policy_test_evaluation(
+    release_id: melodee_domain::ReleaseId,
+    result: Result<PolicyEvaluation, melodee_policy::PolicyEngineError>,
+) -> Result<PolicyEvaluation, PolicyTestEvaluationError> {
+    result.map_err(|source| PolicyTestEvaluationError { release_id, source })
+}
+
 async fn run_policy_evaluate(
     engine: &PolicyEngine,
-    store: &melodee_persistence::PolicyStore,
+    store: &PolicyStore,
     pool: &PgPool,
     release_id: melodee_domain::ReleaseId,
     now: OffsetDateTime,
-) -> Result<melodee_policy::PolicyEvaluation, Box<dyn std::error::Error>> {
-    let row: Option<(String,)> = sqlx::query_as(r#"SELECT title FROM releases WHERE id = $1"#)
-        .bind(release_id.into_uuid())
-        .fetch_optional(pool)
-        .await?;
-
-    let title = row.map(|(t,)| t).unwrap_or_default();
-    let existing_traits = store
-        .load_classification(pool, release_id)
+) -> Result<PolicyEvaluation, Box<dyn std::error::Error>> {
+    let context = store
+        .load_snapshot(pool, release_id)
         .await?
-        .map(|c| c.traits)
-        .unwrap_or_default();
-
-    let track_facts = store.load_release_tracks(pool, release_id).await?;
-    let novelty_category = compute_novelty_category(store, pool, release_id, &track_facts).await?;
-
-    let input = melodee_policy::PolicyInput {
-        release_id,
-        title: Some(title),
-        directory_name: None,
-        parent_directory_name: None,
-        structured_tag_traits: Vec::new(),
-        embedded_external_id_traits: Vec::new(),
-        catalog_known_release_traits: Vec::new(),
-        existing_classification_traits: existing_traits,
-        actors: Vec::new(),
-        novelty_category,
-        has_corrupt_media: false,
-        now,
-    };
-
-    Ok(engine.evaluate(&input))
+        .ok_or_else(|| operator_error(format!("Release {release_id} is not cataloged")))?;
+    Ok(evaluate_catalog_context(engine, &context, now)?)
 }
 
-/// Records a policy decision for a Release, optionally marking it as completed.
-async fn run_policy_decide(
-    engine: &PolicyEngine,
-    store: &melodee_persistence::PolicyStore,
+async fn run_policy_inspect(
+    store: &PolicyStore,
     pool: &PgPool,
     release_id: melodee_domain::ReleaseId,
-    now: OffsetDateTime,
-    complete: bool,
-) -> Result<melodee_domain::Disposition, Box<dyn std::error::Error>> {
-    let eval = run_policy_evaluate(engine, store, pool, release_id, now).await?;
-
-    let mut tx = pool.begin().await?;
-    store.record_decision(&mut tx, &eval.decision).await?;
-
-    if complete {
-        let completed = eval.decision.clone().mark_completed(now)?;
-        store.complete_decision(&mut tx, &completed, now).await?;
+) -> Result<(), Box<dyn std::error::Error>> {
+    let (decision, history) = store.inspect_decision(pool, release_id).await?;
+    let decision = decision.ok_or_else(|| {
+        operator_error(format!(
+            "Release {release_id} has no durable policy decision"
+        ))
+    })?;
+    println!("release_id:          {}", decision.release_id);
+    println!("work_item_id:        {}", decision.work_item_id);
+    println!("decision_id:         {}", decision.id);
+    println!(
+        "rule_set:            {}@{}",
+        decision.rule_set_id, decision.rule_set_version
+    );
+    println!("disposition:         {}", decision.disposition.as_str());
+    println!(
+        "completion_state:    {}",
+        decision.completion_state.as_str()
+    );
+    println!("matched_rules:       {:?}", decision.matched_rule_ids);
+    println!("source_fingerprint:  {}", decision.source_fingerprint);
+    println!("actor:                {:?}", decision.actor);
+    println!(
+        "override_reason:      {}",
+        decision.override_reason.as_deref().unwrap_or("none")
+    );
+    println!("evidence:             {}", decision.evidence_summary);
+    println!("decided_at:           {}", decision.decided_at);
+    println!("completed_at:         {:?}", decision.completed_at);
+    println!("audit:");
+    for entry in history {
+        println!(
+            "  {} event={} disposition={} completion={} actor={:?} reason={}",
+            entry.created_at,
+            entry.event,
+            entry.decision.disposition.as_str(),
+            entry.decision.completion_state.as_str(),
+            entry.decision.actor,
+            entry.decision.override_reason.as_deref().unwrap_or("none"),
+        );
     }
+    Ok(())
+}
 
-    tx.commit().await?;
-    Ok(eval.decision.disposition)
+async fn run_policy_decide(
+    store: &PolicyStore,
+    pool: &PgPool,
+    release_id: melodee_domain::ReleaseId,
+    disposition: melodee_domain::Disposition,
+    actor: String,
+    reason: String,
+    now: OffsetDateTime,
+) -> Result<melodee_persistence::StoredPolicyDecision, Box<dyn std::error::Error>> {
+    let context = store
+        .load_snapshot(pool, release_id)
+        .await?
+        .ok_or_else(|| operator_error(format!("Release {release_id} is not cataloged")))?;
+    let decision = context.current_decision.ok_or_else(|| {
+        operator_error(format!("Release {release_id} has no current decision to override; allow the policy worker to evaluate it first"))
+    })?;
+    let result = store
+        .apply_admin_override(
+            pool,
+            &PolicyAdminOverrideRequest {
+                work_item_id: context.claim.item.id,
+                decision_id: decision.id,
+                chosen_disposition: disposition,
+                actor,
+                reason,
+                source_fingerprint: context.claim.source_fingerprint,
+                now,
+            },
+        )
+        .await?;
+    Ok(result.decision)
+}
+
+fn increment(counts: &mut BTreeMap<String, u32>, key: &str) {
+    let count = counts.entry(key.to_owned()).or_insert(0);
+    *count = count.saturating_add(1);
+}
+
+fn parse_nonblank(raw: &str) -> Result<String, String> {
+    let value = raw.trim();
+    if value.is_empty() {
+        Err("value must not be blank".to_owned())
+    } else {
+        Ok(value.to_owned())
+    }
+}
+
+fn operator_error(message: String) -> std::io::Error {
+    std::io::Error::new(std::io::ErrorKind::InvalidInput, message)
 }
 
 #[cfg(test)]
@@ -1386,5 +1358,127 @@ mod tests {
                 command: CatalogCommands::Inspect { id: parsed }
             } if parsed == id
         ));
+    }
+
+    #[test]
+    fn policy_read_only_commands_match_the_work_package() {
+        let test = Cli::try_parse_from([
+            "melodee",
+            "policy",
+            "test",
+            "--limit",
+            "23",
+            "--actor",
+            "policy-test-admin",
+        ])
+        .expect("valid policy test command");
+        assert!(matches!(
+            test.command,
+            Commands::Policy {
+                command: PolicyCommands::Test { limit: 23, actor }
+            } if actor == "policy-test-admin"
+        ));
+        assert!(
+            Cli::try_parse_from([
+                "melodee", "policy", "test", "--limit", "0", "--actor", "admin",
+            ])
+            .is_err()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "melodee", "policy", "test", "--limit", "10001", "--actor", "admin",
+            ])
+            .is_err()
+        );
+        assert!(Cli::try_parse_from(["melodee", "policy", "test", "--limit", "1"]).is_err());
+        assert!(
+            Cli::try_parse_from([
+                "melodee", "policy", "test", "--limit", "1", "--actor", "   ",
+            ])
+            .is_err()
+        );
+
+        let id = Uuid::now_v7();
+        for command in ["evaluate", "inspect"] {
+            let parsed =
+                Cli::try_parse_from(["melodee", "policy", command, id.to_string().as_str()])
+                    .expect("valid policy release command");
+            assert!(match parsed.command {
+                Commands::Policy {
+                    command: PolicyCommands::Evaluate { id: parsed },
+                }
+                | Commands::Policy {
+                    command: PolicyCommands::Inspect { id: parsed },
+                } => parsed == id,
+                _ => false,
+            });
+        }
+    }
+
+    #[test]
+    fn policy_test_evaluation_error_is_typed_and_not_silently_counted() {
+        let release_id = melodee_domain::ReleaseId::new();
+        let error = require_policy_test_evaluation(
+            release_id,
+            Err(melodee_policy::PolicyEngineError::ReleaseMismatch),
+        )
+        .expect_err("invalid Release facts fail the entire policy test");
+        assert_eq!(error.release_id, release_id);
+        assert!(error.to_string().contains(&release_id.to_string()));
+        assert!(std::error::Error::source(&error).is_some());
+    }
+
+    #[test]
+    fn policy_decide_requires_disposition_actor_and_reason() {
+        let id = Uuid::now_v7();
+        let parsed = Cli::try_parse_from([
+            "melodee",
+            "policy",
+            "decide",
+            id.to_string().as_str(),
+            "review",
+            "--actor",
+            "local-admin",
+            "--reason",
+            "verified uncertain audio",
+        ])
+        .expect("valid policy decision command");
+        assert!(matches!(
+            parsed.command,
+            Commands::Policy {
+                command: PolicyCommands::Decide {
+                    id: parsed,
+                    disposition: PolicyDispositionArg::Review,
+                    actor,
+                    reason,
+                }
+            } if parsed == id && actor == "local-admin" && reason == "verified uncertain audio"
+        ));
+
+        assert!(
+            Cli::try_parse_from([
+                "melodee",
+                "policy",
+                "decide",
+                id.to_string().as_str(),
+                "delete",
+            ])
+            .is_err()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "melodee",
+                "policy",
+                "decide",
+                id.to_string().as_str(),
+                "delete",
+                "--actor",
+                "local-admin",
+                "--reason",
+                "verified duplicate",
+                "--complete",
+            ])
+            .is_err()
+        );
     }
 }

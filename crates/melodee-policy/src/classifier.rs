@@ -6,8 +6,10 @@ use std::collections::BTreeSet;
 
 use melodee_domain::ReleaseClassification;
 use melodee_domain::{
-    ClassificationEvidence, ClassificationEvidenceKind, Confidence, EvidenceSource, ReleaseTrait,
+    ClassificationEvidence, ClassificationEvidenceKind, Confidence, DomainInvariantError,
+    EvidenceSource, ReleaseTrait,
 };
+use thiserror::Error;
 use time::OffsetDateTime;
 
 /// Default classifier version string persisted with classifications.
@@ -28,7 +30,23 @@ pub struct ClassificationInput {
     pub structured_tag_traits: Vec<ReleaseTrait>,
     pub embedded_external_id_traits: Vec<ReleaseTrait>,
     pub catalog_known_release_traits: Vec<ReleaseTrait>,
-    pub existing_classification_traits: BTreeSet<ReleaseTrait>,
+    pub administrator_traits: Vec<AdministratorClassification>,
+}
+
+/// One locked manual classification signal with exact administrator
+/// provenance. It participates at the highest evidence tier.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct AdministratorClassification {
+    pub trait_: ReleaseTrait,
+    pub actor: String,
+    pub reason: String,
+}
+
+/// Typed classification failures.
+#[derive(Debug, Error)]
+pub enum ClassificationError {
+    #[error("classification domain invariant failed")]
+    Domain(#[from] DomainInvariantError),
 }
 
 /// Pure classification engine: converts observations into a
@@ -46,10 +64,10 @@ impl Classifier {
         &self,
         input: &ClassificationInput,
         now: OffsetDateTime,
-    ) -> melodee_domain::ReleaseClassification {
+    ) -> Result<melodee_domain::ReleaseClassification, ClassificationError> {
         let classification_id = melodee_domain::ReleaseClassificationId::new();
         let mut evidence: Vec<ClassificationEvidence> = Vec::new();
-        let mut traits: BTreeSet<ReleaseTrait> = input.existing_classification_traits.clone();
+        let mut traits: BTreeSet<ReleaseTrait> = BTreeSet::new();
 
         // Helper to add evidence: all evidence records share the parent
         // classification ID (domain invariant).
@@ -62,10 +80,30 @@ impl Classifier {
                     trait_: $trait_,
                     source: $source,
                     kind: $kind,
-                    confidence: confidence($bp),
+                    confidence: Confidence::new($bp)?,
                     detail: $detail.to_string(),
                 });
             };
+        }
+
+        // Administrator decisions are explicit locked evidence, never inferred
+        // from the presence of an actor elsewhere in policy evaluation.
+        for manual in input.administrator_traits.iter().collect::<BTreeSet<_>>() {
+            melodee_domain::AdministratorOverride::new(melodee_domain::AdministratorOverride {
+                actor: manual.actor.clone(),
+                disposition: melodee_domain::Disposition::Review,
+                reason: manual.reason.clone(),
+            })?;
+            add_evidence!(
+                manual.trait_,
+                EvidenceSource::Administrator,
+                ClassificationEvidenceKind::ManualOverride,
+                10_000,
+                format!(
+                    "Administrator '{}' classified {:?}: {}",
+                    manual.actor, manual.trait_, manual.reason
+                )
+            );
         }
 
         // Title-based evidence (tier 5).
@@ -117,7 +155,7 @@ impl Classifier {
         }
 
         // Structured tag evidence (tier 3).
-        for &trait_value in &input.structured_tag_traits {
+        for &trait_value in input.structured_tag_traits.iter().collect::<BTreeSet<_>>() {
             add_evidence!(
                 trait_value,
                 EvidenceSource::StructuredTags,
@@ -128,7 +166,11 @@ impl Classifier {
         }
 
         // Embedded external ID evidence (tier 2).
-        for &trait_value in &input.embedded_external_id_traits {
+        for &trait_value in input
+            .embedded_external_id_traits
+            .iter()
+            .collect::<BTreeSet<_>>()
+        {
             add_evidence!(
                 trait_value,
                 EvidenceSource::EmbeddedExternalId,
@@ -139,7 +181,11 @@ impl Classifier {
         }
 
         // Catalog context evidence (tier 4).
-        for &trait_value in &input.catalog_known_release_traits {
+        for &trait_value in input
+            .catalog_known_release_traits
+            .iter()
+            .collect::<BTreeSet<_>>()
+        {
             add_evidence!(
                 trait_value,
                 EvidenceSource::CatalogContext,
@@ -165,9 +211,9 @@ impl Classifier {
             .iter()
             .map(|e| e.confidence)
             .max()
-            .unwrap_or(confidence(0));
+            .unwrap_or(Confidence::zero());
 
-        ReleaseClassification {
+        ReleaseClassification::new(ReleaseClassification {
             id: classification_id,
             release_id: input.release_id,
             traits,
@@ -175,86 +221,89 @@ impl Classifier {
             confidence: max_confidence,
             classified_at: now,
             classifier_version: DEFAULT_CLASSIFIER_VERSION.to_string(),
-        }
+        })
+        .map_err(ClassificationError::from)
     }
 
-    /// Returns true if the classification's strongest evidence source is
-    /// directory-only (PRD-CLASS-003: directory evidence cannot trigger
-    /// destructive action).
+    /// Returns true if a specific trait's highest-trust evidence source is
+    /// directory-only. Policy checks remain trait-scoped; unrelated evidence
+    /// must not make a weak trait eligible for a destructive rule.
     #[must_use]
     pub fn strongest_source_is_directory_only(
         classification: &melodee_domain::ReleaseClassification,
+        trait_: ReleaseTrait,
     ) -> bool {
         classification
-            .evidence
-            .iter()
+            .evidence_for(trait_)
             .min_by_key(|e| e.source.trust_rank())
             .is_some_and(|e| e.source.is_directory_only())
     }
 }
 
-/// Constructs a Confidence from a basis-point value, clamped to the valid range.
-fn confidence(bp: u16) -> Confidence {
-    Confidence::new(bp.min(Confidence::MAX_BASIS_POINTS)).unwrap_or(Confidence::zero())
-}
-
 /// Heuristically matches title text against Greatest Hits/compilation patterns.
 fn greatest_hits_title_traits(title: &str) -> Vec<ReleaseTrait> {
-    let lower = title.to_lowercase();
+    let words: Vec<String> = title
+        .split(|character: char| !character.is_alphanumeric())
+        .filter(|word| !word.is_empty())
+        .map(str::to_lowercase)
+        .collect();
+    let has_word =
+        |candidates: &[&str]| words.iter().any(|word| candidates.contains(&word.as_str()));
+    let has_phrase = |phrase: &[&str]| {
+        words
+            .windows(phrase.len())
+            .any(|window| window.iter().map(String::as_str).eq(phrase.iter().copied()))
+    };
     let mut traits = Vec::new();
-    if lower.contains("greatest hits")
-        || lower.contains("best of")
-        || lower.contains("collection")
-        || lower.contains("compilation")
-        || (lower.contains("greatest") && lower.contains("hit"))
+    if has_phrase(&["greatest", "hit"])
+        || has_phrase(&["greatest", "hits"])
+        || has_phrase(&["best", "of"])
+        || has_word(&["collection", "collections", "compilation", "compilations"])
     {
         traits.push(ReleaseTrait::GreatestHits);
         traits.push(ReleaseTrait::Compilation);
     }
-    if lower.contains("box set") || lower.contains("boxset") {
+    if has_phrase(&["box", "set"]) || has_word(&["boxset", "boxsets"]) {
         traits.push(ReleaseTrait::BoxSet);
     }
-    if lower.contains("live") {
+    if has_word(&["live"]) {
         traits.push(ReleaseTrait::Live);
     }
-    if lower.contains("remaster") {
+    if has_word(&["remaster", "remastered", "remasters"]) {
         traits.push(ReleaseTrait::Remaster);
     }
-    if lower.contains("tribute") || lower.contains("cover") {
+    if has_word(&["tribute", "tributes", "cover", "covers"]) {
         traits.push(ReleaseTrait::Tribute);
     }
-    if lower.contains("soundtrack") || lower.contains("ost") {
+    if has_word(&["soundtrack", "soundtracks", "ost"]) {
         traits.push(ReleaseTrait::Soundtrack);
     }
-    if lower.contains("bootleg") {
+    if has_word(&["bootleg", "bootlegs"]) {
         traits.push(ReleaseTrait::Bootleg);
     }
-    if lower.contains("promo") {
+    if has_word(&["promo", "promos", "promotional"]) {
         traits.push(ReleaseTrait::Promo);
     }
-    if lower.contains("demo") {
+    if has_word(&["demo", "demos"]) {
         traits.push(ReleaseTrait::Demo);
     }
-    if lower.contains("cast") || lower.contains("soundtrack") {
+    if has_phrase(&["cast", "recording"]) || has_word(&["soundtrack", "soundtracks", "ost"]) {
         traits.push(ReleaseTrait::CastRecording);
     }
-    if lower.contains("spoken word") || lower.contains("audiobook") {
+    if has_phrase(&["spoken", "word"]) || has_word(&["audiobook", "audiobooks"]) {
         traits.push(ReleaseTrait::SpokenWord);
     }
-    if lower.contains("comedy") {
+    if has_word(&["comedy"]) {
         traits.push(ReleaseTrait::Comedy);
     }
-    if lower.contains("radio") {
+    if has_word(&["radio"]) || has_phrase(&["radio", "show"]) {
         traits.push(ReleaseTrait::RadioShow);
     }
-    if lower.contains("dj mix") || lower.contains("djmix") {
+    if has_phrase(&["dj", "mix"]) || has_word(&["djmix"]) {
         traits.push(ReleaseTrait::DjMix);
     }
-    if lower.contains("remix") {
-        traits.push(ReleaseTrait::Remaster);
-    }
-    if lower.contains("greatest") || lower.contains("hits") {
-        traits.push(ReleaseTrait::GreatestHits);
+    if has_word(&["remix", "remixes"]) {
+        traits.push(ReleaseTrait::Remix);
     }
     traits
 }

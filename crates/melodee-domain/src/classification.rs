@@ -14,6 +14,12 @@ use time::OffsetDateTime;
 use crate::values::{validate_internal_id, validate_nonblank};
 use crate::{Confidence, DomainInvariantError, ReleaseClassificationId, ReleaseId, ReleaseTrait};
 
+/// Complete ReleaseTrait vocabulary; a classification cannot contain more
+/// distinct traits than the domain defines.
+pub const MAX_RELEASE_CLASSIFICATION_TRAITS: usize = ReleaseTrait::ALL.len();
+/// Shared domain/persistence cap for explainable evidence on one Release.
+pub const MAX_RELEASE_CLASSIFICATION_EVIDENCE: usize = 1_000;
+
 /// Position in the evidence trust hierarchy (PRD-CLASS-003).
 ///
 /// Lower numeric values are higher trust. Admin decisions outrank all
@@ -181,10 +187,57 @@ impl ReleaseClassification {
         validate_internal_id(value.id.is_uuid_v7(), "ReleaseClassificationId")?;
         validate_internal_id(value.release_id.is_uuid_v7(), "ReleaseId")?;
         validate_nonblank("classifier version", &value.classifier_version)?;
+        if value.traits.len() > MAX_RELEASE_CLASSIFICATION_TRAITS {
+            return Err(DomainInvariantError::ClassificationScopeExceeded {
+                dimension: "traits",
+                limit: MAX_RELEASE_CLASSIFICATION_TRAITS,
+            });
+        }
+        if value.evidence.len() > MAX_RELEASE_CLASSIFICATION_EVIDENCE {
+            return Err(DomainInvariantError::ClassificationScopeExceeded {
+                dimension: "evidence rows",
+                limit: MAX_RELEASE_CLASSIFICATION_EVIDENCE,
+            });
+        }
+        if value.traits.is_empty() || value.evidence.is_empty() {
+            return Err(DomainInvariantError::IncompleteClassificationEvidence);
+        }
         for evidence in &value.evidence {
-            if evidence.id != value.id {
+            ClassificationEvidence::new(evidence.clone())?;
+            if evidence.id != value.id
+                || evidence.release_id != value.release_id
+                || !value.traits.contains(&evidence.trait_)
+            {
                 return Err(DomainInvariantError::ForeignClassificationEvidence);
             }
+        }
+        let mut evidence_keys = BTreeSet::new();
+        if value.evidence.iter().any(|evidence| {
+            !evidence_keys.insert((
+                evidence.trait_,
+                evidence.source,
+                evidence.kind.as_str(),
+                evidence.detail.as_str(),
+            ))
+        }) {
+            return Err(DomainInvariantError::DuplicateClassificationEvidence);
+        }
+        if value.traits.iter().any(|trait_| {
+            !value
+                .evidence
+                .iter()
+                .any(|evidence| evidence.trait_ == *trait_)
+        }) {
+            return Err(DomainInvariantError::IncompleteClassificationEvidence);
+        }
+        let max_confidence = value
+            .evidence
+            .iter()
+            .map(|evidence| evidence.confidence)
+            .max()
+            .ok_or(DomainInvariantError::IncompleteClassificationEvidence)?;
+        if value.confidence != max_confidence {
+            return Err(DomainInvariantError::InvalidClassificationConfidence);
         }
         Ok(value)
     }
@@ -192,5 +245,29 @@ impl ReleaseClassification {
     #[must_use]
     pub fn has_trait(&self, trait_: ReleaseTrait) -> bool {
         self.traits.contains(&trait_)
+    }
+
+    /// Evidence supporting one trait, isolated from unrelated classification
+    /// dimensions so policy confidence cannot be borrowed across traits.
+    pub fn evidence_for(
+        &self,
+        trait_: ReleaseTrait,
+    ) -> impl Iterator<Item = &ClassificationEvidence> {
+        self.evidence
+            .iter()
+            .filter(move |evidence| evidence.trait_ == trait_)
+    }
+
+    /// Highest confidence from a non-directory source supporting exactly one
+    /// trait. This is the destructive-policy confidence boundary.
+    #[must_use]
+    pub fn strongest_non_directory_confidence_for(
+        &self,
+        trait_: ReleaseTrait,
+    ) -> Option<Confidence> {
+        self.evidence_for(trait_)
+            .filter(|evidence| !evidence.source.is_directory_only())
+            .map(|evidence| evidence.confidence)
+            .max()
     }
 }

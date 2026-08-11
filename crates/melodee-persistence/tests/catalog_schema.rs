@@ -12,7 +12,7 @@ use melodee_domain::{
     EvidencePolarity, IngestionState, ObservedArtistId,
 };
 use melodee_persistence::{CatalogImportRequest, CatalogStore, WorkItemStore, WorkerId};
-use time::OffsetDateTime;
+use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
 #[tokio::test]
@@ -206,19 +206,35 @@ async fn catalog_schema_rejects_identity_state_and_cross_release_corruption() {
     .expect("failed commit preserves playable MediaAsset");
     assert_eq!(playable_after_rejected_commit, 1);
 
+    let complete_policy_lease = sqlx::query(
+        "UPDATE release_work_items
+         SET lease_owner='policy-worker',lease_acquired_at=$2,lease_expires_at=$3
+         WHERE id=$1",
+    )
+    .bind(first.work_item_id)
+    .bind(now)
+    .bind(now + Duration::seconds(60))
+    .execute(&db.pool)
+    .await
+    .expect("Cataloged work permits a complete Phase 5 policy lease");
+    assert_eq!(complete_policy_lease.rows_affected(), 1);
     assert!(
-        sqlx::query(
-            "UPDATE release_work_items
-             SET lease_owner='stale-worker',lease_acquired_at=$2,lease_expires_at=$2
-             WHERE id=$1",
-        )
-        .bind(first.work_item_id)
-        .bind(now)
-        .execute(&db.pool)
-        .await
-        .is_err(),
-        "Cataloged work cannot retain a lease"
+        sqlx::query("UPDATE release_work_items SET lease_expires_at=NULL WHERE id=$1",)
+            .bind(first.work_item_id)
+            .execute(&db.pool)
+            .await
+            .is_err(),
+        "Cataloged work rejects a partial lease tuple"
     );
+    sqlx::query(
+        "UPDATE release_work_items
+         SET lease_owner=NULL,lease_acquired_at=NULL,lease_expires_at=NULL
+         WHERE id=$1",
+    )
+    .bind(first.work_item_id)
+    .execute(&db.pool)
+    .await
+    .expect("Cataloged work also permits the wholly unleased form");
 
     let first_overlay: Uuid =
         sqlx::query_scalar("SELECT current_overlay_id FROM releases WHERE id=$1")

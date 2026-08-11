@@ -52,23 +52,23 @@ template.
 
 Do not silently resolve a material conflict; record it in the PR and propose an ADR when needed.
 
-## Current phase boundary: Phase 5 — Classification, novelty, and policy
+## Current phase boundary: Phase 6 — Search and MQL
 
-Phases 0–4 are complete. The authoritative Phase 4 exit decision is in
-`design/evidence/phase-4/PHASE-4-REPORT.md`. Phase 5 is the next implementation boundary, but agents
-must not create its policy/classification schema or destructive-action behavior until an assigned
-work package and accepted schema/behavior ADR authorize it.
+Phases 0–5 are complete. The authoritative Phase 5 exit decision is in
+`design/evidence/phase-5/PHASE-5-REPORT.md`. Phase 6 is the next implementation boundary, but agents
+must not create its search schema, projection consumer, or MQL behavior until an assigned work
+package and accepted schema/behavior ADR authorize it.
 
-Allowed when explicitly assigned: Phase 5 ReleaseTrait classification/evidence, Track novelty
-categories, versioned policy rules and dispositions, catalog policy dry-run, durable decision/audit
-records before destructive execution, operator overrides, tests/evidence/traceability, CI, and
-documentation.
+Allowed when explicitly assigned: Phase 6 Tantivy schema and lifecycle, transactional-outbox
+consumer/checkpoints, full rebuild and incremental catch-up, Artist/Release/Track search documents,
+MQL parser/AST/translators, autocomplete/admin lookup, scale/performance evidence,
+tests/evidence/traceability, CI, and documentation.
 
-Forbidden: Phase 6+ search/MQL, podcast, party, native API,
+Forbidden: Phase 7+ podcast, party, native API,
 OpenSubsonic, Jellyfin, or UI implementation; redesigning captured external contracts; any database
 schema without an accepted schema ADR; message brokers, Redis, Elasticsearch/OpenSearch, GraphQL,
 microservices; copying C# service/class boundaries into Rust; destructive operations against an
-existing Melodee library without the Phase 5 durable decision/audit/authorization contract.
+existing Melodee library outside the durable Phase 5 decision/audit/authorization contract.
 
 ## Product language
 

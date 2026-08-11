@@ -1,39 +1,38 @@
-//! Release-level novelty analysis: assesses a Release's audio-identity
-//! overlap with the existing catalog, producing a `NoveltyCategory` and a
-//! `NoveltyEvaluation` (PRD-POLICY-004, PRD-POLICY-005).
+//! Track novelty derived from complete catalog facts (PRD-POLICY-004/005).
 
 use std::collections::BTreeSet;
 
 use melodee_domain::{
-    AudioIdentityId, NoveltyEvaluation, PolicyRuleSetId, ReleaseId, TrackId, TrackNovelty,
-    TrackNoveltyCategory,
+    AudioIdentityId, Confidence, DomainInvariantError, MediaAssetId, NoveltyEvaluation,
+    NoveltyEvidenceKind, PolicyRuleSetId, ReleaseId, TrackId, TrackNovelty, TrackNoveltyCategory,
+    TrackNoveltyId,
 };
 use serde::{Deserialize, Serialize};
-
 use thiserror::Error;
 use time::OffsetDateTime;
 
-/// Release-level novelty category summarizing a Release relative to the
-/// existing catalog (PRD-POLICY-004).
+/// Hard bound preventing one malformed Release from causing unbounded memory
+/// growth in policy evaluation.
+pub const MAX_TRACKS_PER_NOVELTY_EVALUATION: usize = 10_000;
+
+/// Stable evaluator identity persisted with fact-derived novelty rows.
+pub const DEFAULT_NOVELTY_EVALUATOR_VERSION: &str = "melodee.policy.novelty-v1";
+
+/// Release-level novelty summary used for operator reporting. Destructive
+/// policy evaluates the underlying counts, never a caller-provided category.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum NoveltyCategory {
-    /// All Tracks are exact duplicates of existing catalog entries; the
-    /// Release is a reissue with identical content (safe for Greatest Hits
-    /// redundancy).
+    /// Every Track is an exact duplicate or a known AudioIdentity.
     Reissue,
-    /// Some Tracks have known audio identities but differ in encoding/fingerprint
-    /// (e.g., remastered audio). This is NOT novel content — it is known material
-    /// in a different encoding. A remaster should be kept (different encoding may
-    /// differ in quality) but is not "new" content warranting a Review disposition
-    /// purely on novelty grounds.
+    /// Retained for storage/wire compatibility; fact-derived evaluation folds
+    /// known AudioIdentity Tracks into redundant `Reissue` semantics.
     Remaster,
-    /// The Release has some novel/alternate Tracks (NewTrack or AlternateRecording)
-    /// alongside known ones. Novel content requires Review before destructive action.
+    /// At least one Track is new or an alternate recording.
     Variant,
-    /// No catalog match for this Release's content; it appears brand new.
+    /// Every Track is new to the catalog.
     BrandNewRelease,
-    /// Insufficient evidence to decide (no tracks, or all tracks uncertain).
+    /// At least one Track lacks enough durable evidence to decide.
     Unknown,
 }
 
@@ -59,224 +58,351 @@ impl NoveltyCategory {
 
     #[must_use]
     pub fn parse(value: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|s| s.as_str() == value)
+        Self::ALL
+            .into_iter()
+            .find(|category| category.as_str() == value)
     }
 
-    /// Whether this category represents genuinely new or alternate material
-    /// that may warrant keeping the Release (PRD-POLICY-005).
-    ///
-    /// Remaster is NOT novel — it is known content in a different encoding.
-    /// Only brand-new content (BrandNewRelease) or content with genuinely
-    /// new/alternate tracks (Variant) is novel.
     #[must_use]
     pub const fn is_novel(self) -> bool {
-        matches!(self, Self::BrandNewRelease | Self::Variant)
+        matches!(self, Self::Variant | Self::BrandNewRelease)
     }
 
-    /// Whether the Release is fully redundant (no novel and no uncertain Tracks).
-    /// A Release is redundant only when ALL Tracks are exact duplicates.
-    /// KnownAudioIdentity tracks are NOT redundant — they are different
-    /// encodings worth keeping.
     #[must_use]
     pub const fn is_redundant(self) -> bool {
         matches!(self, Self::Reissue)
     }
 
-    /// Whether the category prevents automatic deletion (PRD-POLICY-005,
-    /// SPEC-INV-008).
     #[must_use]
     pub const fn is_unsafe_to_auto_delete(self) -> bool {
         !self.is_redundant()
     }
 }
 
-/// Input for novelty assessment: the Release's Tracks and what the catalog
-/// already knows about each audio identity.
+/// One authoritative same-Release Track fact loaded from the catalog.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NoveltyTrackFact {
+    pub release_id: ReleaseId,
+    pub track_id: TrackId,
+    pub audio_identity_id: AudioIdentityId,
+    pub media_asset_id: Option<MediaAssetId>,
+    pub byte_hash: Option<String>,
+    /// True only when the AudioIdentity has durable fingerprint/match evidence;
+    /// provisional identity allocation alone is not confirmation.
+    pub audio_identity_confirmed: bool,
+}
+
+/// Complete inputs for one Release novelty evaluation.
 #[derive(Debug, Clone)]
 pub struct NoveltyInput {
     pub release_id: ReleaseId,
-    /// Each Track's audio identity and byte hash, if available.
-    pub track_audio: Vec<(TrackId, AudioIdentityId, Option<String>)>,
-    /// Audio identities confirmed as exact byte duplicates in the catalog.
-    pub catalog_exact_duplicates: BTreeSet<AudioIdentityId>,
-    /// Audio identities known but distinct encoding/fingerprint.
-    pub catalog_known_identities: BTreeSet<AudioIdentityId>,
-    /// Track-level novelty records pre-computed by the catalog engine.
-    /// These are VERIFIED against the catalog sets above — caller-provided
-    /// labels that contradict the catalog sets are downgraded to Uncertain.
-    pub track_novelty: Vec<TrackNovelty>,
+    pub tracks: Vec<NoveltyTrackFact>,
+    /// Canonical byte hashes present in another Release.
+    pub catalog_exact_byte_hashes: BTreeSet<String>,
+    /// Durable AudioIdentity IDs referenced by another Release.
+    pub catalog_known_audio_identities: BTreeSet<AudioIdentityId>,
+    /// Distinct identities confirmed as alternate performances/versions in the
+    /// same catalog context.
+    pub catalog_alternate_audio_identities: BTreeSet<AudioIdentityId>,
+    pub policy_rule_set_id: PolicyRuleSetId,
     pub evaluator_version: String,
     pub now: OffsetDateTime,
 }
 
+/// Typed novelty failures. Invalid or incomplete facts fail closed rather than
+/// becoming a destructive redundancy result.
 #[derive(Debug, Error)]
 pub enum NoveltyEngineError {
-    #[error("novelty evaluation count mismatch")]
-    CountMismatch,
-    #[error("invalid confidence basis points")]
-    InvalidConfidence,
+    #[error("novelty evaluation has no Tracks")]
+    NoTracks,
+    #[error("novelty evaluation exceeds the {max} Track limit")]
+    TooManyTracks { max: usize },
+    #[error("Track {track_id} does not belong to Release {release_id}")]
+    ForeignTrack {
+        track_id: TrackId,
+        release_id: ReleaseId,
+    },
+    #[error("Track {0} appears more than once in novelty facts")]
+    DuplicateTrack(TrackId),
+    #[error("invalid BLAKE3 byte hash in novelty facts")]
+    InvalidByteHash,
+    #[error("an AudioIdentity cannot be both known and an alternate recording")]
+    ConflictingAudioIdentityFact,
+    #[error("novelty {dimension} exceeds the {max} item limit")]
+    TooManyCatalogFacts { dimension: &'static str, max: usize },
+    #[error("novelty domain invariant failed")]
+    Domain(#[from] DomainInvariantError),
 }
 
-/// Engine that assesses Release-level novelty from per-track assessments
-/// and catalog context.
+/// Pure novelty engine deriving Track categories from catalog facts.
 #[derive(Debug, Clone, Default)]
 pub struct NoveltyEngine;
 
 impl NoveltyEngine {
-    /// Assesses novelty for a Release given catalog context and per-Track
-    /// novelty records (PRD-POLICY-004, PRD-POLICY-005).
-    ///
-    /// The engine verifies caller-provided `TrackNovelty` labels against the
-    /// catalog sets:
-    /// - A track labeled `ExactDuplicate` whose audio identity is NOT in
-    ///   `catalog_exact_duplicates` is downgraded to `Uncertain`.
-    /// - A track labeled `KnownAudioIdentity` whose audio identity is NOT in
-    ///   `catalog_known_identities` is downgraded to `Uncertain`.
-    ///
-    /// Release-level category derived from aggregate counts:
-    /// - All ExactDuplicate → Reissue (fully redundant, safe for Greatest Hits)
-    /// - All KnownAudioIdentity (no ExactDuplicate) → Remaster (known content,
-    ///   different encoding, not novel)
-    /// - Mix of ExactDuplicate + KnownAudioIdentity → Remaster
-    /// - Has NewTrack or AlternateRecording → Variant (novel content)
-    /// - All NewTrack, no exact duplicates → BrandNewRelease
-    /// - Otherwise → Unknown
     pub fn assess(&self, input: &NoveltyInput) -> Result<NoveltyAssessment, NoveltyEngineError> {
-        let total = input.track_novelty.len() as u32;
+        validate_input(input)?;
 
-        // Verify caller-provided labels against catalog sets; downgrade
-        // contradictory labels to Uncertain.
-        let mut verified: Vec<TrackNovelty> = Vec::with_capacity(input.track_novelty.len());
-        for track in &input.track_novelty {
-            let effective_category = match track.category {
-                TrackNoveltyCategory::ExactDuplicate
-                    if !input
-                        .catalog_exact_duplicates
-                        .contains(&track.audio_identity_id) =>
-                {
-                    TrackNoveltyCategory::Uncertain
-                }
-                TrackNoveltyCategory::KnownAudioIdentity
-                    if !input
-                        .catalog_known_identities
-                        .contains(&track.audio_identity_id) =>
-                {
-                    TrackNoveltyCategory::Uncertain
-                }
-                other => other,
-            };
-            verified.push(TrackNovelty {
-                category: effective_category,
-                ..track.clone()
-            });
+        let mut rows = Vec::with_capacity(input.tracks.len());
+        for fact in &input.tracks {
+            let (category, evidence_kind, confidence, detail) = derive_track_novelty(input, fact)?;
+            rows.push(TrackNovelty::new(TrackNovelty {
+                id: TrackNoveltyId::new(),
+                release_id: input.release_id,
+                track_id: fact.track_id,
+                audio_identity_id: fact.audio_identity_id,
+                media_asset_id: fact.media_asset_id,
+                category,
+                confidence,
+                evidence_kind,
+                detail,
+                evaluated_at: input.now,
+            })?);
         }
 
+        let total_track_count =
+            u32::try_from(rows.len()).map_err(|_| NoveltyEngineError::TooManyTracks {
+                max: MAX_TRACKS_PER_NOVELTY_EVALUATION,
+            })?;
         let exact_duplicate_count =
-            count_for_category(&verified, TrackNoveltyCategory::ExactDuplicate);
+            count_for_category(&rows, TrackNoveltyCategory::ExactDuplicate)?;
         let known_audio_identity_count =
-            count_for_category(&verified, TrackNoveltyCategory::KnownAudioIdentity);
+            count_for_category(&rows, TrackNoveltyCategory::KnownAudioIdentity)?;
         let alternate_recording_count =
-            count_for_category(&verified, TrackNoveltyCategory::AlternateRecording);
-        let new_track_count = count_for_category(&verified, TrackNoveltyCategory::NewTrack);
-        let uncertain_count = count_for_category(&verified, TrackNoveltyCategory::Uncertain);
+            count_for_category(&rows, TrackNoveltyCategory::AlternateRecording)?;
+        let new_track_count = count_for_category(&rows, TrackNoveltyCategory::NewTrack)?;
+        let uncertain_count = count_for_category(&rows, TrackNoveltyCategory::Uncertain)?;
 
-        let sum = exact_duplicate_count
-            + known_audio_identity_count
-            + alternate_recording_count
-            + new_track_count
-            + uncertain_count;
-        if sum != total {
-            return Err(NoveltyEngineError::CountMismatch);
-        }
-
-        let evaluation = NoveltyEvaluation {
+        let evaluation = NoveltyEvaluation::new(NoveltyEvaluation {
             release_id: input.release_id,
-            policy_rule_set_id: PolicyRuleSetId::new(),
+            policy_rule_set_id: input.policy_rule_set_id,
             exact_duplicate_count,
             known_audio_identity_count,
             alternate_recording_count,
             new_track_count,
             uncertain_count,
-            total_track_count: total,
+            total_track_count,
             evaluated_at: input.now,
             evaluator_version: input.evaluator_version.clone(),
-        };
+        })?;
 
-        // Release-level category derived from verified aggregate counts.
-        let has_novel = new_track_count > 0 || alternate_recording_count > 0;
-        let all_exact = exact_duplicate_count == total && total > 0;
-        let all_known = known_audio_identity_count == total && total > 0;
-        let all_redundant =
-            exact_duplicate_count + known_audio_identity_count == total && total > 0;
-
-        let category = if total == 0 || uncertain_count == total {
-            // No tracks or all uncertain → Unknown.
+        let category = if evaluation.has_uncertain_tracks() {
             NoveltyCategory::Unknown
-        } else if all_exact {
-            // All tracks are exact byte duplicates → reissue (fully redundant).
-            NoveltyCategory::Reissue
-        } else if all_known && !has_novel && uncertain_count == 0 {
-            // All tracks have known audio identity (different encoding, no novel
-            // content, no uncertain) → Remaster (known but distinct encoding).
-            NoveltyCategory::Remaster
-        } else if all_redundant && !has_novel && uncertain_count == 0 {
-            // Mix of exact duplicates and known identities, no novel content → Remaster.
-            NoveltyCategory::Remaster
-        } else if has_uncertain_only_with_some_known(
-            exact_duplicate_count,
-            known_audio_identity_count,
-            uncertain_count,
-            total,
-        ) {
-            // Some tracks are known (exact dup or known identity) but others are
-            // uncertain → not enough to classify as a clean Remaster; treat as
-            // Variant since we can't confirm full redundancy.
-            NoveltyCategory::Variant
-        } else if has_novel && !all_exact && uncertain_count == 0 {
-            // Has genuinely novel tracks (new or alternate) → Variant.
-            NoveltyCategory::Variant
-        } else if exact_duplicate_count == 0
-            && known_audio_identity_count == 0
-            && new_track_count == total
-        {
-            // All tracks are brand new → BrandNewRelease.
+        } else if evaluation.new_track_count == evaluation.total_track_count {
             NoveltyCategory::BrandNewRelease
-        } else {
-            // Mixed or unclassifiable → Variant (has some novel content).
+        } else if evaluation.novel_track_count() > 0 {
             NoveltyCategory::Variant
+        } else if evaluation.is_redundant() {
+            NoveltyCategory::Reissue
+        } else {
+            NoveltyCategory::Unknown
         };
 
         Ok(NoveltyAssessment {
             category,
             evaluation,
-            track_novelty: verified,
+            track_novelty: rows,
         })
     }
 }
 
-/// Checks if the only novel/uncertain content is from uncertainty mixed with
-/// some known identical/identity tracks.
-fn has_uncertain_only_with_some_known(
-    exact_duplicate_count: u32,
-    known_audio_identity_count: u32,
-    uncertain_count: u32,
-    total: u32,
-) -> bool {
-    uncertain_count > 0
-        && (exact_duplicate_count + known_audio_identity_count) > 0
-        && (exact_duplicate_count + known_audio_identity_count + uncertain_count) == total
+fn validate_input(input: &NoveltyInput) -> Result<(), NoveltyEngineError> {
+    if !input.release_id.is_uuid_v7() || !input.policy_rule_set_id.is_uuid_v7() {
+        return Err(NoveltyEngineError::Domain(
+            DomainInvariantError::InvalidInternalId("novelty input identity"),
+        ));
+    }
+    if input.evaluator_version.trim().is_empty() {
+        return Err(NoveltyEngineError::Domain(
+            DomainInvariantError::BlankValue("novelty evaluator version"),
+        ));
+    }
+    if input.tracks.is_empty() {
+        return Err(NoveltyEngineError::NoTracks);
+    }
+    if input.tracks.len() > MAX_TRACKS_PER_NOVELTY_EVALUATION {
+        return Err(NoveltyEngineError::TooManyTracks {
+            max: MAX_TRACKS_PER_NOVELTY_EVALUATION,
+        });
+    }
+    for (dimension, count) in [
+        ("exact byte hashes", input.catalog_exact_byte_hashes.len()),
+        (
+            "known AudioIdentities",
+            input.catalog_known_audio_identities.len(),
+        ),
+        (
+            "alternate AudioIdentities",
+            input.catalog_alternate_audio_identities.len(),
+        ),
+    ] {
+        if count > MAX_TRACKS_PER_NOVELTY_EVALUATION {
+            return Err(NoveltyEngineError::TooManyCatalogFacts {
+                dimension,
+                max: MAX_TRACKS_PER_NOVELTY_EVALUATION,
+            });
+        }
+    }
+    if input
+        .catalog_known_audio_identities
+        .iter()
+        .any(|id| input.catalog_alternate_audio_identities.contains(id))
+    {
+        return Err(NoveltyEngineError::ConflictingAudioIdentityFact);
+    }
+    if input
+        .catalog_known_audio_identities
+        .iter()
+        .chain(input.catalog_alternate_audio_identities.iter())
+        .any(|id| !id.is_uuid_v7())
+    {
+        return Err(NoveltyEngineError::Domain(
+            DomainInvariantError::InvalidInternalId("AudioIdentityId"),
+        ));
+    }
+    if input
+        .catalog_exact_byte_hashes
+        .iter()
+        .any(|hash| !is_blake3(hash))
+    {
+        return Err(NoveltyEngineError::InvalidByteHash);
+    }
+
+    let mut track_ids = BTreeSet::new();
+    for fact in &input.tracks {
+        if fact.release_id != input.release_id {
+            return Err(NoveltyEngineError::ForeignTrack {
+                track_id: fact.track_id,
+                release_id: input.release_id,
+            });
+        }
+        if !track_ids.insert(fact.track_id) {
+            return Err(NoveltyEngineError::DuplicateTrack(fact.track_id));
+        }
+        if !fact.track_id.is_uuid_v7()
+            || !fact.audio_identity_id.is_uuid_v7()
+            || fact.media_asset_id.is_some_and(|id| !id.is_uuid_v7())
+        {
+            return Err(NoveltyEngineError::Domain(
+                DomainInvariantError::InvalidInternalId("novelty Track fact identity"),
+            ));
+        }
+        if fact
+            .byte_hash
+            .as_deref()
+            .is_some_and(|hash| !is_blake3(hash))
+        {
+            return Err(NoveltyEngineError::InvalidByteHash);
+        }
+    }
+    Ok(())
 }
 
-fn count_for_category(items: &[TrackNovelty], category: TrackNoveltyCategory) -> u32 {
-    items.iter().filter(|t| t.category == category).count() as u32
+fn derive_track_novelty(
+    input: &NoveltyInput,
+    fact: &NoveltyTrackFact,
+) -> Result<
+    (
+        TrackNoveltyCategory,
+        NoveltyEvidenceKind,
+        Confidence,
+        String,
+    ),
+    NoveltyEngineError,
+> {
+    if let Some(hash) = &fact.byte_hash
+        && input.catalog_exact_byte_hashes.contains(hash)
+    {
+        return Ok((
+            TrackNoveltyCategory::ExactDuplicate,
+            NoveltyEvidenceKind::ByteHashMatch,
+            Confidence::new(10_000)?,
+            "Canonical byte hash exists in another Release".to_string(),
+        ));
+    }
+    if input
+        .catalog_known_audio_identities
+        .contains(&fact.audio_identity_id)
+    {
+        return Ok((
+            TrackNoveltyCategory::KnownAudioIdentity,
+            NoveltyEvidenceKind::AudioIdentityMatch,
+            Confidence::new(9_000)?,
+            "AudioIdentity is durably referenced by another Release".to_string(),
+        ));
+    }
+    if fact.audio_identity_confirmed
+        && input
+            .catalog_alternate_audio_identities
+            .contains(&fact.audio_identity_id)
+    {
+        return Ok((
+            TrackNoveltyCategory::AlternateRecording,
+            NoveltyEvidenceKind::AudioIdentityDistinct,
+            Confidence::new(8_500)?,
+            "Catalog evidence confirms a distinct alternate recording".to_string(),
+        ));
+    }
+    if fact.audio_identity_confirmed {
+        return Ok((
+            TrackNoveltyCategory::NewTrack,
+            NoveltyEvidenceKind::NoCatalogMatch,
+            Confidence::new(8_500)?,
+            "Confirmed AudioIdentity has no catalog match".to_string(),
+        ));
+    }
+    Ok((
+        TrackNoveltyCategory::Uncertain,
+        NoveltyEvidenceKind::InsufficientEvidence,
+        Confidence::zero(),
+        "AudioIdentity lacks durable fingerprint or match confirmation".to_string(),
+    ))
 }
 
-/// Result of a novelty assessment.
+fn count_for_category(
+    rows: &[TrackNovelty],
+    category: TrackNoveltyCategory,
+) -> Result<u32, NoveltyEngineError> {
+    u32::try_from(rows.iter().filter(|row| row.category == category).count()).map_err(|_| {
+        NoveltyEngineError::TooManyTracks {
+            max: MAX_TRACKS_PER_NOVELTY_EVALUATION,
+        }
+    })
+}
+
+fn is_blake3(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+/// Validated novelty result. Fields are private so callers cannot synthesize a
+/// destructive `Reissue` without passing complete Track facts through the engine.
 #[derive(Debug, Clone)]
 pub struct NoveltyAssessment {
-    pub category: NoveltyCategory,
-    pub evaluation: NoveltyEvaluation,
-    /// Per-track novelty records (verified against catalog sets), suitable for
-    /// persistence alongside the evaluation.
-    pub track_novelty: Vec<TrackNovelty>,
+    category: NoveltyCategory,
+    evaluation: NoveltyEvaluation,
+    track_novelty: Vec<TrackNovelty>,
+}
+
+impl NoveltyAssessment {
+    #[must_use]
+    pub const fn category(&self) -> NoveltyCategory {
+        self.category
+    }
+
+    #[must_use]
+    pub const fn evaluation(&self) -> &NoveltyEvaluation {
+        &self.evaluation
+    }
+
+    #[must_use]
+    pub fn track_novelty(&self) -> &[TrackNovelty] {
+        &self.track_novelty
+    }
+
+    #[must_use]
+    pub fn into_parts(self) -> (NoveltyCategory, NoveltyEvaluation, Vec<TrackNovelty>) {
+        (self.category, self.evaluation, self.track_novelty)
+    }
 }

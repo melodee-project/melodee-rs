@@ -60,6 +60,23 @@ Implemented normalization checks:
   diagnosing a worker. A target conflict is never overwritten; inspect the durable work-item and
   publication journal evidence before correcting the external filesystem state.
 
+## Policy evaluation checks
+
+- Run `melodee policy config` and `melodee policy rules` to confirm the configured immutable
+  rule-set version and safe disposition preferences. If a preference changed, increment
+  `MELODEE__POLICY__RULE_SET_VERSION`; a same-version payload conflict deliberately fails closed.
+- Run `melodee policy test --limit 100 --actor <administrator-id>` to compare proposed dispositions, matched rules, existing
+  decisions/states, and destructive impact without writing proposed decisions.
+- Run `melodee policy inspect <release-id>` to inspect the current decision and append-only audit.
+  A `Review` or `Delete` decision should remain pending in `NeedsReview`.
+- Run `melodee policy evaluate <release-id>` when a cataloged Release has no durable decision or
+  needs a read-only comparison. Policy evaluation uses PostgreSQL facts and the sealed-manifest
+  fingerprint; it does not need source or canonical media access.
+- Check the `MELODEE__POLICY__*` settings in
+  [Configuration](../installation/configuration/#policy-evaluation). Invalid zero/out-of-range
+  bounds, unsafe dispositions, and immutable rule-set conflicts stop startup rather than silently
+  changing policy.
+
 Remaining topics will be added as their behavior ships:
 
 - database connection and migration problems;

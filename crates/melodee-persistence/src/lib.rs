@@ -32,7 +32,13 @@ pub use config::{
 pub use error::WorkStoreError;
 pub use migrate::{MIGRATOR, migrate};
 pub use policy::{
-    CatalogTrackFact, MAX_POLICY_TEST_SAMPLES, PolicyStore, PolicyStoreError, StoredPolicyDecision,
+    CatalogTrackFact, MAX_POLICY_CLASSIFICATION_EVIDENCE, MAX_POLICY_TEST_CLASSIFICATION_FACTS,
+    MAX_POLICY_TEST_RELEASES, MAX_POLICY_TEST_SAMPLES, MAX_POLICY_TEST_TRACK_FACTS,
+    MAX_POLICY_TRACKS_PER_RELEASE, PolicyAdminOverrideRequest,
+    PolicyAudioIdentityAlternateAssertion, PolicyAudioIdentityNoMatchAssertion,
+    PolicyCatalogContext, PolicyClaim, PolicyCommitResult, PolicyDecisionAuditEntry,
+    PolicyDestructiveCompletion, PolicyEvaluationCommit, PolicyReleaseCatalogTraitAssertion,
+    PolicyStore, PolicyStoreError, StoredPolicyDecision, StoredReleaseClassification,
 };
 pub use work_items::{
     ActiveLease, PublicationJournalEntry, SettlingSnapshot, SettlingSnapshotFile, StateCount,

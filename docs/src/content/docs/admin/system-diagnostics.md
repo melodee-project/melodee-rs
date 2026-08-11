@@ -66,8 +66,17 @@ owner process is currently alive.
   durable state, attempt count, next retry time, and last error.
 - `melodee catalog import` runs one bounded import pass using the same lease, retry, and catalog
   concurrency configuration as the server worker.
+- `melodee policy config` and `melodee policy rules` print the active safe preferences and exact
+  immutable rule-set identity.
+- `melodee policy test --limit 100 --actor <administrator-id>` runs a bounded catalog test and reports proposed outcomes,
+  matched rules, existing dispositions/states, destructive impact, and sample Release IDs.
+- `melodee policy evaluate <release-id>` proposes one decision without persisting it;
+  `melodee policy inspect <release-id>` prints the current durable decision and audit history.
+- `melodee policy decide <release-id> <disposition> --actor <id> --reason <reason>` records an
+  explicit administrator override. It does not complete or execute deletion.
 
-See [Troubleshooting](../troubleshooting/) for operational checks.
+See [Policies](./policies/) for disposition and safety behavior, and
+[Troubleshooting](../troubleshooting/) for operational checks.
 
 :::caution[Partial implementation]
 The health and queue diagnostics above are implemented. A graphical diagnostics screen and

@@ -8,25 +8,35 @@
 
 #![forbid(unsafe_code)]
 
+mod catalog_context;
 mod classifier;
 mod config;
 mod dry_run;
 mod engine;
 mod novelty;
 
+pub use catalog_context::evaluate_catalog_context;
 pub use classifier::{
-    ClassificationInput, Classifier, DEFAULT_CLASSIFIER_VERSION, DEFAULT_DESTRUCTIVE_CONFIDENCE,
+    AdministratorClassification, ClassificationError, ClassificationInput, Classifier,
+    DEFAULT_CLASSIFIER_VERSION, DEFAULT_DESTRUCTIVE_CONFIDENCE,
 };
 pub use config::{
     ENV_POLICY_BATCH_SIZE, ENV_POLICY_CONCURRENCY, ENV_POLICY_DESTRUCTIVE_CONFIDENCE_BPS,
-    PolicyConfig, PolicyConfigError,
+    ENV_POLICY_NOVEL_GREATEST_HITS_DISPOSITION, ENV_POLICY_REDUNDANT_GREATEST_HITS_DISPOSITION,
+    ENV_POLICY_RULE_SET_VERSION, ENV_POLICY_UNCERTAIN_GREATEST_HITS_DISPOSITION,
+    MAX_POLICY_BATCH_SIZE, MAX_POLICY_CONCURRENCY, PolicyConfig, PolicyConfigError,
 };
-pub use dry_run::{PolicyDryRun, PolicyDryRunResult, PolicyDryRunner};
+pub use dry_run::{
+    MAX_DRY_RUN_CLASSIFICATION_FACTS, MAX_DRY_RUN_TRACK_FACTS, MAX_POLICY_TEST_SAMPLES,
+    PolicyDryRun, PolicyDryRunError, PolicyDryRunResult, PolicyDryRunner,
+};
 pub use engine::{
-    DefaultPolicyRuleSet, DefaultRules, PolicyEngine, PolicyEvaluation, PolicyInput, default_rules,
+    DEFAULT_RULE_SET_NAME, DEFAULT_RULE_SET_VERSION, PolicyEngine, PolicyEngineError,
+    PolicyEvaluation, PolicyInput, RuleMatch, default_rule_set, default_rule_set_id, default_rules,
 };
 pub use novelty::{
-    NoveltyAssessment, NoveltyCategory, NoveltyEngine, NoveltyEngineError, NoveltyInput,
+    DEFAULT_NOVELTY_EVALUATOR_VERSION, MAX_TRACKS_PER_NOVELTY_EVALUATION, NoveltyAssessment,
+    NoveltyCategory, NoveltyEngine, NoveltyEngineError, NoveltyInput, NoveltyTrackFact,
 };
 
 /// Outcome of one bounded policy evaluation pass.

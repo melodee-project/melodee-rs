@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "authority": {
+    "decision": "ADR-0120",
+    "requirements": [
+      "PRD-CLASS-003",
+      "PRD-POLICY-003",
+      "PRD-POLICY-004",
+      "PRD-POLICY-005",
+      "PRD-POLICY-006",
+      "PRD-POLICY-007"
+    ],
+    "legacyEvidence": "design/evidence/phase-0/media-baseline.md#7-classification-and-destructive-policy-hazards",
+    "legacyBehaviorPreserved": "A matching directory name alone is non-destructive.",
+    "legacyBehaviorNotPreserved": "Same-size files are never treated as duplicates without authoritative content evidence."
+  },
+  "defaultPreferences": {
+    "redundantGreatestHits": "ignore",
+    "novelGreatestHits": "review",
+    "uncertainGreatestHits": "review"
+  },
+  "cases": [
+    {
+      "id": "greatest-hits-all-exact",
+      "title": "Greatest Hits",
+      "trustedTraits": ["greatest_hits", "compilation"],
+      "trackNovelty": ["exact_duplicate", "exact_duplicate"],
+      "expectedDisposition": "ignore",
+      "forbiddenDisposition": "delete"
+    },
+    {
+      "id": "greatest-hits-all-known-audio",
+      "title": "Greatest Hits",
+      "trustedTraits": ["greatest_hits", "compilation"],
+      "trackNovelty": ["known_audio_identity", "known_audio_identity"],
+      "expectedDisposition": "ignore",
+      "forbiddenDisposition": "delete"
+    },
+    {
+      "id": "greatest-hits-mixed-redundant",
+      "title": "Greatest Hits",
+      "trustedTraits": ["greatest_hits", "compilation"],
+      "trackNovelty": ["exact_duplicate", "known_audio_identity"],
+      "expectedDisposition": "ignore",
+      "forbiddenDisposition": "delete"
+    },
+    {
+      "id": "greatest-hits-one-new",
+      "title": "Greatest Hits",
+      "trustedTraits": ["greatest_hits", "compilation"],
+      "trackNovelty": ["exact_duplicate", "new_track"],
+      "expectedDisposition": "review",
+      "forbiddenDisposition": "delete"
+    },
+    {
+      "id": "greatest-hits-one-alternate",
+      "title": "Greatest Hits",
+      "trustedTraits": ["greatest_hits", "compilation"],
+      "trackNovelty": ["known_audio_identity", "alternate_recording"],
+      "expectedDisposition": "review",
+      "forbiddenDisposition": "delete"
+    },
+    {
+      "id": "greatest-hits-one-uncertain",
+      "title": "Greatest Hits",
+      "trustedTraits": ["greatest_hits", "compilation"],
+      "trackNovelty": ["exact_duplicate", "uncertain"],
+      "expectedDisposition": "review",
+      "forbiddenDisposition": "delete"
+    },
+    {
+      "id": "directory-only-greatest-hits",
+      "title": "Ordinary Release",
+      "directoryName": "Greatest Hits",
+      "trackNovelty": ["exact_duplicate"],
+      "expectedDisposition": "accept",
+      "forbiddenDisposition": "delete"
+    },
+    {
+      "id": "title-only-greatest-hits",
+      "title": "Greatest Hits",
+      "trackNovelty": ["exact_duplicate"],
+      "expectedDisposition": "ignore",
+      "forbiddenDisposition": "delete"
+    },
+    {
+      "id": "nonmatching-release",
+      "title": "Ordinary Release",
+      "trackNovelty": ["new_track"],
+      "expectedDisposition": "review",
+      "forbiddenDisposition": "delete"
+    }
+  ]
+}

@@ -65,10 +65,38 @@ pub enum DomainInvariantError {
     BlankPolicyActor,
     #[error("classification evidence does not belong to the owning classification")]
     ForeignClassificationEvidence,
+    #[error(
+        "every classification trait must have evidence and every evidence trait must be classified"
+    )]
+    IncompleteClassificationEvidence,
+    #[error("classification evidence records must be unique")]
+    DuplicateClassificationEvidence,
+    #[error("classification {dimension} exceeds the limit of {limit}")]
+    ClassificationScopeExceeded {
+        dimension: &'static str,
+        limit: usize,
+    },
     #[error("novelty evaluation category counts do not match the total track count")]
     NoveltyCountMismatch,
+    #[error("policy rule identifiers must be unique within a rule set")]
+    DuplicatePolicyRuleId,
+    #[error("the policy rule disposition is unsafe for its rule type")]
+    InvalidPolicyRuleDisposition,
+    #[error("a Delete policy decision requires a nonblank source fingerprint")]
+    MissingPolicySourceFingerprint,
+    #[error("policy decision completion state and timestamp are inconsistent")]
+    InvalidDecisionCompletionState,
+    #[error("the policy decision actor does not match the evaluated rule-set version")]
+    PolicyActorVersionMismatch,
     #[error("policy decision completion state transition is invalid")]
     InvalidDecisionCompletionTransition,
+    #[error("policy test summary aggregates are inconsistent")]
+    InvalidPolicyTestSummary,
+    #[error("policy test summary {dimension} exceeds the limit of {limit}")]
+    PolicyTestScopeExceeded {
+        dimension: &'static str,
+        limit: usize,
+    },
 }
 
 /// Inclusive confidence in basis points, avoiding floating-point persistence ambiguity.

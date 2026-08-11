@@ -8,13 +8,14 @@ this repository defines the new architecture, specifications, tests, and impleme
 
 ## Current phase
 
-**Phase 5 — Classification, novelty, and policy (active boundary)**
+**Phase 6 — Search and MQL (active boundary)**
 
-Phases 0–4 are complete. Phase 4 implements the authoritative PostgreSQL catalog, evidence-based
-Artist resolution, AudioIdentity, contributions/participation, audited correction, immutable
-manifest-v3 overlays, bounded set-based import, and legacy public-ID mapping. Its exit decision and
-reproducible results are in the [Phase 4 report](design/evidence/phase-4/PHASE-4-REPORT.md). Phase 5
-is the next implementation boundary; see [IMPLEMENTATION.md](IMPLEMENTATION.md).
+Phases 0–5 are complete. Phase 5 implements explainable Release classification, complete Track
+novelty, immutable versioned policy rules, bounded dry-run, leased policy workers, and durable
+decision/audit and administrator-authorization boundaries without reopening or deleting media. Its
+exit decision and reproducible results are in the
+[Phase 5 report](design/evidence/phase-5/PHASE-5-REPORT.md). Phase 6 is the next implementation
+boundary; see [IMPLEMENTATION.md](IMPLEMENTATION.md).
 
 ## Non-negotiable product commitments
 
@@ -90,7 +91,7 @@ The first successful Cargo resolution must produce `Cargo.lock`; commit it in th
 
 ## Current implementation evidence
 
-Completed phase reports live under `design/evidence/phase-0/` through `design/evidence/phase-4/`.
+Completed phase reports live under `design/evidence/phase-0/` through `design/evidence/phase-5/`.
 The phase plan, accepted ADRs, and an assigned work package determine what may be implemented next;
 historical work packages remain as completed project evidence.
 

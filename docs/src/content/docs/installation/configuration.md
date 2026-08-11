@@ -79,6 +79,20 @@ by the current server.
 | `MELODEE__CATALOG__BATCH_SIZE` | `16` | Configured claim ceiling; the effective per-process claim is the smaller of this value and catalog concurrency. |
 | `MELODEE__CATALOG__POLL_INTERVAL_SECONDS` | `5` | Period between PostgreSQL catalog-import polls. |
 
+### Policy evaluation
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `MELODEE__POLICY__WORKER__ENABLED` | `true` | Whether the server evaluates cataloged Releases with the configured immutable rule set. |
+| `MELODEE__POLICY__WORKER__POLL_INTERVAL_SECONDS` | `60` | Period between PostgreSQL policy-worker polls. |
+| `MELODEE__POLICY__CONCURRENCY` | `4` | Maximum policy evaluations in flight in one server process (maximum `64`). |
+| `MELODEE__POLICY__BATCH_SIZE` | `500` | Configured claim ceiling (maximum `10000`); the effective claim is the smaller of this value and concurrency. |
+| `MELODEE__POLICY__RULE_SET_VERSION` | `1` | Immutable version for the configured built-in rule set. Increment it whenever a preference changes. |
+| `MELODEE__POLICY__DESTRUCTIVE_CONFIDENCE_BPS` | `8000` | Confidence threshold in basis points (`1`–`10000`) for a rule that proposes a destructive disposition. |
+| `MELODEE__POLICY__REDUNDANT_GREATEST_HITS_DISPOSITION` | `ignore` | Outcome for fully redundant Greatest Hits Releases: `ignore` or `delete`. Delete remains pending review. |
+| `MELODEE__POLICY__NOVEL_GREATEST_HITS_DISPOSITION` | `review` | Outcome when a Greatest Hits Release contains new/alternate material: `review` or `accept`. |
+| `MELODEE__POLICY__UNCERTAIN_GREATEST_HITS_DISPOSITION` | `review` | Outcome when Greatest Hits novelty is uncertain: `review` or `quarantine`. |
+
 ### Notes
 
 - `MELODEE__INGEST__SOURCES_JSON` and the legacy single-root variables are mutually additive only through configuration code: JSON takes precedence when present.
@@ -97,5 +111,12 @@ by the current server.
   independent of the ingestion-stage concurrency settings. The effective claim size is the lower
   of catalog batch size and catalog concurrency, so a claimed lease never waits behind the same
   process's concurrency queue.
+- Policy evaluation reads authoritative Release, Track, AudioIdentity, byte-hash, catalog-context,
+  and sealed-manifest facts from PostgreSQL; it does not reopen media. Invalid policy bounds or
+  preferences fail startup. Rule-set name/version pairs are immutable: increment the version when
+  changing a preference, or startup fails closed on the stored payload conflict.
+- `Review` and `Delete` policy decisions remain pending in `NeedsReview`. `Accept`, `Ignore`, and
+  `Quarantine` decisions complete atomically with their non-destructive work-item routing. The
+  Phase 5 worker and CLI do not complete destructive actions or remove media.
 - `MELODEE_BIND` remains a compatibility fallback for the earlier bootstrap, but
   `MELODEE__SERVER__BIND` is the canonical key.

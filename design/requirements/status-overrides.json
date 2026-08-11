@@ -417,51 +417,59 @@
       "scripts/run_benchmarks.py",
       "design/evidence/phase-0/scale-baseline.md",
       "crates/melodee-persistence/tests/catalog_performance.rs (repeatable 200-manifest PostgreSQL catalog workload)",
-      "design/evidence/phase-4/PHASE-4-REPORT.md (exact observed metrics and qualification)"
+      "design/evidence/phase-4/PHASE-4-REPORT.md (exact observed catalog metrics and qualification)",
+      "design/evidence/phase-5/PHASE-5-REPORT.md (exact bounded policy-worker metrics and qualification)"
     ],
     "tests": [
       "tests/python/test_benchmark_baseline.py",
-      "crates/melodee-persistence/tests/catalog_performance.rs"
+      "crates/melodee-persistence/tests/catalog_performance.rs",
+      "apps/melodee-server/tests/policy_worker.rs (200-Release policy workload)"
     ],
-    "note": "Legacy reference and Phase 4 catalog workloads are repeatable and reported without turning one host observation into a product threshold. Rust API/search suites continue in later phases."
+    "note": "Legacy reference plus Phase 4 catalog and Phase 5 policy workloads are repeatable and reported without turning one host observation into a product threshold. Rust API/search suites continue in later phases."
   },
   "PRD-PERF-002": {
     "status": "tested",
     "implementation": [
       "scripts/generate_benchmark_dataset.py (three deterministic SQL tiers)",
       "scripts/generate_media_corpus.py (deterministic ffmpeg media corpus)",
-      "crates/melodee-persistence/tests/catalog_common/ (deterministic Published manifest-v3 and frozen legacy catalog fixture generators)"
+      "crates/melodee-persistence/tests/catalog_common/ (deterministic Published manifest-v3 and frozen legacy catalog fixture generators)",
+      "compatibility/phase5/greatest-hits-safety.json (schema-versioned classification/novelty safety corpus)"
     ],
     "tests": [
       "tests/python/test_benchmark_baseline.py",
       "tests/python/test_media_baseline.py",
-      "crates/melodee-persistence/tests/catalog_performance.rs and catalog_legacy.rs"
+      "crates/melodee-persistence/tests/catalog_performance.rs and catalog_legacy.rs",
+      "crates/melodee-policy/tests/phase5_compatibility.rs"
     ]
   },
   "PRD-PERF-003": {
     "status": "in-progress",
     "implementation": [
       "compatibility/benchmarks/results/ (wall-clock cold/warm, response sizes, server memory at Tier C)",
-      "crates/melodee-persistence/tests/catalog_performance.rs (catalog wall time, call time, peak RSS, SQL statement count, rows written, throughput inputs, and zero media reads)"
+      "crates/melodee-persistence/tests/catalog_performance.rs (catalog wall time, call time, peak RSS, SQL statement count, rows written, throughput inputs, and zero media reads)",
+      "apps/melodee-server/tests/policy_worker.rs (policy window wall time, measured concurrency, whole-test VmHWM, mutation statements, and zero media reads)"
     ],
     "tests": [
       "tests/python/test_benchmark_baseline.py",
-      "design/evidence/phase-4/PHASE-4-REPORT.md (exact Phase 4 metric record)"
+      "design/evidence/phase-4/PHASE-4-REPORT.md (exact Phase 4 metric record)",
+      "design/evidence/phase-5/PHASE-5-REPORT.md (exact Phase 5 metric record)"
     ],
-    "note": "Phase 4 adds repeatable catalog wall-time, memory, database statement, row-write, throughput, and no-file-read evidence. Queue age and later API/search metrics remain outstanding, so the broad requirement stays in progress."
+    "note": "Phase 4 catalog and Phase 5 policy add repeatable wall-time, memory, statement, row/result, throughput, bounded-concurrency, and no-file-read evidence. Queue age and later API/search metrics remain outstanding, so the broad requirement stays in progress."
   },
   "PRD-PERF-004": {
     "status": "in-progress",
     "implementation": [
       "design/evidence/phase-0/scale-baseline.md section 4 (per-Release pipeline cost shape ~3s; non-transactional restart behavior evidence)",
       "design/evidence/phase-3/PHASE-3-REPORT.md (bounded 200-Release normalization, validation, and canonical-publication result with zero loss/duplicate authority/source mutation)",
-      "design/evidence/phase-4/PHASE-4-REPORT.md (bounded 200-manifest catalog result with zero loss/duplicate/partial/media-read result)"
+      "design/evidence/phase-4/PHASE-4-REPORT.md (bounded 200-manifest catalog result with zero loss/duplicate/partial/media-read result)",
+      "design/evidence/phase-5/PHASE-5-REPORT.md (bounded 200-Release policy result with zero loss/duplicate/partial/media-read result)"
     ],
     "tests": [
       "crates/melodee-ingestion/tests/normalization.rs (200 Releases reach Published under independently bounded workers; crash/lease recovery cases)",
-      "crates/melodee-persistence/tests/catalog_performance.rs and catalog_import.rs (200 Cataloged plus lease expiry/theft/cancellation/retry recovery)"
+      "crates/melodee-persistence/tests/catalog_performance.rs and catalog_import.rs (200 Cataloged plus lease expiry/theft/cancellation/retry recovery)",
+      "apps/melodee-server/tests/policy_worker.rs and crates/melodee-persistence/tests/phase5_faults.rs (200 policy outcomes plus cancellation/theft/crash/adoption)"
     ],
-    "note": "The Rust 200-Release publication and catalog workloads are measured and bounded with durable recovery tests. Repeated whole-process termination across the later search pipeline remains outstanding, so the broad requirement stays in progress."
+    "note": "The Rust 200-Release publication, catalog, and policy workloads are measured and bounded with durable recovery tests. Repeated whole-process termination across the later search pipeline remains outstanding, so the broad requirement stays in progress."
   },
   "PRD-PERF-005": {
     "status": "in-progress",
@@ -506,7 +514,8 @@
     "implementation": [
       "compatibility/media/ (31-case synthetic corpus incl. malformed tags, corrupt/truncated audio, invalid artwork, duplicate track numbers)",
       "design/evidence/phase-3/PHASE-3-REPORT.md (real MP3/FLAC/OGG/WAV, Unicode/path, artwork, and sidecar publication coverage)",
-      "design/evidence/phase-4/PHASE-4-REPORT.md (same-name, alias/context, guest credit, membership, conflict, negative/manual, legacy, and AudioIdentity cases)"
+      "design/evidence/phase-4/PHASE-4-REPORT.md (same-name, alias/context, guest credit, membership, conflict, negative/manual, legacy, and AudioIdentity cases)",
+      "compatibility/phase5/greatest-hits-safety.json and design/evidence/phase-5/PHASE-5-REPORT.md (classification, five novelty categories, corrupt media, and weak-path safety)"
     ],
     "tests": [
       "tests/python/test_media_baseline.py",
@@ -514,9 +523,10 @@
       "crates/melodee-ingestion/tests/normalization.rs",
       "crates/melodee-ingestion/tests/publication.rs",
       "crates/melodee-catalog/src/resolver.rs",
-      "crates/melodee-persistence/tests/catalog_identity.rs, catalog_participation.rs, catalog_merge_split.rs, and catalog_audio_identity.rs"
+      "crates/melodee-persistence/tests/catalog_identity.rs, catalog_participation.rs, catalog_merge_split.rs, and catalog_audio_identity.rs",
+      "crates/melodee-policy/tests/phase5_compatibility.rs and apps/melodee-server/tests/policy_worker.rs"
     ],
-    "note": "Phase 3 media/pathology and Phase 4 identity/credit/AudioIdentity ambiguity cases are implemented. Phase 5 classification and later compatibility-scale cases keep the cross-product requirement in progress."
+    "note": "Phase 3 media/pathology, Phase 4 identity/credit/AudioIdentity ambiguity, and Phase 5 classification/novelty safety cases are implemented. Later API/client compatibility-scale cases keep the cross-product requirement in progress."
   },
   "PRD-TEST-006": {
     "status": "in-progress",
@@ -525,7 +535,8 @@
       "compatibility/melodee-api-v1/golden/native-auth/ (refresh replay/rotation fault evidence)",
       "design/evidence/phase-2/PHASE-2-REPORT.md (lease expiry, retry, PostgreSQL, and concurrent-claim recovery evidence)",
       "design/evidence/phase-3/PHASE-3-REPORT.md (inspection/conversion/copy/fsync/rename/database-completion crash and retry evidence)",
-      "design/evidence/phase-4/PHASE-4-REPORT.md (catalog lease expiry/theft/renewal/cancellation, retryable failure, idempotency, and conflict evidence)"
+      "design/evidence/phase-4/PHASE-4-REPORT.md (catalog lease expiry/theft/renewal/cancellation, retryable failure, idempotency, and conflict evidence)",
+      "design/evidence/phase-5/PHASE-5-REPORT.md (policy lease theft/cancellation, crash-after-decision, exact adoption, and direct reclaim)"
     ],
     "tests": [
       "crates/melodee-persistence/tests/recovery.rs",
@@ -535,9 +546,10 @@
       "crates/melodee-ingestion/tests/normalization.rs",
       "crates/melodee-ingestion/tests/publication.rs",
       "crates/melodee-persistence/tests/catalog_import.rs",
-      "crates/melodee-catalog/src/authority.rs (deterministic provider-failure semantics)"
+      "crates/melodee-catalog/src/authority.rs (deterministic provider-failure semantics)",
+      "crates/melodee-persistence/tests/phase5_faults.rs and apps/melodee-server/tests/policy_worker.rs"
     ],
-    "note": "Ingestion and catalog stages have deterministic crash/retry/lease/source-change/PostgreSQL/publication/provider-boundary fault coverage. Phase 6 search and later API failures keep the broad requirement in progress."
+    "note": "Ingestion, catalog, and policy stages have deterministic crash/retry/lease/source-change/PostgreSQL/publication/provider-boundary fault coverage. Phase 6 search and later API failures keep the broad requirement in progress."
   },
   "PRD-TEST-007": {
     "status": "in-progress",
@@ -545,7 +557,8 @@
       "crates/melodee-domain/src/ingestion.rs (legal durable states/transitions and next-action vocabulary)",
       "crates/melodee-persistence/src/work_items.rs (leased claims, append-only transition/failure history, retry/reprocess)",
       "apps/melodee-server/src/admin.rs and apps/melodee-cli/src/main.rs (operator-visible state/history/next actions)",
-      "crates/melodee-persistence/src/catalog.rs and crates/melodee-catalog/src/importer.rs (Published/Cataloging/Cataloged lease, retry, cancellation, and diagnostics contract)"
+      "crates/melodee-persistence/src/catalog.rs and crates/melodee-catalog/src/importer.rs (Published/Cataloging/Cataloged lease, retry, cancellation, and diagnostics contract)",
+      "crates/melodee-persistence/src/policy.rs and apps/melodee-server/src/policy_worker.rs (Cataloged policy lease, atomic disposition, retry, cancellation, and audit contract)"
     ],
     "tests": [
       "crates/melodee-domain unit tests (transition matrix and retry policy)",
@@ -553,9 +566,10 @@
       "crates/melodee-persistence/tests/recovery.rs",
       "crates/melodee-ingestion/tests/reconciliation.rs",
       "crates/melodee-ingestion/tests/normalization.rs",
-      "crates/melodee-persistence/tests/catalog_import.rs"
+      "crates/melodee-persistence/tests/catalog_import.rs",
+      "crates/melodee-persistence/tests/phase5_claims.rs, phase5_faults.rs, phase5_override.rs, and apps/melodee-server/tests/policy_worker.rs"
     ],
-    "note": "The invariant is implemented and tested through Cataloged, including retryable Cataloging backoff and immediate cancellation reclaim. Phase 6 indexing must extend the same durable-state/next-action proof before the full pipeline requirement is complete."
+    "note": "The invariant is implemented and tested through durable Phase 5 dispositions, including retryable policy backoff, cancellation reclaim, and operator authorization. Phase 6 indexing must extend the same durable-state/next-action proof before the full pipeline requirement is complete."
   },
   "PRD-WORK-001": {
     "status": "in-progress",
@@ -683,19 +697,21 @@
     ]
   },
   "PRD-FP-002": {
-    "status": "in-progress",
+    "status": "tested",
     "implementation": [
       "crates/melodee-media/src/normalize.rs (FingerprintObservation: source-relative path, Chromaprint fingerprint, duration_ms)",
       "crates/melodee-domain/src/manifest.rs (FingerprintObservation domain type)",
       "crates/melodee-domain/src/manifest.rs (byte hash is an observation, not identity resolution)",
-      "crates/melodee-domain/src/release.rs and identity.rs (Track/MediaAsset/AudioIdentity separation and conservative evidence decisions)"
+      "crates/melodee-domain/src/release.rs and identity.rs (Track/MediaAsset/AudioIdentity separation and conservative evidence decisions)",
+      "crates/melodee-policy/src/novelty.rs (separate exact byte, known AudioIdentity, alternate recording, and uncertain outcomes)"
     ],
     "tests": [
       "crates/melodee-media/src/lib.rs (byte_hash_distinguishes_same_size_content)",
       "crates/melodee-media/tests/normalization_real.rs (deterministic BLAKE3 output hashes and source Chromaprint observations)",
-      "crates/melodee-persistence/tests/catalog_audio_identity.rs"
+      "crates/melodee-persistence/tests/catalog_audio_identity.rs",
+      "crates/melodee-policy/tests/policy_acceptance.rs and crates/melodee-persistence/tests/phase5_novelty.rs"
     ],
-     "note": "Byte identity, Track occurrence, and AudioIdentity are separate and fingerprint/byte evidence cannot auto-merge them. Phase 5 still owns explicit novelty/alternate-recording classification, so the broad requirement remains in progress."
+     "note": "Byte identity, Track occurrence, AudioIdentity, alternate recording, and uncertainty are distinct and tested; fingerprint/byte evidence cannot silently auto-merge them."
    },
    "PRD-FP-003": {
      "status": "tested",
@@ -1233,17 +1249,19 @@
        "crates/melodee-persistence/tests/catalog_identity.rs"
      ]
    },
-   "PRD-PRINCIPLE-006": {
-     "status": "in-progress",
+  "PRD-PRINCIPLE-006": {
+     "status": "tested",
      "implementation": [
        "crates/melodee-catalog/src/resolver.rs (weak/ambiguous/conflicting evidence retains provisional identity)",
-       "crates/melodee-persistence/src/catalog.rs (initial import is conservative and never deletes media)"
+       "crates/melodee-persistence/src/catalog.rs (initial import is conservative and never deletes media)",
+       "crates/melodee-policy/src/engine.rs and apps/melodee-server/src/policy_worker.rs (uncertain novelty routes a non-destructive disposition)"
      ],
      "tests": [
        "crates/melodee-catalog/src/resolver.rs",
-       "crates/melodee-persistence/tests/catalog_import.rs and catalog_audio_identity.rs"
+       "crates/melodee-persistence/tests/catalog_import.rs and catalog_audio_identity.rs",
+       "crates/melodee-policy/tests/policy_acceptance.rs, phase5_compatibility.rs, and crates/melodee-persistence/tests/phase5_override.rs"
      ],
-     "note": "Phase 4 turns identity uncertainty into provisional state and never media deletion. Phase 5 must extend the principle to classification/disposition and destructive authorization."
+     "note": "Identity, novelty, and disposition uncertainty route to provisional, Review, or Quarantine behavior; no uncertainty path authorizes or performs deletion."
    },
    "PRD-PRINCIPLE-008": {
      "status": "tested",
@@ -1251,7 +1269,8 @@
        "design/adr/ADR-0117-use-a-postgresql-catalog-identity-and-contribution-schema-with-set-based-manifest-import.md",
        "design/adr/ADR-0118-use-audioidentity-and-immutable-manifest-v3-semantic-overlays.md",
        "design/adr/ADR-0119-use-audit-only-corrections-for-legacy-releases-without-manifest-v3.md",
-       "design/adr/README.md (accepted Phase 4 decision index)"
+       "design/adr/ADR-0120-phase5-classification-novelty-and-policy-schema.md",
+       "design/adr/README.md (accepted Phase 4 and Phase 5 decision index)"
      ],
      "tests": [
        "python3 scripts/validate_repository.py (ADR status/link validation)"
@@ -1285,12 +1304,14 @@
       "status": "tested",
       "implementation": [
         "crates/melodee-domain/src/classification.rs (ReleaseClassification with multi-valued traits)",
-        "crates/melodee-policy/src/classifier.rs (Classifier::classify populates traits and evidence)"
+        "crates/melodee-policy/src/classifier.rs (validated multi-source classification)",
+        "crates/melodee-persistence/migrations/0008_phase5_policy.sql (immutable Release traits and classification evidence)"
       ],
       "tests": [
-        "crates/melodee-policy/tests/policy_acceptance.rs (class_001_title_pattern_identifies_greatest_hits)"
+        "crates/melodee-policy/tests/policy_acceptance.rs (classification_is_multivalued_and_every_trait_has_scoped_evidence)",
+        "crates/melodee-persistence/tests/phase5_commit.rs"
       ],
-      "note": "Multi-valued Release classification with explainable evidence is implemented and tested."
+      "note": "Multi-valued Release classification with exact immutable evidence is implemented and tested through the atomic PostgreSQL policy commit."
     },
     "PRD-CLASS-002": {
       "status": "tested",
@@ -1299,9 +1320,10 @@
         "crates/melodee-policy/src/classifier.rs (confidence-per-evidence-source assignment)"
       ],
       "tests": [
-        "crates/melodee-policy/tests/policy_acceptance.rs (class_002_confidence_reflects_evidence_quality)"
+        "crates/melodee-policy/tests/policy_acceptance.rs (classification evidence, confidence, deduplication, and scope tests)",
+        "crates/melodee-persistence/tests/phase5_commit.rs (manifest provenance and foreign-fact rejection)"
       ],
-      "note": "Evidence dimensions and confidence are implemented and tested."
+      "note": "Evidence source, kind, confidence, detail, version, and manifest provenance are implemented and revalidated before persistence."
     },
     "PRD-CLASS-003": {
       "status": "tested",
@@ -1310,7 +1332,8 @@
         "crates/melodee-policy/src/classifier.rs (strongest_source_is_directory_only guard)"
       ],
       "tests": [
-        "crates/melodee-policy/tests/policy_acceptance.rs (class_003_directory_only_evidence_never_produces_destructive_disposition, class_005_directory_only_evidence_never_produces_destructive_disposition)"
+        "crates/melodee-policy/tests/policy_acceptance.rs (administrator_classification_is_explicit_highest_tier_evidence and directory_only_greatest_hits_evidence_cannot_trigger_redundant_rule)",
+        "crates/melodee-policy/tests/phase5_compatibility.rs (directory-only safety corpus case)"
       ],
       "note": "Evidence hierarchy is implemented; directory-only evidence cannot produce destructive dispositions."
     },
@@ -1318,22 +1341,27 @@
       "status": "tested",
       "implementation": [
         "crates/melodee-domain/src/ingestion.rs (Disposition enum: Accept, Review, Ignore, Quarantine, Delete)",
-        "crates/melodee-policy/src/engine.rs (PolicyEngine maps classification + novelty to disposition)"
+        "crates/melodee-policy/src/engine.rs (validated PolicyEngine maps classification + complete novelty facts to disposition)",
+        "apps/melodee-server/src/policy_worker.rs (durable worker state routing)"
       ],
       "tests": [
-        "crates/melodee-policy/tests/policy_acceptance.rs (pol_001_through_pol_010)"
+        "crates/melodee-policy/tests/policy_acceptance.rs",
+        "apps/melodee-server/tests/policy_worker.rs"
       ],
-      "note": "Default disposition mapping implemented and tested."
+      "note": "All five typed dispositions are evaluated and the non-destructive worker state routes are tested; Delete remains a pending authorization and is not a filesystem operation."
     },
     "PRD-POLICY-002": {
-      "status": "implemented",
+      "status": "tested",
       "implementation": [
         "crates/melodee-domain/src/classification.rs (ReleaseTrait enum)",
         "crates/melodee-domain/src/ingestion.rs (Disposition semantics)",
         "crates/melodee-policy/src/classifier.rs (trait extraction from observations)"
       ],
-      "tests": [],
-      "note": "Semantics vocabulary implemented."
+      "tests": [
+        "crates/melodee-policy/tests/policy_acceptance.rs",
+        "crates/melodee-persistence/tests/phase5_commit.rs and phase5_override.rs"
+      ],
+      "note": "ReleaseTrait and Disposition semantics are implemented and tested through pure evaluation and durable state routing."
     },
     "PRD-POLICY-003": {
       "status": "tested",
@@ -1342,67 +1370,79 @@
         "crates/melodee-domain/src/release.rs (ReleaseTrait::GreatestHits, Compilation)"
       ],
       "tests": [
-        "crates/melodee-policy/tests/policy_acceptance.rs (class_001_title_pattern_identifies_greatest_hits)"
+        "crates/melodee-policy/tests/policy_acceptance.rs (title boundary and Greatest Hits rule tests)",
+        "crates/melodee-policy/tests/phase5_compatibility.rs (data-driven Greatest Hits safety corpus)"
       ],
-      "note": "Greatest Hits redundancy detection implemented and tested."
+      "note": "Greatest Hits is an evidence-backed trait whose disposition also requires complete catalog novelty; title/path strings alone are never a redundancy decision."
     },
     "PRD-POLICY-004": {
       "status": "tested",
       "implementation": [
         "crates/melodee-domain/src/novelty.rs (TrackNoveltyCategory)",
-        "crates/melodee-policy/src/novelty.rs (NoveltyCategory release-level summarization)"
+        "crates/melodee-policy/src/novelty.rs (complete Track-fact assessment and Release aggregate)",
+        "crates/melodee-persistence/src/policy.rs (bounded authoritative novelty snapshot and commit revalidation)"
       ],
       "tests": [
-        "crates/melodee-policy/tests/policy_acceptance.rs (nov_001_through_nov_004, pol_004b_brand_new_release_novelty_requires_review)"
+        "crates/melodee-policy/tests/policy_acceptance.rs (ExactDuplicate, KnownAudioIdentity, AlternateRecording, NewTrack, and Uncertain)",
+        "crates/melodee-persistence/tests/phase5_novelty.rs",
+        "apps/melodee-server/tests/policy_worker.rs (supported catalog facts flow through the engine before commit)"
       ],
-      "note": "Track novelty categories and release-level novelty summarization are implemented and tested."
+      "note": "All five novelty categories are derived from bounded durable catalog facts and revalidated in the atomic store transaction without media reads."
     },
     "PRD-POLICY-005": {
       "status": "tested",
       "implementation": [
-        "crates/melodee-policy/src/novelty.rs (NoveltyCategory::is_novel, is_redundant, is_unsafe_to_auto_delete)",
-        "crates/melodee-policy/src/engine.rs (POL-004 rule routes novel content to Review)"
+        "crates/melodee-policy/src/novelty.rs (exact redundant, novel, and uncertain category semantics)",
+        "crates/melodee-policy/src/engine.rs (Greatest Hits redundancy, novelty, and uncertainty rules)"
       ],
       "tests": [
-        "crates/melodee-policy/tests/policy_acceptance.rs (pol_004_brand_new_release_requires_manual_review, pol_008_remaster_with_no_operator_yields_review)"
+        "crates/melodee-policy/tests/policy_acceptance.rs (new_alternate_and_uncertain_greatest_hits_never_take_redundant_outcome)",
+        "crates/melodee-policy/tests/phase5_compatibility.rs"
       ],
-      "note": "Novelty semantics for redundant collections implemented; novel content requires manual review."
+      "note": "Only ExactDuplicate and KnownAudioIdentity are redundant; alternate, new, and uncertain material never silently reaches a redundant outcome."
     },
     "PRD-POLICY-006": {
       "status": "tested",
       "implementation": [
-        "crates/melodee-policy/src/engine.rs (default_rules, DefaultPolicyRuleSet)",
-        "apps/melodee-cli/src/main.rs (policy rules command)"
+        "crates/melodee-policy/src/engine.rs and config.rs (immutable safe default and configured rule sets)",
+        "apps/melodee-cli/src/main.rs (policy config and rules commands)",
+        "apps/melodee-server/src/policy_worker.rs (configured bounded runtime)"
       ],
       "tests": [
-        "crates/melodee-policy/tests/policy_acceptance.rs (pol_007_durable_decision_recorded_with_correct_metadata)"
+        "crates/melodee-policy/tests/policy_acceptance.rs (default/configured rule ordering and safety)",
+        "crates/melodee-persistence/tests/phase5_rule_sets.rs",
+        "apps/melodee-server/tests/policy_worker.rs (corrupt context and 200-Release runtime)"
       ],
-      "note": "Example default rules are versioned and surfaced via CLI."
+      "note": "Default and configured rules are immutable, ordered, versioned, bounded, surfaced by CLI, and exercised by the actual worker."
     },
     "PRD-POLICY-007": {
       "status": "tested",
       "implementation": [
         "crates/melodee-domain/src/policy.rs (ReleasePolicyDecision with durable fields)",
-        "crates/melodee-persistence/src/policy.rs (record_decision, get_decision)",
-        "crates/melodee-persistence/migrations/0008_phase5_policy.sql (policy_decisions + audit)",
-        "crates/melodee-policy/src/engine.rs (decision populated before any destructive action)"
+        "crates/melodee-persistence/src/policy.rs (atomic commit_evaluation, apply_admin_override, and complete_destructive_action)",
+        "crates/melodee-persistence/migrations/0008_phase5_policy.sql (exact decision-to-facts foreign keys and append-only audit)",
+        "crates/melodee-policy/src/engine.rs (validated decision before any state route)"
       ],
       "tests": [
-        "crates/melodee-policy/tests/policy_acceptance.rs (pol_007_durable_decision_recorded_with_correct_metadata)"
+        "crates/melodee-persistence/tests/phase5_commit.rs, phase5_override.rs, and phase5_faults.rs",
+        "apps/melodee-server/tests/policy_worker.rs (crash adoption and no duplicate facts)"
       ],
-      "note": "Durable decision record is constructed before destructive action; persistence layer commits to PostgreSQL."
+      "note": "Facts, decision, audit, event, and state commit atomically. Delete is pending until an explicit fingerprint-bound administrator override and separate matching completion; Phase 5 performs no deletion."
     },
     "PRD-POLICY-008": {
-      "status": "tested",
+      "status": "in-progress",
       "implementation": [
         "crates/melodee-domain/src/policy.rs (PolicyTestSummary)",
-        "crates/melodee-persistence/src/policy.rs (store_test_run, PolicyStoreError types)",
-        "crates/melodee-policy/src/dry_run.rs (PolicyDryRunner, PolicyDryRun)",
-        "crates/melodee-persistence/migrations/0008_phase5_policy.sql (policy_test_runs table)"
+        "crates/melodee-persistence/src/policy.rs (bounded dry_run_inputs and store_test_run)",
+        "crates/melodee-policy/src/dry_run.rs (bounded zero-write PolicyDryRunner)",
+        "crates/melodee-persistence/migrations/0008_phase5_policy.sql (policy_test_runs audit summaries)",
+        "apps/melodee-cli/src/main.rs (policy test command)"
       ],
       "tests": [
-        "crates/melodee-policy/tests/policy_acceptance.rs (pol_010_dry_run_produces_stats_without_database)"
+        "crates/melodee-policy/tests/policy_acceptance.rs (bounded dry-run, zero buckets, nested cap+1 rejection)",
+        "crates/melodee-persistence/tests/policy_phase5.rs",
+        "apps/melodee-cli/tests/policy.rs"
       ],
-      "note": "Policy dry-run/test-against-catalog produces non-destructive aggregate reports."
+      "note": "The bounded PostgreSQL/CLI policy dry-run reports proposed, per-rule, existing-disposition, sample, and destructive-impact aggregates; it stores only the audit summary and writes no decisions. Phase 10 still owns the required Admin UI surface, so the broad UI requirement remains in progress."
     }
 }
