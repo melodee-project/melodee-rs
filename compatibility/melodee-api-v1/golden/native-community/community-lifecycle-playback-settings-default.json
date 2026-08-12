@@ -1,0 +1,9 @@
+{
+  "crossfadeDuration": 0,
+  "gaplessPlayback": true,
+  "volumeNormalization": false,
+  "replayGain": "none",
+  "audioQuality": "high",
+  "equalizerPreset": null,
+  "lastUsedDevice": null
+}

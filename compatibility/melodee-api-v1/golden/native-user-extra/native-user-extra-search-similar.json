@@ -1,0 +1,25 @@
+{
+  "similar": [
+    {
+      "id": "2b8eab4b-235d-5892-99f8-c0f5f54e8ab4",
+      "name": "Solar Wind",
+      "type": "song",
+      "similarityScore": 1,
+      "imageUrl": "{melodee-origin}/images/2b8eab4b-235d-5892-99f8-c0f5f54e8ab4/80"
+    },
+    {
+      "id": "e068e9f1-b7a1-58b9-9aaa-47c954694634",
+      "name": "Midnight Sun",
+      "type": "song",
+      "similarityScore": 0.95,
+      "imageUrl": "{melodee-origin}/images/e068e9f1-b7a1-58b9-9aaa-47c954694634/80"
+    },
+    {
+      "id": "828f864f-0d5a-572e-a6c4-69e96fa6983f",
+      "name": "Falling (feat. Guest Vocalist)",
+      "type": "song",
+      "similarityScore": 0.9,
+      "imageUrl": "{melodee-origin}/images/828f864f-0d5a-572e-a6c4-69e96fa6983f/80"
+    }
+  ]
+}

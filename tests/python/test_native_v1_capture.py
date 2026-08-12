@@ -7,6 +7,7 @@ inventory, and the committed golden evidence itself.
 from __future__ import annotations
 
 import base64
+import copy
 import json
 import sys
 import unittest
@@ -22,6 +23,9 @@ capture_baseline = load_module("capture_baseline", ROOT / "scripts" / "capture_b
 legacy_oracle = load_module("legacy_oracle", ROOT / "scripts" / "legacy_oracle.py")
 build_native_inventory = load_module(
     "build_native_inventory", ROOT / "scripts" / "build_native_inventory.py"
+)
+build_phase7_route_matrix = load_module(
+    "build_phase7_route_matrix", ROOT / "scripts" / "build_phase7_route_matrix.py"
 )
 gen_fixture_tokens = load_module("gen_fixture_tokens", ROOT / "scripts" / "gen_fixture_tokens.py")
 
@@ -170,6 +174,127 @@ class RouteInventoryTests(unittest.TestCase):
                 return entry
         raise AssertionError(f"route not in inventory: {method} {path}")
 
+    def test_integer_path_parameters_normalize_in_any_segment(self) -> None:
+        self.assertEqual(
+            build_native_inventory.normalize_path(
+                "/api/v1/party-sessions/00000000-0000-0000-0000-000000000001/participants/1/ban"
+            ),
+            "/api/v1/party-sessions/{}/participants/{}/ban",
+        )
+
+        manifest = json.loads(
+            (ROOT / "compatibility/melodee-api-v1/contracts/route-manifest.json").read_text()
+        )
+        fixed_numeric_segments = [
+            route["path"]
+            for route in manifest["routes"]
+            if any(segment.isdigit() for segment in route["path"].split("/"))
+        ]
+        self.assertEqual(
+            fixed_numeric_segments,
+            [],
+            "normalizing integer components is safe only while the frozen manifest has no fixed numeric segments",
+        )
+
+    def test_inventory_path_maps_concrete_opaque_negative_capture(self) -> None:
+        mapping = build_native_inventory.scenario_route_map()
+        self.assertIn(
+            "auth-password-reset-validate-invalid",
+            mapping[("GET", "/api/v1/auth/password-reset/validate/{}")],
+        )
+
+    def test_matrix_rejects_fabricated_rust_test_reference(self) -> None:
+        inventory = copy.deepcopy(self.inventory)
+        evidence = json.loads(
+            (ROOT / "compatibility/melodee-api-v1/contracts/phase7-route-evidence.json").read_text()
+        )
+        evidence["routes"][0]["rustTests"] = ["does/not/exist.rs::fabricated_test"]
+        with self.assertRaisesRegex(build_phase7_route_matrix.MatrixError, "file is missing"):
+            build_phase7_route_matrix.build_matrix(inventory, evidence)
+
+    def test_matrix_accepts_only_runnable_rust_test_symbols(self) -> None:
+        import tempfile
+
+        fake_sources = {
+            "block_comment": "/* #[test]\nfn proof() {} */\n",
+            "line_comment": "// #[test]\n// fn proof() {}\n",
+            "ordinary_string": 'const TEXT: &str = "#[test]\nfn proof() {}";\n',
+            "raw_string": 'const TEXT: &str = r#"#[tokio::test]\nasync fn proof() {}"#;\n',
+            "ignored": "#[ignore = \"not evidence\"]\n#[tokio::test]\nasync fn proof() {}\n",
+            "ordinary_function": "fn proof() {}\n",
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_path = root / "tests" / "proof.rs"
+            source_path.parent.mkdir()
+            reference = "tests/proof.rs::proof"
+            for label, source in fake_sources.items():
+                with self.subTest(label=label):
+                    source_path.write_text(source, encoding="utf-8")
+                    with self.assertRaisesRegex(
+                        build_phase7_route_matrix.MatrixError,
+                        "named Rust test is missing",
+                    ):
+                        build_phase7_route_matrix.validate_rust_tests(
+                            [reference], ("GET", "/proof"), root
+                        )
+
+            source_path.write_text(
+                "#[tokio::test]\nasync fn proof() {}\n", encoding="utf-8"
+            )
+            build_phase7_route_matrix.validate_rust_tests(
+                [reference], ("GET", "/proof"), root
+            )
+
+    def test_promoted_golden_hash_and_provenance_are_verified(self) -> None:
+        import tempfile
+
+        source = GOLDEN / "native-community"
+        metadata_source = source / "community-lifecycle-request-list.metadata.json"
+        metadata = json.loads(metadata_source.read_text())
+        body_name = metadata["response"]["bodyFile"]
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp) / "native-community"
+            directory.mkdir()
+            (directory / "provenance.json").write_text(
+                (source / "provenance.json").read_text(), encoding="utf-8"
+            )
+            (directory / metadata_source.name).write_text(
+                json.dumps(metadata), encoding="utf-8"
+            )
+            (directory / body_name).write_bytes(b"corrupt")
+            original = build_native_inventory.GOLDEN_DIR
+            build_native_inventory.GOLDEN_DIR = Path(tmp)
+            try:
+                with self.assertRaisesRegex(ValueError, "hash mismatch"):
+                    build_native_inventory.promoted_golden_names()
+            finally:
+                build_native_inventory.GOLDEN_DIR = original
+
+    def test_promoted_golden_method_and_path_must_match_scenario(self) -> None:
+        import tempfile
+
+        source = GOLDEN / "native-community"
+        metadata_source = source / "community-lifecycle-request-list.metadata.json"
+        metadata = json.loads(metadata_source.read_text())
+        metadata["request"]["method"] = "DELETE"
+        body_name = metadata["response"]["bodyFile"]
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp) / "native-community"
+            directory.mkdir()
+            (directory / "provenance.json").write_text(
+                (source / "provenance.json").read_text(), encoding="utf-8"
+            )
+            (directory / metadata_source.name).write_text(json.dumps(metadata), encoding="utf-8")
+            (directory / body_name).write_bytes((source / body_name).read_bytes())
+            original = build_native_inventory.GOLDEN_DIR
+            build_native_inventory.GOLDEN_DIR = Path(tmp)
+            try:
+                with self.assertRaisesRegex(ValueError, "method/path"):
+                    build_native_inventory.promoted_golden_names()
+            finally:
+                build_native_inventory.GOLDEN_DIR = original
+
     def test_queue_is_excluded_from_build(self) -> None:
         entry = self.route("GET", "/api/v1/queue")
         self.assertEqual(entry["parityStatus"], "excluded-from-build")
@@ -211,6 +336,138 @@ class RouteInventoryTests(unittest.TestCase):
                 "captured",
                 f"{method} {path} must be covered by a compatibility scenario",
             )
+
+    def test_capture_status_requires_promoted_golden_evidence(self) -> None:
+        promoted = build_native_inventory.promoted_golden_names()
+        self.assertGreater(len(promoted), 0)
+        for route in self.inventory["routes"]:
+            self.assertEqual(
+                route["scenarios"],
+                [name for name in route["declaredScenarios"] if name in promoted],
+            )
+            if route["parityStatus"] == "captured":
+                self.assertGreater(len(route["scenarios"]), 0)
+
+
+class Phase7RouteMatrixTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.inventory = json.loads(
+            (ROOT / "compatibility/melodee-api-v1/contracts/route-inventory.json").read_text()
+        )
+        cls.evidence = json.loads(
+            (ROOT / "compatibility/melodee-api-v1/contracts/phase7-route-evidence.json").read_text()
+        )
+        cls.matrix = json.loads(
+            (ROOT / "design/agents/PHASE-7-ROUTE-MATRIX.json").read_text()
+        )
+
+    def phase7_route(self, method: str, path: str) -> dict:
+        return next(
+            route
+            for route in self.matrix["routes"]
+            if route["method"] == method and route["path"] == path
+        )
+
+    def test_matrix_is_generated_from_inventory_and_rust_evidence(self) -> None:
+        generated = build_phase7_route_matrix.build_matrix(self.inventory, self.evidence)
+        self.assertEqual(self.matrix, generated)
+        self.assertEqual(self.matrix["routeCount"], 202)
+        self.assertEqual(
+            self.matrix["pendingRouteCount"]
+            + self.matrix["completedRouteCount"]
+            + self.matrix["deferredRouteCount"],
+            202,
+        )
+
+    def test_legacy_capture_is_not_a_rust_implementation_claim(self) -> None:
+        matrix_without_rust_evidence = build_phase7_route_matrix.build_matrix(
+            self.inventory,
+            {**self.evidence, "routes": []},
+        )
+        route = next(
+            route
+            for route in matrix_without_rust_evidence["routes"]
+            if route["method"] == "GET" and route["path"] == "/api/v1/artists"
+        )
+        self.assertEqual(route["legacyContract"]["captureStatus"], "captured")
+        self.assertEqual(route["phase7"]["status"], "implementation-pending")
+
+    def test_excluded_party_and_queue_routes_have_legacy_evidence_but_need_rust_proof(self) -> None:
+        queue = self.phase7_route("GET", "/api/v1/queue")
+        party = self.phase7_route("POST", "/api/v1/party-sessions")
+        self.assertGreater(len(queue["legacyContract"]["scenarios"]), 0)
+        self.assertGreater(len(party["legacyContract"]["scenarios"]), 0)
+        for route in (queue, party):
+            self.assertIn(
+                route["phase7"]["status"],
+                {"negative-compatibility-pending", "preserved-intentional-legacy-absence"},
+            )
+
+    def test_compiled_overlap_domains_remain_phase7_obligations(self) -> None:
+        for method, path in (
+            ("GET", "/api/v1/analytics/listening"),
+            ("GET", "/api/v1/requests"),
+            ("GET", "/api/v1/shares"),
+            ("GET", "/api/v1/podcasts/channels"),
+        ):
+            route = self.phase7_route(method, path)
+            self.assertEqual(route["legacyContract"]["implementation"], "implemented")
+            self.assertIn(
+                route["phase7"]["status"],
+                {
+                    "implementation-pending",
+                    "implemented-and-differentially-tested",
+                    "approved-compatibility-normalization",
+                },
+            )
+
+    def test_native_client_cross_surface_images_require_rust_evidence(self) -> None:
+        rows = self.matrix["crossSurfaceDependencies"]
+        self.assertEqual(len(rows), 5)
+        self.assertTrue(
+            all(
+                row["phase7"]["status"] == "implemented-and-differentially-tested"
+                and row["phase7"]["rustTests"]
+                for row in rows
+            )
+        )
+        without_evidence = build_phase7_route_matrix.build_matrix(
+            self.inventory,
+            {**self.evidence, "crossSurfaceDependencies": []},
+        )
+        self.assertTrue(
+            all(
+                row["phase7"]["status"] == "implementation-pending"
+                for row in without_evidence["crossSurfaceDependencies"]
+            )
+        )
+
+    def test_evidence_cannot_claim_differential_parity_without_tests(self) -> None:
+        evidence = {**self.evidence, "routes": [{
+            "method": "GET",
+            "path": "/api/v1/artists",
+            "status": "implemented-and-differentially-tested",
+            "authority": "PRD-API-M1-001",
+            "requirements": ["PRD-API-M1-001"],
+            "legacyEvidence": ["catalog/artists-list"],
+            "rustTests": [],
+        }]}
+        with self.assertRaisesRegex(build_phase7_route_matrix.MatrixError, "rustTests"):
+            build_phase7_route_matrix.build_matrix(self.inventory, evidence)
+
+    def test_preserved_absence_requires_accepted_adr_authority(self) -> None:
+        evidence = {**self.evidence, "routes": [{
+            "method": "GET",
+            "path": "/api/v1/queue",
+            "status": "preserved-intentional-legacy-absence",
+            "authority": "PRD-USER-004",
+            "requirements": ["PRD-USER-004"],
+            "legacyEvidence": ["catalog-queue/queue-get-empty"],
+            "rustTests": ["native_queue_absence_is_preserved"],
+        }]}
+        with self.assertRaisesRegex(build_phase7_route_matrix.MatrixError, "accepted ADR"):
+            build_phase7_route_matrix.build_matrix(self.inventory, evidence)
 
 
 class GoldenFixtureTests(unittest.TestCase):

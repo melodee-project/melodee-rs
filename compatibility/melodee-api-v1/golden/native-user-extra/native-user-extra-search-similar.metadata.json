@@ -1,0 +1,30 @@
+{
+  "name": "native-user-extra/search-similar",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/api/v1/search/similar/ea26fc59-a545-51c2-94c4-702e1f97b80a/song?limit=10",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "native-user-extra-search-similar.json",
+    "sha256": "eda866336cd35e12eb6456605ef2cfab84bfab2944a22b843904b0e7185dcea2",
+    "bytes": 730
+  },
+  "normalize": {
+    "maskBaseUrl": true
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": true
+}

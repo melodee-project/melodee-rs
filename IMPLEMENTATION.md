@@ -14,7 +14,9 @@
 [design/evidence/phase-5/PHASE-5-REPORT.md](design/evidence/phase-5/PHASE-5-REPORT.md);
 **Phase 6 complete (2026-08-11)**, see
 [design/evidence/phase-6/PHASE-6-REPORT.md](design/evidence/phase-6/PHASE-6-REPORT.md);
-**Phase 7 active**.
+**Phase 7 complete (2026-08-12)**, see
+[design/evidence/phase-7/PHASE-7-REPORT.md](design/evidence/phase-7/PHASE-7-REPORT.md);
+**Phase 8 active**.
 **Date:** 2026-08-07  
 **Governing documents:** [PRD.md](PRD.md), [SPEC.md](SPEC.md), accepted ADRs
 
@@ -336,7 +338,8 @@ Deliver lightning-fast, rebuildable search at large-catalog scale.
 
 ## 10. Phase 7 — Native Melodee API v1
 
-**Status:** Active.
+**Status:** Complete (2026-08-12) — independently reviewed and accepted. See the
+[Phase 7 report](design/evidence/phase-7/PHASE-7-REPORT.md).
 
 ### Objective
 
@@ -358,6 +361,8 @@ Make existing native clients operate against Rust without a synchronized client 
 - Android Auto survives process recreation and continuous multi-Track playback.
 
 ## 11. Phase 8 — OpenSubsonic and Jellyfin adapters
+
+**Status:** Active.
 
 ### Objective
 

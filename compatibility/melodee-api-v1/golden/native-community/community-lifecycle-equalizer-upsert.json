@@ -1,0 +1,11 @@
+{
+  "id": "<volatile>",
+  "name": "Phase 7 Headphones",
+  "bands": [
+    {
+      "frequency": 60,
+      "gain": 2
+    }
+  ],
+  "isDefault": true
+}

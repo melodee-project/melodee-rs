@@ -163,13 +163,30 @@ class CompareCapturesTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.module = load_module("compare_captures", ROOT / "scripts" / "compare_captures.py")
 
-    def write_capture(self, directory: Path, body: dict, *, status: int = 200, normalize: dict | None = None) -> None:
+    def write_capture(
+        self,
+        directory: Path,
+        body: dict | bytes,
+        *,
+        status: int = 200,
+        normalize: dict | None = None,
+        request: dict | None = None,
+        structure_checks: dict | None = None,
+    ) -> None:
         directory.mkdir(parents=True, exist_ok=True)
-        payload = (json.dumps(body, indent=2) + "\n").encode()
+        payload = body if isinstance(body, bytes) else (json.dumps(body, indent=2) + "\n").encode()
         (directory / "scenario.json").write_bytes(payload)
         metadata = {
             "name": "scenario",
-            "request": {"method": "GET", "url": "http://example.test/x", "auth": "none"},
+            "request": request
+            or {
+                "method": "GET",
+                "url": "http://example.test/x",
+                "auth": "none",
+                "headers": {},
+                "jsonTemplate": None,
+                "bodyTemplate": None,
+            },
             "response": {
                 "status": status,
                 "headers": {"content-type": "application/json"},
@@ -178,17 +195,41 @@ class CompareCapturesTests(unittest.TestCase):
                 "bytes": len(payload),
             },
             "normalize": normalize or {},
+            "structureChecks": structure_checks,
             "error": None,
             "allowFailure": False,
         }
         (directory / "scenario.metadata.json").write_text(json.dumps(metadata))
 
-    def compare_dirs(self, left_body: dict, right_body: dict, normalize: dict | None = None):
+    def compare_dirs(
+        self,
+        left_body: dict | bytes,
+        right_body: dict | bytes,
+        normalize: dict | None = None,
+        *,
+        left_request: dict | None = None,
+        right_request: dict | None = None,
+        left_checks: dict | None = None,
+        right_checks: dict | None = None,
+        right_normalize: dict | None = None,
+    ):
         with tempfile.TemporaryDirectory() as tmp:
             left = Path(tmp) / "left"
             right = Path(tmp) / "right"
-            self.write_capture(left, left_body, normalize=normalize)
-            self.write_capture(right, right_body, normalize=normalize)
+            self.write_capture(
+                left,
+                left_body,
+                normalize=normalize,
+                request=left_request,
+                structure_checks=left_checks,
+            )
+            self.write_capture(
+                right,
+                right_body,
+                normalize=right_normalize if right_normalize is not None else normalize,
+                request=right_request,
+                structure_checks=right_checks,
+            )
             return self.module.compare(left, right)
 
     def test_parse_json_path(self) -> None:
@@ -239,6 +280,82 @@ class CompareCapturesTests(unittest.TestCase):
     def test_type_change_is_significant(self) -> None:
         differences = self.compare_dirs({"count": "3"}, {"count": 3})
         self.assertEqual(len(differences), 1)
+
+    def test_request_method_and_url_are_contract(self) -> None:
+        expected = {
+            "method": "GET",
+            "url": "{melodee-origin}/api/v1/artists?page=1",
+            "auth": "bearer-var:accessToken",
+            "headers": {},
+            "jsonTemplate": None,
+            "bodyTemplate": None,
+        }
+        actual = {**expected, "method": "POST", "url": "{melodee-origin}/api/v1/artists"}
+        differences = self.compare_dirs(
+            {"data": []},
+            {"data": []},
+            left_request=expected,
+            right_request=actual,
+        )
+        self.assertEqual(
+            {difference.field for difference in differences},
+            {"request.method", "request.url"},
+        )
+
+    def test_actual_capture_cannot_widen_baseline_normalization(self) -> None:
+        differences = self.compare_dirs(
+            {"stable": 1},
+            {"stable": 2},
+            normalize={},
+            right_normalize={"maskJsonPaths": ["$.stable"]},
+        )
+        self.assertEqual(
+            {difference.field for difference in differences},
+            {"normalize", "response.body$.stable"},
+        )
+
+    def test_token_structure_checks_are_contract(self) -> None:
+        differences = self.compare_dirs(
+            {"token": "<volatile>"},
+            {"token": "<volatile>"},
+            left_checks={"$.token": {"valid": True, "headerAlg": "HS256"}},
+            right_checks={"$.token": {"valid": False}},
+        )
+        self.assertEqual([difference.field for difference in differences], ["structureChecks"])
+
+    def test_binary_difference_reports_hashes_even_when_length_matches(self) -> None:
+        differences = self.compare_dirs(b"abc", b"abd")
+        self.assertEqual(len(differences), 1)
+        self.assertIn("sha256=", differences[0].expected)
+        self.assertIn("sha256=", differences[0].actual)
+
+    def test_incremental_scenario_selection_ignores_unselected_capture_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            expected = Path(tmp) / "expected"
+            actual = Path(tmp) / "actual"
+            self.write_capture(expected, {"value": 1})
+            self.write_capture(actual, {"value": 1})
+
+            extra_body = (json.dumps({"value": 2}) + "\n").encode()
+            (expected / "extra.json").write_bytes(extra_body)
+            extra_metadata = json.loads((expected / "scenario.metadata.json").read_text())
+            extra_metadata["name"] = "extra"
+            extra_metadata["response"]["bodyFile"] = "extra.json"
+            (expected / "extra.metadata.json").write_text(json.dumps(extra_metadata))
+
+            self.assertEqual(self.module.compare(expected, actual, {"scenario"}), [])
+            differences = self.module.compare(expected, actual)
+            self.assertEqual([difference.scenario for difference in differences], ["extra"])
+
+    def test_unknown_incremental_scenario_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            expected = Path(tmp) / "expected"
+            actual = Path(tmp) / "actual"
+            self.write_capture(expected, {"value": 1})
+            self.write_capture(actual, {"value": 1})
+            differences = self.module.compare(expected, actual, {"missing"})
+            self.assertEqual(len(differences), 1)
+            self.assertEqual(differences[0].actual, "unknown")
 
 
 class NewAdrTests(unittest.TestCase):

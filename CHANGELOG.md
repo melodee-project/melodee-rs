@@ -52,6 +52,14 @@ by an accepted ADR and release gate.
   status/rebuild/query/autocomplete/parse/explain CLI operations, compatibility/fault/path tests,
   bounded retry escalation and poison-row isolation, sealed snapshot plus live diagnostic counts,
   and a reproducible 10-million-Track benchmark harness with a default-gate smoke test.
+- Phase 7 native Melodee API v1 compatibility: identity-preserving authentication and user state,
+  catalog browse/search/images/direct streaming, playlists and bounded smart playlists, scrobbling,
+  requests, shares, podcasts, discovery/analytics/recommendations, playback endpoints, and exact
+  negative behavior for the frozen Party/Queue exclusions. The 202-route evidence matrix contains
+  150 exact implementations, 17 accepted compatibility normalizations, and 35 preserved absences,
+  with no pending or deferred route. Additive migrations `0010` through `0019`, bounded workers,
+  library ACL/rate/secret/path safety, current-catalog performance evidence, and Android,
+  Android Auto-mode, and MeloAmp real-client evidence accompany the adapter.
 - Canonical Carbon admin UI reference mockups.
 - Astro Starlight public documentation platform under `/docs`, with GitHub Pages deployment,
   PR validation, and documentation-impact rules in the Definition of Done.

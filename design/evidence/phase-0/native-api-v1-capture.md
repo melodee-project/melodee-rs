@@ -166,11 +166,15 @@ controller/action, auth, `inOpenApi`, `usedBy` (client evidence), scenario cover
 
 | parityStatus | routes |
 |---|---:|
-| captured | 34 |
-| client-used-uncaptured | 69 |
+| captured | 33 |
+| client-used-uncaptured | 70 |
 | documented-uncaptured | 45 |
 | undocumented-uncaptured | 19 |
 | excluded-from-build | 35 |
+
+`captured` requires both a declared scenario and promoted golden metadata/body evidence. The
+declared `native-system-info` scenario currently has no promoted response, so the route correctly
+remains `client-used-uncaptured` rather than receiving credit from a declaration alone.
 
 The published OpenAPI document is treated as one input, never the authority (it omits
 queue/party/podcasts routes; party+queue are additionally not compiled at all).

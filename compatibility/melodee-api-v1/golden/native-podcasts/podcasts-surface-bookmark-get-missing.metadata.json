@@ -1,0 +1,32 @@
+{
+  "name": "podcasts-surface/bookmark-get-missing",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/api/v1/podcasts/episodes/999999/bookmark",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "podcasts-surface-bookmark-get-missing.json",
+    "sha256": "5bf479db2fc87cf8ebf3059812a9fb16c3607bfbb822c21cd2d9eb601e9edbb8",
+    "bytes": 103
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.correlationId"
+    ]
+  },
+  "structureChecks": null,
+  "error": "HTTP Error 400: Bad Request",
+  "allowFailure": true
+}

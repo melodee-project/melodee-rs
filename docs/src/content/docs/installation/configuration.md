@@ -107,6 +107,39 @@ by the current server.
 | `MELODEE__SEARCH__DEFAULT_LIMIT` | `200` | Default operator query limit. |
 | `MELODEE__SEARCH__MAX_LIMIT` | `1000` | Maximum operator query limit. |
 
+### Native API podcasts
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `MELODEE__PODCAST__ENABLED` | `true` | Enables role-gated native-v1 podcast routes. `false`, `0`, or `no` makes the surface return `404`. |
+| `MELODEE__PODCAST__DISCOVERY_ENDPOINT` | `https://itunes.apple.com/` | Base URL for podcast search, trending, and lookup. Production endpoints must use HTTPS; loopback HTTP is accepted only by deterministic tests. |
+| `MELODEE__PODCAST__WORKER__ENABLED` | `false` | Enables bounded feed refresh, download, retention, and orphan-recovery passes while podcasts are enabled. Enabling requires an owned storage root. |
+| `MELODEE__PODCAST__STORAGE_ROOT` | — when worker enabled | Dedicated absolute root for podcast downloads. It must not overlap inbound, work, canonical-media, or search roots. |
+| `MELODEE__PODCAST__WORKER__POLL_INTERVAL_SECONDS` | `30` | Delay between worker passes (`1`–`86400`). |
+| `MELODEE__PODCAST__WORKER__BATCH_SIZE` | `4` | Maximum downloads claimed per pass (`1`–`32`). |
+| `MELODEE__PODCAST__WORKER__LEASE_SECONDS` | `300` | Cross-process download lease (`60`–`3600` seconds). |
+| `MELODEE__PODCAST__WORKER__MAX_ATTEMPTS` | `5` | Failed attempts before a download becomes a permanent operator-visible failure (`1`–`100`). |
+| `MELODEE__PODCAST__MAX_DOWNLOAD_BYTES` | `536870912` | Maximum enclosure body size (`1 MiB`–`4 GiB`). |
+
+### Native API URLs, streaming, and proxies
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `MELODEE__NATIVE__PUBLIC_ORIGIN` | Listener origin | External origin used in native-v1 image, stream, and browser-login redirect URLs. It must be an absolute `http` or `https` origin without credentials, a path, or a query. Set it to the reverse proxy's public origin in production. |
+| `MELODEE__NATIVE__STREAM_CONCURRENCY` | `32` | Maximum direct media responses open concurrently in one server process (`1`–`4096`). Additional requests wait with bounded backpressure. |
+| `MELODEE__NATIVE__AUTH__JWT_KEY` | — (required) | HS256 signing secret for native-v1 15-minute access tokens and protected browser session cookies. Generate at least 32 random bytes (for example, `openssl rand -base64 48`) and keep the same secret on every server process. The example placeholder is rejected at startup. |
+| `MELODEE__NATIVE__AUTH__MAX_SESSION_DAYS` | `90` | Absolute refresh-family lifetime (`30`–`365` days); individual refresh tokens remain valid for at most 30 days and rotate on use. |
+| `MELODEE__NATIVE__AUTH__DEVELOPMENT_RESET_TOKENS` | `false` | Includes the one-time reset token and URL in a successful password-reset request. Enable only on isolated development systems. |
+| `MELODEE__NATIVE__AUTH__RATE_ATTEMPTS` | `10` | Authentication attempts allowed for one normalized actor/address key per fixed window (`1`–`10000`). |
+| `MELODEE__NATIVE__AUTH__RATE_WINDOW_SECONDS` | `60` | PostgreSQL-backed authentication rate window (`1`–`86400` seconds). |
+| `MELODEE__NATIVE__AUTH__RATE_MAX_KEYS` | `100000` | Maximum active rate-counter keys retained cluster-wide (`1`–`10000000`). New keys fail closed at capacity. |
+| `MELODEE__NATIVE__CORS__ALLOWED_ORIGINS` | empty | Comma-separated exact `http`/`https` browser origins allowed to call native v1. Wildcards are rejected. The policy admits native `GET`/`POST`/`PUT`/`PATCH`/`DELETE` requests and exposes only the paging, range, duration, and ETag response headers used by browser clients. Include MeloAmp's exact development origin (for example, `http://localhost:3001`) only when needed. |
+| `MELODEE__NATIVE__TRUSTED_PROXIES` | empty | Comma-separated exact proxy IPs or CIDRs allowed to supply `Forwarded`/`X-Forwarded-For`. Untrusted forwarding headers are ignored. For a trusted peer, Melodee walks the forwarded chain from right to left, removes trusted proxy hops, and uses the first untrusted address as the client. List only proxy infrastructure you control. |
+| `MELODEE__NATIVE__AUTH__GOOGLE__ENABLED` | `false` | Enables Google ID-token exchange only when the client ID and JWKS configuration also validate. |
+| `MELODEE__NATIVE__AUTH__GOOGLE__CLIENT_ID` | — | Exact Google OAuth client ID used as the required token audience. |
+| `MELODEE__NATIVE__AUTH__GOOGLE__JWKS_URL` | Google v3 certificates URL | HTTPS JWKS endpoint. Redirects are rejected and the response/cache are bounded. |
+| `MELODEE__NATIVE__AUTH__GOOGLE__HOSTED_DOMAINS` | empty | Optional comma-separated lowercase hosted-domain allowlist checked after signature, issuer, audience, lifetime, and verified-email validation. |
+
 ### Notes
 
 - `MELODEE__INGEST__SOURCES_JSON` and the legacy single-root variables are mutually additive only through configuration code: JSON takes precedence when present.
@@ -138,3 +171,11 @@ by the current server.
   roots are rejected, and retirement only removes a validated direct generation child. When search
   is enabled, missing/corrupt active-generation state makes `/readyz` return not ready while
   `/healthz` remains a liveness check.
+- Podcast discovery sends only the user-supplied query/country/genre and bounded result limit to
+  the configured endpoint. It does not send Melodee credentials or catalog data. Redirects are
+  rejected, at most eight requests run concurrently, and time, response size, and result count are
+  bounded.
+- Stream credentials bind to the authoritative client address. Configure trusted proxies only when
+  those proxies overwrite forwarding headers; trusting a client-controlled forwarding hop can make
+  signed URLs unusable or weaken client-address binding. Direct streaming is available only when
+  `MELODEE__STORAGE__ROOT` opens as the canonical publication root.

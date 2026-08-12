@@ -1,0 +1,33 @@
+{
+  "name": "podcasts-surface/opml-import-empty",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "POST",
+    "url": "{melodee-origin}/api/v1/podcasts/opml/import",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Content-Type": "application/xml",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": "<opml version=\"2.0\"><body></body></opml>"
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "podcasts-surface-opml-import-empty.json",
+    "sha256": "becddbd70a2278443a8e23509a7b52d130114f55955b2e3a6b1af59121b2a3d2",
+    "bytes": 113
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.correlationId"
+    ]
+  },
+  "structureChecks": null,
+  "error": "HTTP Error 400: Bad Request",
+  "allowFailure": true
+}

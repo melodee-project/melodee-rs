@@ -1,0 +1,30 @@
+{
+  "name": "native-user-extra/user-artists-recent",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/api/v1/user/artists/recently-played?page=1&limit=50",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "native-user-extra-user-artists-recent.json",
+    "sha256": "2b96e23b9078f128711ce819a0a6704b0bb02b16e072d44eb2af8925df13a9e5",
+    "bytes": 1247
+  },
+  "normalize": {
+    "maskBaseUrl": true
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": true
+}

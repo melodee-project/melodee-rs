@@ -1,0 +1,28 @@
+{
+  "name": "community-lifecycle/equalizer-list-empty",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/api/v1/equalizer/presets?page=1&limit=20",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "community-lifecycle-equalizer-list-empty.json",
+    "sha256": "109802815bece0b5f3daf6ec2e726982e477a62d638ea771b07dffce511833cb",
+    "bytes": 168
+  },
+  "normalize": {},
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

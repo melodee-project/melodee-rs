@@ -1,0 +1,37 @@
+{
+  "name": "native-discovery/themes-me",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "POST",
+    "url": "{melodee-origin}/api/v1/themes/me",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Content-Type": "application/json",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": {
+      "themeId": "phase7-missing"
+    },
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 401,
+    "headers": {
+      "content-length": "0",
+      "location": "{melodee-origin}/Account/Login?ReturnUrl=%2Fapi%2Fv1%2Fthemes%2Fme"
+    },
+    "bodyFile": "native-discovery-themes-me.bin",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "normalize": {
+    "maskBaseUrl": true,
+    "maskJsonPaths": [
+      "$.correlationId"
+    ]
+  },
+  "structureChecks": null,
+  "error": "HTTP Error 401: Unauthorized",
+  "allowFailure": true
+}

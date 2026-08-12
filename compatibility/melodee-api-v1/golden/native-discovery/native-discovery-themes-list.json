@@ -1,0 +1,24 @@
+[
+  {
+    "id": "light",
+    "name": "Light",
+    "author": "Radzen",
+    "version": "1.0.0",
+    "description": "Clean, bright theme for daytime use (Radzen default)",
+    "isBuiltIn": true,
+    "previewImage": null,
+    "hasWarnings": false,
+    "warningDetails": null
+  },
+  {
+    "id": "dark",
+    "name": "Dark",
+    "author": "Radzen",
+    "version": "1.0.0",
+    "description": "Easy on the eyes theme for low-light environments (Radzen dark)",
+    "isBuiltIn": true,
+    "previewImage": null,
+    "hasWarnings": false,
+    "warningDetails": null
+  }
+]

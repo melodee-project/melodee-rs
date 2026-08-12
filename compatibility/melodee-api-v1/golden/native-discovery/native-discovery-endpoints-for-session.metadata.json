@@ -1,0 +1,23 @@
+{
+  "name": "native-discovery/endpoints-for-session",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/api/v1/endpoints/for-session/00000000-0000-0000-0000-000000000001",
+    "auth": "bearer-var:accessToken",
+    "headers": {"User-Agent": "melodee-rs-phase0-capture/1", "Authorization": "Bearer <redacted>"},
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 401,
+    "headers": {"content-type": "application/json; charset=utf-8"},
+    "bodyFile": "native-discovery-endpoints-for-session.json",
+    "sha256": "06c7794c86e317dd3ada3ce1b52efeefad84a445dc6b5860f5ebaaf6ca055eb3",
+    "bytes": 109
+  },
+  "normalize": {"maskBaseUrl": true, "maskJsonPaths": ["$.correlationId"]},
+  "structureChecks": null,
+  "error": "HTTP Error 401: Unauthorized",
+  "allowFailure": true
+}

@@ -1,0 +1,33 @@
+{
+  "name": "native-discovery/charts-playlist",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/api/v1/charts/phase7-missing/playlist",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "native-discovery-charts-playlist.json",
+    "sha256": "a0aeabe46d256634e5953b60c69b7630d305302dd44b276d76b7459ea3d26411",
+    "bytes": 91
+  },
+  "normalize": {
+    "maskBaseUrl": true,
+    "maskJsonPaths": [
+      "$.correlationId"
+    ]
+  },
+  "structureChecks": null,
+  "error": "HTTP Error 404: Not Found",
+  "allowFailure": true
+}

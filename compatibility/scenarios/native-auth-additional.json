@@ -1,0 +1,89 @@
+[
+  {
+    "schemaVersion": 2,
+    "name": "auth-cookie-sign-in",
+    "surface": "melodee-api-v1",
+    "method": "POST",
+    "path": "/api/v1/auth/cookie/sign-in",
+    "auth": "none",
+    "json": {
+      "userName": "phase0-fixture",
+      "password": "Mel0deeR0cks!"
+    },
+    "normalize": {},
+    "notes": "Captures the browser-cookie sign-in response. Cookie cryptographic material is intentionally excluded by the capture tool's safe-header allowlist; Rust tests pin Secure/HttpOnly/SameSite and cookie-only middleware behavior."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "auth-cookie-sign-out-without-cookie",
+    "surface": "melodee-api-v1",
+    "method": "POST",
+    "path": "/api/v1/auth/cookie/sign-out",
+    "auth": "none",
+    "expectStatus": 401,
+    "normalize": {"maskBaseUrl": true},
+    "notes": "Proves the route uses the browser cookie scheme and challenges a missing session with the frozen login Location."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "auth-google-disabled",
+    "surface": "melodee-api-v1",
+    "method": "POST",
+    "path": "/api/v1/auth/google",
+    "auth": "none",
+    "json": {"idToken": "phase0-disabled-google-token"},
+    "expectStatus": 400,
+    "normalize": {"maskJsonPaths": ["$.correlationId"]},
+    "notes": "Frozen default: Google authentication is disabled unless explicitly configured."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "auth-cookie-google-disabled",
+    "surface": "melodee-api-v1",
+    "method": "POST",
+    "path": "/api/v1/auth/cookie/google",
+    "auth": "none",
+    "json": {"idToken": "phase0-disabled-google-token"},
+    "expectStatus": 400,
+    "normalize": {"maskJsonPaths": ["$.correlationId"]},
+    "notes": "The browser-cookie Google exchange has the same fail-closed disabled default as the JWT exchange."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "auth-password-reset-request-unknown",
+    "surface": "melodee-api-v1",
+    "method": "POST",
+    "path": "/api/v1/auth/password-reset/request",
+    "auth": "none",
+    "json": {"email": "phase0-no-such-user@example.test"},
+    "normalize": {},
+    "notes": "Non-enumerating reset request for an unknown email returns the same public success envelope."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "auth-password-reset-validate-invalid",
+    "surface": "melodee-api-v1",
+    "method": "GET",
+    "path": "/api/v1/auth/password-reset/validate/phase0-invalid-reset-token",
+    "inventoryPath": "/api/v1/auth/password-reset/validate/{token}",
+    "auth": "none",
+    "expectStatus": 400,
+    "normalize": {"maskJsonPaths": ["$.correlationId"]},
+    "notes": "Invalid reset tokens fail closed without disclosing account state."
+  },
+  {
+    "schemaVersion": 2,
+    "name": "auth-password-reset-confirm-invalid",
+    "surface": "melodee-api-v1",
+    "method": "POST",
+    "path": "/api/v1/auth/password-reset/confirm",
+    "auth": "none",
+    "json": {
+      "token": "phase0-invalid-reset-token",
+      "newPassword": "phase0-new-password"
+    },
+    "expectStatus": 400,
+    "normalize": {"maskJsonPaths": ["$.correlationId"]},
+    "notes": "Invalid reset confirmation is rejected; one-use success and atomic refresh revocation are pinned by PostgreSQL/Rust tests."
+  }
+]

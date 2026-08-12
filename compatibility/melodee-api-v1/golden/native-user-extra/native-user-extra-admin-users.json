@@ -1,0 +1,11 @@
+[
+  {
+    "id": "f78448cc-82ec-5864-877c-6c6163b00065",
+    "username": "phase0-fixture",
+    "email": "phase0-fixture@example.test",
+    "isAdmin": true,
+    "isEnabled": true,
+    "createdAt": "2026-08-09T19:53:33.5438340Z",
+    "lastLoginAt": "2026-08-12T13:30:01.4578900Z"
+  }
+]

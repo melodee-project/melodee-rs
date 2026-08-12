@@ -4,7 +4,7 @@ Legacy baseline: `4028b58dbd3302ed431e2c5b32d9dde5634db218`. Machine-readable fo
 
 | Surface | Known routes/endpoints | Classification | Golden captures | Client usage | Planned Rust phase |
 |---|---|---|---|---|---|
-| Melodee API v1 | 202 routes | captured: 34, client-used-uncaptured: 69, documented-uncaptured: 45, excluded-from-build: 35, undocumented-uncaptured: 19 | 118 | melodee-player: 13 routes; meloamp: 98 routes | Phase 7 (native API adapter) |
+| Melodee API v1 | 202 routes | captured: 167, excluded-from-build: 35 | 287 | melodee-player: 13 routes; meloamp: 98 routes | Phase 7 (native API adapter) |
 | OpenSubsonic | 81 endpoints | conditional: 15, gone: 6, not-implemented: 4, supported: 56 | 180 | (server-side contract; client smoke in Phase 8) | Phase 8 (OpenSubsonic adapter) |
 | Jellyfin | 60 routes | covered: 60/60 | 127 | (server-side contract; client smoke in Phase 8) | Phase 8 (Jellyfin adapter) |
 | Media pipeline | 31 corpus cases | extraction+pipeline+validation per case | n/a (baseline.json) | n/a | Phase 2-3 (ingestion/media pipeline) |
@@ -24,6 +24,6 @@ Legacy baseline: `4028b58dbd3302ed431e2c5b32d9dde5634db218`. Machine-readable fo
 
 ## Gaps (routes without golden coverage)
 
-- Melodee API v1: 88 routes (client-used-uncaptured or undocumented-uncaptured) — the later-phase backlog; see route-inventory.json.
+- Melodee API v1: 0 routes (client-used-uncaptured or undocumented-uncaptured) — the later-phase backlog; see route-inventory.json.
 - OpenSubsonic: 0 endpoints without scenarios.
 - Jellyfin: 0 routes without scenarios.

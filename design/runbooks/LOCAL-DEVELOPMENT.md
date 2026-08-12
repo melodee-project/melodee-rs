@@ -160,6 +160,55 @@ place. A full schema rollback is a drained restore of the verified pre-0009 back
 database. Tantivy generations are disposable: after forward migration, use
 `melodee search rebuild --actor <administrator-id>` rather than copying or editing generation files.
 
+## Apply and recover the Phase 7 native API migrations
+
+Migration `0010_phase7_native_auth.sql` is additive and creates the native User/public-ID,
+role/library-access, refresh-family, password-reset, social-login, and cluster-wide rate-limit
+authority. Back up before applying it, retain the old database for downgrade, and never drop the
+tables in place:
+
+    pg_dump --format=custom --file=/safe/backup/location/melodee-pre-0010.dump "$MELODEE__DATABASE__URL"
+    pg_restore --list /safe/backup/location/melodee-pre-0010.dump >/dev/null
+    cargo run -p melodee-cli -- migrate
+    psql "$MELODEE__DATABASE__URL" --set ON_ERROR_STOP=1 --command "SELECT to_regclass('public.native_users'), to_regclass('public.native_refresh_tokens'), to_regclass('public.native_password_reset_tokens'), to_regclass('public.native_rate_limit_counters')"
+
+Native startup requires `MELODEE__NATIVE__AUTH__JWT_KEY` with at least 32 random bytes. The value in
+`.env.example` is an intentionally rejected placeholder; generate a local secret with
+`openssl rand -base64 48` and keep the same value on every process. Configure
+`MELODEE__NATIVE__TRUSTED_PROXIES` only for controlled infrastructure; Melodee strips trusted hops
+from the right of the forwarding chain and rejects an all-trusted or malformed chain. List each
+browser client origin explicitly in
+`MELODEE__NATIVE__CORS__ALLOWED_ORIGINS`. Google authentication remains disabled unless its enabled,
+client-ID, HTTPS JWKS, and optional hosted-domain settings validate. Never enable development reset
+token responses on a production system.
+
+Migrations `0010` through `0019` are additive. Together they create native auth/public IDs,
+per-user catalog state, community and podcast state, genre preferences, discovery, playlists,
+endpoint sessions, catalog browse indexes, and bounded route-state constraints. They do not open,
+move, or delete catalog media. When separately enabled, the podcast worker may retain or remove only
+downloaded enclosures under its marker-owned, non-overlapping podcast root. Back up and validate
+PostgreSQL before applying the set to a database that matters:
+
+    pg_dump --format=custom --file=/safe/backup/location/melodee-pre-0010.dump "$MELODEE__DATABASE__URL"
+    pg_restore --list /safe/backup/location/melodee-pre-0010.dump >/dev/null
+    cargo run -p melodee-cli -- migrate
+    psql "$MELODEE__DATABASE__URL" --set ON_ERROR_STOP=1 --command "SELECT version, description, success FROM _sqlx_migrations WHERE version BETWEEN 10 AND 19 ORDER BY version"
+    psql "$MELODEE__DATABASE__URL" --set ON_ERROR_STOP=1 --command "SELECT to_regclass('public.native_users'), to_regclass('public.native_refresh_tokens'), to_regclass('public.native_endpoint_sessions'), to_regclass('public.native_playlists'), to_regclass('public.native_podcast_episodes')"
+
+An older binary may leave these additive relations unused; verify that exact binary against an
+isolated copy before downgrade. Do not drop Phase 7 tables in place. Full schema rollback restores
+the verified pre-0010 backup into a new empty database and repoints the service only after migration
+history and catalog checks pass. A disposable restore rehearsal is:
+
+    createdb melodee_phase7_restore_check
+    pg_restore --exit-on-error --dbname=melodee_phase7_restore_check /safe/backup/location/melodee-pre-0010.dump
+    psql postgresql:///melodee_phase7_restore_check --set ON_ERROR_STOP=1 --command "SELECT version, success FROM _sqlx_migrations ORDER BY version DESC LIMIT 1"
+    psql postgresql:///melodee_phase7_restore_check --set ON_ERROR_STOP=1 --command "SELECT count(*) AS tracks FROM tracks"
+    dropdb melodee_phase7_restore_check
+
+Run the rehearsal only against the explicitly named disposable database and retain the post-`0019`
+database intact until cutover is verified.
+
 ## Check the running process
 
 ```bash

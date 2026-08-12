@@ -1,0 +1,28 @@
+{
+  "name": "native-user-extra/user-stats-top-genres",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/api/v1/user/stats/top-genres?days=30&limit=10",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "native-user-extra-user-stats-top-genres.json",
+    "sha256": "31d7c94cf1aad1eeb24cace631db945bdc5772d60cb09f420816457c1c98d521",
+    "bytes": 37
+  },
+  "normalize": {},
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": true
+}

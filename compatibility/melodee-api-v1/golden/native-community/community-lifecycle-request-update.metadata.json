@@ -1,0 +1,40 @@
+{
+  "name": "community-lifecycle/request-update",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "PUT",
+    "url": "{melodee-origin}/api/v1/requests/d3cd5618-420d-4277-8647-86cefbf71b9e",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Content-Type": "application/json",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": {
+      "description": "Updated Phase 7 compatibility request"
+    },
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "community-lifecycle-request-update.json",
+    "sha256": "7008341c42be06cd96c4114f0c4d42be24f1e889d47ec887fafb7769e01b68d0",
+    "bytes": 672
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.apiKey",
+      "$.createdAt",
+      "$.updatedAt",
+      "$.lastActivityAt",
+      "$.createdByUser.apiKey",
+      "$.lastActivityUser.apiKey"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

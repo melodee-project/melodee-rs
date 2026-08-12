@@ -1,0 +1,33 @@
+{
+  "name": "native-discovery/backend-capabilities",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/api/v1/playback-backend/capabilities",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "native-discovery-backend-capabilities.json",
+    "sha256": "d981647844801a43d6982619d5caa576fb40d052b0746dce9cef725e1c3e96d3",
+    "bytes": 100
+  },
+  "normalize": {
+    "maskBaseUrl": true,
+    "maskJsonPaths": [
+      "$.correlationId"
+    ]
+  },
+  "structureChecks": null,
+  "error": "HTTP Error 400: Bad Request",
+  "allowFailure": true
+}

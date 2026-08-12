@@ -1,0 +1,5 @@
+{
+  "code": "BAD_REQUEST",
+  "message": "Last.fm not configured",
+  "correlationId": "<volatile>"
+}

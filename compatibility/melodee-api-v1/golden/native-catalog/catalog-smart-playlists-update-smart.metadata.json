@@ -1,0 +1,44 @@
+{
+  "name": "catalog-smart-playlists/update-smart",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "PUT",
+    "url": "{melodee-origin}/api/v1/playlists/smart/00000000-0000-0000-0000-000000000001",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Content-Type": "application/json",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": {
+      "name": "Smart Probe Updated",
+      "mqlQuery": "artist:\"Dune Pilots\"",
+      "entityType": "songs",
+      "isPublic": false
+    },
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 500,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "catalog-smart-playlists-update-smart.json",
+    "sha256": "d76f8a079083bbf8f0d93cef67bace555614b7a873888bd203ab8c831e2a05b6",
+    "bytes": 109
+  },
+  "normalize": {
+    "maskBaseUrl": true,
+    "maskJsonPaths": [
+      "$.apiKey",
+      "$.lastEvaluatedAt",
+      "$.createdAt",
+      "$.owner.createdAt",
+      "$.owner.updatedAt",
+      "$.correlationId"
+    ]
+  },
+  "structureChecks": null,
+  "error": "HTTP Error 500: Internal Server Error",
+  "allowFailure": true
+}

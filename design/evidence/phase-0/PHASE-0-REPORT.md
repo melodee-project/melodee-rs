@@ -72,7 +72,7 @@ databases and cold starts) and never depended on session state.
 
 | Surface | Known | Classification | Golden captures | Evidence |
 |---|---:|---|---:|---|
-| Melodee API v1 | 202 routes | captured: 34; client-used-uncaptured: 69; documented-uncaptured: 45; undocumented-uncaptured: 19; excluded-from-build: 35 | 118 | `compatibility/melodee-api-v1/` |
+| Melodee API v1 | 202 routes | captured: 33; client-used-uncaptured: 70; documented-uncaptured: 45; undocumented-uncaptured: 19; excluded-from-build: 35 | 118 | `compatibility/melodee-api-v1/` |
 | OpenSubsonic | 81 endpoints (164 routes) | supported: 56; conditional: 15; gone(410): 6; not-implemented(501): 4 | 179 | `compatibility/opensubsonic/` |
 | Jellyfin | 60 routes | covered: 60/60 | 127 | `compatibility/jellyfin/` |
 | Media pipeline | 31 corpus cases | extraction + pipeline + validation per case | baseline.json | `compatibility/media/` |

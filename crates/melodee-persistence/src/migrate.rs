@@ -1,6 +1,8 @@
 //! Migration runner. Migrations are explicit, source-controlled SQL under
 //! `crates/melodee-persistence/migrations/`, embedded at compile time and
-//! runnable from an empty database.
+//! runnable from an empty database. Phase-specific additive indexes are kept
+//! here as migrations as well, so an upgraded catalog receives the same query
+//! plan guarantees as a freshly created database.
 
 use sqlx::PgPool;
 use sqlx::migrate::Migrator;

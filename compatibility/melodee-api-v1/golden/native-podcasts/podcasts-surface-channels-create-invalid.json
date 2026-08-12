@@ -1,0 +1,5 @@
+{
+  "code": "BAD_REQUEST",
+  "message": "Invalid URL format",
+  "correlationId": "<volatile>"
+}

@@ -1,0 +1,36 @@
+{
+  "name": "community-lifecycle/request-list",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/api/v1/requests?page=1&pageSize=20&mine=true",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "community-lifecycle-request-list.json",
+    "sha256": "e6c550a4af77a2c64a253e5d88b61b4edcedd5ad4e0150c56ecfdbaa4b74a5bf",
+    "bytes": 696
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.data[*].apiKey",
+      "$.data[*].createdAt",
+      "$.data[*].updatedAt",
+      "$.data[*].lastActivityAt",
+      "$.data[*].createdByUser.apiKey"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

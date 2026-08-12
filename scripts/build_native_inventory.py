@@ -16,18 +16,31 @@ excluded from compilation) are first-class rows here. Output is deterministic
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 SURFACE_DIR = ROOT / "compatibility" / "melodee-api-v1"
 SCENARIOS_DIR = ROOT / "compatibility" / "scenarios"
+GOLDEN_DIR = SURFACE_DIR / "golden"
 SCHEMA_VERSION = 1
 
 UUID_RE = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+CAPTURE_VAR_RE = re.compile(r"\{\{[^}]+\}\}")
 ROUTE_PARAM_RE = re.compile(r"\{[^}]*\}")
+INTEGER_SEGMENT_RE = re.compile(r"(?<=/)\d+(?=/|$)")
+PUBLIC_SHARE_SEGMENT_RE = re.compile(r"(?<=/api/v1/shares/public/)[^/?#]+")
+
+
+def display_path(path: Path) -> str:
+    try:
+        return str(path.relative_to(ROOT))
+    except ValueError:
+        return str(path)
 
 
 def normalize_path(path: str) -> str:
@@ -35,15 +48,46 @@ def normalize_path(path: str) -> str:
     path = path.split("?", 1)[0]
     path = path.split("#", 1)[0]
     path = UUID_RE.sub("{}", path)
+    path = CAPTURE_VAR_RE.sub("{}", path)
     path = ROUTE_PARAM_RE.sub("{}", path)
-    # Literal trailing parameters in client-style paths (e.g. starred/{id}/true
-    # captured with concrete values).
-    path = re.sub(r"/(true|false|\d+)$", "/{}", path)
+    # Concrete integer parameters occur inside some captured paths (for
+    # example /participants/1/ban), not only at the end. The frozen manifest
+    # has no fixed all-numeric path segments; a regression test guards that
+    # precondition so adding such a route cannot silently collapse identities.
+    path = INTEGER_SEGMENT_RE.sub("{}", path)
+    # Public share IDs are short opaque strings rather than UUIDs. No literal
+    # child route exists beneath this prefix in the frozen manifest.
+    path = PUBLIC_SHARE_SEGMENT_RE.sub("{}", path)
+    # Literal trailing boolean parameters in client-style paths (for example
+    # starred/{id}/true).
+    path = re.sub(r"/(true|false)$", "/{}", path)
     return path
 
 
-def scenario_route_map() -> dict[tuple[str, str], list[str]]:
+def normalize_scenario_path(path: str, method: str, manifest: dict) -> str:
+    """Resolve concrete non-UUID values (slugs, periods, asset paths) against
+    the frozen route templates before falling back to generic normalization."""
+    request_path = path.split("?", 1)[0].split("#", 1)[0]
+    candidates: list[str] = []
+    for route in manifest["routes"]:
+        if method not in route["methods"]:
+            continue
+        pattern = re.escape(str(route["path"]))
+        pattern = re.sub(r"\\\{\\\*[^}]+\\\}", ".+", pattern)
+        pattern = re.sub(r"\\\{[^}]+\\\}", "[^/]+", pattern)
+        if re.fullmatch(pattern, request_path):
+            candidates.append(normalize_path(str(route["path"])))
+    if len(candidates) == 1:
+        return candidates[0]
+    return normalize_path(path)
+
+
+def scenario_route_map(manifest: dict | None = None) -> dict[tuple[str, str], list[str]]:
     """Map (method, normalized path) -> scenario step names."""
+    if manifest is None:
+        manifest = json.loads(
+            (SURFACE_DIR / "contracts" / "route-manifest.json").read_text(encoding="utf-8")
+        )
     mapping: dict[tuple[str, str], list[str]] = {}
     for scenario_file in sorted(SCENARIOS_DIR.glob("*.json")):
         scenarios = json.loads(scenario_file.read_text(encoding="utf-8"))
@@ -51,20 +95,93 @@ def scenario_route_map() -> dict[tuple[str, str], list[str]]:
             steps = scenario.get("flow") if isinstance(scenario.get("flow"), list) else [scenario]
             for index, step in enumerate(steps):
                 name = f"{scenario['name']}/{step.get('name', f'step-{index + 1}')}" if steps is not [scenario] and isinstance(scenario.get("flow"), list) else str(scenario["name"])
-                raw_path = str(step.get("path", ""))
+                # A negative capture may need a concrete opaque path value
+                # while still declaring which parameterized manifest route it
+                # proves. `inventoryPath` is evidence metadata only; the
+                # capture runner continues to request `path` verbatim.
+                raw_path = str(step.get("inventoryPath", step.get("path", "")))
                 method = str(step.get("method", "GET")).upper()
                 if "{{streamUrl}}" in raw_path:
                     normalized = "/song/stream/{}/{}/{}"
                 elif "/song/stream/" in raw_path:
                     normalized = "/song/stream/{}/{}/{}"
                 elif raw_path.startswith("/images/"):
-                    normalized = normalize_path(raw_path)
+                    normalized = normalize_scenario_path(raw_path, method, manifest)
                     mapping.setdefault((method, normalized), []).append(name)
                     continue
                 else:
-                    normalized = normalize_path(raw_path)
+                    normalized = normalize_scenario_path(raw_path, method, manifest)
                 mapping.setdefault((method, normalized), []).append(name)
     return mapping
+
+
+def captured_url_path(url: str) -> str:
+    if url.startswith("{") and "}" in url:
+        return url.split("}", 1)[1]
+    parsed = urlsplit(url)
+    return parsed.path + (f"?{parsed.query}" if parsed.query else "")
+
+
+def promoted_golden_names(manifest: dict | None = None) -> set[str]:
+    """Return scenario names backed by promoted metadata and response bodies."""
+    names: set[str] = set()
+    if manifest is None:
+        manifest = json.loads(
+            (SURFACE_DIR / "contracts" / "route-manifest.json").read_text(encoding="utf-8")
+        )
+    expected_commit = manifest["legacyBaselineCommit"]
+    declared = scenario_route_map(manifest)
+    declared_by_name: dict[str, set[tuple[str, str]]] = {}
+    for key, scenario_names in declared.items():
+        for scenario_name in scenario_names:
+            declared_by_name.setdefault(scenario_name, set()).add(key)
+    for metadata_path in sorted(GOLDEN_DIR.glob("*/*.metadata.json")):
+        provenance_path = metadata_path.parent / "provenance.json"
+        if not provenance_path.is_file():
+            raise ValueError(
+                f"promoted metadata has no provenance: {display_path(metadata_path)}"
+            )
+        provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+        if (
+            provenance.get("schemaVersion") != 1
+            or provenance.get("surface") != "melodee-api-v1"
+            or provenance.get("legacyBaselineCommit") != expected_commit
+            or not str(provenance.get("reproducedBy", "")).strip()
+        ):
+            raise ValueError(
+                f"promoted provenance is invalid: {display_path(provenance_path)}"
+            )
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        name = str(metadata["name"])
+        if name in names:
+            raise ValueError(f"duplicate promoted native scenario name: {name}")
+        body_file = metadata.get("response", {}).get("bodyFile")
+        body_path = metadata_path.parent / body_file if isinstance(body_file, str) else None
+        if body_path is None or not body_path.is_file():
+            raise ValueError(f"promoted metadata has no response body: {display_path(metadata_path)}")
+        expected_hash = metadata.get("response", {}).get("sha256")
+        if not isinstance(expected_hash, str) or hashlib.sha256(body_path.read_bytes()).hexdigest() != expected_hash:
+            raise ValueError(f"promoted response hash mismatch: {display_path(metadata_path)}")
+        expected_bytes = metadata.get("response", {}).get("bytes")
+        if expected_bytes != body_path.stat().st_size:
+            raise ValueError(f"promoted response byte count mismatch: {display_path(metadata_path)}")
+        request = metadata.get("request", {})
+        method = str(request.get("method", "")).upper()
+        url = str(request.get("url", ""))
+        if not method or not url:
+            raise ValueError(f"promoted metadata has no request identity: {display_path(metadata_path)}")
+        captured_path = captured_url_path(url)
+        normalized = (
+            "/song/stream/{}/{}/{}"
+            if "/song/stream/" in captured_path
+            else normalize_scenario_path(captured_path, method, manifest)
+        )
+        if (method, normalized) not in declared_by_name.get(name, set()):
+            raise ValueError(
+                f"promoted request method/path does not match scenario: {display_path(metadata_path)}"
+            )
+        names.add(name)
+    return names
 
 
 def main() -> None:
@@ -80,7 +197,8 @@ def main() -> None:
     manifest = json.loads((SURFACE_DIR / "contracts" / "route-manifest.json").read_text(encoding="utf-8"))
     openapi = json.loads((SURFACE_DIR / "contracts" / "openapi-v1.json").read_text(encoding="utf-8"))
     usage = json.loads((SURFACE_DIR / "contracts" / "native-client-usage.json").read_text(encoding="utf-8"))
-    scenarios = scenario_route_map()
+    declared_scenarios = scenario_route_map(manifest)
+    promoted_names = promoted_golden_names(manifest)
 
     openapi_paths: dict[tuple[str, str], None] = {}
     for path, ops in openapi.get("paths", {}).items():
@@ -100,7 +218,8 @@ def main() -> None:
         for method in route["methods"]:
             key = (method, normalize_path(route["path"]))
             used_by = client_paths.get(key, [])
-            scenario_names = scenarios.get(key, [])
+            declared_names = declared_scenarios.get(key, [])
+            scenario_names = [name for name in declared_names if name in promoted_names]
             if route.get("buildExcluded"):
                 parity = "excluded-from-build"
             elif scenario_names:
@@ -122,6 +241,7 @@ def main() -> None:
                     "implementation": route["implementation"],
                     "inOpenApi": key in openapi_paths,
                     "usedBy": used_by,
+                    "declaredScenarios": declared_names,
                     "scenarios": scenario_names,
                     "parityStatus": parity,
                 }
@@ -151,8 +271,9 @@ def main() -> None:
     routes.sort(key=lambda r: (r["path"], r["method"]))
 
     cross_surface = []
-    for key, names in sorted(scenarios.items()):
+    for key, declared_names in sorted(declared_scenarios.items()):
         if key[1].startswith("/images/"):
+            names = [name for name in declared_names if name in promoted_names]
             cross_surface.append(
                 {
                     "method": key[0],
@@ -177,6 +298,7 @@ def main() -> None:
             "compatibility/melodee-api-v1/contracts/openapi-v1.json",
             "compatibility/melodee-api-v1/contracts/native-client-usage.json",
             "compatibility/scenarios/*.json",
+            "compatibility/melodee-api-v1/golden/*/*.metadata.json",
         ],
         "routeCount": len(routes),
         "summary": summary,

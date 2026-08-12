@@ -1,0 +1,33 @@
+{
+  "name": "native-user-extra/genre-songs",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/api/v1/genres/55Kw5aKD6Z-z5qW9/songs?page=1&limit=50",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "native-user-extra-genre-songs.json",
+    "sha256": "297e91d8cd3b38dd71b72e7bb29731e0e4c603001d9963d912d24d85fb05bf31",
+    "bytes": 4454
+  },
+  "normalize": {
+    "maskBaseUrl": true,
+    "maskUrlAuthTokenPaths": [
+      "$.songs[*].streamUrl"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": true
+}

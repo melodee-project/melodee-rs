@@ -3,6 +3,7 @@ resolver = "3"
 members = [
   "apps/melodee-cli",
   "apps/melodee-server",
+  "crates/melodee-auth",
   "crates/melodee-catalog",
   "crates/melodee-domain",
   "crates/melodee-persistence",
@@ -21,12 +22,25 @@ license = "MIT"
 authors = ["Melodee Project contributors"]
 
 [workspace.dependencies]
-axum = { version = "=0.8.9", features = ["http1", "json", "tokio"] }
+axum = { version = "=0.8.9", features = ["http1", "json", "multipart", "tokio"] }
+base64 = "=0.22.1"
+bcrypt = "=0.19.2"
 blake3 = "=1.8.6"
+futures-util = "=0.3.33"
+getrandom = "=0.4.3"
+hmac = "=0.13.0"
+jsonwebtoken = { version = "=11.0.0", default-features = false, features = ["aws_lc_rs", "use_pem"] }
+reqwest = { version = "=0.13.4", default-features = false, features = ["json", "query", "rustls", "stream"] }
+quick-xml = "=0.41.0"
 tempfile = "=3.20.0"
 clap = { version = "=4.6.4", features = ["derive", "env"] }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.150"
+sha2 = "=0.11.0"
+# ADR-0123: bounded native image compatibility. Enable only codecs accepted
+# by the native upload/capture contract; no AVIF, BMP, DDS, EXR, HDR, ICO,
+# PNM, QOI, TIFF, or TGA decoder is linked.
+image = { version = "=0.25.10", default-features = false, features = ["gif", "jpeg", "png", "webp"] }
 lofty = "=0.25.0"
 # ADR-0116: safe no-replace directory finalization for canonical publication
 # on Unix. Windows uses the platform's non-replacing rename behavior.
@@ -48,12 +62,16 @@ sqlx = { version = "=0.9.0", default-features = false, features = [
 # used; no proprietary Tantivy features are enabled.
 tantivy = "=0.26.1"
 thiserror = "=2.0.19"
-time = { version = "=0.3.55", features = ["serde"] }
-tokio = { version = "=1.52.3", features = ["macros", "net", "rt-multi-thread", "signal"] }
-tower-http = { version = "=0.7.0", features = ["trace"] }
+time = { version = "=0.3.55", features = ["formatting", "serde"] }
+tokio = { version = "=1.52.3", features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "signal"] }
+tower-http = { version = "=0.7.0", features = ["cors", "trace"] }
 tracing = "=0.1.44"
 tracing-subscriber = { version = "=0.3.23", features = ["env-filter", "fmt", "json"] }
 uuid = { version = "=1.24.0", features = ["serde", "v7"] }
+# ADR-0123: bounded in-memory native-v1 theme-pack import/export. Only the
+# standard DEFLATE codec is enabled; encrypted and exotic archive codecs are
+# intentionally outside the compatibility boundary.
+zip = { version = "=6.0.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

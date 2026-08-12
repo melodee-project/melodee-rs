@@ -1,0 +1,5 @@
+{
+  "code": "BAD_REQUEST",
+  "message": "Channel not found",
+  "correlationId": "<volatile>"
+}

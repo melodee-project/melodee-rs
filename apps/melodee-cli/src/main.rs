@@ -1,12 +1,12 @@
-use std::{collections::BTreeMap, env, process::Command};
+use std::{collections::BTreeMap, env, io::Read, path::PathBuf, process::Command};
 
 use clap::{Parser, Subcommand, ValueEnum};
 use melodee_catalog::{CatalogConfig, import_once};
 use melodee_domain::{IngestionState, ReleaseWorkItem};
 use melodee_ingestion::{IngestionConfig, publish_once, reconcile_all_sources, validate_once};
 use melodee_persistence::{
-    CatalogStore, PolicyAdminOverrideRequest, PolicyStore, WorkEngineConfig, WorkItemStore,
-    WorkerId, migrate,
+    CatalogStore, MAX_CHART_CSV_BYTES, NativeChartImport, NativeDiscoveryStore,
+    PolicyAdminOverrideRequest, PolicyStore, WorkEngineConfig, WorkItemStore, WorkerId, migrate,
 };
 use melodee_policy::{
     PolicyConfig, PolicyEngine, PolicyEvaluation, default_rule_set, evaluate_catalog_context,
@@ -57,6 +57,34 @@ enum Commands {
     Search {
         #[command(subcommand)]
         command: SearchCommands,
+    },
+    /// Import a bounded chart CSV and link unique exact catalog matches.
+    Charts {
+        #[command(subcommand)]
+        command: ChartCommands,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum ChartCommands {
+    /// Atomically create a visible chart from Rank,ArtistName,ReleaseTitle,ReleaseYear CSV rows.
+    Import {
+        #[arg(long)]
+        file: PathBuf,
+        #[arg(long, value_parser = parse_nonblank)]
+        slug: String,
+        #[arg(long, value_parser = parse_nonblank)]
+        title: String,
+        #[arg(long)]
+        source_name: Option<String>,
+        #[arg(long)]
+        source_url: Option<String>,
+        #[arg(long)]
+        year: Option<i32>,
+        #[arg(long, default_value_t = false)]
+        hidden: bool,
+        #[arg(long, default_value_t = false)]
+        generated_playlist: bool,
     },
 }
 
@@ -294,7 +322,8 @@ async fn main() {
             println!("Phase 4: complete — see design/evidence/phase-4/PHASE-4-REPORT.md");
             println!("Phase 5: complete — see design/evidence/phase-5/PHASE-5-REPORT.md");
             println!("Phase 6: complete — see design/evidence/phase-6/PHASE-6-REPORT.md");
-            println!("Phase 7: active — see IMPLEMENTATION.md");
+            println!("Phase 7: complete — see design/evidence/phase-7/PHASE-7-REPORT.md");
+            println!("Phase 8: active — see IMPLEMENTATION.md");
             println!("Read: PRD.md, SPEC.md, IMPLEMENTATION.md, AGENTS.md");
         }
         Commands::Doctor => {
@@ -1171,6 +1200,64 @@ async fn main() {
                 }
             }
         }
+        Commands::Charts { command } => match command {
+            ChartCommands::Import {
+                file,
+                slug,
+                title,
+                source_name,
+                source_url,
+                year,
+                hidden,
+                generated_playlist,
+            } => {
+                let mut input = Vec::new();
+                let file_handle = std::fs::File::open(&file).unwrap_or_else(|error| {
+                    eprintln!("error: cannot open chart CSV {}: {error}", file.display());
+                    std::process::exit(2);
+                });
+                let read_limit = u64::try_from(MAX_CHART_CSV_BYTES + 1).unwrap_or(u64::MAX);
+                file_handle
+                    .take(read_limit)
+                    .read_to_end(&mut input)
+                    .unwrap_or_else(|error| {
+                        eprintln!("error: cannot read chart CSV {}: {error}", file.display());
+                        std::process::exit(2);
+                    });
+                if input.len() > MAX_CHART_CSV_BYTES {
+                    eprintln!("error: chart CSV exceeds {MAX_CHART_CSV_BYTES} bytes");
+                    std::process::exit(2);
+                }
+                let pool = pool().await;
+                migrate(&pool).await.unwrap_or_else(|error| {
+                    eprintln!("error: migration failed: {error}");
+                    std::process::exit(1);
+                });
+                let result = NativeDiscoveryStore
+                    .import_chart_csv(
+                        &pool,
+                        &NativeChartImport {
+                            slug,
+                            title,
+                            source_name,
+                            source_url,
+                            chart_year: year,
+                            is_visible: !hidden,
+                            is_generated_playlist_enabled: generated_playlist,
+                        },
+                        &input,
+                    )
+                    .await
+                    .unwrap_or_else(|error| {
+                        eprintln!("error: {error}");
+                        std::process::exit(1);
+                    });
+                println!("chart_id:    {}", result.chart_id);
+                println!("items:       {}", result.item_count);
+                println!("linked:      {}", result.linked_count);
+                println!("unlinked:    {}", result.item_count - result.linked_count);
+            }
+        },
     }
 }
 

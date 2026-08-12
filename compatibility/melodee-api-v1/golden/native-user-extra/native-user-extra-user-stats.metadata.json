@@ -1,0 +1,28 @@
+{
+  "name": "native-user-extra/user-stats",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/api/v1/user/stats?days=30",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "native-user-extra-user-stats.json",
+    "sha256": "679e16db2079fc141e2c576c367b00d3b60c9c26d119c3b2a4eef94bea77f9f9",
+    "bytes": 130
+  },
+  "normalize": {},
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": true
+}

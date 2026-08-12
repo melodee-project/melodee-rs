@@ -1,0 +1,8 @@
+{
+  "name": "Melodee",
+  "description": "Melodee API",
+  "majorVersion": 2,
+  "minorVersion": 2,
+  "patchVersion": 0,
+  "version": "2.2.0"
+}

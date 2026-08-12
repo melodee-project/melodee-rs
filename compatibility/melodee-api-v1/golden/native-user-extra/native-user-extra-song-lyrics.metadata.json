@@ -1,0 +1,32 @@
+{
+  "name": "native-user-extra/song-lyrics",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/api/v1/songs/ea26fc59-a545-51c2-94c4-702e1f97b80a/lyrics",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "native-user-extra-song-lyrics.json",
+    "sha256": "06b25c437f35b88678f30c415139cecf1099e375ccec01f36af358d544a639a9",
+    "bytes": 92
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.correlationId"
+    ]
+  },
+  "structureChecks": null,
+  "error": "HTTP Error 404: Not Found",
+  "allowFailure": true
+}

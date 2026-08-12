@@ -1,0 +1,26 @@
+{
+  "data": [
+    {
+      "id": "813c11e0-61cd-5204-ae0f-ce68386eacec",
+      "thumbnailUrl": "{melodee-origin}/images/artist_813c11e0-61cd-5204-ae0f-ce68386eacec/80",
+      "imageUrl": "{melodee-origin}/images/artist_813c11e0-61cd-5204-ae0f-ce68386eacec/1024",
+      "name": "Aurora Fields",
+      "userStarred": true,
+      "userRating": 4,
+      "albumCount": 1,
+      "songCount": 3,
+      "createdAt": "2026-01-01 00:00:00",
+      "updatedAt": "---",
+      "biography": "Synthetic ordinary solo artist fixture.",
+      "genres": null
+    }
+  ],
+  "meta": {
+    "totalCount": 1,
+    "pageSize": 50,
+    "currentPage": 1,
+    "totalPages": 1,
+    "hasNext": false,
+    "hasPrevious": false
+  }
+}

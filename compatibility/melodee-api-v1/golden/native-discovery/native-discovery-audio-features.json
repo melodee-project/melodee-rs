@@ -1,0 +1,15 @@
+{
+  "id": "ea26fc59-a545-51c2-94c4-702e1f97b80a",
+  "tempo": 100,
+  "key": null,
+  "mode": null,
+  "timeSignature": 4,
+  "acousticness": 0.5,
+  "danceability": 0.5,
+  "energy": 0.5,
+  "instrumentalness": 0.5,
+  "liveness": 0.2,
+  "loudness": -10,
+  "speechiness": 0.1,
+  "valence": 0.5
+}

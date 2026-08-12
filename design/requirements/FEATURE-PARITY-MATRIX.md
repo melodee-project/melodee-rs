@@ -51,7 +51,7 @@ This is the living checklist for the Rust replacement. No row may be silently re
 | Localization | Capability | 10 | Planned | — | — | — | |
 | RTL supported cultures | Capability | 10 | Planned | — | — | — | |
 | OpenSubsonic API | Exact compatibility | 8 | Planned | `design/evidence/phase-0/opensubsonic-capture.md` (81 endpoints; 179 golden; 410/501 matrix automated) | — | — | D1 unsigned-JWT and D2 seek corruption are do-not-preserve |
-| Melodee API v1 | Exact compatibility | 7 | Planned | `design/evidence/phase-0/native-api-v1-capture.md` (118 golden; unified inventory; client usage inventoried) | — | — | 88-route later-phase backlog tracked in route-inventory.json |
+| Melodee API v1 | Exact compatibility | 7 | In progress | `design/evidence/phase-0/native-api-v1-capture.md` (118 golden; unified inventory; client usage inventoried) | — | — | 89-route client-used/undocumented capture backlog plus other documented gaps tracked in route-inventory.json |
 | Jellyfin music compatibility | Exact current subset | 8 | Planned | `design/evidence/phase-0/jellyfin-capture.md` (60/60 routes; 127 golden; no transcoding; images 404 without art) | — | — | Music-only subset boundary frozen |
 | Container images amd64/arm64 | Capability | 11 | Planned | — | — | — | |
 | CLI administrative operations | Capability/replacement | 1,9 | In progress | — | Rust-native migrate/doctor/work/ingest/catalog commands with bounded one-shot processing and durable diagnostics | `apps/melodee-cli/src/main.rs`; `apps/melodee-cli/tests/plan.rs`; workspace integration tests | Foundation and Phase 2–4 operator commands are implemented; broader user/admin recovery and migration commands remain Phase 9 |

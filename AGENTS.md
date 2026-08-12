@@ -52,27 +52,26 @@ template.
 
 Do not silently resolve a material conflict; record it in the PR and propose an ADR when needed.
 
-## Current phase boundary: Phase 7 — Native Melodee API v1
+## Current phase boundary: Phase 8 — OpenSubsonic and Jellyfin adapters
 
-Phases 0–6 are complete. Phase 6's independently accepted implementation and evidence are in
-`design/evidence/phase-6/PHASE-6-REPORT.md`. Phase 7 is active under the frozen native Melodee API
-v1 captures, SPEC/PRD requirements, and accepted ADRs. Proposed ADR-0114 must be ratified or revised
-before implementing its dual-shape playlist request extension.
+Phases 0–7 are complete. Phase 7's independently accepted native-v1 implementation and evidence are
+in `design/evidence/phase-7/PHASE-7-REPORT.md`. Phase 8 is active under the frozen OpenSubsonic and
+Jellyfin captures, SPEC/PRD requirements, and accepted ADRs.
 
-Allowed when explicitly assigned: Phase 7 work-package/ADR preparation; native Melodee API v1
-authentication and session flows; Artist/Release/Track browse, detail, search, image, and stream
-adapters; playlists, queues, scrobbling, requests, shares, podcasts, playback settings/backends,
-party routes, and other captured native-v1 surfaces; exact native DTO/error/pagination/nullability
-compatibility; Android/MeloAmp differential and integration tests; migrations backed by accepted
-schema ADRs; tests/evidence/traceability, CI, and documentation.
+Allowed when explicitly assigned: Phase 8 work-package/ADR preparation; OpenSubsonic authentication,
+JSON/XML/JSONP envelopes, documented endpoint groups, extensions, intentional Gone/Not Implemented
+behavior, and streaming; music-focused Jellyfin discovery, authentication, tokens, item views,
+Artists, genres, playlists, sessions, images, and audio; representative real-client differential and
+integration tests; migrations backed by accepted schema ADRs; tests/evidence/traceability, CI, and
+documentation.
 
-Forbidden: Phase 8+ OpenSubsonic or Jellyfin implementation; Phase 9 remaining parity domains except
-where a captured native-v1 route is explicitly assigned in Phase 7; Phase 10 admin UI implementation;
-redesigning captured external contracts without compatibility evidence, a product decision, an
-accepted ADR, and a migration/client plan; any database schema without an accepted schema ADR;
-message brokers, Redis, Elasticsearch/OpenSearch, GraphQL, microservices; copying C# service/class
-boundaries into Rust; destructive operations against an existing Melodee library outside the
-durable Phase 5 decision/audit/authorization contract.
+Forbidden: Phase 9 remaining parity-domain expansion; Phase 10 admin UI implementation; Phase 11
+migration/import completion; merging native-v1, OpenSubsonic, or Jellyfin wire DTOs; redesigning
+captured external contracts without compatibility evidence, a product decision, an accepted ADR,
+and a migration/client plan; any database schema without an accepted schema ADR; message brokers,
+Redis, Elasticsearch/OpenSearch, GraphQL, microservices; copying C# service/class boundaries into
+Rust; destructive operations against an existing Melodee library outside the durable Phase 5
+decision/audit/authorization contract.
 
 ## Product language
 

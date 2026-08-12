@@ -1,0 +1,32 @@
+{
+  "name": "native-user-provider-state/unlink-missing-google",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "DELETE",
+    "url": "{melodee-origin}/api/v1/user/me/link/google",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "native-user-provider-state-unlink-missing-google.json",
+    "sha256": "a7682392423adf29fc6671c0303ae0d3de1599ab16ee712d2e863de88e0b7531",
+    "bytes": 114
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.correlationId"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

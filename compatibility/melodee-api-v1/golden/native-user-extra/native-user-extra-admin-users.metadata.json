@@ -1,0 +1,28 @@
+{
+  "name": "native-user-extra/admin-users",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/api/v1/admin/users",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "native-user-extra-admin-users.json",
+    "sha256": "96f45709bd78460e55b7bef5b58a65f681086e75eae48f446bfb4367a0bb81f4",
+    "bytes": 283
+  },
+  "normalize": {},
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": true
+}

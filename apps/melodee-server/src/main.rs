@@ -1,4 +1,4 @@
-use std::{env, error::Error, net::SocketAddr};
+use std::{env, error::Error, net::SocketAddr, sync::Arc};
 
 use axum::{Router, routing::get};
 use melodee_catalog::{CatalogConfig, CatalogSchedulerHandle, start_catalog_loop};
@@ -10,7 +10,7 @@ use melodee_persistence::{CatalogStore, WorkEngineConfig, WorkItemStore, migrate
 use melodee_policy::PolicyConfig;
 use melodee_search::{SearchConfig, SearchRoot, start_search_loop};
 use melodee_server::policy_worker::{PolicyWorkerConfig, start_policy_loop};
-use melodee_server::{admin, policy_worker, system};
+use melodee_server::{admin, native, native_stream, podcast_worker, policy_worker, system};
 use tokio::sync::oneshot;
 use tower_http::trace::TraceLayer;
 use tracing::info;
@@ -58,6 +58,12 @@ async fn stop_search_worker(handle: Option<melodee_search::SearchSchedulerHandle
     }
 }
 
+async fn stop_podcast_worker(handle: Option<podcast_worker::PodcastSchedulerHandle>) {
+    if let Some(handle) = handle {
+        handle.stop().await;
+    }
+}
+
 fn database_url() -> String {
     match env::var(melodee_persistence::ENV_DATABASE_URL) {
         Ok(url) if !url.is_empty() => url,
@@ -69,6 +75,46 @@ fn database_url() -> String {
             std::process::exit(2);
         }
     }
+}
+
+const ENV_NATIVE_PUBLIC_ORIGIN: &str = "MELODEE__NATIVE__PUBLIC_ORIGIN";
+const ENV_NATIVE_STREAM_CONCURRENCY: &str = "MELODEE__NATIVE__STREAM_CONCURRENCY";
+const DEFAULT_NATIVE_STREAM_CONCURRENCY: usize = 32;
+const MAX_NATIVE_STREAM_CONCURRENCY: usize = 4096;
+
+fn native_public_origin(address: SocketAddr) -> Result<String, &'static str> {
+    let value = env::var(ENV_NATIVE_PUBLIC_ORIGIN).unwrap_or_else(|_| format!("http://{address}"));
+    validate_public_origin(&value)?;
+    Ok(value.trim_end_matches('/').to_string())
+}
+
+fn validate_public_origin(value: &str) -> Result<(), &'static str> {
+    let uri = value
+        .parse::<axum::http::Uri>()
+        .map_err(|_| "native public origin must be an absolute HTTP(S) origin")?;
+    if !matches!(uri.scheme_str(), Some("http" | "https"))
+        || uri.authority().is_none()
+        || uri.path() != "/"
+        || uri.query().is_some()
+        || uri
+            .authority()
+            .is_some_and(|authority| authority.as_str().contains('@'))
+    {
+        return Err(
+            "native public origin must be an absolute HTTP(S) origin without credentials, path, or query",
+        );
+    }
+    Ok(())
+}
+
+fn parse_native_stream_concurrency(value: &str) -> Result<usize, &'static str> {
+    let concurrency = value
+        .parse::<usize>()
+        .map_err(|_| "MELODEE__NATIVE__STREAM_CONCURRENCY must be an integer between 1 and 4096")?;
+    if !(1..=MAX_NATIVE_STREAM_CONCURRENCY).contains(&concurrency) {
+        return Err("MELODEE__NATIVE__STREAM_CONCURRENCY must be between 1 and 4096");
+    }
+    Ok(concurrency)
 }
 
 #[tokio::main]
@@ -88,6 +134,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     let work_config = WorkEngineConfig::from_env()?;
     let catalog_config = CatalogConfig::from_env()?;
+    let podcast_config = podcast_worker::PodcastConfig::from_env()?;
     let policy_config = PolicyConfig::from_env()?;
     let policy_worker_config = PolicyWorkerConfig::from_env()?;
     let publication_roots = ingestion_config.publication_roots()?;
@@ -106,6 +153,21 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         let canonical_search_root = search_config.resolve_root_against(&other_roots)?;
         let root = SearchRoot::open(&canonical_search_root)?;
         search_config.search_root = root.path().to_path_buf();
+    }
+    if podcast_config.enabled && podcast_config.worker_enabled {
+        let mut other_roots = ingestion_config
+            .sources
+            .iter()
+            .map(|source| source.root.clone())
+            .collect::<Vec<_>>();
+        other_roots.push(ingestion_config.work_area_base.clone());
+        if let Some(roots) = &publication_roots {
+            other_roots.push(roots.storage_root.clone());
+        }
+        if search_config.enabled {
+            other_roots.push(search_config.search_root.clone());
+        }
+        podcast_config.prepare_owned_root(&other_roots)?;
     }
     let mut reconcile_handle = None;
     let mut inspection_handle = None;
@@ -135,7 +197,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             melodee_persistence::WorkItemStore,
             work_config,
         ));
-        match publication_roots {
+        match &publication_roots {
             Some(roots) => {
                 info!(
                     storage_root = %roots.storage_root.display(),
@@ -214,6 +276,46 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     let bind = system::configured_bind();
     let address: SocketAddr = bind.parse()?;
+    let public_origin = native_public_origin(address)?;
+    let native_auth = Arc::new(native::auth::NativeAuthService::from_env()?);
+    let native_cors = native::auth::cors_from_env()?;
+    let trusted_proxies = env::var("MELODEE__NATIVE__TRUSTED_PROXIES")
+        .unwrap_or_default()
+        .split(',')
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::parse)
+        .collect::<Result<Vec<_>, _>>()?;
+    let stream_concurrency = env::var(ENV_NATIVE_STREAM_CONCURRENCY)
+        .map_or_else(
+            |_| Ok(DEFAULT_NATIVE_STREAM_CONCURRENCY),
+            |value| parse_native_stream_concurrency(&value),
+        )
+        .map_err(|error| -> Box<dyn Error + Send + Sync> { error.into() })?;
+    let direct_play = publication_roots
+        .as_ref()
+        .map(|roots| native_stream::CanonicalAssetRoot::open(&roots.storage_root))
+        .transpose()?
+        .and_then(|root| native_stream::DirectPlayService::new(root, stream_concurrency));
+    let native_state = native::NativeState {
+        pool: pool.clone(),
+        search: search_config.enabled.then_some(search_config.clone()),
+        public_origin: public_origin.clone(),
+        podcast_config: Arc::new(podcast_config.clone()),
+        podcast_discovery: native::podcasts::PodcastDiscoveryClient::new(
+            &podcast_config.discovery_endpoint,
+        )?,
+        stream_url_signer: Arc::new(native::stream::DatabaseStreamUrlSigner::new(
+            pool.clone(),
+            public_origin,
+        )),
+        user_state: Arc::new(native::PostgresNativeUserStateReader::new(pool.clone())),
+        direct_play,
+        client_addresses: native_stream::ClientAddressResolver::new(trusted_proxies),
+        auth: native_auth,
+    };
+    let native_app = native::configured_router(native_state).layer(native_cors);
+    let podcast_handle = podcast_worker::start_podcast_loop(pool.clone(), podcast_config);
 
     let admin_state = admin::AdminState {
         pool: pool.clone(),
@@ -246,16 +348,20 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             get(admin::list_active_leases),
         )
         .with_state(admin_state)
-        .layer(TraceLayer::new_for_http());
+        .merge(native_app)
+        .layer(TraceLayer::new_for_http().make_span_with(melodee_server::make_http_span));
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
     let listener = tokio::net::TcpListener::bind(address).await?;
     let server_handle = tokio::spawn(async move {
-        axum::serve(listener, app)
-            .with_graceful_shutdown(async move {
-                let _ = shutdown_rx.await;
-            })
-            .await
+        axum::serve(
+            listener,
+            app.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .with_graceful_shutdown(async move {
+            let _ = shutdown_rx.await;
+        })
+        .await
     });
 
     info!(%address, "Melodee Rust bootstrap server listening");
@@ -265,7 +371,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     // Signal every worker immediately, then await server drain and worker
     // cancellation together while PostgreSQL is still available for safe
     // lease/error bookkeeping.
-    let (server_result, (), (), (), (), (), (), (), ()) = tokio::join!(
+    let (server_result, (), (), (), (), (), (), (), (), ()) = tokio::join!(
         server_handle,
         stop_worker(reconcile_handle),
         stop_worker(inspection_handle),
@@ -275,9 +381,60 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         stop_catalog_worker(catalog_handle),
         stop_policy_worker(policy_handle),
         stop_search_worker(search_handle),
+        stop_podcast_worker(podcast_handle),
     );
     server_result??;
     pool.close().await;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod native_configuration_tests {
+    use super::{parse_native_stream_concurrency, validate_public_origin};
+
+    #[test]
+    fn native_stream_concurrency_is_strictly_bounded() {
+        assert_eq!(parse_native_stream_concurrency("1"), Ok(1));
+        assert_eq!(parse_native_stream_concurrency("4096"), Ok(4096));
+        assert!(parse_native_stream_concurrency("0").is_err());
+        assert!(parse_native_stream_concurrency("4097").is_err());
+        assert!(parse_native_stream_concurrency(" 32").is_err());
+        assert!(parse_native_stream_concurrency("many").is_err());
+    }
+
+    #[test]
+    fn native_public_origin_rejects_ambiguous_or_credentialed_urls() {
+        assert!(validate_public_origin("https://music.example.test").is_ok());
+        assert!(validate_public_origin("http://127.0.0.1:8080").is_ok());
+        assert!(validate_public_origin("music.example.test").is_err());
+        assert!(validate_public_origin("https://user:secret@example.test").is_err());
+        assert!(validate_public_origin("https://example.test/api").is_err());
+        assert!(validate_public_origin("https://example.test/?query=1").is_err());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn native_public_origin_accepts_only_absolute_http_origins() {
+        for valid in [
+            "https://music.example",
+            "http://127.0.0.1:8080",
+            "https://music.example/",
+        ] {
+            assert!(validate_public_origin(valid).is_ok(), "{valid}");
+        }
+        for invalid in [
+            "music.example",
+            "ftp://music.example",
+            "https://user:secret@music.example",
+            "https://music.example/api",
+            "https://music.example?tenant=a",
+        ] {
+            assert!(validate_public_origin(invalid).is_err(), "{invalid}");
+        }
+    }
 }

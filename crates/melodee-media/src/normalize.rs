@@ -884,8 +884,7 @@ fn run_ffmpeg_process(
         .stdout(Stdio::null())
         .stderr(Stdio::piped());
 
-    let mut child = command
-        .spawn()
+    let mut child = spawn_tool(&mut command)
         .map_err(|error| NormalizationError::Ffmpeg(format!("unable to start ffmpeg: {error}")))?;
     let stderr = child.stderr.take();
     let stderr_reader =
@@ -935,7 +934,8 @@ fn run_child_wait_ffmpeg(
 }
 
 fn run_fpcalc(input: &Path, options: &NormalizationOptions) -> Result<String, NormalizationError> {
-    let mut child = Command::new(&options.fpcalc_path)
+    let mut command = Command::new(&options.fpcalc_path);
+    command
         .arg("-json")
         .arg("-length")
         .arg(FINGERPRINT_LENGTH_SECONDS.to_string())
@@ -943,8 +943,8 @@ fn run_fpcalc(input: &Path, options: &NormalizationOptions) -> Result<String, No
         .arg(input)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
+        .stderr(Stdio::piped());
+    let mut child = spawn_tool(&mut command)
         .map_err(|error| NormalizationError::Fpcalc(format!("unable to start fpcalc: {error}")))?;
 
     let stdout = child.stdout.take();
@@ -1027,6 +1027,29 @@ fn run_child_wait_generic(
 fn terminate_and_reap(child: &mut std::process::Child) {
     let _ = child.kill();
     let _ = child.wait();
+}
+
+fn spawn_tool(command: &mut Command) -> std::io::Result<std::process::Child> {
+    retry_executable_busy(|| command.spawn())
+}
+
+fn retry_executable_busy<T>(mut spawn: impl FnMut() -> std::io::Result<T>) -> std::io::Result<T> {
+    const EXECUTABLE_BUSY_RETRIES: u8 = 4;
+    let mut retry_count = 0;
+    loop {
+        match spawn() {
+            Err(error)
+                if error.raw_os_error() == Some(26) && retry_count < EXECUTABLE_BUSY_RETRIES =>
+            {
+                // Linux can briefly return ETXTBSY while a just-created executable is still
+                // being released by the filesystem. Bound the retry so genuine tool failures
+                // remain immediate and actionable.
+                retry_count += 1;
+                thread::sleep(StdDuration::from_millis(10));
+            }
+            result => return result,
+        }
+    }
 }
 
 fn verify_audio_decodes(
@@ -1962,6 +1985,40 @@ mod tests {
         assert_eq!(status, 23);
         assert_eq!(diagnostic, "failed");
         fs::remove_dir_all(temp).unwrap();
+    }
+
+    #[test]
+    fn executable_busy_spawn_retry_is_narrow_and_bounded() {
+        let mut busy_attempts = 0;
+        let result = retry_executable_busy(|| {
+            busy_attempts += 1;
+            if busy_attempts < 5 {
+                Err(std::io::Error::from_raw_os_error(26))
+            } else {
+                Ok("started")
+            }
+        })
+        .unwrap();
+        assert_eq!(result, "started");
+        assert_eq!(busy_attempts, 5);
+
+        let mut exhausted_attempts = 0;
+        let error = retry_executable_busy::<()>(|| {
+            exhausted_attempts += 1;
+            Err(std::io::Error::from_raw_os_error(26))
+        })
+        .unwrap_err();
+        assert_eq!(error.raw_os_error(), Some(26));
+        assert_eq!(exhausted_attempts, 5);
+
+        let mut other_attempts = 0;
+        let error = retry_executable_busy::<()>(|| {
+            other_attempts += 1;
+            Err(std::io::Error::from_raw_os_error(2))
+        })
+        .unwrap_err();
+        assert_eq!(error.raw_os_error(), Some(2));
+        assert_eq!(other_attempts, 1);
     }
 
     #[cfg(unix)]

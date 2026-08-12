@@ -1,0 +1,18 @@
+{
+  "query": "podcast",
+  "totalResults": 1,
+  "results": [
+    {
+      "title": "The Mel Robbins Podcast",
+      "artist": "Mel Robbins",
+      "feedUrl": "https://feeds.simplecast.com/UCwaTX1J",
+      "description": null,
+      "imageUrl": "https://is1-ssl.mzstatic.com/image/thumb/Podcasts211/v4/ab/66/a5/ab66a5f5-b52b-c70a-227b-0721bd9dc660/mza_13546984924981879479.jpg/600x600bb.jpg",
+      "genre": "Self-Improvement",
+      "episodeCount": 425,
+      "lastReleaseDate": "2026-08-10T04:05:00Z",
+      "itunesUrl": "https://podcasts.apple.com/us/podcast/the-mel-robbins-podcast/id1646101002?uo=4",
+      "itunesId": "1646101002"
+    }
+  ]
+}

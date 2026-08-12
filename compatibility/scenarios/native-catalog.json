@@ -374,6 +374,37 @@
   },
   {
     "schemaVersion": 2,
+    "name": "catalog-smart-playlists",
+    "surface": "melodee-api-v1",
+    "flow": [
+      {
+        "name": "login",
+        "method": "POST",
+        "path": "/api/v1/auth/authenticate",
+        "auth": "none",
+        "json": {"userName": "phase0-fixture", "password": "Mel0deeR0cks!"},
+        "capture": {"accessToken": "$.token"},
+        "secretCapture": ["accessToken"],
+        "normalize": {"maskJsonPaths": ["$.token", "$.expiresAt", "$.refreshToken", "$.refreshTokenExpiresAt", "$.user.createdAt", "$.user.updatedAt", "$.serverVersion"], "maskBaseUrl": true}
+      },
+      {
+        "name": "create-smart",
+        "method": "POST",
+        "path": "/api/v1/playlists/smart",
+        "auth": "bearer-var:accessToken",
+        "json": {"name": "Smart Probe", "mqlQuery": "artist:\"Dune Pilots\"", "entityType": "songs", "isPublic": false},
+        "allowFailure": true,
+        "normalize": {"maskBaseUrl": true, "maskJsonPaths": ["$.apiKey", "$.lastEvaluatedAt", "$.createdAt", "$.owner.createdAt", "$.owner.updatedAt", "$.correlationId"]}
+      },
+      {"name": "list-smart", "method": "GET", "path": "/api/v1/playlists/smart?page=1&pageSize=50", "auth": "bearer-var:accessToken", "allowFailure": true, "normalize": {"maskBaseUrl": true, "maskJsonPaths": ["$.data[*].apiKey", "$.data[*].lastEvaluatedAt", "$.data[*].createdAt", "$.data[*].owner.createdAt", "$.data[*].owner.updatedAt", "$.correlationId"]}},
+      {"name": "get-smart", "method": "GET", "path": "/api/v1/playlists/smart/00000000-0000-0000-0000-000000000001", "inventoryPath": "/api/v1/playlists/smart/{id}", "auth": "bearer-var:accessToken", "allowFailure": true, "normalize": {"maskBaseUrl": true, "maskJsonPaths": ["$.apiKey", "$.lastEvaluatedAt", "$.createdAt", "$.owner.createdAt", "$.owner.updatedAt", "$.correlationId"]}},
+      {"name": "update-smart", "method": "PUT", "path": "/api/v1/playlists/smart/00000000-0000-0000-0000-000000000001", "inventoryPath": "/api/v1/playlists/smart/{id}", "auth": "bearer-var:accessToken", "json": {"name": "Smart Probe Updated", "mqlQuery": "artist:\"Dune Pilots\"", "entityType": "songs", "isPublic": false}, "allowFailure": true, "normalize": {"maskBaseUrl": true, "maskJsonPaths": ["$.apiKey", "$.lastEvaluatedAt", "$.createdAt", "$.owner.createdAt", "$.owner.updatedAt", "$.correlationId"]}},
+      {"name": "evaluate-smart", "method": "GET", "path": "/api/v1/playlists/smart/00000000-0000-0000-0000-000000000001/evaluate?page=1&pageSize=20", "inventoryPath": "/api/v1/playlists/smart/{id}/evaluate", "auth": "bearer-var:accessToken", "allowFailure": true, "normalize": {"maskBaseUrl": true, "maskJsonPaths": ["$.playlist.apiKey", "$.playlist.lastEvaluatedAt", "$.playlist.createdAt", "$.playlist.owner.createdAt", "$.playlist.owner.updatedAt", "$.correlationId"], "maskUrlAuthTokenPaths": ["$.data[*].streamUrl"]}},
+      {"name": "delete-smart", "method": "DELETE", "path": "/api/v1/playlists/smart/00000000-0000-0000-0000-000000000001", "inventoryPath": "/api/v1/playlists/smart/{id}", "auth": "bearer-var:accessToken", "allowFailure": true, "normalize": {"maskJsonPaths": ["$.correlationId"]}}
+    ]
+  },
+  {
+    "schemaVersion": 2,
     "name": "catalog-queue",
     "surface": "melodee-api-v1",
     "flow": [
@@ -988,6 +1019,49 @@
         "notes": "MeloAmp playlist creation (also 'save queue as playlist', QueueView.tsx:253). The server-generated playlist ApiKey is random per run and is masked/unsubstituted."
       },
       {
+        "name": "list-playlists",
+        "method": "GET",
+        "path": "/api/v1/playlists?page=1&pageSize=50",
+        "auth": "bearer-var:accessToken",
+        "normalize": {"maskBaseUrl": true, "maskJsonPaths": ["$.data[*].id", "$.data[*].thumbnailUrl", "$.data[*].imageUrl", "$.data[*].createdAt", "$.data[*].updatedAt", "$.data[*].owner.createdAt", "$.data[*].owner.updatedAt"]}
+      },
+      {
+        "name": "update-playlist",
+        "method": "PUT",
+        "path": "/api/v1/playlists/{{playlistId}}",
+        "inventoryPath": "/api/v1/playlists/{id}",
+        "auth": "bearer-var:accessToken",
+        "json": {"name": "CRUD Probe Updated", "comment": "updated", "isPublic": false},
+        "allowFailure": true,
+        "normalize": {"maskBaseUrl": true, "maskJsonPaths": ["$.id", "$.thumbnailUrl", "$.imageUrl", "$.createdAt", "$.updatedAt", "$.owner.createdAt", "$.owner.updatedAt", "$.correlationId"]}
+      },
+      {
+        "name": "upload-image-empty",
+        "method": "POST",
+        "path": "/api/v1/playlists/{{playlistId}}/image",
+        "inventoryPath": "/api/v1/playlists/{id}/image",
+        "auth": "bearer-var:accessToken",
+        "allowFailure": true,
+        "normalize": {"maskJsonPaths": ["$.correlationId", "$.traceId"]}
+      },
+      {
+        "name": "delete-image",
+        "method": "DELETE",
+        "path": "/api/v1/playlists/{{playlistId}}/image",
+        "inventoryPath": "/api/v1/playlists/{id}/image",
+        "auth": "bearer-var:accessToken",
+        "allowFailure": true,
+        "normalize": {"maskJsonPaths": ["$.correlationId"]}
+      },
+      {
+        "name": "import-empty",
+        "method": "POST",
+        "path": "/api/v1/playlists/import",
+        "auth": "bearer-var:accessToken",
+        "allowFailure": true,
+        "normalize": {"maskJsonPaths": ["$.correlationId", "$.traceId"]}
+      },
+      {
         "name": "add-songs",
         "method": "POST",
         "path": "/api/v1/playlists/{{playlistId}}/songs",
@@ -1047,6 +1121,16 @@
           ]
         },
         "notes": "Verifies the reordered PlaylistOrder is observable."
+      },
+      {
+        "name": "remove-songs",
+        "method": "DELETE",
+        "path": "/api/v1/playlists/{{playlistId}}/songs",
+        "inventoryPath": "/api/v1/playlists/{id}/songs",
+        "auth": "bearer-var:accessToken",
+        "json": ["2b8eab4b-235d-5892-99f8-c0f5f54e8ab4"],
+        "allowFailure": true,
+        "normalize": {"maskJsonPaths": ["$.correlationId"]}
       },
       {
         "name": "delete-playlist",

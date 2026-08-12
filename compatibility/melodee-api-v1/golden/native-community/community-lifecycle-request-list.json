@@ -1,0 +1,31 @@
+{
+  "meta": {
+    "totalCount": 1,
+    "pageSize": 20,
+    "currentPage": 1,
+    "totalPages": 1,
+    "hasPrevious": false,
+    "hasNext": false
+  },
+  "data": [
+    {
+      "apiKey": "<volatile>",
+      "category": "General",
+      "status": "Pending",
+      "description": "Phase 7 compatibility request",
+      "artistName": null,
+      "albumTitle": null,
+      "songTitle": null,
+      "releaseYear": null,
+      "createdAt": "<volatile>",
+      "updatedAt": "<volatile>",
+      "lastActivityAt": "<volatile>",
+      "lastActivityType": "UserComment",
+      "commentCount": 0,
+      "createdByUser": {
+        "apiKey": "<volatile>",
+        "userName": "phase0-fixture"
+      }
+    }
+  ]
+}

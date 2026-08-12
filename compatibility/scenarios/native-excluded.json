@@ -1,0 +1,42 @@
+[
+  {
+    "schemaVersion": 2,
+    "name": "native-excluded",
+    "surface": "melodee-api-v1",
+    "notes": "The frozen build excludes every Party controller. Each method/path must remain an empty 404 unless an accepted compatibility decision activates it.",
+    "flow": [
+      {"name": "party-endpoints-register", "method": "POST", "path": "/api/v1/party-endpoints/register", "auth": "none", "expectStatus": 404},
+      {"name": "party-endpoint-detail", "method": "GET", "path": "/api/v1/party-endpoints/00000000-0000-0000-0000-000000000001", "auth": "none", "expectStatus": 404},
+      {"name": "party-endpoint-capabilities", "method": "PUT", "path": "/api/v1/party-endpoints/00000000-0000-0000-0000-000000000001/capabilities", "auth": "none", "expectStatus": 404},
+      {"name": "party-endpoint-detach", "method": "POST", "path": "/api/v1/party-endpoints/00000000-0000-0000-0000-000000000001/detach", "auth": "none", "expectStatus": 404},
+      {"name": "party-endpoint-heartbeat", "method": "POST", "path": "/api/v1/party-endpoints/00000000-0000-0000-0000-000000000001/heartbeat", "auth": "none", "expectStatus": 404},
+      {"name": "party-endpoint-state", "method": "GET", "path": "/api/v1/party-endpoints/00000000-0000-0000-0000-000000000001/state", "auth": "none", "expectStatus": 404},
+      {"name": "party-session-create", "method": "POST", "path": "/api/v1/party-sessions", "auth": "none", "expectStatus": 404},
+      {"name": "party-session-active", "method": "GET", "path": "/api/v1/party-sessions/active", "auth": "none", "expectStatus": 404},
+      {"name": "party-session-mine", "method": "GET", "path": "/api/v1/party-sessions/my", "auth": "none", "expectStatus": 404},
+      {"name": "party-session-detail", "method": "GET", "path": "/api/v1/party-sessions/00000000-0000-0000-0000-000000000001", "auth": "none", "expectStatus": 404},
+      {"name": "party-session-end", "method": "POST", "path": "/api/v1/party-sessions/00000000-0000-0000-0000-000000000001/end", "auth": "none", "expectStatus": 404},
+      {"name": "party-session-join", "method": "POST", "path": "/api/v1/party-sessions/00000000-0000-0000-0000-000000000001/join", "auth": "none", "expectStatus": 404},
+      {"name": "party-session-leave", "method": "POST", "path": "/api/v1/party-sessions/00000000-0000-0000-0000-000000000001/leave", "auth": "none", "expectStatus": 404},
+      {"name": "party-session-participants", "method": "GET", "path": "/api/v1/party-sessions/00000000-0000-0000-0000-000000000001/participants", "auth": "none", "expectStatus": 404},
+      {"name": "party-session-audit", "method": "GET", "path": "/api/v1/party-sessions/00000000-0000-0000-0000-000000000001/audit", "auth": "none", "expectStatus": 404},
+      {"name": "party-participant-ban", "method": "POST", "path": "/api/v1/party-sessions/00000000-0000-0000-0000-000000000001/participants/1/ban", "auth": "none", "expectStatus": 404},
+      {"name": "party-participant-kick", "method": "POST", "path": "/api/v1/party-sessions/00000000-0000-0000-0000-000000000001/participants/1/kick", "auth": "none", "expectStatus": 404},
+      {"name": "party-participant-role", "method": "POST", "path": "/api/v1/party-sessions/00000000-0000-0000-0000-000000000001/participants/1/role", "auth": "none", "expectStatus": 404},
+      {"name": "party-participant-unban", "method": "POST", "path": "/api/v1/party-sessions/00000000-0000-0000-0000-000000000001/participants/1/unban", "auth": "none", "expectStatus": 404},
+      {"name": "party-playback-state", "method": "GET", "path": "/api/v1/party-sessions/00000000-0000-0000-0000-000000000001/playback", "auth": "none", "expectStatus": 404},
+      {"name": "party-playback-next", "method": "POST", "path": "/api/v1/party-sessions/00000000-0000-0000-0000-000000000001/playback/next", "auth": "none", "expectStatus": 404},
+      {"name": "party-playback-pause", "method": "POST", "path": "/api/v1/party-sessions/00000000-0000-0000-0000-000000000001/playback/pause", "auth": "none", "expectStatus": 404},
+      {"name": "party-playback-play", "method": "POST", "path": "/api/v1/party-sessions/00000000-0000-0000-0000-000000000001/playback/play", "auth": "none", "expectStatus": 404},
+      {"name": "party-playback-seek", "method": "POST", "path": "/api/v1/party-sessions/00000000-0000-0000-0000-000000000001/playback/seek", "auth": "none", "expectStatus": 404},
+      {"name": "party-playback-stop", "method": "POST", "path": "/api/v1/party-sessions/00000000-0000-0000-0000-000000000001/playback/stop", "auth": "none", "expectStatus": 404},
+      {"name": "party-playback-volume", "method": "POST", "path": "/api/v1/party-sessions/00000000-0000-0000-0000-000000000001/playback/volume", "auth": "none", "expectStatus": 404},
+      {"name": "party-queue-list", "method": "GET", "path": "/api/v1/party-sessions/00000000-0000-0000-0000-000000000001/queue", "auth": "none", "expectStatus": 404},
+      {"name": "party-queue-clear", "method": "POST", "path": "/api/v1/party-sessions/00000000-0000-0000-0000-000000000001/queue/clear", "auth": "none", "expectStatus": 404},
+      {"name": "party-queue-add", "method": "POST", "path": "/api/v1/party-sessions/00000000-0000-0000-0000-000000000001/queue/items", "auth": "none", "expectStatus": 404},
+      {"name": "party-queue-remove", "method": "DELETE", "path": "/api/v1/party-sessions/00000000-0000-0000-0000-000000000001/queue/items/00000000-0000-0000-0000-000000000002", "auth": "none", "expectStatus": 404},
+      {"name": "party-queue-reorder", "method": "POST", "path": "/api/v1/party-sessions/00000000-0000-0000-0000-000000000001/queue/items/00000000-0000-0000-0000-000000000002/reorder", "auth": "none", "expectStatus": 404},
+      {"name": "party-queue-lock", "method": "POST", "path": "/api/v1/party-sessions/00000000-0000-0000-0000-000000000001/settings/queue-lock", "auth": "none", "expectStatus": 404}
+    ]
+  }
+]

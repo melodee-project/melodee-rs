@@ -1,0 +1,45 @@
+{
+  "name": "catalog-playlist-crud/update-playlist",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "PUT",
+    "url": "{melodee-origin}/api/v1/playlists/<captured:playlistId>",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Content-Type": "application/json",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": {
+      "name": "CRUD Probe Updated",
+      "comment": "updated",
+      "isPublic": false
+    },
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "catalog-playlist-crud-update-playlist.json",
+    "sha256": "36b4396fbd9666c0510abeefa255268e0e013d6c928fb312974e71f81203a7a4",
+    "bytes": 1170
+  },
+  "normalize": {
+    "maskBaseUrl": true,
+    "maskJsonPaths": [
+      "$.id",
+      "$.thumbnailUrl",
+      "$.imageUrl",
+      "$.createdAt",
+      "$.updatedAt",
+      "$.owner.createdAt",
+      "$.owner.updatedAt",
+      "$.correlationId"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": true
+}

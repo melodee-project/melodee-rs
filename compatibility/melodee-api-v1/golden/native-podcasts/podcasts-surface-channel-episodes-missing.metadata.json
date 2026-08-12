@@ -1,0 +1,32 @@
+{
+  "name": "podcasts-surface/channel-episodes-missing",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/api/v1/podcasts/channels/999999/episodes?page=1&pageSize=50",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "podcasts-surface-channel-episodes-missing.json",
+    "sha256": "53811cd839e19bf45e4be13532f6f705178ba86b861b1e2125b5a85153418e3a",
+    "bytes": 93
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.correlationId"
+    ]
+  },
+  "structureChecks": null,
+  "error": "HTTP Error 404: Not Found",
+  "allowFailure": true
+}

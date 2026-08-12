@@ -1,0 +1,35 @@
+{
+  "name": "podcasts-surface/channels-create-invalid",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "POST",
+    "url": "{melodee-origin}/api/v1/podcasts/channels",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Content-Type": "application/json",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": {
+      "url": "not-a-feed-url"
+    },
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "podcasts-surface-channels-create-invalid.json",
+    "sha256": "0f89ae94c35033d43a267397fd255a1a9064c34232e3acf3510850ac18b13ba7",
+    "bytes": 96
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.correlationId"
+    ]
+  },
+  "structureChecks": null,
+  "error": "HTTP Error 400: Bad Request",
+  "allowFailure": true
+}

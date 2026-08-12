@@ -8,13 +8,14 @@ this repository defines the new architecture, specifications, tests, and impleme
 
 ## Current phase
 
-**Phase 7 — Native Melodee API v1 (active boundary)**
+**Phase 8 — OpenSubsonic and Jellyfin adapters (active boundary)**
 
-Phases 0–6 are complete. Phase 6's bounded MQL, disposable Tantivy projection, leased outbox
-consumer, generational rebuild, corruption recovery, operator tooling, and measured
-10-million-Track evidence passed independent review. See the
-[final Phase 6 report](design/evidence/phase-6/PHASE-6-REPORT.md) and
-[IMPLEMENTATION.md](IMPLEMENTATION.md). Phase 7 native API compatibility work is now active.
+Phases 0–7 are complete. Phase 7's 202-route native Melodee API v1 adapter, identity-preserving
+authentication and user state, streaming, bounded workers, additive migrations, compatibility
+evidence, performance evidence, and real-client exercises passed independent review. See the
+[final Phase 7 report](design/evidence/phase-7/PHASE-7-REPORT.md) and
+[IMPLEMENTATION.md](IMPLEMENTATION.md). Phase 8 OpenSubsonic and Jellyfin compatibility work is now
+active.
 
 ## Non-negotiable product commitments
 

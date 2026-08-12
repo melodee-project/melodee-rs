@@ -1,0 +1,23 @@
+{
+  "meta": {
+    "totalCount": 1,
+    "pageSize": 50,
+    "currentPage": 1,
+    "totalPages": 1,
+    "hasPrevious": false,
+    "hasNext": false
+  },
+  "data": [
+    {
+      "apiKey": "<volatile>",
+      "parentCommentApiKey": null,
+      "body": "Compatibility comment",
+      "isSystem": false,
+      "createdAt": "<volatile>",
+      "createdByUser": {
+        "apiKey": "<volatile>",
+        "userName": "phase0-fixture"
+      }
+    }
+  ]
+}

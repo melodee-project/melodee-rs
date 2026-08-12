@@ -1,8 +1,8 @@
 # ADR-0114: Accept MeloAmp playlist add-songs object body alongside canonical array form
 
 - **Date:** 2026-08-09
-- **Status:** Proposed
-- **Decision owners:** Unassigned (deferred to the Phase 7 native API implementation)
+- **Status:** Accepted
+- **Decision owners:** Repository maintainers (Phase 7 compatibility)
 - **Supersedes:** None
 - **Superseded by:** None
 - **Related requirements:** PRD-API-M1-001, PRD-API-M1-002, PRD-API-M1-005, PRD-API-M1-006
@@ -26,7 +26,7 @@ current client feature.
 
 ## Decision
 
-Proposed for the Phase 7 native API adapter:
+For the Phase 7 native API adapter:
 
 1. Preserve the currently valid Melodee API v1 request shape (bare `Guid[]` array) — existing
    captured contract.
@@ -35,9 +35,8 @@ Proposed for the Phase 7 native API adapter:
 3. Do NOT preserve the legacy 500 failure of the bare-array form (see coverage-matrix D4);
    both accepted shapes must work correctly.
 
-This ADR is **Proposed**, not Accepted: the native API implementation phase is later, and the
-decision should be re-confirmed with the Phase 7 contract work (including whether the OpenAPI
-document should describe both forms).
+The Phase 7 adapter documents both forms with an OpenAPI `oneOf`. The bare array remains the
+canonical legacy form; the object form is an additive first-party-client compatibility form.
 
 ## Alternatives considered
 

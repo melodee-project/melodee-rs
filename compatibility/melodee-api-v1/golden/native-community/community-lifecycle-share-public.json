@@ -1,0 +1,20 @@
+{
+  "shareType": "Song",
+  "resourceName": "Polar Veil",
+  "description": "Phase 7 public share fixture",
+  "thumbnailUrl": "{melodee-origin}/images/song_ea26fc59-a545-51c2-94c4-702e1f97b80a/80",
+  "imageUrl": "{melodee-origin}/images/song_ea26fc59-a545-51c2-94c4-702e1f97b80a/1024",
+  "isDownloadable": false,
+  "createdAt": "<volatile>",
+  "expiresAt": "<volatile>",
+  "artist": null,
+  "album": null,
+  "song": {
+    "id": "ea26fc59-a545-51c2-94c4-702e1f97b80a",
+    "title": "Polar Veil",
+    "trackNumber": 2,
+    "durationMs": 3000,
+    "streamUrl": "{melodee-origin}/rest/stream?id=song_ea26fc59-a545-51c2-94c4-702e1f97b80a"
+  },
+  "playlist": null
+}

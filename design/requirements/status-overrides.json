@@ -83,17 +83,45 @@
     "note": "The implemented server requires no RabbitMQ, Kafka, Redis, Elasticsearch, OpenSearch, or Kubernetes. Any later addition still requires measured evidence and an ADR."
   },
   "PRD-API-M1-001": {
-    "status": "in-progress",
+    "status": "tested",
     "implementation": [
       "compatibility/melodee-api-v1/contracts/ (OpenAPI snapshot, route manifest, client usage, unified inventory)",
       "compatibility/melodee-api-v1/golden/ (native-auth, native-catalog, native-stream)",
       "design/evidence/phase-0/native-api-v1-capture.md",
-      "design/evidence/phase-0/native-client-route-inventory.md"
+      "design/evidence/phase-0/native-client-route-inventory.md",
+      "compatibility/melodee-api-v1/contracts/phase7-route-evidence.json (route-specific legacy and Rust evidence)",
+      "design/agents/PHASE-7-ROUTE-MATRIX.json (202 executable dispositions)"
     ],
     "tests": [
-      "tests/python/test_native_v1_capture.py"
+      "tests/python/test_native_v1_capture.py",
+      "scripts/build_native_inventory.py --check",
+      "scripts/build_phase7_route_matrix.py --check"
     ],
-    "note": "Native v1 surface captured (Issue 5). OpenSubsonic and Jellyfin captures are Issues 6-7."
+    "note": "The complete native-v1 surface is captured and its 202 route dispositions are executable. OpenSubsonic and Jellyfin remain separate Phase 8 adapters."
+  },
+  "PRD-API-M1-002": {
+    "status": "tested",
+    "implementation": [
+      "apps/melodee-server/src/native/ (frozen native-v1 adapter)",
+      "design/evidence/phase-7/REAL-CLIENT-ACCEPTANCE.md"
+    ],
+    "tests": [
+      "apps/melodee-server/tests/native_client_fixture.rs",
+      "Android 1.8.0 and MeloAmp browser/Electron real-client workflows against the Rust fixture"
+    ],
+    "note": "The pinned existing clients completed their core workflows without a synchronized client release."
+  },
+  "PRD-API-M1-003": {
+    "status": "tested",
+    "implementation": [
+      "apps/melodee-server/src/native/dto.rs (legacy Album/Song wire vocabulary)",
+      "crates/melodee-domain (Release/Track core vocabulary)"
+    ],
+    "tests": [
+      "apps/melodee-server/tests/native_catalog_api.rs",
+      "cargo clippy --workspace --all-targets --all-features -- -D warnings"
+    ],
+    "note": "Compatibility-only DTOs retain the frozen vocabulary while domain and persistence interfaces use Release and Track."
   },
   "PRD-API-M1-004": {
     "status": "in-progress",
@@ -110,53 +138,308 @@
     "note": "Phase 4 proves the catalog mapping for all frozen public UUIDs. Phase 11 still owns production migration/cutover and real-client state validation, so the broad API migration requirement remains in progress."
   },
   "PRD-API-M1-005": {
-    "status": "in-progress",
+    "status": "tested",
     "implementation": [
-      "compatibility/scenarios/native-*.json (method/path, params, casing, null-vs-omitted, status codes, envelopes, pagination, ordering, URLs, headers captured for the critical path)"
+      "compatibility/scenarios/native-*.json (method/path, params, casing, null-vs-omitted, status codes, envelopes, pagination, ordering, URLs, and headers)",
+      "compatibility/melodee-api-v1/contracts/phase7-route-evidence.json",
+      "apps/melodee-server/src/native/ (native-v1 wire adapter)"
     ],
     "tests": [
       "tests/python/test_native_v1_capture.py",
-      "scripts/compare_captures.py"
+      "scripts/compare_captures.py",
+      "apps/melodee-server/tests/native_*_api.rs",
+      "apps/melodee-server/tests/native_playlists.rs",
+      "apps/melodee-server/tests/native_stream.rs"
     ],
-    "note": "Critical path covered; full-surface coverage tracked by route-inventory.json parityStatus."
+    "note": "All compiled and excluded routes have promoted legacy evidence plus exact Rust, approved-normalization, or preserved-absence evidence."
   },
   "PRD-API-M1-006": {
-    "status": "in-progress",
+    "status": "tested",
     "implementation": [
-      "compatibility/melodee-api-v1/contracts/route-inventory.json (all 202 routes classified; 35 excluded-from-build)"
+      "compatibility/melodee-api-v1/contracts/route-inventory.json (all 202 routes classified; 35 excluded-from-build)",
+      "design/agents/PHASE-7-ROUTE-MATRIX.json (150 exact, 17 approved normalizations, 35 preserved absences)"
     ],
     "tests": [
-      "tests/python/test_native_v1_capture.py (RouteInventoryTests)"
+      "tests/python/test_native_v1_capture.py (RouteInventoryTests)",
+      "scripts/build_phase7_route_matrix.py --check"
     ],
-    "note": "Parity matrix exists; client-used-uncaptured routes are the later-phase backlog."
+    "note": "The Phase 7 matrix is complete with no pending or deferred native-v1 route."
   },
   "PRD-STREAM-001": {
-    "status": "captured",
+    "status": "tested",
     "implementation": [
       "compatibility/melodee-api-v1/golden/native-stream/ (URL shape, HMAC semantics, 200/206/400/401/302 matrix)",
-      "design/evidence/phase-0/native-api-v1-capture.md section 4"
+      "design/evidence/phase-0/native-api-v1-capture.md section 4",
+      "apps/melodee-server/src/native_stream.rs (captured HMAC token, client binding, range and bounded direct-play implementation)",
+      "apps/melodee-server/src/native/stream.rs (native HTTP adapter)"
     ],
     "tests": [
-      "tests/python/test_native_v1_capture.py (test_stream_range_semantics_evidence)"
+      "tests/python/test_native_v1_capture.py (test_stream_range_semantics_evidence)",
+      "apps/melodee-server/tests/native_stream.rs",
+      "apps/melodee-server/tests/native_stream_acl.rs"
     ]
   },
   "PRD-STREAM-002": {
     "status": "in-progress",
     "implementation": [
-      "compatibility/melodee-api-v1/golden/native-stream/ (direct play, ranges, content type/length)"
+      "compatibility/melodee-api-v1/golden/native-stream/ (direct play, ranges, content type/length)",
+      "apps/melodee-server/src/native_stream.rs (direct play, HEAD/range, disconnect capacity release and bounded concurrency)"
     ],
     "tests": [
-      "tests/python/test_native_v1_capture.py"
+      "tests/python/test_native_v1_capture.py",
+      "apps/melodee-server/tests/native_stream.rs (captured ranges, full/HEAD, capacity and disconnect release)"
     ],
-    "note": "Range/seek captured. Transcoding paths, concurrent playback, and disconnect handling remain (performance phase / Issue 9)."
+    "note": "Native direct play, range/seek, content headers, bounded concurrent playback, and disconnect release are implemented. Configured transcoding paths remain cross-adapter work and keep the broader requirement in progress."
   },
   "PRD-STREAM-003": {
+    "status": "tested",
+    "implementation": [
+      "design/evidence/phase-0/native-client-route-inventory.md (Android/Android Auto route inventory and gate prerequisites)",
+      "apps/melodee-server/tests/native_client_fixture.rs (disposable real-server client fixture)",
+      "design/evidence/phase-7/REAL-CLIENT-ACCEPTANCE.md"
+    ],
+    "tests": [
+      "melodee-player ./gradlew build and Phase7RealServerAndroidAutoTest against the Rust fixture",
+      "MeloAmp yarn test --watchAll=false, yarn build, browser and Electron smoke against the Rust fixture"
+    ],
+    "note": "Android phone workflows and the shipping Android Auto-mode MediaBrowser/MediaSession contract passed on an API 37 emulator, including process restoration. Physical head-unit/DHU certification remains an explicitly recorded operational limitation."
+  },
+  "PRD-AUTH-001": {
+    "status": "tested",
+    "implementation": [
+      "crates/melodee-auth (legacy bcrypt verification)",
+      "crates/melodee-persistence/migrations/0010_phase7_native_auth.sql",
+      "crates/melodee-persistence/src/auth.rs"
+    ],
+    "tests": [
+      "crates/melodee-persistence/tests/auth_phase7.rs (legacy_user_import_preserves_public_id_hash_roles_and_stream_secret)",
+      "apps/melodee-server/tests/native_auth_api.rs"
+    ]
+  },
+  "PRD-AUTH-002": {
+    "status": "tested",
+    "implementation": [
+      "apps/melodee-server/src/native/auth.rs",
+      "crates/melodee-persistence/src/auth.rs"
+    ],
+    "tests": [
+      "apps/melodee-server/tests/native_auth_api.rs (JWT, refresh, cookie, reset, logout and Google OIDC flows)",
+      "crates/melodee-persistence/tests/auth_phase7.rs"
+    ],
+    "note": "All authentication flows compiled into the frozen native-v1 surface have promoted differential evidence."
+  },
+  "PRD-AUTH-003": {
+    "status": "tested",
+    "implementation": [
+      "crates/melodee-persistence/migrations/0010_phase7_native_auth.sql (roles and native user flags)",
+      "apps/melodee-server/src/native/auth.rs (validated principal roles)"
+    ],
+    "tests": [
+      "crates/melodee-persistence/tests/auth_phase7.rs",
+      "apps/melodee-server/tests/native_catalog_api.rs (cross-library authorization)"
+    ]
+  },
+  "PRD-AUTH-004": {
+    "status": "tested",
+    "implementation": [
+      "crates/melodee-persistence/src/auth.rs (group-to-library access predicates)"
+    ],
+    "tests": [
+      "crates/melodee-persistence/tests/auth_phase7.rs (library_group_binding_is_open_by_default_and_restricted_when_bound)",
+      "apps/melodee-server/tests/native_catalog_api.rs (native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks)"
+    ]
+  },
+  "PRD-AUTH-005": {
+    "status": "tested",
+    "implementation": [
+      "crates/melodee-auth/src/lib.rs (redacted secret values and hash-only tokens)",
+      "apps/melodee-server/src/native/error.rs (stable public errors)",
+      "apps/melodee-server/src/lib.rs (method plus MatchedPath request spans; raw URI and query are never recorded)"
+    ],
+    "tests": [
+      "crates/melodee-auth tests",
+      "apps/melodee-server/tests/native_auth_api.rs",
+      "apps/melodee-server/src/lib.rs::tests::http_request_span_never_records_raw_path_or_query_secrets"
+    ]
+  },
+  "PRD-AUTH-006": {
+    "status": "tested",
+    "implementation": [
+      "crates/melodee-persistence/src/auth.rs (atomic PostgreSQL rate limiter)",
+      "apps/melodee-server/src/native/auth.rs (account-state and native rate-limit enforcement)"
+    ],
+    "tests": [
+      "crates/melodee-persistence/tests/auth_phase7.rs (postgres_rate_limit_is_atomic_expiring_and_capacity_bounded)",
+      "apps/melodee-server/tests/native_auth_api.rs (native_auth_rate_limit_is_cluster_backed_and_has_retry_after)"
+    ]
+  },
+  "PRD-AUTH-007": {
     "status": "in-progress",
     "implementation": [
-      "design/evidence/phase-0/native-client-route-inventory.md (Android/Android Auto route inventory and gate prerequisites)"
+      ".env.example and docs/src/content/docs/installation/configuration.md (secret-safe native configuration guidance)"
     ],
+    "tests": [
+      "cd docs && pnpm check && pnpm check:links && pnpm build"
+    ],
+    "note": "Phase 7 documents secret handling and fails closed on missing production secrets. A future general configuration export/import facility must add explicit secret warnings when that facility is implemented."
+  },
+  "PRD-USER-001": {
+    "status": "tested",
+    "implementation": [
+      "crates/melodee-persistence/migrations/0011_phase7_native_user_state.sql",
+      "crates/melodee-persistence/src/native_user_state.rs"
+    ],
+    "tests": [
+      "crates/melodee-persistence/tests/native_user_state_phase7.rs",
+      "apps/melodee-server/tests/native_catalog_api.rs"
+    ]
+  },
+  "PRD-USER-002": {
+    "status": "tested",
+    "implementation": [
+      "crates/melodee-persistence/src/native_user_state.rs (Artist/Release/Track annotations and genre preferences)"
+    ],
+    "tests": [
+      "crates/melodee-persistence/tests/native_user_state_phase7.rs",
+      "crates/melodee-persistence/tests/native_genre_state_phase7.rs",
+      "apps/melodee-server/tests/native_catalog_api.rs"
+    ]
+  },
+  "PRD-USER-003": {
+    "status": "tested",
+    "implementation": [
+      "apps/melodee-server/src/native/catalog.rs (now-playing and scrobble adapter)",
+      "crates/melodee-persistence/src/native_user_state.rs (atomic play facts)"
+    ],
+    "tests": [
+      "crates/melodee-persistence/tests/native_user_state_phase7.rs",
+      "apps/melodee-server/tests/native_catalog_api.rs",
+      "design/evidence/phase-7/REAL-CLIENT-ACCEPTANCE.md"
+    ]
+  },
+  "PRD-USER-004": {
+    "status": "tested",
+    "implementation": [
+      "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "design/agents/PHASE-7-ROUTE-MATRIX.json (three frozen Queue exclusions)"
+    ],
+    "tests": [
+      "apps/melodee-server/tests/native_catalog_api.rs (exact excluded route matrix)",
+      "compatibility/melodee-api-v1/golden/native-excluded/"
+    ],
+    "note": "The current frozen native build exposes no Queue controller; Phase 7 preserves that exact absence rather than inventing persistence or routes."
+  },
+  "PRD-USER-005": {
+    "status": "tested",
+    "implementation": [
+      "crates/melodee-persistence/src/discovery.rs",
+      "apps/melodee-server/src/native/discovery.rs"
+    ],
+    "tests": [
+      "crates/melodee-persistence/tests/native_discovery_phase7.rs",
+      "apps/melodee-server/tests/native_discovery_api.rs"
+    ]
+  },
+  "PRD-PLAYLIST-001": {
+    "status": "in-progress",
+    "implementation": [
+      "crates/melodee-persistence/migrations/0016_phase7_native_playlists.sql",
+      "apps/melodee-server/src/native/playlists.rs"
+    ],
+    "tests": [
+      "apps/melodee-server/tests/native_playlists.rs"
+    ],
+    "note": "Native-v1 playlist CRUD/order/visibility/import/image behavior is tested. The requirement also names OpenSubsonic and Jellyfin behavior, which remains Phase 8 work."
+  },
+  "PRD-PLAYLIST-002": {
+    "status": "tested",
+    "implementation": [
+      "crates/melodee-persistence/migrations/0016_phase7_native_playlists.sql",
+      "apps/melodee-server/src/native/playlists.rs (bounded MQL smart-playlist evaluator)"
+    ],
+    "tests": [
+      "apps/melodee-server/tests/native_playlists.rs (smart_playlist_routes_validate_and_evaluate_bounded_mql)"
+    ]
+  },
+  "PRD-PLAYLIST-003": {
+    "status": "tested",
+    "implementation": [
+      "crates/melodee-persistence/migrations/0016_phase7_native_playlists.sql (stable public IDs and ordered items)"
+    ],
+    "tests": [
+      "crates/melodee-persistence/tests/native_user_state_phase7.rs",
+      "apps/melodee-server/tests/native_playlists.rs"
+    ]
+  },
+  "PRD-DISCOVERY-001": {
+    "status": "tested",
+    "implementation": [
+      "crates/melodee-persistence/src/discovery.rs",
+      "apps/melodee-server/src/native/discovery.rs"
+    ],
+    "tests": [
+      "crates/melodee-persistence/tests/native_discovery_phase7.rs (bounded_chart_import_is_atomic_and_links_only_unique_catalog_identity)",
+      "apps/melodee-server/tests/native_discovery_api.rs"
+    ]
+  },
+  "PRD-DISCOVERY-002": {
+    "status": "tested",
+    "implementation": [
+      "apps/melodee-server/src/native/discovery.rs (bounded user-scoped recommendations)"
+    ],
+    "tests": [
+      "apps/melodee-server/tests/native_discovery_api.rs"
+    ]
+  },
+  "PRD-DISCOVERY-003": {
+    "status": "tested",
+    "implementation": [
+      "crates/melodee-persistence/src/discovery.rs (indexed/materialized listening facts)",
+      "apps/melodee-server/src/native/discovery.rs"
+    ],
+    "tests": [
+      "crates/melodee-persistence/tests/native_discovery_phase7.rs",
+      "apps/melodee-server/tests/native_discovery_api.rs"
+    ]
+  },
+  "PRD-PARTY-001": {
+    "status": "in-progress",
+    "implementation": [
+      "design/agents/PHASE-7-ROUTE-MATRIX.json (32 frozen Party exclusions preserved)"
+    ],
+    "tests": [
+      "apps/melodee-server/tests/native_catalog_api.rs (exact excluded route matrix)",
+      "compatibility/melodee-api-v1/golden/native-excluded/"
+    ],
+    "note": "The frozen native server did not compile Party routes. Phase 7 preserves that observable absence; broader Party domain implementation remains Phase 9."
+  },
+  "PRD-PARTY-002": {
+    "status": "planned",
+    "implementation": [],
     "tests": [],
-    "note": "Release gate; cannot run until the Rust server exists. Client-side prerequisites inventoried."
+    "note": "OpenSubsonic jukebox behavior belongs to the separately governed Phase 8 adapter."
+  },
+  "PRD-PARTY-003": {
+    "status": "tested",
+    "implementation": [
+      "crates/melodee-persistence/migrations/0017_phase7_native_endpoint_sessions.sql",
+      "apps/melodee-server/src/native/endpoints.rs"
+    ],
+    "tests": [
+      "apps/melodee-server/tests/native_endpoints_api.rs"
+    ],
+    "note": "The playback endpoint/backend operations compiled into native-v1 are durable and owner/role scoped."
+  },
+  "PRD-PARTY-004": {
+    "status": "tested",
+    "implementation": [
+      "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "design/agents/PHASE-7-ROUTE-MATRIX.json"
+    ],
+    "tests": [
+      "scripts/build_phase7_route_matrix.py --check"
+    ],
+    "note": "Current observable build exclusions were reviewed and retained; no historical Party design was copied into the native adapter."
   },
   "PRD-API-OS-001": {
     "status": "captured",
@@ -416,8 +699,22 @@
     ],
     "note": "Phase 3 publication is safe to retry and exposes only an absent or complete canonical Release. Source removal is intentionally not part of this non-destructive authorization."
   },
+  "PRD-SEC-004": {
+    "status": "tested",
+    "implementation": [
+      "apps/melodee-server/src/native/community.rs (128-bit OS-CSPRNG public-share bearer with bounded collision retry)",
+      "crates/melodee-auth/src/lib.rs (CSPRNG refresh/reset material and hash-only persistence)",
+      "design/adr/ADR-0129-secure-native-public-share-bearers-and-resolvable-links.md"
+    ],
+    "tests": [
+      "apps/melodee-server/tests/native_community_api.rs::native_community_routes_are_owner_fenced_bounded_and_replay_safe",
+      "crates/melodee-persistence/tests/native_community_phase7.rs::community_schema_preserves_ids_parent_scope_and_replay_safe_preferences",
+      "crates/melodee-auth tests"
+    ],
+    "note": "New anonymous share capabilities and authentication tokens use operating-system randomness; weak migrated share bearers are rotated and their former URLs stay inactive."
+  },
   "PRD-PERF-001": {
-    "status": "in-progress",
+    "status": "tested",
     "implementation": [
       "compatibility/benchmarks/ (datasets, results with environment metadata, SUMMARY.md)",
       "scripts/generate_benchmark_dataset.py",
@@ -426,15 +723,17 @@
       "crates/melodee-persistence/tests/catalog_performance.rs (repeatable 200-manifest PostgreSQL catalog workload)",
       "design/evidence/phase-4/PHASE-4-REPORT.md (exact observed catalog metrics and qualification)",
       "design/evidence/phase-5/PHASE-5-REPORT.md (exact bounded policy-worker metrics and qualification)",
-      "crates/melodee-search/src/bin/phase6_benchmark.rs and design/evidence/phase-6/PHASE-6-REPORT.md (deterministic default, current-scale, and 10M search evidence)"
+      "crates/melodee-search/src/bin/phase6_benchmark.rs and design/evidence/phase-6/PHASE-6-REPORT.md (deterministic default, current-scale, and 10M search evidence)",
+      "apps/melodee-server/tests/native_phase7_performance.rs and design/evidence/phase-7/PHASE-7-REPORT.md (2k gate smoke and 560k native API evidence)"
     ],
     "tests": [
       "tests/python/test_benchmark_baseline.py",
       "crates/melodee-persistence/tests/catalog_performance.rs",
       "apps/melodee-server/tests/policy_worker.rs (200-Release policy workload)",
-      "cargo run --release -p melodee-search --bin phase6_benchmark (10M streaming search workload)"
+      "cargo run --release -p melodee-search --bin phase6_benchmark (10M streaming search workload)",
+      "cargo test --release -p melodee-server --test native_phase7_performance native_api_current_catalog_scale_evidence -- --ignored --exact --nocapture"
     ],
-    "note": "Legacy reference plus Phase 4 catalog, Phase 5 policy, and Phase 6 default/current-scale/10M search workloads are repeatable and reported with exact environment and limitations. Rust API benchmarks continue with their later public route phases."
+    "note": "Legacy reference plus ingestion/catalog/policy, search, and native API workloads are repeatable and reported with exact environment, corpus, correctness checks, and limitations."
   },
   "PRD-PERF-002": {
     "status": "tested",
@@ -457,15 +756,17 @@
       "compatibility/benchmarks/results/ (wall-clock cold/warm, response sizes, server memory at Tier C)",
       "crates/melodee-persistence/tests/catalog_performance.rs (catalog wall time, call time, peak RSS, SQL statement count, rows written, throughput inputs, and zero media reads)",
       "apps/melodee-server/tests/policy_worker.rs (policy window wall time, measured concurrency, whole-test VmHWM, mutation statements, and zero media reads)",
-      "crates/melodee-search/src/bin/phase6_benchmark.rs (build/query wall time, documents/sec, index bytes, process VmHWM, query count/time fields, and zero media reads)"
+      "crates/melodee-search/src/bin/phase6_benchmark.rs (build/query wall time, documents/sec, index bytes, process VmHWM, query count/time fields, and zero media reads)",
+      "apps/melodee-server/tests/native_phase7_performance.rs (route p50/p95/max, response bytes, seed wall, process VmHWM, and zero media reads)"
     ],
     "tests": [
       "tests/python/test_benchmark_baseline.py",
       "design/evidence/phase-4/PHASE-4-REPORT.md (exact Phase 4 metric record)",
       "design/evidence/phase-5/PHASE-5-REPORT.md (exact Phase 5 metric record)",
-      "design/evidence/phase-6/PHASE-6-REPORT.md (exact default/current-scale/10M search metric record)"
+      "design/evidence/phase-6/PHASE-6-REPORT.md (exact default/current-scale/10M search metric record)",
+      "design/evidence/phase-7/PHASE-7-REPORT.md (exact current-catalog native API metric record)"
     ],
-    "note": "Phase 4 catalog, Phase 5 policy, and Phase 6 search add repeatable wall-time, memory, statement/query, row/result, throughput, queue-age, index-byte, and no-media-read evidence. Later public API metrics remain outstanding, so the broad requirement stays in progress."
+    "note": "Phase 4 catalog, Phase 5 policy, Phase 6 search, and Phase 7 native API evidence cover the required metric families across their relevant workload boundaries. Per-request PostgreSQL query timing remains an operational-observability follow-up, so the broad requirement stays in progress."
   },
   "PRD-PERF-004": {
     "status": "in-progress",
@@ -483,29 +784,33 @@
     "note": "The Rust 200-Release publication, catalog, and policy workloads are measured and bounded with durable recovery tests. Repeated whole-process termination across the later search pipeline remains outstanding, so the broad requirement stays in progress."
   },
   "PRD-PERF-005": {
-    "status": "in-progress",
+    "status": "tested",
     "implementation": [
       "design/evidence/phase-0/scale-baseline.md sections 3, 5 (bottlenecks + proposed budgets labeled requirement-vs-proposal)",
-      "crates/melodee-search/src/bin/phase6_benchmark.rs (35k Artist/50k Release with 560k and 10M Track runs)"
+      "crates/melodee-search/src/bin/phase6_benchmark.rs (35k Artist/50k Release with 560k and 10M Track runs)",
+      "apps/melodee-server/tests/native_phase7_performance.rs (35k Artist/50k Release/560k Track native API run)"
     ],
     "tests": [
       "tests/python/test_benchmark_baseline.py",
-      "design/evidence/phase-6/PHASE-6-REPORT.md"
+      "design/evidence/phase-6/PHASE-6-REPORT.md",
+      "design/evidence/phase-7/PHASE-7-REPORT.md"
     ],
-    "note": "The search half is measured at current-realistic and 10M-Track scales. Public API route benchmarks remain assigned to Phase 7+, so the combined requirement remains in progress."
+    "note": "Search is measured at current and 10M-Track scale; native browse/random/detail routes are measured at 560k-Track current-catalog scale with a default-gate smoke."
   },
   "PRD-PERF-006": {
-    "status": "in-progress",
+    "status": "tested",
     "implementation": [
       "crates/melodee-persistence/src/search.rs (bounded keyset snapshot pages and bounded outbox reads)",
-      "crates/melodee-search/src/worker.rs, rebuild.rs, and service.rs (bounded projection/query paths with no filesystem-tree or media scan)"
+      "crates/melodee-search/src/worker.rs, rebuild.rs, and service.rs (bounded projection/query paths with no filesystem-tree or media scan)",
+      "apps/melodee-server/src/native/catalog.rs (bounded browse/random/detail SQL paths)"
     ],
     "tests": [
       "crates/melodee-search/tests/rebuild_integration.rs",
       "crates/melodee-persistence/tests/search_phase6.rs",
-      "design/evidence/phase-6/PHASE-6-REPORT.md"
+      "design/evidence/phase-6/PHASE-6-REPORT.md",
+      "apps/melodee-server/tests/native_phase7_performance.rs"
     ],
-    "note": "Normal Phase 6 indexing and search are page/batch bounded and do not scan media trees or materialize the catalog. Later browse/random API paths must preserve this invariant, so the broad requirement remains in progress."
+    "note": "Normal indexing/search and native browse/random/detail paths are page/batch bounded, avoid filesystem-tree scans and catalog materialization, and report zero media reads."
   },
   "PRD-TEST-001": {
     "status": "in-progress",
@@ -1601,5 +1906,94 @@
         "apps/melodee-cli/tests/policy.rs"
       ],
       "note": "The bounded PostgreSQL/CLI policy dry-run reports proposed, per-rule, existing-disposition, sample, and destructive-impact aggregates; it stores only the audit summary and writes no decisions. Phase 10 still owns the required Admin UI surface, so the broad UI requirement remains in progress."
+    },
+    "PRD-REQUEST-001": {
+      "status": "tested",
+      "implementation": [
+        "crates/melodee-persistence/migrations/0012_phase7_native_community.sql",
+        "crates/melodee-persistence/src/catalog.rs (atomic ID-backed request auto-completion at catalog commit)",
+        "apps/melodee-server/src/native/community.rs"
+      ],
+      "tests": [
+        "crates/melodee-persistence/tests/native_community_phase7.rs::community_schema_preserves_ids_parent_scope_and_replay_safe_preferences",
+        "apps/melodee-server/tests/native_community_api.rs::native_community_routes_are_owner_fenced_bounded_and_replay_safe"
+      ],
+      "note": "Native-v1 lifecycle, comments, activity/unread state, and frozen-oracle AddRelease/AddTrack catalog matching are implemented. Auto-completion writes public-ID targets and one system activity comment in the authoritative catalog transaction, so retries cannot duplicate completion."
+    },
+    "PRD-REQUEST-002": {
+      "status": "in-progress",
+      "implementation": [
+        "apps/melodee-server/src/native/community.rs (native Melodee API v1 request surface)"
+      ],
+      "tests": [
+        "apps/melodee-server/tests/native_community_api.rs::native_community_routes_are_owner_fenced_bounded_and_replay_safe"
+      ],
+      "note": "The captured native-v1 API is implemented in Phase 7. Other parity adapters and the administrative UI remain owned by their later active phases."
+    },
+    "PRD-SHARE-001": {
+      "status": "tested",
+      "implementation": [
+        "crates/melodee-persistence/migrations/0012_phase7_native_community.sql",
+        "apps/melodee-server/src/native/community.rs"
+      ],
+      "tests": [
+        "crates/melodee-persistence/tests/native_community_phase7.rs::community_schema_preserves_ids_parent_scope_and_replay_safe_preferences",
+        "apps/melodee-server/tests/native_community_api.rs::native_community_routes_are_owner_fenced_bounded_and_replay_safe"
+      ]
+    },
+    "PRD-SHARE-002": {
+      "status": "tested",
+      "implementation": [
+        "apps/melodee-server/src/native/community.rs (anonymous public share resolution with expiry fencing)"
+      ],
+      "tests": [
+        "apps/melodee-server/tests/native_community_api.rs::native_community_routes_are_owner_fenced_bounded_and_replay_safe"
+      ]
+    },
+    "PRD-SHARE-003": {
+      "status": "tested",
+      "implementation": [
+        "crates/melodee-persistence/migrations/0012_phase7_native_community.sql (immutable public IDs and secure bearer constraint)",
+        "crates/melodee-persistence/src/community.rs (transactional replay-safe share import, secure-token preservation, weak-token rotation and durable source binding)",
+        "design/adr/ADR-0129-secure-native-public-share-bearers-and-resolvable-links.md"
+      ],
+      "tests": [
+        "crates/melodee-persistence/tests/native_community_phase7.rs::community_schema_preserves_ids_parent_scope_and_replay_safe_preferences"
+      ]
+    },
+    "PRD-POD-001": {
+      "status": "tested",
+      "implementation": [
+        "apps/melodee-server/src/native/podcasts.rs",
+        "apps/melodee-server/src/podcast_worker.rs"
+      ],
+      "tests": [
+        "apps/melodee-server/tests/native_podcasts_api.rs::all_native_podcast_routes_are_tenant_scoped_bounded_and_authorized",
+        "apps/melodee-server/tests/native_podcasts_api.rs::configured_router_exposes_podcasts_only_after_real_bearer_validation"
+      ]
+    },
+    "PRD-POD-002": {
+      "status": "tested",
+      "implementation": [
+        "crates/melodee-persistence/migrations/0013_phase7_native_podcasts.sql",
+        "apps/melodee-server/src/native/podcasts.rs",
+        "apps/melodee-server/src/podcast_worker.rs (bounded feed refresh, leased downloads, retention, and owned-file recovery)"
+      ],
+      "tests": [
+        "crates/melodee-persistence/tests/native_podcasts_phase7.rs::podcast_schema_is_tenant_scoped_bounded_and_cascades_playback_state",
+        "apps/melodee-server/tests/native_podcasts_api.rs::all_native_podcast_routes_are_tenant_scoped_bounded_and_authorized"
+      ],
+      "note": "The integration test covers real bounded RSS refresh, expired-lease recovery, enclosure publication, stale-worker publication fencing, idempotent orphan cleanup, and retention without touching catalog media."
+    },
+    "PRD-POD-003": {
+      "status": "in-progress",
+      "implementation": [
+        "apps/melodee-server/src/native/podcasts.rs (all 19 compiled native-v1 routes)",
+        "compatibility/melodee-api-v1/golden/native-podcasts"
+      ],
+      "tests": [
+        "apps/melodee-server/tests/native_podcasts_api.rs::all_native_podcast_routes_are_tenant_scoped_bounded_and_authorized"
+      ],
+      "note": "Native Melodee API compatibility is implemented and captured in Phase 7. The separately governed OpenSubsonic adapter remains Phase 8 work, so the cross-adapter requirement is not complete."
     }
 }

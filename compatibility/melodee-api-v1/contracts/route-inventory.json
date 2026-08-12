@@ -6,15 +6,13 @@
     "compatibility/melodee-api-v1/contracts/route-manifest.json",
     "compatibility/melodee-api-v1/contracts/openapi-v1.json",
     "compatibility/melodee-api-v1/contracts/native-client-usage.json",
-    "compatibility/scenarios/*.json"
+    "compatibility/scenarios/*.json",
+    "compatibility/melodee-api-v1/golden/*/*.metadata.json"
   ],
   "routeCount": 202,
   "summary": {
-    "client-used-uncaptured": 69,
-    "captured": 34,
-    "documented-uncaptured": 45,
-    "excluded-from-build": 35,
-    "undocumented-uncaptured": 19
+    "captured": 167,
+    "excluded-from-build": 35
   },
   "routes": [
     {
@@ -38,8 +36,13 @@
           "usedFor": "admin page"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-user-extra/admin-users"
+      ],
+      "scenarios": [
+        "native-user-extra/admin-users"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -61,6 +64,9 @@
           "evidence": "pages/BrowseAlbums.tsx:22",
           "usedFor": "browse"
         }
+      ],
+      "declaredScenarios": [
+        "catalog/albums-list"
       ],
       "scenarios": [
         "catalog/albums-list"
@@ -88,8 +94,13 @@
           "usedFor": "album hate"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-user-extra/album-hate"
+      ],
+      "scenarios": [
+        "native-user-extra/album-hate"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -111,6 +122,9 @@
           "evidence": "pages/Dashboard.tsx:31",
           "usedFor": "dashboard"
         }
+      ],
+      "declaredScenarios": [
+        "catalog/albums-recent"
       ],
       "scenarios": [
         "catalog/albums-recent"
@@ -137,6 +151,10 @@
           "evidence": "detailViews/AlbumDetailView.tsx:130",
           "usedFor": "album rating"
         }
+      ],
+      "declaredScenarios": [
+        "catalog-star-rating/rate-album",
+        "catalog-star-rating/rate-album-reset"
       ],
       "scenarios": [
         "catalog-star-rating/rate-album",
@@ -165,6 +183,10 @@
           "usedFor": "album star"
         }
       ],
+      "declaredScenarios": [
+        "catalog-star-rating/star-album-on",
+        "catalog-star-rating/star-album-off"
+      ],
       "scenarios": [
         "catalog-star-rating/star-album-on",
         "catalog-star-rating/star-album-off"
@@ -191,6 +213,14 @@
           "evidence": "detailViews/AlbumDetailView.tsx:37",
           "usedFor": "album detail"
         }
+      ],
+      "declaredScenarios": [
+        "catalog/album-detail",
+        "catalog/album-detail-compilation",
+        "catalog/album-detail-multidisc",
+        "catalog/album-detail-minimal-metadata",
+        "catalog-star-rating/album-detail-after-star",
+        "catalog-star-rating/album-detail-after-rating"
       ],
       "scenarios": [
         "catalog/album-detail",
@@ -228,6 +258,11 @@
           "usedFor": "album detail"
         }
       ],
+      "declaredScenarios": [
+        "catalog/album-songs",
+        "catalog/album-songs-multidisc",
+        "stream/album-songs-for-stream-url"
+      ],
       "scenarios": [
         "catalog/album-songs",
         "catalog/album-songs-multidisc",
@@ -256,8 +291,13 @@
           "usedFor": "analytics"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-discovery/analytics-listening"
+      ],
+      "scenarios": [
+        "native-discovery/analytics-listening"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -280,8 +320,13 @@
           "usedFor": "analytics"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-discovery/analytics-top"
+      ],
+      "scenarios": [
+        "native-discovery/analytics-top"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -304,8 +349,13 @@
           "usedFor": "artist lookup"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-discovery/artist-lookup"
+      ],
+      "scenarios": [
+        "native-discovery/artist-lookup"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -328,8 +378,13 @@
           "usedFor": "artist lookup"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-discovery/artist-lookup-providers"
+      ],
+      "scenarios": [
+        "native-discovery/artist-lookup-providers"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -356,6 +411,11 @@
           "evidence": "pages/BrowseArtists.tsx:22",
           "usedFor": "browse (page, pageSize=20, orderBy, orderDirection)"
         }
+      ],
+      "declaredScenarios": [
+        "catalog/artists-list",
+        "catalog/artists-list-page2",
+        "catalog/artists-search-q-dune"
       ],
       "scenarios": [
         "catalog/artists-list",
@@ -385,6 +445,10 @@
           "usedFor": "artist hate"
         }
       ],
+      "declaredScenarios": [
+        "catalog-star-rating/hate-artist-on",
+        "catalog-star-rating/hate-artist-off"
+      ],
       "scenarios": [
         "catalog-star-rating/hate-artist-on",
         "catalog-star-rating/hate-artist-off"
@@ -412,6 +476,9 @@
           "usedFor": "dashboard"
         }
       ],
+      "declaredScenarios": [
+        "catalog/artists-recent"
+      ],
       "scenarios": [
         "catalog/artists-recent"
       ],
@@ -432,8 +499,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "native-user-extra/artist-rate"
+      ],
+      "scenarios": [
+        "native-user-extra/artist-rate"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -455,6 +527,10 @@
           "evidence": "detailViews/ArtistDetailView.tsx:76",
           "usedFor": "artist star"
         }
+      ],
+      "declaredScenarios": [
+        "catalog-star-rating/star-artist-on",
+        "catalog-star-rating/star-artist-off"
       ],
       "scenarios": [
         "catalog-star-rating/star-artist-on",
@@ -482,6 +558,11 @@
           "evidence": "detailViews/ArtistDetailView.tsx:34",
           "usedFor": "artist detail"
         }
+      ],
+      "declaredScenarios": [
+        "catalog/artist-detail",
+        "catalog/artist-detail-unknown",
+        "catalog-star-rating/artist-detail-after-star"
       ],
       "scenarios": [
         "catalog/artist-detail",
@@ -516,6 +597,9 @@
           "usedFor": "artist detail"
         }
       ],
+      "declaredScenarios": [
+        "catalog/artist-albums"
+      ],
       "scenarios": [
         "catalog/artist-albums"
       ],
@@ -542,6 +626,9 @@
           "usedFor": "Android Auto artist browse"
         }
       ],
+      "declaredScenarios": [
+        "catalog/artist-songs"
+      ],
       "scenarios": [
         "catalog/artist-songs"
       ],
@@ -562,8 +649,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "native-discovery/audio-bpm"
+      ],
+      "scenarios": [
+        "native-discovery/audio-bpm"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -580,8 +672,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "native-discovery/audio-features"
+      ],
+      "scenarios": [
+        "native-discovery/audio-features"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -606,8 +703,32 @@
           "usedFor": "login (email + password)"
         }
       ],
-      "scenarios": [
+      "declaredScenarios": [
         "native-auth-login",
+        "auth-login-success",
+        "auth-login-invalid-password",
+        "auth-login-unknown-user",
+        "auth-refresh-rotation/login",
+        "auth-refresh-rotation/relogin",
+        "auth-refresh-legacy-jwt-endpoint/login",
+        "auth-revoke-specific-token/login",
+        "catalog/login",
+        "catalog-smart-playlists/login",
+        "catalog-queue/login",
+        "catalog-star-rating/login",
+        "catalog-scrobble/login",
+        "catalog-images/login",
+        "catalog-playlist-crud/login",
+        "community-lifecycle/login",
+        "native-discovery/login",
+        "podcasts-surface/login",
+        "native-scrobble-lastfm/login",
+        "stream/login",
+        "native-user-extra/login",
+        "native-user-provider-link-disabled/login",
+        "native-user-provider-state/login"
+      ],
+      "scenarios": [
         "auth-login-success",
         "auth-login-invalid-password",
         "auth-login-unknown-user",
@@ -621,7 +742,12 @@
         "catalog-scrobble/login",
         "catalog-images/login",
         "catalog-playlist-crud/login",
-        "stream/login"
+        "community-lifecycle/login",
+        "native-discovery/login",
+        "podcasts-surface/login",
+        "stream/login",
+        "native-user-provider-link-disabled/login",
+        "native-user-provider-state/login"
       ],
       "parityStatus": "captured"
     },
@@ -637,8 +763,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "auth-cookie-google-disabled"
+      ],
+      "scenarios": [
+        "auth-cookie-google-disabled"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -652,8 +783,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "auth-cookie-sign-in"
+      ],
+      "scenarios": [
+        "auth-cookie-sign-in"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -670,8 +806,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "auth-cookie-sign-out-without-cookie"
+      ],
+      "scenarios": [
+        "auth-cookie-sign-out-without-cookie"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -685,8 +826,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "auth-google-disabled"
+      ],
+      "scenarios": [
+        "auth-google-disabled"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -703,6 +849,9 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
+      "declaredScenarios": [
+        "auth-refresh-rotation/logout"
+      ],
       "scenarios": [
         "auth-refresh-rotation/logout"
       ],
@@ -720,8 +869,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "auth-password-reset-confirm-invalid"
+      ],
+      "scenarios": [
+        "auth-password-reset-confirm-invalid"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -735,8 +889,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "auth-password-reset-request-unknown"
+      ],
+      "scenarios": [
+        "auth-password-reset-request-unknown"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -750,8 +909,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "auth-password-reset-validate-invalid"
+      ],
+      "scenarios": [
+        "auth-password-reset-validate-invalid"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -773,6 +937,10 @@
           "evidence": "src/ui/src/api.ts:56",
           "usedFor": "401 response interceptor (legacy JWT endpoint, no rotation)"
         }
+      ],
+      "declaredScenarios": [
+        "auth-refresh-legacy-jwt-endpoint/refresh-with-valid-jwt",
+        "auth-refresh-legacy-jwt-endpoint/refresh-with-expired-jwt"
       ],
       "scenarios": [
         "auth-refresh-legacy-jwt-endpoint/refresh-with-valid-jwt",
@@ -797,6 +965,15 @@
           "evidence": "data/api/MusicApi.kt:15-19; NetworkModule.kt:276",
           "usedFor": "401 retry path only (X-Refresh-Request: true header skips Bearer)"
         }
+      ],
+      "declaredScenarios": [
+        "auth-refresh-invalid-token",
+        "auth-refresh-expired-token",
+        "auth-refresh-rotation/rotate-first",
+        "auth-refresh-rotation/replay-rotated-token",
+        "auth-refresh-rotation/rotate-after-family-revoke",
+        "auth-refresh-rotation/refresh-after-logout",
+        "auth-revoke-specific-token/rotate-revoked"
       ],
       "scenarios": [
         "auth-refresh-invalid-token",
@@ -824,6 +1001,9 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
+      "declaredScenarios": [
+        "auth-revoke-specific-token/revoke"
+      ],
       "scenarios": [
         "auth-revoke-specific-token/revoke"
       ],
@@ -850,8 +1030,13 @@
           "usedFor": "charts"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-discovery/charts-list"
+      ],
+      "scenarios": [
+        "native-discovery/charts-list"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -874,8 +1059,13 @@
           "usedFor": "chart detail"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-discovery/charts-detail"
+      ],
+      "scenarios": [
+        "native-discovery/charts-detail"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -892,8 +1082,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "native-discovery/charts-playlist"
+      ],
+      "scenarios": [
+        "native-discovery/charts-playlist"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -916,8 +1111,13 @@
           "usedFor": "remote endpoints"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-discovery/endpoints-list"
+      ],
+      "scenarios": [
+        "native-discovery/endpoints-list"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -940,8 +1140,13 @@
           "usedFor": "remote endpoints"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-discovery/endpoints-for-session"
+      ],
+      "scenarios": [
+        "native-discovery/endpoints-for-session"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -964,8 +1169,13 @@
           "usedFor": "remote endpoints"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-discovery/endpoints-attach"
+      ],
+      "scenarios": [
+        "native-discovery/endpoints-attach"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -988,8 +1198,13 @@
           "usedFor": "remote endpoints"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-discovery/endpoints-detach"
+      ],
+      "scenarios": [
+        "native-discovery/endpoints-detach"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -1012,8 +1227,13 @@
           "usedFor": "equalizer"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "community-lifecycle/equalizer-list-empty"
+      ],
+      "scenarios": [
+        "community-lifecycle/equalizer-list-empty"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -1036,8 +1256,13 @@
           "usedFor": "save preset"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "community-lifecycle/equalizer-upsert"
+      ],
+      "scenarios": [
+        "community-lifecycle/equalizer-upsert"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "DELETE",
@@ -1060,8 +1285,13 @@
           "usedFor": "delete preset"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "community-lifecycle/equalizer-delete"
+      ],
+      "scenarios": [
+        "community-lifecycle/equalizer-delete"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -1084,6 +1314,10 @@
           "usedFor": "genres page"
         }
       ],
+      "declaredScenarios": [
+        "catalog/genres-list",
+        "native-user-extra/genres-for-id"
+      ],
       "scenarios": [
         "catalog/genres-list"
       ],
@@ -1104,8 +1338,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "native-user-extra/genres-hated"
+      ],
+      "scenarios": [
+        "native-user-extra/genres-hated"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -1122,8 +1361,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "native-user-extra/genre-hate"
+      ],
+      "scenarios": [
+        "native-user-extra/genre-hate"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -1140,8 +1384,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "native-user-extra/genres-starred"
+      ],
+      "scenarios": [
+        "native-user-extra/genres-starred"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -1158,8 +1407,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "native-user-extra/genre-star"
+      ],
+      "scenarios": [
+        "native-user-extra/genre-star"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -1182,8 +1436,13 @@
           "usedFor": "genre songs"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-user-extra/genre-songs"
+      ],
+      "scenarios": [
+        "native-user-extra/genre-songs"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -1200,7 +1459,12 @@
       "implementation": "excluded-from-build",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
+      "declaredScenarios": [
+        "native-excluded/party-endpoints-register"
+      ],
+      "scenarios": [
+        "native-excluded/party-endpoints-register"
+      ],
       "parityStatus": "excluded-from-build"
     },
     {
@@ -1218,7 +1482,12 @@
       "implementation": "excluded-from-build",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
+      "declaredScenarios": [
+        "native-excluded/party-endpoint-detail"
+      ],
+      "scenarios": [
+        "native-excluded/party-endpoint-detail"
+      ],
       "parityStatus": "excluded-from-build"
     },
     {
@@ -1236,7 +1505,12 @@
       "implementation": "excluded-from-build",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
+      "declaredScenarios": [
+        "native-excluded/party-endpoint-capabilities"
+      ],
+      "scenarios": [
+        "native-excluded/party-endpoint-capabilities"
+      ],
       "parityStatus": "excluded-from-build"
     },
     {
@@ -1254,7 +1528,12 @@
       "implementation": "excluded-from-build",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
+      "declaredScenarios": [
+        "native-excluded/party-endpoint-detach"
+      ],
+      "scenarios": [
+        "native-excluded/party-endpoint-detach"
+      ],
       "parityStatus": "excluded-from-build"
     },
     {
@@ -1272,7 +1551,12 @@
       "implementation": "excluded-from-build",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
+      "declaredScenarios": [
+        "native-excluded/party-endpoint-heartbeat"
+      ],
+      "scenarios": [
+        "native-excluded/party-endpoint-heartbeat"
+      ],
       "parityStatus": "excluded-from-build"
     },
     {
@@ -1290,7 +1574,12 @@
       "implementation": "excluded-from-build",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
+      "declaredScenarios": [
+        "native-excluded/party-endpoint-state"
+      ],
+      "scenarios": [
+        "native-excluded/party-endpoint-state"
+      ],
       "parityStatus": "excluded-from-build"
     },
     {
@@ -1308,7 +1597,12 @@
       "implementation": "excluded-from-build",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
+      "declaredScenarios": [
+        "native-excluded/party-session-create"
+      ],
+      "scenarios": [
+        "native-excluded/party-session-create"
+      ],
       "parityStatus": "excluded-from-build"
     },
     {
@@ -1326,7 +1620,12 @@
       "implementation": "excluded-from-build",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
+      "declaredScenarios": [
+        "native-excluded/party-session-active"
+      ],
+      "scenarios": [
+        "native-excluded/party-session-active"
+      ],
       "parityStatus": "excluded-from-build"
     },
     {
@@ -1344,7 +1643,12 @@
       "implementation": "excluded-from-build",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
+      "declaredScenarios": [
+        "native-excluded/party-session-mine"
+      ],
+      "scenarios": [
+        "native-excluded/party-session-mine"
+      ],
       "parityStatus": "excluded-from-build"
     },
     {
@@ -1362,7 +1666,12 @@
       "implementation": "excluded-from-build",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
+      "declaredScenarios": [
+        "native-excluded/party-session-detail"
+      ],
+      "scenarios": [
+        "native-excluded/party-session-detail"
+      ],
       "parityStatus": "excluded-from-build"
     },
     {
@@ -1380,7 +1689,12 @@
       "implementation": "excluded-from-build",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
+      "declaredScenarios": [
+        "native-excluded/party-session-audit"
+      ],
+      "scenarios": [
+        "native-excluded/party-session-audit"
+      ],
       "parityStatus": "excluded-from-build"
     },
     {
@@ -1398,7 +1712,12 @@
       "implementation": "excluded-from-build",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
+      "declaredScenarios": [
+        "native-excluded/party-session-end"
+      ],
+      "scenarios": [
+        "native-excluded/party-session-end"
+      ],
       "parityStatus": "excluded-from-build"
     },
     {
@@ -1416,7 +1735,12 @@
       "implementation": "excluded-from-build",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
+      "declaredScenarios": [
+        "native-excluded/party-session-join"
+      ],
+      "scenarios": [
+        "native-excluded/party-session-join"
+      ],
       "parityStatus": "excluded-from-build"
     },
     {
@@ -1434,7 +1758,12 @@
       "implementation": "excluded-from-build",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
+      "declaredScenarios": [
+        "native-excluded/party-session-leave"
+      ],
+      "scenarios": [
+        "native-excluded/party-session-leave"
+      ],
       "parityStatus": "excluded-from-build"
     },
     {
@@ -1452,7 +1781,12 @@
       "implementation": "excluded-from-build",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
+      "declaredScenarios": [
+        "native-excluded/party-session-participants"
+      ],
+      "scenarios": [
+        "native-excluded/party-session-participants"
+      ],
       "parityStatus": "excluded-from-build"
     },
     {
@@ -1470,7 +1804,12 @@
       "implementation": "excluded-from-build",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
+      "declaredScenarios": [
+        "native-excluded/party-participant-ban"
+      ],
+      "scenarios": [
+        "native-excluded/party-participant-ban"
+      ],
       "parityStatus": "excluded-from-build"
     },
     {
@@ -1488,7 +1827,12 @@
       "implementation": "excluded-from-build",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
+      "declaredScenarios": [
+        "native-excluded/party-participant-kick"
+      ],
+      "scenarios": [
+        "native-excluded/party-participant-kick"
+      ],
       "parityStatus": "excluded-from-build"
     },
     {
@@ -1506,7 +1850,12 @@
       "implementation": "excluded-from-build",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
+      "declaredScenarios": [
+        "native-excluded/party-participant-role"
+      ],
+      "scenarios": [
+        "native-excluded/party-participant-role"
+      ],
       "parityStatus": "excluded-from-build"
     },
     {
@@ -1524,7 +1873,12 @@
       "implementation": "excluded-from-build",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
+      "declaredScenarios": [
+        "native-excluded/party-participant-unban"
+      ],
+      "scenarios": [
+        "native-excluded/party-participant-unban"
+      ],
       "parityStatus": "excluded-from-build"
     },
     {
@@ -1542,7 +1896,12 @@
       "implementation": "excluded-from-build",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
+      "declaredScenarios": [
+        "native-excluded/party-playback-state"
+      ],
+      "scenarios": [
+        "native-excluded/party-playback-state"
+      ],
       "parityStatus": "excluded-from-build"
     },
     {
@@ -1560,7 +1919,12 @@
       "implementation": "excluded-from-build",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
+      "declaredScenarios": [
+        "native-excluded/party-playback-next"
+      ],
+      "scenarios": [
+        "native-excluded/party-playback-next"
+      ],
       "parityStatus": "excluded-from-build"
     },
     {
@@ -1578,7 +1942,12 @@
       "implementation": "excluded-from-build",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
+      "declaredScenarios": [
+        "native-excluded/party-playback-pause"
+      ],
+      "scenarios": [
+        "native-excluded/party-playback-pause"
+      ],
       "parityStatus": "excluded-from-build"
     },
     {
@@ -1596,7 +1965,12 @@
       "implementation": "excluded-from-build",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
+      "declaredScenarios": [
+        "native-excluded/party-playback-play"
+      ],
+      "scenarios": [
+        "native-excluded/party-playback-play"
+      ],
       "parityStatus": "excluded-from-build"
     },
     {
@@ -1614,7 +1988,12 @@
       "implementation": "excluded-from-build",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
+      "declaredScenarios": [
+        "native-excluded/party-playback-seek"
+      ],
+      "scenarios": [
+        "native-excluded/party-playback-seek"
+      ],
       "parityStatus": "excluded-from-build"
     },
     {
@@ -1632,7 +2011,12 @@
       "implementation": "excluded-from-build",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
+      "declaredScenarios": [
+        "native-excluded/party-playback-stop"
+      ],
+      "scenarios": [
+        "native-excluded/party-playback-stop"
+      ],
       "parityStatus": "excluded-from-build"
     },
     {
@@ -1650,7 +2034,12 @@
       "implementation": "excluded-from-build",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
+      "declaredScenarios": [
+        "native-excluded/party-playback-volume"
+      ],
+      "scenarios": [
+        "native-excluded/party-playback-volume"
+      ],
       "parityStatus": "excluded-from-build"
     },
     {
@@ -1668,7 +2057,12 @@
       "implementation": "excluded-from-build",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
+      "declaredScenarios": [
+        "native-excluded/party-queue-list"
+      ],
+      "scenarios": [
+        "native-excluded/party-queue-list"
+      ],
       "parityStatus": "excluded-from-build"
     },
     {
@@ -1686,7 +2080,12 @@
       "implementation": "excluded-from-build",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
+      "declaredScenarios": [
+        "native-excluded/party-queue-clear"
+      ],
+      "scenarios": [
+        "native-excluded/party-queue-clear"
+      ],
       "parityStatus": "excluded-from-build"
     },
     {
@@ -1704,7 +2103,12 @@
       "implementation": "excluded-from-build",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
+      "declaredScenarios": [
+        "native-excluded/party-queue-add"
+      ],
+      "scenarios": [
+        "native-excluded/party-queue-add"
+      ],
       "parityStatus": "excluded-from-build"
     },
     {
@@ -1722,7 +2126,12 @@
       "implementation": "excluded-from-build",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
+      "declaredScenarios": [
+        "native-excluded/party-queue-remove"
+      ],
+      "scenarios": [
+        "native-excluded/party-queue-remove"
+      ],
       "parityStatus": "excluded-from-build"
     },
     {
@@ -1740,7 +2149,12 @@
       "implementation": "excluded-from-build",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
+      "declaredScenarios": [
+        "native-excluded/party-queue-reorder"
+      ],
+      "scenarios": [
+        "native-excluded/party-queue-reorder"
+      ],
       "parityStatus": "excluded-from-build"
     },
     {
@@ -1758,7 +2172,12 @@
       "implementation": "excluded-from-build",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
+      "declaredScenarios": [
+        "native-excluded/party-queue-lock"
+      ],
+      "scenarios": [
+        "native-excluded/party-queue-lock"
+      ],
       "parityStatus": "excluded-from-build"
     },
     {
@@ -1782,8 +2201,13 @@
           "usedFor": "playback tools"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-discovery/backend-capabilities"
+      ],
+      "scenarios": [
+        "native-discovery/backend-capabilities"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -1806,8 +2230,13 @@
           "usedFor": "playback tools"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-discovery/backend-heartbeat"
+      ],
+      "scenarios": [
+        "native-discovery/backend-heartbeat"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -1830,8 +2259,13 @@
           "usedFor": "playback tools"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-discovery/backend-initialize"
+      ],
+      "scenarios": [
+        "native-discovery/backend-initialize"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -1854,8 +2288,13 @@
           "usedFor": "playback tools"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-discovery/backend-register"
+      ],
+      "scenarios": [
+        "native-discovery/backend-register"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -1878,8 +2317,13 @@
           "usedFor": "playback tools"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-discovery/backend-shutdown"
+      ],
+      "scenarios": [
+        "native-discovery/backend-shutdown"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -1902,8 +2346,13 @@
           "usedFor": "playback tools"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-discovery/backend-status"
+      ],
+      "scenarios": [
+        "native-discovery/backend-status"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -1926,8 +2375,13 @@
           "usedFor": "playback tools"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "community-lifecycle/playback-settings-default"
+      ],
+      "scenarios": [
+        "community-lifecycle/playback-settings-default"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -1950,8 +2404,13 @@
           "usedFor": "playback tools"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "community-lifecycle/playback-settings-update"
+      ],
+      "scenarios": [
+        "community-lifecycle/playback-settings-update"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -1968,8 +2427,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "catalog-playlist-crud/list-playlists"
+      ],
+      "scenarios": [
+        "catalog-playlist-crud/list-playlists"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -1992,6 +2456,9 @@
           "usedFor": "create playlist / save queue as playlist"
         }
       ],
+      "declaredScenarios": [
+        "catalog-playlist-crud/create-playlist"
+      ],
       "scenarios": [
         "catalog-playlist-crud/create-playlist"
       ],
@@ -2012,8 +2479,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "catalog-playlist-crud/import-empty"
+      ],
+      "scenarios": [
+        "catalog-playlist-crud/import-empty"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -2036,8 +2508,13 @@
           "usedFor": "smart playlists"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "catalog-smart-playlists/list-smart"
+      ],
+      "scenarios": [
+        "catalog-smart-playlists/list-smart"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -2060,8 +2537,13 @@
           "usedFor": "create smart playlist (MQL)"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "catalog-smart-playlists/create-smart"
+      ],
+      "scenarios": [
+        "catalog-smart-playlists/create-smart"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "DELETE",
@@ -2084,8 +2566,13 @@
           "usedFor": "delete smart playlist"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "catalog-smart-playlists/delete-smart"
+      ],
+      "scenarios": [
+        "catalog-smart-playlists/delete-smart"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -2102,8 +2589,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "catalog-smart-playlists/get-smart"
+      ],
+      "scenarios": [
+        "catalog-smart-playlists/get-smart"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "PUT",
@@ -2126,8 +2618,13 @@
           "usedFor": "edit smart playlist"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "catalog-smart-playlists/update-smart"
+      ],
+      "scenarios": [
+        "catalog-smart-playlists/update-smart"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -2150,8 +2647,13 @@
           "usedFor": "preview smart playlist"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "catalog-smart-playlists/evaluate-smart"
+      ],
+      "scenarios": [
+        "catalog-smart-playlists/evaluate-smart"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "DELETE",
@@ -2174,8 +2676,13 @@
           "usedFor": "delete playlist"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "catalog-playlist-crud/delete-playlist"
+      ],
+      "scenarios": [
+        "catalog-playlist-crud/delete-playlist"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -2198,8 +2705,13 @@
           "usedFor": "playlist detail"
         }
       ],
+      "declaredScenarios": [
+        "catalog/playlist-detail",
+        "catalog-playlist-crud/detail-after-delete"
+      ],
       "scenarios": [
-        "catalog/playlist-detail"
+        "catalog/playlist-detail",
+        "catalog-playlist-crud/detail-after-delete"
       ],
       "parityStatus": "captured"
     },
@@ -2224,8 +2736,13 @@
           "usedFor": "edit playlist"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "catalog-playlist-crud/update-playlist"
+      ],
+      "scenarios": [
+        "catalog-playlist-crud/update-playlist"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "DELETE",
@@ -2242,8 +2759,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "catalog-playlist-crud/delete-image"
+      ],
+      "scenarios": [
+        "catalog-playlist-crud/delete-image"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -2266,8 +2788,13 @@
           "usedFor": "playlist image upload (multipart)"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "catalog-playlist-crud/upload-image-empty"
+      ],
+      "scenarios": [
+        "catalog-playlist-crud/upload-image-empty"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "DELETE",
@@ -2284,8 +2811,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "catalog-playlist-crud/remove-songs"
+      ],
+      "scenarios": [
+        "catalog-playlist-crud/remove-songs"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -2313,8 +2845,13 @@
           "usedFor": "playlist detail"
         }
       ],
+      "declaredScenarios": [
+        "catalog/playlist-songs",
+        "catalog-playlist-crud/songs-after-reorder"
+      ],
       "scenarios": [
-        "catalog/playlist-songs"
+        "catalog/playlist-songs",
+        "catalog-playlist-crud/songs-after-reorder"
       ],
       "parityStatus": "captured"
     },
@@ -2339,8 +2876,15 @@
           "usedFor": "add songs to playlist — NOTE: client posts object body { songIds } but server binds bare Guid[]; broken against baseline (see scenario catalog-playlist-crud/add-songs-meloamp-shape)"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "catalog-playlist-crud/add-songs",
+        "catalog-playlist-crud/add-songs-meloamp-shape"
+      ],
+      "scenarios": [
+        "catalog-playlist-crud/add-songs",
+        "catalog-playlist-crud/add-songs-meloamp-shape"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "PUT",
@@ -2363,8 +2907,13 @@
           "usedFor": "reorder playlist"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "catalog-playlist-crud/reorder-songs"
+      ],
+      "scenarios": [
+        "catalog-playlist-crud/reorder-songs"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -2381,8 +2930,13 @@
       "implementation": "implemented",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "undocumented-uncaptured"
+      "declaredScenarios": [
+        "podcasts-surface/channels-list"
+      ],
+      "scenarios": [
+        "podcasts-surface/channels-list"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -2399,8 +2953,13 @@
       "implementation": "implemented",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "undocumented-uncaptured"
+      "declaredScenarios": [
+        "podcasts-surface/channels-create-invalid"
+      ],
+      "scenarios": [
+        "podcasts-surface/channels-create-invalid"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "DELETE",
@@ -2417,8 +2976,13 @@
       "implementation": "implemented",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "undocumented-uncaptured"
+      "declaredScenarios": [
+        "podcasts-surface/channels-delete-missing"
+      ],
+      "scenarios": [
+        "podcasts-surface/channels-delete-missing"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "PATCH",
@@ -2435,8 +2999,13 @@
       "implementation": "implemented",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "undocumented-uncaptured"
+      "declaredScenarios": [
+        "podcasts-surface/channels-update-missing"
+      ],
+      "scenarios": [
+        "podcasts-surface/channels-update-missing"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -2453,8 +3022,13 @@
       "implementation": "implemented",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "undocumented-uncaptured"
+      "declaredScenarios": [
+        "podcasts-surface/channel-episodes-missing"
+      ],
+      "scenarios": [
+        "podcasts-surface/channel-episodes-missing"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -2471,8 +3045,13 @@
       "implementation": "implemented",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "undocumented-uncaptured"
+      "declaredScenarios": [
+        "podcasts-surface/channel-refresh-missing"
+      ],
+      "scenarios": [
+        "podcasts-surface/channel-refresh-missing"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -2489,8 +3068,13 @@
       "implementation": "implemented",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "undocumented-uncaptured"
+      "declaredScenarios": [
+        "podcasts-surface/discover-lookup-missing"
+      ],
+      "scenarios": [
+        "podcasts-surface/discover-lookup-missing"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -2507,8 +3091,13 @@
       "implementation": "implemented",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "undocumented-uncaptured"
+      "declaredScenarios": [
+        "podcasts-surface/discover-search"
+      ],
+      "scenarios": [
+        "podcasts-surface/discover-search"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -2525,8 +3114,13 @@
       "implementation": "implemented",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "undocumented-uncaptured"
+      "declaredScenarios": [
+        "podcasts-surface/discover-trending"
+      ],
+      "scenarios": [
+        "podcasts-surface/discover-trending"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -2543,8 +3137,13 @@
       "implementation": "implemented",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "undocumented-uncaptured"
+      "declaredScenarios": [
+        "podcasts-surface/episode-search-empty"
+      ],
+      "scenarios": [
+        "podcasts-surface/episode-search-empty"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "DELETE",
@@ -2561,8 +3160,13 @@
       "implementation": "implemented",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "undocumented-uncaptured"
+      "declaredScenarios": [
+        "podcasts-surface/episode-delete-missing"
+      ],
+      "scenarios": [
+        "podcasts-surface/episode-delete-missing"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "DELETE",
@@ -2579,8 +3183,13 @@
       "implementation": "implemented",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "undocumented-uncaptured"
+      "declaredScenarios": [
+        "podcasts-surface/bookmark-delete-missing"
+      ],
+      "scenarios": [
+        "podcasts-surface/bookmark-delete-missing"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -2597,8 +3206,13 @@
       "implementation": "implemented",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "undocumented-uncaptured"
+      "declaredScenarios": [
+        "podcasts-surface/bookmark-get-missing"
+      ],
+      "scenarios": [
+        "podcasts-surface/bookmark-get-missing"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "PUT",
@@ -2615,8 +3229,13 @@
       "implementation": "implemented",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "undocumented-uncaptured"
+      "declaredScenarios": [
+        "podcasts-surface/bookmark-save-missing"
+      ],
+      "scenarios": [
+        "podcasts-surface/bookmark-save-missing"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -2633,8 +3252,13 @@
       "implementation": "implemented",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "undocumented-uncaptured"
+      "declaredScenarios": [
+        "podcasts-surface/episode-download-missing"
+      ],
+      "scenarios": [
+        "podcasts-surface/episode-download-missing"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -2651,8 +3275,13 @@
       "implementation": "implemented",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "undocumented-uncaptured"
+      "declaredScenarios": [
+        "podcasts-surface/history-missing"
+      ],
+      "scenarios": [
+        "podcasts-surface/history-missing"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -2669,8 +3298,13 @@
       "implementation": "implemented",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "undocumented-uncaptured"
+      "declaredScenarios": [
+        "podcasts-surface/episode-play-missing"
+      ],
+      "scenarios": [
+        "podcasts-surface/episode-play-missing"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -2687,8 +3321,13 @@
       "implementation": "implemented",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "undocumented-uncaptured"
+      "declaredScenarios": [
+        "podcasts-surface/opml-export"
+      ],
+      "scenarios": [
+        "podcasts-surface/opml-export"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -2705,8 +3344,13 @@
       "implementation": "implemented",
       "inOpenApi": false,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "undocumented-uncaptured"
+      "declaredScenarios": [
+        "podcasts-surface/opml-import-empty"
+      ],
+      "scenarios": [
+        "podcasts-surface/opml-import-empty"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "DELETE",
@@ -2723,6 +3367,9 @@
       "implementation": "excluded-from-build",
       "inOpenApi": false,
       "usedBy": [],
+      "declaredScenarios": [
+        "catalog-queue/queue-delete"
+      ],
       "scenarios": [
         "catalog-queue/queue-delete"
       ],
@@ -2743,6 +3390,11 @@
       "implementation": "excluded-from-build",
       "inOpenApi": false,
       "usedBy": [],
+      "declaredScenarios": [
+        "catalog-queue/queue-get-empty",
+        "catalog-queue/queue-get-after-put",
+        "catalog-queue/queue-get-after-delete"
+      ],
       "scenarios": [
         "catalog-queue/queue-get-empty",
         "catalog-queue/queue-get-after-put",
@@ -2765,6 +3417,9 @@
       "implementation": "excluded-from-build",
       "inOpenApi": false,
       "usedBy": [],
+      "declaredScenarios": [
+        "catalog-queue/queue-put"
+      ],
       "scenarios": [
         "catalog-queue/queue-put"
       ],
@@ -2791,8 +3446,13 @@
           "usedFor": "recommendations"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-discovery/recommendations"
+      ],
+      "scenarios": [
+        "native-discovery/recommendations"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -2815,8 +3475,13 @@
           "usedFor": "requests page"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "community-lifecycle/request-list"
+      ],
+      "scenarios": [
+        "community-lifecycle/request-list"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -2839,8 +3504,15 @@
           "usedFor": "create request"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "community-lifecycle/request-create",
+        "community-lifecycle/request-create-for-delete"
+      ],
+      "scenarios": [
+        "community-lifecycle/request-create",
+        "community-lifecycle/request-create-for-delete"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -2863,8 +3535,13 @@
           "usedFor": "activity feed"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "community-lifecycle/request-activity"
+      ],
+      "scenarios": [
+        "community-lifecycle/request-activity"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -2887,8 +3564,13 @@
           "usedFor": "unread activity"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "community-lifecycle/request-unread"
+      ],
+      "scenarios": [
+        "community-lifecycle/request-unread"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "DELETE",
@@ -2905,8 +3587,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "community-lifecycle/request-delete"
+      ],
+      "scenarios": [
+        "community-lifecycle/request-delete"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -2929,8 +3616,13 @@
           "usedFor": "request detail"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "community-lifecycle/request-detail"
+      ],
+      "scenarios": [
+        "community-lifecycle/request-detail"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "PUT",
@@ -2953,8 +3645,13 @@
           "usedFor": "edit request"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "community-lifecycle/request-update"
+      ],
+      "scenarios": [
+        "community-lifecycle/request-update"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -2977,8 +3674,13 @@
           "usedFor": "request comments"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "community-lifecycle/request-comments-list"
+      ],
+      "scenarios": [
+        "community-lifecycle/request-comments-list"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -3001,8 +3703,13 @@
           "usedFor": "comment"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "community-lifecycle/request-comment-create"
+      ],
+      "scenarios": [
+        "community-lifecycle/request-comment-create"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -3025,8 +3732,13 @@
           "usedFor": "complete request"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "community-lifecycle/request-complete"
+      ],
+      "scenarios": [
+        "community-lifecycle/request-complete"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -3049,8 +3761,13 @@
           "usedFor": "mark seen"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "community-lifecycle/request-seen"
+      ],
+      "scenarios": [
+        "community-lifecycle/request-seen"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -3078,6 +3795,11 @@
           "usedFor": "nowPlaying after 10s; played after 70%"
         }
       ],
+      "declaredScenarios": [
+        "catalog-scrobble/scrobble-now-playing",
+        "catalog-scrobble/scrobble-played",
+        "catalog-scrobble/scrobble-unknown-song"
+      ],
       "scenarios": [
         "catalog-scrobble/scrobble-now-playing",
         "catalog-scrobble/scrobble-played",
@@ -3100,8 +3822,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "native-scrobble-lastfm/auth-url-unconfigured"
+      ],
+      "scenarios": [
+        "native-scrobble-lastfm/auth-url-unconfigured"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -3118,8 +3845,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "native-scrobble-lastfm/disconnect"
+      ],
+      "scenarios": [
+        "native-scrobble-lastfm/disconnect"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -3136,8 +3868,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "native-scrobble-lastfm/session-unconfigured"
+      ],
+      "scenarios": [
+        "native-scrobble-lastfm/session-unconfigured"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -3159,6 +3896,10 @@
           "evidence": "pages/SearchPage.tsx:121-129",
           "usedFor": "combined search"
         }
+      ],
+      "declaredScenarios": [
+        "catalog/search-post-dune",
+        "catalog/search-unicode"
       ],
       "scenarios": [
         "catalog/search-post-dune",
@@ -3187,8 +3928,13 @@
           "usedFor": "advanced search with filters"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-user-extra/search-advanced"
+      ],
+      "scenarios": [
+        "native-user-extra/search-advanced"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -3205,8 +3951,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "native-user-extra/search-similar"
+      ],
+      "scenarios": [
+        "native-user-extra/search-similar"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -3234,6 +3985,10 @@
           "usedFor": "song search"
         }
       ],
+      "declaredScenarios": [
+        "catalog/search-songs-neon",
+        "catalog/search-songs-filter-by-artist"
+      ],
       "scenarios": [
         "catalog/search-songs-neon",
         "catalog/search-songs-filter-by-artist"
@@ -3255,8 +4010,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "native-user-extra/search-suggest"
+      ],
+      "scenarios": [
+        "native-user-extra/search-suggest"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -3279,8 +4039,13 @@
           "usedFor": "shares page"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "community-lifecycle/share-list"
+      ],
+      "scenarios": [
+        "community-lifecycle/share-list"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -3303,8 +4068,13 @@
           "usedFor": "create share"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "community-lifecycle/share-create"
+      ],
+      "scenarios": [
+        "community-lifecycle/share-create"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -3324,8 +4094,13 @@
           "usedFor": "public share page (unauthenticated)"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "community-lifecycle/share-public"
+      ],
+      "scenarios": [
+        "community-lifecycle/share-public"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "DELETE",
@@ -3348,8 +4123,13 @@
           "usedFor": "delete share"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "community-lifecycle/share-delete"
+      ],
+      "scenarios": [
+        "community-lifecycle/share-delete"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -3366,8 +4146,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "community-lifecycle/share-detail"
+      ],
+      "scenarios": [
+        "community-lifecycle/share-detail"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "PUT",
@@ -3390,8 +4175,13 @@
           "usedFor": "edit share"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "community-lifecycle/share-update"
+      ],
+      "scenarios": [
+        "community-lifecycle/share-update"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -3413,6 +4203,9 @@
           "evidence": "pages/BrowseSongs.tsx:22",
           "usedFor": "browse"
         }
+      ],
+      "declaredScenarios": [
+        "catalog/songs-list"
       ],
       "scenarios": [
         "catalog/songs-list"
@@ -3440,6 +4233,10 @@
           "usedFor": "hate toggle"
         }
       ],
+      "declaredScenarios": [
+        "catalog-star-rating/hate-song-on",
+        "catalog-star-rating/hate-song-off"
+      ],
       "scenarios": [
         "catalog-star-rating/hate-song-on",
         "catalog-star-rating/hate-song-off"
@@ -3461,8 +4258,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "native-user-extra/songs-random"
+      ],
+      "scenarios": [
+        "native-user-extra/songs-random"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -3479,8 +4281,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "native-user-extra/songs-recent"
+      ],
+      "scenarios": [
+        "native-user-extra/songs-recent"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -3502,6 +4309,10 @@
           "evidence": "pages/Player.tsx:265",
           "usedFor": "rating 0-5"
         }
+      ],
+      "declaredScenarios": [
+        "catalog-star-rating/rate-song",
+        "catalog-star-rating/rate-song-reset"
       ],
       "scenarios": [
         "catalog-star-rating/rate-song",
@@ -3535,6 +4346,10 @@
           "usedFor": "star toggle"
         }
       ],
+      "declaredScenarios": [
+        "catalog-star-rating/star-song-on",
+        "catalog-star-rating/star-song-off"
+      ],
       "scenarios": [
         "catalog-star-rating/star-song-on",
         "catalog-star-rating/star-song-off"
@@ -3561,6 +4376,16 @@
           "evidence": "detailViews/SongDetailView.tsx:32",
           "usedFor": "song detail"
         }
+      ],
+      "declaredScenarios": [
+        "catalog/song-detail",
+        "catalog/song-detail-unknown",
+        "catalog-star-rating/song-detail-after-star",
+        "catalog-star-rating/song-detail-after-unstar",
+        "catalog-star-rating/song-detail-after-rating",
+        "catalog-star-rating/song-detail-after-hate",
+        "catalog-scrobble/song-detail-before-scrobble",
+        "catalog-scrobble/song-detail-after-scrobble"
       ],
       "scenarios": [
         "catalog/song-detail",
@@ -3589,8 +4414,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "native-user-extra/song-lyrics"
+      ],
+      "scenarios": [
+        "native-user-extra/song-lyrics"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -3614,6 +4444,9 @@
           "evidence": "pages/LoginPage.tsx:25",
           "usedFor": "unauthenticated version gate"
         }
+      ],
+      "declaredScenarios": [
+        "native-system-info"
       ],
       "scenarios": [
         "native-system-info"
@@ -3641,8 +4474,13 @@
           "usedFor": "dashboard"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-discovery/system-stats"
+      ],
+      "scenarios": [
+        "native-discovery/system-stats"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -3656,8 +4494,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "native-discovery/system-throw"
+      ],
+      "scenarios": [
+        "native-discovery/system-throw"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -3677,8 +4520,13 @@
           "usedFor": "themes page"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-discovery/themes-list"
+      ],
+      "scenarios": [
+        "native-discovery/themes-list"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -3701,8 +4549,13 @@
           "usedFor": "import theme"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-discovery/themes-import"
+      ],
+      "scenarios": [
+        "native-discovery/themes-import"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -3722,8 +4575,13 @@
           "usedFor": "select theme"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-discovery/themes-me"
+      ],
+      "scenarios": [
+        "native-discovery/themes-me"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -3740,8 +4598,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "native-discovery/themes-rescan"
+      ],
+      "scenarios": [
+        "native-discovery/themes-rescan"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "DELETE",
@@ -3758,8 +4621,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "native-discovery/themes-delete"
+      ],
+      "scenarios": [
+        "native-discovery/themes-delete"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -3782,8 +4650,13 @@
           "usedFor": "export theme (fetch WITHOUT Authorization header)"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-discovery/themes-export"
+      ],
+      "scenarios": [
+        "native-discovery/themes-export"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -3797,8 +4670,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "native-discovery/themes-file"
+      ],
+      "scenarios": [
+        "native-discovery/themes-file"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -3821,8 +4699,13 @@
           "usedFor": "favorites (entity variant)"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-user-extra/user-albums-disliked"
+      ],
+      "scenarios": [
+        "native-user-extra/user-albums-disliked"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -3845,8 +4728,13 @@
           "usedFor": "favorites (entity variant)"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-user-extra/user-albums-liked"
+      ],
+      "scenarios": [
+        "native-user-extra/user-albums-liked"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -3869,8 +4757,13 @@
           "usedFor": "favorites (entity variant)"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-user-extra/user-albums-rated"
+      ],
+      "scenarios": [
+        "native-user-extra/user-albums-rated"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -3887,8 +4780,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "native-user-extra/user-albums-recent"
+      ],
+      "scenarios": [
+        "native-user-extra/user-albums-recent"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -3911,8 +4809,13 @@
           "usedFor": "favorites (entity variant)"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-user-extra/user-albums-top-rated"
+      ],
+      "scenarios": [
+        "native-user-extra/user-albums-top-rated"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -3935,8 +4838,13 @@
           "usedFor": "favorites (entity variant)"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-user-extra/user-artists-disliked"
+      ],
+      "scenarios": [
+        "native-user-extra/user-artists-disliked"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -3959,8 +4867,13 @@
           "usedFor": "favorites (entity variant)"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-user-extra/user-artists-liked"
+      ],
+      "scenarios": [
+        "native-user-extra/user-artists-liked"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -3983,8 +4896,13 @@
           "usedFor": "favorites (entity variant)"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-user-extra/user-artists-rated"
+      ],
+      "scenarios": [
+        "native-user-extra/user-artists-rated"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -4001,8 +4919,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "native-user-extra/user-artists-recent"
+      ],
+      "scenarios": [
+        "native-user-extra/user-artists-recent"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -4025,8 +4948,13 @@
           "usedFor": "favorites (entity variant)"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-user-extra/user-artists-top-rated"
+      ],
+      "scenarios": [
+        "native-user-extra/user-artists-top-rated"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -4049,8 +4977,13 @@
           "usedFor": "history"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-user-extra/user-last-played"
+      ],
+      "scenarios": [
+        "native-user-extra/user-last-played"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -4078,8 +5011,16 @@
           "usedFor": "session restore"
         }
       ],
-      "scenarios": [
+      "declaredScenarios": [
         "native-user-me",
+        "auth-user-missing-token",
+        "auth-user-malformed-token",
+        "auth-user-expired-token",
+        "auth-refresh-rotation/access-with-token",
+        "auth-refresh-rotation/access-with-rotated-token",
+        "auth-refresh-rotation/access-after-logout"
+      ],
+      "scenarios": [
         "auth-user-missing-token",
         "auth-user-malformed-token",
         "auth-user-expired-token",
@@ -4104,8 +5045,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "native-user-provider-state/unlink-missing-google"
+      ],
+      "scenarios": [
+        "native-user-provider-state/unlink-missing-google"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "POST",
@@ -4122,8 +5068,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "native-user-provider-link-disabled/link-google-disabled"
+      ],
+      "scenarios": [
+        "native-user-provider-link-disabled/link-google-disabled"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -4140,8 +5091,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "native-user-provider-state/list-empty"
+      ],
+      "scenarios": [
+        "native-user-provider-state/list-empty"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -4169,6 +5125,9 @@
           "usedFor": "playlist picker/manager/dashboard"
         }
       ],
+      "declaredScenarios": [
+        "catalog/user-playlists-limit-param"
+      ],
       "scenarios": [
         "catalog/user-playlists-limit-param"
       ],
@@ -4195,8 +5154,13 @@
           "usedFor": "favorites; entity placeholder is a literal path segment iterated client-side (songs|albums|artists)"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-user-extra/user-songs-disliked"
+      ],
+      "scenarios": [
+        "native-user-extra/user-songs-disliked"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -4219,8 +5183,13 @@
           "usedFor": "favorites; entity placeholder is a literal path segment iterated client-side (songs|albums|artists)"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-user-extra/user-songs-liked"
+      ],
+      "scenarios": [
+        "native-user-extra/user-songs-liked"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -4243,8 +5212,13 @@
           "usedFor": "favorites; entity placeholder is a literal path segment iterated client-side (songs|albums|artists)"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-user-extra/user-songs-rated"
+      ],
+      "scenarios": [
+        "native-user-extra/user-songs-rated"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -4261,8 +5235,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "native-user-extra/user-songs-recent"
+      ],
+      "scenarios": [
+        "native-user-extra/user-songs-recent"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -4285,8 +5264,13 @@
           "usedFor": "favorites; entity placeholder is a literal path segment iterated client-side (songs|albums|artists)"
         }
       ],
-      "scenarios": [],
-      "parityStatus": "client-used-uncaptured"
+      "declaredScenarios": [
+        "native-user-extra/user-songs-top-rated"
+      ],
+      "scenarios": [
+        "native-user-extra/user-songs-top-rated"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -4303,8 +5287,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "native-user-extra/user-stats"
+      ],
+      "scenarios": [
+        "native-user-extra/user-stats"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -4321,8 +5310,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "native-user-extra/user-stats-history"
+      ],
+      "scenarios": [
+        "native-user-extra/user-stats-history"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -4339,8 +5333,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "native-user-extra/user-stats-per-day"
+      ],
+      "scenarios": [
+        "native-user-extra/user-stats-per-day"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -4357,8 +5356,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "native-user-extra/user-stats-top-genres"
+      ],
+      "scenarios": [
+        "native-user-extra/user-stats-top-genres"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -4375,8 +5379,13 @@
       "implementation": "implemented",
       "inOpenApi": true,
       "usedBy": [],
-      "scenarios": [],
-      "parityStatus": "documented-uncaptured"
+      "declaredScenarios": [
+        "native-user-extra/user-stats-top-songs"
+      ],
+      "scenarios": [
+        "native-user-extra/user-stats-top-songs"
+      ],
+      "parityStatus": "captured"
     },
     {
       "method": "GET",
@@ -4400,6 +5409,22 @@
           "evidence": "<audio> element via toQueueSong.ts:36-49; appends ?jwt=<token>; Player.tsx:132,139 probes HEAD then Range bytes=0-1023 fallback",
           "usedFor": "playback via server-provided streamUrl (never constructed client-side)"
         }
+      ],
+      "declaredScenarios": [
+        "stream/get-full",
+        "stream/get-range-initial",
+        "stream/get-range-middle",
+        "stream/get-range-final-suffix",
+        "stream/get-range-open-end",
+        "stream/get-range-malformed",
+        "stream/get-range-unsatisfiable",
+        "stream/get-range-inverted",
+        "stream/get-range-multipart",
+        "stream/get-with-jwt-query-param",
+        "stream/get-tampered-token",
+        "stream/get-token-for-wrong-song",
+        "stream/get-unknown-user",
+        "stream/get-empty-guid-user"
       ],
       "scenarios": [
         "stream/get-full",

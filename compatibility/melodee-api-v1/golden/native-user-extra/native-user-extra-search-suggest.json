@@ -1,0 +1,38 @@
+{
+  "artists": [
+    {
+      "id": "5bf951d5-7afe-5c50-8941-145b7095902b",
+      "name": "Dune",
+      "type": "artist",
+      "thumbnailUrl": "{melodee-origin}/images/artist_5bf951d5-7afe-5c50-8941-145b7095902b/80"
+    },
+    {
+      "id": "503f045f-1bd6-5ea7-9e32-14632344680c",
+      "name": "Düné",
+      "type": "artist",
+      "thumbnailUrl": "{melodee-origin}/images/artist_503f045f-1bd6-5ea7-9e32-14632344680c/80"
+    }
+  ],
+  "albums": [],
+  "songs": [
+    {
+      "id": "c418d383-13f5-598d-94a8-c15e5d2df348",
+      "name": "Sandstone - Dune",
+      "type": "song",
+      "thumbnailUrl": "{melodee-origin}/images/song_c418d383-13f5-598d-94a8-c15e5d2df348/80"
+    },
+    {
+      "id": "b3297a8f-5e2b-5ade-98ea-f899d38059e0",
+      "name": "Neon 東京 - Sæglópur 日本",
+      "type": "song",
+      "thumbnailUrl": "{melodee-origin}/images/song_b3297a8f-5e2b-5ade-98ea-f899d38059e0/80"
+    },
+    {
+      "id": "20cf62c1-fae9-5966-8193-4c4ca99ed749",
+      "name": "Saxophone in the Rain - Various Artists",
+      "type": "song",
+      "thumbnailUrl": "{melodee-origin}/images/song_20cf62c1-fae9-5966-8193-4c4ca99ed749/80"
+    }
+  ],
+  "playlists": []
+}

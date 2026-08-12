@@ -1,0 +1,5 @@
+{
+  "code": "BAD_REQUEST",
+  "message": "Bookmark not found",
+  "correlationId": "<volatile>"
+}

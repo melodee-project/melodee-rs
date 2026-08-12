@@ -14,6 +14,7 @@ rules:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 from dataclasses import dataclass
@@ -135,15 +136,38 @@ def compare_scenario(
 ) -> list[Difference]:
     differences: list[Difference] = []
 
+    # The request is part of the compatibility contract. A response-only
+    # comparison could otherwise bless a handler registered under the wrong
+    # method/path or a changed query/body shape.
+    for field in ("method", "url", "auth", "headers", "jsonTemplate", "bodyTemplate"):
+        left = expected.get("request", {}).get(field)
+        right = actual.get("request", {}).get(field)
+        if left != right:
+            differences.append(Difference(name, f"request.{field}", left, right))
+
     left_status = expected["response"]["status"]
     right_status = actual["response"]["status"]
     if left_status != right_status:
         differences.append(Difference(name, "response.status", left_status, right_status))
 
-    normalize = expected.get("normalize") or actual.get("normalize") or {}
+    # Only the baseline's policy is authoritative. Allowing the actual capture
+    # to add masks could hide a Rust contract regression.
+    normalize = expected.get("normalize") or {}
+    if (actual.get("normalize") or {}) != normalize:
+        differences.append(
+            Difference(name, "normalize", normalize, actual.get("normalize") or {})
+        )
     dropped = {h.lower() for h in normalize.get("dropHeaders", [])}
-    left_headers = {k: v for k, v in expected["response"]["headers"].items() if k not in dropped}
-    right_headers = {k: v for k, v in actual["response"]["headers"].items() if k not in dropped}
+    left_headers = {
+        k.lower(): v
+        for k, v in expected["response"]["headers"].items()
+        if k.lower() not in dropped
+    }
+    right_headers = {
+        k.lower(): v
+        for k, v in actual["response"]["headers"].items()
+        if k.lower() not in dropped
+    }
     if left_headers != right_headers:
         differences.append(Difference(name, "response.headers", left_headers, right_headers))
 
@@ -155,8 +179,15 @@ def compare_scenario(
         right_json = json.loads(right_body)
     except (json.JSONDecodeError, UnicodeDecodeError):
         if left_body != right_body:
+            left_digest = hashlib.sha256(left_body).hexdigest()
+            right_digest = hashlib.sha256(right_body).hexdigest()
             differences.append(
-                Difference(name, "response.body", f"{len(left_body)} bytes", f"{len(right_body)} bytes")
+                Difference(
+                    name,
+                    "response.body",
+                    f"{len(left_body)} bytes sha256={left_digest}",
+                    f"{len(right_body)} bytes sha256={right_digest}",
+                )
             )
         return differences
 
@@ -164,13 +195,29 @@ def compare_scenario(
     right_norm = normalize_json(right_json, mask_paths)
     for path, left, right in diff_json(left_norm, right_norm):
         differences.append(Difference(name, f"response.body{path}", _short(left), _short(right)))
+
+    left_checks = expected.get("structureChecks")
+    right_checks = actual.get("structureChecks")
+    if left_checks != right_checks:
+        differences.append(Difference(name, "structureChecks", left_checks, right_checks))
     return differences
 
 
-def compare(expected_dir: Path, actual_dir: Path) -> list[Difference]:
+def compare(
+    expected_dir: Path,
+    actual_dir: Path,
+    scenario_names: set[str] | None = None,
+) -> list[Difference]:
     expected = metadata_by_name(expected_dir)
     actual = metadata_by_name(actual_dir)
     differences: list[Difference] = []
+
+    if scenario_names is not None:
+        unknown = sorted(scenario_names - expected.keys())
+        if unknown:
+            return [Difference(name, "scenario", "present in baseline", "unknown") for name in unknown]
+        expected = {name: value for name, value in expected.items() if name in scenario_names}
+        actual = {name: value for name, value in actual.items() if name in scenario_names}
 
     for missing in sorted(expected.keys() - actual.keys()):
         differences.append(Difference(missing, "scenario", "present", "missing"))
@@ -188,9 +235,15 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("expected", type=Path)
     parser.add_argument("actual", type=Path)
+    parser.add_argument(
+        "--scenario",
+        action="append",
+        dest="scenarios",
+        help="Compare only this scenario name (repeatable); useful for an incremental route slice.",
+    )
     args = parser.parse_args()
 
-    differences = compare(args.expected, args.actual)
+    differences = compare(args.expected, args.actual, set(args.scenarios) if args.scenarios else None)
     if not differences:
         print("Captures match after normalization.")
         return

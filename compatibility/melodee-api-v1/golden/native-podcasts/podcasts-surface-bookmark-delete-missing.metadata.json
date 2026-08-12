@@ -1,0 +1,32 @@
+{
+  "name": "podcasts-surface/bookmark-delete-missing",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "DELETE",
+    "url": "{melodee-origin}/api/v1/podcasts/episodes/999999/bookmark",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "podcasts-surface-bookmark-delete-missing.json",
+    "sha256": "3f347662bf7eb1220f5f7fc8be2a244b85384f699f1467b2519c55a72a7e788b",
+    "bytes": 96
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.correlationId"
+    ]
+  },
+  "structureChecks": null,
+  "error": "HTTP Error 400: Bad Request",
+  "allowFailure": true
+}

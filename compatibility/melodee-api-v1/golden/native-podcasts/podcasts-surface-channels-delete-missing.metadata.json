@@ -1,0 +1,32 @@
+{
+  "name": "podcasts-surface/channels-delete-missing",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "DELETE",
+    "url": "{melodee-origin}/api/v1/podcasts/channels/999999?softDelete=true",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "podcasts-surface-channels-delete-missing.json",
+    "sha256": "467c849d89ea50ae6725dc13bcb286a54a0478f810765e08f6f2ed57157861a7",
+    "bytes": 95
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.correlationId"
+    ]
+  },
+  "structureChecks": null,
+  "error": "HTTP Error 400: Bad Request",
+  "allowFailure": true
+}

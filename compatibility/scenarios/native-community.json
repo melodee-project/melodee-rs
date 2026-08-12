@@ -1,0 +1,218 @@
+[
+  {
+    "schemaVersion": 2,
+    "name": "community-lifecycle",
+    "surface": "melodee-api-v1",
+    "flow": [
+      {
+        "name": "login",
+        "method": "POST",
+        "path": "/api/v1/auth/authenticate",
+        "auth": "none",
+        "json": {"userName": "phase0-fixture", "password": "Mel0deeR0cks!"},
+        "capture": {"accessToken": "$.token"},
+        "secretCapture": ["accessToken"],
+        "normalize": {
+          "maskJsonPaths": ["$.token", "$.expiresAt", "$.refreshToken", "$.refreshTokenExpiresAt", "$.user.createdAt", "$.user.updatedAt", "$.serverVersion"],
+          "maskBaseUrl": true,
+          "structureChecks": {"$.token": "jwt"}
+        }
+      },
+      {
+        "name": "share-public",
+        "method": "GET",
+        "path": "/api/v1/shares/public/phase7-public-song",
+        "auth": "none",
+        "normalize": {
+          "maskJsonPaths": ["$.createdAt", "$.expiresAt"],
+          "maskBaseUrl": true
+        }
+      },
+      {
+        "name": "playback-settings-default",
+        "method": "GET",
+        "path": "/api/v1/playback/settings",
+        "auth": "bearer-var:accessToken",
+        "normalize": {}
+      },
+      {
+        "name": "playback-settings-update",
+        "method": "POST",
+        "path": "/api/v1/playback/settings",
+        "auth": "bearer-var:accessToken",
+        "json": {
+          "crossfadeDuration": 4.5,
+          "gaplessPlayback": true,
+          "volumeNormalization": true,
+          "replayGain": "track",
+          "audioQuality": "lossless",
+          "equalizerPreset": null
+        },
+        "normalize": {}
+      },
+      {
+        "name": "equalizer-list-empty",
+        "method": "GET",
+        "path": "/api/v1/equalizer/presets?page=1&limit=20",
+        "auth": "bearer-var:accessToken",
+        "normalize": {}
+      },
+      {
+        "name": "equalizer-upsert",
+        "method": "POST",
+        "path": "/api/v1/equalizer/presets",
+        "auth": "bearer-var:accessToken",
+        "json": {
+          "name": "Phase 7 Headphones",
+          "bands": [{"frequency": 60.0, "gain": 2.0}],
+          "isDefault": true
+        },
+        "capture": {"presetId": "$.id"},
+        "normalize": {"maskJsonPaths": ["$.id"]}
+      },
+      {
+        "name": "equalizer-delete",
+        "method": "DELETE",
+        "path": "/api/v1/equalizer/presets/{{presetId}}",
+        "auth": "bearer-var:accessToken",
+        "normalize": {}
+      },
+      {
+        "name": "request-create",
+        "method": "POST",
+        "path": "/api/v1/requests",
+        "auth": "bearer-var:accessToken",
+        "json": {"category": 5, "description": "Phase 7 compatibility request"},
+        "capture": {"requestId": "$.apiKey"},
+        "normalize": {
+          "maskJsonPaths": ["$.apiKey", "$.createdAt", "$.updatedAt", "$.lastActivityAt", "$.createdByUser.apiKey", "$.lastActivityUser.apiKey"]
+        }
+      },
+      {
+        "name": "request-list",
+        "method": "GET",
+        "path": "/api/v1/requests?page=1&pageSize=20&mine=true",
+        "auth": "bearer-var:accessToken",
+        "normalize": {"maskJsonPaths": ["$.data[*].apiKey", "$.data[*].createdAt", "$.data[*].updatedAt", "$.data[*].lastActivityAt", "$.data[*].createdByUser.apiKey"]}
+      },
+      {
+        "name": "request-detail",
+        "method": "GET",
+        "path": "/api/v1/requests/{{requestId}}",
+        "auth": "bearer-var:accessToken",
+        "normalize": {"maskJsonPaths": ["$.apiKey", "$.createdAt", "$.updatedAt", "$.lastActivityAt", "$.createdByUser.apiKey", "$.lastActivityUser.apiKey"]}
+      },
+      {
+        "name": "request-update",
+        "method": "PUT",
+        "path": "/api/v1/requests/{{requestId}}",
+        "auth": "bearer-var:accessToken",
+        "json": {"description": "Updated Phase 7 compatibility request"},
+        "normalize": {"maskJsonPaths": ["$.apiKey", "$.createdAt", "$.updatedAt", "$.lastActivityAt", "$.createdByUser.apiKey", "$.lastActivityUser.apiKey"]}
+      },
+      {
+        "name": "request-comment-create",
+        "method": "POST",
+        "path": "/api/v1/requests/{{requestId}}/comments",
+        "auth": "bearer-var:accessToken",
+        "json": {"body": "Compatibility comment"},
+        "normalize": {"maskJsonPaths": ["$.apiKey", "$.createdAt", "$.createdByUser.apiKey"]}
+      },
+      {
+        "name": "request-comments-list",
+        "method": "GET",
+        "path": "/api/v1/requests/{{requestId}}/comments?page=1&pageSize=50",
+        "auth": "bearer-var:accessToken",
+        "normalize": {"maskJsonPaths": ["$.data[*].apiKey", "$.data[*].createdAt", "$.data[*].createdByUser.apiKey"]}
+      },
+      {
+        "name": "request-activity",
+        "method": "GET",
+        "path": "/api/v1/requests/activity",
+        "auth": "bearer-var:accessToken",
+        "normalize": {}
+      },
+      {
+        "name": "request-unread",
+        "method": "GET",
+        "path": "/api/v1/requests/activity/unread?page=1&pageSize=10",
+        "auth": "bearer-var:accessToken",
+        "normalize": {"maskJsonPaths": ["$.data[*].apiKey", "$.data[*].lastActivityAt", "$.data[*].lastActivityUser.apiKey"]}
+      },
+      {
+        "name": "request-seen",
+        "method": "POST",
+        "path": "/api/v1/requests/{{requestId}}/seen",
+        "auth": "bearer-var:accessToken",
+        "normalize": {}
+      },
+      {
+        "name": "request-complete",
+        "method": "POST",
+        "path": "/api/v1/requests/{{requestId}}/complete",
+        "auth": "bearer-var:accessToken",
+        "normalize": {}
+      },
+      {
+        "name": "request-create-for-delete",
+        "method": "POST",
+        "path": "/api/v1/requests",
+        "auth": "bearer-var:accessToken",
+        "json": {"category": 5, "description": "Delete compatibility request"},
+        "capture": {"deleteRequestId": "$.apiKey"},
+        "normalize": {"maskJsonPaths": ["$.apiKey", "$.createdAt", "$.updatedAt", "$.lastActivityAt", "$.createdByUser.apiKey", "$.lastActivityUser.apiKey"]}
+      },
+      {
+        "name": "request-delete",
+        "method": "DELETE",
+        "path": "/api/v1/requests/{{deleteRequestId}}",
+        "auth": "bearer-var:accessToken",
+        "normalize": {}
+      },
+      {
+        "name": "share-create",
+        "method": "POST",
+        "path": "/api/v1/shares",
+        "auth": "bearer-var:accessToken",
+        "json": {
+          "shareType": 1,
+          "resourceId": "ea26fc59-a545-51c2-94c4-702e1f97b80a",
+          "description": "Phase 7 public sample",
+          "isDownloadable": false
+        },
+        "capture": {"shareId": "$.id"},
+        "normalize": {"maskJsonPaths": ["$.id", "$.shareUrl", "$.owner.createdAt", "$.owner.updatedAt", "$.createdAt", "$.expiresAt", "$.lastVisitedAt"], "maskBaseUrl": true}
+      },
+      {
+        "name": "share-list",
+        "method": "GET",
+        "path": "/api/v1/shares?page=1&pageSize=20",
+        "auth": "bearer-var:accessToken",
+        "normalize": {"maskJsonPaths": ["$.data[*].id", "$.data[*].shareUrl", "$.data[*].owner.createdAt", "$.data[*].owner.updatedAt", "$.data[*].createdAt", "$.data[*].expiresAt", "$.data[*].lastVisitedAt"], "maskBaseUrl": true}
+      },
+      {
+        "name": "share-detail",
+        "method": "GET",
+        "path": "/api/v1/shares/{{shareId}}",
+        "auth": "bearer-var:accessToken",
+        "normalize": {"maskJsonPaths": ["$.id", "$.shareUrl", "$.owner.createdAt", "$.owner.updatedAt", "$.createdAt", "$.expiresAt", "$.lastVisitedAt"], "maskBaseUrl": true}
+      },
+      {
+        "name": "share-update",
+        "method": "PUT",
+        "path": "/api/v1/shares/{{shareId}}",
+        "auth": "bearer-var:accessToken",
+        "json": {"description": "Updated public sample", "isDownloadable": true},
+        "normalize": {"maskJsonPaths": ["$.id", "$.shareUrl", "$.owner.createdAt", "$.owner.updatedAt", "$.createdAt", "$.expiresAt", "$.lastVisitedAt"], "maskBaseUrl": true}
+      },
+      {
+        "name": "share-delete",
+        "method": "DELETE",
+        "path": "/api/v1/shares/{{shareId}}",
+        "auth": "bearer-var:accessToken",
+        "normalize": {}
+      }
+    ],
+    "notes": "Compiled Phase 7 request, share, playback-setting, and equalizer lifecycle evidence."
+  }
+]

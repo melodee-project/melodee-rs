@@ -1,0 +1,30 @@
+[
+  {
+    "schemaVersion": 2,
+    "name": "podcasts-surface",
+    "surface": "melodee-api-v1",
+    "flow": [
+      {"name":"login","method":"POST","path":"/api/v1/auth/authenticate","auth":"none","json":{"userName":"phase0-fixture","password":"Mel0deeR0cks!"},"capture":{"accessToken":"$.token"},"secretCapture":["accessToken"],"normalize":{"maskJsonPaths":["$.token","$.expiresAt","$.refreshToken","$.refreshTokenExpiresAt","$.user.createdAt","$.user.updatedAt","$.serverVersion"],"maskBaseUrl":true,"structureChecks":{"$.token":"jwt"}}},
+      {"name":"channels-list","method":"GET","path":"/api/v1/podcasts/channels?page=1&pageSize=50","auth":"bearer-var:accessToken","normalize":{"maskBaseUrl":true}},
+      {"name":"channels-create-invalid","method":"POST","path":"/api/v1/podcasts/channels","auth":"bearer-var:accessToken","json":{"url":"not-a-feed-url"},"allowFailure":true,"normalize":{"maskJsonPaths":["$.correlationId"]}},
+      {"name":"channels-update-missing","method":"PATCH","path":"/api/v1/podcasts/channels/999999","auth":"bearer-var:accessToken","json":{"autoDownloadEnabled":true},"allowFailure":true,"normalize":{"maskJsonPaths":["$.correlationId"]}},
+      {"name":"channels-delete-missing","method":"DELETE","path":"/api/v1/podcasts/channels/999999?softDelete=true","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskJsonPaths":["$.correlationId"]}},
+      {"name":"channel-episodes-missing","method":"GET","path":"/api/v1/podcasts/channels/999999/episodes?page=1&pageSize=50","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskJsonPaths":["$.correlationId"]}},
+      {"name":"channel-refresh-missing","method":"POST","path":"/api/v1/podcasts/channels/999999/refresh","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskJsonPaths":["$.correlationId"]}},
+      {"name":"episode-search-empty","method":"GET","path":"/api/v1/podcasts/episodes/search?query=phase7-no-match&page=1&pageSize=50","auth":"bearer-var:accessToken","normalize":{"maskBaseUrl":true}},
+      {"name":"episode-delete-missing","method":"DELETE","path":"/api/v1/podcasts/episodes/999999","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskJsonPaths":["$.correlationId"]}},
+      {"name":"episode-download-missing","method":"POST","path":"/api/v1/podcasts/episodes/999999/download","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskJsonPaths":["$.correlationId"]}},
+      {"name":"episode-play-missing","method":"POST","path":"/api/v1/podcasts/episodes/999999/play?secondsPlayed=10","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskJsonPaths":["$.correlationId"]}},
+      {"name":"bookmark-get-missing","method":"GET","path":"/api/v1/podcasts/episodes/999999/bookmark","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskJsonPaths":["$.correlationId"]}},
+      {"name":"bookmark-save-missing","method":"PUT","path":"/api/v1/podcasts/episodes/999999/bookmark","auth":"bearer-var:accessToken","json":{"positionSeconds":10,"comment":"resume"},"allowFailure":true,"normalize":{"maskJsonPaths":["$.correlationId"]}},
+      {"name":"bookmark-delete-missing","method":"DELETE","path":"/api/v1/podcasts/episodes/999999/bookmark","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskJsonPaths":["$.correlationId"]}},
+      {"name":"history-missing","method":"GET","path":"/api/v1/podcasts/episodes/999999/history?limit=50&offset=0","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskJsonPaths":["$.correlationId"]}},
+      {"name":"opml-export","method":"GET","path":"/api/v1/podcasts/opml/export","auth":"bearer-var:accessToken","normalize":{}},
+      {"name":"opml-import-empty","method":"POST","path":"/api/v1/podcasts/opml/import","auth":"bearer-var:accessToken","headers":{"Content-Type":"application/xml"},"body":"<opml version=\"2.0\"><body></body></opml>","allowFailure":true,"normalize":{"maskJsonPaths":["$.correlationId"]}},
+      {"name":"discover-search","method":"GET","path":"/api/v1/podcasts/discover/search?query=phase7-no-match&limit=1&country=US","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true,"maskJsonPaths":["$.correlationId"]}},
+      {"name":"discover-trending","method":"GET","path":"/api/v1/podcasts/discover/trending?limit=1&country=US","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true,"maskJsonPaths":["$.correlationId"]}},
+      {"name":"discover-lookup-missing","method":"GET","path":"/api/v1/podcasts/discover/lookup/0","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true,"maskJsonPaths":["$.correlationId"]}}
+    ],
+    "notes":"All 19 compiled native-v1 podcast routes. Missing-resource cases pin legacy status/error behavior while Rust success-path state transitions are covered by PostgreSQL/HTTP tests."
+  }
+]

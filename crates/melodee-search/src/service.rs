@@ -52,6 +52,32 @@ pub async fn query_plan_active(
     .map_err(|error| SearchError::Retryable(format!("search task failed: {error}")))?
 }
 
+/// Query the active projection within one entity kind and return the total
+/// count plus a deterministic page.
+pub async fn query_active_kind(
+    config: &SearchConfig,
+    pool: &PgPool,
+    input: &str,
+    kind: &str,
+    limit: usize,
+    offset: usize,
+) -> Result<(usize, Vec<SearchHit>), SearchError> {
+    if limit > config.max_limit {
+        return Err(SearchError::InvalidQuery(format!(
+            "limit exceeds configured maximum {}",
+            config.max_limit
+        )));
+    }
+    let plan = parse_and_plan_with_bounds(input, &config.mql_bounds())?;
+    let path = active_generation_path(config, pool).await?;
+    let kind = kind.to_string();
+    tokio::task::spawn_blocking(move || {
+        SearchStore::open_readonly(&path)?.search_kind(&plan, &kind, limit, offset)
+    })
+    .await
+    .map_err(|error| SearchError::Retryable(format!("search task failed: {error}")))?
+}
+
 pub async fn autocomplete_active(
     config: &SearchConfig,
     pool: &PgPool,

@@ -1,0 +1,34 @@
+{
+  "name": "auth-google-disabled",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "POST",
+    "url": "{melodee-origin}/api/v1/auth/google",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Content-Type": "application/json"
+    },
+    "jsonTemplate": {
+      "idToken": "<redacted>"
+    },
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "auth-google-disabled.json",
+    "sha256": "5f11914903c00f53f241f935c4c07a77efcf2d8d603e3b0730046b0de3709876",
+    "bytes": 114
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.correlationId"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

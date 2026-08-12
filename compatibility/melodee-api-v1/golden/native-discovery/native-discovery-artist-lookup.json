@@ -1,0 +1,72 @@
+{
+  "candidates": [
+    {
+      "providerDisplayName": "ITunes Search Engine",
+      "providerId": "36E4DB7A-18BB-4A7D-86F7-A3C653A21611",
+      "name": "Aurora Fields",
+      "sortName": "AURORAFIELDS",
+      "imageUrl": null,
+      "thumbnailUrl": null,
+      "musicBrainzId": null,
+      "spotifyId": null,
+      "discogsId": null,
+      "amgId": null,
+      "wikiDataId": null,
+      "itunesId": "1825315582",
+      "lastFmId": null
+    },
+    {
+      "providerDisplayName": "ITunes Search Engine",
+      "providerId": "36E4DB7A-18BB-4A7D-86F7-A3C653A21611",
+      "name": "Aurora Shields",
+      "sortName": "AURORASHIELDS",
+      "imageUrl": null,
+      "thumbnailUrl": null,
+      "musicBrainzId": null,
+      "spotifyId": null,
+      "discogsId": null,
+      "amgId": null,
+      "wikiDataId": null,
+      "itunesId": "1375812436",
+      "lastFmId": null
+    }
+  ],
+  "hasPartialFailures": false,
+  "providers": [
+    {
+      "id": "018A798D-7B68-4F3E-80CD-1BAF03998C0B",
+      "displayName": "Melodee Database",
+      "isEnabled": true
+    },
+    {
+      "id": "018A798D-7B68-4F3E-80CD-1BAF03998C0B",
+      "displayName": "Music Brainz Database",
+      "isEnabled": true
+    },
+    {
+      "id": "BBAC49B7-0EDF-4D31-8A54-C9126509C2CE",
+      "displayName": "Spotify Service",
+      "isEnabled": false
+    },
+    {
+      "id": "36E4DB7A-18BB-4A7D-86F7-A3C653A21611",
+      "displayName": "ITunes Search Engine",
+      "isEnabled": true
+    },
+    {
+      "id": "3E43D998-2E9C-45B0-8128-EE6F0A41419E",
+      "displayName": "Last FM Search Engine",
+      "isEnabled": true
+    },
+    {
+      "id": "5A8D2E5B-3C9D-4E7F-9B7A-A1B2C3D4E5F6",
+      "displayName": "Discogs Search Engine",
+      "isEnabled": false
+    },
+    {
+      "id": "7B9C8E1F-2A3D-4E5B-8C7D-9E0F1A2B3C4D",
+      "displayName": "WikiData Search Engine",
+      "isEnabled": false
+    }
+  ]
+}

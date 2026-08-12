@@ -1,0 +1,5 @@
+{
+  "code": "BAD_REQUEST",
+  "message": "Jukebox is not enabled",
+  "correlationId": "<volatile>"
+}

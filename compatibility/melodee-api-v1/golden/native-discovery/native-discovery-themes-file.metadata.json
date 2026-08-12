@@ -1,0 +1,33 @@
+{
+  "name": "native-discovery/themes-file",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/api/v1/themes/phase7-missing/file/theme.css",
+    "auth": "none",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/problem+json; charset=utf-8",
+      "cache-control": "public,max-age=31536000"
+    },
+    "bodyFile": "native-discovery-themes-file.json",
+    "sha256": "6216d13f31a5f9b582f424b78a4f0f4454c547d38b203aa4a91d3dc29a157769",
+    "bytes": 180
+  },
+  "normalize": {
+    "maskBaseUrl": true,
+    "maskJsonPaths": [
+      "$.correlationId"
+    ]
+  },
+  "structureChecks": null,
+  "error": "HTTP Error 404: Not Found",
+  "allowFailure": true
+}

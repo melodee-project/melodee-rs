@@ -1,0 +1,136 @@
+{
+  "period": "week",
+  "totalPlayTime": 0,
+  "totalTracksPlayed": 0,
+  "topArtists": [],
+  "topAlbums": [],
+  "topGenres": [],
+  "listeningByTimeOfDay": [
+    {
+      "hour": 0,
+      "playTime": 0
+    },
+    {
+      "hour": 1,
+      "playTime": 0
+    },
+    {
+      "hour": 2,
+      "playTime": 0
+    },
+    {
+      "hour": 3,
+      "playTime": 0
+    },
+    {
+      "hour": 4,
+      "playTime": 0
+    },
+    {
+      "hour": 5,
+      "playTime": 0
+    },
+    {
+      "hour": 6,
+      "playTime": 0
+    },
+    {
+      "hour": 7,
+      "playTime": 0
+    },
+    {
+      "hour": 8,
+      "playTime": 0
+    },
+    {
+      "hour": 9,
+      "playTime": 0
+    },
+    {
+      "hour": 10,
+      "playTime": 0
+    },
+    {
+      "hour": 11,
+      "playTime": 0
+    },
+    {
+      "hour": 12,
+      "playTime": 0
+    },
+    {
+      "hour": 13,
+      "playTime": 0
+    },
+    {
+      "hour": 14,
+      "playTime": 0
+    },
+    {
+      "hour": 15,
+      "playTime": 0
+    },
+    {
+      "hour": 16,
+      "playTime": 0
+    },
+    {
+      "hour": 17,
+      "playTime": 0
+    },
+    {
+      "hour": 18,
+      "playTime": 0
+    },
+    {
+      "hour": 19,
+      "playTime": 0
+    },
+    {
+      "hour": 20,
+      "playTime": 0
+    },
+    {
+      "hour": 21,
+      "playTime": 0
+    },
+    {
+      "hour": 22,
+      "playTime": 0
+    },
+    {
+      "hour": 23,
+      "playTime": 0
+    }
+  ],
+  "listeningByDayOfWeek": [
+    {
+      "day": "monday",
+      "playTime": 0
+    },
+    {
+      "day": "tuesday",
+      "playTime": 0
+    },
+    {
+      "day": "wednesday",
+      "playTime": 0
+    },
+    {
+      "day": "thursday",
+      "playTime": 0
+    },
+    {
+      "day": "friday",
+      "playTime": 0
+    },
+    {
+      "day": "saturday",
+      "playTime": 0
+    },
+    {
+      "day": "sunday",
+      "playTime": 0
+    }
+  ]
+}

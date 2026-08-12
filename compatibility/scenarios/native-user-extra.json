@@ -1,0 +1,52 @@
+[
+  {
+    "schemaVersion": 2,
+    "name": "native-user-extra",
+    "surface": "melodee-api-v1",
+    "notes": "Phase 7 capture for previously uncaptured native-v1 user lists, statistics, genre state, and adjacent search/song routes.",
+    "flow": [
+      {
+        "name": "login", "method": "POST", "path": "/api/v1/auth/authenticate", "auth": "none",
+        "json": {"userName": "phase0-fixture", "password": "Mel0deeR0cks!"},
+        "capture": {"accessToken": "$.token"}, "secretCapture": ["accessToken"],
+        "normalize": {"maskJsonPaths": ["$.token", "$.expiresAt", "$.refreshToken", "$.refreshTokenExpiresAt", "$.user.createdAt", "$.user.updatedAt", "$.serverVersion"], "maskBaseUrl": true, "structureChecks": {"$.token": "jwt"}}
+      },
+      {"name":"admin-users","method":"GET","path":"/api/v1/admin/users","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{}},
+      {"name":"artist-rate","method":"POST","path":"/api/v1/artists/setrating/813c11e0-61cd-5204-ae0f-ce68386eacec/4","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{}},
+      {"name":"album-hate","method":"POST","path":"/api/v1/albums/hated/69d97699-74c5-5403-878f-87f42d9d9fbb/true","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{}},
+      {"name":"genres-for-id","method":"GET","path":"/api/v1/genres?page=1&limit=50","auth":"bearer-var:accessToken","capture":{"genreId":"$.genres[0].id"},"normalize":{"maskBaseUrl":true}},
+      {"name":"genre-songs","method":"GET","path":"/api/v1/genres/{{genreId}}/songs?page=1&limit=50","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true,"maskUrlAuthTokenPaths":["$.songs[*].streamUrl"]}},
+      {"name":"genre-star","method":"POST","path":"/api/v1/genres/starred/{{genreId}}/true","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{}},
+      {"name":"genres-starred","method":"GET","path":"/api/v1/genres/starred","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{}},
+      {"name":"genre-hate","method":"POST","path":"/api/v1/genres/hated/{{genreId}}/true","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{}},
+      {"name":"genres-hated","method":"GET","path":"/api/v1/genres/hated","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{}},
+      {"name":"search-suggest","method":"GET","path":"/api/v1/search/suggest?q=Ne&limit=5","auth":"bearer-var:accessToken","capture":{"similarId":"$.songs[0].id","similarType":"$.songs[0].type"},"allowFailure":true,"normalize":{"maskBaseUrl":true}},
+      {"name":"search-advanced","method":"POST","path":"/api/v1/search/advanced","auth":"bearer-var:accessToken","json":{"query":"Neon","types":["song"],"page":1,"limit":10},"allowFailure":true,"normalize":{"maskBaseUrl":true,"maskUrlAuthTokenPaths":["$.results.songs[*].streamUrl"]}},
+      {"name":"search-similar","method":"GET","path":"/api/v1/search/similar/{{similarId}}/{{similarType}}?limit=10","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true}},
+      {"name":"songs-recent","method":"GET","path":"/api/v1/songs/recent?limit=10","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true,"maskUrlAuthTokenPaths":["$.data[*].streamUrl"]}},
+      {"name":"songs-random","method":"GET","path":"/api/v1/songs/random?count=5","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true,"maskUrlAuthTokenPaths":["$[*].streamUrl"]}},
+      {"name":"song-lyrics","method":"GET","path":"/api/v1/songs/ea26fc59-a545-51c2-94c4-702e1f97b80a/lyrics","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskJsonPaths":["$.correlationId"]}},
+      {"name":"user-artists-liked","method":"GET","path":"/api/v1/user/artists/liked?page=1&limit=50","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true}},
+      {"name":"user-artists-disliked","method":"GET","path":"/api/v1/user/artists/disliked?page=1&limit=50","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true}},
+      {"name":"user-artists-rated","method":"GET","path":"/api/v1/user/artists/rated?page=1&limit=50","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true}},
+      {"name":"user-artists-top-rated","method":"GET","path":"/api/v1/user/artists/top-rated?page=1&limit=50","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true}},
+      {"name":"user-artists-recent","method":"GET","path":"/api/v1/user/artists/recently-played?page=1&limit=50","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true}},
+      {"name":"user-albums-liked","method":"GET","path":"/api/v1/user/albums/liked?page=1&limit=50","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true}},
+      {"name":"user-albums-disliked","method":"GET","path":"/api/v1/user/albums/disliked?page=1&limit=50","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true}},
+      {"name":"user-albums-rated","method":"GET","path":"/api/v1/user/albums/rated?page=1&limit=50","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true}},
+      {"name":"user-albums-top-rated","method":"GET","path":"/api/v1/user/albums/top-rated?page=1&limit=50","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true}},
+      {"name":"user-albums-recent","method":"GET","path":"/api/v1/user/albums/recently-played?page=1&limit=50","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true}},
+      {"name":"user-songs-liked","method":"GET","path":"/api/v1/user/songs/liked?page=1&limit=50","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true,"maskUrlAuthTokenPaths":["$.data[*].streamUrl"]}},
+      {"name":"user-songs-disliked","method":"GET","path":"/api/v1/user/songs/disliked?page=1&limit=50","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true,"maskUrlAuthTokenPaths":["$.data[*].streamUrl"]}},
+      {"name":"user-songs-rated","method":"GET","path":"/api/v1/user/songs/rated?page=1&limit=50","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true,"maskUrlAuthTokenPaths":["$.data[*].streamUrl"]}},
+      {"name":"user-songs-top-rated","method":"GET","path":"/api/v1/user/songs/top-rated?page=1&limit=50","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true,"maskUrlAuthTokenPaths":["$.data[*].streamUrl"]}},
+      {"name":"user-songs-recent","method":"GET","path":"/api/v1/user/songs/recently-played?page=1&limit=50","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true,"maskUrlAuthTokenPaths":["$.data[*].streamUrl"]}},
+      {"name":"user-last-played","method":"GET","path":"/api/v1/user/last-played?page=1&limit=50","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true,"maskUrlAuthTokenPaths":["$.data[*].streamUrl"]}},
+      {"name":"user-stats","method":"GET","path":"/api/v1/user/stats?days=30","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{}},
+      {"name":"user-stats-top-songs","method":"GET","path":"/api/v1/user/stats/top-songs?days=30&limit=10","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{}},
+      {"name":"user-stats-top-genres","method":"GET","path":"/api/v1/user/stats/top-genres?days=30&limit=10","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{}},
+      {"name":"user-stats-per-day","method":"GET","path":"/api/v1/user/stats/plays-per-day?days=30","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{}},
+      {"name":"user-stats-history","method":"GET","path":"/api/v1/user/stats/history?limit=10","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{}}
+    ]
+  }
+]

@@ -5,7 +5,7 @@
 use std::process::Command;
 
 #[test]
-fn plan_reports_phase_six_complete_and_phase_seven_active() {
+fn plan_reports_phase_seven_complete_and_phase_eight_active() {
     let output = Command::new(env!("CARGO_BIN_EXE_melodee-cli"))
         .arg("plan")
         .output()
@@ -17,8 +17,9 @@ fn plan_reports_phase_six_complete_and_phase_seven_active() {
     assert!(stdout.contains("Phase 4: complete — see design/evidence/phase-4/PHASE-4-REPORT.md"));
     assert!(stdout.contains("Phase 5: complete — see design/evidence/phase-5/PHASE-5-REPORT.md"));
     assert!(stdout.contains("Phase 6: complete — see design/evidence/phase-6/PHASE-6-REPORT.md"));
-    assert!(stdout.contains("Phase 7: active — see IMPLEMENTATION.md"));
-    assert!(!stdout.contains("Phase 6: active"));
+    assert!(stdout.contains("Phase 7: complete — see design/evidence/phase-7/PHASE-7-REPORT.md"));
+    assert!(stdout.contains("Phase 8: active — see IMPLEMENTATION.md"));
+    assert!(!stdout.contains("Phase 7: active"));
     assert!(!stdout.contains("Phase 5: active"));
     assert!(!stdout.contains("3.3 active"));
     assert!(!stdout.contains("3.4 planned"));

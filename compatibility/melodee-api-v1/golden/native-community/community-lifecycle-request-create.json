@@ -1,0 +1,28 @@
+{
+  "apiKey": "<volatile>",
+  "category": "General",
+  "status": "Pending",
+  "description": "Phase 7 compatibility request",
+  "artistName": null,
+  "targetArtistApiKey": null,
+  "albumTitle": null,
+  "targetAlbumApiKey": null,
+  "songTitle": null,
+  "targetSongApiKey": null,
+  "releaseYear": null,
+  "externalUrl": null,
+  "notes": null,
+  "createdAt": "<volatile>",
+  "updatedAt": "<volatile>",
+  "lastActivityAt": "<volatile>",
+  "lastActivityType": "UserComment",
+  "commentCount": 0,
+  "createdByUser": {
+    "apiKey": "<volatile>",
+    "userName": "phase0-fixture"
+  },
+  "lastActivityUser": {
+    "apiKey": "<volatile>",
+    "userName": "phase0-fixture"
+  }
+}

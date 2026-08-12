@@ -1,0 +1,68 @@
+[
+  {
+    "schemaVersion": 2,
+    "name": "native-user-provider-link-disabled",
+    "surface": "melodee-api-v1",
+    "flow": [
+      {
+        "name": "login",
+        "method": "POST",
+        "path": "/api/v1/auth/authenticate",
+        "auth": "none",
+        "json": {"userName": "phase0-fixture", "password": "Mel0deeR0cks!"},
+        "capture": {"accessToken": "$.token"},
+        "secretCapture": ["accessToken"],
+        "normalize": {
+          "maskJsonPaths": ["$.token", "$.expiresAt", "$.refreshToken", "$.refreshTokenExpiresAt", "$.user.createdAt", "$.user.updatedAt", "$.serverVersion"],
+          "maskBaseUrl": true,
+          "structureChecks": {"$.token": "jwt", "$.refreshToken": "opaqueToken"}
+        }
+      },
+      {
+        "name": "link-google-disabled",
+        "method": "POST",
+        "path": "/api/v1/user/me/link/google",
+        "auth": "bearer-var:accessToken",
+        "json": {"idToken": "phase0-disabled-google-token"},
+        "expectStatus": 400,
+        "normalize": {"maskJsonPaths": ["$.correlationId"]}
+      }
+    ]
+  },
+  {
+    "schemaVersion": 2,
+    "name": "native-user-provider-state",
+    "surface": "melodee-api-v1",
+    "flow": [
+      {
+        "name": "login",
+        "method": "POST",
+        "path": "/api/v1/auth/authenticate",
+        "auth": "none",
+        "json": {"userName": "phase0-fixture", "password": "Mel0deeR0cks!"},
+        "capture": {"accessToken": "$.token"},
+        "secretCapture": ["accessToken"],
+        "normalize": {
+          "maskJsonPaths": ["$.token", "$.expiresAt", "$.refreshToken", "$.refreshTokenExpiresAt", "$.user.createdAt", "$.user.updatedAt", "$.serverVersion"],
+          "maskBaseUrl": true,
+          "structureChecks": {"$.token": "jwt", "$.refreshToken": "opaqueToken"}
+        }
+      },
+      {
+        "name": "list-empty",
+        "method": "GET",
+        "path": "/api/v1/user/me/linked-providers",
+        "auth": "bearer-var:accessToken",
+        "normalize": {}
+      },
+      {
+        "name": "unlink-missing-google",
+        "method": "DELETE",
+        "path": "/api/v1/user/me/link/google",
+        "auth": "bearer-var:accessToken",
+        "expectStatus": 404,
+        "normalize": {"maskJsonPaths": ["$.correlationId"]}
+      }
+    ]
+  }
+]

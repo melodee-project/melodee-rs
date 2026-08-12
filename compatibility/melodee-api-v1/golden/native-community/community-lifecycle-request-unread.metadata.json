@@ -1,0 +1,34 @@
+{
+  "name": "community-lifecycle/request-unread",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/api/v1/requests/activity/unread?page=1&pageSize=10",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "community-lifecycle-request-unread.json",
+    "sha256": "bdda02bca5b6081988db92b62280178f1602011f0456d5a3dee37a4c66a4115d",
+    "bytes": 165
+  },
+  "normalize": {
+    "maskJsonPaths": [
+      "$.data[*].apiKey",
+      "$.data[*].lastActivityAt",
+      "$.data[*].lastActivityUser.apiKey"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

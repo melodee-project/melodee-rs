@@ -1,0 +1,3919 @@
+{
+  "schemaVersion": 1,
+  "surface": "melodee-api-v1",
+  "legacyBaselineCommit": "4028b58dbd3302ed431e2c5b32d9dde5634db218",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/users",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-user-extra/admin-users"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact route and the focused HTTP test preserves the promoted frozen-oracle status, DTO, paging, public-ID, and user-state behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/albums",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-003",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "catalog/albums-list"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact method/path and preserves the captured public-ID, paging, DTO, and annotation behavior."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/albums/hated/{}/{}",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0127-native-public-id-migration-and-id-preserving-schema-for-api-v1.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-USER-001",
+        "PRD-USER-002"
+      ],
+      "legacyEvidence": [
+        "native-user-extra/album-hate"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact route and the focused HTTP test preserves the promoted frozen-oracle status, DTO, paging, public-ID, and user-state behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/albums/recent",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-003",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "catalog/albums-recent"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact method/path and preserves the captured public-ID, paging, DTO, and annotation behavior."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/albums/setrating/{}/{}",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-USER-002"
+      ],
+      "legacyEvidence": [
+        "catalog-star-rating/rate-album"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact method/path and checks its public-ID and wire-shape behavior against the attached frozen legacy scenario."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/albums/starred/{}/{}",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-003",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "catalog-star-rating/star-album-on"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact method/path and preserves the captured public-ID, paging, DTO, and annotation behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/albums/{}",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-003",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "catalog/album-detail"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact method/path and checks its public-ID and wire-shape behavior against the attached frozen legacy scenario."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/albums/{}/songs",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-003",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "catalog/album-songs"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact method/path and preserves the captured public-ID, paging, DTO, and annotation behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/analytics/listening",
+      "status": "approved-compatibility-normalization",
+      "authority": "design/adr/ADR-0128-capture-required-legacy-bug-fixes-in-native-api-v1.md",
+      "requirements": [
+        "PRD-DISCOVERY-003",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-discovery/analytics-listening"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_discovery_api.rs::native_discovery_routes_use_durable_bounded_facts_and_preserve_wire_shapes"
+      ],
+      "rationale": "The PostgreSQL-backed native adapter is exercised through the exact HTTP route; the promoted frozen capture preserves legacy status/auth and the focused test proves durable bounded positive behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/analytics/top/{}",
+      "status": "approved-compatibility-normalization",
+      "authority": "design/adr/ADR-0128-capture-required-legacy-bug-fixes-in-native-api-v1.md",
+      "requirements": [
+        "PRD-DISCOVERY-003",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-discovery/analytics-top"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_discovery_api.rs::native_discovery_routes_use_durable_bounded_facts_and_preserve_wire_shapes"
+      ],
+      "rationale": "The PostgreSQL-backed native adapter is exercised through the exact HTTP route; the promoted frozen capture preserves legacy status/auth and the focused test proves durable bounded positive behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/artists",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-003",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "catalog/artists-list"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact method/path and checks its public-ID and wire-shape behavior against the attached frozen legacy scenario."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/artists/hated/{}/{}",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-003",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "catalog-star-rating/hate-artist-on"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact method/path and preserves the captured public-ID, paging, DTO, and annotation behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/artists/recent",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-003",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "catalog/artists-recent"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact method/path and preserves the captured public-ID, paging, DTO, and annotation behavior."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/artists/setrating/{}/{}",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0127-native-public-id-migration-and-id-preserving-schema-for-api-v1.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-USER-001",
+        "PRD-USER-002"
+      ],
+      "legacyEvidence": [
+        "native-user-extra/artist-rate"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact route and the focused HTTP test preserves the promoted frozen-oracle status, DTO, paging, public-ID, and user-state behavior."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/artists/starred/{}/{}",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-USER-002"
+      ],
+      "legacyEvidence": [
+        "catalog-star-rating/star-artist-on"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact method/path and checks its public-ID and wire-shape behavior against the attached frozen legacy scenario."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/artists/{}",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-003",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "catalog/artist-detail"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact method/path and preserves the captured public-ID, paging, DTO, and annotation behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/artists/{}/albums",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-003",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "catalog/artist-albums"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact method/path and preserves the captured public-ID, paging, DTO, and annotation behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/artists/{}/songs",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-003",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "catalog/artist-songs"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact method/path and preserves the captured public-ID, paging, DTO, and annotation behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/audio/bpm",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-DISCOVERY-002",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-discovery/audio-bpm"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_discovery_api.rs::native_discovery_routes_use_durable_bounded_facts_and_preserve_wire_shapes"
+      ],
+      "rationale": "The PostgreSQL-backed native adapter is exercised through the exact HTTP route; the promoted frozen capture preserves legacy status/auth and the focused test proves durable bounded positive behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/audio/features/{}",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-DISCOVERY-002",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-discovery/audio-features"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_discovery_api.rs::native_discovery_routes_use_durable_bounded_facts_and_preserve_wire_shapes"
+      ],
+      "rationale": "The PostgreSQL-backed native adapter is exercised through the exact HTTP route; the promoted frozen capture preserves legacy status/auth and the focused test proves durable bounded positive behavior."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/authenticate",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0124-native-authentication-session-and-refresh-token-compatibility.md",
+      "requirements": [
+        "PRD-AUTH-001",
+        "PRD-AUTH-002",
+        "PRD-AUTH-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "auth-login-success",
+        "auth-login-invalid-password",
+        "auth-login-unknown-user"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_auth_api.rs::login_unknown_and_wrong_password_share_the_exact_public_error",
+        "apps/melodee-server/tests/native_auth_api.rs::login_rotation_replay_and_logout_match_the_captured_lifecycle"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/logout",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0124-native-authentication-session-and-refresh-token-compatibility.md",
+      "requirements": [
+        "PRD-AUTH-002",
+        "PRD-AUTH-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "auth-refresh-rotation/logout"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_auth_api.rs::login_rotation_replay_and_logout_match_the_captured_lifecycle"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/refresh",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0124-native-authentication-session-and-refresh-token-compatibility.md",
+      "requirements": [
+        "PRD-AUTH-002",
+        "PRD-AUTH-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "auth-refresh-legacy-jwt-endpoint/refresh-with-valid-jwt",
+        "auth-refresh-legacy-jwt-endpoint/refresh-with-expired-jwt"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_auth_api.rs::login_rotation_replay_and_logout_match_the_captured_lifecycle",
+        "apps/melodee-server/tests/native_auth_api.rs::malformed_and_expired_access_tokens_fail_with_an_empty_401"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/refresh-token",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0124-native-authentication-session-and-refresh-token-compatibility.md",
+      "requirements": [
+        "PRD-AUTH-002",
+        "PRD-AUTH-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "auth-refresh-invalid-token",
+        "auth-refresh-expired-token",
+        "auth-refresh-rotation/rotate-first",
+        "auth-refresh-rotation/replay-rotated-token",
+        "auth-refresh-rotation/rotate-after-family-revoke",
+        "auth-refresh-rotation/refresh-after-logout"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_auth_api.rs::login_rotation_replay_and_logout_match_the_captured_lifecycle",
+        "apps/melodee-server/tests/native_auth_api.rs::invalid_and_expired_refresh_tokens_have_the_captured_distinct_messages"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/revoke",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0124-native-authentication-session-and-refresh-token-compatibility.md",
+      "requirements": [
+        "PRD-AUTH-002",
+        "PRD-AUTH-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "auth-revoke-specific-token/revoke"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_auth_api.rs::login_rotation_replay_and_logout_match_the_captured_lifecycle"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/charts",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-DISCOVERY-001",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-discovery/charts-list"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_discovery_api.rs::native_discovery_routes_use_durable_bounded_facts_and_preserve_wire_shapes",
+        "crates/melodee-persistence/tests/native_discovery_phase7.rs::bounded_chart_import_is_atomic_and_links_only_unique_catalog_identity"
+      ],
+      "rationale": "The PostgreSQL-backed native adapter is exercised through the exact HTTP route; the promoted frozen capture preserves legacy status/auth and the focused test proves durable bounded positive behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/charts/{}",
+      "status": "approved-compatibility-normalization",
+      "authority": "design/adr/ADR-0128-capture-required-legacy-bug-fixes-in-native-api-v1.md",
+      "requirements": [
+        "PRD-DISCOVERY-001",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-discovery/charts-detail"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_discovery_api.rs::native_discovery_routes_use_durable_bounded_facts_and_preserve_wire_shapes",
+        "crates/melodee-persistence/tests/native_discovery_phase7.rs::bounded_chart_import_is_atomic_and_links_only_unique_catalog_identity"
+      ],
+      "rationale": "The PostgreSQL-backed native adapter is exercised through the exact HTTP route; the promoted frozen capture preserves legacy status/auth and the focused test proves durable bounded positive behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/charts/{}/playlist",
+      "status": "approved-compatibility-normalization",
+      "authority": "design/adr/ADR-0128-capture-required-legacy-bug-fixes-in-native-api-v1.md",
+      "requirements": [
+        "PRD-DISCOVERY-001",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-discovery/charts-playlist"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_discovery_api.rs::native_discovery_routes_use_durable_bounded_facts_and_preserve_wire_shapes",
+        "crates/melodee-persistence/tests/native_discovery_phase7.rs::bounded_chart_import_is_atomic_and_links_only_unique_catalog_identity"
+      ],
+      "rationale": "ADR-0128 item 9 authorizes the captured image-URL correction. The exact HTTP regression also proves deterministic Track expansion and a fail-closed 5,000-Track response bound."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/endpoints",
+      "status": "approved-compatibility-normalization",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-PARTY-003",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-discovery/endpoints-list"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_endpoints_api.rs::endpoint_registry_enforces_visibility_session_roles_ownership_and_atomic_attachment"
+      ],
+      "rationale": "The PostgreSQL-backed native adapter is exercised through the exact HTTP route; the promoted frozen capture preserves legacy status/auth and the focused test proves durable bounded positive behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/endpoints/for-session/{}",
+      "status": "approved-compatibility-normalization",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-PARTY-003",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-discovery/endpoints-for-session"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_endpoints_api.rs::endpoint_registry_enforces_visibility_session_roles_ownership_and_atomic_attachment"
+      ],
+      "rationale": "The PostgreSQL-backed native adapter is exercised through the exact HTTP route; the promoted frozen capture preserves legacy status/auth and the focused test proves durable bounded positive behavior."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/endpoints/{}/attach",
+      "status": "approved-compatibility-normalization",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-PARTY-003",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-discovery/endpoints-attach"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_endpoints_api.rs::endpoint_registry_enforces_visibility_session_roles_ownership_and_atomic_attachment"
+      ],
+      "rationale": "The PostgreSQL-backed native adapter is exercised through the exact HTTP route; the promoted frozen capture preserves legacy status/auth and the focused test proves durable bounded positive behavior."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/endpoints/{}/detach",
+      "status": "approved-compatibility-normalization",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-PARTY-003",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-discovery/endpoints-detach"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_endpoints_api.rs::endpoint_registry_enforces_visibility_session_roles_ownership_and_atomic_attachment"
+      ],
+      "rationale": "The PostgreSQL-backed native adapter is exercised through the exact HTTP route; the promoted frozen capture preserves legacy status/auth and the focused test proves durable bounded positive behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/equalizer/presets",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-001",
+        "PRD-USER-003"
+      ],
+      "legacyEvidence": [
+        "community-lifecycle/equalizer-list-empty"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_community_api.rs::native_community_routes_are_owner_fenced_bounded_and_replay_safe",
+        "crates/melodee-persistence/tests/native_community_phase7.rs::community_schema_preserves_ids_parent_scope_and_replay_safe_preferences"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/equalizer/presets",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-001",
+        "PRD-USER-003"
+      ],
+      "legacyEvidence": [
+        "community-lifecycle/equalizer-upsert"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_community_api.rs::native_community_routes_are_owner_fenced_bounded_and_replay_safe",
+        "crates/melodee-persistence/tests/native_community_phase7.rs::community_schema_preserves_ids_parent_scope_and_replay_safe_preferences"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/equalizer/presets/{}",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-001",
+        "PRD-USER-003"
+      ],
+      "legacyEvidence": [
+        "community-lifecycle/equalizer-delete"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_community_api.rs::native_community_routes_are_owner_fenced_bounded_and_replay_safe",
+        "crates/melodee-persistence/tests/native_community_phase7.rs::community_schema_preserves_ids_parent_scope_and_replay_safe_preferences"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/genres",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "catalog/genres-list"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact method/path and checks its public-ID and wire-shape behavior against the attached frozen legacy scenario."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/genres/hated",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0127-native-public-id-migration-and-id-preserving-schema-for-api-v1.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-USER-001",
+        "PRD-USER-002"
+      ],
+      "legacyEvidence": [
+        "native-user-extra/genres-hated"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact route and the focused HTTP test preserves the promoted frozen-oracle status, DTO, paging, public-ID, and user-state behavior."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/genres/hated/{}/{}",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0127-native-public-id-migration-and-id-preserving-schema-for-api-v1.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-USER-001",
+        "PRD-USER-002"
+      ],
+      "legacyEvidence": [
+        "native-user-extra/genre-hate"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact route and the focused HTTP test preserves the promoted frozen-oracle status, DTO, paging, public-ID, and user-state behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/genres/starred",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0127-native-public-id-migration-and-id-preserving-schema-for-api-v1.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-USER-001",
+        "PRD-USER-002"
+      ],
+      "legacyEvidence": [
+        "native-user-extra/genres-starred"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact route and the focused HTTP test preserves the promoted frozen-oracle status, DTO, paging, public-ID, and user-state behavior."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/genres/starred/{}/{}",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0127-native-public-id-migration-and-id-preserving-schema-for-api-v1.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-USER-001",
+        "PRD-USER-002"
+      ],
+      "legacyEvidence": [
+        "native-user-extra/genre-star"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact route and the focused HTTP test preserves the promoted frozen-oracle status, DTO, paging, public-ID, and user-state behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/genres/{}/songs",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-user-extra/genre-songs"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact route and the focused HTTP test preserves the promoted frozen-oracle status, DTO, paging, public-ID, and user-state behavior."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-endpoints/register",
+      "status": "preserved-intentional-legacy-absence",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-excluded/party-endpoints-register"
+      ],
+      "rustTests": [
+        "apps/melodee-server/src/native/mod.rs::all_excluded_queue_and_party_paths_preserve_empty_404"
+      ],
+      "rationale": "The legacy native-v1 controller was excluded from its build; Rust preserves the exact empty 404 for this method/path."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/party-endpoints/{}",
+      "status": "preserved-intentional-legacy-absence",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-excluded/party-endpoint-detail"
+      ],
+      "rustTests": [
+        "apps/melodee-server/src/native/mod.rs::all_excluded_queue_and_party_paths_preserve_empty_404"
+      ],
+      "rationale": "The legacy native-v1 controller was excluded from its build; Rust preserves the exact empty 404 for this method/path."
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/party-endpoints/{}/capabilities",
+      "status": "preserved-intentional-legacy-absence",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-excluded/party-endpoint-capabilities"
+      ],
+      "rustTests": [
+        "apps/melodee-server/src/native/mod.rs::all_excluded_queue_and_party_paths_preserve_empty_404"
+      ],
+      "rationale": "The legacy native-v1 controller was excluded from its build; Rust preserves the exact empty 404 for this method/path."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-endpoints/{}/detach",
+      "status": "preserved-intentional-legacy-absence",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-excluded/party-endpoint-detach"
+      ],
+      "rustTests": [
+        "apps/melodee-server/src/native/mod.rs::all_excluded_queue_and_party_paths_preserve_empty_404"
+      ],
+      "rationale": "The legacy native-v1 controller was excluded from its build; Rust preserves the exact empty 404 for this method/path."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-endpoints/{}/heartbeat",
+      "status": "preserved-intentional-legacy-absence",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-excluded/party-endpoint-heartbeat"
+      ],
+      "rustTests": [
+        "apps/melodee-server/src/native/mod.rs::all_excluded_queue_and_party_paths_preserve_empty_404"
+      ],
+      "rationale": "The legacy native-v1 controller was excluded from its build; Rust preserves the exact empty 404 for this method/path."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/party-endpoints/{}/state",
+      "status": "preserved-intentional-legacy-absence",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-excluded/party-endpoint-state"
+      ],
+      "rustTests": [
+        "apps/melodee-server/src/native/mod.rs::all_excluded_queue_and_party_paths_preserve_empty_404"
+      ],
+      "rationale": "The legacy native-v1 controller was excluded from its build; Rust preserves the exact empty 404 for this method/path."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-sessions",
+      "status": "preserved-intentional-legacy-absence",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-excluded/party-session-create"
+      ],
+      "rustTests": [
+        "apps/melodee-server/src/native/mod.rs::all_excluded_queue_and_party_paths_preserve_empty_404"
+      ],
+      "rationale": "The legacy native-v1 controller was excluded from its build; Rust preserves the exact empty 404 for this method/path."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/party-sessions/active",
+      "status": "preserved-intentional-legacy-absence",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-excluded/party-session-active"
+      ],
+      "rustTests": [
+        "apps/melodee-server/src/native/mod.rs::all_excluded_queue_and_party_paths_preserve_empty_404"
+      ],
+      "rationale": "The legacy native-v1 controller was excluded from its build; Rust preserves the exact empty 404 for this method/path."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/party-sessions/my",
+      "status": "preserved-intentional-legacy-absence",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-excluded/party-session-mine"
+      ],
+      "rustTests": [
+        "apps/melodee-server/src/native/mod.rs::all_excluded_queue_and_party_paths_preserve_empty_404"
+      ],
+      "rationale": "The legacy native-v1 controller was excluded from its build; Rust preserves the exact empty 404 for this method/path."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/party-sessions/{}",
+      "status": "preserved-intentional-legacy-absence",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-excluded/party-session-detail"
+      ],
+      "rustTests": [
+        "apps/melodee-server/src/native/mod.rs::all_excluded_queue_and_party_paths_preserve_empty_404"
+      ],
+      "rationale": "The legacy native-v1 controller was excluded from its build; Rust preserves the exact empty 404 for this method/path."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/party-sessions/{}/audit",
+      "status": "preserved-intentional-legacy-absence",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-excluded/party-session-audit"
+      ],
+      "rustTests": [
+        "apps/melodee-server/src/native/mod.rs::all_excluded_queue_and_party_paths_preserve_empty_404"
+      ],
+      "rationale": "The legacy native-v1 controller was excluded from its build; Rust preserves the exact empty 404 for this method/path."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-sessions/{}/end",
+      "status": "preserved-intentional-legacy-absence",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-excluded/party-session-end"
+      ],
+      "rustTests": [
+        "apps/melodee-server/src/native/mod.rs::all_excluded_queue_and_party_paths_preserve_empty_404"
+      ],
+      "rationale": "The legacy native-v1 controller was excluded from its build; Rust preserves the exact empty 404 for this method/path."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-sessions/{}/join",
+      "status": "preserved-intentional-legacy-absence",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-excluded/party-session-join"
+      ],
+      "rustTests": [
+        "apps/melodee-server/src/native/mod.rs::all_excluded_queue_and_party_paths_preserve_empty_404"
+      ],
+      "rationale": "The legacy native-v1 controller was excluded from its build; Rust preserves the exact empty 404 for this method/path."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-sessions/{}/leave",
+      "status": "preserved-intentional-legacy-absence",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-excluded/party-session-leave"
+      ],
+      "rustTests": [
+        "apps/melodee-server/src/native/mod.rs::all_excluded_queue_and_party_paths_preserve_empty_404"
+      ],
+      "rationale": "The legacy native-v1 controller was excluded from its build; Rust preserves the exact empty 404 for this method/path."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/party-sessions/{}/participants",
+      "status": "preserved-intentional-legacy-absence",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-excluded/party-session-participants"
+      ],
+      "rustTests": [
+        "apps/melodee-server/src/native/mod.rs::all_excluded_queue_and_party_paths_preserve_empty_404"
+      ],
+      "rationale": "The legacy native-v1 controller was excluded from its build; Rust preserves the exact empty 404 for this method/path."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-sessions/{}/participants/{}/ban",
+      "status": "preserved-intentional-legacy-absence",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-excluded/party-participant-ban"
+      ],
+      "rustTests": [
+        "apps/melodee-server/src/native/mod.rs::all_excluded_queue_and_party_paths_preserve_empty_404"
+      ],
+      "rationale": "The legacy native-v1 controller was excluded from its build; Rust preserves the exact empty 404 for this method/path."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-sessions/{}/participants/{}/kick",
+      "status": "preserved-intentional-legacy-absence",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-excluded/party-participant-kick"
+      ],
+      "rustTests": [
+        "apps/melodee-server/src/native/mod.rs::all_excluded_queue_and_party_paths_preserve_empty_404"
+      ],
+      "rationale": "The legacy native-v1 controller was excluded from its build; Rust preserves the exact empty 404 for this method/path."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-sessions/{}/participants/{}/role",
+      "status": "preserved-intentional-legacy-absence",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-excluded/party-participant-role"
+      ],
+      "rustTests": [
+        "apps/melodee-server/src/native/mod.rs::all_excluded_queue_and_party_paths_preserve_empty_404"
+      ],
+      "rationale": "The legacy native-v1 controller was excluded from its build; Rust preserves the exact empty 404 for this method/path."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-sessions/{}/participants/{}/unban",
+      "status": "preserved-intentional-legacy-absence",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-excluded/party-participant-unban"
+      ],
+      "rustTests": [
+        "apps/melodee-server/src/native/mod.rs::all_excluded_queue_and_party_paths_preserve_empty_404"
+      ],
+      "rationale": "The legacy native-v1 controller was excluded from its build; Rust preserves the exact empty 404 for this method/path."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/party-sessions/{}/playback",
+      "status": "preserved-intentional-legacy-absence",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-excluded/party-playback-state"
+      ],
+      "rustTests": [
+        "apps/melodee-server/src/native/mod.rs::all_excluded_queue_and_party_paths_preserve_empty_404"
+      ],
+      "rationale": "The legacy native-v1 controller was excluded from its build; Rust preserves the exact empty 404 for this method/path."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-sessions/{}/playback/next",
+      "status": "preserved-intentional-legacy-absence",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-excluded/party-playback-next"
+      ],
+      "rustTests": [
+        "apps/melodee-server/src/native/mod.rs::all_excluded_queue_and_party_paths_preserve_empty_404"
+      ],
+      "rationale": "The legacy native-v1 controller was excluded from its build; Rust preserves the exact empty 404 for this method/path."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-sessions/{}/playback/pause",
+      "status": "preserved-intentional-legacy-absence",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-excluded/party-playback-pause"
+      ],
+      "rustTests": [
+        "apps/melodee-server/src/native/mod.rs::all_excluded_queue_and_party_paths_preserve_empty_404"
+      ],
+      "rationale": "The legacy native-v1 controller was excluded from its build; Rust preserves the exact empty 404 for this method/path."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-sessions/{}/playback/play",
+      "status": "preserved-intentional-legacy-absence",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-excluded/party-playback-play"
+      ],
+      "rustTests": [
+        "apps/melodee-server/src/native/mod.rs::all_excluded_queue_and_party_paths_preserve_empty_404"
+      ],
+      "rationale": "The legacy native-v1 controller was excluded from its build; Rust preserves the exact empty 404 for this method/path."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-sessions/{}/playback/seek",
+      "status": "preserved-intentional-legacy-absence",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-excluded/party-playback-seek"
+      ],
+      "rustTests": [
+        "apps/melodee-server/src/native/mod.rs::all_excluded_queue_and_party_paths_preserve_empty_404"
+      ],
+      "rationale": "The legacy native-v1 controller was excluded from its build; Rust preserves the exact empty 404 for this method/path."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-sessions/{}/playback/stop",
+      "status": "preserved-intentional-legacy-absence",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-excluded/party-playback-stop"
+      ],
+      "rustTests": [
+        "apps/melodee-server/src/native/mod.rs::all_excluded_queue_and_party_paths_preserve_empty_404"
+      ],
+      "rationale": "The legacy native-v1 controller was excluded from its build; Rust preserves the exact empty 404 for this method/path."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-sessions/{}/playback/volume",
+      "status": "preserved-intentional-legacy-absence",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-excluded/party-playback-volume"
+      ],
+      "rustTests": [
+        "apps/melodee-server/src/native/mod.rs::all_excluded_queue_and_party_paths_preserve_empty_404"
+      ],
+      "rationale": "The legacy native-v1 controller was excluded from its build; Rust preserves the exact empty 404 for this method/path."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/party-sessions/{}/queue",
+      "status": "preserved-intentional-legacy-absence",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-excluded/party-queue-list"
+      ],
+      "rustTests": [
+        "apps/melodee-server/src/native/mod.rs::all_excluded_queue_and_party_paths_preserve_empty_404"
+      ],
+      "rationale": "The legacy native-v1 controller was excluded from its build; Rust preserves the exact empty 404 for this method/path."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-sessions/{}/queue/clear",
+      "status": "preserved-intentional-legacy-absence",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-excluded/party-queue-clear"
+      ],
+      "rustTests": [
+        "apps/melodee-server/src/native/mod.rs::all_excluded_queue_and_party_paths_preserve_empty_404"
+      ],
+      "rationale": "The legacy native-v1 controller was excluded from its build; Rust preserves the exact empty 404 for this method/path."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-sessions/{}/queue/items",
+      "status": "preserved-intentional-legacy-absence",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-excluded/party-queue-add"
+      ],
+      "rustTests": [
+        "apps/melodee-server/src/native/mod.rs::all_excluded_queue_and_party_paths_preserve_empty_404"
+      ],
+      "rationale": "The legacy native-v1 controller was excluded from its build; Rust preserves the exact empty 404 for this method/path."
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/party-sessions/{}/queue/items/{}",
+      "status": "preserved-intentional-legacy-absence",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-excluded/party-queue-remove"
+      ],
+      "rustTests": [
+        "apps/melodee-server/src/native/mod.rs::all_excluded_queue_and_party_paths_preserve_empty_404"
+      ],
+      "rationale": "The legacy native-v1 controller was excluded from its build; Rust preserves the exact empty 404 for this method/path."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-sessions/{}/queue/items/{}/reorder",
+      "status": "preserved-intentional-legacy-absence",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-excluded/party-queue-reorder"
+      ],
+      "rustTests": [
+        "apps/melodee-server/src/native/mod.rs::all_excluded_queue_and_party_paths_preserve_empty_404"
+      ],
+      "rationale": "The legacy native-v1 controller was excluded from its build; Rust preserves the exact empty 404 for this method/path."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/party-sessions/{}/settings/queue-lock",
+      "status": "preserved-intentional-legacy-absence",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-excluded/party-queue-lock"
+      ],
+      "rustTests": [
+        "apps/melodee-server/src/native/mod.rs::all_excluded_queue_and_party_paths_preserve_empty_404"
+      ],
+      "rationale": "The legacy native-v1 controller was excluded from its build; Rust preserves the exact empty 404 for this method/path."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/playback-backend/capabilities",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-PARTY-003",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-discovery/backend-capabilities"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_discovery_api.rs::native_discovery_routes_use_durable_bounded_facts_and_preserve_wire_shapes"
+      ],
+      "rationale": "The PostgreSQL-backed native adapter is exercised through the exact HTTP route; the promoted frozen capture preserves legacy status/auth and the focused test proves durable bounded positive behavior."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/playback-backend/heartbeat/{}",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-PARTY-003",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-discovery/backend-heartbeat"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_discovery_api.rs::native_discovery_routes_use_durable_bounded_facts_and_preserve_wire_shapes"
+      ],
+      "rationale": "The PostgreSQL-backed native adapter is exercised through the exact HTTP route; the promoted frozen capture preserves legacy status/auth and the focused test proves durable bounded positive behavior."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/playback-backend/initialize",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-PARTY-003",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-discovery/backend-initialize"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_discovery_api.rs::native_discovery_routes_use_durable_bounded_facts_and_preserve_wire_shapes"
+      ],
+      "rationale": "The PostgreSQL-backed native adapter is exercised through the exact HTTP route; the promoted frozen capture preserves legacy status/auth and the focused test proves durable bounded positive behavior."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/playback-backend/register-endpoint",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-PARTY-003",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-discovery/backend-register"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_discovery_api.rs::native_discovery_routes_use_durable_bounded_facts_and_preserve_wire_shapes"
+      ],
+      "rationale": "The PostgreSQL-backed native adapter is exercised through the exact HTTP route; the promoted frozen capture preserves legacy status/auth and the focused test proves durable bounded positive behavior."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/playback-backend/shutdown",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-PARTY-003",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-discovery/backend-shutdown"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_discovery_api.rs::native_discovery_routes_use_durable_bounded_facts_and_preserve_wire_shapes"
+      ],
+      "rationale": "The PostgreSQL-backed native adapter is exercised through the exact HTTP route; the promoted frozen capture preserves legacy status/auth and the focused test proves durable bounded positive behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/playback-backend/status",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-PARTY-003",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-discovery/backend-status"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_discovery_api.rs::native_discovery_routes_use_durable_bounded_facts_and_preserve_wire_shapes"
+      ],
+      "rationale": "The PostgreSQL-backed native adapter is exercised through the exact HTTP route; the promoted frozen capture preserves legacy status/auth and the focused test proves durable bounded positive behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/playback/settings",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-001",
+        "PRD-USER-003"
+      ],
+      "legacyEvidence": [
+        "community-lifecycle/playback-settings-default"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_community_api.rs::native_community_routes_are_owner_fenced_bounded_and_replay_safe",
+        "crates/melodee-persistence/tests/native_community_phase7.rs::community_schema_preserves_ids_parent_scope_and_replay_safe_preferences"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/playback/settings",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-001",
+        "PRD-USER-003"
+      ],
+      "legacyEvidence": [
+        "community-lifecycle/playback-settings-update"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_community_api.rs::native_community_routes_are_owner_fenced_bounded_and_replay_safe",
+        "crates/melodee-persistence/tests/native_community_phase7.rs::community_schema_preserves_ids_parent_scope_and_replay_safe_preferences"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/playlists",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0127-native-public-id-migration-and-id-preserving-schema-for-api-v1.md",
+      "requirements": [
+        "PRD-PLAYLIST-001",
+        "PRD-PLAYLIST-003",
+        "PRD-API-M1-003"
+      ],
+      "legacyEvidence": [
+        "catalog-playlist-crud/create-playlist"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_playlists.rs::playlist_crud_routes_preserve_order_dual_add_shapes_and_ownership"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/playlists/{}",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0127-native-public-id-migration-and-id-preserving-schema-for-api-v1.md",
+      "requirements": [
+        "PRD-PLAYLIST-001",
+        "PRD-PLAYLIST-003",
+        "PRD-API-M1-003"
+      ],
+      "legacyEvidence": [
+        "catalog-playlist-crud/delete-playlist"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_playlists.rs::playlist_crud_routes_preserve_order_dual_add_shapes_and_ownership"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/playlists/{}",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0127-native-public-id-migration-and-id-preserving-schema-for-api-v1.md",
+      "requirements": [
+        "PRD-PLAYLIST-001",
+        "PRD-PLAYLIST-003",
+        "PRD-API-M1-003"
+      ],
+      "legacyEvidence": [
+        "catalog/playlist-detail",
+        "catalog-playlist-crud/detail-after-delete"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_playlists.rs::playlist_crud_routes_preserve_order_dual_add_shapes_and_ownership"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/playlists/{}/songs",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0127-native-public-id-migration-and-id-preserving-schema-for-api-v1.md",
+      "requirements": [
+        "PRD-PLAYLIST-001",
+        "PRD-PLAYLIST-003",
+        "PRD-API-M1-003"
+      ],
+      "legacyEvidence": [
+        "catalog/playlist-songs",
+        "catalog-playlist-crud/songs-after-reorder"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_playlists.rs::playlist_crud_routes_preserve_order_dual_add_shapes_and_ownership",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/playlists/{}/songs",
+      "status": "approved-compatibility-normalization",
+      "authority": "design/adr/ADR-0114-accept-meloamp-playlist-add-songs-object-body-alongside-canonical-array-form.md",
+      "requirements": [
+        "PRD-PLAYLIST-001",
+        "PRD-API-M1-003",
+        "PRD-API-M1-005"
+      ],
+      "legacyEvidence": [
+        "catalog-playlist-crud/add-songs",
+        "catalog-playlist-crud/add-songs-meloamp-shape"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_playlists.rs::playlist_crud_routes_preserve_order_dual_add_shapes_and_ownership"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/playlists/{}/songs/reorder",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0127-native-public-id-migration-and-id-preserving-schema-for-api-v1.md",
+      "requirements": [
+        "PRD-PLAYLIST-001",
+        "PRD-PLAYLIST-003",
+        "PRD-API-M1-003"
+      ],
+      "legacyEvidence": [
+        "catalog-playlist-crud/reorder-songs"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_playlists.rs::playlist_crud_routes_preserve_order_dual_add_shapes_and_ownership",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/podcasts/channels",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-POD-001",
+        "PRD-POD-002",
+        "PRD-POD-003"
+      ],
+      "legacyEvidence": [
+        "podcasts-surface/channels-list"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_podcasts_api.rs::all_native_podcast_routes_are_tenant_scoped_bounded_and_authorized",
+        "crates/melodee-persistence/tests/native_podcasts_phase7.rs::podcast_schema_is_tenant_scoped_bounded_and_cascades_playback_state"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/podcasts/channels",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-POD-001",
+        "PRD-POD-002",
+        "PRD-POD-003"
+      ],
+      "legacyEvidence": [
+        "podcasts-surface/channels-create-invalid"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_podcasts_api.rs::all_native_podcast_routes_are_tenant_scoped_bounded_and_authorized",
+        "crates/melodee-persistence/tests/native_podcasts_phase7.rs::podcast_schema_is_tenant_scoped_bounded_and_cascades_playback_state"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/podcasts/channels/{}",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-POD-001",
+        "PRD-POD-002",
+        "PRD-POD-003"
+      ],
+      "legacyEvidence": [
+        "podcasts-surface/channels-delete-missing"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_podcasts_api.rs::all_native_podcast_routes_are_tenant_scoped_bounded_and_authorized",
+        "crates/melodee-persistence/tests/native_podcasts_phase7.rs::podcast_schema_is_tenant_scoped_bounded_and_cascades_playback_state"
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/podcasts/channels/{}",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-POD-001",
+        "PRD-POD-002",
+        "PRD-POD-003"
+      ],
+      "legacyEvidence": [
+        "podcasts-surface/channels-update-missing"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_podcasts_api.rs::all_native_podcast_routes_are_tenant_scoped_bounded_and_authorized"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/podcasts/channels/{}/episodes",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-POD-001",
+        "PRD-POD-002",
+        "PRD-POD-003"
+      ],
+      "legacyEvidence": [
+        "podcasts-surface/channel-episodes-missing"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_podcasts_api.rs::all_native_podcast_routes_are_tenant_scoped_bounded_and_authorized"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/podcasts/channels/{}/refresh",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-POD-001",
+        "PRD-POD-002",
+        "PRD-POD-003"
+      ],
+      "legacyEvidence": [
+        "podcasts-surface/channel-refresh-missing"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_podcasts_api.rs::all_native_podcast_routes_are_tenant_scoped_bounded_and_authorized"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/podcasts/discover/lookup/{}",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-POD-001",
+        "PRD-POD-002",
+        "PRD-POD-003"
+      ],
+      "legacyEvidence": [
+        "podcasts-surface/discover-lookup-missing"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_podcasts_api.rs::all_native_podcast_routes_are_tenant_scoped_bounded_and_authorized"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/podcasts/discover/search",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-POD-001",
+        "PRD-POD-002",
+        "PRD-POD-003"
+      ],
+      "legacyEvidence": [
+        "podcasts-surface/discover-search"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_podcasts_api.rs::all_native_podcast_routes_are_tenant_scoped_bounded_and_authorized",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/podcasts/discover/trending",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-POD-001",
+        "PRD-POD-002",
+        "PRD-POD-003"
+      ],
+      "legacyEvidence": [
+        "podcasts-surface/discover-trending"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_podcasts_api.rs::all_native_podcast_routes_are_tenant_scoped_bounded_and_authorized"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/podcasts/episodes/search",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-POD-001",
+        "PRD-POD-002",
+        "PRD-POD-003"
+      ],
+      "legacyEvidence": [
+        "podcasts-surface/episode-search-empty"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_podcasts_api.rs::all_native_podcast_routes_are_tenant_scoped_bounded_and_authorized",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/podcasts/episodes/{}",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-POD-001",
+        "PRD-POD-002",
+        "PRD-POD-003"
+      ],
+      "legacyEvidence": [
+        "podcasts-surface/episode-delete-missing"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_podcasts_api.rs::all_native_podcast_routes_are_tenant_scoped_bounded_and_authorized",
+        "crates/melodee-persistence/tests/native_podcasts_phase7.rs::podcast_schema_is_tenant_scoped_bounded_and_cascades_playback_state"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/podcasts/episodes/{}/bookmark",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-POD-001",
+        "PRD-POD-002",
+        "PRD-POD-003"
+      ],
+      "legacyEvidence": [
+        "podcasts-surface/bookmark-delete-missing"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_podcasts_api.rs::all_native_podcast_routes_are_tenant_scoped_bounded_and_authorized",
+        "crates/melodee-persistence/tests/native_podcasts_phase7.rs::podcast_schema_is_tenant_scoped_bounded_and_cascades_playback_state"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/podcasts/episodes/{}/bookmark",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-POD-001",
+        "PRD-POD-002",
+        "PRD-POD-003"
+      ],
+      "legacyEvidence": [
+        "podcasts-surface/bookmark-get-missing"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_podcasts_api.rs::all_native_podcast_routes_are_tenant_scoped_bounded_and_authorized"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/podcasts/episodes/{}/bookmark",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-POD-001",
+        "PRD-POD-002",
+        "PRD-POD-003"
+      ],
+      "legacyEvidence": [
+        "podcasts-surface/bookmark-save-missing"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_podcasts_api.rs::all_native_podcast_routes_are_tenant_scoped_bounded_and_authorized",
+        "crates/melodee-persistence/tests/native_podcasts_phase7.rs::podcast_schema_is_tenant_scoped_bounded_and_cascades_playback_state"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/podcasts/episodes/{}/download",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-POD-001",
+        "PRD-POD-002",
+        "PRD-POD-003"
+      ],
+      "legacyEvidence": [
+        "podcasts-surface/episode-download-missing"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_podcasts_api.rs::all_native_podcast_routes_are_tenant_scoped_bounded_and_authorized"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/podcasts/episodes/{}/history",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-POD-001",
+        "PRD-POD-002",
+        "PRD-POD-003"
+      ],
+      "legacyEvidence": [
+        "podcasts-surface/history-missing"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_podcasts_api.rs::all_native_podcast_routes_are_tenant_scoped_bounded_and_authorized"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/podcasts/episodes/{}/play",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-POD-001",
+        "PRD-POD-002",
+        "PRD-POD-003"
+      ],
+      "legacyEvidence": [
+        "podcasts-surface/episode-play-missing"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_podcasts_api.rs::all_native_podcast_routes_are_tenant_scoped_bounded_and_authorized",
+        "crates/melodee-persistence/tests/native_podcasts_phase7.rs::podcast_schema_is_tenant_scoped_bounded_and_cascades_playback_state"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/podcasts/opml/export",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-POD-001",
+        "PRD-POD-002",
+        "PRD-POD-003"
+      ],
+      "legacyEvidence": [
+        "podcasts-surface/opml-export"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_podcasts_api.rs::all_native_podcast_routes_are_tenant_scoped_bounded_and_authorized"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/podcasts/opml/import",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-POD-001",
+        "PRD-POD-002",
+        "PRD-POD-003"
+      ],
+      "legacyEvidence": [
+        "podcasts-surface/opml-import-empty"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_podcasts_api.rs::all_native_podcast_routes_are_tenant_scoped_bounded_and_authorized"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/queue",
+      "status": "preserved-intentional-legacy-absence",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "catalog-queue/queue-delete"
+      ],
+      "rustTests": [
+        "apps/melodee-server/src/native/mod.rs::all_excluded_queue_and_party_paths_preserve_empty_404"
+      ],
+      "rationale": "The legacy native-v1 controller was excluded from its build; Rust preserves the exact empty 404 for this method/path."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/queue",
+      "status": "preserved-intentional-legacy-absence",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "catalog-queue/queue-get-empty",
+        "catalog-queue/queue-get-after-put",
+        "catalog-queue/queue-get-after-delete"
+      ],
+      "rustTests": [
+        "apps/melodee-server/src/native/mod.rs::all_excluded_queue_and_party_paths_preserve_empty_404"
+      ],
+      "rationale": "The legacy native-v1 controller was excluded from its build; Rust preserves the exact empty 404 for this method/path."
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/queue",
+      "status": "preserved-intentional-legacy-absence",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "catalog-queue/queue-put"
+      ],
+      "rustTests": [
+        "apps/melodee-server/src/native/mod.rs::all_excluded_queue_and_party_paths_preserve_empty_404"
+      ],
+      "rationale": "The legacy native-v1 controller was excluded from its build; Rust preserves the exact empty 404 for this method/path."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/recommendations",
+      "status": "approved-compatibility-normalization",
+      "authority": "design/adr/ADR-0128-capture-required-legacy-bug-fixes-in-native-api-v1.md",
+      "requirements": [
+        "PRD-DISCOVERY-002",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-discovery/recommendations"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_discovery_api.rs::native_discovery_routes_use_durable_bounded_facts_and_preserve_wire_shapes",
+        "apps/melodee-server/tests/native_phase7_performance.rs::native_api_scale_smoke_is_bounded_and_correct",
+        "crates/melodee-persistence/tests/native_user_state_phase7.rs::annotations_playlists_and_scrobbles_are_bounded_atomic_and_idempotent"
+      ],
+      "rationale": "ADR-0128 item 8 authorizes positive durable recommendation facts. Candidates come from an incrementally maintained indexed projection through a hard-capped request window. Eligibility is applied inside that window; exhaustion returns a typed 503 instead of a falsely empty response or an unbounded tail scan. HTTP and scale regressions prove correct results through a 2,001-row category-heavy prefix and bounded failure beyond 4,096 candidates."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/requests",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-REQUEST-001",
+        "PRD-REQUEST-002"
+      ],
+      "legacyEvidence": [
+        "community-lifecycle/request-list"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_community_api.rs::native_community_routes_are_owner_fenced_bounded_and_replay_safe",
+        "crates/melodee-persistence/tests/native_community_phase7.rs::community_schema_preserves_ids_parent_scope_and_replay_safe_preferences"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/requests",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-REQUEST-001",
+        "PRD-REQUEST-002"
+      ],
+      "legacyEvidence": [
+        "community-lifecycle/request-create",
+        "community-lifecycle/request-create-for-delete"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_community_api.rs::native_community_routes_are_owner_fenced_bounded_and_replay_safe",
+        "crates/melodee-persistence/tests/native_community_phase7.rs::community_schema_preserves_ids_parent_scope_and_replay_safe_preferences"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/requests/activity",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-REQUEST-001",
+        "PRD-REQUEST-002"
+      ],
+      "legacyEvidence": [
+        "community-lifecycle/request-activity"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_community_api.rs::native_community_routes_are_owner_fenced_bounded_and_replay_safe"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/requests/activity/unread",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-REQUEST-001",
+        "PRD-REQUEST-002"
+      ],
+      "legacyEvidence": [
+        "community-lifecycle/request-unread"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_community_api.rs::native_community_routes_are_owner_fenced_bounded_and_replay_safe"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/requests/{}",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-REQUEST-001",
+        "PRD-REQUEST-002"
+      ],
+      "legacyEvidence": [
+        "community-lifecycle/request-delete"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_community_api.rs::native_community_routes_are_owner_fenced_bounded_and_replay_safe"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/requests/{}",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-REQUEST-001",
+        "PRD-REQUEST-002"
+      ],
+      "legacyEvidence": [
+        "community-lifecycle/request-detail"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_community_api.rs::native_community_routes_are_owner_fenced_bounded_and_replay_safe"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/requests/{}",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-REQUEST-001",
+        "PRD-REQUEST-002"
+      ],
+      "legacyEvidence": [
+        "community-lifecycle/request-update"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_community_api.rs::native_community_routes_are_owner_fenced_bounded_and_replay_safe"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/requests/{}/comments",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-REQUEST-001",
+        "PRD-REQUEST-002"
+      ],
+      "legacyEvidence": [
+        "community-lifecycle/request-comments-list"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_community_api.rs::native_community_routes_are_owner_fenced_bounded_and_replay_safe",
+        "crates/melodee-persistence/tests/native_community_phase7.rs::community_schema_preserves_ids_parent_scope_and_replay_safe_preferences"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/requests/{}/comments",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-REQUEST-001",
+        "PRD-REQUEST-002"
+      ],
+      "legacyEvidence": [
+        "community-lifecycle/request-comment-create"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_community_api.rs::native_community_routes_are_owner_fenced_bounded_and_replay_safe",
+        "crates/melodee-persistence/tests/native_community_phase7.rs::community_schema_preserves_ids_parent_scope_and_replay_safe_preferences"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/requests/{}/complete",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-REQUEST-001",
+        "PRD-REQUEST-002"
+      ],
+      "legacyEvidence": [
+        "community-lifecycle/request-complete"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_community_api.rs::native_community_routes_are_owner_fenced_bounded_and_replay_safe"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/requests/{}/seen",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-REQUEST-001",
+        "PRD-REQUEST-002"
+      ],
+      "legacyEvidence": [
+        "community-lifecycle/request-seen"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_community_api.rs::native_community_routes_are_owner_fenced_bounded_and_replay_safe"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/scrobble",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-USER-003"
+      ],
+      "legacyEvidence": [
+        "catalog-scrobble/scrobble-played"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact method/path and checks its public-ID and wire-shape behavior against the attached frozen legacy scenario."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/scrobble/lastfm/auth-url",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-USER-003"
+      ],
+      "legacyEvidence": [
+        "native-scrobble-lastfm/auth-url-unconfigured"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "Rust preserves the captured validated-callback response when Last.fm is not configured."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/scrobble/lastfm/disconnect",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-USER-003"
+      ],
+      "legacyEvidence": [
+        "native-scrobble-lastfm/disconnect"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "Rust preserves the captured idempotent disconnect response without persisting provider secrets."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/scrobble/lastfm/session",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-USER-003"
+      ],
+      "legacyEvidence": [
+        "native-scrobble-lastfm/session-unconfigured"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "Rust preserves the captured bounded token-exchange response when Last.fm is not configured."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/search",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-003",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "catalog/search-post-dune"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact method/path and checks its public-ID and wire-shape behavior against the attached frozen legacy scenario."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/search/advanced",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-SEARCH-001",
+        "PRD-SEARCH-002"
+      ],
+      "legacyEvidence": [
+        "native-user-extra/search-advanced"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact route and the focused HTTP test preserves the promoted frozen-oracle status, DTO, paging, public-ID, and user-state behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/search/similar/{}/{}",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-SEARCH-001",
+        "PRD-SEARCH-002"
+      ],
+      "legacyEvidence": [
+        "native-user-extra/search-similar"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_similar_song_preserves_captured_genre_bpm_order_scores_and_acl"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact route; the positive focused HTTP test preserves the frozen song-similarity genre, BPM-window, play-order, score, DTO, public-ID, and ACL behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/search/songs",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-003",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "catalog/search-songs-neon"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact method/path and checks its public-ID and wire-shape behavior against the attached frozen legacy scenario."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/search/suggest",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-SEARCH-001",
+        "PRD-SEARCH-002"
+      ],
+      "legacyEvidence": [
+        "native-user-extra/search-suggest"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact route and the focused HTTP test preserves the promoted frozen-oracle status, DTO, paging, public-ID, and user-state behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/shares",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0129-secure-native-public-share-bearers-and-resolvable-links.md",
+      "requirements": [
+        "PRD-SHARE-001",
+        "PRD-SHARE-002",
+        "PRD-SHARE-003"
+      ],
+      "legacyEvidence": [
+        "community-lifecycle/share-list"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_community_api.rs::native_community_routes_are_owner_fenced_bounded_and_replay_safe",
+        "crates/melodee-persistence/tests/native_community_phase7.rs::community_schema_preserves_ids_parent_scope_and_replay_safe_preferences"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/shares",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0129-secure-native-public-share-bearers-and-resolvable-links.md",
+      "requirements": [
+        "PRD-SHARE-001",
+        "PRD-SHARE-002",
+        "PRD-SHARE-003"
+      ],
+      "legacyEvidence": [
+        "community-lifecycle/share-create"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_community_api.rs::native_community_routes_are_owner_fenced_bounded_and_replay_safe",
+        "crates/melodee-persistence/tests/native_community_phase7.rs::community_schema_preserves_ids_parent_scope_and_replay_safe_preferences"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/shares/public/{}",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0129-secure-native-public-share-bearers-and-resolvable-links.md",
+      "requirements": [
+        "PRD-SHARE-001",
+        "PRD-SHARE-002",
+        "PRD-SHARE-003"
+      ],
+      "legacyEvidence": [
+        "community-lifecycle/share-public"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_community_api.rs::native_community_routes_are_owner_fenced_bounded_and_replay_safe"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/shares/{}",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0129-secure-native-public-share-bearers-and-resolvable-links.md",
+      "requirements": [
+        "PRD-SHARE-001",
+        "PRD-SHARE-002",
+        "PRD-SHARE-003"
+      ],
+      "legacyEvidence": [
+        "community-lifecycle/share-delete"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_community_api.rs::native_community_routes_are_owner_fenced_bounded_and_replay_safe"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/shares/{}",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0129-secure-native-public-share-bearers-and-resolvable-links.md",
+      "requirements": [
+        "PRD-SHARE-001",
+        "PRD-SHARE-002",
+        "PRD-SHARE-003"
+      ],
+      "legacyEvidence": [
+        "community-lifecycle/share-detail"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_community_api.rs::native_community_routes_are_owner_fenced_bounded_and_replay_safe"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/shares/{}",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0129-secure-native-public-share-bearers-and-resolvable-links.md",
+      "requirements": [
+        "PRD-SHARE-001",
+        "PRD-SHARE-002",
+        "PRD-SHARE-003"
+      ],
+      "legacyEvidence": [
+        "community-lifecycle/share-update"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_community_api.rs::native_community_routes_are_owner_fenced_bounded_and_replay_safe"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/songs",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-003",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "catalog/songs-list"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact method/path and preserves the captured public-ID, paging, DTO, and annotation behavior."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/songs/hated/{}/{}",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-USER-002"
+      ],
+      "legacyEvidence": [
+        "catalog-star-rating/hate-song-on"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact method/path and checks its public-ID and wire-shape behavior against the attached frozen legacy scenario."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/songs/random",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-user-extra/songs-random"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_random_songs_samples_beyond_the_first_ten_thousand_tracks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact route, preserves the promoted frozen-oracle DTO/public-ID behavior, fails closed for users without access-group membership, and proves the bounded sampler can select Tracks beyond the former first-10,000 ceiling."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/songs/recent",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-user-extra/songs-recent"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact route and the focused HTTP test preserves the promoted frozen-oracle status, DTO, paging, public-ID, and user-state behavior."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/songs/setrating/{}/{}",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-003",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "catalog-star-rating/rate-song"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact method/path and preserves the captured public-ID, paging, DTO, and annotation behavior."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/songs/starred/{}/{}",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-003",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "catalog-star-rating/star-song-on"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact method/path and preserves the captured public-ID, paging, DTO, and annotation behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/songs/{}",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-003",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "catalog/song-detail"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact method/path and checks its public-ID and wire-shape behavior against the attached frozen legacy scenario."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/songs/{}/lyrics",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-user-extra/song-lyrics"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact route and the focused HTTP test preserves the promoted frozen-oracle status, DTO, paging, public-ID, and user-state behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/system/info",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-001",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-system-info"
+      ],
+      "rustTests": [
+        "apps/melodee-server/src/native/mod.rs::system_info_is_public_and_matches_the_frozen_gate"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact method/path and checks its public-ID and wire-shape behavior against the attached frozen legacy scenario."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/themes",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-USER-001",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-discovery/themes-list"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_discovery_api.rs::native_discovery_routes_use_durable_bounded_facts_and_preserve_wire_shapes",
+        "apps/melodee-server/src/native/discovery.rs::theme_archive_accepts_a_bounded_database_owned_pack",
+        "apps/melodee-server/src/native/discovery.rs::theme_archive_rejects_traversal_duplicates_links_and_missing_contract_files"
+      ],
+      "rationale": "The PostgreSQL-backed native adapter is exercised through the exact HTTP route; the promoted frozen capture preserves legacy status/auth and the focused test proves durable bounded positive behavior."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/themes/import",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-USER-001",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-discovery/themes-import"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_discovery_api.rs::native_discovery_routes_use_durable_bounded_facts_and_preserve_wire_shapes",
+        "apps/melodee-server/src/native/discovery.rs::theme_archive_accepts_a_bounded_database_owned_pack",
+        "apps/melodee-server/src/native/discovery.rs::theme_archive_rejects_traversal_duplicates_links_and_missing_contract_files"
+      ],
+      "rationale": "The PostgreSQL-backed native adapter is exercised through the exact HTTP route; the promoted frozen capture preserves legacy status/auth and the focused test proves durable bounded positive behavior."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/themes/me",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-USER-001",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-discovery/themes-me"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_discovery_api.rs::native_discovery_routes_use_durable_bounded_facts_and_preserve_wire_shapes",
+        "apps/melodee-server/src/native/discovery.rs::theme_archive_accepts_a_bounded_database_owned_pack",
+        "apps/melodee-server/src/native/discovery.rs::theme_archive_rejects_traversal_duplicates_links_and_missing_contract_files"
+      ],
+      "rationale": "The PostgreSQL-backed native adapter is exercised through the exact HTTP route; the promoted frozen capture preserves legacy status/auth and the focused test proves durable bounded positive behavior."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/themes/rescan",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-USER-001",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-discovery/themes-rescan"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_discovery_api.rs::native_discovery_routes_use_durable_bounded_facts_and_preserve_wire_shapes",
+        "apps/melodee-server/src/native/discovery.rs::theme_archive_accepts_a_bounded_database_owned_pack",
+        "apps/melodee-server/src/native/discovery.rs::theme_archive_rejects_traversal_duplicates_links_and_missing_contract_files"
+      ],
+      "rationale": "The PostgreSQL-backed native adapter is exercised through the exact HTTP route; the promoted frozen capture preserves legacy status/auth and the focused test proves durable bounded positive behavior."
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/themes/{}",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-USER-001",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-discovery/themes-delete"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_discovery_api.rs::native_discovery_routes_use_durable_bounded_facts_and_preserve_wire_shapes",
+        "apps/melodee-server/src/native/discovery.rs::theme_archive_accepts_a_bounded_database_owned_pack",
+        "apps/melodee-server/src/native/discovery.rs::theme_archive_rejects_traversal_duplicates_links_and_missing_contract_files"
+      ],
+      "rationale": "The PostgreSQL-backed native adapter is exercised through the exact HTTP route; the promoted frozen capture preserves legacy status/auth and the focused test proves durable bounded positive behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/themes/{}/export",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-USER-001",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-discovery/themes-export"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_discovery_api.rs::native_discovery_routes_use_durable_bounded_facts_and_preserve_wire_shapes",
+        "apps/melodee-server/src/native/discovery.rs::theme_archive_accepts_a_bounded_database_owned_pack",
+        "apps/melodee-server/src/native/discovery.rs::theme_archive_rejects_traversal_duplicates_links_and_missing_contract_files"
+      ],
+      "rationale": "The PostgreSQL-backed native adapter is exercised through the exact HTTP route; the promoted frozen capture preserves legacy status/auth and the focused test proves durable bounded positive behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/themes/{}/file/{}",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
+      "requirements": [
+        "PRD-USER-001",
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-discovery/themes-file"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_discovery_api.rs::native_discovery_routes_use_durable_bounded_facts_and_preserve_wire_shapes",
+        "apps/melodee-server/src/native/discovery.rs::theme_archive_accepts_a_bounded_database_owned_pack",
+        "apps/melodee-server/src/native/discovery.rs::theme_archive_rejects_traversal_duplicates_links_and_missing_contract_files"
+      ],
+      "rationale": "The PostgreSQL-backed native adapter is exercised through the exact HTTP route; the promoted frozen capture preserves legacy status/auth and the focused test proves durable bounded positive behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/albums/disliked",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0127-native-public-id-migration-and-id-preserving-schema-for-api-v1.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-USER-001",
+        "PRD-USER-002"
+      ],
+      "legacyEvidence": [
+        "native-user-extra/user-albums-disliked"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact route and the focused HTTP test preserves the promoted frozen-oracle status, DTO, paging, public-ID, and user-state behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/albums/liked",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0127-native-public-id-migration-and-id-preserving-schema-for-api-v1.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-USER-001",
+        "PRD-USER-002"
+      ],
+      "legacyEvidence": [
+        "native-user-extra/user-albums-liked"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact route and the focused HTTP test preserves the promoted frozen-oracle status, DTO, paging, public-ID, and user-state behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/albums/rated",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0127-native-public-id-migration-and-id-preserving-schema-for-api-v1.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-USER-001",
+        "PRD-USER-002"
+      ],
+      "legacyEvidence": [
+        "native-user-extra/user-albums-rated"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact route and the focused HTTP test preserves the promoted frozen-oracle status, DTO, paging, public-ID, and user-state behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/albums/recently-played",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0127-native-public-id-migration-and-id-preserving-schema-for-api-v1.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-USER-001",
+        "PRD-USER-002"
+      ],
+      "legacyEvidence": [
+        "native-user-extra/user-albums-recent"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact route and the focused HTTP test preserves the promoted frozen-oracle status, DTO, paging, public-ID, and user-state behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/albums/top-rated",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0127-native-public-id-migration-and-id-preserving-schema-for-api-v1.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-USER-001",
+        "PRD-USER-002"
+      ],
+      "legacyEvidence": [
+        "native-user-extra/user-albums-top-rated"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact route and the focused HTTP test preserves the promoted frozen-oracle status, DTO, paging, public-ID, and user-state behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/artists/disliked",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0127-native-public-id-migration-and-id-preserving-schema-for-api-v1.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-USER-001",
+        "PRD-USER-002"
+      ],
+      "legacyEvidence": [
+        "native-user-extra/user-artists-disliked"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact route and the focused HTTP test preserves the promoted frozen-oracle status, DTO, paging, public-ID, and user-state behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/artists/liked",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0127-native-public-id-migration-and-id-preserving-schema-for-api-v1.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-USER-001",
+        "PRD-USER-002"
+      ],
+      "legacyEvidence": [
+        "native-user-extra/user-artists-liked"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact route and the focused HTTP test preserves the promoted frozen-oracle status, DTO, paging, public-ID, and user-state behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/artists/rated",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0127-native-public-id-migration-and-id-preserving-schema-for-api-v1.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-USER-001",
+        "PRD-USER-002"
+      ],
+      "legacyEvidence": [
+        "native-user-extra/user-artists-rated"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact route and the focused HTTP test preserves the promoted frozen-oracle status, DTO, paging, public-ID, and user-state behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/artists/recently-played",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0127-native-public-id-migration-and-id-preserving-schema-for-api-v1.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-USER-001",
+        "PRD-USER-002"
+      ],
+      "legacyEvidence": [
+        "native-user-extra/user-artists-recent"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact route and the focused HTTP test preserves the promoted frozen-oracle status, DTO, paging, public-ID, and user-state behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/artists/top-rated",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0127-native-public-id-migration-and-id-preserving-schema-for-api-v1.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-USER-001",
+        "PRD-USER-002"
+      ],
+      "legacyEvidence": [
+        "native-user-extra/user-artists-top-rated"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact route and the focused HTTP test preserves the promoted frozen-oracle status, DTO, paging, public-ID, and user-state behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/last-played",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0127-native-public-id-migration-and-id-preserving-schema-for-api-v1.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-USER-001",
+        "PRD-USER-002"
+      ],
+      "legacyEvidence": [
+        "native-user-extra/user-last-played"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact route and the focused HTTP test preserves the promoted frozen-oracle status, DTO, paging, public-ID, and user-state behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/playlists",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0127-native-public-id-migration-and-id-preserving-schema-for-api-v1.md",
+      "requirements": [
+        "PRD-PLAYLIST-001",
+        "PRD-PLAYLIST-003",
+        "PRD-API-M1-003"
+      ],
+      "legacyEvidence": [
+        "catalog/user-playlists-limit-param"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_playlists.rs::playlist_crud_routes_preserve_order_dual_add_shapes_and_ownership"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/songs/disliked",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0127-native-public-id-migration-and-id-preserving-schema-for-api-v1.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-USER-001",
+        "PRD-USER-002"
+      ],
+      "legacyEvidence": [
+        "native-user-extra/user-songs-disliked"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact route and the focused HTTP test preserves the promoted frozen-oracle status, DTO, paging, public-ID, and user-state behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/songs/liked",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0127-native-public-id-migration-and-id-preserving-schema-for-api-v1.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-USER-001",
+        "PRD-USER-002"
+      ],
+      "legacyEvidence": [
+        "native-user-extra/user-songs-liked"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact route and the focused HTTP test preserves the promoted frozen-oracle status, DTO, paging, public-ID, and user-state behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/songs/rated",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0127-native-public-id-migration-and-id-preserving-schema-for-api-v1.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-USER-001",
+        "PRD-USER-002"
+      ],
+      "legacyEvidence": [
+        "native-user-extra/user-songs-rated"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact route and the focused HTTP test preserves the promoted frozen-oracle status, DTO, paging, public-ID, and user-state behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/songs/recently-played",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0127-native-public-id-migration-and-id-preserving-schema-for-api-v1.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-USER-001",
+        "PRD-USER-002"
+      ],
+      "legacyEvidence": [
+        "native-user-extra/user-songs-recent"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact route and the focused HTTP test preserves the promoted frozen-oracle status, DTO, paging, public-ID, and user-state behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/songs/top-rated",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0127-native-public-id-migration-and-id-preserving-schema-for-api-v1.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-USER-001",
+        "PRD-USER-002"
+      ],
+      "legacyEvidence": [
+        "native-user-extra/user-songs-top-rated"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact route and the focused HTTP test preserves the promoted frozen-oracle status, DTO, paging, public-ID, and user-state behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/stats",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-USER-005"
+      ],
+      "legacyEvidence": [
+        "native-user-extra/user-stats"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact route and the focused HTTP test preserves the promoted frozen-oracle status, DTO, paging, public-ID, and user-state behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/stats/history",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-USER-005"
+      ],
+      "legacyEvidence": [
+        "native-user-extra/user-stats-history"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact route and the focused HTTP test preserves the promoted frozen-oracle status, DTO, paging, public-ID, and user-state behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/stats/plays-per-day",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-USER-005"
+      ],
+      "legacyEvidence": [
+        "native-user-extra/user-stats-per-day"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact route and the focused HTTP test preserves the promoted frozen-oracle status, DTO, paging, public-ID, and user-state behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/stats/top-genres",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-USER-005"
+      ],
+      "legacyEvidence": [
+        "native-user-extra/user-stats-top-genres"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact route and the focused HTTP test preserves the promoted frozen-oracle status, DTO, paging, public-ID, and user-state behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/stats/top-songs",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-USER-005"
+      ],
+      "legacyEvidence": [
+        "native-user-extra/user-stats-top-songs"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/tests/native_catalog_api.rs::native_library_acl_prevents_cross_library_browse_search_mutation_and_scrobble_leaks"
+      ],
+      "rationale": "The PostgreSQL-backed Rust adapter exercises this exact route and the focused HTTP test preserves the promoted frozen-oracle status, DTO, paging, public-ID, and user-state behavior."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/cookie/sign-in",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0124-native-authentication-session-and-refresh-token-compatibility.md",
+      "requirements": [
+        "PRD-API-M1-006",
+        "PRD-AUTH-001",
+        "PRD-AUTH-002",
+        "PRD-AUTH-005",
+        "PRD-AUTH-006"
+      ],
+      "legacyEvidence": [
+        "auth-cookie-sign-in"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_auth_api.rs::browser_cookie_is_separate_from_bearer_and_cleared_on_sign_out"
+      ],
+      "rationale": "The cookie-only browser session preserves legacy bcrypt login, response, secure cookie attributes, and separation from native Bearer authentication."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/cookie/sign-out",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0124-native-authentication-session-and-refresh-token-compatibility.md",
+      "requirements": [
+        "PRD-API-M1-006",
+        "PRD-AUTH-002",
+        "PRD-AUTH-005"
+      ],
+      "legacyEvidence": [
+        "auth-cookie-sign-out-without-cookie"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_auth_api.rs::browser_cookie_is_separate_from_bearer_and_cleared_on_sign_out"
+      ],
+      "rationale": "The cookie scheme produces the frozen 401 login challenge when absent and clears a valid browser session with the captured response when present."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/google",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0124-native-authentication-session-and-refresh-token-compatibility.md",
+      "requirements": [
+        "PRD-API-M1-006",
+        "PRD-AUTH-002",
+        "PRD-AUTH-005",
+        "PRD-AUTH-006"
+      ],
+      "legacyEvidence": [
+        "auth-google-disabled"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_auth_api.rs::google_authentication_is_disabled_by_default_for_jwt_and_cookie_flows",
+        "apps/melodee-server/tests/native_auth_api.rs::google_oidc_uses_local_jwks_and_immutable_social_subject_mapping",
+        "apps/melodee-server/tests/native_auth_api.rs::google_jwks_rejects_redirects_and_oversized_responses"
+      ],
+      "rationale": "The disabled default is frozen against the oracle; enabled mode verifies bounded RS256/JWKS, exact claims, domain policy, key rotation, and immutable migrated subject linkage using deterministic local fixtures."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/cookie/google",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0124-native-authentication-session-and-refresh-token-compatibility.md",
+      "requirements": [
+        "PRD-API-M1-006",
+        "PRD-AUTH-002",
+        "PRD-AUTH-005",
+        "PRD-AUTH-006"
+      ],
+      "legacyEvidence": [
+        "auth-cookie-google-disabled"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_auth_api.rs::google_authentication_is_disabled_by_default_for_jwt_and_cookie_flows",
+        "apps/melodee-server/tests/native_auth_api.rs::google_oidc_uses_local_jwks_and_immutable_social_subject_mapping"
+      ],
+      "rationale": "The browser exchange shares the verified Google identity pipeline but returns the cookie-only legacy session rather than native JWT credentials."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/password-reset/request",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0124-native-authentication-session-and-refresh-token-compatibility.md",
+      "requirements": [
+        "PRD-API-M1-006",
+        "PRD-AUTH-001",
+        "PRD-AUTH-002",
+        "PRD-AUTH-005",
+        "PRD-AUTH-006"
+      ],
+      "legacyEvidence": [
+        "auth-password-reset-request-unknown"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_auth_api.rs::password_reset_is_non_enumerating_one_use_and_revokes_refresh",
+        "crates/melodee-persistence/tests/auth_phase7.rs::reset_is_one_use_replaces_hash_and_revokes_refresh_atomically"
+      ],
+      "rationale": "Unknown, disabled, and active accounts share the non-enumerating public envelope; only a SHA-256 digest is persisted and the clear token is development-only configuration."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/password-reset/validate/{}",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0124-native-authentication-session-and-refresh-token-compatibility.md",
+      "requirements": [
+        "PRD-API-M1-006",
+        "PRD-AUTH-002",
+        "PRD-AUTH-005"
+      ],
+      "legacyEvidence": [
+        "auth-password-reset-validate-invalid"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_auth_api.rs::password_reset_is_non_enumerating_one_use_and_revokes_refresh",
+        "crates/melodee-persistence/tests/auth_phase7.rs::reset_is_one_use_replaces_hash_and_revokes_refresh_atomically"
+      ],
+      "rationale": "The endpoint validates a digest-backed, unexpired, unused token without consuming it and preserves the frozen invalid-token envelope."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/password-reset/confirm",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0124-native-authentication-session-and-refresh-token-compatibility.md",
+      "requirements": [
+        "PRD-API-M1-006",
+        "PRD-AUTH-001",
+        "PRD-AUTH-002",
+        "PRD-AUTH-005",
+        "PRD-AUTH-006"
+      ],
+      "legacyEvidence": [
+        "auth-password-reset-confirm-invalid"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_auth_api.rs::password_reset_is_non_enumerating_one_use_and_revokes_refresh",
+        "crates/melodee-persistence/tests/auth_phase7.rs::reset_is_one_use_replaces_hash_and_revokes_refresh_atomically"
+      ],
+      "rationale": "Confirmation atomically consumes the one-use token, installs a legacy-compatible bcrypt hash, and revokes every refresh family before returning success."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/artist-lookup",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-ARTIST-005"
+      ],
+      "legacyEvidence": [
+        "native-discovery/artist-lookup"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_discovery_api.rs::native_discovery_routes_use_durable_bounded_facts_and_preserve_wire_shapes"
+      ],
+      "rationale": "The bounded PostgreSQL lookup returns external identities as evidence while preserving provider DTOs and enforcing per-User library access."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/artist-lookup/providers",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-ARTIST-005"
+      ],
+      "legacyEvidence": [
+        "native-discovery/artist-lookup-providers"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_discovery_api.rs::native_discovery_routes_use_durable_bounded_facts_and_preserve_wire_shapes"
+      ],
+      "rationale": "The adapter preserves the frozen ordered provider capability list, including disabled providers used by clients for explanation."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/system/stats",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-discovery/system-stats"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_discovery_api.rs::native_discovery_routes_use_durable_bounded_facts_and_preserve_wire_shapes"
+      ],
+      "rationale": "The administrator-only route returns the frozen four statistic rows, type values, and sort order from durable PostgreSQL counts."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/system/throw",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "native-discovery/system-throw"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_discovery_api.rs::native_discovery_routes_use_durable_bounded_facts_and_preserve_wire_shapes"
+      ],
+      "rationale": "The public diagnostic route returns the frozen sanitized 500 envelope with a per-request correlation ID."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/me",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0124-native-authentication-session-and-refresh-token-compatibility.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-AUTH-002",
+        "PRD-USER-001"
+      ],
+      "legacyEvidence": [
+        "auth-refresh-rotation/access-with-token",
+        "auth-user-missing-token"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_auth_api.rs::google_oidc_uses_local_jwks_and_immutable_social_subject_mapping",
+        "apps/melodee-server/tests/native_auth_api.rs::malformed_and_expired_access_tokens_fail_with_an_empty_401"
+      ],
+      "rationale": "The route maps an authenticated migrated public identity to the frozen User DTO and preserves the empty bearer rejection."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/user/me/linked-providers",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0124-native-authentication-session-and-refresh-token-compatibility.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-AUTH-002"
+      ],
+      "legacyEvidence": [
+        "native-user-provider-state/list-empty"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_auth_api.rs::google_oidc_uses_local_jwks_and_immutable_social_subject_mapping",
+        "crates/melodee-persistence/tests/auth_phase7.rs::social_provider_subject_ownership_lists_and_unlinks_without_leaking_subjects"
+      ],
+      "rationale": "Provider subjects remain private while the route exposes only the frozen public Google link facts for the authenticated User."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/user/me/link/google",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0124-native-authentication-session-and-refresh-token-compatibility.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-AUTH-002",
+        "PRD-AUTH-006"
+      ],
+      "legacyEvidence": [
+        "native-user-provider-link-disabled/link-google-disabled"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_auth_api.rs::google_oidc_uses_local_jwks_and_immutable_social_subject_mapping",
+        "apps/melodee-server/tests/native_auth_api.rs::google_authentication_is_disabled_by_default_for_jwt_and_cookie_flows",
+        "crates/melodee-persistence/tests/auth_phase7.rs::social_provider_subject_ownership_lists_and_unlinks_without_leaking_subjects"
+      ],
+      "rationale": "The handler validates Google OIDC locally, binds the immutable subject to the authenticated User, and preserves the disabled-provider error."
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/user/me/link/google",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0124-native-authentication-session-and-refresh-token-compatibility.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-AUTH-002",
+        "PRD-AUTH-006"
+      ],
+      "legacyEvidence": [
+        "native-user-provider-state/unlink-missing-google"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_auth_api.rs::google_oidc_uses_local_jwks_and_immutable_social_subject_mapping",
+        "crates/melodee-persistence/tests/auth_phase7.rs::social_provider_subject_ownership_lists_and_unlinks_without_leaking_subjects"
+      ],
+      "rationale": "Unlinking is owner-scoped and preserves both the success message and the frozen duplicated not-found wording."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/playlists",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0127-native-public-id-migration-and-id-preserving-schema-for-api-v1.md",
+      "requirements": [
+        "PRD-PLAYLIST-001",
+        "PRD-PLAYLIST-003",
+        "PRD-API-M1-003"
+      ],
+      "legacyEvidence": [
+        "catalog-playlist-crud/list-playlists"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_playlists.rs::playlist_crud_routes_preserve_order_dual_add_shapes_and_ownership"
+      ],
+      "rationale": "The owner-scoped bounded list preserves the captured paging envelope, public IDs, ordering, and Playlist DTO shape."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/playlists/import",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0127-native-public-id-migration-and-id-preserving-schema-for-api-v1.md",
+      "requirements": [
+        "PRD-PLAYLIST-001",
+        "PRD-PLAYLIST-003",
+        "PRD-API-M1-003"
+      ],
+      "legacyEvidence": [
+        "catalog-playlist-crud/import-empty"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_playlists.rs::playlist_import_and_image_routes_are_bounded_and_content_safe"
+      ],
+      "rationale": "The multipart M3U importer preserves the captured empty-request failure while bounding bytes and lines, resolving normalized basenames through an indexed set-based projection, filtering inaccessible Tracks, and committing one owner-scoped Playlist atomically."
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/playlists/{}",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0127-native-public-id-migration-and-id-preserving-schema-for-api-v1.md",
+      "requirements": [
+        "PRD-PLAYLIST-001",
+        "PRD-PLAYLIST-003",
+        "PRD-API-M1-003"
+      ],
+      "legacyEvidence": [
+        "catalog-playlist-crud/update-playlist"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_playlists.rs::playlist_crud_routes_preserve_order_dual_add_shapes_and_ownership"
+      ],
+      "rationale": "The owner-only update preserves the captured public-ID and DTO contract without allowing another User to mutate the Playlist."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/playlists/{}/image",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0127-native-public-id-migration-and-id-preserving-schema-for-api-v1.md",
+      "requirements": [
+        "PRD-PLAYLIST-001",
+        "PRD-PLAYLIST-003",
+        "PRD-API-M1-003"
+      ],
+      "legacyEvidence": [
+        "catalog-playlist-crud/upload-image-empty"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_playlists.rs::playlist_import_and_image_routes_are_bounded_and_content_safe"
+      ],
+      "rationale": "The bounded owner-only image upload preserves the captured missing-multipart failure and accepts only fully decoded, pixel-bounded image content before persistence."
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/playlists/{}/image",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0127-native-public-id-migration-and-id-preserving-schema-for-api-v1.md",
+      "requirements": [
+        "PRD-PLAYLIST-001",
+        "PRD-PLAYLIST-003",
+        "PRD-API-M1-003"
+      ],
+      "legacyEvidence": [
+        "catalog-playlist-crud/delete-image"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_playlists.rs::playlist_import_and_image_routes_are_bounded_and_content_safe"
+      ],
+      "rationale": "The owner-only delete is idempotent and preserves the captured empty success response without touching media assets."
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/playlists/{}/songs",
+      "status": "implemented-and-differentially-tested",
+      "authority": "design/adr/ADR-0127-native-public-id-migration-and-id-preserving-schema-for-api-v1.md",
+      "requirements": [
+        "PRD-PLAYLIST-001",
+        "PRD-PLAYLIST-003",
+        "PRD-API-M1-003"
+      ],
+      "legacyEvidence": [
+        "catalog-playlist-crud/remove-songs"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_playlists.rs::playlist_crud_routes_preserve_order_dual_add_shapes_and_ownership"
+      ],
+      "rationale": "The owner-scoped removal preserves the captured empty success response and deterministically compacts Playlist order."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/playlists/smart",
+      "status": "approved-compatibility-normalization",
+      "authority": "design/adr/ADR-0128-capture-required-legacy-bug-fixes-in-native-api-v1.md",
+      "requirements": [
+        "PRD-PLAYLIST-001",
+        "PRD-PLAYLIST-002",
+        "PRD-API-M1-005"
+      ],
+      "legacyEvidence": [
+        "catalog-smart-playlists/list-smart"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_playlists.rs::smart_playlist_routes_validate_and_evaluate_bounded_mql"
+      ],
+      "rationale": "ADR-0128 item 10 replaces the captured missing-table 500 with a bounded owner-scoped list over durable smart Playlists."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/playlists/smart",
+      "status": "approved-compatibility-normalization",
+      "authority": "design/adr/ADR-0128-capture-required-legacy-bug-fixes-in-native-api-v1.md",
+      "requirements": [
+        "PRD-PLAYLIST-001",
+        "PRD-PLAYLIST-002",
+        "PRD-API-M1-005"
+      ],
+      "legacyEvidence": [
+        "catalog-smart-playlists/create-smart"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_playlists.rs::smart_playlist_routes_validate_and_evaluate_bounded_mql"
+      ],
+      "rationale": "ADR-0128 item 10 replaces the captured missing-table 500 with validated durable creation using preserved public IDs and bounded MQL."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/playlists/smart/{}",
+      "status": "approved-compatibility-normalization",
+      "authority": "design/adr/ADR-0128-capture-required-legacy-bug-fixes-in-native-api-v1.md",
+      "requirements": [
+        "PRD-PLAYLIST-001",
+        "PRD-PLAYLIST-002",
+        "PRD-API-M1-005"
+      ],
+      "legacyEvidence": [
+        "catalog-smart-playlists/get-smart"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_playlists.rs::smart_playlist_routes_validate_and_evaluate_bounded_mql"
+      ],
+      "rationale": "ADR-0128 item 10 replaces the captured missing-table 500 with an owner/public visibility check and the frozen DTO field names."
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/playlists/smart/{}",
+      "status": "approved-compatibility-normalization",
+      "authority": "design/adr/ADR-0128-capture-required-legacy-bug-fixes-in-native-api-v1.md",
+      "requirements": [
+        "PRD-PLAYLIST-001",
+        "PRD-PLAYLIST-002",
+        "PRD-API-M1-005"
+      ],
+      "legacyEvidence": [
+        "catalog-smart-playlists/update-smart"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_playlists.rs::smart_playlist_routes_validate_and_evaluate_bounded_mql"
+      ],
+      "rationale": "ADR-0128 item 10 replaces the captured missing-table 500 with an owner-only validated update that invalidates stale evaluation facts."
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/playlists/smart/{}",
+      "status": "approved-compatibility-normalization",
+      "authority": "design/adr/ADR-0128-capture-required-legacy-bug-fixes-in-native-api-v1.md",
+      "requirements": [
+        "PRD-PLAYLIST-001",
+        "PRD-PLAYLIST-002",
+        "PRD-API-M1-005"
+      ],
+      "legacyEvidence": [
+        "catalog-smart-playlists/delete-smart"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_playlists.rs::smart_playlist_routes_validate_and_evaluate_bounded_mql"
+      ],
+      "rationale": "ADR-0128 item 10 replaces the captured missing-table 500 with an owner-only durable delete."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/playlists/smart/{}/evaluate",
+      "status": "approved-compatibility-normalization",
+      "authority": "design/adr/ADR-0128-capture-required-legacy-bug-fixes-in-native-api-v1.md",
+      "requirements": [
+        "PRD-PLAYLIST-001",
+        "PRD-PLAYLIST-002",
+        "PRD-API-M1-005"
+      ],
+      "legacyEvidence": [
+        "catalog-smart-playlists/evaluate-smart"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_playlists.rs::smart_playlist_routes_validate_and_evaluate_bounded_mql"
+      ],
+      "rationale": "ADR-0128 item 10 replaces the captured missing-table 500 with bounded MQL parsing and deterministic projection paging. Evaluation fails closed for principals lacking catalog-wide access because the shared projection carries no authorization fields, and public readers cannot mutate owner evaluation metadata."
+    },
+    {
+      "method": "GET",
+      "path": "/song/stream/{}/{}/{}",
+      "status": "approved-compatibility-normalization",
+      "authority": "design/adr/ADR-0125-phase-7-stream-token-validation-and-range-semantics.md",
+      "requirements": [
+        "PRD-STREAM-001",
+        "PRD-STREAM-002",
+        "PRD-STREAM-003",
+        "PRD-API-M1-005"
+      ],
+      "legacyEvidence": [
+        "stream/get-full",
+        "stream/get-range-initial",
+        "stream/get-range-middle",
+        "stream/get-range-final-suffix",
+        "stream/get-range-open-end",
+        "stream/get-range-malformed",
+        "stream/get-range-unsatisfiable",
+        "stream/get-range-inverted",
+        "stream/get-range-multipart",
+        "stream/get-with-jwt-query-param",
+        "stream/get-tampered-token",
+        "stream/get-token-for-wrong-song",
+        "stream/get-unknown-user",
+        "stream/get-empty-guid-user"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_stream.rs::captured_token_is_url_safe_timed_client_bound_and_replayable_for_seeks",
+        "apps/melodee-server/tests/native_stream.rs::token_expiry_tampering_and_every_bound_claim_fail_uniformly",
+        "apps/melodee-server/tests/native_stream.rs::captured_single_range_matrix_is_exact",
+        "apps/melodee-server/tests/native_stream.rs::full_get_and_head_have_exact_length_type_and_range_headers",
+        "apps/melodee-server/tests/native_stream.rs::request_like_paths_wrong_sizes_and_non_regular_assets_fail_closed",
+        "apps/melodee-server/tests/native_stream.rs::symlinked_root_components_and_asset_leaves_are_never_followed",
+        "apps/melodee-server/tests/native_stream_acl.rs::valid_hmac_for_a_restricted_library_returns_uniform_unauthorized_without_media_bytes"
+      ],
+      "rationale": "The Rust adapter preserves the captured HMAC payload, seven-day/client-IP binding, seek replay, byte ranges, and HEAD behavior while ADR-0128 item 5 normalizes malformed or mismatched credentials to one non-enumerating 401 and the resolver rechecks library access before opening media."
+    }
+  ],
+  "crossSurfaceDependencies": [
+    {
+      "method": "GET",
+      "path": "/images/album_{}/{}",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "catalog-images/image-album-large"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/src/native/images.rs::image_processing_is_deterministic_and_honors_requested_dimensions",
+        "apps/melodee-server/src/native/images.rs::unsupported_and_dimension_bomb_inputs_fail_closed",
+        "apps/melodee-server/src/native/images.rs::encoded_input_byte_limit_is_checked_before_decode",
+        "apps/melodee-server/src/native/images.rs::anonymous_image_processing_concurrency_is_explicitly_bounded",
+        "apps/melodee-server/tests/native_stream.rs::bounded_asset_reads_share_the_no_follow_stream_boundary"
+      ],
+      "rationale": "The anonymous Rust image adapter returns the frozen default Album bytes for a cataloged Release and validates cache behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/images/artist_{}/{}",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "catalog-images/image-artist-thumb"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/src/native/images.rs::image_processing_is_deterministic_and_honors_requested_dimensions",
+        "apps/melodee-server/src/native/images.rs::unsupported_and_dimension_bomb_inputs_fail_closed",
+        "apps/melodee-server/src/native/images.rs::encoded_input_byte_limit_is_checked_before_decode",
+        "apps/melodee-server/src/native/images.rs::anonymous_image_processing_concurrency_is_explicitly_bounded",
+        "apps/melodee-server/tests/native_stream.rs::bounded_asset_reads_share_the_no_follow_stream_boundary"
+      ],
+      "rationale": "The anonymous Rust image adapter resolves an Artist through cataloged Releases and matches the frozen default Artist bytes."
+    },
+    {
+      "method": "GET",
+      "path": "/images/playlist_{}/{}",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "catalog-images/image-playlist-thumb"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/src/native/images.rs::image_processing_is_deterministic_and_honors_requested_dimensions",
+        "apps/melodee-server/src/native/images.rs::unsupported_and_dimension_bomb_inputs_fail_closed",
+        "apps/melodee-server/src/native/images.rs::encoded_input_byte_limit_is_checked_before_decode",
+        "apps/melodee-server/src/native/images.rs::anonymous_image_processing_concurrency_is_explicitly_bounded",
+        "apps/melodee-server/tests/native_stream.rs::bounded_asset_reads_share_the_no_follow_stream_boundary"
+      ],
+      "rationale": "The anonymous Rust image adapter serves durable Playlist image bytes or the byte-exact frozen fallback with the captured content type."
+    },
+    {
+      "method": "GET",
+      "path": "/images/song_{}/{}",
+      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006"
+      ],
+      "legacyEvidence": [
+        "catalog-images/image-song-thumb",
+        "catalog-images/image-unknown-id"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/src/native/images.rs::image_processing_is_deterministic_and_honors_requested_dimensions",
+        "apps/melodee-server/src/native/images.rs::unsupported_and_dimension_bomb_inputs_fail_closed",
+        "apps/melodee-server/src/native/images.rs::encoded_input_byte_limit_is_checked_before_decode",
+        "apps/melodee-server/src/native/images.rs::anonymous_image_processing_concurrency_is_explicitly_bounded",
+        "apps/melodee-server/tests/native_stream.rs::bounded_asset_reads_share_the_no_follow_stream_boundary"
+      ],
+      "rationale": "The anonymous Rust image adapter resolves Song artwork through its Release, matches frozen fallback bytes, and preserves unknown-ID empty 200 behavior."
+    },
+    {
+      "method": "GET",
+      "path": "/images/user_{}/{}",
+      "authority": "design/adr/ADR-0127-native-public-id-migration-and-id-preserving-schema-for-api-v1.md",
+      "requirements": [
+        "PRD-API-M1-004",
+        "PRD-API-M1-005",
+        "PRD-API-M1-006",
+        "PRD-USER-001"
+      ],
+      "legacyEvidence": [
+        "catalog-images/image-user-thumb"
+      ],
+      "rustTests": [
+        "apps/melodee-server/tests/native_catalog_api.rs::native_catalog_browse_detail_and_search_preserve_public_ids_and_user_state",
+        "apps/melodee-server/src/native/images.rs::image_processing_is_deterministic_and_honors_requested_dimensions",
+        "apps/melodee-server/src/native/images.rs::unsupported_and_dimension_bomb_inputs_fail_closed",
+        "apps/melodee-server/src/native/images.rs::encoded_input_byte_limit_is_checked_before_decode",
+        "apps/melodee-server/src/native/images.rs::anonymous_image_processing_concurrency_is_explicitly_bounded",
+        "apps/melodee-server/tests/native_stream.rs::bounded_asset_reads_share_the_no_follow_stream_boundary"
+      ],
+      "rationale": "The anonymous Rust image adapter serves a durable user avatar or the byte-exact frozen user fallback by migrated public ID."
+    }
+  ]
+}

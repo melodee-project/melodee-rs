@@ -1395,6 +1395,8 @@ async fn persist_prepared_import(
     });
     association_query.build().execute(&mut **tx).await?;
 
+    auto_complete_native_requests(tx, release_id, now).await?;
+
     sqlx::query(
         "INSERT INTO catalog_imports (
             id, work_item_id, release_id, manifest_row_id, manifest_id,
@@ -1586,6 +1588,137 @@ async fn persist_prepared_import(
         set_based_mutation_statement_count: SET_BASED_MUTATION_STATEMENT_COUNT,
         inserted: true,
     })
+}
+
+/// Preserve native-v1 request auto-completion at the catalog commit boundary.
+///
+/// The frozen server runs this behavior when a Release or Track is added. Keeping
+/// it inside the same authoritative transaction prevents a crash window between
+/// catalog publication and request completion. Exact public IDs win; the legacy
+/// normalized-name fallback is scoped to the one newly cataloged Release and its
+/// ID-backed Artist associations.
+async fn auto_complete_native_requests(
+    tx: &mut Transaction<'_, Postgres>,
+    release_id: Uuid,
+    now: OffsetDateTime,
+) -> Result<(), CatalogStoreError> {
+    sqlx::query(
+        "WITH primary_artist AS (
+             SELECT artist.id, artist.public_api_id, artist.canonical_name
+             FROM release_artists billing
+             JOIN artists artist ON artist.id = billing.artist_id
+             WHERE billing.release_id = $1 AND billing.role = 'primary'
+             ORDER BY billing.presentation_order, artist.id
+             LIMIT 1
+         ), candidate AS (
+             SELECT request.id, release.public_api_id AS target_id,
+                    release.title AS target_title, artist.canonical_name AS artist_name
+             FROM native_requests request
+             JOIN releases release ON release.id = $1
+             CROSS JOIN primary_artist artist
+             WHERE request.category = 1 AND request.status IN (1, 2)
+               AND (request.release_year IS NULL
+                    OR request.release_year = EXTRACT(year FROM release.release_date)::integer)
+               AND (
+                    request.target_release_public_api_id = release.public_api_id
+                    OR request.target_artist_public_api_id = artist.public_api_id
+                    OR (
+                        request.target_release_public_api_id IS NULL
+                        AND request.target_artist_public_api_id IS NULL
+                        AND request.release_title IS NOT NULL
+                        AND request.artist_name IS NOT NULL
+                        AND lower(btrim(request.release_title)) = lower(btrim(release.title))
+                        AND lower(btrim(request.artist_name)) = lower(btrim(artist.canonical_name))
+                    )
+               )
+         ), completed AS (
+             UPDATE native_requests request
+             SET status = 3,
+                 target_release_public_api_id = candidate.target_id,
+                 last_activity_at = $2,
+                 last_activity_type = 'SystemComment',
+                 last_activity_user_id = NULL,
+                 updated_at = $2
+             FROM candidate
+             WHERE request.id = candidate.id AND request.status IN (1, 2)
+             RETURNING request.id, candidate.target_id, candidate.target_title,
+                       candidate.artist_name
+         )
+         INSERT INTO native_request_comments (
+             id, public_api_id, request_id, parent_comment_id,
+             created_by_user_id, body, is_system, created_at
+         )
+         SELECT completed.id, completed.id, completed.id, NULL, NULL,
+                format(
+                    E'✅ **Request automatically completed!**\\n\\nThe release **%s** by **%s** has been added to the library.\\n\\n[View Release](/data/release/%s)',
+                    completed.target_title, completed.artist_name, completed.target_id
+                ),
+                true, $2
+         FROM completed",
+    )
+    .bind(release_id)
+    .bind(now)
+    .execute(&mut **tx)
+    .await?;
+
+    sqlx::query(
+        "WITH candidate AS (
+             SELECT DISTINCT ON (request.id)
+                    request.id, track.public_api_id AS target_id,
+                    track.title AS target_title, artist.canonical_name AS artist_name
+             FROM native_requests request
+             JOIN tracks track ON track.release_id = $1
+             JOIN releases release ON release.id = track.release_id
+             JOIN artist_track_associations participation
+               ON participation.track_id = track.id AND participation.is_performance
+             JOIN artists artist ON artist.id = participation.artist_id
+             WHERE request.category = 2 AND request.status IN (1, 2)
+               AND (request.release_year IS NULL
+                    OR request.release_year = EXTRACT(year FROM release.release_date)::integer)
+               AND (
+                    request.target_track_public_api_id = track.public_api_id
+                    OR request.target_artist_public_api_id = artist.public_api_id
+                    OR (
+                        request.target_track_public_api_id IS NULL
+                        AND request.target_artist_public_api_id IS NULL
+                        AND request.track_title IS NOT NULL
+                        AND request.artist_name IS NOT NULL
+                        AND lower(btrim(request.track_title)) = lower(btrim(track.title))
+                        AND lower(btrim(request.artist_name)) = lower(btrim(artist.canonical_name))
+                    )
+               )
+             ORDER BY request.id, track.ordinal, artist.id
+         ), completed AS (
+             UPDATE native_requests request
+             SET status = 3,
+                 target_track_public_api_id = candidate.target_id,
+                 last_activity_at = $2,
+                 last_activity_type = 'SystemComment',
+                 last_activity_user_id = NULL,
+                 updated_at = $2
+             FROM candidate
+             WHERE request.id = candidate.id AND request.status IN (1, 2)
+             RETURNING request.id, candidate.target_id, candidate.target_title,
+                       candidate.artist_name
+         )
+         INSERT INTO native_request_comments (
+             id, public_api_id, request_id, parent_comment_id,
+             created_by_user_id, body, is_system, created_at
+         )
+         SELECT completed.id, completed.id, completed.id, NULL, NULL,
+                format(
+                    E'✅ **Request automatically completed!**\\n\\nThe track **%s** by **%s** has been added to the library.\\n\\n[View Track](/data/track/%s)',
+                    completed.target_title, completed.artist_name, completed.target_id
+                ),
+                true, $2
+         FROM completed",
+    )
+    .bind(release_id)
+    .bind(now)
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(())
 }
 
 async fn load_existing_result(

@@ -1,0 +1,49 @@
+[
+  {
+    "schemaVersion": 2,
+    "name": "native-scrobble-lastfm",
+    "surface": "melodee-api-v1",
+    "notes": "Frozen unconfigured-provider behavior for the three compiled Last.fm scrobble routes.",
+    "flow": [
+      {
+        "name": "login",
+        "method": "POST",
+        "path": "/api/v1/auth/authenticate",
+        "auth": "none",
+        "json": {"userName": "phase0-fixture", "password": "Mel0deeR0cks!"},
+        "capture": {"accessToken": "$.token"},
+        "secretCapture": ["accessToken"],
+        "normalize": {
+          "maskJsonPaths": ["$.token", "$.expiresAt", "$.refreshToken", "$.refreshTokenExpiresAt", "$.user.createdAt", "$.user.updatedAt", "$.serverVersion"],
+          "maskBaseUrl": true,
+          "structureChecks": {"$.token": "jwt"}
+        }
+      },
+      {
+        "name": "auth-url-unconfigured",
+        "method": "GET",
+        "path": "/api/v1/scrobble/lastfm/auth-url?callback=https%3A%2F%2Fclient.example%2Fcallback",
+        "auth": "bearer-var:accessToken",
+        "expectStatus": 400,
+        "normalize": {"maskJsonPaths": ["$.correlationId"]}
+      },
+      {
+        "name": "session-unconfigured",
+        "method": "POST",
+        "path": "/api/v1/scrobble/lastfm/session",
+        "auth": "bearer-var:accessToken",
+        "json": {"token": "synthetic-provider-token"},
+        "expectStatus": 400,
+        "normalize": {"maskJsonPaths": ["$.correlationId"]}
+      },
+      {
+        "name": "disconnect",
+        "method": "POST",
+        "path": "/api/v1/scrobble/lastfm/disconnect",
+        "auth": "bearer-var:accessToken",
+        "expectStatus": 200,
+        "normalize": {}
+      }
+    ]
+  }
+]

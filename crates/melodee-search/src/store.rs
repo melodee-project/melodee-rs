@@ -381,6 +381,62 @@ impl SearchStore {
             .map(|hits| hits.into_iter().flatten().collect())
     }
 
+    /// Run a validated plan within one document kind and return the total
+    /// alongside a bounded deterministic page. Smart-playlist adapters use
+    /// this boundary so pagination is applied after kind scoping, not after a
+    /// mixed-result query.
+    pub fn search_kind(
+        &self,
+        plan: &CatalogQueryPlan,
+        kind: &str,
+        limit: usize,
+        offset: usize,
+    ) -> Result<(usize, Vec<SearchHit>), SearchError> {
+        if !matches!(kind, "artist" | "release" | "track") {
+            return Err(SearchError::InvalidQuery(
+                "search kind must be artist, release, or track".to_string(),
+            ));
+        }
+        if !(1..=MAX_SEARCH_RESULTS).contains(&limit) {
+            return Err(SearchError::InvalidQuery(format!(
+                "result limit must be between 1 and {MAX_SEARCH_RESULTS}"
+            )));
+        }
+        if offset > MAX_SEARCH_OFFSET {
+            return Err(SearchError::InvalidQuery(format!(
+                "result offset must not exceed {MAX_SEARCH_OFFSET}"
+            )));
+        }
+        let mut tokenizer = self.tokenizer.clone();
+        let resolve = |value: &str| self.resolve_artist_ids(value);
+        let planned = translator::plan_to_query(&self.schema, plan, &mut tokenizer, &resolve)?;
+        let kind_query = Box::new(TermQuery::new(
+            Term::from_field_text(self.schema.kind, kind),
+            IndexRecordOption::Basic,
+        ));
+        let query = BooleanQuery::new(vec![(Occur::Must, planned), (Occur::Must, kind_query)]);
+        let searcher = self.reader.searcher();
+        let total = searcher
+            .search(&query, &Count)
+            .map_err(SearchError::Tantivy)?;
+        let top = searcher
+            .search(
+                &query,
+                &TopDocs::with_limit(limit)
+                    .and_offset(offset)
+                    .order_by_string_fast_field("doc_id", Order::Asc),
+            )
+            .map_err(SearchError::Tantivy)?;
+        let hits = top
+            .into_iter()
+            .map(|(_, address)| self.hit(&searcher, address, 0.0))
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .flatten()
+            .collect();
+        Ok((total, hits))
+    }
+
     fn hit(
         &self,
         searcher: &tantivy::Searcher,

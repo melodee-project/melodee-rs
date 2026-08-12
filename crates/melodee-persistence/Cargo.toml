@@ -7,6 +7,8 @@ license.workspace = true
 publish = false
 
 [dependencies]
+getrandom.workspace = true
+melodee-auth = { path = "../melodee-auth", version = "0.1.0" }
 melodee-domain = { path = "../melodee-domain", version = "0.1.0" }
 serde.workspace = true
 serde_json.workspace = true
@@ -17,6 +19,7 @@ tracing.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+bcrypt.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
 [lints]

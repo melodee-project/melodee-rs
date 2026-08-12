@@ -50,7 +50,15 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SCENARIOS = ROOT / "compatibility" / "scenarios" / "public.json"
 SENSITIVE_QUERY_KEYS = {"p", "password", "t", "s", "jwt", "apikey", "token"}
-SENSITIVE_BODY_KEYS = {"password", "refreshtoken", "token", "secret", "apikey"}
+SENSITIVE_BODY_KEYS = {
+    "password",
+    "newpassword",
+    "refreshtoken",
+    "idtoken",
+    "token",
+    "secret",
+    "apikey",
+}
 SAFE_HEADERS = {
     "accept-ranges",
     "access-control-allow-origin",

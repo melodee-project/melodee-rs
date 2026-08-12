@@ -1,0 +1,5 @@
+{
+  "code": "BAD_REQUEST",
+  "message": "Episode not found",
+  "correlationId": "<volatile>"
+}

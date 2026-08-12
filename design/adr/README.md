@@ -58,6 +58,16 @@ python3 scripts/new_adr.py "short title"
 - [ADR-0121: Search projection schema and lifecycle](ADR-0121-search-projection-schema-and-lifecycle.md)
 - [ADR-0122: MQL syntax and semantics](ADR-0122-mql-syntax-and-semantics.md)
 
+## Current Phase 7 decisions
+
+- [ADR-0123: Phase 7 scope overlap handling](ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md)
+- [ADR-0124: Native authentication, session, and refresh-token compatibility](ADR-0124-native-authentication-session-and-refresh-token-compatibility.md)
+- [ADR-0125: Native stream-token validation and range semantics](ADR-0125-phase-7-stream-token-validation-and-range-semantics.md)
+- [ADR-0126: Native API rate limiting and client-address semantics](ADR-0126-rate-limiting-and-client-address-semantics-for-native-api-v1.md)
+- [ADR-0127: Native public-ID migration and identity-preserving schema](ADR-0127-native-public-id-migration-and-id-preserving-schema-for-api-v1.md)
+- [ADR-0128: Capture-required native-v1 legacy bug fixes](ADR-0128-capture-required-legacy-bug-fixes-in-native-api-v1.md)
+- [ADR-0129: Secure native public-share bearers and resolvable links](ADR-0129-secure-native-public-share-bearers-and-resolvable-links.md)
+
 ## ADR quality rules
 
 - State the decision, not merely the chosen technology.

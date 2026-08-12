@@ -1,0 +1,11 @@
+{
+  "apiKey": "<volatile>",
+  "parentCommentApiKey": null,
+  "body": "Compatibility comment",
+  "isSystem": false,
+  "createdAt": "<volatile>",
+  "createdByUser": {
+    "apiKey": "<volatile>",
+    "userName": "phase0-fixture"
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "code": "BAD_REQUEST",
+  "message": "Unable to exchange Last.fm session key",
+  "correlationId": "<volatile>"
+}

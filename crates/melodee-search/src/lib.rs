@@ -32,8 +32,8 @@ pub use schema::{
     RAW_TOKENIZER, SCHEMA_VERSION, SearchSchema, TEXT_TOKENIZER, build_schema, register_tokenizers,
 };
 pub use service::{
-    SearchDiagnostic, autocomplete_active, diagnostic, query_active, query_plan_active,
-    resolve_artist_ids_active,
+    SearchDiagnostic, autocomplete_active, diagnostic, query_active, query_active_kind,
+    query_plan_active, resolve_artist_ids_active,
 };
 pub use store::{GenerationStats, SearchHit, SearchStore};
 #[cfg(feature = "test-support")]

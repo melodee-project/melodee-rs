@@ -1,0 +1,49 @@
+[
+  {
+    "schemaVersion": 2,
+    "name": "native-discovery",
+    "surface": "melodee-api-v1",
+    "notes": "Phase 7 capture of every compiled discovery, audio-feature, chart, playback-backend, system-diagnostic, and theme route.",
+    "flow": [
+      {
+        "name": "login",
+        "method": "POST",
+        "path": "/api/v1/auth/authenticate",
+        "auth": "none",
+        "json": {"userName": "phase0-fixture", "password": "Mel0deeR0cks!"},
+        "capture": {"accessToken": "$.token"},
+        "secretCapture": ["accessToken"],
+        "normalize": {"maskJsonPaths": ["$.token", "$.expiresAt", "$.refreshToken", "$.refreshTokenExpiresAt", "$.user.createdAt", "$.user.updatedAt"], "maskBaseUrl": true}
+      },
+      {"name":"analytics-listening","method":"GET","path":"/api/v1/analytics/listening?period=week","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true}},
+      {"name":"analytics-top","method":"GET","path":"/api/v1/analytics/top/week?type=song&limit=10","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true}},
+      {"name":"artist-lookup","method":"POST","path":"/api/v1/artist-lookup","auth":"bearer-var:accessToken","json":{"artistName":"Aurora Fields","limit":5},"allowFailure":true,"normalize":{"maskBaseUrl":true}},
+      {"name":"artist-lookup-providers","method":"GET","path":"/api/v1/artist-lookup/providers","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true}},
+      {"name":"audio-bpm","method":"GET","path":"/api/v1/audio/bpm?min=80&max=140&page=1&limit=10","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true}},
+      {"name":"audio-features","method":"GET","path":"/api/v1/audio/features/ea26fc59-a545-51c2-94c4-702e1f97b80a","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true}},
+      {"name":"charts-list","method":"GET","path":"/api/v1/charts?page=1&pageSize=20","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true}},
+      {"name":"charts-detail","method":"GET","path":"/api/v1/charts/phase7-missing","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true,"maskJsonPaths":["$.correlationId"]}},
+      {"name":"charts-playlist","method":"GET","path":"/api/v1/charts/phase7-missing/playlist","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true,"maskJsonPaths":["$.correlationId"]}},
+      {"name":"backend-capabilities","method":"GET","path":"/api/v1/playback-backend/capabilities","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true,"maskJsonPaths":["$.correlationId"]}},
+      {"name":"backend-status","method":"GET","path":"/api/v1/playback-backend/status","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true,"maskJsonPaths":["$.correlationId"]}},
+      {"name":"backend-initialize","method":"POST","path":"/api/v1/playback-backend/initialize","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true,"maskJsonPaths":["$.correlationId"]}},
+      {"name":"backend-shutdown","method":"POST","path":"/api/v1/playback-backend/shutdown","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true,"maskJsonPaths":["$.correlationId"]}},
+      {"name":"backend-register","method":"POST","path":"/api/v1/playback-backend/register-endpoint","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true,"maskJsonPaths":["$.correlationId"]}},
+      {"name":"backend-heartbeat","method":"POST","path":"/api/v1/playback-backend/heartbeat/00000000-0000-0000-0000-000000000001","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true,"maskJsonPaths":["$.correlationId"]}},
+      {"name":"recommendations","method":"GET","path":"/api/v1/recommendations?limit=10&type=song&category=discover","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true}},
+      {"name":"endpoints-list","method":"GET","path":"/api/v1/endpoints","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true,"maskJsonPaths":["$.correlationId"]}},
+      {"name":"endpoints-for-session","method":"GET","path":"/api/v1/endpoints/for-session/00000000-0000-0000-0000-000000000001","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true,"maskJsonPaths":["$.correlationId"]}},
+      {"name":"endpoints-attach","method":"POST","path":"/api/v1/endpoints/00000000-0000-0000-0000-000000000001/attach","auth":"bearer-var:accessToken","json":{"sessionApiKey":"00000000-0000-0000-0000-000000000001"},"allowFailure":true,"normalize":{"maskBaseUrl":true,"maskJsonPaths":["$.correlationId"]}},
+      {"name":"endpoints-detach","method":"POST","path":"/api/v1/endpoints/00000000-0000-0000-0000-000000000001/detach","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true,"maskJsonPaths":["$.correlationId"]}},
+      {"name":"system-stats","method":"GET","path":"/api/v1/system/stats","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true}},
+      {"name":"system-throw","method":"GET","path":"/api/v1/system/throw","auth":"none","allowFailure":true,"normalize":{"maskBaseUrl":true,"maskJsonPaths":["$.correlationId"]}},
+      {"name":"themes-list","method":"GET","path":"/api/v1/themes","auth":"none","allowFailure":true,"normalize":{"maskBaseUrl":true}},
+      {"name":"themes-me","method":"POST","path":"/api/v1/themes/me","auth":"bearer-var:accessToken","json":{"themeId":"phase7-missing"},"allowFailure":true,"normalize":{"maskBaseUrl":true,"maskJsonPaths":["$.correlationId"]}},
+      {"name":"themes-rescan","method":"POST","path":"/api/v1/themes/rescan","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true}},
+      {"name":"themes-import","method":"POST","path":"/api/v1/themes/import","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true,"maskJsonPaths":["$.correlationId"]}},
+      {"name":"themes-export","method":"GET","path":"/api/v1/themes/phase7-missing/export","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true,"maskJsonPaths":["$.correlationId"]}},
+      {"name":"themes-delete","method":"DELETE","path":"/api/v1/themes/phase7-missing","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true,"maskJsonPaths":["$.correlationId"]}},
+      {"name":"themes-file","method":"GET","path":"/api/v1/themes/phase7-missing/file/theme.css","auth":"none","allowFailure":true,"normalize":{"maskBaseUrl":true,"maskJsonPaths":["$.correlationId"]}}
+    ]
+  }
+]

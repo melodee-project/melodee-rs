@@ -1,0 +1,28 @@
+{
+  "name": "native-user-extra/genres-hated",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/api/v1/genres/hated",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "native-user-extra-genres-hated.json",
+    "sha256": "cc7f13e74640e617b15fd5c4db96c47e9753178584919246e54e306dd1a3a4d6",
+    "bytes": 140
+  },
+  "normalize": {},
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": true
+}

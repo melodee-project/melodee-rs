@@ -1,0 +1,30 @@
+[
+  {
+    "type": 4,
+    "title": "Albums",
+    "data": "10",
+    "description": null,
+    "sortOrder": 1
+  },
+  {
+    "type": 4,
+    "title": "Artists",
+    "data": "10",
+    "description": null,
+    "sortOrder": 2
+  },
+  {
+    "type": 4,
+    "title": "Playlists",
+    "data": "2",
+    "description": null,
+    "sortOrder": 6
+  },
+  {
+    "type": 4,
+    "title": "Songs",
+    "data": "19",
+    "description": null,
+    "sortOrder": 9
+  }
+]

@@ -1,0 +1,30 @@
+{
+  "name": "native-discovery/recommendations",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/api/v1/recommendations?limit=10&type=song&category=discover",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "native-discovery-recommendations.json",
+    "sha256": "32e42088c06f1f7206e7a21dac63ad52b1b77142addc91305a812d4980a081ec",
+    "bytes": 54
+  },
+  "normalize": {
+    "maskBaseUrl": true
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": true
+}

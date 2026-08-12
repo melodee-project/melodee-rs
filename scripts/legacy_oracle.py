@@ -384,6 +384,12 @@ def seed_sql(catalog: dict, media: dict[str, tuple[int, str]]) -> str:
     statements.append('DELETE FROM "Shares";')
     statements.append('DELETE FROM "Bookmarks";')
     statements.append('DELETE FROM "PlayQues";')
+    statements.append('DELETE FROM "RequestComments";')
+    statements.append('DELETE FROM "RequestParticipants";')
+    statements.append('DELETE FROM "RequestUserStates";')
+    statements.append('DELETE FROM "Requests";')
+    statements.append('DELETE FROM "UserEqualizerPresets";')
+    statements.append('DELETE FROM "UserPlaybackSettings";')
     # Non-fixture users (scenario-created, e.g. OpenSubsonic createUser) must
     # not leak either; user-dependent rows above are already wiped.
     statements.append(
@@ -693,6 +699,31 @@ def seed_sql(catalog: dict, media: dict[str, tuple[int, str]]) -> str:
                 + ");"
             )
 
+    # Stable anonymous native-v1 share fixture. The public short ID is part of
+    # the external contract and intentionally remains human-readable here so
+    # the unauthenticated route can be captured without leaking a generated ID
+    # from a prior request step.
+    statements.append(
+        'INSERT INTO "Shares" ("UserId","ShareId","ShareType","ShareUniqueId","IsDownloadable",'
+        '"VisitCount","IsLocked","SortOrder","ApiKey","CreatedAt","Description") VALUES ('
+        + ",".join(
+            [
+                f'(SELECT "Id" FROM "Users" WHERE "UserName" = {sql_literal(FIXTURE_USER)})',
+                str(song_ids["nl-02-polarveil"]),
+                "1",
+                sql_literal("phase7-public-song"),
+                "false",
+                "0",
+                "false",
+                "0",
+                sql_literal(fixture_uuid("share", "public-song")),
+                now,
+                sql_literal("Phase 7 public share fixture"),
+            ]
+        )
+        + ");"
+    )
+
     statements.append("SET session_replication_role = DEFAULT;")
 
     # An expired refresh token for negative-path capture. HashedToken is
@@ -959,9 +990,18 @@ def cmd_verify(config: OracleConfig) -> None:
 
 
 SCENARIO_FILES = [
+    "public.json",
     "native-auth.json",
+    "native-auth-additional.json",
     "native-catalog.json",
+    "native-discovery.json",
+    "native-excluded.json",
     "native-stream.json",
+    "native-scrobble-extra.json",
+    "native-user-extra.json",
+    "native-user-providers.json",
+    "native-community.json",
+    "native-podcasts.json",
     "opensubsonic-system.json",
     "opensubsonic-auth.json",
     "opensubsonic-browse.json",

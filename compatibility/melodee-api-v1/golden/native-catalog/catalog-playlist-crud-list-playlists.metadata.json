@@ -1,0 +1,39 @@
+{
+  "name": "catalog-playlist-crud/list-playlists",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/api/v1/playlists?page=1&pageSize=50",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "bodyFile": "catalog-playlist-crud-list-playlists.json",
+    "sha256": "43b6fc6884fedbc4cc1bfc640fcd7d3c643e0c2f5ed6ec2dc130153efd473305",
+    "bytes": 4236
+  },
+  "normalize": {
+    "maskBaseUrl": true,
+    "maskJsonPaths": [
+      "$.data[*].id",
+      "$.data[*].thumbnailUrl",
+      "$.data[*].imageUrl",
+      "$.data[*].createdAt",
+      "$.data[*].updatedAt",
+      "$.data[*].owner.createdAt",
+      "$.data[*].owner.updatedAt"
+    ]
+  },
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

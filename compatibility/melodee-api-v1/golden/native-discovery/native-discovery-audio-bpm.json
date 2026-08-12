@@ -1,0 +1,72 @@
+{
+  "tracks": [
+    {
+      "id": "d493e627-df71-50ed-93fb-c29b9f6ec96a",
+      "title": "Lantern",
+      "artist": "The Harbour Lights",
+      "bpm": 84
+    },
+    {
+      "id": "e068e9f1-b7a1-58b9-9aaa-47c954694634",
+      "title": "Midnight Sun",
+      "artist": "Aurora Fields",
+      "bpm": 88
+    },
+    {
+      "id": "e43ff3e7-3e4a-5168-9c31-cf2676eb6cb0",
+      "title": "Tidepools",
+      "artist": "Nora Beacon",
+      "bpm": 90
+    },
+    {
+      "id": "2b8eab4b-235d-5892-99f8-c0f5f54e8ab4",
+      "title": "Solar Wind",
+      "artist": "Aurora Fields",
+      "bpm": 92
+    },
+    {
+      "id": "828f864f-0d5a-572e-a6c4-69e96fa6983f",
+      "title": "Falling (feat. Guest Vocalist)",
+      "artist": "Various Artists",
+      "bpm": 97
+    },
+    {
+      "id": "ea26fc59-a545-51c2-94c4-702e1f97b80a",
+      "title": "Polar Veil",
+      "artist": "Aurora Fields",
+      "bpm": 100
+    },
+    {
+      "id": "4c4e6173-b091-566a-82b5-3b69e8b043a4",
+      "title": "Helt Alrigt",
+      "artist": "Düné",
+      "bpm": 105
+    },
+    {
+      "id": "ab76dea7-9b0d-5b70-930a-8e6c2824d164",
+      "title": "Call and Response",
+      "artist": "The Harbour Lights",
+      "bpm": 110
+    },
+    {
+      "id": "3e185e31-88b5-519b-b830-1ae915e80ba5",
+      "title": "Caravan",
+      "artist": "Dune",
+      "bpm": 118
+    },
+    {
+      "id": "c418d383-13f5-598d-94a8-c15e5d2df348",
+      "title": "Sandstone",
+      "artist": "Dune",
+      "bpm": 120
+    }
+  ],
+  "meta": {
+    "totalCount": 12,
+    "pageSize": 10,
+    "currentPage": 1,
+    "totalPages": 2,
+    "hasPrevious": false,
+    "hasNext": true
+  }
+}

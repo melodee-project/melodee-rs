@@ -1,6 +1,6 @@
 # Technology Baseline
 
-**Audit date:** 2026-08-07; updated 2026-08-10 for the Phase 3 publication dependency
+**Audit date:** 2026-08-07; updated 2026-08-12 for Phase 7 dependencies
 **Policy:** Candidate versions are revalidated and locked when first used. Required functionality must
 remain fully FOSS.
 
@@ -10,8 +10,13 @@ remain fully FOSS.
 | Async runtime | Tokio | 1.52.3 | MIT | Scaffolded |
 | HTTP | Axum | 0.8.9 | MIT | Scaffolded |
 | HTTP middleware | tower-http | 0.7.0 | MIT | Scaffolded |
+| Outbound HTTP | reqwest | 0.13.4 | MIT/Apache-2.0 | Accepted — ADR-0123; rustls-only, bounded podcast-discovery HTTPS client |
+| JWT/JWK verification | jsonwebtoken | 11.0.0 | MIT | Accepted — ADR-0124; RS256 Google ID-token verification using bounded HTTPS JWKS, exact issuer/audience/lifetime checks, and the already-required aws-lc-rs backend |
+| XML feed parsing | quick-xml | 0.41.0 | MIT | Accepted — ADR-0123; bounded streaming RSS/Atom metadata parsing |
 | CLI | clap | 4.6.4 | MIT/Apache-2.0 | Scaffolded |
 | Serialization | Serde / serde_json | 1.0.229 / 1.0.150 | MIT/Apache-2.0 | Scaffolded |
+| ZIP archives | zip | 6.0.0 | MIT | Accepted — ADR-0123; theme packs only, in-memory, Stored/DEFLATE codecs, hard entry/size/path bounds |
+| Image processing | image-rs/image | 0.25.10 | MIT/Apache-2.0 | Accepted — ADR-0123; native artwork only, JPEG/PNG/WebP/GIF codecs, bounded input/pixels/dimensions/concurrency, deterministic output |
 | Domain errors | thiserror | 2.0.19 | MIT/Apache-2.0 | Scaffolded |
 | IDs | uuid | 1.24.0 | MIT/Apache-2.0 | Scaffolded |
 | Filesystem primitives | rustix | 1.1.4 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | Accepted — ADR-0116; safe Unix no-follow/no-replace publication boundary |
@@ -33,6 +38,27 @@ remain fully FOSS.
 Documentation-site versions were verified against the npm registry on 2026-08-07 (all packages
 active, current stable line, licenses as listed, no paid/open-core requirement for any feature
 Melodee uses). The committed `docs/pnpm-lock.yaml` is the authoritative lock.
+
+Reqwest 0.13.4 was revalidated against the crates.io package metadata on 2026-08-12. Melodee
+disables its default features and enables only JSON, query encoding, streaming response bodies,
+and rustls. Native TLS, system proxies, cookies, compression, HTTP/2, and HTTP/3 are not enabled.
+Quick-xml 0.41.0 was revalidated against crates.io on 2026-08-12. It is used without optional
+features and receives only response bodies already capped by the podcast outbound client.
+
+zip 6.0.0 was revalidated against crates.io metadata on 2026-08-12. It is MIT licensed, requires
+Rust 1.83 or newer, and the repository enables only the DEFLATE implementation needed for legacy
+theme packs. AES, bzip2, deflate64, LZMA, PPMd, XZ, and Zstandard features remain disabled.
+
+image 0.25.10 was revalidated against crates.io metadata on 2026-08-12. It is MIT/Apache-2.0
+licensed. Default features are disabled; only JPEG, PNG, WebP, and GIF codecs required by the
+native image contract are enabled. The server applies byte, pixel, dimension, and concurrency
+bounds before decoding and never mutates canonical artwork.
+
+jsonwebtoken 11.0.0 uses its `aws_lc_rs` backend instead of the broad RustCrypto feature set. This
+reuses rustls' existing audited provider and excludes the RSA 0.9 dependency carrying
+RUSTSEC-2023-0071. Reqwest's rustls platform verifier includes Mozilla-derived root-certificate data
+under `CDLA-Permissive-2.0`; that OSI-compatible permissive license is explicitly allowlisted in
+`deny.toml`. No certificate data, JWT key, or provider service is proprietary or hosted-only.
 
 ## Dependency approval checklist
 

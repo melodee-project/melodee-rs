@@ -1,0 +1,26 @@
+{
+  "name": "native-scrobble-lastfm/auth-url-unconfigured",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "GET",
+    "url": "{melodee-origin}/api/v1/scrobble/lastfm/auth-url?callback=https%3A%2F%2Fclient.example%2Fcallback",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 400,
+    "headers": {"content-type": "application/json; charset=utf-8"},
+    "bodyFile": "native-scrobble-lastfm-auth-url-unconfigured.json",
+    "sha256": "565e16e9f4ae41f0fc9198f6e5d5e3b74894c6fa28efe92be9c9a37b50db050b",
+    "bytes": 100
+  },
+  "normalize": {"maskJsonPaths": ["$.correlationId"]},
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

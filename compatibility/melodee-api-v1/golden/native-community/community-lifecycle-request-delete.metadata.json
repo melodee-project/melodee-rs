@@ -1,0 +1,28 @@
+{
+  "name": "community-lifecycle/request-delete",
+  "surface": "melodee-api-v1",
+  "request": {
+    "method": "DELETE",
+    "url": "{melodee-origin}/api/v1/requests/792461ba-3f41-4e81-8c52-14f7d62d2091",
+    "auth": "bearer-var:accessToken",
+    "headers": {
+      "User-Agent": "melodee-rs-phase0-capture/1",
+      "Authorization": "Bearer <redacted>"
+    },
+    "jsonTemplate": null,
+    "bodyTemplate": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-length": "0"
+    },
+    "bodyFile": "community-lifecycle-request-delete.bin",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "normalize": {},
+  "structureChecks": null,
+  "error": null,
+  "allowFailure": false
+}

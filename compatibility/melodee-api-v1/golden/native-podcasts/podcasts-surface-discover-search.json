@@ -1,0 +1,18 @@
+{
+  "query": "phase7-no-match",
+  "totalResults": 1,
+  "results": [
+    {
+      "title": "The Comics Alternative",
+      "artist": "Stergios Botzakis & Derek Royal",
+      "feedUrl": "https://feeds.megaphone.fm/BCM7709583822",
+      "description": null,
+      "imageUrl": "https://is1-ssl.mzstatic.com/image/thumb/Podcasts221/v4/15/e9/8c/15e98ca1-1c36-8daf-0403-2f9aba45b2e9/mza_11681085943431482324.jpg/600x600bb.jpg",
+      "genre": "Arts",
+      "episodeCount": 807,
+      "lastReleaseDate": "2019-01-30T16:02:00Z",
+      "itunesUrl": "https://podcasts.apple.com/us/podcast/the-comics-alternative/id549853961?uo=4",
+      "itunesId": "549853961"
+    }
+  ]
+}
