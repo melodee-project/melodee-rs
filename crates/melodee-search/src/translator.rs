@@ -108,7 +108,6 @@ fn target_scope(schema: &SearchSchema, target: PredicateTarget) -> BoxQuery {
         | PredicateTarget::Genre
         | PredicateTarget::Tag
         | PredicateTarget::Year
-        | PredicateTarget::Date
         | PredicateTarget::PrimaryArtist
         | PredicateTarget::FeaturedArtist
         | PredicateTarget::Performer
@@ -116,6 +115,7 @@ fn target_scope(schema: &SearchSchema, target: PredicateTarget) -> BoxQuery {
         PredicateTarget::Status => &["artist", "release"],
         PredicateTarget::Default
         | PredicateTarget::Artist
+        | PredicateTarget::Date
         | PredicateTarget::Id
         | PredicateTarget::PublicId => &["artist", "release", "track"],
     };
@@ -177,14 +177,44 @@ fn range_query(field: Field, lower: Bound<i64>, upper: Bound<i64>) -> BoxQuery {
     Box::new(RangeQuery::new(to_term(lower), to_term(upper)))
 }
 
-fn date_range_query(field: Field, lower: Bound<i64>, upper: Bound<i64>) -> BoxQuery {
-    let to_term = |bound: Bound<i64>| {
-        let date = |days: i64| tantivy::DateTime::from_timestamp_secs(days.saturating_mul(86_400));
-        match bound {
-            Bound::Included(value) => Bound::Included(Term::from_field_date(field, date(value))),
-            Bound::Excluded(value) => Bound::Excluded(Term::from_field_date(field, date(value))),
-            Bound::Unbounded => Bound::Unbounded,
-        }
+/// Translate a calendar-date predicate to a half-open timestamp interval.
+/// This makes equality cover the whole UTC calendar day for `updated_at`,
+/// while remaining exact for Release/Track dates stored at midnight.
+fn calendar_date_bounds(pred: &PlanPredicate) -> (Bound<i64>, Bound<i64>) {
+    const SECONDS_PER_DAY: i64 = 86_400;
+    let day_start = |value: &MqlValue| scalar_i64(value).saturating_mul(SECONDS_PER_DAY);
+    let next_day = |value: &MqlValue| day_start(value).saturating_add(SECONDS_PER_DAY);
+    match &pred.value {
+        MqlValue::Range(low, high) => (
+            low.as_deref()
+                .map_or(Bound::Unbounded, |value| Bound::Included(day_start(value))),
+            high.as_deref()
+                .map_or(Bound::Unbounded, |value| Bound::Excluded(next_day(value))),
+        ),
+        value => match pred.op {
+            CompareOp::Eq | CompareOp::NotEq => (
+                Bound::Included(day_start(value)),
+                Bound::Excluded(next_day(value)),
+            ),
+            CompareOp::Lt => (Bound::Unbounded, Bound::Excluded(day_start(value))),
+            CompareOp::Lte => (Bound::Unbounded, Bound::Excluded(next_day(value))),
+            CompareOp::Gt => (Bound::Included(next_day(value)), Bound::Unbounded),
+            CompareOp::Gte => (Bound::Included(day_start(value)), Bound::Unbounded),
+        },
+    }
+}
+
+fn timestamp_range_query(field: Field, lower: Bound<i64>, upper: Bound<i64>) -> BoxQuery {
+    let to_term = |bound: Bound<i64>| match bound {
+        Bound::Included(value) => Bound::Included(Term::from_field_date(
+            field,
+            tantivy::DateTime::from_timestamp_secs(value),
+        )),
+        Bound::Excluded(value) => Bound::Excluded(Term::from_field_date(
+            field,
+            tantivy::DateTime::from_timestamp_secs(value),
+        )),
+        Bound::Unbounded => Bound::Unbounded,
     };
     Box::new(RangeQuery::new(to_term(lower), to_term(upper)))
 }
@@ -272,6 +302,13 @@ fn leaf_to_query(
         }
         PredicateTarget::Id => {
             if let MqlValue::Text(t) = &pred.value {
+                for id in resolve(t)? {
+                    subqueries.push(kind_scope(
+                        schema,
+                        "artist",
+                        raw_term(schema.a_internal_id, &id),
+                    ));
+                }
                 subqueries.push(kind_scope(
                     schema,
                     "artist",
@@ -291,6 +328,13 @@ fn leaf_to_query(
         }
         PredicateTarget::PublicId => {
             if let MqlValue::Text(t) = &pred.value {
+                for id in resolve(t)? {
+                    subqueries.push(kind_scope(
+                        schema,
+                        "artist",
+                        raw_term(schema.a_internal_id, &id),
+                    ));
+                }
                 subqueries.push(kind_scope(
                     schema,
                     "artist",
@@ -333,7 +377,7 @@ fn leaf_to_query(
                 subqueries.push(kind_scope(
                     schema,
                     "release",
-                    raw_term(schema.r_artist_ids, &id),
+                    raw_term(schema.r_primary_artist_ids, &id),
                 ));
                 subqueries.push(kind_scope(
                     schema,
@@ -347,7 +391,7 @@ fn leaf_to_query(
                 subqueries.push(kind_scope(
                     schema,
                     "release",
-                    raw_term(schema.r_artist_ids, &id),
+                    raw_term(schema.r_featured_artist_ids, &id),
                 ));
                 subqueries.push(kind_scope(
                     schema,
@@ -361,7 +405,7 @@ fn leaf_to_query(
                 subqueries.push(kind_scope(
                     schema,
                     "release",
-                    raw_term(schema.r_artist_ids, &id),
+                    raw_term(schema.r_performer_artist_ids, &id),
                 ));
                 subqueries.push(kind_scope(
                     schema,
@@ -375,7 +419,7 @@ fn leaf_to_query(
                 subqueries.push(kind_scope(
                     schema,
                     "release",
-                    raw_term(schema.r_artist_ids, &id),
+                    raw_term(schema.r_other_artist_ids, &id),
                 ));
                 subqueries.push(kind_scope(
                     schema,
@@ -426,19 +470,23 @@ fn leaf_to_query(
             ));
         }
         PredicateTarget::Date => {
-            let (lo, hi) = match &pred.value {
-                MqlValue::Range(l, h) => range_value_bounds_i64(l, h),
-                v => range_bounds_i64(pred.op, v),
-            };
+            let (lo, hi) = calendar_date_bounds(pred);
+            subqueries.push(Box::new(BooleanQuery::new(vec![
+                (Occur::Must, target_scope(schema, PredicateTarget::Date)),
+                (
+                    Occur::Must,
+                    timestamp_range_query(schema.updated_at, lo, hi),
+                ),
+            ])));
             subqueries.push(kind_scope(
                 schema,
                 "release",
-                date_range_query(schema.r_release_date, lo, hi),
+                timestamp_range_query(schema.r_release_date, lo, hi),
             ));
             subqueries.push(kind_scope(
                 schema,
                 "track",
-                date_range_query(schema.t_release_date, lo, hi),
+                timestamp_range_query(schema.t_release_date, lo, hi),
             ));
         }
         PredicateTarget::Type => {

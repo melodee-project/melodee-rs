@@ -449,12 +449,15 @@
       "crates/melodee-ingestion/src/normalize.rs (bounded normalization concurrency with lease heartbeat)",
       "crates/melodee-ingestion/src/publication_worker.rs (independently bounded validation/publication JoinSet workers with lease heartbeat and cancellation)",
       "crates/melodee-media/src/lib.rs (streaming hashes and bounded tool output/artwork limits)",
-      "crates/melodee-catalog/src/config.rs and importer.rs (independent bounded catalog-write claim/concurrency, renewal, and cancellation)"
+      "crates/melodee-catalog/src/config.rs and importer.rs (independent bounded catalog-write claim/concurrency, renewal, and cancellation)",
+      "crates/melodee-search/src/config.rs and worker.rs (independently bounded search outbox claims, finite retry attempts, lease heartbeat, cancellation, and polling)"
     ],
     "tests": [
       "crates/melodee-ingestion/tests/inspection.rs",
       "crates/melodee-ingestion/tests/normalization.rs (measured normalization concurrency reaches 8 and never exceeds 8; validation/publication claim pools configured independently to 8; 200 Releases reach Published)",
-      "crates/melodee-persistence/tests/catalog_performance.rs (catalog concurrency reaches and never exceeds four for 200 manifests)"
+      "crates/melodee-persistence/tests/catalog_performance.rs (catalog concurrency reaches and never exceeds four for 200 manifests)",
+      "crates/melodee-persistence/tests/search_phase6.rs (bounded exclusive claims, lease expiry/reclaim, max-attempt escalation, and checkpoint fencing)",
+      "crates/melodee-search/tests/rebuild_integration.rs (lease theft cancels before commit and the scheduler next pass converges; long idle polling stops promptly)"
     ]
   },
   {
@@ -3061,7 +3064,8 @@
       "crates/melodee-persistence/src/work_items.rs (leased claims, append-only transition/failure history, retry/reprocess)",
       "apps/melodee-server/src/admin.rs and apps/melodee-cli/src/main.rs (operator-visible state/history/next actions)",
       "crates/melodee-persistence/src/catalog.rs and crates/melodee-catalog/src/importer.rs (Published/Cataloging/Cataloged lease, retry, cancellation, and diagnostics contract)",
-      "crates/melodee-persistence/src/policy.rs and apps/melodee-server/src/policy_worker.rs (Cataloged policy lease, atomic disposition, retry, cancellation, and audit contract)"
+      "crates/melodee-persistence/src/policy.rs and apps/melodee-server/src/policy_worker.rs (Cataloged policy lease, atomic disposition, retry, cancellation, and audit contract)",
+      "crates/melodee-persistence/src/search.rs and crates/melodee-search/src/worker.rs and rebuild.rs (Phase 6 leased next actions, bounded retry/permanent failure, cancellation, rebuild recovery, and diagnostics)"
     ],
     "tests": [
       "crates/melodee-domain unit tests (transition matrix and retry policy)",
@@ -3070,7 +3074,8 @@
       "crates/melodee-ingestion/tests/reconciliation.rs",
       "crates/melodee-ingestion/tests/normalization.rs",
       "crates/melodee-persistence/tests/catalog_import.rs",
-      "crates/melodee-persistence/tests/phase5_claims.rs, phase5_faults.rs, phase5_override.rs, and apps/melodee-server/tests/policy_worker.rs"
+      "crates/melodee-persistence/tests/phase5_claims.rs, phase5_faults.rs, phase5_override.rs, and apps/melodee-server/tests/policy_worker.rs",
+      "crates/melodee-search/tests/search_tests.rs, crates/melodee-search/tests/rebuild_integration.rs, crates/melodee-persistence/tests/search_phase6.rs, and design/evidence/phase-6/PHASE-6-REPORT.md"
     ]
   },
   {

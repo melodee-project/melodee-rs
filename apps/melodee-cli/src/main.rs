@@ -74,8 +74,9 @@ enum SearchCommands {
     Query {
         /// MQL expression.
         expression: String,
-        #[arg(long, default_value_t = 200)]
-        limit: usize,
+        /// Result limit. Defaults to MELODEE__SEARCH__DEFAULT_LIMIT.
+        #[arg(long)]
+        limit: Option<usize>,
         #[arg(long, default_value_t = 0)]
         offset: usize,
     },
@@ -292,7 +293,8 @@ async fn main() {
             println!("Phase 3: complete — see design/evidence/phase-3/PHASE-3-REPORT.md");
             println!("Phase 4: complete — see design/evidence/phase-4/PHASE-4-REPORT.md");
             println!("Phase 5: complete — see design/evidence/phase-5/PHASE-5-REPORT.md");
-            println!("Phase 6: active — see IMPLEMENTATION.md");
+            println!("Phase 6: complete — see design/evidence/phase-6/PHASE-6-REPORT.md");
+            println!("Phase 7: active — see IMPLEMENTATION.md");
             println!("Read: PRD.md, SPEC.md, IMPLEMENTATION.md, AGENTS.md");
         }
         Commands::Doctor => {
@@ -1028,10 +1030,38 @@ async fn main() {
             }
         }
         Commands::Search { command } => {
-            let config = SearchConfig::from_env().unwrap_or_else(|error| {
+            let mut config = SearchConfig::from_env().unwrap_or_else(|error| {
                 eprintln!("error: invalid search configuration: {error}");
                 std::process::exit(2);
             });
+            if !matches!(
+                &command,
+                SearchCommands::Parse { .. } | SearchCommands::Explain { .. }
+            ) {
+                let ingestion = IngestionConfig::from_env().unwrap_or_else(|error| {
+                    eprintln!("error: invalid ingestion configuration: {error}");
+                    std::process::exit(2);
+                });
+                let mut other_roots = ingestion
+                    .sources
+                    .iter()
+                    .map(|source| source.root.clone())
+                    .collect::<Vec<_>>();
+                if let Some(roots) = ingestion.publication_roots().unwrap_or_else(|error| {
+                    eprintln!("error: invalid publication configuration: {error}");
+                    std::process::exit(2);
+                }) {
+                    other_roots.push(roots.storage_root);
+                    other_roots.push(roots.work_area_base);
+                }
+                config.search_root =
+                    config
+                        .resolve_root_against(&other_roots)
+                        .unwrap_or_else(|error| {
+                            eprintln!("error: {}", error.operator_message());
+                            std::process::exit(2);
+                        });
+            }
             match command {
                 SearchCommands::Parse { expression } => {
                     let ast = melodee_mql::parse_with_bounds(&expression, &config.mql_bounds())
@@ -1065,7 +1095,7 @@ async fn main() {
                 SearchCommands::Status => {
                     let pool = pool().await;
                     let status = diagnostic(&config, &pool).await.unwrap_or_else(|error| {
-                        eprintln!("error: {error}");
+                        eprintln!("error: {}", error.operator_message());
                         std::process::exit(1);
                     });
                     println!(
@@ -1081,7 +1111,7 @@ async fn main() {
                     let job = request_rebuild(&config, &pool, &actor)
                         .await
                         .unwrap_or_else(|error| {
-                            eprintln!("error: {error}");
+                            eprintln!("error: {}", error.operator_message());
                             std::process::exit(1);
                         });
                     println!("rebuild requested: {}", job.job_id);
@@ -1089,7 +1119,11 @@ async fn main() {
                         run_rebuild_once(&config, &pool)
                             .await
                             .unwrap_or_else(|error| {
-                                eprintln!("error: rebuild {} failed: {error}", job.job_id);
+                                eprintln!(
+                                    "error: rebuild {} failed: {}",
+                                    job.job_id,
+                                    error.operator_message()
+                                );
                                 std::process::exit(1);
                             });
                     println!("rebuild activated: {}", completed.unwrap_or(job.job_id));
@@ -1100,12 +1134,18 @@ async fn main() {
                     offset,
                 } => {
                     let pool = pool().await;
-                    let hits = query_active(&config, &pool, &expression, limit, offset)
-                        .await
-                        .unwrap_or_else(|error| {
-                            eprintln!("error: {error}");
-                            std::process::exit(1);
-                        });
+                    let hits = query_active(
+                        &config,
+                        &pool,
+                        &expression,
+                        limit.unwrap_or(config.default_limit),
+                        offset,
+                    )
+                    .await
+                    .unwrap_or_else(|error| {
+                        eprintln!("error: {}", error.operator_message());
+                        std::process::exit(1);
+                    });
                     for hit in hits {
                         println!(
                             "{}\t{}\t{}\t{}",
@@ -1122,7 +1162,7 @@ async fn main() {
                     let values = autocomplete_active(&config, &pool, &kind, &prefix, limit)
                         .await
                         .unwrap_or_else(|error| {
-                            eprintln!("error: {error}");
+                            eprintln!("error: {}", error.operator_message());
                             std::process::exit(1);
                         });
                     for value in values {
@@ -1668,10 +1708,18 @@ mod tests {
             Commands::Search {
                 command: SearchCommands::Query {
                     expression,
-                    limit: 25,
+                    limit: Some(25),
                     offset: 50
                 }
             } if expression == "artist:Björk"
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["melodee", "search", "query", "artist:Björk"])
+                .expect("search query with configured default")
+                .command,
+            Commands::Search {
+                command: SearchCommands::Query { limit: None, .. }
+            }
         ));
         for command in ["parse", "explain"] {
             assert!(Cli::try_parse_from(["melodee", "search", command, "year:1990..1999"]).is_ok());

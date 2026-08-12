@@ -4,6 +4,8 @@ use melodee_mql::{CatalogQueryPlan, parse_and_plan_with_bounds};
 use melodee_persistence::{SearchProjectionStatus, SearchProjectionStore};
 use serde::Serialize;
 use sqlx::PgPool;
+use tracing::warn;
+use uuid::Uuid;
 
 use crate::config::SearchConfig;
 use crate::error::SearchError;
@@ -14,6 +16,7 @@ use crate::store::{GenerationStats, SearchHit, SearchStore};
 pub struct SearchDiagnostic {
     pub projection: SearchProjectionStatus,
     pub generation: Option<GenerationStats>,
+    pub generation_error_code: Option<String>,
     pub generation_error: Option<String>,
 }
 
@@ -80,6 +83,19 @@ pub async fn resolve_artist_ids_active(
             "Artist lookup must be nonblank and within the MQL input bound".to_string(),
         ));
     }
+    if let Ok(artist_uuid) = Uuid::parse_str(value)
+        && let Some(redirected) = sqlx::query_scalar::<_, Uuid>(
+            "SELECT resolve_artist_redirect(artist.id)
+             FROM artists artist
+             WHERE artist.id = $1 OR artist.public_api_id = $1
+             LIMIT 1",
+        )
+        .bind(artist_uuid)
+        .fetch_optional(pool)
+        .await?
+    {
+        return Ok(vec![redirected.to_string()]);
+    }
     let path = active_generation_path(config, pool).await?;
     let value = value.to_string();
     tokio::task::spawn_blocking(move || {
@@ -108,16 +124,19 @@ pub async fn diagnostic(
         return Ok(SearchDiagnostic {
             projection,
             generation: None,
+            generation_error_code: Some("search.no_active_generation".to_string()),
             generation_error: Some("no active search generation".to_string()),
         });
     };
     let path = match validate_active_manifest(&root, &active) {
         Ok(path) => path,
         Err(error) => {
+            warn!(error = ?error, generation_id = %active.generation_id, "active search generation manifest validation failed");
             return Ok(SearchDiagnostic {
                 projection,
                 generation: None,
-                generation_error: Some(error.to_string()),
+                generation_error_code: Some(error.reason_code().to_string()),
+                generation_error: Some(error.operator_message().to_string()),
             });
         }
     };
@@ -134,22 +153,35 @@ pub async fn diagnostic(
             Ok(SearchDiagnostic {
                 projection,
                 generation: Some(generation),
+                generation_error_code: None,
                 generation_error: None,
             })
         }
-        Ok(generation) => Ok(SearchDiagnostic {
-            projection,
-            generation: None,
-            generation_error: Some(format!(
-                "active generation metadata mismatch: database={:?}, index={generation:?}",
-                active.current_document_counts
-            )),
-        }),
-        Err(error) => Ok(SearchDiagnostic {
-            projection,
-            generation: None,
-            generation_error: Some(error.to_string()),
-        }),
+        Ok(generation) => {
+            warn!(
+                generation_id = %active.generation_id,
+                database_counts = ?active.current_document_counts,
+                index_stats = ?generation,
+                "active search generation metadata does not match its index"
+            );
+            Ok(SearchDiagnostic {
+                projection,
+                generation: None,
+                generation_error_code: Some("search.generation_metadata_mismatch".to_string()),
+                generation_error: Some(
+                    "active search generation metadata does not match its index".to_string(),
+                ),
+            })
+        }
+        Err(error) => {
+            warn!(error = ?error, generation_id = %active.generation_id, "active search generation could not be inspected");
+            Ok(SearchDiagnostic {
+                projection,
+                generation: None,
+                generation_error_code: Some(error.reason_code().to_string()),
+                generation_error: Some(error.operator_message().to_string()),
+            })
+        }
     }
 }
 

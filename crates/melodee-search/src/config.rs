@@ -13,6 +13,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::SearchError;
 
+#[cfg(feature = "test-support")]
+use crate::worker::{SearchApplyTestBarrier, SearchSchedulerTestProbe};
+
 pub const ENV_SEARCH_ENABLED: &str = "MELODEE__SEARCH__ENABLED";
 pub const ENV_SEARCH_ROOT: &str = "MELODEE__SEARCH__ROOT";
 pub const ENV_SEARCH_LEASE_SECONDS: &str = "MELODEE__SEARCH__LEASE_SECONDS";
@@ -22,6 +25,9 @@ pub const ENV_SEARCH_POLL_INTERVAL_MS: &str = "MELODEE__SEARCH__POLL_INTERVAL_MS
 pub const ENV_SEARCH_SNAPSHOT_PAGE_SIZE: &str = "MELODEE__SEARCH__SNAPSHOT_PAGE_SIZE";
 pub const ENV_SEARCH_DEFAULT_LIMIT: &str = "MELODEE__SEARCH__DEFAULT_LIMIT";
 pub const ENV_SEARCH_MAX_LIMIT: &str = "MELODEE__SEARCH__MAX_LIMIT";
+
+const MAX_SEARCH_LEASE_SECONDS: u64 = 3_600;
+const MAX_SEARCH_POLL_INTERVAL_MS: u64 = 60_000;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchConfig {
@@ -44,6 +50,14 @@ pub struct SearchConfig {
     pub max_limit: usize,
     /// Whether the search worker is enabled at server startup.
     pub enabled: bool,
+    #[cfg(feature = "test-support")]
+    #[serde(skip)]
+    #[doc(hidden)]
+    pub apply_test_barrier: Option<SearchApplyTestBarrier>,
+    #[cfg(feature = "test-support")]
+    #[serde(skip)]
+    #[doc(hidden)]
+    pub scheduler_test_probe: Option<SearchSchedulerTestProbe>,
 }
 
 impl Default for SearchConfig {
@@ -58,6 +72,10 @@ impl Default for SearchConfig {
             default_limit: 200,
             max_limit: 1000,
             enabled: false,
+            #[cfg(feature = "test-support")]
+            apply_test_barrier: None,
+            #[cfg(feature = "test-support")]
+            scheduler_test_probe: None,
         }
     }
 }
@@ -85,6 +103,10 @@ impl SearchConfig {
             )?,
             default_limit: parse_usize(ENV_SEARCH_DEFAULT_LIMIT, defaults.default_limit)?,
             max_limit: parse_usize(ENV_SEARCH_MAX_LIMIT, defaults.max_limit)?,
+            #[cfg(feature = "test-support")]
+            apply_test_barrier: None,
+            #[cfg(feature = "test-support")]
+            scheduler_test_probe: None,
         };
         config.validate()?;
         if config.enabled && std::env::var_os(ENV_SEARCH_ROOT).is_none() {
@@ -97,18 +119,16 @@ impl SearchConfig {
 
     /// The MQL resource bounds used when parsing/planning queries.
     pub fn mql_bounds(&self) -> Bounds {
-        Bounds {
-            default_limit: self.default_limit,
-            max_limit: self.max_limit,
-            ..Bounds::default()
-        }
+        Bounds::default()
     }
 
     /// Validate positive/finite bounds and the search root, failing fast on
     /// invalid configuration (rule F: validate positive bounds and path safety).
     pub fn validate(&self) -> Result<(), String> {
-        if self.lease_seconds == 0 {
-            return Err("lease_seconds must be > 0".to_string());
+        if !(1..=MAX_SEARCH_LEASE_SECONDS).contains(&self.lease_seconds) {
+            return Err(format!(
+                "lease_seconds must be between 1 and {MAX_SEARCH_LEASE_SECONDS}"
+            ));
         }
         if self.claim_batch_size == 0 {
             return Err("claim_batch_size must be > 0".to_string());
@@ -133,8 +153,10 @@ impl SearchConfig {
                 melodee_persistence::MAX_SEARCH_SNAPSHOT_PAGE
             ));
         }
-        if self.poll_interval_ms == 0 {
-            return Err("poll_interval_ms must be > 0".to_string());
+        if !(1..=MAX_SEARCH_POLL_INTERVAL_MS).contains(&self.poll_interval_ms) {
+            return Err(format!(
+                "poll_interval_ms must be between 1 and {MAX_SEARCH_POLL_INTERVAL_MS}"
+            ));
         }
         if self.default_limit == 0 || self.default_limit > self.max_limit {
             return Err("default_limit must be in (0, max_limit]".to_string());
@@ -152,6 +174,14 @@ impl SearchConfig {
     /// symlink-containing, or otherwise unsafe paths.
     pub fn resolve_root(&self) -> Result<PathBuf, SearchError> {
         validate_search_root(&self.search_root)
+    }
+
+    /// Resolve the search root and apply the shared source/storage overlap
+    /// policy used by server and administrative entrypoints.
+    pub fn resolve_root_against(&self, other_roots: &[PathBuf]) -> Result<PathBuf, SearchError> {
+        let root = self.resolve_root()?;
+        reject_root_overlap(&root, other_roots)?;
+        Ok(root)
     }
 }
 
@@ -319,23 +349,57 @@ mod tests {
     use super::*;
 
     #[test]
-    fn configuration_rejects_zero_and_excessive_worker_bounds() {
+    fn configuration_rejects_zero_and_excessive_bounds() {
         let mut config = SearchConfig::default();
+        config.lease_seconds = 0;
+        assert!(config.validate().is_err());
+
+        config = SearchConfig::default();
         config.claim_batch_size = 0;
         assert!(config.validate().is_err());
 
+        config = SearchConfig::default();
+        config.lease_seconds = MAX_SEARCH_LEASE_SECONDS + 1;
+        assert!(config.validate().is_err());
+
+        config = SearchConfig::default();
         config.claim_batch_size = melodee_persistence::MAX_SEARCH_OUTBOX_BATCH + 1;
         assert!(config.validate().is_err());
 
-        config.claim_batch_size = 1;
+        config = SearchConfig::default();
         config.snapshot_page_size = melodee_persistence::MAX_SEARCH_SNAPSHOT_PAGE + 1;
         assert!(config.validate().is_err());
 
-        config.snapshot_page_size = 1;
+        config = SearchConfig::default();
         config.max_outbox_attempts = 0;
         assert!(config.validate().is_err());
 
+        config = SearchConfig::default();
         config.max_outbox_attempts = melodee_persistence::MAX_SEARCH_OUTBOX_ATTEMPTS + 1;
+        assert!(config.validate().is_err());
+
+        config = SearchConfig::default();
+        config.poll_interval_ms = 0;
+        assert!(config.validate().is_err());
+
+        config = SearchConfig::default();
+        config.poll_interval_ms = MAX_SEARCH_POLL_INTERVAL_MS + 1;
+        assert!(config.validate().is_err());
+
+        config = SearchConfig::default();
+        config.default_limit = 0;
+        assert!(config.validate().is_err());
+
+        config = SearchConfig::default();
+        config.default_limit = config.max_limit + 1;
+        assert!(config.validate().is_err());
+
+        config = SearchConfig::default();
+        config.max_limit = 0;
+        assert!(config.validate().is_err());
+
+        config = SearchConfig::default();
+        config.max_limit = crate::store::MAX_SEARCH_RESULTS + 1;
         assert!(config.validate().is_err());
     }
 
@@ -347,6 +411,7 @@ mod tests {
         std::fs::create_dir(&real).expect("real directory");
         let link = directory.path().join("link");
         std::os::unix::fs::symlink(&real, &link).expect("symlink fixture");
+        assert!(validate_search_root(&link).is_err());
         assert!(validate_search_root(&link.join("search")).is_err());
     }
 }

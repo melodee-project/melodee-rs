@@ -170,15 +170,48 @@ fn leading_boolean_operators_are_rejected_at_their_token() {
 }
 
 #[test]
+fn dangling_boolean_operators_are_rejected_at_their_token() {
+    for (input, expected_span) in [("title:x AND", (8, 11)), ("title:x OR", (8, 10))] {
+        let error = parse(input).expect_err("dangling operator must fail");
+        assert!(matches!(
+            error,
+            MqlError::Syntax { span, .. } if span == expected_span
+        ));
+    }
+}
+
+#[test]
 fn grouped_negation_error_has_the_group_span() {
     let error = parse("-(a OR b)").expect_err("dash cannot negate a group");
-    assert!(matches!(error, MqlError::Syntax { span: (2, 8), .. }));
+    assert!(matches!(error, MqlError::Syntax { span: (0, 9), .. }));
+}
+
+#[test]
+fn empty_regex_reports_regex_error_at_the_regex_token() {
+    for (input, expected_span) in [("title://", (6, 8)), ("//", (0, 2))] {
+        let error = parse(input).expect_err("empty regex");
+        assert!(matches!(
+            error,
+            MqlError::RegexError { span, .. } if span == expected_span
+        ));
+    }
 }
 
 #[test]
 fn unterminated_quote_reports_span() {
     let err = parse("title:\"unterminated").expect_err("should fail");
-    assert!(matches!(err, MqlError::Syntax { .. }));
+    assert!(matches!(err, MqlError::Syntax { span: (6, 19), .. }));
+}
+
+#[test]
+fn unary_and_group_eof_errors_point_at_the_input_end() {
+    for (input, expected_span) in [("NOT", (3, 3)), ("-", (1, 1)), ("(", (1, 1))] {
+        let error = parse(input).expect_err("incomplete expression must fail");
+        assert!(matches!(
+            error,
+            MqlError::Syntax { span, .. } if span == expected_span
+        ));
+    }
 }
 
 #[test]

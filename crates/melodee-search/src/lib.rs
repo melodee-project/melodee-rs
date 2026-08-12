@@ -36,4 +36,7 @@ pub use service::{
     resolve_artist_ids_active,
 };
 pub use store::{GenerationStats, SearchHit, SearchStore};
+#[cfg(feature = "test-support")]
+#[doc(hidden)]
+pub use worker::{SearchApplyTestBarrier, SearchSchedulerTestProbe};
 pub use worker::{SearchPassStats, SearchSchedulerHandle, apply_outbox_once, start_search_loop};

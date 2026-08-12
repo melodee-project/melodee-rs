@@ -15,4 +15,4 @@ configuration, hardware/environment, exact command, result, limitations, and rel
 - [Phase 3](phase-3/PHASE-3-REPORT.md)
 - [Phase 4](phase-4/PHASE-4-REPORT.md)
 - [Phase 5](phase-5/PHASE-5-REPORT.md)
-- [Phase 6 Candidate](phase-6/PHASE-6-REPORT.md)
+- [Phase 6](phase-6/PHASE-6-REPORT.md)

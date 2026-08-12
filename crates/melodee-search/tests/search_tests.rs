@@ -18,6 +18,7 @@ fn artist(id: &str, public: &str, name: &str, aliases: &[&str], rev: i64) -> Art
         display_name: name.to_string(),
         sort_name: name.to_string(),
         aliases: aliases.iter().map(|s| s.to_string()).collect(),
+        redirect_ids: Vec::new(),
         disambiguation: None,
         artist_type: "person".to_string(),
         status: "verified".to_string(),
@@ -73,6 +74,10 @@ fn release(id: &str, title: &str, artist_ids: &[&str], rev: i64) -> ReleaseDoc {
         title: title.to_string(),
         sort_title: title.to_string(),
         artist_ids: artist_ids.iter().map(|s| s.to_string()).collect(),
+        primary_artist_ids: artist_ids.iter().map(|s| s.to_string()).collect(),
+        featured_artist_ids: Vec::new(),
+        performer_artist_ids: Vec::new(),
+        other_artist_ids: Vec::new(),
         artist_display: String::new(),
         genre_tags: vec![],
         release_year: Some(2000),
@@ -195,6 +200,79 @@ fn primary_featured_performer_participation() {
 }
 
 #[test]
+fn release_artist_roles_do_not_bleed_into_one_another() {
+    let directory = TempDir::new().unwrap();
+    let mut store = SearchStore::create(directory.path()).unwrap();
+    for id in ["primary", "featured", "performer", "other"] {
+        store
+            .upsert_artist(&artist(id, &format!("public-{id}"), id, &[], 1))
+            .unwrap();
+    }
+    let release = ReleaseDoc {
+        internal_id: "role-release".to_string(),
+        public_id: "public-role-release".to_string(),
+        title: "Role Exactness".to_string(),
+        sort_title: "Role Exactness".to_string(),
+        artist_ids: vec![
+            "primary".into(),
+            "featured".into(),
+            "performer".into(),
+            "other".into(),
+        ],
+        primary_artist_ids: vec!["primary".into()],
+        featured_artist_ids: vec!["featured".into()],
+        performer_artist_ids: vec!["performer".into()],
+        other_artist_ids: vec!["other".into()],
+        artist_display: String::new(),
+        genre_tags: Vec::new(),
+        release_year: None,
+        release_date_days: None,
+        release_type: "studio".to_string(),
+        status: "active".to_string(),
+        revision: 1,
+        updated_at: time::OffsetDateTime::UNIX_EPOCH,
+    };
+    store.upsert_release(&release).unwrap();
+    store
+        .upsert_track(&track(
+            "role-track",
+            "role-release",
+            "Track Role Exactness",
+            &["primary"],
+            &["featured"],
+            &["performer"],
+            &["other"],
+            1,
+        ))
+        .unwrap();
+    store.commit().unwrap();
+
+    for (scope, matching_id) in [
+        ("primaryArtist", "primary"),
+        ("featuredArtist", "featured"),
+        ("performer", "performer"),
+        ("other", "other"),
+    ] {
+        for candidate in ["primary", "featured", "performer", "other"] {
+            let hits = store
+                .search(
+                    &parse_and_plan(&format!("{scope}:{candidate}")).unwrap(),
+                    10,
+                    0,
+                )
+                .unwrap();
+            for expected_entity in ["role-release", "role-track"] {
+                assert_eq!(
+                    hits.iter().any(|hit| hit.internal_id == expected_entity),
+                    candidate == matching_id,
+                    "{scope}:{candidate} returned {hits:?}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn diacritics_fold_to_ascii() {
     let (_d, store) = populated();
     // ASCII-folded query "bjork" should match "Björk".
@@ -269,6 +347,97 @@ fn date_fields_use_tantivy_dates_and_preserve_range_semantics() {
         )
         .unwrap();
     assert_eq!(range.len(), 3);
+}
+
+#[test]
+fn date_queries_union_whole_day_updated_at_with_release_dates() {
+    let directory = TempDir::new().unwrap();
+    let mut store = SearchStore::create(directory.path()).unwrap();
+    let same_day = time::OffsetDateTime::from_unix_timestamp(951_827_696).unwrap();
+    let next_day = time::OffsetDateTime::from_unix_timestamp(951_912_000).unwrap();
+
+    let mut same_day_artist = artist("updated-same", "pub-updated-same", "Same Day", &[], 1);
+    same_day_artist.updated_at = same_day;
+    store.upsert_artist(&same_day_artist).unwrap();
+    let mut next_day_artist = artist("updated-next", "pub-updated-next", "Next Day", &[], 1);
+    next_day_artist.updated_at = next_day;
+    store.upsert_artist(&next_day_artist).unwrap();
+
+    let mut dated_release = release("dated-release", "Dated Release", &[], 1);
+    dated_release.release_date_days = Some(11_016);
+    store.upsert_release(&dated_release).unwrap();
+    let mut dated_track = track(
+        "dated-track",
+        "dated-release",
+        "Dated Track",
+        &[],
+        &[],
+        &[],
+        &[],
+        1,
+    );
+    dated_track.release_date_days = Some(11_016);
+    store.upsert_track(&dated_track).unwrap();
+    store.commit().unwrap();
+
+    let exact = hit_ids(
+        &store
+            .search(&parse_and_plan("date:2000-02-29").unwrap(), 20, 0)
+            .unwrap(),
+    );
+    assert!(exact.contains(&"updated-same".to_string()));
+    assert!(exact.contains(&"dated-release".to_string()));
+    assert!(exact.contains(&"dated-track".to_string()));
+    assert!(!exact.contains(&"updated-next".to_string()));
+
+    let inclusive = hit_ids(
+        &store
+            .search(
+                &parse_and_plan("date:2000-02-29..2000-03-01").unwrap(),
+                20,
+                0,
+            )
+            .unwrap(),
+    );
+    assert!(inclusive.contains(&"updated-same".to_string()));
+    assert!(inclusive.contains(&"updated-next".to_string()));
+    assert!(inclusive.contains(&"dated-release".to_string()));
+    assert!(inclusive.contains(&"dated-track".to_string()));
+
+    let open_upper = hit_ids(
+        &store
+            .search(&parse_and_plan("date:..2000-02-29").unwrap(), 20, 0)
+            .unwrap(),
+    );
+    assert!(open_upper.contains(&"updated-same".to_string()));
+    assert!(open_upper.contains(&"dated-release".to_string()));
+    assert!(open_upper.contains(&"dated-track".to_string()));
+    assert!(!open_upper.contains(&"updated-next".to_string()));
+
+    let open_lower = hit_ids(
+        &store
+            .search(&parse_and_plan("date:2000-03-01..").unwrap(), 20, 0)
+            .unwrap(),
+    );
+    assert!(open_lower.contains(&"updated-next".to_string()));
+    assert!(!open_lower.contains(&"updated-same".to_string()));
+    assert!(!open_lower.contains(&"dated-release".to_string()));
+    assert!(!open_lower.contains(&"dated-track".to_string()));
+
+    let through_day = hit_ids(
+        &store
+            .search(&parse_and_plan("date<=2000-02-29").unwrap(), 20, 0)
+            .unwrap(),
+    );
+    assert!(through_day.contains(&"updated-same".to_string()));
+    assert!(!through_day.contains(&"updated-next".to_string()));
+    let after_day = hit_ids(
+        &store
+            .search(&parse_and_plan("date>2000-02-29").unwrap(), 20, 0)
+            .unwrap(),
+    );
+    assert!(after_day.contains(&"updated-next".to_string()));
+    assert!(!after_day.contains(&"updated-same".to_string()));
 }
 
 #[test]
@@ -492,7 +661,71 @@ fn owned_generation_removal_rejects_symlinks_and_root_overlap() {
         std::os::unix::fs::symlink(&outside, generation.join("escape")).unwrap();
         assert!(root.remove_generation(generation_id).is_err());
         assert_eq!(std::fs::read(&outside).unwrap(), b"authoritative");
+
+        let direct_symlink_id = uuid::Uuid::now_v7();
+        let direct_symlink_path = root
+            .create_generation(
+                direct_symlink_id,
+                time::OffsetDateTime::UNIX_EPOCH,
+                melodee_search::SCHEMA_VERSION,
+                0,
+            )
+            .unwrap();
+        std::fs::remove_file(direct_symlink_path.join("generation.json")).unwrap();
+        std::fs::remove_dir(&direct_symlink_path).unwrap();
+        let outside_directory = parent.path().join("must-survive-directory");
+        std::fs::create_dir(&outside_directory).unwrap();
+        std::fs::write(outside_directory.join("authoritative"), b"catalog truth").unwrap();
+        std::os::unix::fs::symlink(&outside_directory, &direct_symlink_path).unwrap();
+        assert!(root.remove_generation(direct_symlink_id).is_err());
+        assert_eq!(
+            std::fs::read(outside_directory.join("authoritative")).unwrap(),
+            b"catalog truth"
+        );
     }
+}
+
+#[cfg(all(
+    feature = "test-support",
+    any(target_os = "linux", target_os = "android", target_vendor = "apple")
+))]
+#[test]
+fn generation_removal_rejects_a_leaf_replaced_by_a_symlink_after_root_open() {
+    let parent = TempDir::new().unwrap();
+    let root = SearchRoot::open(&parent.path().join("search")).unwrap();
+    let generation_id = uuid::Uuid::now_v7();
+    let generation = root
+        .create_generation(
+            generation_id,
+            time::OffsetDateTime::UNIX_EPOCH,
+            melodee_search::SCHEMA_VERSION,
+            0,
+        )
+        .unwrap();
+    let outside = parent.path().join("outside-authoritative-data");
+    std::fs::create_dir(&outside).unwrap();
+    std::fs::write(outside.join("must-survive"), b"authoritative").unwrap();
+
+    let result = root.remove_generation_with_test_hook(generation_id, || {
+        std::fs::remove_file(generation.join("generation.json")).unwrap();
+        std::fs::remove_dir(&generation).unwrap();
+        std::os::unix::fs::symlink(&outside, &generation).unwrap();
+    });
+
+    assert!(result.is_err());
+    assert_eq!(
+        std::fs::read(outside.join("must-survive")).unwrap(),
+        b"authoritative"
+    );
+    assert!(!generation.exists());
+    assert!(
+        root.path()
+            .join(format!(".retiring_gen_{generation_id}"))
+            .symlink_metadata()
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
 }
 
 #[test]

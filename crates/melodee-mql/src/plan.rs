@@ -17,8 +17,6 @@ pub struct Bounds {
     pub max_ast_depth: usize,
     pub max_clauses: usize,
     pub max_regex_len: usize,
-    pub default_limit: usize,
-    pub max_limit: usize,
     pub parse_timeout_ms: u64,
 }
 
@@ -30,8 +28,6 @@ impl Default for Bounds {
             max_ast_depth: 32,
             max_clauses: 256,
             max_regex_len: 256,
-            default_limit: 200,
-            max_limit: 1000,
             parse_timeout_ms: 100,
         }
     }
@@ -125,8 +121,6 @@ pub enum PlanNode {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct CatalogQueryPlan {
     pub root: PlanNode,
-    pub limit: usize,
-    pub offset: usize,
 }
 
 fn coerce_numeric(v: &MqlValue, field: &str, span: Span) -> Result<i64, MqlError> {
@@ -278,11 +272,7 @@ pub fn validate(ast: &MqlAst, bounds: &Bounds) -> Result<CatalogQueryPlan, MqlEr
             span: None,
         });
     }
-    Ok(CatalogQueryPlan {
-        root,
-        limit: bounds.default_limit,
-        offset: 0,
-    })
+    Ok(CatalogQueryPlan { root })
 }
 
 fn validate_node(

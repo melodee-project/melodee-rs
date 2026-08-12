@@ -17,11 +17,14 @@ const ARTISTS: usize = 35_000;
 const RELEASES: usize = 50_000;
 const DEFAULT_TRACKS: usize = 10_000_000;
 const COMMIT_INTERVAL: usize = 100_000;
+const CORPUS_IDENTITY: &str = "ordinal-v1";
 
 #[derive(Debug, Serialize)]
 struct QueryMetric {
     expression: String,
     result_count: usize,
+    expected_result_count: Option<usize>,
+    expected_ids: Vec<String>,
     warm_p50_ms: f64,
     warm_p95_ms: f64,
     warm_p99_ms: f64,
@@ -30,9 +33,7 @@ struct QueryMetric {
 #[derive(Debug, Serialize)]
 struct BenchmarkReport {
     benchmark: &'static str,
-    /// Stable corpus identity marker. Generation is deliberately ordinal and
-    /// does not use a PRNG, so changing this label does not change records.
-    seed: u64,
+    corpus_identity: &'static str,
     artists: usize,
     releases: usize,
     tracks: usize,
@@ -100,8 +101,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let corpus = query_corpus(tracks);
     let mut aggregate = Vec::new();
     let mut queries = Vec::new();
-    for expression in corpus {
-        let (metric, samples) = measure_query(&store, expression, 40)?;
+    for expectation in corpus {
+        let (metric, samples) = measure_query(&store, expectation, 40)?;
         aggregate.extend_from_slice(&samples);
         queries.push(metric);
     }
@@ -109,11 +110,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     // case, but are not interactive lookup/search traffic and therefore are
     // reported separately rather than silently diluting the agreed SLO corpus.
     let mut stress_queries = Vec::new();
-    for expression in [
-        "genre:rock AND year>=2000".to_string(),
-        "duration>=60000 AND duration<=70000".to_string(),
+    for expectation in [
+        QueryExpectation::nonempty("genre:rock AND year>=2000"),
+        QueryExpectation::nonempty("duration>=60000 AND duration<=70000"),
     ] {
-        stress_queries.push(measure_query(&store, expression, 10)?.0);
+        stress_queries.push(measure_query(&store, expectation, 10)?.0);
     }
     let aggregate_p50 = percentile_ms(&mut aggregate.clone(), 50);
     let aggregate_p95 = percentile_ms(&mut aggregate.clone(), 95);
@@ -125,7 +126,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .ok_or("document count overflow")?;
     let report = BenchmarkReport {
         benchmark: "phase6-search-10m-v1",
-        seed: 0x4d45_4c4f_4445_4506,
+        corpus_identity: CORPUS_IDENTITY,
         artists: ARTISTS,
         releases: RELEASES,
         tracks,
@@ -203,6 +204,7 @@ fn artist(ordinal: usize) -> ArtistDoc {
         display_name: format!("Benchmark Artist {ordinal}"),
         sort_name: format!("Benchmark Artist {ordinal:05}"),
         aliases: vec![format!("Alias {ordinal}")],
+        redirect_ids: Vec::new(),
         disambiguation: None,
         artist_type: "person".to_string(),
         status: "verified".to_string(),
@@ -221,6 +223,10 @@ fn release(ordinal: usize) -> ReleaseDoc {
         title: format!("Benchmark Release marker{}", ordinal % 1_000),
         sort_title: format!("Benchmark Release {ordinal:05}"),
         artist_ids: vec![format!("artist-{:05}", ordinal % ARTISTS)],
+        primary_artist_ids: vec![format!("artist-{:05}", ordinal % ARTISTS)],
+        featured_artist_ids: Vec::new(),
+        performer_artist_ids: Vec::new(),
+        other_artist_ids: Vec::new(),
         artist_display: format!("Benchmark Artist {}", ordinal % ARTISTS),
         genre_tags: vec![genre(ordinal).to_string()],
         release_year: Some(1970 + i64::try_from(ordinal % 55).unwrap_or_default()),
@@ -275,32 +281,114 @@ fn genre(ordinal: usize) -> &'static str {
     GENRES[ordinal % GENRES.len()]
 }
 
-fn query_corpus(tracks: usize) -> Vec<String> {
+#[derive(Debug)]
+struct QueryExpectation {
+    expression: String,
+    expected_result_count: Option<usize>,
+    expected_ids: Vec<String>,
+}
+
+impl QueryExpectation {
+    fn exact(expression: impl Into<String>, expected_ids: Vec<String>) -> Self {
+        Self {
+            expression: expression.into(),
+            expected_result_count: Some(expected_ids.len()),
+            expected_ids,
+        }
+    }
+
+    fn nonempty(expression: impl Into<String>) -> Self {
+        Self {
+            expression: expression.into(),
+            expected_result_count: None,
+            expected_ids: Vec::new(),
+        }
+    }
+}
+
+fn query_corpus(tracks: usize) -> Vec<QueryExpectation> {
+    let last_track_id = format!("track-{:08}", tracks.saturating_sub(1));
+    let marker_ids = ordinal_ids("track", 8, 42, 1_000, tracks, 25);
+    // `rock` is ordinal mod 8 == 0 and year 2000 is ordinal mod 55 == 30;
+    // the combined release series starts at 360 and repeats every 440.
+    let rock_2000_ids = ordinal_ids("release", 5, 360, 440, RELEASES, 25);
+    // Cross-kind role lookup sorts by `doc_id`, so the two matching Release
+    // documents precede matching Tracks in the first 25 results.
+    let mut primary_artist_ids = ordinal_ids("release", 5, 42, ARTISTS, RELEASES, 25);
+    let remaining = 25usize.saturating_sub(primary_artist_ids.len());
+    primary_artist_ids.extend(ordinal_ids("track", 8, 42, ARTISTS, tracks, remaining));
+    let mut duration_ids = Vec::new();
+    let mut cycle = 0usize;
+    while duration_ids.len() < 25 {
+        let cycle_start = match cycle.checked_mul(360_000) {
+            Some(value) if value < tracks => value,
+            _ => break,
+        };
+        for offset in 0..=10 {
+            let ordinal = cycle_start + offset;
+            if ordinal >= tracks || duration_ids.len() == 25 {
+                break;
+            }
+            duration_ids.push(format!("track-{ordinal:08}"));
+        }
+        cycle += 1;
+    }
     vec![
-        "track:marker42".to_string(),
-        "genre:rock AND year=2000".to_string(),
-        "primaryArtist:\"Benchmark Artist 42\"".to_string(),
-        format!("id:track-{:08}", tracks.saturating_sub(1)),
-        "duration:60000..60010".to_string(),
+        QueryExpectation::exact("track:marker42", marker_ids),
+        QueryExpectation::exact("genre:rock AND year=2000", rock_2000_ids),
+        QueryExpectation::exact("primaryArtist:\"Benchmark Artist 42\"", primary_artist_ids),
+        QueryExpectation::exact(format!("id:{last_track_id}"), vec![last_track_id]),
+        QueryExpectation::exact("duration:60000..60010", duration_ids),
     ]
+}
+
+fn ordinal_ids(
+    kind: &str,
+    width: usize,
+    start: usize,
+    step: usize,
+    upper: usize,
+    limit: usize,
+) -> Vec<String> {
+    (start..upper)
+        .step_by(step)
+        .take(limit)
+        .map(|ordinal| format!("{kind}-{ordinal:0width$}"))
+        .collect()
 }
 
 fn measure_query(
     store: &SearchStore,
-    expression: String,
+    expectation: QueryExpectation,
     repetitions: usize,
 ) -> Result<(QueryMetric, Vec<u128>), Box<dyn Error>> {
+    let QueryExpectation {
+        expression,
+        expected_result_count,
+        expected_ids,
+    } = expectation;
     let plan = parse_and_plan(&expression)?;
     let warmup = store.search(&plan, 25, 0)?;
     if warmup.is_empty() {
         return Err(format!("benchmark query returned no results: {expression}").into());
     }
-    if let Some(expected_id) = expression.strip_prefix("id:")
-        && (warmup.len() != 1 || warmup[0].internal_id != expected_id)
-    {
-        return Err(
-            format!("exact-ID benchmark query returned an incorrect result: {expression}").into(),
-        );
+    if expected_result_count.is_some_and(|count| warmup.len() != count) {
+        return Err(format!(
+            "benchmark query returned {} results, expected {:?}: {expression}",
+            warmup.len(),
+            expected_result_count
+        )
+        .into());
+    }
+    let actual_ids = warmup
+        .iter()
+        .map(|hit| hit.internal_id.clone())
+        .collect::<Vec<_>>();
+    if !expected_ids.is_empty() && actual_ids != expected_ids {
+        return Err(format!(
+            "benchmark query returned ids {actual_ids:?}, expected {expected_ids:?}: {expression}"
+        )
+        .into());
     }
     let mut samples = Vec::with_capacity(repetitions);
     let mut result_count = 0;
@@ -316,6 +404,8 @@ fn measure_query(
     let metric = QueryMetric {
         expression,
         result_count,
+        expected_result_count,
+        expected_ids,
         warm_p50_ms: percentile_ms(&mut samples.clone(), 50),
         warm_p95_ms: percentile_ms(&mut samples.clone(), 95),
         warm_p99_ms: percentile_ms(&mut samples.clone(), 99),

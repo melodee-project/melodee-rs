@@ -1,8 +1,8 @@
 # Phase 6 Report — Search and MQL
 
-**Status:** Candidate — review remediation and local acceptance complete; independent re-review required
+**Status:** Complete — independently reviewed and accepted
 
-**Evidence captured:** 2026-08-11T23:21:57Z
+**Evidence captured:** 2026-08-12T03:11:06Z
 
 **Base commit:** `e9cf1b3c9ce81b0d28fbf17cf4f582dba4218422` plus the Phase 6 change set
 
@@ -11,7 +11,7 @@
 ADR-0105, ADR-0107, ADR-0121, ADR-0122, and the
 [Definition of Done](../../agents/DEFINITION-OF-DONE.md).
 
-## Candidate decision
+## Final decision
 
 Phase 6 implements a disposable Tantivy projection over the authoritative Phase 4 PostgreSQL
 catalog, a pure bounded MQL parser/planner, leased incremental indexing, generational rebuild and
@@ -23,16 +23,17 @@ loss or corruption does not change PostgreSQL or media. Readers validate the Pos
 pointer against the owned generation manifest, schema, high-water mark, and document counts before
 opening the index. Query readers do not acquire the exclusive Tantivy writer lock.
 
-This report deliberately remains **Candidate**. The first independent review blocked on two P1
-findings; their remediations now require independent confirmation before Phase 6 can be marked
-complete or Phase 7 can be activated.
+The first independent review blocked on two P1 findings. Both findings and the broader follow-up
+audit were remediated, the complete benchmark and repository gates passed on the frozen tree, and
+an independent re-review returned **ACCEPT** with no remaining P0 or P1 findings. Phase 6 is
+complete and Phase 7 may begin.
 
 ## Implemented architecture
 
 - `melodee-mql` owns the span-aware lexer, recursive-descent parser, AST, field/operator validator,
   bounds, and framework-free `CatalogQueryPlan`. It has no SQLx, Tantivy, Axum, or filesystem
   dependency.
-- `melodee-search` owns the exact Tantivy 0.26.1 schema (version 2), Unicode/ASCII-folding analyzers,
+- `melodee-search` owns the exact Tantivy 0.26.1 schema (version 3), Unicode/ASCII-folding analyzers,
   deterministic queries and pagination, revision-fenced writes/tombstones, active-generation
   services, autocomplete/lookup, outbox worker, rebuild, filesystem ownership, and benchmark.
 - Migration `0009_phase6_search.sql` and `melodee-persistence::SearchProjectionStore` own the global
@@ -51,8 +52,8 @@ complete or Phase 7 can be activated.
 | ID | Result | Executable evidence |
 | --- | --- | --- |
 | A1 same-name Artists remain distinct | Satisfied | `same_name_artists_remain_distinct` |
-| A2 aliases/corrections searchable | Satisfied | alias test plus catalog-correction commit-before-ack integration path |
-| A3 role participation is ID-backed | Satisfied | `primary_featured_performer_participation` and snapshot SQL |
+| A2 aliases/corrections searchable | Satisfied | `aliases_are_searchable`, `public_identity_correction_merges_aliases_into_real_search_workers`, and `search_artist_snapshot_collects_redirect_chains_for_merged_sources` |
+| A3 role participation is ID-backed | Satisfied | `primary_featured_performer_participation`, `search_release_snapshot_splits_roles_for_primary_featured_performer_and_other`, and `postgres_snapshots_preserve_release_and_track_artist_roles_in_index` |
 | A4 stale/unordered rows cannot regress | Satisfied | revision and pending-revision fencing tests |
 | A5 tombstones affect only projection | Satisfied | delete and stale-resurrection tests |
 | A6 bounded deterministic pagination | Satisfied | MQL bounds and deterministic pagination tests |
@@ -60,21 +61,21 @@ complete or Phase 7 can be activated.
 | A8 claim/expiry/fencing | Satisfied | `outbox_claim_expiry_retry_and_ack_are_exclusive_and_fenced` |
 | A9 commit-before-ack replay | Satisfied | real catalog correction committed to Tantivy, DB ack omitted, exact replay skipped by revision |
 | A10 retry/permanent failure | Satisfied | configured max-attempt escalation plus deterministic poison-row isolation/healthy-sibling acknowledgement |
-| A11 snapshot plus concurrent writes | Satisfied | repeatable-read exclusion followed by outbox catch-up visibility |
+| A11 snapshot plus concurrent writes | Satisfied | `repeatable_read_snapshot_excludes_concurrent_write_that_catchup_observes` and `outbox_insert_waits_and_is_catchup_after_activate_generation_share_lock` |
 | A12 rebuild boundary recovery | Satisfied | cancellation lease release/direct retry, activation and retired-generation recovery |
 | A13 corrupt/missing index | Satisfied | active `meta.json` corruption, failed diagnostic, PostgreSQL rebuild recovery |
 | A14 zero media reads | Satisfied | published/cataloged fixture has nonexistent source/canonical paths before and after rebuild |
 | A15 equivalent rebuilt results | Satisfied | exact document counts and query hits before/after corruption recovery |
-| A16 filesystem path safety | Satisfied | symlink, root overlap, unowned root, UUIDv7/manifest, direct-child removal tests |
+| A16 filesystem path safety | Satisfied | `owned_generation_removal_rejects_symlinks_and_root_overlap`, `generation_removal_rejects_a_leaf_replaced_by_a_symlink_after_root_open`, `nonempty_unowned_root_is_rejected`, and `generation_identity_and_manifest_facts_are_fail_closed` |
 | A17 one writer per generation | Satisfied | PostgreSQL global lease plus Tantivy second-writer rejection/read-only concurrency test |
-| A18 bounds/backpressure/cancellation | Satisfied | bounded claims/pages and deterministic rebuild cancellation/reclaim |
+| A18 bounds/backpressure/cancellation | Satisfied | `outbox_claim_expiry_retry_and_ack_are_exclusive_and_fenced`, `outbox_max_attempts_escalate_exactly_at_configured_limit`, `lease_theft_fences_commit_and_scheduler_converges_on_next_pass`, `scheduler_stop_interrupts_long_idle_poll`, and `outbox_insert_waits_and_is_catchup_after_activate_generation_share_lock` |
 | A19 readiness/liveness/diagnostics | Satisfied | server healthy/missing/corrupt-generation readiness, live-count, and permanent failure diagnostic tests |
-| A20 MQL syntax/precedence | Satisfied | 34 parser/planner tests |
+| A20 MQL syntax/precedence | Satisfied | 37 parser/planner tests |
 | A21 exact errors and resource bounds | Satisfied | span/depth/token/clause/regex/date/timeout tests |
 | A22 compatibility plus four rejected bugs | Satisfied | executable `compatibility/mql/phase6-corpus.json` tied to frozen legacy commit |
 | A23 autocomplete/admin lookup | Satisfied | deterministic bounded autocomplete and active Artist lookup integration |
-| A24 10M warm p95 below 50 ms | Satisfied for the declared interactive corpus | default-gate benchmark contract/latency smoke plus exact 10M evidence below; broad stress results disclosed separately |
-| A25 complete gates | Satisfied | post-review repository and documentation gates passed on the final tree |
+| A24 10M warm p95 below 50 ms | Satisfied | frozen schema-v3 10M run below |
+| A25 complete gates | Satisfied | the complete repository gate passed twice, including once after the final traceability edits; the documentation gate and independent re-review also passed |
 
 ## MQL compatibility boundary
 
@@ -83,6 +84,9 @@ The committed compatibility corpus records the frozen legacy commit
 intentional corrections: no silent truncation, case-insensitive boolean keywords, consistent
 default-field expansion, and regex over indexed Unicode-folded tokens rather than raw bytes. It is
 parsed with unknown-field rejection and executed through the real parser/planner.
+
+Current executable acceptance coverage is 37 MQL parser/planner tests, 24 search unit tests, 6
+real rebuild integration tests, and 12 PostgreSQL search-phase tests.
 
 No native Melodee API v1, OpenSubsonic, Jellyfin route, payload, identifier, authentication,
 pagination, streaming, or error contract changes in Phase 6.
@@ -117,37 +121,27 @@ cargo run --release -p melodee-search --bin phase6_benchmark -- \
   --tracks <COUNT> --root /absolute/empty-or-owned/search/root
 ```
 
-Environment: Linux `7.1.5-201.fc44.x86_64` x86-64, Rust/Cargo 1.97.1, 24 logical CPUs. The harness
-uses corpus identity marker `5567940417645004038`, 35,000 Artists, 50,000 Releases, commit interval
-100,000, and records whole-process Linux `VmHWM`. Record generation is a pure function of ordinal;
-the marker versions the corpus and is not a pseudo-random seed. Synthetic records stream directly to the disposable index;
-therefore PostgreSQL query count/time and committed generated dataset bytes are truthfully zero.
-Source and canonical media reads are independently zero.
+Environment: Rust/Cargo 1.97.1, 24 logical CPUs, Linux. The recorded harness
+uses corpus identity `ordinal-v1`, 35,000 Artists, 50,000 Releases, 10,000,000 Tracks,
+10,085,000 documents, commit interval 100,000, and records whole-process Linux `VmHWM`. Record
+generation is a pure function of ordinal; that identity identifies the corpus and is not a
+pseudo-random seed. Synthetic records stream directly to the disposable index, so PostgreSQL query
+count/time, source reads, canonical reads, and committed generated bytes are all zero.
 
-| Tracks | Documents | Build | Docs/s | Index bytes | Peak RSS KiB | Interactive warm p50/p95/p99 | Target |
+| Tracks | Documents | Build wall ms | Docs/s | Index bytes | Peak RSS KiB | Interactive warm p50/p95/p99 | Target |
 | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |
-| 10,000 | 95,000 | 584 ms | 162,631.34 | 17,719,072 | 107,880 | 0.176 / 1.886 / 1.922 ms | pass |
-| 560,000 | 645,000 | 5,416 ms | 119,082.04 | 138,085,487 | 214,896 | 0.978 / 4.754 / 4.984 ms | pass |
-| 10,000,000 | 10,085,000 | 112,572 ms | 89,587.06 | 1,837,039,122 | 732,260 | 5.951 / 27.258 / 31.842 ms | pass |
+| 10,000,000 | 10,085,000 | 110,667 | 91,128.88357453649 | 1,880,384,451 | 759,440 | 6.042969 / 26.507272 / 31.871234 ms | pass |
 
-The 10M interactive corpus is: selective Track token, genre+exact year, primary Artist, exact ID,
-and narrow duration range. Result counts were 25/25/25/1/25; individual warm p95 values were
-7.409/27.565/1.915/0.640/31.842 ms.
+The interactive corpus is: selective Track token, genre+exact year, primary Artist, exact ID, and narrow
+duration range. Result counts were 25/25/25/1/25, in ordered query order, and the search results
+self-validated. The exact per-query warm p95 values were 6.706675 ms, 26.912343 ms, 1.898736 ms,
+0.577815 ms, and 31.871234 ms. Broad stress queries remain explicitly outside the interactive SLO:
+`genre:rock AND year>=2000` was 72.578955 ms p95 and `duration>=60000 AND duration<=70000` was
+42.982031 ms p95.
 
-The pre-review schema-v1 diagnostic run included broad analytical scans in the target aggregate and
-did **not** pass: broad duration p95 was about 624–626 ms. The independent review identified that
-ADR-declared numeric/date fast fields were not actually fast. Schema v2 fixes that contract and the
-entire benchmark was rerun rather than retaining stale evidence. The harness still reports broad
-scans separately as stress queries outside the declared interactive corpus. On the final 10M run,
-`genre:rock AND year>=2000` was 72.775 ms p95 and
-`duration>=60000 AND duration<=70000` was 36.752 ms p95. The genre scan still requires later
-optimization before broad scans can be advertised as interactive. This qualification prevents a
-selective-query result from becoming a false claim about arbitrary full-range analytics.
-
-No generated catalog dataset or Tantivy index is committed. A 10,000-Track benchmark smoke runs in
-the default Rust test gate to detect generator/count/result/media-read contract failures and
-catastrophic interactive-latency regressions; the release-scale 10M measurement remains the recorded
-acceptance artifact above.
+No generated catalog dataset or Tantivy index is committed. A 10,000-Track benchmark smoke still
+runs in the default Rust test gate to detect generator/count/result/media-read contract failures and
+catastrophic interactive-latency regressions.
 
 ## Independent review remediation
 
@@ -179,7 +173,7 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 ```
 
 All focused commands above passed before review and again after remediation. The fresh post-review
-repository gate passed on the final tree:
+repository gate passed on the current tree:
 
 ```text
 ./scripts/check.sh
@@ -206,11 +200,11 @@ passed; and the static build produced 35 pages.
   interactive SLO.
 - Production-scale PostgreSQL snapshot contention, index disk sizing on the real catalog, and
   non-Linux filesystem retirement behavior require operational observation.
-- Phase 7 owns public search routes and compatibility DTOs. Phase 10 owns the graphical diagnostics
-  and search-management UI. Neither is activated by this Candidate.
+- Phase 7 owns public search routes and compatibility DTOs and is now the active phase. Phase 10
+  owns the graphical diagnostics and search-management UI.
 
 Documentation impact:
 - Updated — public search/MQL reference, installation configuration, system diagnostics,
   troubleshooting, `.env.example`, local migration/restore runbook, changelog, README/phase status,
   technology baseline, feature matrix, requirement traceability, ADR/evidence registries, and this
-  Candidate report.
+  final Phase 6 report.

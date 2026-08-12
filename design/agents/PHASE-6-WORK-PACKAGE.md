@@ -64,8 +64,8 @@ In precedence order:
 - `rm -rf` or broad filesystem deletion; only ownership-validated, path-checked removal under the
   validated search root (rule 12).
 - Committing generated 10M datasets or Tantivy indexes (rule 11).
-- Marking Phase 6 COMPLETE or activating Phase 7; the final report remains Candidate pending
-  independent review.
+- Self-marking Phase 6 complete or activating Phase 7 before independent review. That review has now
+  accepted the completed phase in `design/evidence/phase-6/PHASE-6-REPORT.md`.
 - `unsafe`, `unwrap`, `expect`, `panic!`, `todo!`, `unimplemented!` in production code.
 
 ## Architecture boundaries
@@ -91,7 +91,10 @@ types. The translator (plan -> Tantivy `Query`) lives only inside `melodee-searc
 ### 6.2 MQL validation + `CatalogQueryPlan`
 
 - Field/role registry; type checking per operator; default-field expansion; bound checks.
-- `CatalogQueryPlan` (kinds, predicates, role scopes, sort, limit, timeout) — framework-free.
+- `CatalogQueryPlan` owns validated predicates and role scopes and remains framework-free. Entity-kind
+  applicability is encoded by each predicate target. Stable default sorting and bounded pagination are
+  explicit search-application execution policy, while the parse timeout remains a parser bound; these
+  concerns are not duplicated as dead fields in the pure plan.
 
 ### 6.3 Tantivy schema + writer/reader (`melodee-search`)
 
@@ -181,7 +184,8 @@ types. The translator (plan -> Tantivy `Query`) lives only inside `melodee-searc
 
 - Public `/docs`: search overview, MQL reference, configuration, diagnostics/troubleshooting, CLI
   commands. Update `.env.example`. Internal local-dev + operational runbooks. `CHANGELOG.md`,
-  `README`/`IMPLEMENTATION` (Phase 6 still active), `design/requirements/status-overrides.json`,
+  `README`/`IMPLEMENTATION` (Phase 6 remains active until independent acceptance),
+  `design/requirements/status-overrides.json`,
   generated requirements index/JSON, `FEATURE-PARITY-MATRIX.md`, ADR/evidence registries, and a
   Candidate `design/evidence/phase-6/PHASE-6-REPORT.md` with exact commands/results.
 - Traceability: every satisfied requirement gets implementation + test + evidence links.
@@ -192,7 +196,8 @@ types. The translator (plan -> Tantivy `Query`) lives only inside `melodee-searc
 - `./scripts/check.sh`, `validate_repository.py`, `extract_requirements.py --check`, docs build, and the
   10M benchmark all pass (or an accepted ADR revises the p95 target with evidence).
 - Index deletion/rebuild requires no media re-ingestion (A14) and never affects PostgreSQL/media.
-- The Phase 6 report remains **Candidate**; the final closure decision is left to independent review.
+- The Phase 6 report remains **Candidate** until independent review. The completed review returned
+  ACCEPT with no remaining P0/P1 findings, so the final report records Phase 6 as complete.
 
 ## Accepted implementation bounds
 

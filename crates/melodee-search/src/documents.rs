@@ -15,6 +15,7 @@ pub struct ArtistDoc {
     pub display_name: String,
     pub sort_name: String,
     pub aliases: Vec<String>,
+    pub redirect_ids: Vec<String>,
     pub disambiguation: Option<String>,
     pub artist_type: String,
     pub status: String,
@@ -31,6 +32,10 @@ pub struct ReleaseDoc {
     pub title: String,
     pub sort_title: String,
     pub artist_ids: Vec<String>,
+    pub primary_artist_ids: Vec<String>,
+    pub featured_artist_ids: Vec<String>,
+    pub performer_artist_ids: Vec<String>,
+    pub other_artist_ids: Vec<String>,
     pub artist_display: String,
     pub genre_tags: Vec<String>,
     pub release_year: Option<i64>,
@@ -71,6 +76,11 @@ impl From<melodee_persistence::SearchArtistRecord> for ArtistDoc {
             display_name: record.display_name,
             sort_name: record.sort_name,
             aliases: record.aliases,
+            redirect_ids: record
+                .redirect_ids
+                .into_iter()
+                .map(|value| value.to_string())
+                .collect(),
             disambiguation: record.disambiguation,
             artist_type: record.artist_type,
             status: record.status,
@@ -84,16 +94,18 @@ impl From<melodee_persistence::SearchArtistRecord> for ArtistDoc {
 
 impl From<melodee_persistence::SearchReleaseRecord> for ReleaseDoc {
     fn from(record: melodee_persistence::SearchReleaseRecord) -> Self {
+        let convert =
+            |values: Vec<uuid::Uuid>| values.into_iter().map(|value| value.to_string()).collect();
         Self {
             internal_id: record.internal_id.to_string(),
             public_id: record.public_id.to_string(),
             title: record.title,
             sort_title: record.sort_title,
-            artist_ids: record
-                .artist_ids
-                .into_iter()
-                .map(|id| id.to_string())
-                .collect(),
+            artist_ids: convert(record.artist_ids),
+            primary_artist_ids: convert(record.primary_artist_ids),
+            featured_artist_ids: convert(record.featured_artist_ids),
+            performer_artist_ids: convert(record.performer_artist_ids),
+            other_artist_ids: convert(record.other_artist_ids),
             artist_display: record.artist_display,
             genre_tags: record.genre_tags,
             release_year: record.release_year,
@@ -170,6 +182,7 @@ pub fn artist_document(schema: &SearchSchema, a: &ArtistDoc) -> TantivyDocument 
     doc.add_text(schema.a_display_name, &a.display_name);
     doc.add_text(schema.a_sort_name, &a.sort_name);
     push_text(&mut doc, schema.a_aliases, &a.aliases);
+    push_text(&mut doc, schema.a_redirect_ids, &a.redirect_ids);
     if let Some(disambiguation) = &a.disambiguation {
         doc.add_text(schema.a_disambiguation, disambiguation);
     }
@@ -195,6 +208,18 @@ pub fn release_document(schema: &SearchSchema, r: &ReleaseDoc) -> TantivyDocumen
     doc.add_text(schema.r_title, &r.title);
     doc.add_text(schema.r_sort_title, &r.sort_title);
     push_text(&mut doc, schema.r_artist_ids, &r.artist_ids);
+    push_text(&mut doc, schema.r_primary_artist_ids, &r.primary_artist_ids);
+    push_text(
+        &mut doc,
+        schema.r_featured_artist_ids,
+        &r.featured_artist_ids,
+    );
+    push_text(
+        &mut doc,
+        schema.r_performer_artist_ids,
+        &r.performer_artist_ids,
+    );
+    push_text(&mut doc, schema.r_other_artist_ids, &r.other_artist_ids);
     doc.add_text(schema.r_artist_display, &r.artist_display);
     push_text(&mut doc, schema.r_genre_tags, &r.genre_tags);
     if let Some(y) = r.release_year {

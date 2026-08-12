@@ -85,8 +85,12 @@ impl Parser {
     fn parse_or(&mut self, bounds: &Bounds, depth: usize) -> Result<MqlAst, MqlError> {
         self.check_deadline()?;
         let mut left = self.parse_and(bounds, depth)?;
-        while self.peek_keyword() == Some(Keyword::Or) {
+        while let Some((Token::Word(_), op_span)) = self.peek().cloned() {
+            if self.peek_keyword() != Some(Keyword::Or) {
+                break;
+            }
             self.bump();
+            self.ensure_boolean_rhs(op_span, "OR")?;
             let right = self.parse_and(bounds, depth)?;
             left = MqlAst::Or(Box::new(left), Box::new(right));
         }
@@ -99,7 +103,8 @@ impl Parser {
         loop {
             match self.peek_keyword() {
                 Some(Keyword::And) => {
-                    self.bump();
+                    let (_, op_span) = self.bump();
+                    self.ensure_boolean_rhs(op_span, "AND")?;
                     let right = self.parse_unary(bounds, depth)?;
                     left = MqlAst::And(Box::new(left), Box::new(right));
                 }
@@ -116,6 +121,20 @@ impl Parser {
         Ok(left)
     }
 
+    fn ensure_boolean_rhs(&self, op_span: Span, operator: &str) -> Result<(), MqlError> {
+        if self.starts_primary() {
+            return Ok(());
+        }
+        let span = match self.peek() {
+            Some((_, span)) => *span,
+            None => op_span,
+        };
+        Err(MqlError::Syntax {
+            message: format!("expected an expression after {operator}"),
+            span,
+        })
+    }
+
     fn parse_unary(&mut self, bounds: &Bounds, depth: usize) -> Result<MqlAst, MqlError> {
         self.check_deadline()?;
         self.check_depth(bounds, depth)?;
@@ -125,6 +144,7 @@ impl Parser {
             return Ok(MqlAst::Not(Box::new(inner)));
         }
         if let Some((Token::Minus, _)) = self.peek() {
+            let minus_span = self.peek().map(|(_, span)| *span).unwrap_or((0, 0));
             self.bump();
             let term = self.parse_primary(bounds, depth + 1)?;
             return match term {
@@ -132,25 +152,19 @@ impl Parser {
                     t.negate = true;
                     Ok(MqlAst::Term(t))
                 }
-                _ => Err(MqlError::Syntax {
-                    message: "negation '-' must prefix a clause".to_string(),
-                    span: self.span_of(&term),
-                }),
+                _ => {
+                    let end = self
+                        .tokens
+                        .get(self.pos.saturating_sub(1))
+                        .map_or(minus_span.1, |token| token.1.1);
+                    Err(MqlError::Syntax {
+                        message: "negation '-' must prefix a clause".to_string(),
+                        span: (minus_span.0, end),
+                    })
+                }
             };
         }
         self.parse_primary(bounds, depth)
-    }
-
-    fn span_of(&self, ast: &MqlAst) -> Span {
-        match ast {
-            MqlAst::Term(t) => t.span,
-            MqlAst::Not(inner) => self.span_of(inner),
-            MqlAst::And(left, right) | MqlAst::Or(left, right) => {
-                let left = self.span_of(left);
-                let right = self.span_of(right);
-                (left.0, right.1)
-            }
-        }
     }
 
     fn eof_span(&self) -> Span {
@@ -193,7 +207,7 @@ impl Parser {
             None => {
                 return Err(MqlError::Syntax {
                     message: "expected a clause".to_string(),
-                    span: (0, 0),
+                    span: self.eof_span(),
                 });
             }
         };
@@ -326,6 +340,12 @@ impl Parser {
         match tok {
             (Token::Word(w), span) => {
                 if w.len() >= 2 && w.starts_with('/') && w.ends_with('/') {
+                    if w.len() == 2 {
+                        return Err(MqlError::RegexError {
+                            message: "regex must not be empty".to_string(),
+                            span,
+                        });
+                    }
                     let inner = w[1..w.len() - 1].to_string();
                     Ok((MqlValue::Regex(inner), span))
                 } else {
@@ -364,8 +384,14 @@ impl Parser {
     }
 }
 
-fn word_to_value(word: &str, _span: Span) -> Result<MqlValue, MqlError> {
+fn word_to_value(word: &str, span: Span) -> Result<MqlValue, MqlError> {
     if word.len() >= 2 && word.starts_with('/') && word.ends_with('/') {
+        if word.len() == 2 {
+            return Err(MqlError::RegexError {
+                message: "regex must not be empty".to_string(),
+                span,
+            });
+        }
         return Ok(MqlValue::Regex(word[1..word.len() - 1].to_string()));
     }
     Ok(MqlValue::Text(word.to_string()))

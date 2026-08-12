@@ -179,6 +179,7 @@ pub struct SearchArtistRecord {
     pub display_name: String,
     pub sort_name: String,
     pub aliases: Vec<String>,
+    pub redirect_ids: Vec<Uuid>,
     pub disambiguation: Option<String>,
     pub artist_type: String,
     pub status: String,
@@ -195,6 +196,10 @@ pub struct SearchReleaseRecord {
     pub title: String,
     pub sort_title: String,
     pub artist_ids: Vec<Uuid>,
+    pub primary_artist_ids: Vec<Uuid>,
+    pub featured_artist_ids: Vec<Uuid>,
+    pub performer_artist_ids: Vec<Uuid>,
+    pub other_artist_ids: Vec<Uuid>,
     pub artist_display: String,
     pub genre_tags: Vec<String>,
     pub release_year: Option<i64>,
@@ -711,11 +716,6 @@ impl SearchProjectionStore {
         now: OffsetDateTime,
     ) -> Result<StoredSearchGeneration, SearchStoreError> {
         let mut tx = pool.begin().await?;
-        // Blocks new catalog outbox inserts for the short max-id/status/pointer
-        // transaction, making the caught-up check and activation one boundary.
-        sqlx::query("LOCK TABLE catalog_projection_outbox IN SHARE MODE")
-            .execute(&mut *tx)
-            .await?;
         let generation_id = lock_rebuild_job(&mut tx, job_id, worker, now, "validated").await?;
         let row = sqlx::query(
             "SELECT generation.search_root, generation.caught_up_outbox_id
@@ -731,6 +731,11 @@ impl SearchProjectionStore {
         .fetch_optional(&mut *tx)
         .await?
         .ok_or(SearchStoreError::LeaseLost)?;
+        // Locks catalog outbox only after rebuild/generation rows are fenced, so row-lock
+        // contention on unrelated rebuild work does not block INSERT writers.
+        sqlx::query("LOCK TABLE catalog_projection_outbox IN SHARE MODE")
+            .execute(&mut *tx)
+            .await?;
         let search_root: String = row.try_get(0)?;
         let caught_up: i64 = row.try_get(1)?;
         let latest = sqlx::query_scalar::<_, Option<i64>>(
@@ -1172,6 +1177,7 @@ impl SearchProjectionStore {
         message: &str,
         retry_at: Option<OffsetDateTime>,
         max_attempts: u32,
+        release_checkpoint: bool,
         now: OffsetDateTime,
     ) -> Result<(), SearchStoreError> {
         if outbox_ids.is_empty()
@@ -1236,16 +1242,18 @@ impl SearchProjectionStore {
         if updated.rows_affected() != outbox_ids.len() as u64 {
             return Err(SearchStoreError::LeaseLost);
         }
-        sqlx::query(
-            "UPDATE search_projection_checkpoint
-             SET lease_owner = NULL, lease_expires_at = NULL, updated_at = $3
-             WHERE projection_name = $1 AND lease_owner = $2",
-        )
-        .bind(projection_name)
-        .bind(worker)
-        .bind(now)
-        .execute(&mut *tx)
-        .await?;
+        if release_checkpoint {
+            sqlx::query(
+                "UPDATE search_projection_checkpoint
+                 SET lease_owner = NULL, lease_expires_at = NULL, updated_at = $3
+                 WHERE projection_name = $1 AND lease_owner = $2",
+            )
+            .bind(projection_name)
+            .bind(worker)
+            .bind(now)
+            .execute(&mut *tx)
+            .await?;
+        }
         tx.commit().await?;
         Ok(())
     }
@@ -1263,16 +1271,19 @@ impl SearchProjectionStore {
                 (SELECT count(*) FROM catalog_projection_outbox outbox
                  WHERE outbox.projection_name = $1
                    AND outbox.processed_at IS NULL AND outbox.failed_at IS NULL
-                   AND (outbox.lease_owner IS NULL OR outbox.lease_expires_at <= $3)),
+                   AND (outbox.lease_owner IS NULL OR
+                        (outbox.lease_owner IS NOT NULL AND outbox.lease_expires_at <= $3))),
                 (SELECT count(*) FROM catalog_projection_outbox outbox
                  WHERE outbox.projection_name = $1 AND outbox.failed_at IS NOT NULL),
                 (SELECT min(outbox.available_at) FROM catalog_projection_outbox outbox
                  WHERE outbox.projection_name = $1
                    AND outbox.processed_at IS NULL AND outbox.failed_at IS NULL
-                   AND (outbox.lease_owner IS NULL OR outbox.lease_expires_at <= $3)),
+                   AND (outbox.lease_owner IS NULL OR
+                        (outbox.lease_owner IS NOT NULL AND outbox.lease_expires_at <= $3))),
                 (SELECT count(*) FROM catalog_projection_outbox outbox
                  WHERE outbox.projection_name = $1
                    AND outbox.processed_at IS NULL AND outbox.failed_at IS NULL
+                   AND outbox.lease_owner IS NOT NULL
                    AND outbox.lease_expires_at > $3),
                 COALESCE((SELECT checkpoint.last_processed_outbox_id
                           FROM search_projection_checkpoint checkpoint
@@ -1539,6 +1550,26 @@ const ARTIST_COLUMNS: &str = "
         WHERE alias.artist_id = artist.id
         ORDER BY alias.normalized_alias, alias.id
     ),
+    ARRAY(
+        SELECT DISTINCT redirect_id
+        FROM (
+            WITH RECURSIVE redirects(id, public_api_id) AS (
+                SELECT merged.id, merged.public_api_id
+                FROM artists merged
+                WHERE merged.merged_into_artist_id = artist.id
+                  AND merged.status = 'merged'
+                UNION ALL
+                SELECT merged.id, merged.public_api_id
+                FROM artists merged
+                JOIN redirects source ON merged.merged_into_artist_id = source.id
+                WHERE merged.status = 'merged'
+            )
+            SELECT id AS redirect_id FROM redirects
+            UNION
+            SELECT public_api_id AS redirect_id FROM redirects
+        ) redirects
+        ORDER BY redirect_id
+    ),
     artist.disambiguation, artist.artist_type, artist.status,
     extract(year FROM artist.begin_date)::bigint,
     extract(year FROM artist.end_date)::bigint,
@@ -1551,17 +1582,63 @@ const ARTIST_SELECT_BY_ID: &str = "
                WHERE alias.artist_id = artist.id
                ORDER BY alias.normalized_alias, alias.id
            ),
+           ARRAY(
+               SELECT DISTINCT redirect_id
+               FROM (
+            WITH RECURSIVE redirects(id, public_api_id) AS (
+                SELECT merged.id, merged.public_api_id
+                FROM artists merged
+                WHERE merged.merged_into_artist_id = artist.id
+                  AND merged.status = 'merged'
+                UNION ALL
+                SELECT merged.id, merged.public_api_id
+                FROM artists merged
+                JOIN redirects source ON merged.merged_into_artist_id = source.id
+                WHERE merged.status = 'merged'
+                   )
+                   SELECT id AS redirect_id FROM redirects
+                   UNION
+                   SELECT public_api_id AS redirect_id FROM redirects
+               ) redirects
+               ORDER BY redirect_id
+           ),
            artist.disambiguation, artist.artist_type, artist.status,
            extract(year FROM artist.begin_date)::bigint,
            extract(year FROM artist.end_date)::bigint,
            artist.revision, artist.updated_at
-    FROM artists artist WHERE artist.id = $1";
+    FROM artists artist
+    WHERE artist.id = $1
+      AND artist.status IN ('provisional', 'verified')";
 
 const RELEASE_SELECT_BY_ID: &str = "
     SELECT release.id, release.public_api_id, release.title, release.sort_title,
            ARRAY(
                SELECT billing.artist_id FROM release_artists billing
                WHERE billing.release_id = release.id
+               ORDER BY billing.presentation_order, billing.id
+           ),
+           ARRAY(
+               SELECT billing.artist_id FROM release_artists billing
+               WHERE billing.release_id = release.id AND billing.role = 'primary'
+               ORDER BY billing.presentation_order, billing.id
+           ),
+           ARRAY(
+               SELECT billing.artist_id FROM release_artists billing
+               WHERE billing.release_id = release.id
+                 AND billing.role IN ('featured', 'guest')
+               ORDER BY billing.presentation_order, billing.id
+           ),
+           ARRAY(
+               SELECT DISTINCT contribution.artist_id
+               FROM contributions contribution
+               WHERE contribution.release_id = release.id
+                 AND contribution.track_id IS NULL
+                 AND contribution.is_performance
+               ORDER BY contribution.artist_id
+           ),
+           ARRAY(
+               SELECT billing.artist_id FROM release_artists billing
+               WHERE billing.release_id = release.id AND billing.role = 'other'
                ORDER BY billing.presentation_order, billing.id
            ),
            COALESCE(release.display_artist, ''),
@@ -1626,25 +1703,35 @@ const TRACK_SELECT_BY_ID: &str = "
                WHERE contribution.release_id = track.release_id
                  AND (contribution.track_id IS NULL OR contribution.track_id = track.id)
                  AND contribution.is_performance
-                 AND contribution.role IN (
-                     'performer', 'band_member', 'vocalist', 'instrumentalist'
-                 )
-               ORDER BY contribution.artist_id
+                ORDER BY contribution.artist_id
            ),
            ARRAY(
-               SELECT DISTINCT association.artist_id
-               FROM artist_track_associations association
-               WHERE association.track_id = track.id
-                 AND association.artist_id NOT IN (
-                     SELECT billing.artist_id FROM track_artists billing
-                     WHERE billing.track_id = track.id
-                     UNION
-                     SELECT contribution.artist_id FROM contributions contribution
-                     WHERE contribution.release_id = track.release_id
-                       AND (contribution.track_id IS NULL OR contribution.track_id = track.id)
-                       AND contribution.is_performance
-                 )
-               ORDER BY association.artist_id
+               SELECT DISTINCT other_artist_id
+               FROM (
+                   SELECT association.artist_id AS other_artist_id
+                   FROM artist_track_associations association
+                   WHERE association.track_id = track.id
+                     AND association.artist_id NOT IN (
+                         SELECT billing.artist_id FROM track_artists billing
+                         WHERE billing.track_id = track.id
+                         UNION
+                         SELECT contribution.artist_id FROM contributions contribution
+                         WHERE contribution.release_id = track.release_id
+                           AND (contribution.track_id IS NULL OR contribution.track_id = track.id)
+                           AND contribution.is_performance
+                     )
+                   UNION
+                   SELECT billing.artist_id AS other_artist_id
+                   FROM track_artists billing
+                   WHERE billing.track_id = track.id
+                     AND billing.role = 'other'
+                   UNION
+                   SELECT billing.artist_id AS other_artist_id
+                   FROM release_artists billing
+                   WHERE billing.release_id = track.release_id
+                     AND billing.role = 'other'
+               ) other_values
+               ORDER BY other_artist_id
            ),
            ARRAY(
                SELECT DISTINCT association.artist_id
@@ -1690,13 +1777,14 @@ fn parse_artist_row(row: sqlx::postgres::PgRow) -> Result<SearchArtistRecord, Se
         display_name: row.try_get(2)?,
         sort_name: row.try_get(3)?,
         aliases: row.try_get(4)?,
-        disambiguation: row.try_get(5)?,
-        artist_type: row.try_get(6)?,
-        status: row.try_get(7)?,
-        begin_year: row.try_get(8)?,
-        end_year: row.try_get(9)?,
-        revision: row.try_get(10)?,
-        updated_at: row.try_get(11)?,
+        redirect_ids: row.try_get(5)?,
+        disambiguation: row.try_get(6)?,
+        artist_type: row.try_get(7)?,
+        status: row.try_get(8)?,
+        begin_year: row.try_get(9)?,
+        end_year: row.try_get(10)?,
+        revision: row.try_get(11)?,
+        updated_at: row.try_get(12)?,
     })
 }
 
@@ -1707,14 +1795,18 @@ fn parse_release_row(row: sqlx::postgres::PgRow) -> Result<SearchReleaseRecord, 
         title: row.try_get(2)?,
         sort_title: row.try_get(3)?,
         artist_ids: row.try_get(4)?,
-        artist_display: row.try_get(5)?,
-        genre_tags: row.try_get(6)?,
-        release_year: row.try_get(7)?,
-        release_date_days: row.try_get(8)?,
-        release_type: row.try_get(9)?,
-        status: row.try_get(10)?,
-        revision: row.try_get(11)?,
-        updated_at: row.try_get(12)?,
+        primary_artist_ids: row.try_get(5)?,
+        featured_artist_ids: row.try_get(6)?,
+        performer_artist_ids: row.try_get(7)?,
+        other_artist_ids: row.try_get(8)?,
+        artist_display: row.try_get(9)?,
+        genre_tags: row.try_get(10)?,
+        release_year: row.try_get(11)?,
+        release_date_days: row.try_get(12)?,
+        release_type: row.try_get(13)?,
+        status: row.try_get(14)?,
+        revision: row.try_get(15)?,
+        updated_at: row.try_get(16)?,
     })
 }
 
@@ -1782,6 +1874,7 @@ impl SearchSnapshotReader {
         let rows = sqlx::query(AssertSqlSafe(format!(
             "SELECT {ARTIST_COLUMNS} FROM artists artist
              WHERE ($1::uuid IS NULL OR artist.id > $1)
+               AND artist.status IN ('provisional', 'verified')
              ORDER BY artist.id LIMIT $2"
         )))
         .bind(after)

@@ -9,7 +9,10 @@ mod common;
 
 use catalog_common::{CatalogFixturePresentation, seed_published_release};
 use common::{TestDb, test_config};
-use melodee_domain::IngestionState;
+use melodee_domain::{
+    Artist, ArtistAlias, ArtistAliasId, ArtistAliasType, ArtistId, ArtistMerge, ArtistMergeId,
+    ArtistPublicId, ArtistStatus, ArtistType, Confidence, IngestionState, NewArtist,
+};
 use melodee_mql::parse_and_plan;
 use melodee_persistence::{
     CatalogImportRequest, CatalogStore, SEARCH_PROJECTION_NAME, SearchCatalogRecord,
@@ -17,9 +20,465 @@ use melodee_persistence::{
 };
 use melodee_search::{
     ArtistDoc, ReleaseDoc, SearchConfig, SearchRoot, SearchStore, TrackDoc, apply_outbox_once,
-    request_rebuild, run_rebuild_once,
+    request_rebuild, resolve_artist_ids_active, run_rebuild_once,
 };
 use tempfile::TempDir;
+
+async fn activate_empty_generation(db: &TestDb, directory: &TempDir) -> SearchConfig {
+    let config = SearchConfig {
+        search_root: directory.path().join("search"),
+        enabled: true,
+        ..SearchConfig::default()
+    };
+    request_rebuild(&config, &db.pool, "empty-catalog-test")
+        .await
+        .expect("request empty rebuild");
+    assert!(
+        run_rebuild_once(&config, &db.pool)
+            .await
+            .expect("run empty rebuild")
+            .is_some()
+    );
+    config
+}
+
+#[tokio::test]
+async fn empty_catalog_activates_queryable_zero_document_generation() {
+    let db = TestDb::create("phase6_empty_rebuild").await;
+    let directory = TempDir::new().expect("search temp root");
+    let config = activate_empty_generation(&db, &directory).await;
+    let root = SearchRoot::open(&config.search_root).expect("owned search root");
+    let active =
+        SearchProjectionStore::active_generation(&db.pool, root.path().to_string_lossy().as_ref())
+            .await
+            .expect("read active generation")
+            .expect("empty active generation");
+    assert_eq!(active.document_counts.artists, 0);
+    assert_eq!(active.document_counts.releases, 0);
+    assert_eq!(active.document_counts.tracks, 0);
+    assert_eq!(active.current_document_counts, active.document_counts);
+    let media_count = sqlx::query_scalar::<_, i64>("SELECT count(*) FROM media_assets")
+        .fetch_one(&db.pool)
+        .await
+        .expect("count media assets");
+    assert_eq!(media_count, 0);
+
+    let store = SearchStore::open_readonly(&root.generation_path(active.generation_id))
+        .expect("open empty generation read-only");
+    let stats = store.stats().expect("read empty generation stats");
+    assert_eq!((stats.artists, stats.releases, stats.tracks), (0, 0, 0));
+    assert!(
+        store
+            .search(
+                &parse_and_plan("artist:anything").expect("valid MQL"),
+                10,
+                0
+            )
+            .expect("query empty generation")
+            .is_empty()
+    );
+    drop(store);
+
+    let healthy = melodee_search::diagnostic(&config, &db.pool)
+        .await
+        .expect("diagnose empty generation");
+    assert!(healthy.generation.is_some());
+    assert!(healthy.generation_error.is_none());
+
+    let sentinel_root = config.search_root.display().to_string();
+    std::fs::remove_file(
+        root.generation_path(active.generation_id)
+            .join("generation.json"),
+    )
+    .expect("remove disposable manifest");
+    let missing_manifest = melodee_search::diagnostic(&config, &db.pool)
+        .await
+        .expect("missing manifest is a diagnostic result");
+    assert!(missing_manifest.generation.is_none());
+    assert_eq!(
+        missing_manifest.generation_error_code.as_deref(),
+        Some("search.filesystem")
+    );
+    let serialized = serde_json::to_string(&missing_manifest).expect("serialize diagnostic");
+    assert!(!serialized.contains(&sentinel_root));
+    assert!(!serialized.contains("generation.json"));
+    db.drop().await;
+}
+
+#[cfg(feature = "test-support")]
+#[tokio::test]
+async fn lease_theft_fences_commit_and_scheduler_converges_on_next_pass() {
+    let db = TestDb::create("phase6_outbox_heartbeat").await;
+    let directory = TempDir::new().expect("search temp root");
+    let mut config = activate_empty_generation(&db, &directory).await;
+    config.lease_seconds = 1;
+    config.poll_interval_ms = 10;
+    let barrier = melodee_search::SearchApplyTestBarrier::new();
+    config.apply_test_barrier = Some(barrier.clone());
+
+    let entity_id = uuid::Uuid::new_v4();
+    let now = time::OffsetDateTime::now_utc();
+    let outbox_id = sqlx::query_scalar::<_, i64>(
+        "INSERT INTO catalog_projection_outbox (
+            projection_name, entity_type, entity_id, operation,
+            entity_revision, available_at, created_at
+         ) VALUES ($1, 'artist', $2, 'delete', 1, $3, $3)
+         RETURNING id",
+    )
+    .bind(SEARCH_PROJECTION_NAME)
+    .bind(entity_id)
+    .bind(now)
+    .fetch_one(&db.pool)
+    .await
+    .expect("seed deletion outbox row");
+
+    let scheduler = melodee_search::start_search_loop(config.clone(), db.pool.clone());
+    tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        barrier.wait_until_reached(),
+    )
+    .await
+    .expect("application reached pre-commit barrier");
+    let stale_owner = sqlx::query_scalar::<_, String>(
+        "SELECT lease_owner FROM catalog_projection_outbox WHERE id = $1",
+    )
+    .bind(outbox_id)
+    .fetch_one(&db.pool)
+    .await
+    .expect("read original lease owner");
+    let thief = "phase6-lease-thief";
+    let mut theft = db.pool.begin().await.expect("begin lease theft");
+    let stolen_expiry = now + time::Duration::seconds(60);
+    let stolen_row = sqlx::query(
+        "UPDATE catalog_projection_outbox
+         SET lease_owner = $2, lease_expires_at = $3
+         WHERE id = $1 AND lease_owner = $4",
+    )
+    .bind(outbox_id)
+    .bind(thief)
+    .bind(stolen_expiry)
+    .bind(&stale_owner)
+    .execute(&mut *theft)
+    .await
+    .expect("steal row lease");
+    assert_eq!(stolen_row.rows_affected(), 1);
+    let stolen_checkpoint = sqlx::query(
+        "UPDATE search_projection_checkpoint
+         SET lease_owner = $2, lease_expires_at = $3
+         WHERE projection_name = $1 AND lease_owner = $4",
+    )
+    .bind(SEARCH_PROJECTION_NAME)
+    .bind(thief)
+    .bind(stolen_expiry)
+    .bind(&stale_owner)
+    .execute(&mut *theft)
+    .await
+    .expect("steal checkpoint lease");
+    assert_eq!(stolen_checkpoint.rows_affected(), 1);
+    theft.commit().await.expect("commit lease theft");
+
+    tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        barrier.wait_until_cancelled(),
+    )
+    .await
+    .expect("failed heartbeat cancelled blocking apply before commit");
+    let stale_state = sqlx::query_as::<_, (bool, bool)>(
+        "SELECT processed_at IS NOT NULL, failed_at IS NOT NULL
+         FROM catalog_projection_outbox WHERE id = $1",
+    )
+    .bind(outbox_id)
+    .fetch_one(&db.pool)
+    .await
+    .expect("read fenced row state");
+    assert_eq!(stale_state, (false, false));
+
+    let mut release_thief = db.pool.begin().await.expect("begin thief abandonment");
+    sqlx::query(
+        "UPDATE catalog_projection_outbox
+         SET lease_owner = NULL, lease_expires_at = NULL
+         WHERE id = $1 AND lease_owner = $2",
+    )
+    .bind(outbox_id)
+    .bind(thief)
+    .execute(&mut *release_thief)
+    .await
+    .expect("release stolen row lease");
+    sqlx::query(
+        "UPDATE search_projection_checkpoint
+         SET lease_owner = NULL, lease_expires_at = NULL
+         WHERE projection_name = $1 AND lease_owner = $2",
+    )
+    .bind(SEARCH_PROJECTION_NAME)
+    .bind(thief)
+    .execute(&mut *release_thief)
+    .await
+    .expect("release stolen checkpoint lease");
+    release_thief.commit().await.expect("abandon stolen lease");
+
+    tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        loop {
+            let processed = sqlx::query_scalar::<_, bool>(
+                "SELECT processed_at IS NOT NULL FROM catalog_projection_outbox WHERE id = $1",
+            )
+            .bind(outbox_id)
+            .fetch_one(&db.pool)
+            .await
+            .expect("poll outbox completion");
+            if processed {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("scheduler resumed after pass-local lease loss");
+    scheduler.stop().await;
+
+    let root = SearchRoot::open(&config.search_root).expect("owned root");
+    let active =
+        SearchProjectionStore::active_generation(&db.pool, root.path().to_string_lossy().as_ref())
+            .await
+            .expect("read active generation")
+            .expect("active generation");
+    let mut writer = SearchStore::open(&root.generation_path(active.generation_id))
+        .expect("open converged writer");
+    assert!(
+        !writer
+            .delete("artist", &entity_id.to_string(), 1)
+            .expect("revision fence")
+    );
+    db.drop().await;
+}
+
+#[cfg(feature = "test-support")]
+#[tokio::test]
+async fn scheduler_stop_interrupts_long_idle_poll() {
+    let db = TestDb::create("phase6_scheduler_stop").await;
+    let directory = TempDir::new().expect("search temp root");
+    let mut config = activate_empty_generation(&db, &directory).await;
+    config.poll_interval_ms = 60_000;
+    let probe = melodee_search::SearchSchedulerTestProbe::new();
+    config.scheduler_test_probe = Some(probe.clone());
+    let scheduler = melodee_search::start_search_loop(config, db.pool.clone());
+    tokio::time::timeout(std::time::Duration::from_secs(3), probe.wait_until_idle())
+        .await
+        .expect("scheduler reached idle poll");
+    tokio::time::timeout(std::time::Duration::from_secs(1), scheduler.stop())
+        .await
+        .expect("stop interrupts sixty-second poll");
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn postgres_snapshots_preserve_release_and_track_artist_roles_in_index() {
+    let db = TestDb::create("phase6_role_snapshot_index").await;
+    let fixture = seed_published_release(
+        &db,
+        602,
+        CatalogFixturePresentation {
+            release_title: "Role Snapshot Release",
+            release_artist: "Fixture Release Artist",
+            track_title: "Role Snapshot Track",
+            track_artist: "Fixture Track Artist",
+            release_date: "2006-07-08",
+        },
+    )
+    .await;
+    let worker = WorkerId::new();
+    let now = time::OffsetDateTime::now_utc();
+    CatalogStore
+        .claim_cataloging(&db.pool, &worker, &test_config(), now)
+        .await
+        .expect("claim fixture");
+    CatalogStore
+        .import_manifest_v3(
+            &db.pool,
+            fixture.work_item_id,
+            &worker,
+            &CatalogImportRequest::new("phase6.role-fixture.v1", "phase6-test"),
+            now,
+        )
+        .await
+        .expect("catalog role fixture");
+    let release_id = sqlx::query_scalar::<_, uuid::Uuid>("SELECT id FROM releases LIMIT 1")
+        .fetch_one(&db.pool)
+        .await
+        .expect("release id");
+    let track_id = sqlx::query_scalar::<_, uuid::Uuid>("SELECT id FROM tracks LIMIT 1")
+        .fetch_one(&db.pool)
+        .await
+        .expect("track id");
+
+    let role_artists = [
+        ("Release Primary Probe", "release", "primary", true),
+        ("Track Primary Probe", "track", "primary", true),
+        ("Release Featured Probe", "release", "featured", true),
+        ("Track Featured Probe", "track", "featured", true),
+        ("Release Other Probe", "release", "other", true),
+        ("Track Other Probe", "track", "other", true),
+        ("Release Performer Probe", "release", "vocalist", true),
+        ("Track Performer Probe", "track", "vocalist", true),
+        ("Non Performance Probe", "track", "producer", false),
+    ]
+    .map(|(name, scope, role, performance)| (uuid::Uuid::now_v7(), name, scope, role, performance));
+    for (artist_id, name, _, _, _) in role_artists {
+        sqlx::query(
+            "INSERT INTO artists (
+                id, public_api_id, canonical_name, normalized_name, sort_name,
+                artist_type, status, created_at, updated_at
+             ) VALUES ($1, $2, $3, UPPER($3), $3,
+                       'person', 'verified', $4, $4)",
+        )
+        .bind(artist_id)
+        .bind(uuid::Uuid::now_v7())
+        .bind(name)
+        .bind(now)
+        .execute(&db.pool)
+        .await
+        .expect("seed role Artist");
+    }
+    for (artist_id, name, scope, role, performance) in role_artists {
+        match (scope, role) {
+            ("release", "primary" | "featured" | "other") => {
+                sqlx::query(
+                    "INSERT INTO release_artists (
+                        id, release_id, artist_id, role, presentation_order,
+                        display_value, join_phrase, created_at
+                     ) VALUES ($1, $2, $3, $4,
+                         (SELECT COALESCE(max(presentation_order), 0) + 1
+                          FROM release_artists WHERE release_id = $2),
+                         $5, '', $6)",
+                )
+                .bind(uuid::Uuid::now_v7())
+                .bind(release_id)
+                .bind(artist_id)
+                .bind(role)
+                .bind(name)
+                .bind(now)
+                .execute(&db.pool)
+                .await
+                .expect("seed ReleaseArtist role");
+            }
+            ("track", "primary" | "featured" | "other") => {
+                sqlx::query(
+                    "INSERT INTO track_artists (
+                        id, track_id, artist_id, role, presentation_order,
+                        display_value, join_phrase, created_at
+                     ) VALUES ($1, $2, $3, $4,
+                         (SELECT COALESCE(max(presentation_order), 0) + 1
+                          FROM track_artists WHERE track_id = $2),
+                         $5, '', $6)",
+                )
+                .bind(uuid::Uuid::now_v7())
+                .bind(track_id)
+                .bind(artist_id)
+                .bind(role)
+                .bind(name)
+                .bind(now)
+                .execute(&db.pool)
+                .await
+                .expect("seed TrackArtist role");
+            }
+            _ => {
+                sqlx::query(
+                    "INSERT INTO contributions (
+                        id, release_id, track_id, artist_id, observed_artist_id,
+                        role, evidence_source, presentation_order,
+                        is_performance, created_at
+                     ) VALUES ($1, $2, $3, $4, NULL, $5, 'phase6-test', 0, $6, $7)",
+                )
+                .bind(uuid::Uuid::now_v7())
+                .bind(release_id)
+                .bind((scope == "track").then_some(track_id))
+                .bind(artist_id)
+                .bind(role)
+                .bind(performance)
+                .bind(now)
+                .execute(&db.pool)
+                .await
+                .expect("seed Contribution role");
+            }
+        }
+    }
+
+    let directory = TempDir::new().expect("index directory");
+    let mut store = SearchStore::create(directory.path()).expect("create role index");
+    for (artist_id, _, _, _, _) in role_artists {
+        let record = SearchProjectionStore::load_catalog_record(
+            &db.pool,
+            melodee_persistence::SearchEntityType::Artist,
+            artist_id,
+        )
+        .await
+        .expect("load Artist snapshot")
+        .expect("Artist snapshot");
+        let SearchCatalogRecord::Artist(record) = record else {
+            panic!("expected Artist snapshot")
+        };
+        store
+            .upsert_artist(&ArtistDoc::from(record))
+            .expect("index Artist snapshot");
+    }
+    let release = SearchProjectionStore::load_catalog_record(
+        &db.pool,
+        melodee_persistence::SearchEntityType::Release,
+        release_id,
+    )
+    .await
+    .expect("load Release snapshot")
+    .expect("Release snapshot");
+    let SearchCatalogRecord::Release(release) = release else {
+        panic!("expected Release snapshot")
+    };
+    store
+        .upsert_release(&ReleaseDoc::from(release))
+        .expect("index Release snapshot");
+    let track = SearchProjectionStore::load_catalog_record(
+        &db.pool,
+        melodee_persistence::SearchEntityType::Track,
+        track_id,
+    )
+    .await
+    .expect("load Track snapshot")
+    .expect("Track snapshot");
+    let SearchCatalogRecord::Track(track) = track else {
+        panic!("expected Track snapshot")
+    };
+    store
+        .upsert_track(&TrackDoc::from(track))
+        .expect("index Track snapshot");
+    store.commit().expect("commit role snapshots");
+
+    for (expression, release_matches, track_matches) in [
+        ("primaryArtist:\"Release Primary Probe\"", true, true),
+        ("primaryArtist:\"Track Primary Probe\"", false, true),
+        ("featuredArtist:\"Release Featured Probe\"", true, true),
+        ("featuredArtist:\"Track Featured Probe\"", false, true),
+        ("other:\"Release Other Probe\"", true, true),
+        ("other:\"Track Other Probe\"", false, true),
+        ("performer:\"Release Performer Probe\"", true, true),
+        ("performer:\"Track Performer Probe\"", false, true),
+        ("performer:\"Non Performance Probe\"", false, false),
+    ] {
+        let hits = store
+            .search(&parse_and_plan(expression).expect("valid role MQL"), 20, 0)
+            .expect("query indexed PG snapshots");
+        assert_eq!(
+            hits.iter()
+                .any(|hit| hit.kind == "release" && hit.internal_id == release_id.to_string()),
+            release_matches,
+            "Release mismatch for {expression}: {hits:?}"
+        );
+        assert_eq!(
+            hits.iter()
+                .any(|hit| hit.kind == "track" && hit.internal_id == track_id.to_string()),
+            track_matches,
+            "Track mismatch for {expression}: {hits:?}"
+        );
+    }
+    db.drop().await;
+}
 
 #[tokio::test]
 async fn populated_catalog_rebuilds_without_reading_media_and_activates_atomically() {
@@ -544,6 +1003,284 @@ async fn populated_catalog_rebuilds_without_reading_media_and_activates_atomical
     .await
     .expect("read adopted retirement receipt");
     assert!(adopted_removal.is_some());
+
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn public_identity_correction_merges_aliases_into_real_search_workers() {
+    let db = TestDb::create("phase6_identity_correction").await;
+    let fixture = seed_published_release(
+        &db,
+        602,
+        CatalogFixturePresentation {
+            release_title: "Correction Proof Release",
+            release_artist: "Correction Source Artist",
+            track_title: "Correction Proof Track",
+            track_artist: "Correction Track Artist",
+            release_date: "2008-08-08",
+        },
+    )
+    .await;
+    let catalog = CatalogStore;
+    let worker = WorkerId::new();
+    let now = time::OffsetDateTime::now_utc();
+    let claimed = catalog
+        .claim_cataloging(&db.pool, &worker, &test_config(), now)
+        .await
+        .expect("claim published fixture");
+    assert_eq!(claimed.len(), 1);
+    catalog
+        .import_manifest_v3(
+            &db.pool,
+            fixture.work_item_id,
+            &worker,
+            &CatalogImportRequest::new("phase6.identity-correction.v1", "phase6-test"),
+            now,
+        )
+        .await
+        .expect("catalog fixture");
+    assert!(!std::path::Path::new(&fixture.source_path).exists());
+    assert!(!std::path::Path::new(&fixture.canonical_asset_path).exists());
+
+    let source_artist: (uuid::Uuid, uuid::Uuid) =
+        sqlx::query_as("SELECT id, public_api_id FROM artists WHERE canonical_name = $1")
+            .bind("Correction Source Artist")
+            .fetch_one(&db.pool)
+            .await
+            .expect("read imported source Artist");
+    let target_artist = Artist::new(NewArtist {
+        id: ArtistId::new(),
+        public_api_id: ArtistPublicId::from_uuid(uuid::Uuid::now_v7()),
+        canonical_name: "Correction Target Artist".to_owned(),
+        normalized_name: "CORRECTIONTARGETARTIST".to_owned(),
+        sort_name: "Correction Target Artist".to_owned(),
+        artist_type: ArtistType::Person,
+        disambiguation: None,
+        active_dates: None,
+        status: ArtistStatus::Verified,
+        created_at: now,
+    })
+    .expect("valid target Artist");
+    catalog
+        .create_artist(&db.pool, &target_artist)
+        .await
+        .expect("create correction target Artist");
+    let alias = ArtistAlias {
+        id: ArtistAliasId::new(),
+        artist_id: ArtistId::from_uuid(source_artist.0),
+        value: "Correction Alias".to_owned(),
+        normalized_value: "CORRECTIONALIAS".to_owned(),
+        alias_type: ArtistAliasType::Search,
+        locale: None,
+        evidence_source: "phase6-identity-correction".to_owned(),
+        confidence: Confidence::new(10_000).expect("valid confidence"),
+        locked: true,
+    };
+    catalog
+        .add_artist_alias(&db.pool, &alias, now)
+        .await
+        .expect("seed alias on source Artist");
+
+    let directory = TempDir::new().expect("search temp root");
+    let search_path = directory.path().join("search");
+    let config = SearchConfig {
+        search_root: search_path,
+        enabled: true,
+        ..SearchConfig::default()
+    };
+    let requested = request_rebuild(&config, &db.pool, "phase6-test")
+        .await
+        .expect("request rebuild");
+    assert_eq!(requested.status, "requested");
+    assert_eq!(
+        run_rebuild_once(&config, &db.pool)
+            .await
+            .expect("run rebuild"),
+        Some(requested.job_id)
+    );
+
+    let source_hits = melodee_search::query_active(
+        &config,
+        &db.pool,
+        "artist:\"Correction Source Artist\"",
+        20,
+        0,
+    )
+    .await
+    .expect("query source Artist before correction");
+    assert!(
+        source_hits
+            .iter()
+            .any(|hit| hit.kind == "artist" && hit.internal_id == source_artist.0.to_string()),
+        "source artist should be searchable before correction: {source_hits:?}"
+    );
+    let alias_hits =
+        melodee_search::query_active(&config, &db.pool, "alias:Correction Alias", 20, 0)
+            .await
+            .expect("query alias before correction");
+    assert!(
+        alias_hits
+            .iter()
+            .any(|hit| hit.kind == "artist" && hit.internal_id == source_artist.0.to_string()),
+        "alias should resolve to source artist before correction: {alias_hits:?}"
+    );
+    assert_eq!(
+        resolve_artist_ids_active(&config, &db.pool, "Correction Alias")
+            .await
+            .expect("resolve alias before correction"),
+        vec![source_artist.0.to_string()]
+    );
+    assert_eq!(
+        resolve_artist_ids_active(&config, &db.pool, "Correction Target Artist")
+            .await
+            .expect("resolve target before correction"),
+        vec![target_artist.id().into_uuid().to_string()]
+    );
+
+    let merge = ArtistMerge {
+        id: ArtistMergeId::new(),
+        source_artist_id: ArtistId::from_uuid(source_artist.0),
+        source_public_api_id: ArtistPublicId::from_uuid(source_artist.1),
+        target_artist_id: target_artist.id(),
+        actor: "catalog-admin".to_owned(),
+        reason: "merge duplicate observations through the public correction API".to_owned(),
+        occurred_at: now,
+    };
+    catalog
+        .merge_artist(&db.pool, &merge, "manual-identity-correction-v1")
+        .await
+        .expect("merge source Artist into target");
+    let pending_after_merge: i64 = sqlx::query_scalar(
+        "SELECT count(*)
+         FROM catalog_projection_outbox
+         WHERE projection_name = $1 AND processed_at IS NULL AND failed_at IS NULL",
+    )
+    .bind(SEARCH_PROJECTION_NAME)
+    .fetch_one(&db.pool)
+    .await
+    .expect("count pending search outbox after merge");
+    assert!(pending_after_merge > 0);
+
+    let mut total_applied = 0_u64;
+    for _ in 0..8 {
+        let pass = apply_outbox_once(&config, &db.pool)
+            .await
+            .expect("apply correction outbox");
+        total_applied += pass.applied as u64;
+        if pass.claimed == 0 {
+            break;
+        }
+    }
+    assert!(total_applied > 0);
+    let drained = apply_outbox_once(&config, &db.pool)
+        .await
+        .expect("confirm outbox drain");
+    assert_eq!(drained.claimed, 0);
+
+    let merged_source_hits = melodee_search::query_active(
+        &config,
+        &db.pool,
+        "artist:\"Correction Source Artist\"",
+        20,
+        0,
+    )
+    .await
+    .expect("query redirected source Artist");
+    assert!(
+        merged_source_hits
+            .iter()
+            .any(|hit| hit.kind == "artist" && hit.internal_id == target_artist.id().to_string()),
+        "merged source artist should resolve to the canonical target: {merged_source_hits:?}"
+    );
+    assert!(
+        merged_source_hits
+            .iter()
+            .all(|hit| hit.internal_id != source_artist.0.to_string()),
+        "merged source tombstone should not remain searchable: {merged_source_hits:?}"
+    );
+    let merged_target_hits = melodee_search::query_active(
+        &config,
+        &db.pool,
+        "artist:\"Correction Target Artist\"",
+        20,
+        0,
+    )
+    .await
+    .expect("query merged target Artist");
+    assert!(
+        merged_target_hits
+            .iter()
+            .any(|hit| hit.kind == "artist" && hit.internal_id == target_artist.id().to_string()),
+        "target artist should remain searchable after merge: {merged_target_hits:?}"
+    );
+    let merged_alias_hits =
+        melodee_search::query_active(&config, &db.pool, "alias:Correction Alias", 20, 0)
+            .await
+            .expect("query alias after merge");
+    assert!(
+        merged_alias_hits
+            .iter()
+            .any(|hit| hit.kind == "artist" && hit.internal_id == target_artist.id().to_string()),
+        "alias should move to target artist after merge: {merged_alias_hits:?}"
+    );
+    assert_eq!(
+        resolve_artist_ids_active(&config, &db.pool, "Correction Alias")
+            .await
+            .expect("resolve alias after merge"),
+        vec![target_artist.id().into_uuid().to_string()]
+    );
+    assert_eq!(
+        resolve_artist_ids_active(&config, &db.pool, "Correction Source Artist")
+            .await
+            .expect("resolve source after merge"),
+        vec![target_artist.id().into_uuid().to_string()]
+    );
+    assert_eq!(
+        resolve_artist_ids_active(&config, &db.pool, "Correction Target Artist")
+            .await
+            .expect("resolve target after merge"),
+        vec![target_artist.id().into_uuid().to_string()]
+    );
+    assert_eq!(
+        resolve_artist_ids_active(&config, &db.pool, &source_artist.0.to_string())
+            .await
+            .expect("resolve source internal id after merge"),
+        vec![target_artist.id().into_uuid().to_string()]
+    );
+    assert_eq!(
+        resolve_artist_ids_active(&config, &db.pool, &source_artist.1.to_string())
+            .await
+            .expect("resolve source public id after merge"),
+        vec![target_artist.id().into_uuid().to_string()]
+    );
+    let redirected_id_hits =
+        melodee_search::query_active(&config, &db.pool, &format!("id:{}", source_artist.0), 20, 0)
+            .await
+            .expect("query redirected source internal id");
+    assert!(
+        redirected_id_hits
+            .iter()
+            .any(|hit| hit.kind == "artist" && hit.internal_id == target_artist.id().to_string()),
+        "source internal id should redirect to target artist: {redirected_id_hits:?}"
+    );
+    let redirected_public_hits = melodee_search::query_active(
+        &config,
+        &db.pool,
+        &format!("publicId:{}", source_artist.1),
+        20,
+        0,
+    )
+    .await
+    .expect("query redirected source public id");
+    assert!(
+        redirected_public_hits
+            .iter()
+            .any(|hit| hit.kind == "artist" && hit.internal_id == target_artist.id().to_string()),
+        "source public id should redirect to target artist: {redirected_public_hits:?}"
+    );
+    assert!(!std::path::Path::new(&fixture.source_path).exists());
+    assert!(!std::path::Path::new(&fixture.canonical_asset_path).exists());
 
     db.drop().await;
 }

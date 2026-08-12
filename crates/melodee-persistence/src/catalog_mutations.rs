@@ -1852,30 +1852,36 @@ pub(crate) async fn audit_artist_change(
     now: OffsetDateTime,
     bump_revision: bool,
 ) -> Result<(), CatalogStoreError> {
-    let revision = if bump_revision {
-        sqlx::query_scalar::<_, i64>(
+    let (revision, status) = if bump_revision {
+        sqlx::query_as::<_, (i64, String)>(
             "UPDATE artists SET revision = revision + 1, updated_at = $2
-             WHERE id = $1 RETURNING revision",
+             WHERE id = $1 RETURNING revision, status",
         )
         .bind(artist_id)
         .bind(now)
         .fetch_one(&mut **tx)
         .await?
     } else {
-        sqlx::query_scalar::<_, i64>("SELECT revision FROM artists WHERE id = $1")
+        sqlx::query_as::<_, (i64, String)>("SELECT revision, status FROM artists WHERE id = $1")
             .bind(artist_id)
             .fetch_one(&mut **tx)
             .await?
+    };
+    let operation = if matches!(status.as_str(), "merged" | "deprecated") {
+        "delete"
+    } else {
+        "upsert"
     };
     sqlx::query(
         "INSERT INTO catalog_projection_outbox (
             projection_name, entity_type, entity_id, operation,
             entity_revision, available_at, attempt_count, created_at
-         ) VALUES ('tantivy.catalog','artist',$1,'upsert',$2,$3,0,$3)",
+         ) VALUES ('tantivy.catalog','artist',$1,$4,$2,$3,0,$3)",
     )
     .bind(artist_id)
     .bind(revision)
     .bind(now)
+    .bind(operation)
     .execute(&mut **tx)
     .await?;
     audit_event(

@@ -217,3 +217,92 @@ CREATE CONSTRAINT TRIGGER search_active_generation_matches_status
 AFTER INSERT OR UPDATE ON search_active_generation
 DEFERRABLE INITIALLY DEFERRED
 FOR EACH ROW EXECUTE FUNCTION validate_search_active_generation();
+
+CREATE FUNCTION validate_search_active_generation_ownership() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        IF EXISTS (
+            SELECT 1
+            FROM search_generations generation
+            WHERE generation.generation_id = OLD.generation_id
+              AND generation.search_root = OLD.search_root
+              AND generation.status = 'active'
+        ) THEN
+            RAISE EXCEPTION 'active generation would be orphaned by deleting active generation pointer'
+                USING ERRCODE = '23514';
+        END IF;
+        RETURN OLD;
+    END IF;
+    RETURN NULL;
+END;
+$$;
+
+CREATE CONSTRAINT TRIGGER search_active_generation_cannot_delete_active_generation_pointer
+AFTER DELETE ON search_active_generation
+DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW EXECUTE FUNCTION validate_search_active_generation_ownership();
+
+CREATE UNIQUE INDEX search_generations_active_one_per_root
+    ON search_generations (search_root)
+    WHERE status = 'active';
+
+CREATE FUNCTION validate_search_generations_no_active_pointer() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        IF EXISTS (
+            SELECT 1
+            FROM search_active_generation active
+            WHERE active.generation_id = OLD.generation_id
+              AND active.search_root = OLD.search_root
+        ) THEN
+            RAISE EXCEPTION 'active generation pointer would reference a deleted generation'
+                USING ERRCODE = '23514';
+        END IF;
+        RETURN OLD;
+    END IF;
+
+    IF NEW.status = 'active' THEN
+        IF NEW.activated_at IS NULL THEN
+            RAISE EXCEPTION 'active generation pointer and generation must share an activation timestamp'
+                USING ERRCODE = '23514';
+        END IF;
+        IF NOT EXISTS (
+            SELECT 1
+            FROM search_active_generation active
+            WHERE active.generation_id = NEW.generation_id
+              AND active.search_root = NEW.search_root
+              AND active.activated_at = NEW.activated_at
+        ) THEN
+            RAISE EXCEPTION 'active generation pointer must reference this generation'
+                USING ERRCODE = '23514';
+        END IF;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM search_active_generation active
+        WHERE active.generation_id = NEW.generation_id
+          AND active.search_root = NEW.search_root
+    ) THEN
+        IF NEW.status <> 'active'
+           OR NEW.activated_at IS NULL
+           OR NEW.activated_at <> (
+               SELECT active.activated_at
+               FROM search_active_generation active
+               WHERE active.generation_id = NEW.generation_id
+                 AND active.search_root = NEW.search_root
+           ) THEN
+            RAISE EXCEPTION 'active generation pointer would reference a non-active generation'
+                USING ERRCODE = '23514';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE CONSTRAINT TRIGGER search_generations_cannot_be_active_pointer_target
+AFTER INSERT OR UPDATE OR DELETE ON search_generations
+DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW EXECUTE FUNCTION validate_search_generations_no_active_pointer();

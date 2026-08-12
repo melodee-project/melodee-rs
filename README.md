@@ -8,13 +8,13 @@ this repository defines the new architecture, specifications, tests, and impleme
 
 ## Current phase
 
-**Phase 6 — Search and MQL (active boundary)**
+**Phase 7 — Native Melodee API v1 (active boundary)**
 
-Phases 0–5 are complete. The Phase 6 implementation is a Candidate pending independent review: it
-adds bounded MQL, a disposable Tantivy projection, leased outbox consumption, generational rebuild,
-corruption recovery, operator tooling, and measured 10-million-Track evidence without reading
-media. See the [Phase 6 Candidate report](design/evidence/phase-6/PHASE-6-REPORT.md) and
-[IMPLEMENTATION.md](IMPLEMENTATION.md). Phase 7 is not active.
+Phases 0–6 are complete. Phase 6's bounded MQL, disposable Tantivy projection, leased outbox
+consumer, generational rebuild, corruption recovery, operator tooling, and measured
+10-million-Track evidence passed independent review. See the
+[final Phase 6 report](design/evidence/phase-6/PHASE-6-REPORT.md) and
+[IMPLEMENTATION.md](IMPLEMENTATION.md). Phase 7 native API compatibility work is now active.
 
 ## Non-negotiable product commitments
 
@@ -92,10 +92,9 @@ The first successful Cargo resolution must produce `Cargo.lock`; commit it in th
 
 ## Current implementation evidence
 
-Completed phase reports live under `design/evidence/phase-0/` through `design/evidence/phase-5/`;
-the Phase 6 report is a Candidate pending independent review. The phase plan, accepted ADRs, and an
-assigned work package determine what may be implemented next; historical work packages remain as
-completed project evidence.
+Completed phase reports live under `design/evidence/phase-0/` through `design/evidence/phase-6/`.
+The phase plan, accepted ADRs, and an assigned work package determine what may be implemented next;
+historical work packages remain as completed project evidence.
 
 ## Legacy repository relationship
 

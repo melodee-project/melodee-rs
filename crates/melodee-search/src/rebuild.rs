@@ -90,7 +90,7 @@ pub async fn run_rebuild_once_with_cancel(
                 )
                 .await
                 {
-                    warn!(%evidence_error, %error, "permanent rebuild failure evidence could not be recorded");
+                    warn!(%evidence_error, error = ?error, "permanent rebuild failure evidence could not be recorded");
                 }
             } else {
                 let retry_at = now + time::Duration::seconds(5);
@@ -104,7 +104,7 @@ pub async fn run_rebuild_once_with_cancel(
                 )
                 .await
                 {
-                    warn!(%evidence_error, %error, "retryable rebuild failure evidence could not be recorded");
+                    warn!(%evidence_error, error = ?error, "retryable rebuild failure evidence could not be recorded");
                 }
             }
             Err(error)
@@ -320,6 +320,9 @@ async fn catch_up_and_activate(
             )
             .await?;
         }
+        // Persistence holds the outbox SHARE lock only inside this bounded
+        // metadata transaction. Keep all index/catalog/filesystem work above
+        // this call so activation cannot extend catalog-writer blocking.
         match SearchProjectionStore::activate_generation(
             pool,
             job_id,
@@ -351,7 +354,7 @@ async fn retire_old_generations(pool: &PgPool, root: &SearchRoot) {
         match SearchProjectionStore::retired_generation_ids(pool, root_text.as_ref(), 16).await {
             Ok(ids) => ids,
             Err(error) => {
-                warn!(%error, "unable to list retired search generations");
+                warn!(error = ?error, "unable to list retired search generations");
                 return;
             }
         };
@@ -360,7 +363,7 @@ async fn retire_old_generations(pool: &PgPool, root: &SearchRoot) {
         match std::fs::symlink_metadata(&path) {
             Ok(_) => {
                 if let Err(error) = root.remove_generation(generation_id) {
-                    warn!(%generation_id, %error, "retired search generation was not removed");
+                    warn!(%generation_id, error = ?error, "retired search generation was not removed");
                     continue;
                 }
             }
@@ -370,7 +373,7 @@ async fn retire_old_generations(pool: &PgPool, root: &SearchRoot) {
                 // generation rather than retrying a removal forever.
             }
             Err(error) => {
-                warn!(%generation_id, %error, "retired generation path could not be inspected");
+                warn!(%generation_id, error = ?error, "retired generation path could not be inspected");
                 continue;
             }
         }
@@ -382,7 +385,7 @@ async fn retire_old_generations(pool: &PgPool, root: &SearchRoot) {
         )
         .await
         {
-            warn!(%generation_id, %error, "retired generation removal was not recorded");
+            warn!(%generation_id, error = ?error, "retired generation removal was not recorded");
         }
     }
 }

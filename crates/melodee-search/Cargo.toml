@@ -24,6 +24,7 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
 blake3 = { workspace = true }
+rustix = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
 tempfile = { workspace = true }

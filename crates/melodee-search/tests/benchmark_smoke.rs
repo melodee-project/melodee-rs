@@ -29,6 +29,7 @@ fn benchmark_binary_enforces_counts_correctness_and_interactive_budget() {
         serde_json::from_slice(&output.stdout).expect("parse benchmark report");
     assert_eq!(report["tracks"], 10_000);
     assert_eq!(report["total_documents"], 95_000);
+    assert_eq!(report["corpus_identity"], "ordinal-v1");
     assert_eq!(report["source_media_reads"], 0);
     assert_eq!(report["canonical_media_reads"], 0);
     assert_eq!(report["target_met"], true);

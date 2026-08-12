@@ -12,8 +12,9 @@
 [design/evidence/phase-4/PHASE-4-REPORT.md](design/evidence/phase-4/PHASE-4-REPORT.md);
 **Phase 5 complete (2026-08-10)**, see
 [design/evidence/phase-5/PHASE-5-REPORT.md](design/evidence/phase-5/PHASE-5-REPORT.md);
-**Phase 6 Candidate (2026-08-11)**, see
-[design/evidence/phase-6/PHASE-6-REPORT.md](design/evidence/phase-6/PHASE-6-REPORT.md).
+**Phase 6 complete (2026-08-11)**, see
+[design/evidence/phase-6/PHASE-6-REPORT.md](design/evidence/phase-6/PHASE-6-REPORT.md);
+**Phase 7 active**.
 **Date:** 2026-08-07  
 **Governing documents:** [PRD.md](PRD.md), [SPEC.md](SPEC.md), accepted ADRs
 
@@ -312,7 +313,7 @@ reproducible evidence are in
 
 ## 9. Phase 6 — Search and MQL
 
-**Status:** Candidate — implemented and locally accepted; independent review pending. Phase 7 is not active.
+**Status:** COMPLETE (2026-08-11) — independently reviewed and accepted. See the Phase 6 report.
 
 ### Objective
 
@@ -334,6 +335,8 @@ Deliver lightning-fast, rebuildable search at large-catalog scale.
 - MQL compatibility tests pass.
 
 ## 10. Phase 7 — Native Melodee API v1
+
+**Status:** Active.
 
 ### Objective
 

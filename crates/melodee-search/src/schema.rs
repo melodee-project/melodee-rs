@@ -13,7 +13,7 @@ use tantivy::tokenizer::{
 };
 
 /// Schema version. Bump when field semantics change incompatibly.
-pub const SCHEMA_VERSION: u32 = 2;
+pub const SCHEMA_VERSION: u32 = 3;
 
 /// Tokenizer for tokenized text fields (Unicode-aware + lowercase + ASCII fold).
 pub const TEXT_TOKENIZER: &str = "melodee";
@@ -33,6 +33,7 @@ pub struct SearchSchema {
     pub a_display_name: Field,
     pub a_sort_name: Field,
     pub a_aliases: Field,
+    pub a_redirect_ids: Field,
     pub a_disambiguation: Field,
     pub a_type: Field,
     pub a_status: Field,
@@ -44,6 +45,10 @@ pub struct SearchSchema {
     pub r_title: Field,
     pub r_sort_title: Field,
     pub r_artist_ids: Field,
+    pub r_primary_artist_ids: Field,
+    pub r_featured_artist_ids: Field,
+    pub r_performer_artist_ids: Field,
+    pub r_other_artist_ids: Field,
     pub r_artist_display: Field,
     pub r_genre_tags: Field,
     pub r_release_year: Field,
@@ -122,6 +127,7 @@ pub fn build_schema() -> SearchSchema {
     let a_display_name = builder.add_text_field("a_display_name", text_opts(true));
     let a_sort_name = builder.add_text_field("a_sort_name", raw_fast_opts(true));
     let a_aliases = builder.add_text_field("a_aliases", text_opts(true));
+    let a_redirect_ids = builder.add_text_field("a_redirect_ids", raw_opts(true));
     let a_disambiguation = builder.add_text_field("a_disambiguation", text_opts(true));
     let a_type = builder.add_text_field("a_type", raw_opts(true));
     let a_status = builder.add_text_field("a_status", raw_opts(true));
@@ -133,6 +139,10 @@ pub fn build_schema() -> SearchSchema {
     let r_title = builder.add_text_field("r_title", text_opts(true));
     let r_sort_title = builder.add_text_field("r_sort_title", raw_fast_opts(true));
     let r_artist_ids = builder.add_text_field("r_artist_ids", raw_opts(true));
+    let r_primary_artist_ids = builder.add_text_field("r_primary_artist_ids", raw_opts(true));
+    let r_featured_artist_ids = builder.add_text_field("r_featured_artist_ids", raw_opts(true));
+    let r_performer_artist_ids = builder.add_text_field("r_performer_artist_ids", raw_opts(true));
+    let r_other_artist_ids = builder.add_text_field("r_other_artist_ids", raw_opts(true));
     let r_artist_display = builder.add_text_field("r_artist_display", text_opts(true));
     let r_genre_tags = builder.add_text_field("r_genre_tags", raw_opts(true));
     let r_release_year = builder.add_i64_field("r_release_year", int_opts(true));
@@ -171,6 +181,7 @@ pub fn build_schema() -> SearchSchema {
         a_display_name,
         a_sort_name,
         a_aliases,
+        a_redirect_ids,
         a_disambiguation,
         a_type,
         a_status,
@@ -181,6 +192,10 @@ pub fn build_schema() -> SearchSchema {
         r_title,
         r_sort_title,
         r_artist_ids,
+        r_primary_artist_ids,
+        r_featured_artist_ids,
+        r_performer_artist_ids,
+        r_other_artist_ids,
         r_artist_display,
         r_genre_tags,
         r_release_year,

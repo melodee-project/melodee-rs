@@ -454,8 +454,8 @@ impl CatalogStore {
     ) -> Result<(), CatalogStoreError> {
         ArtistMerge::new(merge.clone())?;
         let mut tx = pool.begin().await?;
-        let artists = sqlx::query_as::<_, (Uuid, Uuid, String)>(
-            "SELECT id, public_api_id, status FROM artists
+        let artists = sqlx::query_as::<_, (Uuid, Uuid, String, String, String, i64)>(
+            "SELECT id, public_api_id, status, canonical_name, normalized_name, revision FROM artists
              WHERE id = ANY($1) ORDER BY id FOR UPDATE",
         )
         .bind([
@@ -479,6 +479,8 @@ impl CatalogStore {
         {
             return Err(CatalogStoreError::MutationConflict);
         }
+        let source_name = source.map(|artist| artist.3.clone());
+        let source_normalized_name = source.map(|artist| artist.4.clone());
         let identity_row_count = affected_artist_identity_row_count(
             &mut tx,
             &[merge.source_artist_id, merge.target_artist_id],
@@ -626,6 +628,28 @@ impl CatalogStore {
         .bind(merge.occurred_at)
         .execute(&mut *tx)
         .await?;
+        if let Some(source_name) = source_name {
+            sqlx::query(
+                "INSERT INTO artist_aliases (
+                    id, artist_id, alias, normalized_alias, alias_type, locale,
+                    evidence_source, confidence, is_locked, created_at
+                 )
+                 SELECT $1, $2, $3, $4, 'search', NULL, $5, 10000, true, $6
+                 WHERE NOT EXISTS (
+                     SELECT 1
+                     FROM artist_aliases alias
+                     WHERE alias.artist_id = $2 AND alias.normalized_alias = $4
+                 )",
+            )
+            .bind(Uuid::now_v7())
+            .bind(merge.target_artist_id.into_uuid())
+            .bind(&source_name)
+            .bind(source_normalized_name.as_deref().unwrap_or_default())
+            .bind(&merge.actor)
+            .bind(merge.occurred_at)
+            .execute(&mut *tx)
+            .await?;
+        }
         rebuild_participation_for_tracks(&mut tx, &track_ids, merge.occurred_at).await?;
         enqueue_track_revisions(&mut tx, &track_ids, merge.occurred_at, true).await?;
         let moved = serde_json::json!({

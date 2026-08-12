@@ -273,8 +273,12 @@ impl SearchStore {
                 Term::from_field_text(self.schema.a_public_id, value),
                 IndexRecordOption::Basic,
             );
+            let q_redir = TermQuery::new(
+                Term::from_field_text(self.schema.a_redirect_ids, value),
+                IndexRecordOption::Basic,
+            );
             let queries: Vec<Box<dyn tantivy::query::Query>> =
-                vec![Box::new(q_int), Box::new(q_pub)];
+                vec![Box::new(q_int), Box::new(q_pub), Box::new(q_redir)];
             for q in &queries {
                 let top = searcher
                     .search(&**q, &TopDocs::with_limit(1).order_by_score())

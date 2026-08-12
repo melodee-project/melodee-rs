@@ -8,7 +8,7 @@ use melodee_ingestion::{
 };
 use melodee_persistence::{CatalogStore, WorkEngineConfig, WorkItemStore, migrate};
 use melodee_policy::PolicyConfig;
-use melodee_search::{SearchConfig, SearchRoot, reject_root_overlap, start_search_loop};
+use melodee_search::{SearchConfig, SearchRoot, start_search_loop};
 use melodee_server::policy_worker::{PolicyWorkerConfig, start_policy_loop};
 use melodee_server::{admin, policy_worker, system};
 use tokio::sync::oneshot;
@@ -94,7 +94,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let mut search_config = SearchConfig::from_env()
         .map_err(|error| format!("invalid search configuration: {error}"))?;
     if search_config.enabled {
-        let root = SearchRoot::open(&search_config.search_root)?;
         let mut other_roots = ingestion_config
             .sources
             .iter()
@@ -104,7 +103,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             other_roots.push(roots.storage_root.clone());
             other_roots.push(roots.work_area_base.clone());
         }
-        reject_root_overlap(root.path(), &other_roots)?;
+        let canonical_search_root = search_config.resolve_root_against(&other_roots)?;
+        let root = SearchRoot::open(&canonical_search_root)?;
         search_config.search_root = root.path().to_path_buf();
     }
     let mut reconcile_handle = None;
