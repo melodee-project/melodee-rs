@@ -123,5 +123,23 @@ async fn enabled_search_is_not_ready_until_an_active_generation_opens() {
     let (status, body) = request_json(ready, "/readyz").await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["status"], "ready");
+
+    let root = melodee_search::SearchRoot::open(&config.search_root).expect("owned search root");
+    let active = melodee_persistence::SearchProjectionStore::active_generation(
+        &db.pool,
+        root.path().to_string_lossy().as_ref(),
+    )
+    .await
+    .expect("read active generation")
+    .expect("active generation");
+    std::fs::remove_file(root.generation_path(active.generation_id).join("meta.json"))
+        .expect("corrupt disposable active generation");
+    let corrupt = Router::new().route(
+        "/readyz",
+        get(readyz).with_state(ReadinessState::new(db.pool.clone()).with_search(Some(config))),
+    );
+    let (status, body) = request_json(corrupt, "/readyz").await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(body["status"], "not_ready");
     db.drop().await;
 }

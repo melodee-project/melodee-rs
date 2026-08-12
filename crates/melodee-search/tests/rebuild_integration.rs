@@ -201,6 +201,252 @@ async fn populated_catalog_rebuilds_without_reading_media_and_activates_atomical
         .await
         .expect("queue converged");
     assert_eq!(idle.claimed, 0);
+
+    // A document-level Tantivy failure must not commit that row's scheduled
+    // replacement or delay a healthy sibling from the same claimed batch.
+    #[cfg(feature = "test-support")]
+    {
+        let artist_rows = sqlx::query_as::<_, (uuid::Uuid, i64)>(
+            "SELECT id, revision FROM artists ORDER BY (id = $1) DESC, id LIMIT 2",
+        )
+        .bind(revised_artist_id)
+        .fetch_all(&db.pool)
+        .await
+        .expect("load poison-batch Artists");
+        assert_eq!(artist_rows.len(), 2);
+        let poison_at = time::OffsetDateTime::now_utc();
+        let mut poison_tx = db.pool.begin().await.expect("begin poison batch");
+        let bad_revision = artist_rows[0].1 + 1;
+        sqlx::query(
+            "UPDATE artists SET sort_name = 'Injected Failure Candidate', revision = $2,
+                            updated_at = $3 WHERE id = $1",
+        )
+        .bind(artist_rows[0].0)
+        .bind(bad_revision)
+        .bind(poison_at)
+        .execute(&mut *poison_tx)
+        .await
+        .expect("update fault-injection Artist");
+        let bad_outbox_id = sqlx::query_scalar::<_, i64>(
+            "INSERT INTO catalog_projection_outbox (
+            projection_name, entity_type, entity_id, operation,
+            entity_revision, available_at, created_at
+         ) VALUES ($1, 'artist', $2, 'upsert', $3, $4, $4)
+         RETURNING id",
+        )
+        .bind(SEARCH_PROJECTION_NAME)
+        .bind(artist_rows[0].0)
+        .bind(bad_revision)
+        .bind(poison_at)
+        .fetch_one(&mut *poison_tx)
+        .await
+        .expect("seed poison outbox row");
+        let good_revision = artist_rows[1].1 + 1;
+        sqlx::query(
+            "UPDATE artists SET canonical_name = 'Healthy Batch Sibling',
+                            normalized_name = 'HEALTHY BATCH SIBLING',
+                            sort_name = 'Healthy Batch Sibling', revision = $2,
+                            updated_at = $3 WHERE id = $1",
+        )
+        .bind(artist_rows[1].0)
+        .bind(good_revision)
+        .bind(poison_at)
+        .execute(&mut *poison_tx)
+        .await
+        .expect("update healthy sibling");
+        let good_outbox_id = sqlx::query_scalar::<_, i64>(
+            "INSERT INTO catalog_projection_outbox (
+            projection_name, entity_type, entity_id, operation,
+            entity_revision, available_at, created_at
+         ) VALUES ($1, 'artist', $2, 'upsert', $3, $4, $4)
+         RETURNING id",
+        )
+        .bind(SEARCH_PROJECTION_NAME)
+        .bind(artist_rows[1].0)
+        .bind(good_revision)
+        .bind(poison_at)
+        .fetch_one(&mut *poison_tx)
+        .await
+        .expect("seed healthy sibling outbox row");
+        poison_tx.commit().await.expect("commit poison batch");
+
+        melodee_search::worker::set_document_failure_for_test(Some(artist_rows[0].0));
+        let isolated = apply_outbox_once(&config, &db.pool)
+            .await
+            .expect("isolate malformed search document");
+        melodee_search::worker::set_document_failure_for_test(None);
+        assert_eq!(isolated.claimed, 2);
+        assert_eq!(isolated.applied, 1);
+        assert_eq!(isolated.acknowledged, 1);
+        assert_eq!(isolated.errors, 1);
+        let outcomes = sqlx::query_as::<_, (i64, bool, bool, Option<String>)>(
+            "SELECT id, processed_at IS NOT NULL, failed_at IS NOT NULL, failure_kind
+         FROM catalog_projection_outbox WHERE id = ANY($1) ORDER BY id",
+        )
+        .bind(&[bad_outbox_id, good_outbox_id][..])
+        .fetch_all(&db.pool)
+        .await
+        .expect("read isolated batch outcomes");
+        assert_eq!(outcomes.len(), 2);
+        assert_eq!(
+            outcomes[0],
+            (
+                bad_outbox_id,
+                false,
+                true,
+                Some("index_document".to_string())
+            )
+        );
+        assert_eq!(outcomes[1], (good_outbox_id, true, false, None));
+        let failed_row_still_visible = melodee_search::query_active(
+            &config,
+            &db.pool,
+            &format!("id:{}", artist_rows[0].0),
+            10,
+            0,
+        )
+        .await
+        .expect("query failed row's prior document");
+        assert_eq!(failed_row_still_visible.len(), 1);
+        let healthy_sibling_visible = melodee_search::query_active(
+            &config,
+            &db.pool,
+            "name:\"Healthy Batch Sibling\"",
+            10,
+            0,
+        )
+        .await
+        .expect("query healthy sibling");
+        assert_eq!(healthy_sibling_visible.len(), 1);
+        let healthy_diagnostic = melodee_search::diagnostic(&config, &db.pool)
+            .await
+            .expect("diagnose live counts after isolated batch");
+        assert!(healthy_diagnostic.generation_error.is_none());
+
+        let recovery_at = time::OffsetDateTime::now_utc();
+        let recovered_revision = bad_revision + 1;
+        let mut recovery_tx = db.pool.begin().await.expect("begin poison recovery");
+        sqlx::query(
+            "UPDATE artists SET sort_name = canonical_name, revision = $2,
+                            updated_at = $3 WHERE id = $1",
+        )
+        .bind(artist_rows[0].0)
+        .bind(recovered_revision)
+        .bind(recovery_at)
+        .execute(&mut *recovery_tx)
+        .await
+        .expect("repair authoritative Artist sort name");
+        sqlx::query(
+            "INSERT INTO catalog_projection_outbox (
+            projection_name, entity_type, entity_id, operation,
+            entity_revision, available_at, created_at
+         ) VALUES ($1, 'artist', $2, 'upsert', $3, $4, $4)",
+        )
+        .bind(SEARCH_PROJECTION_NAME)
+        .bind(artist_rows[0].0)
+        .bind(recovered_revision)
+        .bind(recovery_at)
+        .execute(&mut *recovery_tx)
+        .await
+        .expect("seed repaired Artist outbox row");
+        recovery_tx.commit().await.expect("commit poison recovery");
+        let recovered_poison = apply_outbox_once(&config, &db.pool)
+            .await
+            .expect("index repaired Artist revision");
+        assert_eq!(recovered_poison.applied, 1);
+        assert_eq!(recovered_poison.acknowledged, 1);
+        assert_eq!(recovered_poison.errors, 0);
+    }
+
+    // Snapshot counts stay sealed while live counts follow incremental
+    // deletes/upserts, preventing healthy catch-up from becoming a permanent
+    // diagnostic mismatch.
+    let live_revision = sqlx::query_scalar::<_, i64>("SELECT revision FROM artists WHERE id = $1")
+        .bind(revised_artist_id)
+        .fetch_one(&db.pool)
+        .await
+        .expect("read current Artist revision");
+    let count_at = time::OffsetDateTime::now_utc();
+    sqlx::query(
+        "INSERT INTO catalog_projection_outbox (
+            projection_name, entity_type, entity_id, operation,
+            entity_revision, available_at, created_at
+         ) VALUES ($1, 'artist', $2, 'delete', $3, $4, $4)",
+    )
+    .bind(SEARCH_PROJECTION_NAME)
+    .bind(revised_artist_id)
+    .bind(live_revision + 1)
+    .bind(count_at)
+    .execute(&db.pool)
+    .await
+    .expect("seed live-count delete");
+    let deleted = apply_outbox_once(&config, &db.pool)
+        .await
+        .expect("apply live-count delete");
+    assert_eq!(deleted.applied, 1);
+    let after_delete =
+        SearchProjectionStore::active_generation(&db.pool, root.path().to_string_lossy().as_ref())
+            .await
+            .expect("read live counts after delete")
+            .expect("active generation");
+    assert_eq!(after_delete.document_counts.artists, 2);
+    assert_eq!(after_delete.current_document_counts.artists, 1);
+    assert!(
+        melodee_search::diagnostic(&config, &db.pool)
+            .await
+            .expect("diagnose after live delete")
+            .generation_error
+            .is_none()
+    );
+
+    let restored_revision = live_revision + 2;
+    let restore_at = time::OffsetDateTime::now_utc();
+    let mut restore_tx = db.pool.begin().await.expect("begin live-count restore");
+    sqlx::query("UPDATE artists SET revision = $2, updated_at = $3 WHERE id = $1")
+        .bind(revised_artist_id)
+        .bind(restored_revision)
+        .bind(restore_at)
+        .execute(&mut *restore_tx)
+        .await
+        .expect("advance restored Artist revision");
+    sqlx::query(
+        "INSERT INTO catalog_projection_outbox (
+            projection_name, entity_type, entity_id, operation,
+            entity_revision, available_at, created_at
+         ) VALUES ($1, 'artist', $2, 'upsert', $3, $4, $4)",
+    )
+    .bind(SEARCH_PROJECTION_NAME)
+    .bind(revised_artist_id)
+    .bind(restored_revision)
+    .bind(restore_at)
+    .execute(&mut *restore_tx)
+    .await
+    .expect("seed live-count restore");
+    restore_tx
+        .commit()
+        .await
+        .expect("commit live-count restore");
+    assert_eq!(
+        apply_outbox_once(&config, &db.pool)
+            .await
+            .expect("apply live-count restore")
+            .applied,
+        1
+    );
+    let after_restore =
+        SearchProjectionStore::active_generation(&db.pool, root.path().to_string_lossy().as_ref())
+            .await
+            .expect("read live counts after restore")
+            .expect("active generation");
+    assert_eq!(after_restore.current_document_counts.artists, 2);
+    assert!(
+        melodee_search::diagnostic(&config, &db.pool)
+            .await
+            .expect("diagnose after live restore")
+            .generation_error
+            .is_none()
+    );
+
     let final_store = SearchStore::open(&generation_path).expect("open converged generation");
     let final_stats = final_store.stats().expect("converged counts");
     assert_eq!(final_stats.artists, 2);

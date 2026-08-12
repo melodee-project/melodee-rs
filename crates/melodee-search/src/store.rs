@@ -20,6 +20,18 @@ use crate::translator;
 pub const MAX_SEARCH_RESULTS: usize = 1_000;
 pub const MAX_SEARCH_OFFSET: usize = 10_000;
 
+#[cfg(feature = "test-support")]
+std::thread_local! {
+    static INJECTED_COMMIT_FAILURE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Inject or clear a deterministic pre-commit failure.
+#[cfg(feature = "test-support")]
+#[doc(hidden)]
+pub fn set_commit_failure_for_test(enabled: bool) {
+    INJECTED_COMMIT_FAILURE.set(enabled);
+}
+
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SearchHit {
     pub kind: String,
@@ -232,6 +244,12 @@ impl SearchStore {
 
     /// Make buffered writes durable and refresh readers.
     pub fn commit(&mut self) -> Result<(), SearchError> {
+        #[cfg(feature = "test-support")]
+        if INJECTED_COMMIT_FAILURE.get() {
+            return Err(SearchError::Retryable(
+                "injected Tantivy commit failure".to_string(),
+            ));
+        }
         self.writer_mut()?.commit().map_err(SearchError::Tantivy)?;
         self.reader.reload().map_err(SearchError::Tantivy)?;
         self.pending_revisions.clear();

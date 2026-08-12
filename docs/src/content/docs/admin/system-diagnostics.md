@@ -76,8 +76,10 @@ owner process is currently alive.
   `melodee policy inspect <release-id>` prints the current durable decision and audit history.
 - `melodee policy decide <release-id> <disposition> --actor <id> --reason <reason>` records an
   explicit administrator override. It does not complete or execute deletion.
-- `melodee search status` reports pending/permanently failed outbox rows, oldest availability,
-  leases, checkpoint, latest rebuild, active generation, document counts, and index-open errors.
+- `melodee search status` reports unleased pending rows, separately leased rows, permanently failed
+  outbox rows, oldest availability, checkpoint, latest rebuild, active generation, sealed snapshot
+  and current live document counts, and index-open errors. Retryable rows become permanent failures
+  after `MELODEE__SEARCH__MAX_OUTBOX_ATTEMPTS` so a poison row cannot churn forever.
 - `melodee search rebuild --actor <administrator-id>` synchronously builds, validates, catches up,
   and activates a new generation. `search query`, `autocomplete`, `parse`, and `explain` exercise
   the same bounded query contracts used by the worker.

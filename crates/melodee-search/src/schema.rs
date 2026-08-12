@@ -13,7 +13,7 @@ use tantivy::tokenizer::{
 };
 
 /// Schema version. Bump when field semantics change incompatibly.
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
 
 /// Tokenizer for tokenized text fields (Unicode-aware + lowercase + ASCII fold).
 pub const TEXT_TOKENIZER: &str = "melodee";
@@ -38,7 +38,6 @@ pub struct SearchSchema {
     pub a_status: Field,
     pub a_begin_year: Field,
     pub a_end_year: Field,
-    pub a_revision: Field,
 
     pub r_internal_id: Field,
     pub r_public_id: Field,
@@ -51,7 +50,6 @@ pub struct SearchSchema {
     pub r_release_date: Field,
     pub r_type: Field,
     pub r_status: Field,
-    pub r_revision: Field,
 
     pub t_internal_id: Field,
     pub t_public_id: Field,
@@ -69,7 +67,6 @@ pub struct SearchSchema {
     pub t_duration_ms: Field,
     pub t_release_year: Field,
     pub t_release_date: Field,
-    pub t_revision: Field,
 }
 
 fn text_opts(stored: bool) -> TextOptions {
@@ -101,7 +98,7 @@ fn raw_fast_opts(stored: bool) -> TextOptions {
 }
 
 fn int_opts(stored: bool) -> NumericOptions {
-    let mut opts = NumericOptions::default().set_indexed();
+    let mut opts = NumericOptions::default().set_indexed().set_fast();
     if stored {
         opts = opts.set_stored();
     }
@@ -120,36 +117,34 @@ pub fn build_schema() -> SearchSchema {
     let revision = builder.add_i64_field("revision", int_opts(true));
     let updated_at = builder.add_date_field("updated_at", date_opts());
 
-    let a_internal_id = builder.add_text_field("a_internal_id", raw_opts(true));
-    let a_public_id = builder.add_text_field("a_public_id", raw_opts(true));
+    let a_internal_id = builder.add_text_field("a_internal_id", raw_fast_opts(true));
+    let a_public_id = builder.add_text_field("a_public_id", raw_fast_opts(true));
     let a_display_name = builder.add_text_field("a_display_name", text_opts(true));
-    let a_sort_name = builder.add_text_field("a_sort_name", raw_opts(true));
+    let a_sort_name = builder.add_text_field("a_sort_name", raw_fast_opts(true));
     let a_aliases = builder.add_text_field("a_aliases", text_opts(true));
     let a_disambiguation = builder.add_text_field("a_disambiguation", text_opts(true));
     let a_type = builder.add_text_field("a_type", raw_opts(true));
     let a_status = builder.add_text_field("a_status", raw_opts(true));
     let a_begin_year = builder.add_i64_field("a_begin_year", int_opts(false));
     let a_end_year = builder.add_i64_field("a_end_year", int_opts(false));
-    let a_revision = builder.add_i64_field("a_revision", int_opts(true));
 
-    let r_internal_id = builder.add_text_field("r_internal_id", raw_opts(true));
-    let r_public_id = builder.add_text_field("r_public_id", raw_opts(true));
+    let r_internal_id = builder.add_text_field("r_internal_id", raw_fast_opts(true));
+    let r_public_id = builder.add_text_field("r_public_id", raw_fast_opts(true));
     let r_title = builder.add_text_field("r_title", text_opts(true));
-    let r_sort_title = builder.add_text_field("r_sort_title", raw_opts(true));
+    let r_sort_title = builder.add_text_field("r_sort_title", raw_fast_opts(true));
     let r_artist_ids = builder.add_text_field("r_artist_ids", raw_opts(true));
     let r_artist_display = builder.add_text_field("r_artist_display", text_opts(true));
     let r_genre_tags = builder.add_text_field("r_genre_tags", raw_opts(true));
     let r_release_year = builder.add_i64_field("r_release_year", int_opts(true));
-    let r_release_date = builder.add_i64_field("r_release_date", int_opts(true));
+    let r_release_date = builder.add_date_field("r_release_date", date_opts());
     let r_type = builder.add_text_field("r_type", raw_opts(true));
     let r_status = builder.add_text_field("r_status", raw_opts(true));
-    let r_revision = builder.add_i64_field("r_revision", int_opts(true));
 
-    let t_internal_id = builder.add_text_field("t_internal_id", raw_opts(true));
-    let t_public_id = builder.add_text_field("t_public_id", raw_opts(true));
+    let t_internal_id = builder.add_text_field("t_internal_id", raw_fast_opts(true));
+    let t_public_id = builder.add_text_field("t_public_id", raw_fast_opts(true));
     let t_release_id = builder.add_text_field("t_release_id", raw_opts(true));
     let t_title = builder.add_text_field("t_title", text_opts(true));
-    let t_sort_title = builder.add_text_field("t_sort_title", raw_opts(true));
+    let t_sort_title = builder.add_text_field("t_sort_title", raw_fast_opts(true));
     let t_primary_artist_ids = builder.add_text_field("t_primary_artist_ids", raw_opts(true));
     let t_featured_artist_ids = builder.add_text_field("t_featured_artist_ids", raw_opts(true));
     let t_performer_artist_ids = builder.add_text_field("t_performer_artist_ids", raw_opts(true));
@@ -161,8 +156,7 @@ pub fn build_schema() -> SearchSchema {
     let t_track_number = builder.add_i64_field("t_track_number", int_opts(true));
     let t_duration_ms = builder.add_i64_field("t_duration_ms", int_opts(true));
     let t_release_year = builder.add_i64_field("t_release_year", int_opts(true));
-    let t_release_date = builder.add_i64_field("t_release_date", int_opts(true));
-    let t_revision = builder.add_i64_field("t_revision", int_opts(true));
+    let t_release_date = builder.add_date_field("t_release_date", date_opts());
 
     let schema = builder.build();
 
@@ -182,7 +176,6 @@ pub fn build_schema() -> SearchSchema {
         a_status,
         a_begin_year,
         a_end_year,
-        a_revision,
         r_internal_id,
         r_public_id,
         r_title,
@@ -194,7 +187,6 @@ pub fn build_schema() -> SearchSchema {
         r_release_date,
         r_type,
         r_status,
-        r_revision,
         t_internal_id,
         t_public_id,
         t_release_id,
@@ -211,7 +203,6 @@ pub fn build_schema() -> SearchSchema {
         t_duration_ms,
         t_release_year,
         t_release_date,
-        t_revision,
     }
 }
 

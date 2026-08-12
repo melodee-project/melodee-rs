@@ -1419,7 +1419,9 @@
       "design/adr/ADR-0107-use-tantivy-as-search-projection.md"
     ],
     "tests": [
-      "crates/melodee-search/tests/search_tests.rs"
+      "crates/melodee-search/tests/search_tests.rs",
+      "crates/melodee-search/tests/rebuild_integration.rs (poison-row isolation and live-count diagnostics)",
+      "crates/melodee-persistence/tests/search_phase6.rs (bounded retry escalation)"
     ]
   },
   {
@@ -1494,6 +1496,7 @@
       "crates/melodee-search/src/bin/phase6_benchmark.rs"
     ],
     "tests": [
+      "crates/melodee-search/tests/benchmark_smoke.rs (default-gate generator/result/media-read/latency guard)",
       "design/evidence/phase-6/PHASE-6-REPORT.md (10-million-Track warm-latency evidence)"
     ]
   },
@@ -2680,7 +2683,7 @@
       "crates/melodee-search/src/service.rs (active-generation manifest/index diagnostic)"
     ],
     "tests": [
-      "apps/melodee-server/tests/system_api.rs"
+      "apps/melodee-server/tests/system_api.rs (disabled/healthy/corrupt-generation readiness)"
     ]
   },
   {

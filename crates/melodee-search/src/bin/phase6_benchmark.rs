@@ -30,6 +30,8 @@ struct QueryMetric {
 #[derive(Debug, Serialize)]
 struct BenchmarkReport {
     benchmark: &'static str,
+    /// Stable corpus identity marker. Generation is deliberately ordinal and
+    /// does not use a PRNG, so changing this label does not change records.
     seed: u64,
     artists: usize,
     releases: usize,

@@ -144,8 +144,18 @@ impl Parser {
     fn span_of(&self, ast: &MqlAst) -> Span {
         match ast {
             MqlAst::Term(t) => t.span,
-            _ => (0, 0),
+            MqlAst::Not(inner) => self.span_of(inner),
+            MqlAst::And(left, right) | MqlAst::Or(left, right) => {
+                let left = self.span_of(left);
+                let right = self.span_of(right);
+                (left.0, right.1)
+            }
         }
+    }
+
+    fn eof_span(&self) -> Span {
+        let end = self.tokens.last().map_or(0, |token| token.1.1);
+        (end, end)
     }
 
     fn parse_primary(&mut self, bounds: &Bounds, depth: usize) -> Result<MqlAst, MqlError> {
@@ -168,7 +178,7 @@ impl Parser {
                 None => {
                     return Err(MqlError::Syntax {
                         message: "unexpected end of input, expected ')'".to_string(),
-                        span: (0, 0),
+                        span: self.eof_span(),
                     });
                 }
             }
@@ -190,6 +200,12 @@ impl Parser {
         let head = self.bump();
         let (field, op, value_span_start) = match head {
             (Token::Word(w), word_span) => {
+                if matches!(is_bool_keyword(&w), Some(Keyword::And | Keyword::Or)) {
+                    return Err(MqlError::Syntax {
+                        message: "boolean operator must follow a clause".to_string(),
+                        span: word_span,
+                    });
+                }
                 // Field clause if followed by Colon or a CompareOp.
                 match self.peek() {
                     Some((Token::Colon, _)) => {
@@ -253,7 +269,7 @@ impl Parser {
     fn cur_span_start(&self) -> Span {
         match self.peek() {
             Some((_, span)) => *span,
-            None => (self.tokens.last().map(|t| t.1.1).unwrap_or(0), 0),
+            None => self.eof_span(),
         }
     }
 
@@ -285,10 +301,26 @@ impl Parser {
             None => {
                 return Err(MqlError::Syntax {
                     message: "expected a value".to_string(),
-                    span: (0, 0),
+                    span: self.eof_span(),
                 });
             }
         };
+        // A leading minus is unary clause negation everywhere except after a
+        // field operator, where it is part of a signed numeric value.
+        if let (Token::Minus, minus_span) = &tok {
+            self.bump();
+            let Some((Token::Word(value), value_span)) = self.peek().cloned() else {
+                return Err(MqlError::Syntax {
+                    message: "expected a numeric value after '-'".to_string(),
+                    span: *minus_span,
+                });
+            };
+            self.bump();
+            return Ok((
+                MqlValue::Text(format!("-{value}")),
+                (minus_span.0, value_span.1),
+            ));
+        }
         // Advance past the token we just read.
         self.bump();
         match tok {

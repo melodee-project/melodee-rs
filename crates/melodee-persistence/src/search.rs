@@ -16,6 +16,7 @@ use uuid::Uuid;
 pub const SEARCH_PROJECTION_NAME: &str = "tantivy.catalog";
 pub const MAX_SEARCH_OUTBOX_BATCH: usize = 512;
 pub const MAX_SEARCH_SNAPSHOT_PAGE: usize = 1_000;
+pub const MAX_SEARCH_OUTBOX_ATTEMPTS: u32 = 100;
 
 #[derive(Debug, Error)]
 pub enum SearchStoreError {
@@ -147,6 +148,11 @@ pub struct StoredSearchGeneration {
     pub source_high_water_mark: i64,
     pub caught_up_outbox_id: i64,
     pub document_counts: SearchDocumentCounts,
+    /// Current live projection counts. `document_counts` remains the sealed
+    /// snapshot manifest fact; this value advances with catch-up and outbox
+    /// acknowledgements so diagnostics do not compare a live index with its
+    /// historical snapshot baseline.
+    pub current_document_counts: SearchDocumentCounts,
     pub manifest_hash: Option<String>,
     pub owner_lease: Option<String>,
     pub owner_lease_expires_at: Option<OffsetDateTime>,
@@ -286,7 +292,8 @@ impl SearchProjectionStore {
         let row = sqlx::query(
             "SELECT generation_id, search_root, schema_version, status,
                     source_high_water_mark, caught_up_outbox_id, document_counts,
-                    manifest_hash, owner_lease, owner_lease_expires_at
+                    current_document_counts, manifest_hash, owner_lease,
+                    owner_lease_expires_at
              FROM search_generations WHERE generation_id = $1",
         )
         .bind(generation_id)
@@ -305,7 +312,8 @@ impl SearchProjectionStore {
             "SELECT generation.generation_id, generation.search_root,
                     generation.schema_version, generation.status,
                     generation.source_high_water_mark, generation.caught_up_outbox_id,
-                    generation.document_counts, generation.manifest_hash,
+                    generation.document_counts, generation.current_document_counts,
+                    generation.manifest_hash,
                     generation.owner_lease, generation.owner_lease_expires_at
              FROM search_active_generation active
              JOIN search_generations generation
@@ -629,7 +637,8 @@ impl SearchProjectionStore {
         let generation = sqlx::query(
             "UPDATE search_generations
              SET status = 'validated', validated_at = $5,
-                 document_counts = $3, manifest_hash = $4,
+                 document_counts = $3, current_document_counts = $3,
+                 manifest_hash = $4,
                  caught_up_outbox_id = $6
              WHERE generation_id = $1 AND owner_lease = $2
                AND owner_lease_expires_at > $5 AND status = 'building'
@@ -659,6 +668,7 @@ impl SearchProjectionStore {
         job_id: Uuid,
         worker: &str,
         caught_up_outbox_id: i64,
+        current_counts: &SearchDocumentCounts,
         now: OffsetDateTime,
     ) -> Result<(), SearchStoreError> {
         if caught_up_outbox_id < 0 {
@@ -666,11 +676,17 @@ impl SearchProjectionStore {
                 "outbox high-water mark must be non-negative".to_string(),
             ));
         }
+        let counts_json = serde_json::to_value(current_counts).map_err(|error| {
+            SearchStoreError::InvalidRequest(format!(
+                "current document counts are invalid: {error}"
+            ))
+        })?;
         let mut tx = pool.begin().await?;
         let generation_id = lock_rebuild_job(&mut tx, job_id, worker, now, "validated").await?;
         let updated = sqlx::query(
             "UPDATE search_generations
-             SET caught_up_outbox_id = GREATEST(caught_up_outbox_id, $3)
+             SET caught_up_outbox_id = GREATEST(caught_up_outbox_id, $3),
+                 current_document_counts = $5
              WHERE generation_id = $1 AND owner_lease = $2
                AND owner_lease_expires_at > $4 AND status = 'validated'",
         )
@@ -678,6 +694,7 @@ impl SearchProjectionStore {
         .bind(worker)
         .bind(caught_up_outbox_id)
         .bind(now)
+        .bind(counts_json)
         .execute(&mut *tx)
         .await?;
         if updated.rows_affected() != 1 {
@@ -1008,6 +1025,41 @@ impl SearchProjectionStore {
         outbox_ids: &[i64],
         now: OffsetDateTime,
     ) -> Result<(), SearchStoreError> {
+        Self::acknowledge_outbox_inner(pool, projection_name, worker, outbox_ids, None, now).await
+    }
+
+    /// Acknowledge rows and advance the active generation's live document
+    /// counts in the same PostgreSQL transaction. The sealed snapshot counts
+    /// remain immutable; these live counts are the diagnostic comparison for
+    /// an incrementally changing Tantivy generation.
+    pub async fn acknowledge_outbox_with_generation(
+        pool: &PgPool,
+        projection_name: &str,
+        worker: &str,
+        outbox_ids: &[i64],
+        generation_id: Uuid,
+        current_counts: &SearchDocumentCounts,
+        now: OffsetDateTime,
+    ) -> Result<(), SearchStoreError> {
+        Self::acknowledge_outbox_inner(
+            pool,
+            projection_name,
+            worker,
+            outbox_ids,
+            Some((generation_id, current_counts)),
+            now,
+        )
+        .await
+    }
+
+    async fn acknowledge_outbox_inner(
+        pool: &PgPool,
+        projection_name: &str,
+        worker: &str,
+        outbox_ids: &[i64],
+        generation: Option<(Uuid, &SearchDocumentCounts)>,
+        now: OffsetDateTime,
+    ) -> Result<(), SearchStoreError> {
         if outbox_ids.is_empty() {
             return Err(SearchStoreError::InvalidRequest(
                 "at least one outbox id is required".to_string(),
@@ -1030,6 +1082,31 @@ impl SearchProjectionStore {
         .await?;
         if updated.rows_affected() != outbox_ids.len() as u64 {
             return Err(SearchStoreError::LeaseLost);
+        }
+        if let Some((generation_id, current_counts)) = generation {
+            let counts_json = serde_json::to_value(current_counts).map_err(|error| {
+                SearchStoreError::InvalidRequest(format!(
+                    "current document counts are invalid: {error}"
+                ))
+            })?;
+            let generation = sqlx::query(
+                "UPDATE search_generations generation
+                 SET current_document_counts = $2
+                 WHERE generation.generation_id = $1
+                   AND generation.status = 'active'
+                   AND EXISTS (
+                       SELECT 1 FROM search_active_generation active
+                       WHERE active.generation_id = generation.generation_id
+                         AND active.search_root = generation.search_root
+                   )",
+            )
+            .bind(generation_id)
+            .bind(counts_json)
+            .execute(&mut *tx)
+            .await?;
+            if generation.rows_affected() != 1 {
+                return Err(SearchStoreError::LeaseLost);
+            }
         }
         let max_id = outbox_ids.iter().copied().max().ok_or_else(|| {
             SearchStoreError::InvalidRequest("at least one outbox id is required".to_string())
@@ -1094,23 +1171,35 @@ impl SearchProjectionStore {
         failure_kind: &str,
         message: &str,
         retry_at: Option<OffsetDateTime>,
+        max_attempts: u32,
         now: OffsetDateTime,
     ) -> Result<(), SearchStoreError> {
         if outbox_ids.is_empty()
             || failure_kind.trim().is_empty()
             || message.trim().is_empty()
             || message.len() > 4_096
+            || !(1..=MAX_SEARCH_OUTBOX_ATTEMPTS).contains(&max_attempts)
         {
             return Err(SearchStoreError::InvalidRequest(
                 "failure evidence is missing or oversized".to_string(),
             ));
         }
+        let max_attempts = i32::try_from(max_attempts).map_err(|_| {
+            SearchStoreError::InvalidRequest("maximum attempts is too large".to_string())
+        })?;
         let mut tx = pool.begin().await?;
         let updated = if let Some(available_at) = retry_at {
             sqlx::query(
                 "UPDATE catalog_projection_outbox
-                 SET attempt_count = attempt_count + 1, available_at = $5,
-                     last_error = $6, lease_owner = NULL, lease_expires_at = NULL
+                 SET attempt_count = attempt_count + 1,
+                     available_at = CASE
+                         WHEN attempt_count + 1 >= $7 THEN available_at ELSE $5 END,
+                     last_error = $6,
+                     failure_kind = CASE
+                         WHEN attempt_count + 1 >= $7 THEN $8 ELSE NULL END,
+                     failed_at = CASE
+                         WHEN attempt_count + 1 >= $7 THEN $4 ELSE NULL END,
+                     lease_owner = NULL, lease_expires_at = NULL
                  WHERE id = ANY($1) AND projection_name = $2
                    AND lease_owner = $3 AND lease_expires_at > $4
                    AND processed_at IS NULL AND failed_at IS NULL",
@@ -1121,6 +1210,8 @@ impl SearchProjectionStore {
             .bind(now)
             .bind(available_at)
             .bind(message)
+            .bind(max_attempts)
+            .bind(failure_kind)
             .execute(&mut *tx)
             .await?
         } else {
@@ -1171,12 +1262,14 @@ impl SearchProjectionStore {
             "SELECT
                 (SELECT count(*) FROM catalog_projection_outbox outbox
                  WHERE outbox.projection_name = $1
-                   AND outbox.processed_at IS NULL AND outbox.failed_at IS NULL),
+                   AND outbox.processed_at IS NULL AND outbox.failed_at IS NULL
+                   AND (outbox.lease_owner IS NULL OR outbox.lease_expires_at <= $3)),
                 (SELECT count(*) FROM catalog_projection_outbox outbox
                  WHERE outbox.projection_name = $1 AND outbox.failed_at IS NOT NULL),
                 (SELECT min(outbox.available_at) FROM catalog_projection_outbox outbox
                  WHERE outbox.projection_name = $1
-                   AND outbox.processed_at IS NULL AND outbox.failed_at IS NULL),
+                   AND outbox.processed_at IS NULL AND outbox.failed_at IS NULL
+                   AND (outbox.lease_owner IS NULL OR outbox.lease_expires_at <= $3)),
                 (SELECT count(*) FROM catalog_projection_outbox outbox
                  WHERE outbox.projection_name = $1
                    AND outbox.processed_at IS NULL AND outbox.failed_at IS NULL
@@ -1335,9 +1428,13 @@ fn parse_rebuild_row(
 fn parse_generation_row(
     row: sqlx::postgres::PgRow,
 ) -> Result<StoredSearchGeneration, SearchStoreError> {
-    let counts: serde_json::Value = row.try_get(6)?;
-    let document_counts = serde_json::from_value(counts).map_err(|error| {
+    let snapshot_counts: serde_json::Value = row.try_get(6)?;
+    let document_counts = serde_json::from_value(snapshot_counts).map_err(|error| {
         SearchStoreError::CorruptCatalog(format!("invalid search document counts: {error}"))
+    })?;
+    let live_counts: serde_json::Value = row.try_get(7)?;
+    let current_document_counts = serde_json::from_value(live_counts).map_err(|error| {
+        SearchStoreError::CorruptCatalog(format!("invalid current search document counts: {error}"))
     })?;
     Ok(StoredSearchGeneration {
         generation_id: row.try_get(0)?,
@@ -1347,9 +1444,10 @@ fn parse_generation_row(
         source_high_water_mark: row.try_get(4)?,
         caught_up_outbox_id: row.try_get(5)?,
         document_counts,
-        manifest_hash: row.try_get(7)?,
-        owner_lease: row.try_get(8)?,
-        owner_lease_expires_at: row.try_get(9)?,
+        current_document_counts,
+        manifest_hash: row.try_get(8)?,
+        owner_lease: row.try_get(9)?,
+        owner_lease_expires_at: row.try_get(10)?,
     })
 }
 

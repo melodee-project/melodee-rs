@@ -67,6 +67,22 @@ fn numeric_comparison_coerced() {
 }
 
 #[test]
+fn negative_numeric_values_are_not_confused_with_clause_negation() {
+    let plan = parse_and_plan("year:-1 AND duration>=-250").expect("signed numeric plan");
+    let PlanNode::And(left, right) = plan.root else {
+        panic!("expected two signed numeric predicates");
+    };
+    let PlanNode::Leaf(year) = *left else {
+        panic!("expected year predicate");
+    };
+    let PlanNode::Leaf(duration) = *right else {
+        panic!("expected duration predicate");
+    };
+    assert_eq!(year.value, MqlValue::Number(-1));
+    assert_eq!(duration.value, MqlValue::Number(-250));
+}
+
+#[test]
 fn inclusive_range_parsed() {
     let plan = parse_and_plan("year:2000..2010").expect("plan");
     let node = first_leaf(&plan);
@@ -97,6 +113,20 @@ fn regex_value_parsed() {
 }
 
 #[test]
+fn empty_regex_is_rejected() {
+    assert!(matches!(
+        parse_and_plan("title://").expect_err("empty regex"),
+        MqlError::RegexError { .. }
+    ));
+}
+
+#[test]
+fn regex_bound_counts_characters_not_utf8_bytes() {
+    let expression = format!("title:/{}/", "界".repeat(200));
+    parse_and_plan(&expression).expect("200 characters is below the 256-character bound");
+}
+
+#[test]
 fn negation_prefix() {
     let plan = parse_and_plan("-title:x").expect("plan");
     let node = first_leaf(&plan);
@@ -123,9 +153,26 @@ fn unknown_field_is_error() {
 fn mismatched_paren_reports_span() {
     let err = parse("(a OR b").expect_err("should fail");
     match err {
-        MqlError::Syntax { span, .. } => assert!(span.0 <= span.1),
+        MqlError::Syntax { span, .. } => assert_eq!(span, (7, 7)),
         other => panic!("expected Syntax with span, got {other:?}"),
     }
+}
+
+#[test]
+fn leading_boolean_operators_are_rejected_at_their_token() {
+    for (input, expected_span) in [("AND title:x", (0, 3)), ("OR title:x", (0, 2))] {
+        let error = parse(input).expect_err("leading operator must fail");
+        assert!(matches!(
+            error,
+            MqlError::Syntax { span, .. } if span == expected_span
+        ));
+    }
+}
+
+#[test]
+fn grouped_negation_error_has_the_group_span() {
+    let error = parse("-(a OR b)").expect_err("dash cannot negate a group");
+    assert!(matches!(error, MqlError::Syntax { span: (2, 8), .. }));
 }
 
 #[test]

@@ -152,6 +152,13 @@ fn add_updated_at(
     );
 }
 
+fn date_from_days(days: i64) -> tantivy::DateTime {
+    // PostgreSQL `date` is bounded far below the i64 multiplication limit;
+    // saturating here still keeps this pure projection boundary panic-free if
+    // a corrupt caller bypasses the persistence contract.
+    tantivy::DateTime::from_timestamp_secs(days.saturating_mul(86_400))
+}
+
 pub fn artist_document(schema: &SearchSchema, a: &ArtistDoc) -> TantivyDocument {
     let mut doc = TantivyDocument::new();
     doc.add_text(schema.kind, "artist");
@@ -174,7 +181,6 @@ pub fn artist_document(schema: &SearchSchema, a: &ArtistDoc) -> TantivyDocument 
     if let Some(y) = a.end_year {
         doc.add_i64(schema.a_end_year, y);
     }
-    doc.add_i64(schema.a_revision, a.revision);
     doc
 }
 
@@ -195,11 +201,10 @@ pub fn release_document(schema: &SearchSchema, r: &ReleaseDoc) -> TantivyDocumen
         doc.add_i64(schema.r_release_year, y);
     }
     if let Some(d) = r.release_date_days {
-        doc.add_i64(schema.r_release_date, d);
+        doc.add_date(schema.r_release_date, date_from_days(d));
     }
     doc.add_text(schema.r_type, &r.release_type);
     doc.add_text(schema.r_status, &r.status);
-    doc.add_i64(schema.r_revision, r.revision);
     doc
 }
 
@@ -243,9 +248,8 @@ pub fn track_document(schema: &SearchSchema, t: &TrackDoc) -> TantivyDocument {
         doc.add_i64(schema.t_release_year, y);
     }
     if let Some(d) = t.release_date_days {
-        doc.add_i64(schema.t_release_date, d);
+        doc.add_date(schema.t_release_date, date_from_days(d));
     }
-    doc.add_i64(schema.t_revision, t.revision);
     doc
 }
 

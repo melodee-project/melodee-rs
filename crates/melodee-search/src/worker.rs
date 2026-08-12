@@ -6,8 +6,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use melodee_persistence::{
-    SEARCH_PROJECTION_NAME, SearchCatalogRecord, SearchEntityType, SearchOperation,
-    SearchOutboxItem, SearchProjectionStore,
+    SEARCH_PROJECTION_NAME, SearchCatalogRecord, SearchDocumentCounts, SearchEntityType,
+    SearchOperation, SearchOutboxItem, SearchProjectionStore,
 };
 use serde::Serialize;
 use sqlx::PgPool;
@@ -22,6 +22,40 @@ use crate::error::SearchError;
 use crate::generation::SearchRoot;
 use crate::rebuild::run_rebuild_once_with_cancel;
 use crate::store::SearchStore;
+
+#[cfg(feature = "test-support")]
+static INJECTED_DOCUMENT_FAILURE: std::sync::OnceLock<std::sync::Mutex<Option<Uuid>>> =
+    std::sync::OnceLock::new();
+
+/// Inject or clear one deterministic document-application failure.
+///
+/// This is compiled only for explicit `test-support` builds and has no
+/// environment/configuration surface in production.
+#[cfg(feature = "test-support")]
+#[doc(hidden)]
+pub fn set_document_failure_for_test(entity_id: Option<Uuid>) {
+    if let Ok(mut guard) = INJECTED_DOCUMENT_FAILURE
+        .get_or_init(|| std::sync::Mutex::new(None))
+        .lock()
+    {
+        *guard = entity_id;
+    }
+}
+
+fn injected_document_failure(entity_id: Uuid) -> bool {
+    #[cfg(feature = "test-support")]
+    {
+        INJECTED_DOCUMENT_FAILURE
+            .get_or_init(|| std::sync::Mutex::new(None))
+            .lock()
+            .is_ok_and(|guard| *guard == Some(entity_id))
+    }
+    #[cfg(not(feature = "test-support"))]
+    {
+        let _ = entity_id;
+        false
+    }
+}
 
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct SearchPassStats {
@@ -172,6 +206,7 @@ pub async fn apply_outbox_once(
                         failure_kind,
                         &error.to_string(),
                         retry_at,
+                        config.max_outbox_attempts,
                         now,
                     )
                     .await
@@ -204,25 +239,44 @@ pub async fn apply_outbox_once(
     )
     .await?;
 
+    let generation_id = active.generation_id;
     let applied = tokio::task::spawn_blocking(move || apply_batch(&generation_path, loaded))
         .await
         .map_err(|error| SearchError::Retryable(format!("index task failed: {error}")))?;
     match applied {
-        Ok(applied) => {
-            SearchProjectionStore::acknowledge_outbox(
-                pool,
-                SEARCH_PROJECTION_NAME,
-                &worker,
-                &ids,
-                OffsetDateTime::now_utc(),
-            )
-            .await?;
+        Ok(batch) => {
+            if !batch.acknowledged_ids.is_empty() {
+                SearchProjectionStore::acknowledge_outbox_with_generation(
+                    pool,
+                    SEARCH_PROJECTION_NAME,
+                    &worker,
+                    &batch.acknowledged_ids,
+                    generation_id,
+                    &batch.counts,
+                    OffsetDateTime::now_utc(),
+                )
+                .await?;
+            }
+            for failure in &batch.failures {
+                SearchProjectionStore::record_outbox_failure(
+                    pool,
+                    SEARCH_PROJECTION_NAME,
+                    &worker,
+                    &[failure.outbox_id],
+                    "index_document",
+                    &failure.error,
+                    None,
+                    config.max_outbox_attempts,
+                    OffsetDateTime::now_utc(),
+                )
+                .await?;
+            }
             Ok(SearchPassStats {
                 claimed: ids.len(),
-                applied,
-                acknowledged: ids.len(),
-                stale_or_idempotent: ids.len().saturating_sub(applied),
-                errors: 0,
+                applied: batch.applied,
+                acknowledged: batch.acknowledged_ids.len(),
+                stale_or_idempotent: batch.acknowledged_ids.len().saturating_sub(batch.applied),
+                errors: batch.failures.len(),
                 no_active_generation: false,
             })
         }
@@ -236,6 +290,7 @@ pub async fn apply_outbox_once(
                 "index_io",
                 &error.to_string(),
                 Some(retry_at),
+                config.max_outbox_attempts,
                 OffsetDateTime::now_utc(),
             )
             .await
@@ -247,36 +302,101 @@ pub async fn apply_outbox_once(
     }
 }
 
+#[derive(Debug)]
+struct FailedOutboxRow {
+    outbox_id: i64,
+    error: String,
+}
+
+#[derive(Debug)]
+struct BatchApplyResult {
+    applied: usize,
+    acknowledged_ids: Vec<i64>,
+    failures: Vec<FailedOutboxRow>,
+    counts: SearchDocumentCounts,
+}
+
 fn apply_batch(
     generation_path: &Path,
     rows: Vec<(SearchOutboxItem, Option<SearchCatalogRecord>)>,
-) -> Result<usize, SearchError> {
+) -> Result<BatchApplyResult, SearchError> {
     let mut store = SearchStore::open(generation_path)?;
+    let mut accepted = Vec::with_capacity(rows.len());
+    let mut failures = Vec::new();
     let mut applied = 0;
-    for (item, record) in rows {
-        match (item.operation, record) {
-            (_, Some(SearchCatalogRecord::NoDocument)) => {}
-            (SearchOperation::Upsert, Some(SearchCatalogRecord::Artist(record))) => {
-                applied += usize::from(store.upsert_artist(&ArtistDoc::from(record))?);
+    for row in rows {
+        match apply_row(&mut store, &row) {
+            Ok(wrote) => {
+                applied += usize::from(wrote);
+                accepted.push(row);
             }
-            (SearchOperation::Upsert, Some(SearchCatalogRecord::Release(record))) => {
-                applied += usize::from(store.upsert_release(&ReleaseDoc::from(record))?);
-            }
-            (SearchOperation::Upsert, Some(SearchCatalogRecord::Track(record))) => {
-                applied += usize::from(store.upsert_track(&TrackDoc::from(record))?);
-            }
-            (SearchOperation::Delete, _) | (SearchOperation::Upsert, None) => {
-                if item.entity_type != SearchEntityType::AudioIdentity {
-                    applied += usize::from(store.delete(
-                        item.entity_type.as_str(),
-                        &item.entity_id.to_string(),
-                        item.entity_revision,
-                    )?);
+            Err(error) => {
+                failures.push(FailedOutboxRow {
+                    outbox_id: row.0.id,
+                    error: error.to_string(),
+                });
+                // Upsert schedules deletion before Tantivy validates the new
+                // document. Drop the uncommitted writer so the failed row
+                // cannot partially remove an existing document, then replay
+                // only rows already proven valid into a fresh writer.
+                drop(store);
+                store = SearchStore::open(generation_path)?;
+                applied = 0;
+                for accepted_row in &accepted {
+                    applied += usize::from(apply_row(&mut store, accepted_row)?);
                 }
             }
         }
     }
     // The caller acknowledges PostgreSQL only after this durable commit.
     store.commit()?;
-    Ok(applied)
+    let stats = store.stats()?;
+    let counts = SearchDocumentCounts {
+        artists: u64::try_from(stats.artists)
+            .map_err(|_| SearchError::Retryable("Artist count overflow".to_string()))?,
+        releases: u64::try_from(stats.releases)
+            .map_err(|_| SearchError::Retryable("Release count overflow".to_string()))?,
+        tracks: u64::try_from(stats.tracks)
+            .map_err(|_| SearchError::Retryable("Track count overflow".to_string()))?,
+    };
+    Ok(BatchApplyResult {
+        applied,
+        acknowledged_ids: accepted.into_iter().map(|(item, _)| item.id).collect(),
+        failures,
+        counts,
+    })
+}
+
+fn apply_row(
+    store: &mut SearchStore,
+    (item, record): &(SearchOutboxItem, Option<SearchCatalogRecord>),
+) -> Result<bool, SearchError> {
+    if injected_document_failure(item.entity_id) {
+        return Err(SearchError::InvalidQuery(
+            "injected document-application failure".to_string(),
+        ));
+    }
+    match (item.operation, record) {
+        (_, Some(SearchCatalogRecord::NoDocument)) => Ok(false),
+        (SearchOperation::Upsert, Some(SearchCatalogRecord::Artist(record))) => {
+            store.upsert_artist(&ArtistDoc::from(record.clone()))
+        }
+        (SearchOperation::Upsert, Some(SearchCatalogRecord::Release(record))) => {
+            store.upsert_release(&ReleaseDoc::from(record.clone()))
+        }
+        (SearchOperation::Upsert, Some(SearchCatalogRecord::Track(record))) => {
+            store.upsert_track(&TrackDoc::from(record.clone()))
+        }
+        (SearchOperation::Delete, _) | (SearchOperation::Upsert, None) => {
+            if item.entity_type == SearchEntityType::AudioIdentity {
+                Ok(false)
+            } else {
+                store.delete(
+                    item.entity_type.as_str(),
+                    &item.entity_id.to_string(),
+                    item.entity_revision,
+                )
+            }
+        }
+    }
 }

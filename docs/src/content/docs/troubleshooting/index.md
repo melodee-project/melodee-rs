@@ -80,7 +80,9 @@ Implemented normalization checks:
 ## Search index checks
 
 - Run `melodee search status`. No active generation, a schema/open error, permanently failed rows,
-  or an old growing backlog is actionable; retryable rows remain scheduled by `available_at`.
+  or an old growing backlog is actionable; retryable rows remain scheduled by `available_at` and
+  become permanent evidence after the configured maximum attempt count. Pending and leased counts
+  are disjoint, so add them when assessing all unfinished, non-failed work.
 - Verify `MELODEE__SEARCH__ROOT` is absolute, dedicated, writable, and separate from inbound,
   normalization, and canonical storage roots. Do not replace its ownership marker or insert
   symlinks beneath it.

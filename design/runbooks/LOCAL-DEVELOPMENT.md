@@ -224,7 +224,9 @@ Search is independently enabled with `MELODEE__SEARCH__ENABLED=true` and require
 absolute `MELODEE__SEARCH__ROOT`. The root must not overlap inbound, work, or canonical storage.
 The worker consumes the transactional catalog outbox in bounded batches, builds generations from
 bounded PostgreSQL pages, and never opens media. A graceful stop releases a rebuild lease at a safe
-page boundary; an in-flight Tantivy commit completes before PostgreSQL acknowledgement.
+page boundary; an in-flight Tantivy commit completes before PostgreSQL acknowledgement. Retryable
+outbox failures stop retrying after `MELODEE__SEARCH__MAX_OUTBOX_ATTEMPTS` (default `5`, maximum
+`100`) and remain visible as permanent failure evidence without blocking healthy sibling rows.
 
 Useful one-shot development commands are:
 

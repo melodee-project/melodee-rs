@@ -42,6 +42,16 @@ async fn outbox_claim_expiry_retry_and_ack_are_exclusive_and_fenced() {
     .await
     .expect("first claim");
     assert_eq!(first.len(), 1);
+    let claimed_status = SearchProjectionStore::status(
+        &db.pool,
+        SEARCH_PROJECTION_NAME,
+        "/tmp/phase6-outbox-test",
+        T0 + TimeDuration::seconds(1),
+    )
+    .await
+    .expect("claimed status");
+    assert_eq!(claimed_status.pending, 0);
+    assert_eq!(claimed_status.leased, 1);
     let none = SearchProjectionStore::claim_outbox(
         &db.pool,
         SEARCH_PROJECTION_NAME,
@@ -83,6 +93,7 @@ async fn outbox_claim_expiry_retry_and_ack_are_exclusive_and_fenced() {
         "database",
         "transient test failure",
         Some(T0 + TimeDuration::seconds(15)),
+        5,
         T0 + TimeDuration::seconds(12),
     )
     .await
@@ -177,6 +188,7 @@ async fn outbox_claim_expiry_retry_and_ack_are_exclusive_and_fenced() {
         "invalid_catalog_row",
         "operator action is required",
         None,
+        5,
         T0 + TimeDuration::seconds(18),
     )
     .await
@@ -198,6 +210,81 @@ async fn outbox_claim_expiry_retry_and_ack_are_exclusive_and_fenced() {
     assert_eq!(
         status.latest_failure_message.as_deref(),
         Some("operator action is required")
+    );
+
+    let exhausted_entity = Uuid::now_v7();
+    let exhausted_id = sqlx::query_scalar::<_, i64>(
+        "INSERT INTO catalog_projection_outbox (
+            projection_name, entity_type, entity_id, operation,
+            entity_revision, available_at, created_at
+         ) VALUES ($1, 'artist', $2, 'delete', 1, $3, $3)
+         RETURNING id",
+    )
+    .bind(SEARCH_PROJECTION_NAME)
+    .bind(exhausted_entity)
+    .bind(T0 + TimeDuration::seconds(19))
+    .fetch_one(&db.pool)
+    .await
+    .expect("seed retry-exhaustion row");
+    for (worker, claim_at, retry_at) in [
+        (
+            "worker-e",
+            T0 + TimeDuration::seconds(19),
+            T0 + TimeDuration::seconds(20),
+        ),
+        (
+            "worker-f",
+            T0 + TimeDuration::seconds(20),
+            T0 + TimeDuration::seconds(21),
+        ),
+    ] {
+        let claimed = SearchProjectionStore::claim_outbox(
+            &db.pool,
+            SEARCH_PROJECTION_NAME,
+            worker,
+            8,
+            Duration::from_secs(10),
+            claim_at,
+        )
+        .await
+        .expect("claim retry-exhaustion row");
+        assert_eq!(claimed.len(), 1);
+        SearchProjectionStore::record_outbox_failure(
+            &db.pool,
+            SEARCH_PROJECTION_NAME,
+            worker,
+            &[exhausted_id],
+            "index_io",
+            "persistent retryable index failure",
+            Some(retry_at),
+            2,
+            claim_at + TimeDuration::milliseconds(100),
+        )
+        .await
+        .expect("record bounded retry failure");
+    }
+    let exhausted = sqlx::query_as::<_, (i32, Option<String>, bool, bool)>(
+        "SELECT attempt_count, failure_kind, failed_at IS NOT NULL,
+                lease_owner IS NULL AND lease_expires_at IS NULL
+         FROM catalog_projection_outbox WHERE id = $1",
+    )
+    .bind(exhausted_id)
+    .fetch_one(&db.pool)
+    .await
+    .expect("read exhausted row");
+    assert_eq!(exhausted, (2, Some("index_io".to_string()), true, true));
+    assert!(
+        SearchProjectionStore::claim_outbox(
+            &db.pool,
+            SEARCH_PROJECTION_NAME,
+            "worker-g",
+            8,
+            Duration::from_secs(10),
+            T0 + TimeDuration::seconds(30),
+        )
+        .await
+        .expect("permanent row is not reclaimable")
+        .is_empty()
     );
     db.drop().await;
 }
@@ -463,6 +550,22 @@ async fn search_schema_rejects_invalid_identity_counts_and_active_pointer() {
              ) VALUES ($1, '/tmp/invalid-counts', 1, 'building', '{}'::jsonb, $2)",
         )
         .bind(invalid_counts)
+        .bind(T0)
+        .execute(&db.pool)
+        .await
+        .is_err()
+    );
+
+    let invalid_live_counts = Uuid::now_v7();
+    assert!(
+        sqlx::query(
+            "INSERT INTO search_generations (
+                generation_id, search_root, schema_version, status,
+                current_document_counts, created_at
+             ) VALUES ($1, '/tmp/invalid-live-counts', 1, 'building',
+                       '{\"artists\":-1,\"releases\":0,\"tracks\":0}'::jsonb, $2)",
+        )
+        .bind(invalid_live_counts)
         .bind(T0)
         .execute(&db.pool)
         .await

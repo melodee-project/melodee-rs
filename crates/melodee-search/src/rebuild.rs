@@ -298,6 +298,15 @@ async fn catch_up_and_activate(
                 apply_record(&mut store, item, record)?;
             }
             store.commit()?;
+            let stats = store.stats()?;
+            let current_counts = melodee_persistence::SearchDocumentCounts {
+                artists: u64::try_from(stats.artists)
+                    .map_err(|_| SearchError::Retryable("Artist count overflow".to_string()))?,
+                releases: u64::try_from(stats.releases)
+                    .map_err(|_| SearchError::Retryable("Release count overflow".to_string()))?,
+                tracks: u64::try_from(stats.tracks)
+                    .map_err(|_| SearchError::Retryable("Track count overflow".to_string()))?,
+            };
             cursor = rows.last().map(|item| item.id).ok_or_else(|| {
                 SearchError::Retryable("outbox catch-up returned no rows".to_string())
             })?;
@@ -306,6 +315,7 @@ async fn catch_up_and_activate(
                 job_id,
                 worker,
                 cursor,
+                &current_counts,
                 OffsetDateTime::now_utc(),
             )
             .await?;
@@ -323,6 +333,10 @@ async fn catch_up_and_activate(
                 return Ok(());
             }
             Err(melodee_persistence::SearchStoreError::NeedsCatchup(_)) => {
+                // `activate_generation` rechecks max(outbox.id) while holding
+                // the activation SHARE lock. A row committed after our
+                // unlocked read reaches this branch; reloading the fenced
+                // cursor and looping is the mechanism that closes that race.
                 generation =
                     SearchProjectionStore::get_generation(pool, generation.generation_id).await?;
             }

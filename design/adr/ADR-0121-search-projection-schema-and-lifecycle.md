@@ -85,7 +85,10 @@ applies an outbox row whose revision is <= the document's current revision (revi
     lease_expires_at, updated_at)` — durable high-water mark per projection;
   - `search_generations(generation_id PK, search_root, schema_version, status
     ('building'|'validated'|'active'|'retired'|'failed'), created_at, activated_at, document_counts
-    jsonb, source_high_water_mark, owner_lease, owner_lease_expires_at)`;
+    jsonb, current_document_counts jsonb, source_high_water_mark, owner_lease,
+    owner_lease_expires_at)`; `document_counts` is the sealed snapshot baseline, while
+    `current_document_counts` advances atomically with catch-up/outbox acknowledgement for live
+    diagnostics;
   - `search_rebuild_jobs(job_id PK, requested_at, requested_by, status
     ('requested'|'running'|'validated'|'activated'|'failed'), generation_id, requested_high_water_mark,
     caught_up_at, error, finished_at)`;
@@ -101,9 +104,12 @@ applies an outbox row whose revision is <= the document's current revision (revi
   Tantivy commit but before DB ack leaves the row unacked; on reclaim it replays — the index uses
   revision fencing so replay is idempotent (no duplicate/regressed document).
 - **Retry / failure**: transient failures increment `attempt_count` and set `available_at` to a bounded
-  backoff; permanent failures record `last_error` and route the generation/job to `failed` with
-  actionable diagnostics. Infrastructure failures are recorded as projection failure evidence only —
-  never as catalog/media corruption.
+  backoff. At the configured positive, bounded attempt limit they become permanent failure evidence
+  instead of retrying forever. A document-level indexing failure is settled only for that row; the
+  writer discards its uncommitted partial replacement, replays proven siblings, commits/acknowledges
+  those siblings, and records the poison row independently. Permanent failures record `last_error`
+  with actionable diagnostics. Infrastructure failures are recorded as projection failure evidence
+  only — never as catalog/media corruption.
 - **Status/backlog/age**: queries over the outbox (`processed_at IS NULL` count, `min(available_at)`),
   checkpoint, active generation, and latest job are exposed as diagnostics (PRD-OBS-002/003).
 
@@ -122,6 +128,12 @@ applies an outbox row whose revision is <= the document's current revision (revi
    `search_active_generation`; readers refresh and switch to the new generation.
 8. Retire old generations only within the ownership-validated search root (no `rm -rf`; explicit,
    path-validated removal of directories under the validated root).
+
+The activation transaction holds a PostgreSQL `SHARE` lock on the outbox through the final
+high-water check, bounded generation status updates, active-pointer upsert, and commit. Releasing it
+after the max-ID read would reopen the catch-up race. No catalog scan, index I/O, or filesystem I/O
+occurs under this lock; operational monitoring must treat an unexpectedly long activation
+transaction as a fault.
 
 ### Multi-process coordination and crash recovery
 

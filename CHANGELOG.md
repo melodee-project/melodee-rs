@@ -50,7 +50,8 @@ by an accepted ADR and release gate.
   outbox leases fence multi-process writers; generation rebuilds stream bounded catalog pages,
   validate/catch up, and activate atomically without reading media. Added search worker readiness,
   status/rebuild/query/autocomplete/parse/explain CLI operations, compatibility/fault/path tests,
-  and a reproducible 10-million-Track benchmark harness.
+  bounded retry escalation and poison-row isolation, sealed snapshot plus live diagnostic counts,
+  and a reproducible 10-million-Track benchmark harness with a default-gate smoke test.
 - Canonical Carbon admin UI reference mockups.
 - Astro Starlight public documentation platform under `/docs`, with GitHub Pages deployment,
   PR validation, and documentation-impact rules in the Definition of Done.

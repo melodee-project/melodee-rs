@@ -17,6 +17,7 @@ pub const ENV_SEARCH_ENABLED: &str = "MELODEE__SEARCH__ENABLED";
 pub const ENV_SEARCH_ROOT: &str = "MELODEE__SEARCH__ROOT";
 pub const ENV_SEARCH_LEASE_SECONDS: &str = "MELODEE__SEARCH__LEASE_SECONDS";
 pub const ENV_SEARCH_BATCH_SIZE: &str = "MELODEE__SEARCH__BATCH_SIZE";
+pub const ENV_SEARCH_MAX_OUTBOX_ATTEMPTS: &str = "MELODEE__SEARCH__MAX_OUTBOX_ATTEMPTS";
 pub const ENV_SEARCH_POLL_INTERVAL_MS: &str = "MELODEE__SEARCH__POLL_INTERVAL_MS";
 pub const ENV_SEARCH_SNAPSHOT_PAGE_SIZE: &str = "MELODEE__SEARCH__SNAPSHOT_PAGE_SIZE";
 pub const ENV_SEARCH_DEFAULT_LIMIT: &str = "MELODEE__SEARCH__DEFAULT_LIMIT";
@@ -30,6 +31,9 @@ pub struct SearchConfig {
     pub lease_seconds: u64,
     /// Rows claimed per outbox poll.
     pub claim_batch_size: usize,
+    /// Failed attempts before a retryable row becomes a durable permanent
+    /// failure instead of blocking the projection forever.
+    pub max_outbox_attempts: u32,
     /// Idle delay between outbox polls, in milliseconds.
     pub poll_interval_ms: u64,
     /// Rows streamed from PostgreSQL at once during a rebuild.
@@ -48,6 +52,7 @@ impl Default for SearchConfig {
             search_root: PathBuf::from("/var/lib/melodee/search"),
             lease_seconds: 60,
             claim_batch_size: 256,
+            max_outbox_attempts: 5,
             poll_interval_ms: 1_000,
             snapshot_page_size: 1_000,
             default_limit: 200,
@@ -69,6 +74,10 @@ impl SearchConfig {
             enabled,
             lease_seconds: parse_u64(ENV_SEARCH_LEASE_SECONDS, defaults.lease_seconds)?,
             claim_batch_size: parse_usize(ENV_SEARCH_BATCH_SIZE, defaults.claim_batch_size)?,
+            max_outbox_attempts: parse_u32(
+                ENV_SEARCH_MAX_OUTBOX_ATTEMPTS,
+                defaults.max_outbox_attempts,
+            )?,
             poll_interval_ms: parse_u64(ENV_SEARCH_POLL_INTERVAL_MS, defaults.poll_interval_ms)?,
             snapshot_page_size: parse_usize(
                 ENV_SEARCH_SNAPSHOT_PAGE_SIZE,
@@ -108,6 +117,14 @@ impl SearchConfig {
             return Err(format!(
                 "claim_batch_size must be <= {}",
                 melodee_persistence::MAX_SEARCH_OUTBOX_BATCH
+            ));
+        }
+        if !(1..=melodee_persistence::MAX_SEARCH_OUTBOX_ATTEMPTS)
+            .contains(&self.max_outbox_attempts)
+        {
+            return Err(format!(
+                "max_outbox_attempts must be between 1 and {}",
+                melodee_persistence::MAX_SEARCH_OUTBOX_ATTEMPTS
             ));
         }
         if !(1..=melodee_persistence::MAX_SEARCH_SNAPSHOT_PAGE).contains(&self.snapshot_page_size) {
@@ -276,6 +293,16 @@ fn parse_u64(name: &str, default: u64) -> Result<u64, String> {
     }
 }
 
+fn parse_u32(name: &str, default: u32) -> Result<u32, String> {
+    match std::env::var(name) {
+        Ok(value) => value
+            .parse()
+            .map_err(|_| format!("{name} must be an unsigned integer")),
+        Err(std::env::VarError::NotPresent) => Ok(default),
+        Err(error) => Err(format!("cannot read {name}: {error}")),
+    }
+}
+
 fn parse_usize(name: &str, default: usize) -> Result<usize, String> {
     match std::env::var(name) {
         Ok(value) => value
@@ -283,5 +310,43 @@ fn parse_usize(name: &str, default: usize) -> Result<usize, String> {
             .map_err(|_| format!("{name} must be a non-negative integer")),
         Err(std::env::VarError::NotPresent) => Ok(default),
         Err(error) => Err(format!("cannot read {name}: {error}")),
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used, clippy::field_reassign_with_default)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn configuration_rejects_zero_and_excessive_worker_bounds() {
+        let mut config = SearchConfig::default();
+        config.claim_batch_size = 0;
+        assert!(config.validate().is_err());
+
+        config.claim_batch_size = melodee_persistence::MAX_SEARCH_OUTBOX_BATCH + 1;
+        assert!(config.validate().is_err());
+
+        config.claim_batch_size = 1;
+        config.snapshot_page_size = melodee_persistence::MAX_SEARCH_SNAPSHOT_PAGE + 1;
+        assert!(config.validate().is_err());
+
+        config.snapshot_page_size = 1;
+        config.max_outbox_attempts = 0;
+        assert!(config.validate().is_err());
+
+        config.max_outbox_attempts = melodee_persistence::MAX_SEARCH_OUTBOX_ATTEMPTS + 1;
+        assert!(config.validate().is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn root_validation_rejects_a_symlink_component() {
+        let directory = tempfile::tempdir().expect("temporary root");
+        let real = directory.path().join("real");
+        std::fs::create_dir(&real).expect("real directory");
+        let link = directory.path().join("link");
+        std::os::unix::fs::symlink(&real, &link).expect("symlink fixture");
+        assert!(validate_search_root(&link.join("search")).is_err());
     }
 }

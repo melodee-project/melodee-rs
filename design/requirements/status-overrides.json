@@ -649,7 +649,7 @@
       "apps/melodee-server/src/system.rs (bounded PostgreSQL readiness plus active search generation/schema/count validation; liveness remains separate)",
       "crates/melodee-search/src/service.rs (active-generation manifest/index diagnostic)"
     ],
-    "tests": ["apps/melodee-server/tests/system_api.rs"],
+    "tests": ["apps/melodee-server/tests/system_api.rs (disabled/healthy/corrupt-generation readiness)"],
     "note": "PostgreSQL and enabled-search readiness are implemented. Media-tool/provider/API-adapter health remains later-phase work, so the aggregate requirement remains in progress."
   },
   "PRD-OBS-003": {
@@ -659,7 +659,7 @@
       "docs/src/content/docs/admin/system-diagnostics.md and troubleshooting/index.md"
     ],
     "tests": ["crates/melodee-persistence/tests/search_phase6.rs and apps/melodee-server/tests/system_api.rs"],
-    "note": "Search failures are actionable through the operator CLI and public runbook. The graphical Diagnostics screen is assigned to Phase 10, so the requirement remains in progress."
+    "note": "Search failures are actionable through disjoint pending/leased counts, bounded-attempt permanent evidence, live-vs-sealed generation counts, the operator CLI, and public runbook. The graphical Diagnostics screen is assigned to Phase 10, so the requirement remains in progress."
   },
   "PRD-OBS-005": {
     "status": "implemented",
@@ -1519,7 +1519,11 @@
         "crates/melodee-search/src/schema.rs, store.rs, worker.rs, and service.rs",
         "design/adr/ADR-0107-use-tantivy-as-search-projection.md"
       ],
-      "tests": ["crates/melodee-search/tests/search_tests.rs"]
+      "tests": [
+        "crates/melodee-search/tests/search_tests.rs",
+        "crates/melodee-search/tests/rebuild_integration.rs (poison-row isolation and live-count diagnostics)",
+        "crates/melodee-persistence/tests/search_phase6.rs (bounded retry escalation)"
+      ]
     },
     "PRD-SEARCH-002": {
       "status": "tested",
@@ -1559,8 +1563,11 @@
     "PRD-SEARCH-006": {
       "status": "tested",
       "implementation": ["crates/melodee-search/src/bin/phase6_benchmark.rs"],
-      "tests": ["design/evidence/phase-6/PHASE-6-REPORT.md (10-million-Track warm-latency evidence)"],
-      "note": "The 10M interactive lookup corpus and separately disclosed broad analytical stress queries are measured on the recorded environment."
+      "tests": [
+        "crates/melodee-search/tests/benchmark_smoke.rs (default-gate generator/result/media-read/latency guard)",
+        "design/evidence/phase-6/PHASE-6-REPORT.md (10-million-Track warm-latency evidence)"
+      ],
+      "note": "The default gate catches benchmark contract and catastrophic latency regressions. The 10M interactive lookup corpus and separately disclosed broad analytical stress queries are measured on the recorded environment."
     },
     "PRD-SEARCH-007": {
       "status": "tested",
@@ -1572,7 +1579,7 @@
         "crates/melodee-search/tests/rebuild_integration.rs",
         "crates/melodee-persistence/tests/search_phase6.rs"
       ],
-      "note": "A new generation is built and caught up before atomic activation; prior generation/media/catalog truth remain untouched."
+      "note": "A new generation is built and caught up before atomic activation; sealed snapshot counts remain immutable while live diagnostic counts advance with catch-up/outbox acknowledgement. Prior generation/media/catalog truth remain untouched."
     },
     "PRD-POLICY-008": {
       "status": "in-progress",

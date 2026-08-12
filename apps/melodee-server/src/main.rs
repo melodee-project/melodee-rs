@@ -200,6 +200,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         info!(
             search_root = %search_config.search_root.display(),
             batch_size = search_config.claim_batch_size,
+            max_outbox_attempts = search_config.max_outbox_attempts,
             "starting search projection and rebuild worker"
         );
         Some(start_search_loop(search_config.clone(), pool.clone()))

@@ -101,6 +101,7 @@ by the current server.
 | `MELODEE__SEARCH__ROOT` | — when enabled | Absolute, dedicated root for owned Tantivy generations. It must not overlap inbound, work, or canonical storage roots. |
 | `MELODEE__SEARCH__LEASE_SECONDS` | `60` | PostgreSQL writer/rebuild lease duration. |
 | `MELODEE__SEARCH__BATCH_SIZE` | `256` | Outbox/catch-up rows per bounded pass (maximum `512`). |
+| `MELODEE__SEARCH__MAX_OUTBOX_ATTEMPTS` | `5` | Failed attempts before a retryable outbox row becomes a permanent, operator-visible failure (maximum `100`). |
 | `MELODEE__SEARCH__POLL_INTERVAL_MS` | `1000` | Delay between worker passes. |
 | `MELODEE__SEARCH__SNAPSHOT_PAGE_SIZE` | `1000` | Maximum PostgreSQL rows held per entity page during rebuild. |
 | `MELODEE__SEARCH__DEFAULT_LIMIT` | `200` | Default operator query limit. |

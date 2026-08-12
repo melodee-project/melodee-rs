@@ -177,6 +177,18 @@ fn range_query(field: Field, lower: Bound<i64>, upper: Bound<i64>) -> BoxQuery {
     Box::new(RangeQuery::new(to_term(lower), to_term(upper)))
 }
 
+fn date_range_query(field: Field, lower: Bound<i64>, upper: Bound<i64>) -> BoxQuery {
+    let to_term = |bound: Bound<i64>| {
+        let date = |days: i64| tantivy::DateTime::from_timestamp_secs(days.saturating_mul(86_400));
+        match bound {
+            Bound::Included(value) => Bound::Included(Term::from_field_date(field, date(value))),
+            Bound::Excluded(value) => Bound::Excluded(Term::from_field_date(field, date(value))),
+            Bound::Unbounded => Bound::Unbounded,
+        }
+    };
+    Box::new(RangeQuery::new(to_term(lower), to_term(upper)))
+}
+
 fn leaf_to_query(
     schema: &SearchSchema,
     pred: &PlanPredicate,
@@ -421,12 +433,12 @@ fn leaf_to_query(
             subqueries.push(kind_scope(
                 schema,
                 "release",
-                range_query(schema.r_release_date, lo, hi),
+                date_range_query(schema.r_release_date, lo, hi),
             ));
             subqueries.push(kind_scope(
                 schema,
                 "track",
-                range_query(schema.t_release_date, lo, hi),
+                date_range_query(schema.t_release_date, lo, hi),
             ));
         }
         PredicateTarget::Type => {

@@ -42,10 +42,11 @@ pub use policy::{
     PolicyStore, PolicyStoreError, StoredPolicyDecision, StoredReleaseClassification,
 };
 pub use search::{
-    MAX_SEARCH_OUTBOX_BATCH, MAX_SEARCH_SNAPSHOT_PAGE, SEARCH_PROJECTION_NAME, SearchArtistRecord,
-    SearchCatalogRecord, SearchDocumentCounts, SearchEntityType, SearchOperation, SearchOutboxItem,
-    SearchProjectionStatus, SearchProjectionStore, SearchReleaseRecord, SearchSnapshotReader,
-    SearchStoreError, SearchTrackRecord, StoredSearchGeneration, StoredSearchRebuildJob,
+    MAX_SEARCH_OUTBOX_ATTEMPTS, MAX_SEARCH_OUTBOX_BATCH, MAX_SEARCH_SNAPSHOT_PAGE,
+    SEARCH_PROJECTION_NAME, SearchArtistRecord, SearchCatalogRecord, SearchDocumentCounts,
+    SearchEntityType, SearchOperation, SearchOutboxItem, SearchProjectionStatus,
+    SearchProjectionStore, SearchReleaseRecord, SearchSnapshotReader, SearchStoreError,
+    SearchTrackRecord, StoredSearchGeneration, StoredSearchRebuildJob,
 };
 pub use work_items::{
     ActiveLease, PublicationJournalEntry, SettlingSnapshot, SettlingSnapshotFile, StateCount,

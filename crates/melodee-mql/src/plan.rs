@@ -204,7 +204,13 @@ fn validate_value(
 ) -> Result<(), MqlError> {
     match value {
         MqlValue::Regex(s) => {
-            if s.len() > bounds.max_regex_len {
+            if s.is_empty() {
+                return Err(MqlError::RegexError {
+                    message: "regex must not be empty".to_string(),
+                    span,
+                });
+            }
+            if s.chars().count() > bounds.max_regex_len {
                 return Err(MqlError::ExceedsBound {
                     kind: "regex length".to_string(),
                     limit: bounds.max_regex_len,

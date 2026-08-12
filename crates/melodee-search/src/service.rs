@@ -127,9 +127,9 @@ pub async fn diagnostic(
     match result {
         Ok(generation)
             if generation.schema_version == u32::try_from(active.schema_version).unwrap_or(0)
-                && generation.artists as u64 == active.document_counts.artists
-                && generation.releases as u64 == active.document_counts.releases
-                && generation.tracks as u64 == active.document_counts.tracks =>
+                && generation.artists as u64 == active.current_document_counts.artists
+                && generation.releases as u64 == active.current_document_counts.releases
+                && generation.tracks as u64 == active.current_document_counts.tracks =>
         {
             Ok(SearchDiagnostic {
                 projection,
@@ -142,7 +142,7 @@ pub async fn diagnostic(
             generation: None,
             generation_error: Some(format!(
                 "active generation metadata mismatch: database={:?}, index={generation:?}",
-                active.document_counts
+                active.current_document_counts
             )),
         }),
         Err(error) => Ok(SearchDiagnostic {

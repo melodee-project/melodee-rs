@@ -255,6 +255,70 @@ fn deterministic_pagination() {
 }
 
 #[test]
+fn date_fields_use_tantivy_dates_and_preserve_range_semantics() {
+    let (_directory, store) = populated();
+    let exact = store
+        .search(&parse_and_plan("date:2000-02-29").unwrap(), 20, 0)
+        .unwrap();
+    assert_eq!(exact.len(), 3);
+    let range = store
+        .search(
+            &parse_and_plan("date:1999-01-01..2001-01-01").unwrap(),
+            20,
+            0,
+        )
+        .unwrap();
+    assert_eq!(range.len(), 3);
+}
+
+#[test]
+fn adr_declared_sort_identity_numeric_and_date_fields_are_fast() {
+    let schema = melodee_search::build_schema();
+    for field in [
+        schema.doc_id,
+        schema.revision,
+        schema.updated_at,
+        schema.a_internal_id,
+        schema.a_public_id,
+        schema.a_sort_name,
+        schema.a_begin_year,
+        schema.a_end_year,
+        schema.r_internal_id,
+        schema.r_public_id,
+        schema.r_sort_title,
+        schema.r_release_year,
+        schema.r_release_date,
+        schema.t_internal_id,
+        schema.t_public_id,
+        schema.t_sort_title,
+        schema.t_track_number,
+        schema.t_duration_ms,
+        schema.t_release_year,
+        schema.t_release_date,
+    ] {
+        assert!(
+            schema.schema.get_field_entry(field).is_fast(),
+            "{} must be a fast field",
+            schema.schema.get_field_entry(field).name()
+        );
+    }
+    assert!(matches!(
+        schema
+            .schema
+            .get_field_entry(schema.r_release_date)
+            .field_type(),
+        tantivy::schema::FieldType::Date(_)
+    ));
+    assert!(matches!(
+        schema
+            .schema
+            .get_field_entry(schema.t_release_date)
+            .field_type(),
+        tantivy::schema::FieldType::Date(_)
+    ));
+}
+
+#[test]
 fn revision_fencing_skips_stale() {
     let dir = TempDir::new().unwrap();
     let mut store = SearchStore::create(dir.path()).unwrap();
@@ -352,6 +416,36 @@ fn pending_revisions_are_fenced_before_commit() {
             .search(&parse_and_plan("artist:Stale").unwrap(), 10, 0)
             .unwrap()
             .is_empty()
+    );
+}
+
+#[cfg(feature = "test-support")]
+#[test]
+fn failed_commit_retains_pending_revision_fencing_until_retry() {
+    let directory = TempDir::new().unwrap();
+    let mut store = SearchStore::create(directory.path()).unwrap();
+    let document = artist(
+        "commit-retry",
+        "public-commit-retry",
+        "Commit Retry",
+        &[],
+        1,
+    );
+    assert!(store.upsert_artist(&document).unwrap());
+    melodee_search::store::set_commit_failure_for_test(true);
+    assert!(store.commit().is_err());
+    assert!(
+        !store.upsert_artist(&document).unwrap(),
+        "the buffered revision remains fenced after a failed commit"
+    );
+    melodee_search::store::set_commit_failure_for_test(false);
+    store.commit().unwrap();
+    assert_eq!(
+        store
+            .search(&parse_and_plan("artist:\"Commit Retry\"").unwrap(), 10, 0)
+            .unwrap()
+            .len(),
+        1
     );
 }
 

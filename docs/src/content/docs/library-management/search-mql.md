@@ -30,7 +30,7 @@ MQL supports:
 
 - implicit `AND` between adjacent terms, plus case-insensitive `AND`, `OR`, and `NOT`;
 - parentheses, quoted strings, and `-field:value` negation;
-- `=`, `!=`, `<`, `<=`, `>`, and `>=` for numeric/date fields;
+- `=`, `!=`, `<`, `<=`, `>`, and `>=` for numeric/date fields, including signed numeric values;
 - inclusive ranges such as `year:1990..1999`, including open ranges;
 - bounded token regex such as `track:/blue.*/`; and
 - exact internal/public ID lookup.
@@ -53,8 +53,9 @@ Unicode-tokenized, lowercased, ASCII-folded terms, not raw file bytes.
 ## Bounds and unsupported syntax
 
 Queries are rejected, with a typed error and byte span, above 4 KiB, 1,024 tokens, depth 32, 256
-clauses, or 256 regex characters. Result pages default to 200 and cannot exceed 1,000; offsets above
-10,000 are rejected. Fuzzy `~`, wildcard `*`, scripts, and function queries are not supported.
+clauses, or 256 regex characters. Empty regexes and leading Boolean operators are syntax errors.
+Result pages default to 200 and cannot exceed 1,000; offsets above 10,000 are rejected. Fuzzy `~`,
+wildcard `*`, scripts, and function queries are not supported.
 
 ## Rebuild and recovery
 

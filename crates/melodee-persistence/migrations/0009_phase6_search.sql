@@ -55,6 +55,7 @@ CREATE TABLE search_generations (
     retired_at timestamptz NULL,
     removed_at timestamptz NULL,
     document_counts jsonb NOT NULL DEFAULT '{"artists":0,"releases":0,"tracks":0}'::jsonb,
+    current_document_counts jsonb NOT NULL DEFAULT '{"artists":0,"releases":0,"tracks":0}'::jsonb,
     source_high_water_mark bigint NOT NULL DEFAULT 0,
     caught_up_outbox_id bigint NOT NULL DEFAULT 0,
     manifest_hash text NULL,
@@ -87,6 +88,20 @@ CREATE TABLE search_generations (
         AND (document_counts ->> 'artists')::numeric <= 9223372036854775807
         AND (document_counts ->> 'releases')::numeric <= 9223372036854775807
         AND (document_counts ->> 'tracks')::numeric <= 9223372036854775807
+    ),
+    CONSTRAINT search_generations_current_counts_check CHECK (
+        jsonb_typeof(current_document_counts) = 'object'
+        AND current_document_counts ?& ARRAY['artists', 'releases', 'tracks']
+        AND current_document_counts - 'artists' - 'releases' - 'tracks' = '{}'::jsonb
+        AND jsonb_typeof(current_document_counts -> 'artists') = 'number'
+        AND jsonb_typeof(current_document_counts -> 'releases') = 'number'
+        AND jsonb_typeof(current_document_counts -> 'tracks') = 'number'
+        AND (current_document_counts ->> 'artists') ~ '^(0|[1-9][0-9]*)$'
+        AND (current_document_counts ->> 'releases') ~ '^(0|[1-9][0-9]*)$'
+        AND (current_document_counts ->> 'tracks') ~ '^(0|[1-9][0-9]*)$'
+        AND (current_document_counts ->> 'artists')::numeric <= 9223372036854775807
+        AND (current_document_counts ->> 'releases')::numeric <= 9223372036854775807
+        AND (current_document_counts ->> 'tracks')::numeric <= 9223372036854775807
     ),
     CONSTRAINT search_generations_manifest_check CHECK (
         manifest_hash IS NULL OR manifest_hash ~ '^[0-9a-f]{64}$'
