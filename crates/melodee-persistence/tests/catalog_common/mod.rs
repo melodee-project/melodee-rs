@@ -84,8 +84,34 @@ pub async fn seed_published_release_with_normalized_hash(
     presentation: CatalogFixturePresentation<'_>,
     normalized_byte_hash: String,
 ) -> PublishedCatalogFixture {
-    seed_published_release_with_options(db, ordinal, presentation, normalized_byte_hash, false)
-        .await
+    seed_published_release_with_normalized_hash_and_genre(
+        db,
+        ordinal,
+        presentation,
+        normalized_byte_hash,
+        None,
+    )
+    .await
+}
+
+/// Variant that overrides the observed genre tag (fixtures default to
+/// `"Fixture"`); genre fidelity is under test in adapter surfaces.
+pub async fn seed_published_release_with_normalized_hash_and_genre(
+    db: &TestDb,
+    ordinal: u32,
+    presentation: CatalogFixturePresentation<'_>,
+    normalized_byte_hash: String,
+    genre: Option<&str>,
+) -> PublishedCatalogFixture {
+    seed_published_release_with_options_full(
+        db,
+        ordinal,
+        presentation,
+        normalized_byte_hash,
+        false,
+        genre,
+    )
+    .await
 }
 
 /// Complete immutable handoff carrying a real inspection read-error fact for
@@ -95,12 +121,13 @@ pub async fn seed_published_release_with_read_error(
     ordinal: u32,
     presentation: CatalogFixturePresentation<'_>,
 ) -> PublishedCatalogFixture {
-    seed_published_release_with_options(
+    seed_published_release_with_options_full(
         db,
         ordinal,
         presentation,
         deterministic_hash('a', ordinal),
         true,
+        None,
     )
     .await
 }
@@ -111,6 +138,25 @@ async fn seed_published_release_with_options(
     presentation: CatalogFixturePresentation<'_>,
     normalized_byte_hash: String,
     bytes_read_errors: bool,
+) -> PublishedCatalogFixture {
+    seed_published_release_with_options_full(
+        db,
+        ordinal,
+        presentation,
+        normalized_byte_hash,
+        bytes_read_errors,
+        None,
+    )
+    .await
+}
+
+async fn seed_published_release_with_options_full(
+    db: &TestDb,
+    ordinal: u32,
+    presentation: CatalogFixturePresentation<'_>,
+    normalized_byte_hash: String,
+    bytes_read_errors: bool,
+    genre: Option<&str>,
 ) -> PublishedCatalogFixture {
     let store = WorkItemStore;
     let config = test_config();
@@ -149,7 +195,7 @@ async fn seed_published_release_with_options(
         disc_total: Some(1),
         year: Some(presentation.release_date[..4].to_owned()),
         date: Some(presentation.release_date.to_owned()),
-        genre: Some("Fixture".to_owned()),
+        genre: Some(genre.unwrap_or("Fixture").to_owned()),
         raw: json!({
             "album_artist": presentation.release_artist,
             "artist": presentation.track_artist,
@@ -405,7 +451,7 @@ async fn seed_published_release_with_options(
     }
 }
 
-fn deterministic_hash(prefix: char, ordinal: u32) -> String {
+pub(crate) fn deterministic_hash(prefix: char, ordinal: u32) -> String {
     let suffix = format!("{ordinal:08x}");
     format!("{}{suffix}", prefix.to_string().repeat(64 - suffix.len()))
 }

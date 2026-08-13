@@ -10,7 +10,9 @@ use melodee_persistence::{CatalogStore, WorkEngineConfig, WorkItemStore, migrate
 use melodee_policy::PolicyConfig;
 use melodee_search::{SearchConfig, SearchRoot, start_search_loop};
 use melodee_server::policy_worker::{PolicyWorkerConfig, start_policy_loop};
-use melodee_server::{admin, native, native_stream, podcast_worker, policy_worker, system};
+use melodee_server::{
+    admin, jellyfin, native, native_stream, opensubsonic, podcast_worker, policy_worker, system,
+};
 use tokio::sync::oneshot;
 use tower_http::trace::TraceLayer;
 use tracing::info;
@@ -297,6 +299,45 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .map(|roots| native_stream::CanonicalAssetRoot::open(&roots.storage_root))
         .transpose()?
         .and_then(|root| native_stream::DirectPlayService::new(root, stream_concurrency));
+    let opensubsonic_state = opensubsonic::OsState::from_env(
+        pool.clone(),
+        public_origin.clone(),
+        &ingestion_config,
+        podcast_config.enabled,
+        direct_play.clone(),
+        native_stream::ClientAddressResolver::new(trusted_proxies.clone()),
+        search_config.enabled.then_some(search_config.clone()),
+    )?;
+    let opensubsonic_app = opensubsonic::configured_router(opensubsonic_state);
+    let jellyfin_state = jellyfin::JfState {
+        pool: pool.clone(),
+        server_name: "Melodee".to_string(),
+        server_version: env!("CARGO_PKG_VERSION").to_string(),
+        server_id: "93cd3cc3a120127ccfda124620290cae".to_string(),
+        local_address: public_origin.clone(),
+        public_origin: public_origin.clone(),
+        token_pepper: jellyfin::SecretPepper::new(
+            std::env::var("MELODEE__JELLYFIN__TOKEN_PEPPER")
+                .unwrap_or_else(|_| {
+                    "melodee-jellyfin-fixture-pepper-NOT-A-REAL-SECRET-32b!".to_string()
+                })
+                .into_bytes(),
+        ),
+        token_expiry_hours: 168,
+        max_active_tokens: 10,
+        direct_play: direct_play.clone(),
+        client_addresses: native_stream::ClientAddressResolver::new(
+            env::var("MELODEE__NATIVE__TRUSTED_PROXIES")
+                .unwrap_or_default()
+                .split(',')
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::parse)
+                .collect::<Result<Vec<_>, _>>()?,
+        ),
+        search: search_config.enabled.then_some(search_config.clone()),
+    };
+    let jellyfin_app = jellyfin::configured_router(jellyfin_state);
     let native_state = native::NativeState {
         pool: pool.clone(),
         search: search_config.enabled.then_some(search_config.clone()),
@@ -349,6 +390,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         )
         .with_state(admin_state)
         .merge(native_app)
+        .merge(opensubsonic_app)
+        .merge(jellyfin_app)
         .layer(TraceLayer::new_for_http().make_span_with(melodee_server::make_http_span));
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();

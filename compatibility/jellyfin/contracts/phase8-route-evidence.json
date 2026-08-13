@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "surface": "jellyfin",
+  "legacyBaselineCommit": "4028b58dbd3302ed431e2c5b32d9dde5634db218",
+  "routes": []
+}

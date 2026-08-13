@@ -69,6 +69,24 @@ pub async fn seed_cataloged_release(
     catalog_published_release(db, published).await
 }
 
+/// Variant with an explicit observed genre tag for adapter-surface tests.
+pub async fn seed_cataloged_release_with_genre(
+    db: &TestDb,
+    ordinal: u32,
+    presentation: CatalogFixturePresentation<'_>,
+    genre: &str,
+) -> CatalogedPolicyFixture {
+    let published = crate::catalog_common::seed_published_release_with_normalized_hash_and_genre(
+        db,
+        ordinal,
+        presentation,
+        crate::catalog_common::deterministic_hash('a', ordinal),
+        Some(genre),
+    )
+    .await;
+    catalog_published_release(db, published).await
+}
+
 /// Builds a complete second v3/catalog handoff whose playable bytes match an
 /// existing immutable MediaAsset hash.
 pub async fn seed_cataloged_release_with_normalized_hash(

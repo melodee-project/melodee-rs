@@ -2,8 +2,10 @@
 //! integration tests. The binary entry point lives in `main.rs`.
 
 pub mod admin;
+pub mod jellyfin;
 pub mod native;
 pub mod native_stream;
+pub mod opensubsonic;
 pub mod podcast_worker;
 pub mod policy_worker;
 pub mod system;

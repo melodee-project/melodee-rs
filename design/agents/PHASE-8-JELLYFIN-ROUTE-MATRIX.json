@@ -1,0 +1,1424 @@
+{
+  "schemaVersion": 1,
+  "surface": "jellyfin",
+  "legacyBaselineCommit": "4028b58dbd3302ed431e2c5b32d9dde5634db218",
+  "sources": [
+    "compatibility/jellyfin/contracts/route-inventory.json",
+    "compatibility/jellyfin/contracts/phase8-route-evidence.json"
+  ],
+  "routeCount": 60,
+  "legacyCaptureSummary": {
+    "routeCount": 60,
+    "coveredCount": 60
+  },
+  "phase8StatusCounts": {
+    "approved-compatibility-normalization": 0,
+    "explicitly-deferred-by-accepted-scope-decision": 0,
+    "implementation-pending": 60,
+    "implemented-and-differentially-tested": 0,
+    "negative-compatibility-pending": 0
+  },
+  "completedRouteCount": 0,
+  "pendingRouteCount": 60,
+  "deferredRouteCount": 0,
+  "invariants": [
+    "Legacy capture is contract evidence, never evidence that a Rust route is implemented.",
+    "Every captured Jellyfin music route is a Phase 8 obligation unless an accepted ADR explicitly defers it.",
+    "Non-music Jellyfin surfaces stay intentionally absent (plain 404); no evidence row may claim them.",
+    "Compatibility normalizations and deferrals require an accepted ADR named by the route evidence row."
+  ],
+  "routes": [
+    {
+      "id": 1,
+      "method": "GET",
+      "path": "/api/jf/",
+      "clientVisiblePath": "/",
+      "controller": "RootController",
+      "action": "ServerRoot",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-root-no-markers"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 2,
+      "method": "GET",
+      "path": "/api/jf/Artists",
+      "clientVisiblePath": "/Artists",
+      "controller": "ArtistsController",
+      "action": "GetArtistsAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-artists-genres/artists-list"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 3,
+      "method": "GET",
+      "path": "/api/jf/Artists/AlbumArtists",
+      "clientVisiblePath": "/Artists/AlbumArtists",
+      "controller": "ArtistsController",
+      "action": "GetAlbumArtistsAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-artists-genres/albumartists-list"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 4,
+      "method": "GET",
+      "path": "/api/jf/Artists/{}",
+      "clientVisiblePath": "/Artists/{}",
+      "controller": "ArtistsController",
+      "action": "GetArtistAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-artists-genres/albumartists-list",
+          "jf-artists-genres/artist-detail"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 5,
+      "method": "GET",
+      "path": "/api/jf/Artists/{}/Images/{}",
+      "clientVisiblePath": "/Artists/{}/Images/{}",
+      "controller": "ImagesController",
+      "action": "GetArtistImageAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-images/artist-image"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 6,
+      "method": "GET",
+      "path": "/api/jf/Artists/{}/Similar",
+      "clientVisiblePath": "/Artists/{}/Similar",
+      "controller": "ArtistsController",
+      "action": "GetSimilarArtistsAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-artists-genres/artist-similar"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 7,
+      "method": "GET",
+      "path": "/api/jf/Audio/{}/Lyrics",
+      "clientVisiblePath": "/Audio/{}/Lyrics",
+      "controller": "AudioController",
+      "action": "GetLyricsAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-extra/audio-lyrics",
+          "jf-extra/audio-lyrics-none"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 8,
+      "method": "GET",
+      "path": "/api/jf/Audio/{}/stream",
+      "clientVisiblePath": "/Audio/{}/stream",
+      "controller": "AudioController",
+      "action": "StreamAudioAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-playback/stream-full",
+          "jf-playback/stream-range-end",
+          "jf-playback/stream-range-invalid",
+          "jf-playback/stream-range-middle",
+          "jf-playback/stream-range-start",
+          "jf-playback/stream-range-unsatisfiable",
+          "jf-playback/stream-unknown"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 9,
+      "method": "GET",
+      "path": "/api/jf/Audio/{}/stream.{}",
+      "clientVisiblePath": "/Audio/{}/stream.{}",
+      "controller": "AudioController",
+      "action": "StreamAudioWithContainerAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-playback/stream-extension-no-static",
+          "jf-playback/stream-extension-static"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 10,
+      "method": "GET",
+      "path": "/api/jf/Audio/{}/universal",
+      "clientVisiblePath": "/Audio/{}/universal",
+      "controller": "AudioController",
+      "action": "UniversalAudioAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-playback/stream-universal"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 11,
+      "method": "GET",
+      "path": "/api/jf/Genres",
+      "clientVisiblePath": "/Genres",
+      "controller": "GenresController",
+      "action": "GetGenresAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-artists-genres/genres-list"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 12,
+      "method": "GET",
+      "path": "/api/jf/Items",
+      "clientVisiblePath": "/Items",
+      "controller": "ItemsController",
+      "action": "GetItemsAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-browse/items-albums",
+          "jf-browse/items-artists",
+          "jf-browse/items-parent-album",
+          "jf-browse/items-parent-artist",
+          "jf-browse/items-searchterm-dune",
+          "jf-browse/items-songs",
+          "jf-browse/items-video-type-empty"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 13,
+      "method": "GET",
+      "path": "/api/jf/Items/Filters",
+      "clientVisiblePath": "/Items/Filters",
+      "controller": "ItemsController",
+      "action": "GetFiltersAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-browse/items-filters"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 14,
+      "method": "DELETE",
+      "path": "/api/jf/Items/{}",
+      "clientVisiblePath": "/Items/{}",
+      "controller": "ItemsController",
+      "action": "DeleteItemAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-extra/delete-playlist-via-items",
+          "jf-extra/delete-song-via-items-404"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 15,
+      "method": "GET",
+      "path": "/api/jf/Items/{}",
+      "clientVisiblePath": "/Items/{}",
+      "controller": "ItemsController",
+      "action": "GetItemAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-browse/item-album-detail",
+          "jf-browse/item-artist-detail",
+          "jf-browse/item-song-detail",
+          "jf-browse/item-unknown",
+          "jf-browse/items-filters",
+          "jf-userstate/verify-favorite",
+          "jf-userstate/verify-unfavorite"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 16,
+      "method": "GET",
+      "path": "/api/jf/Items/{}/Download",
+      "clientVisiblePath": "/Items/{}/Download",
+      "controller": "ItemsController",
+      "action": "GetItemFileAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-playback/download-item"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 17,
+      "method": "GET",
+      "path": "/api/jf/Items/{}/File",
+      "clientVisiblePath": "/Items/{}/File",
+      "controller": "ItemsController",
+      "action": "GetItemFileAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-playback/file-item"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 18,
+      "method": "GET",
+      "path": "/api/jf/Items/{}/Images/{}",
+      "clientVisiblePath": "/Items/{}/Images/{}",
+      "controller": "ImagesController",
+      "action": "GetItemImageAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-images/image-maxwidth-bucket",
+          "jf-images/image-no-artwork-404",
+          "jf-images/image-unknown",
+          "jf-images/item-image-304",
+          "jf-images/item-image-primary"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 19,
+      "method": "GET",
+      "path": "/api/jf/Items/{}/Images/{}/{}",
+      "clientVisiblePath": "/Items/{}/Images/{}/{}",
+      "controller": "ImagesController",
+      "action": "GetItemImageByIndexAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-images/item-image-indexed"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 20,
+      "method": "GET",
+      "path": "/api/jf/Items/{}/InstantMix",
+      "clientVisiblePath": "/Items/{}/InstantMix",
+      "controller": "ItemsController",
+      "action": "GetInstantMixAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-browse/items-instantmix-song",
+          "jf-browse/items-instantmix-unknown"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 21,
+      "method": "GET",
+      "path": "/api/jf/Items/{}/PlaybackInfo",
+      "clientVisiblePath": "/Items/{}/PlaybackInfo",
+      "controller": "ItemsController",
+      "action": "GetPlaybackInfoAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-playback/playbackinfo"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 22,
+      "method": "POST",
+      "path": "/api/jf/Items/{}/PlaybackInfo",
+      "clientVisiblePath": "/Items/{}/PlaybackInfo",
+      "controller": "ItemsController",
+      "action": "GetPlaybackInfoAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-extra/playbackinfo-post"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 23,
+      "method": "POST",
+      "path": "/api/jf/Items/{}/Refresh",
+      "clientVisiblePath": "/Items/{}/Refresh",
+      "controller": "ItemsController",
+      "action": "RefreshItemAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-extra/item-refresh-noop"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 24,
+      "method": "GET",
+      "path": "/api/jf/Items/{}/Similar",
+      "clientVisiblePath": "/Items/{}/Similar",
+      "controller": "ItemsController",
+      "action": "GetSimilarItemsAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-browse/items-similar-artist-id",
+          "jf-browse/items-similar-song"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 25,
+      "method": "GET",
+      "path": "/api/jf/MusicGenres",
+      "clientVisiblePath": "/MusicGenres",
+      "controller": "MusicGenresController",
+      "action": "GetMusicGenresAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-artists-genres/musicgenres-list"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 26,
+      "method": "GET",
+      "path": "/api/jf/Playlists",
+      "clientVisiblePath": "/Playlists",
+      "controller": "PlaylistsController",
+      "action": "GetPlaylistsAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-playlists/playlists-list"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 27,
+      "method": "POST",
+      "path": "/api/jf/Playlists",
+      "clientVisiblePath": "/Playlists",
+      "controller": "PlaylistsController",
+      "action": "CreatePlaylistAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-extra/create-for-items-delete",
+          "jf-playlists-create-with-songs/create-with-songs",
+          "jf-playlists/create-playlist-empty"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 28,
+      "method": "DELETE",
+      "path": "/api/jf/Playlists/{}",
+      "clientVisiblePath": "/Playlists/{}",
+      "controller": "PlaylistsController",
+      "action": "DeletePlaylistAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-playlists-create-with-songs/delete-created",
+          "jf-playlists/delete-created-playlist",
+          "jf-playlists/delete-seeded-playlist"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 29,
+      "method": "GET",
+      "path": "/api/jf/Playlists/{}",
+      "clientVisiblePath": "/Playlists/{}",
+      "controller": "PlaylistsController",
+      "action": "GetPlaylistAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-playlists/detail-after-delete",
+          "jf-playlists/playlist-detail"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 30,
+      "method": "POST",
+      "path": "/api/jf/Playlists/{}",
+      "clientVisiblePath": "/Playlists/{}",
+      "controller": "PlaylistsController",
+      "action": "UpdatePlaylistAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-playlists/update-playlist"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 31,
+      "method": "DELETE",
+      "path": "/api/jf/Playlists/{}/Items",
+      "clientVisiblePath": "/Playlists/{}/Items",
+      "controller": "PlaylistsController",
+      "action": "RemoveItemsFromPlaylistAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-playlists/remove-item"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 32,
+      "method": "GET",
+      "path": "/api/jf/Playlists/{}/Items",
+      "clientVisiblePath": "/Playlists/{}/Items",
+      "controller": "PlaylistsController",
+      "action": "GetPlaylistItemsAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-playlists-create-with-songs/items-of-created",
+          "jf-playlists/items-after-first-add",
+          "jf-playlists/items-after-move",
+          "jf-playlists/items-after-remove",
+          "jf-playlists/playlist-items"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 33,
+      "method": "POST",
+      "path": "/api/jf/Playlists/{}/Items",
+      "clientVisiblePath": "/Playlists/{}/Items",
+      "controller": "PlaylistsController",
+      "action": "AddItemsToPlaylistAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-playlists/add-first-empty",
+          "jf-playlists/add-second-nonempty"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 34,
+      "method": "POST",
+      "path": "/api/jf/Playlists/{}/Items/{}/Move/{}",
+      "clientVisiblePath": "/Playlists/{}/Items/{}/Move/{}",
+      "controller": "PlaylistsController",
+      "action": "MovePlaylistItemAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-playlists/move-item"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 35,
+      "method": "GET",
+      "path": "/api/jf/Sessions",
+      "clientVisiblePath": "/Sessions",
+      "controller": "SessionsController",
+      "action": "GetSessionsAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-userstate/sessions-list",
+          "jf-userstate/sessions-list-after-stop"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 36,
+      "method": "POST",
+      "path": "/api/jf/Sessions/Capabilities",
+      "clientVisiblePath": "/Sessions/Capabilities",
+      "controller": "SessionsController",
+      "action": "PostCapabilitiesAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-extra/capabilities"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 37,
+      "method": "POST",
+      "path": "/api/jf/Sessions/Capabilities/Full",
+      "clientVisiblePath": "/Sessions/Capabilities/Full",
+      "controller": "SessionsController",
+      "action": "PostCapabilitiesFullAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-userstate/capabilities-full"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 38,
+      "method": "POST",
+      "path": "/api/jf/Sessions/Logout",
+      "clientVisiblePath": "/Sessions/Logout",
+      "controller": "SessionsController",
+      "action": "LogoutAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-auth-negative/logout-unauthenticated",
+          "jf-auth/logout"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 39,
+      "method": "POST",
+      "path": "/api/jf/Sessions/Playing",
+      "clientVisiblePath": "/Sessions/Playing",
+      "controller": "SessionsController",
+      "action": "ReportPlaybackStartAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-userstate/session-playing",
+          "jf-userstate/session-playing-unknown-item"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 40,
+      "method": "POST",
+      "path": "/api/jf/Sessions/Playing/Ping",
+      "clientVisiblePath": "/Sessions/Playing/Ping",
+      "controller": "SessionsController",
+      "action": "PingPlaybackAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-userstate/session-ping"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 41,
+      "method": "POST",
+      "path": "/api/jf/Sessions/Playing/Progress",
+      "clientVisiblePath": "/Sessions/Playing/Progress",
+      "controller": "SessionsController",
+      "action": "ReportPlaybackProgressAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-userstate/session-progress"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 42,
+      "method": "POST",
+      "path": "/api/jf/Sessions/Playing/Stopped",
+      "clientVisiblePath": "/Sessions/Playing/Stopped",
+      "controller": "SessionsController",
+      "action": "ReportPlaybackStoppedAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-userstate/session-stopped"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 43,
+      "method": "GET",
+      "path": "/api/jf/Songs/{}/InstantMix",
+      "clientVisiblePath": "/Songs/{}/InstantMix",
+      "controller": "SongsController",
+      "action": "GetInstantMixAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-extra/songs-instantmix"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 44,
+      "method": "GET",
+      "path": "/api/jf/System/Info",
+      "clientVisiblePath": "/System/Info",
+      "controller": "SystemController",
+      "action": "GetSystemInfoAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-system-info",
+          "jf-system-info-fallthrough"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 45,
+      "method": "GET",
+      "path": "/api/jf/System/Info/Public",
+      "clientVisiblePath": "/System/Info/Public",
+      "controller": "SystemController",
+      "action": "GetPublicSystemInfoAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-system-info-public",
+          "jf-system-info-public-explicit"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 46,
+      "method": "GET",
+      "path": "/api/jf/System/Ping",
+      "clientVisiblePath": "/System/Ping",
+      "controller": "SystemController",
+      "action": "Ping",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-system-ping"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 47,
+      "method": "POST",
+      "path": "/api/jf/System/Ping",
+      "clientVisiblePath": "/System/Ping",
+      "controller": "SystemController",
+      "action": "Ping",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-extra/system-ping-post"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 48,
+      "method": "GET",
+      "path": "/api/jf/UserViews",
+      "clientVisiblePath": "/UserViews",
+      "controller": "UserViewsController",
+      "action": "GetUserViewsAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-browse/userviews"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 49,
+      "method": "GET",
+      "path": "/api/jf/Users",
+      "clientVisiblePath": "/Users",
+      "controller": "UsersController",
+      "action": "GetUsersAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-extra/users-list-admin"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 50,
+      "method": "POST",
+      "path": "/api/jf/Users/AuthenticateByName",
+      "clientVisiblePath": "/Users/AuthenticateByName",
+      "controller": "UsersController",
+      "action": "AuthenticateByNameAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-artists-genres/login",
+          "jf-auth-negative/missing-fields",
+          "jf-auth-negative/password-field-not-read",
+          "jf-auth-negative/unknown-user",
+          "jf-auth-negative/wrong-password",
+          "jf-auth/login",
+          "jf-browse/login",
+          "jf-extra/login",
+          "jf-images/login",
+          "jf-playback/login",
+          "jf-playlists-create-with-songs/login",
+          "jf-playlists/login",
+          "jf-userstate/login"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 51,
+      "method": "GET",
+      "path": "/api/jf/Users/Me",
+      "clientVisiblePath": "/Users/Me",
+      "controller": "UsersController",
+      "action": "GetCurrentUserAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-auth-negative/me-garbage-token",
+          "jf-auth-negative/me-no-token",
+          "jf-auth/me-after-logout",
+          "jf-auth/me-api-key-query",
+          "jf-auth/me-mediabrowser-header",
+          "jf-auth/me-x-emby-authorization",
+          "jf-auth/me-x-emby-token",
+          "jf-auth/me-x-mediabrowser-token"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 52,
+      "method": "GET",
+      "path": "/api/jf/Users/Public",
+      "clientVisiblePath": "/Users/Public",
+      "controller": "UsersController",
+      "action": "GetPublicUsersAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-users-public"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 53,
+      "method": "GET",
+      "path": "/api/jf/Users/{}",
+      "clientVisiblePath": "/Users/{}",
+      "controller": "UsersController",
+      "action": "GetUserByIdAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-auth-negative/me-garbage-token",
+          "jf-auth-negative/me-no-token",
+          "jf-auth/me-after-logout",
+          "jf-auth/me-api-key-query",
+          "jf-auth/me-mediabrowser-header",
+          "jf-auth/me-x-emby-authorization",
+          "jf-auth/me-x-emby-token",
+          "jf-auth/me-x-mediabrowser-token",
+          "jf-extra/users-by-id",
+          "jf-users-public"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 54,
+      "method": "DELETE",
+      "path": "/api/jf/Users/{}/FavoriteItems/{}",
+      "clientVisiblePath": "/Users/{}/FavoriteItems/{}",
+      "controller": "UsersController",
+      "action": "RemoveFavoriteAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-userstate/unfavorite-song"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 55,
+      "method": "POST",
+      "path": "/api/jf/Users/{}/FavoriteItems/{}",
+      "clientVisiblePath": "/Users/{}/FavoriteItems/{}",
+      "controller": "UsersController",
+      "action": "AddFavoriteAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-userstate/favorite-song",
+          "jf-userstate/favorite-unknown"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 56,
+      "method": "GET",
+      "path": "/api/jf/Users/{}/Items",
+      "clientVisiblePath": "/Users/{}/Items",
+      "controller": "UsersController",
+      "action": "GetUserItemsAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-extra/users-items-redirect"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 57,
+      "method": "GET",
+      "path": "/api/jf/Users/{}/Items/{}",
+      "clientVisiblePath": "/Users/{}/Items/{}",
+      "controller": "UsersController",
+      "action": "GetUserItemByIdAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-extra/users-item-redirect"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 58,
+      "method": "DELETE",
+      "path": "/api/jf/Users/{}/PlayedItems/{}",
+      "clientVisiblePath": "/Users/{}/PlayedItems/{}",
+      "controller": "UsersController",
+      "action": "MarkUnplayedAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-userstate/unplayed-album"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 59,
+      "method": "POST",
+      "path": "/api/jf/Users/{}/PlayedItems/{}",
+      "clientVisiblePath": "/Users/{}/PlayedItems/{}",
+      "controller": "UsersController",
+      "action": "MarkPlayedAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-userstate/played-album"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    },
+    {
+      "id": 60,
+      "method": "GET",
+      "path": "/api/jf/Users/{}/Views",
+      "clientVisiblePath": "/Users/{}/Views",
+      "controller": "UsersController",
+      "action": "GetUserViewsAsync",
+      "legacyContract": {
+        "implementation": "implemented",
+        "scenarios": [
+          "jf-browse/user-views-by-id"
+        ]
+      },
+      "phase8": {
+        "status": "implementation-pending",
+        "rationale": "The route is a captured legacy obligation with no accepted Rust differential evidence yet.",
+        "authority": null,
+        "requirements": [],
+        "legacyEvidence": [],
+        "rustTests": []
+      }
+    }
+  ]
+}

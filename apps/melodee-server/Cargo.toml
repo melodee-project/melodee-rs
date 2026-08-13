@@ -18,6 +18,7 @@ getrandom.workspace = true
 hmac.workspace = true
 image.workspace = true
 jsonwebtoken.workspace = true
+md-5.workspace = true
 melodee-auth = { path = "../../crates/melodee-auth", version = "0.1.0" }
 melodee-catalog = { path = "../../crates/melodee-catalog", version = "0.1.0" }
 melodee-domain = { path = "../../crates/melodee-domain", version = "0.1.0" }
