@@ -1,6 +1,1054 @@
 {
-  "schemaVersion": 1,
-  "surface": "jellyfin",
-  "legacyBaselineCommit": "4028b58dbd3302ed431e2c5b32d9dde5634db218",
-  "routes": []
+ "schemaVersion": 1,
+ "surface": "jellyfin",
+ "legacyBaselineCommit": "4028b58dbd3302ed431e2c5b32d9dde5634db218",
+ "routes": [
+  {
+   "method": "GET",
+   "path": "/api/jf/",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-002"
+   ],
+   "legacyEvidence": [
+    "jf-root-no-markers"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_core_api.rs::canonical_root_probe_returns_empty_200"
+   ],
+   "rationale": "Root probe serves the captured 200 empty body in canonical form; the marker-gated bare-root behavior lives in the outer routing middleware (ADR-0131)."
+  },
+  {
+   "method": "GET",
+   "path": "/api/jf/Artists",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-001",
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-artists-genres/artists-list"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::artists_list_matches_frozen_shape_and_etags"
+   ],
+   "rationale": "Sort-name ordered artist page with the collection ETag (collection-{total}-{skip}-{take}-{latestTicks}) and 304 negotiation; wire shape compared against the frozen artists-list golden."
+  },
+  {
+   "method": "GET",
+   "path": "/api/jf/Artists/AlbumArtists",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-001",
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-artists-genres/albumartists-list"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::artists_list_matches_frozen_shape_and_etags"
+   ],
+   "rationale": "Captured alias of the artists list handler; same envelope, ordering, and ETag behavior."
+  },
+  {
+   "method": "GET",
+   "path": "/api/jf/Artists/{}",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-artists-genres/albumartists-list",
+    "jf-artists-genres/artist-detail"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::artist_detail_and_search_term_folding"
+   ],
+   "rationale": "Artist detail with the item ETag (md5 of the captured preimage), role-derived CanDownload, and the captured 400/404 detail strings."
+  },
+  {
+   "method": "GET",
+   "path": "/api/jf/Artists/{}/Images/{}",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-images/artist-image"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::images_no_artwork_404_classes"
+   ],
+   "rationale": "Artist images probe the artwork resolver; at this baseline no durable artwork bytes exist, so the captured no-artwork 404 class is served (the legacy fixture's 200 PNGs are a documented evidence gap pending durable artwork storage)."
+  },
+  {
+   "method": "GET",
+   "path": "/api/jf/Artists/{}/Similar",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-artists-genres/artist-similar"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::similar_and_instant_mix_are_deterministic"
+   ],
+   "rationale": "Genre-overlap similar artists; the legacy random tie order is replaced by the deterministic overlap-desc/sort-name/public-id order (ADR-0131 D10-family decision)."
+  },
+  {
+   "method": "GET",
+   "path": "/api/jf/Audio/{}/Lyrics",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-extra/audio-lyrics",
+    "jf-extra/audio-lyrics-none"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::audio_lyrics_download_and_playback_info"
+   ],
+   "rationale": "Sibling .lrc parsing with the captured timestamp semantics (two-digit millis right-pad, untimestamped lines Start:null) and the captured lowercase empty shape."
+  },
+  {
+   "method": "GET",
+   "path": "/api/jf/Audio/{}/stream",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-002",
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-playback/stream-full",
+    "jf-playback/stream-range-end",
+    "jf-playback/stream-range-invalid",
+    "jf-playback/stream-range-middle",
+    "jf-playback/stream-range-start",
+    "jf-playback/stream-range-unsatisfiable",
+    "jf-playback/stream-unknown"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::audio_stream_full_range_and_416_nuances",
+    "apps/melodee-server/tests/jellyfin_media_api.rs::audio_role_gates_and_missing_storage"
+   ],
+   "rationale": "Direct-play streaming with the captured manual range parser: 206 Content-Range, 416 with bytes */len only for out-of-range/inverted starts, HEAD headers-only, HasStreamRole 403 gate."
+  },
+  {
+   "method": "GET",
+   "path": "/api/jf/Audio/{}/stream.{}",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-002",
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-playback/stream-extension-no-static",
+    "jf-playback/stream-extension-static"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::audio_stream_full_range_and_416_nuances",
+    "apps/melodee-server/tests/jellyfin_media_api.rs::audio_role_gates_and_missing_storage"
+   ],
+   "rationale": "Container-suffixed streaming; without static=true the captured transcoding-rejection 400 is served."
+  },
+  {
+   "method": "GET",
+   "path": "/api/jf/Audio/{}/universal",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-002",
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-playback/stream-universal"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::audio_stream_full_range_and_416_nuances",
+    "apps/melodee-server/tests/jellyfin_media_api.rs::audio_role_gates_and_missing_storage"
+   ],
+   "rationale": "Captured universal stream: forces static=true and direct-plays."
+  },
+  {
+   "method": "GET",
+   "path": "/api/jf/Genres",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-artists-genres/genres-list"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::filters_genres_and_user_views"
+   ],
+   "rationale": "Distinct manifest genres as MusicGenre items with the volatile now-based genres-* ETag (masked in the frozen captures)."
+  },
+  {
+   "method": "GET",
+   "path": "/api/jf/Items",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-001",
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-browse/items-albums",
+    "jf-browse/items-artists",
+    "jf-browse/items-parent-album",
+    "jf-browse/items-parent-artist",
+    "jf-browse/items-searchterm-dune",
+    "jf-browse/items-songs",
+    "jf-browse/items-video-type-empty"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::items_dispatch_include_item_types_and_parent_probe"
+   ],
+   "rationale": "Captured dispatch: includeItemTypes MusicArtist/MusicAlbum/Audio, then the parentId probe (artist->albums, album->songs, library->songs); non-music types silently empty; normalized CONTAINS search with diacritic folding."
+  },
+  {
+   "method": "GET",
+   "path": "/api/jf/Items/Filters",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-browse/items-filters"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::filters_genres_and_user_views"
+   ],
+   "rationale": "Captured lowercase {genres, tags:[], years} envelope; shape compared against the frozen filters golden."
+  },
+  {
+   "method": "DELETE",
+   "path": "/api/jf/Items/{}",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-extra/delete-playlist-via-items",
+    "jf-extra/delete-song-via-items-404"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::playlist_full_lifecycle_and_d4_clean_add"
+   ],
+   "rationale": "Captured delete surface: owned playlists only; anything else is the 404 'Item not found or cannot be deleted.' class."
+  },
+  {
+   "method": "GET",
+   "path": "/api/jf/Items/{}",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-browse/item-album-detail",
+    "jf-browse/item-artist-detail",
+    "jf-browse/item-song-detail",
+    "jf-browse/item-unknown",
+    "jf-browse/items-filters",
+    "jf-userstate/verify-favorite",
+    "jf-userstate/verify-unfavorite"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::item_detail_probes_artist_album_song"
+   ],
+   "rationale": "Captured probe order artist->album->song; no ETag header on this route; wire shape compared against the frozen song/album/artist detail goldens."
+  },
+  {
+   "method": "GET",
+   "path": "/api/jf/Items/{}/Download",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-playback/download-item"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::audio_lyrics_download_and_playback_info",
+    "apps/melodee-server/tests/jellyfin_media_api.rs::audio_role_gates_and_missing_storage"
+   ],
+   "rationale": "HasDownloadRole-gated attachment download with the captured percent-escaped filename disposition and shared range semantics."
+  },
+  {
+   "method": "GET",
+   "path": "/api/jf/Items/{}/File",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-playback/file-item"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::audio_lyrics_download_and_playback_info",
+    "apps/melodee-server/tests/jellyfin_media_api.rs::audio_role_gates_and_missing_storage"
+   ],
+   "rationale": "Captured alias of Download (same handler, same gates)."
+  },
+  {
+   "method": "GET",
+   "path": "/api/jf/Items/{}/Images/{}",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-images/image-maxwidth-bucket",
+    "jf-images/image-no-artwork-404",
+    "jf-images/image-unknown",
+    "jf-images/item-image-304",
+    "jf-images/item-image-primary"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::images_no_artwork_404_classes"
+   ],
+   "rationale": "Artist->album->song probe with the captured size buckets; catalog entities resolve to the captured no-artwork 404 classes at this baseline (documented evidence gap: the legacy fixture served stored PNGs)."
+  },
+  {
+   "method": "GET",
+   "path": "/api/jf/Items/{}/Images/{}/{}",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-images/item-image-indexed"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::images_no_artwork_404_classes"
+   ],
+   "rationale": "Indexed image variant; same probe and 404 classes as the unindexed route."
+  },
+  {
+   "method": "GET",
+   "path": "/api/jf/Items/{}/InstantMix",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-browse/items-instantmix-song",
+    "jf-browse/items-instantmix-unknown"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::similar_and_instant_mix_are_deterministic"
+   ],
+   "rationale": "Song/album/artist seed probing with deterministic public-id ordering (D10-family deviation from the legacy random mix)."
+  },
+  {
+   "method": "GET",
+   "path": "/api/jf/Items/{}/PlaybackInfo",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-playback/playbackinfo"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::audio_lyrics_download_and_playback_info"
+   ],
+   "rationale": "Captured: GET and POST share the handler; MediaSources carry the codec/container mapping and DisplayTitle."
+  },
+  {
+   "method": "POST",
+   "path": "/api/jf/Items/{}/PlaybackInfo",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-extra/playbackinfo-post"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::audio_lyrics_download_and_playback_info"
+   ],
+   "rationale": "Captured: GET and POST share the handler; MediaSources carry the codec/container mapping and DisplayTitle."
+  },
+  {
+   "method": "POST",
+   "path": "/api/jf/Items/{}/Refresh",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-extra/item-refresh-noop"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::similar_and_instant_mix_are_deterministic"
+   ],
+   "rationale": "Captured 204 no-op; refresh requests are acknowledged, never executed."
+  },
+  {
+   "method": "GET",
+   "path": "/api/jf/Items/{}/Similar",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-browse/items-similar-artist-id",
+    "jf-browse/items-similar-song"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::similar_and_instant_mix_are_deterministic"
+   ],
+   "rationale": "Song/album seeds surface similar items deterministically; artist and unknown ids return the captured empty envelope."
+  },
+  {
+   "method": "GET",
+   "path": "/api/jf/MusicGenres",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-artists-genres/musicgenres-list"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::filters_genres_and_user_views"
+   ],
+   "rationale": "Same shape as /Genres with the musicgenres-* ETag prefix (captured)."
+  },
+  {
+   "method": "GET",
+   "path": "/api/jf/Playlists",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-playlists/playlists-list"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::playlist_full_lifecycle_and_d4_clean_add"
+   ],
+   "rationale": "Owner-visible playlist page; counters computed from durable items; shape compared against the frozen playlists-list golden."
+  },
+  {
+   "method": "POST",
+   "path": "/api/jf/Playlists",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-extra/create-for-items-delete",
+    "jf-playlists-create-with-songs/create-with-songs",
+    "jf-playlists/create-playlist-empty"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::playlist_full_lifecycle_and_d4_clean_add"
+   ],
+   "rationale": "Create with optional Ids (invalid ids silently skipped, captured); blank name is the captured 400."
+  },
+  {
+   "method": "DELETE",
+   "path": "/api/jf/Playlists/{}",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-playlists-create-with-songs/delete-created",
+    "jf-playlists/delete-created-playlist",
+    "jf-playlists/delete-seeded-playlist"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::playlist_full_lifecycle_and_d4_clean_add"
+   ],
+   "rationale": "Owner-scoped delete; unknown/foreign playlists take the captured 404 'Playlist not found or access denied.' class."
+  },
+  {
+   "method": "GET",
+   "path": "/api/jf/Playlists/{}",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-playlists/detail-after-delete",
+    "jf-playlists/playlist-detail"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::playlist_full_lifecycle_and_d4_clean_add"
+   ],
+   "rationale": "Playlist detail with item ETag and 304 negotiation; shape compared against the frozen detail golden."
+  },
+  {
+   "method": "POST",
+   "path": "/api/jf/Playlists/{}",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-playlists/update-playlist"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::playlist_full_lifecycle_and_d4_clean_add"
+   ],
+   "rationale": "Rename/visibility update; blank names are ignored rather than rejected (captured)."
+  },
+  {
+   "method": "DELETE",
+   "path": "/api/jf/Playlists/{}/Items",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-playlists/remove-item"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::playlist_full_lifecycle_and_d4_clean_add"
+   ],
+   "rationale": "entryIds removal; empty/invalid id lists are the captured 204 no-op."
+  },
+  {
+   "method": "GET",
+   "path": "/api/jf/Playlists/{}/Items",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-playlists-create-with-songs/items-of-created",
+    "jf-playlists/items-after-first-add",
+    "jf-playlists/items-after-move",
+    "jf-playlists/items-after-remove",
+    "jf-playlists/playlist-items"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::playlist_full_lifecycle_and_d4_clean_add"
+   ],
+   "rationale": "Reduced Audio entries with 1-based ParentIndexNumber and song-CreatedAt ETags; UserData hydrates only with enableUserData=true (captured)."
+  },
+  {
+   "method": "POST",
+   "path": "/api/jf/Playlists/{}/Items",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-playlists/add-first-empty",
+    "jf-playlists/add-second-nonempty"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::playlist_full_lifecycle_and_d4_clean_add"
+   ],
+   "rationale": "D4 deviation (do-not-preserve): the legacy add-to-nonempty 500 corruption is replaced by the clean append; empty-add stays the captured 204 no-op."
+  },
+  {
+   "method": "POST",
+   "path": "/api/jf/Playlists/{}/Items/{}/Move/{}",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-playlists/move-item"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::playlist_full_lifecycle_and_d4_clean_add"
+   ],
+   "rationale": "Owner-scoped move (the legacy handler's missing owner scope is a documented hardening deviation); non-integer index never reaches the handler."
+  },
+  {
+   "method": "GET",
+   "path": "/api/jf/Sessions",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-userstate/sessions-list",
+    "jf-userstate/sessions-list-after-stop"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::sessions_synthesis_and_playback_reports"
+   ],
+   "rationale": "Sessions synthesized from durable now-playing state; empty at baseline (captured []), entries after Playing reports."
+  },
+  {
+   "method": "POST",
+   "path": "/api/jf/Sessions/Capabilities",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-extra/capabilities"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::sessions_synthesis_and_playback_reports"
+   ],
+   "rationale": "Captured 204 acknowledgement."
+  },
+  {
+   "method": "POST",
+   "path": "/api/jf/Sessions/Capabilities/Full",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-userstate/capabilities-full"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::sessions_synthesis_and_playback_reports"
+   ],
+   "rationale": "Captured 204 acknowledgement."
+  },
+  {
+   "method": "POST",
+   "path": "/api/jf/Sessions/Logout",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-003"
+   ],
+   "legacyEvidence": [
+    "jf-auth-negative/logout-unauthenticated",
+    "jf-auth/logout"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_core_api.rs::token_transports_and_logout_revocation"
+   ],
+   "rationale": "Immediate token revocation; idempotent 204 even for garbage tokens (captured)."
+  },
+  {
+   "method": "POST",
+   "path": "/api/jf/Sessions/Playing",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-userstate/session-playing",
+    "jf-userstate/session-playing-unknown-item"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::sessions_synthesis_and_playback_reports"
+   ],
+   "rationale": "Feeds durable now-playing; unknown/malformed ItemId is a silent 204 (captured)."
+  },
+  {
+   "method": "POST",
+   "path": "/api/jf/Sessions/Playing/Ping",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-userstate/session-ping"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::sessions_synthesis_and_playback_reports"
+   ],
+   "rationale": "Captured 204 acknowledgement."
+  },
+  {
+   "method": "POST",
+   "path": "/api/jf/Sessions/Playing/Progress",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-userstate/session-progress"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::sessions_synthesis_and_playback_reports"
+   ],
+   "rationale": "Feeds now-playing like Playing (captured); 204."
+  },
+  {
+   "method": "POST",
+   "path": "/api/jf/Sessions/Playing/Stopped",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-userstate/session-stopped"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::sessions_synthesis_and_playback_reports"
+   ],
+   "rationale": "Records a scrobble unless Failed=true (captured); 204 either way."
+  },
+  {
+   "method": "GET",
+   "path": "/api/jf/Songs/{}/InstantMix",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-extra/songs-instantmix"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::similar_and_instant_mix_are_deterministic"
+   ],
+   "rationale": "Song-seed-only InstantMix; unknown seeds take the captured 'Song not found.' 404."
+  },
+  {
+   "method": "GET",
+   "path": "/api/jf/System/Info",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-002"
+   ],
+   "legacyEvidence": [
+    "jf-system-info",
+    "jf-system-info-fallthrough"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_core_api.rs::routing_middleware_rewrites_marker_requests_to_canonical_paths"
+   ],
+   "rationale": "Captured full system-info envelope."
+  },
+  {
+   "method": "GET",
+   "path": "/api/jf/System/Info/Public",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-002"
+   ],
+   "legacyEvidence": [
+    "jf-system-info-public",
+    "jf-system-info-public-explicit"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_core_api.rs::routing_middleware_rewrites_marker_requests_to_canonical_paths"
+   ],
+   "rationale": "Captured public system-info envelope (pre-auth allowlisted)."
+  },
+  {
+   "method": "GET",
+   "path": "/api/jf/System/Ping",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-002"
+   ],
+   "legacyEvidence": [
+    "jf-system-ping"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_core_api.rs::routing_middleware_rewrites_marker_requests_to_canonical_paths"
+   ],
+   "rationale": "Captured 204 No Content (anonymous)."
+  },
+  {
+   "method": "POST",
+   "path": "/api/jf/System/Ping",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-002"
+   ],
+   "legacyEvidence": [
+    "jf-extra/system-ping-post"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_core_api.rs::system_ping_post_is_204"
+   ],
+   "rationale": "Captured 204 No Content (anonymous)."
+  },
+  {
+   "method": "GET",
+   "path": "/api/jf/UserViews",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-browse/userviews"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::filters_genres_and_user_views"
+   ],
+   "rationale": "Configured unlocked libraries as UserViews; empty set yields the captured synthetic 'Music' view with a random GUID."
+  },
+  {
+   "method": "GET",
+   "path": "/api/jf/Users",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-extra/users-list-admin"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_core_api.rs::users_list_and_by_id_scoping"
+   ],
+   "rationale": "Admins see up to 100 users; non-admins see only themselves (captured)."
+  },
+  {
+   "method": "POST",
+   "path": "/api/jf/Users/AuthenticateByName",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-003"
+   ],
+   "legacyEvidence": [
+    "jf-artists-genres/login",
+    "jf-auth-negative/missing-fields",
+    "jf-auth-negative/password-field-not-read",
+    "jf-auth-negative/unknown-user",
+    "jf-auth-negative/wrong-password",
+    "jf-auth/login",
+    "jf-browse/login",
+    "jf-extra/login",
+    "jf-images/login",
+    "jf-playback/login",
+    "jf-playlists-create-with-songs/login",
+    "jf-playlists/login",
+    "jf-userstate/login"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_core_api.rs::authenticate_by_name_returns_user_session_and_access_token",
+    "apps/melodee-server/tests/jellyfin_core_api.rs::authenticate_by_name_password_field_not_read_returns_400",
+    "apps/melodee-server/tests/jellyfin_core_api.rs::authenticate_by_name_wrong_password_returns_401",
+    "apps/melodee-server/tests/jellyfin_core_api.rs::authenticate_by_name_unknown_user_returns_401"
+   ],
+   "rationale": "Pw-only DTO (Password alone is a captured 400), locked-account 403 ordering, 64-hex tokens with HMAC-SHA256 digests, and the {User, SessionInfo, AccessToken, ServerId} envelope."
+  },
+  {
+   "method": "GET",
+   "path": "/api/jf/Users/Me",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-003"
+   ],
+   "legacyEvidence": [
+    "jf-auth-negative/me-garbage-token",
+    "jf-auth-negative/me-no-token",
+    "jf-auth/me-after-logout",
+    "jf-auth/me-api-key-query",
+    "jf-auth/me-mediabrowser-header",
+    "jf-auth/me-x-emby-authorization",
+    "jf-auth/me-x-emby-token",
+    "jf-auth/me-x-mediabrowser-token"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_core_api.rs::token_transports_and_logout_revocation",
+    "apps/melodee-server/tests/jellyfin_core_api.rs::users_me_without_token_returns_401"
+   ],
+   "rationale": "Bearer user across all five captured token transports; failures are indistinguishable 401s."
+  },
+  {
+   "method": "GET",
+   "path": "/api/jf/Users/Public",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-003"
+   ],
+   "legacyEvidence": [
+    "jf-users-public"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_core_api.rs::users_public_returns_empty_public_user_list"
+   ],
+   "rationale": "Captured empty public user list (clients fall back to password login)."
+  },
+  {
+   "method": "GET",
+   "path": "/api/jf/Users/{}",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-auth-negative/me-garbage-token",
+    "jf-auth-negative/me-no-token",
+    "jf-auth/me-after-logout",
+    "jf-auth/me-api-key-query",
+    "jf-auth/me-mediabrowser-header",
+    "jf-auth/me-x-emby-authorization",
+    "jf-auth/me-x-emby-token",
+    "jf-auth/me-x-mediabrowser-token",
+    "jf-extra/users-by-id",
+    "jf-users-public"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_core_api.rs::users_list_and_by_id_scoping"
+   ],
+   "rationale": "Target-user fetch: self or admin only (captured 403 'Cannot access other users.'), unknown ids take the captured 404."
+  },
+  {
+   "method": "DELETE",
+   "path": "/api/jf/Users/{}/FavoriteItems/{}",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-userstate/unfavorite-song"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::favorites_and_played_round_trip"
+   ],
+   "rationale": "Unfavorite with the partial UserData echo; other-user paths take the captured 403."
+  },
+  {
+   "method": "POST",
+   "path": "/api/jf/Users/{}/FavoriteItems/{}",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-userstate/favorite-song",
+    "jf-userstate/favorite-unknown"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::favorites_and_played_round_trip"
+   ],
+   "rationale": "Song->album->artist probe, IsFavorite echo; other-user paths take the captured 403."
+  },
+  {
+   "method": "GET",
+   "path": "/api/jf/Users/{}/Items",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-extra/users-items-redirect"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::user_items_redirect_pair"
+   ],
+   "rationale": "Captured 307 to /Items with whitelisted query reconstruction (True/False booleans, appended userId)."
+  },
+  {
+   "method": "GET",
+   "path": "/api/jf/Users/{}/Items/{}",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-extra/users-item-redirect"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::user_items_redirect_pair"
+   ],
+   "rationale": "Captured 307 to /Items/{dashed-guid}; invalid item ids take the captured non-ProblemDetails 400 shape."
+  },
+  {
+   "method": "DELETE",
+   "path": "/api/jf/Users/{}/PlayedItems/{}",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-userstate/unplayed-album"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::favorites_and_played_round_trip"
+   ],
+   "rationale": "Mark-unplayed resets the durable play counter and clears last-played (captured)."
+  },
+  {
+   "method": "POST",
+   "path": "/api/jf/Users/{}/PlayedItems/{}",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-userstate/played-album"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::favorites_and_played_round_trip"
+   ],
+   "rationale": "Mark-played increments the durable counter and echoes it; artists are not playable (captured 404)."
+  },
+  {
+   "method": "GET",
+   "path": "/api/jf/Users/{}/Views",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
+   "requirements": [
+    "PRD-API-JF-004"
+   ],
+   "legacyEvidence": [
+    "jf-browse/user-views-by-id"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/jellyfin_media_api.rs::filters_genres_and_user_views"
+   ],
+   "rationale": "Captured alias of /UserViews."
+  }
+ ]
 }

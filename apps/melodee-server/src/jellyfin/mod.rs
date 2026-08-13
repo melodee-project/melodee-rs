@@ -14,8 +14,9 @@
 //! ETags use the exact legacy MD5 preimages from the frozen baseline so cache
 //! identifiers are byte-identical at fixed data.
 //!
-//! Routing and auth placement are governed by ADR-0131 and
-//! `docs/development/jellyfin-routing-inventory.md`: routes are mounted in both
+//! Routing and auth placement are governed by ADR-0131 and the frozen route
+//! inventory (`compatibility/jellyfin/contracts/route-inventory.json`): routes
+//! are mounted in both
 //! root form (`/System/Info`, `/Items/...`) and canonical form (`/api/jf/...`),
 //! matching the frozen middleware that rewrote detected Jellyfin requests to
 //! `/api/jf{path}`; the routing boundary itself is captured-contract, not

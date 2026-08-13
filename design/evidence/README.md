@@ -19,3 +19,5 @@ configuration, hardware/environment, exact command, result, limitations, and rel
 - [Phase 7](phase-7/PHASE-7-REPORT.md) — Final, independently reviewed and accepted;
   [compatibility acceptance map](phase-7/COMPATIBILITY-ACCEPTANCE-MAP.md),
   [real-client acceptance](phase-7/REAL-CLIENT-ACCEPTANCE.md)
+- [Phase 8](phase-8/PHASE-8-REPORT.md) — In progress: both adapter route matrices implemented and
+  differentially evidenced; real-client differential runs remain

@@ -25,7 +25,7 @@ use axum::{
     extract::{Path, State},
     http::{HeaderMap, HeaderValue, StatusCode, Uri, header},
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::get,
 };
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -44,7 +44,8 @@ pub fn router() -> Router<JfState> {
         // axum 0.8 cannot express the legacy `{itemId}/stream.{extension}`
         // mixed segment, so the resource segment is dispatched manually.
         .route("/Audio/{id}/{resource}", get(audio_resource).head(audio_resource))
-        .route("/Items/{id}/PlaybackInfo", post(playback_info))
+        // Captured: PlaybackInfo answers GET and POST identically.
+        .route("/Items/{id}/PlaybackInfo", get(playback_info).post(playback_info))
         // Legacy registers GET only for Download/File (no HEAD).
         .route(
             "/Items/{id}/Download",

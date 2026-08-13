@@ -273,7 +273,7 @@ fn assert_json_contract_shape(actual: &serde_json::Value, golden: &serde_json::V
 
 #[tokio::test]
 async fn artists_list_matches_frozen_shape_and_etags() {
-    let (_db, fixture, ids) = seeded_fixture("jf_media_artists").await;
+    let (_db, fixture, _ids) = seeded_fixture("jf_media_artists").await;
     let (status, headers, bytes) = respond(&fixture.state, get("/Artists", &fixture.token)).await;
     assert_eq!(status, StatusCode::OK);
     assert!(headers.contains_key(header::ETAG));
@@ -538,6 +538,18 @@ async fn filters_genres_and_user_views() {
     assert_eq!(json["Items"][0]["Name"], "Music");
     assert_eq!(json["Items"][0]["CollectionType"], "music");
     assert_eq!(json["Items"][0]["Type"], "UserView");
+
+    // /Users/{id}/Views serves the same envelope (captured alias).
+    let (status, _, bytes) = respond(
+        &fixture.state,
+        get(
+            &format!("/Users/{}/Views", nf(fixture.user_public_id)),
+            &fixture.token,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json_body(&bytes)["Items"][0]["Name"], "Music");
 
     // Configured libraries replace the synthetic view.
     let mut state = base_state(&db);
@@ -948,6 +960,58 @@ async fn playlist_full_lifecycle_and_d4_clean_add() {
     let (status, _, _) = respond(&fixture.state, request).await;
     assert_eq!(status, StatusCode::NOT_MODIFIED);
 
+    // Update: rename + visibility flip; blank names are ignored (captured).
+    let (status, _, _) = respond(
+        &fixture.state,
+        post_json(
+            &format!("/Playlists/{playlist_id}"),
+            &fixture.token,
+            r#"{"Name":"Mix One Renamed","IsPublic":true}"#,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (status, _, bytes) = respond(
+        &fixture.state,
+        get(&format!("/Playlists/{playlist_id}"), &fixture.token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json_body(&bytes)["Name"], "Mix One Renamed");
+    let (status, _, _bytes) = respond(
+        &fixture.state,
+        post_json(
+            &format!("/Playlists/{playlist_id}"),
+            &fixture.token,
+            r#"{"Name":"   "}"#,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (_, _, bytes) = respond(
+        &fixture.state,
+        get(&format!("/Playlists/{playlist_id}"), &fixture.token),
+    )
+    .await;
+    assert_eq!(json_body(&bytes)["Name"], "Mix One Renamed");
+
+    // Unknown playlist update/delete -> the captured 404 detail.
+    let unknown = nf(Uuid::now_v7());
+    let (status, _, bytes) = respond(
+        &fixture.state,
+        post_json(
+            &format!("/Playlists/{unknown}"),
+            &fixture.token,
+            r#"{"Name":"Nope"}"#,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(
+        json_body(&bytes)["detail"],
+        "Playlist not found or access denied."
+    );
+
     // Items: 1-based ParentIndexNumber; UserData hydrated only with
     // enableUserData=true (captured).
     let (status, _, bytes) = respond(
@@ -1074,6 +1138,42 @@ async fn playlist_full_lifecycle_and_d4_clean_add() {
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(json_body(&bytes)["detail"], "Playlist name is required.");
+
+    // DELETE /Playlists/{id} (the playlist-surface delete route).
+    let (status, _, bytes) = respond(
+        &fixture.state,
+        post_json("/Playlists", &fixture.token, r#"{"Name":"Delete Me"}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let delete_id = json_body(&bytes)["Id"].as_str().expect("id").to_string();
+    let (status, _, _) = respond(
+        &fixture.state,
+        delete(&format!("/Playlists/{delete_id}"), &fixture.token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (status, _, bytes) = respond(
+        &fixture.state,
+        get(&format!("/Playlists/{delete_id}"), &fixture.token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(json_body(&bytes)["detail"], "Playlist not found.");
+    // Deleting an unknown playlist -> captured 404 detail.
+    let (status, _, bytes) = respond(
+        &fixture.state,
+        delete(
+            &format!("/Playlists/{}", nf(Uuid::now_v7())),
+            &fixture.token,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(
+        json_body(&bytes)["detail"],
+        "Playlist not found or access denied."
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -1248,7 +1348,8 @@ struct AudioFixture {
     _temp: TempDir,
     fixture: Fixture,
     ids: CatalogIds,
-    db: common::TestDb,
+    // Keeps the test database alive for the fixture's lifetime.
+    _db: common::TestDb,
 }
 
 async fn audio_fixture(name: &str) -> AudioFixture {
@@ -1277,7 +1378,7 @@ async fn audio_fixture(name: &str) -> AudioFixture {
         _temp: temp,
         fixture,
         ids,
-        db,
+        _db: db,
     }
 }
 
@@ -1476,6 +1577,18 @@ async fn audio_lyrics_download_and_playback_info() {
     assert_eq!(source["SupportsDirectStream"], true);
     assert_eq!(source["SupportsTranscoding"], false);
     assert_eq!(source["Size"], 4096);
+
+    // Captured: PlaybackInfo also answers GET identically.
+    let (status, _, bytes) = respond(
+        &audio.fixture.state,
+        get(
+            &format!("/Items/{track}/PlaybackInfo"),
+            &audio.fixture.token,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json_body(&bytes)["MediaSources"][0]["Id"], track);
 
     // Unknown song PlaybackInfo -> captured 404.
     let (status, _, bytes) = respond(

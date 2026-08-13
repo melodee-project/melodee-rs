@@ -300,3 +300,139 @@ async fn users_public_returns_empty_public_user_list() {
     let users = json.as_array().expect("array");
     assert!(users.is_empty());
 }
+
+#[tokio::test]
+async fn canonical_root_probe_returns_empty_200() {
+    let db = common::TestDb::create("jf_root_probe").await;
+    let state = state(&db).await;
+    for path in ["/api/jf", "/api/jf/"] {
+        let request = Request::builder()
+            .method("GET")
+            .uri(path)
+            .body(Body::empty())
+            .expect("request");
+        let (status, bytes) = respond(state.clone(), request).await;
+        assert_eq!(status, StatusCode::OK, "{path}");
+        assert!(bytes.is_empty(), "{path}");
+    }
+}
+
+#[tokio::test]
+async fn system_ping_post_is_204() {
+    let db = common::TestDb::create("jf_ping_post").await;
+    let state = state(&db).await;
+    let request = Request::builder()
+        .method("POST")
+        .uri("/System/Ping")
+        .body(Body::empty())
+        .expect("request");
+    let (status, _) = respond(state, request).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+}
+
+#[tokio::test]
+async fn authenticate_by_name_unknown_user_returns_401() {
+    let db = common::TestDb::create("jf_auth_unknown_user").await;
+    let state = state(&db).await;
+    let body = r#"{"Username":"nobody","Pw":"whatever"}"#;
+    let (status, bytes) = respond(state, post_json("/Users/AuthenticateByName", body)).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(json_body(&bytes)["detail"], "Invalid username or password.");
+}
+
+#[tokio::test]
+async fn users_list_and_by_id_scoping() {
+    let db = common::TestDb::create("jf_users_scoping").await;
+    let state = state(&db).await;
+    let body = r#"{"Username":"phase0-fixture","Pw":"Mel0deeR0cks!"}"#;
+    let (_, bytes) = respond(state.clone(), post_json("/Users/AuthenticateByName", body)).await;
+    let token = json_body(&bytes)["AccessToken"]
+        .as_str()
+        .expect("token")
+        .to_string();
+    let self_id = "f78448cc82ec5864877c6c6163b00065";
+
+    // Admin list contains the fixture user.
+    let (status, bytes) = respond(state.clone(), get_with_token("/Users", &token)).await;
+    assert_eq!(status, StatusCode::OK);
+    let users = json_body(&bytes);
+    let users = users.as_array().expect("users array");
+    assert_eq!(users.len(), 1);
+    assert_eq!(users[0]["Id"], self_id);
+    assert!(
+        users[0]["Policy"]["IsAdministrator"]
+            .as_bool()
+            .expect("bool")
+    );
+
+    // By-id: self fetch works.
+    let (status, bytes) = respond(
+        state.clone(),
+        get_with_token(&format!("/Users/{self_id}"), &token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json_body(&bytes)["Name"], "phase0-fixture");
+
+    // Unknown user -> captured 404.
+    let (status, bytes) = respond(
+        state.clone(),
+        get_with_token(&format!("/Users/{}", Uuid::now_v7().simple()), &token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(json_body(&bytes)["detail"], "User not found.");
+
+    // Invalid id -> captured 400.
+    let (status, bytes) = respond(state.clone(), get_with_token("/Users/junk", &token)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(json_body(&bytes)["detail"], "Invalid user ID format.");
+
+    // A non-admin cannot fetch other users (captured 403) and lists only self.
+    let now = OffsetDateTime::now_utc();
+    AuthStore::new()
+        .import_user(
+            &db.pool,
+            &NativeUserImport {
+                id: Uuid::now_v7(),
+                public_api_id: Uuid::now_v7(),
+                username: "jf-plain",
+                normalized_username: "JF-PLAIN",
+                email: "jf-plain@example.test",
+                normalized_email: "JF-PLAIN@EXAMPLE.TEST",
+                password_hash: &bcrypt::hash(FIXTURE_PASSWORD, 4).expect("hash"),
+                password_hash_algorithm: PasswordHashAlgorithm::Bcrypt,
+                stream_signing_key: "test-stream-signing-key",
+                is_admin: false,
+                is_editor: false,
+                enabled: true,
+                locked: false,
+                blacklisted: false,
+                preferred_language: None,
+                preferred_theme: None,
+                auth_revision: 1,
+                roles: &["HasStreamRole".to_string()],
+                created_at: now,
+                updated_at: now,
+            },
+        )
+        .await
+        .expect("import plain user");
+    let body = r#"{"Username":"jf-plain","Pw":"Mel0deeR0cks!"}"#;
+    let (_, bytes) = respond(state.clone(), post_json("/Users/AuthenticateByName", body)).await;
+    let plain_token = json_body(&bytes)["AccessToken"]
+        .as_str()
+        .expect("token")
+        .to_string();
+    let (status, bytes) = respond(
+        state.clone(),
+        get_with_token(&format!("/Users/{self_id}"), &plain_token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(json_body(&bytes)["detail"], "Cannot access other users.");
+    let (status, bytes) = respond(state.clone(), get_with_token("/Users", &plain_token)).await;
+    assert_eq!(status, StatusCode::OK);
+    let users = json_body(&bytes);
+    assert_eq!(users.as_array().expect("array").len(), 1);
+}
