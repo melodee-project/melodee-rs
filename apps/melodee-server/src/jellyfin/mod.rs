@@ -177,6 +177,148 @@ pub async fn routing_middleware(request: Request, next: Next) -> Response {
     next.run(request).await
 }
 
+/// Static Jellyfin route segments in canonical (PascalCase) form. The legacy
+/// ASP.NET router matched templates case-insensitively while preserving the
+/// captured parameter values — real clients (Feishin) call lowercase paths
+/// like `/users/authenticatebyname`, which a case-sensitive router 404s.
+const CANONICAL_SEGMENTS: &[&str] = &[
+    "AlbumArtists",
+    "Artists",
+    "Audio",
+    "AuthenticateByName",
+    "Capabilities",
+    "Download",
+    "FavoriteItems",
+    "File",
+    "Filters",
+    "Full",
+    "Genres",
+    "Images",
+    "Info",
+    "InstantMix",
+    "Items",
+    "Login",
+    "Logout",
+    "Me",
+    "Move",
+    "MusicGenres",
+    "Ping",
+    "PlayedItems",
+    "PlaybackInfo",
+    "Playing",
+    "Playlists",
+    "Progress",
+    "Public",
+    "Refresh",
+    "Sessions",
+    "Similar",
+    "Songs",
+    "Stopped",
+    "System",
+    "UserViews",
+    "Users",
+    "Views",
+];
+
+/// Case-insensitively canonicalizes the static segments of a Jellyfin path,
+/// leaving dynamic values (ids, image types, resource names) untouched.
+/// Segments that match no template segment pass through unchanged. Returns
+/// `None` when the path is already canonical.
+fn canonicalized_uri(uri: &axum::http::Uri) -> Option<axum::http::Uri> {
+    let path = uri.path();
+    let canonical: Vec<&str> = path
+        .split('/')
+        .map(|segment| {
+            CANONICAL_SEGMENTS
+                .iter()
+                .copied()
+                .find(|canonical| segment.eq_ignore_ascii_case(canonical))
+                .unwrap_or(segment)
+        })
+        .collect();
+    let canonical_path = canonical.join("/");
+    if canonical_path == path {
+        return None;
+    }
+    let query = uri.query().map(|q| format!("?{q}")).unwrap_or_default();
+    format!("{canonical_path}{query}").parse().ok()
+}
+
+/// Case-insensitive route matching fallback (real-client compatibility).
+///
+/// The legacy ASP.NET router matched templates case-insensitively while
+/// preserving captured parameter values; real Jellyfin clients (Feishin) call
+/// lowercase paths like `/users/authenticatebyname`. axum route layers never
+/// run for unmatched paths, so this fallback — installed on the outer router
+/// in `main.rs` — canonicalizes the static segments of paths under the
+/// Jellyfin-owned roots and re-dispatches into the app. Paths that do not
+/// canonicalize keep the captured behavior (404, empty body).
+///
+/// The JF-owned roots below never collide with native-v1 (`/api/v1/...`),
+/// OpenSubsonic (`/rest/...`, `/song/...`), or admin (`/api/admin/...`)
+/// prefixes, which stay case-sensitive as captured.
+const JF_CASE_ROOTS: &[&str] = &[
+    "/system/",
+    "/users/",
+    "/userviews",
+    "/items/",
+    "/audio/",
+    "/artists",
+    "/genres",
+    "/musicgenres",
+    "/playlists",
+    "/sessions",
+    "/songs/",
+    "/images/",
+    "/api/jf",
+];
+
+/// Builds the fallback service: canonicalize-and-replay for Jellyfin-cased
+/// paths, captured empty 404 otherwise.
+pub fn case_rewriting_fallback(
+    app: Router,
+) -> impl tower::Service<
+    Request,
+    Response = Response,
+    Error = std::convert::Infallible,
+    Future = impl std::future::Future<Output = Result<Response, std::convert::Infallible>>,
+> + Clone
++ Send
++ 'static {
+    tower::service_fn(move |request: Request| {
+        let app = app.clone();
+        async move {
+            let path_is_root = request.uri().path() == "/";
+            let is_jf = {
+                let path = request.uri().path();
+                let lower = path.to_ascii_lowercase();
+                JF_CASE_ROOTS
+                    .iter()
+                    .any(|root| lower == *root || lower.starts_with(root))
+            };
+            if is_jf && let Some(uri) = canonicalized_uri(request.uri()) {
+                let mut request = request;
+                *request.uri_mut() = uri;
+                let response = tower::ServiceExt::oneshot(app, request)
+                    .await
+                    .unwrap_or_else(|never| match never {});
+                return Ok(response);
+            }
+            // The bare root replays unchanged so the Jellyfin routing
+            // middleware (which wrapped the previous default fallback) still
+            // decides the captured marker probe: marker → 200 empty, no
+            // marker → fall through to the non-Jellyfin surface.
+            if path_is_root {
+                let response = tower::ServiceExt::oneshot(app, request)
+                    .await
+                    .unwrap_or_else(|never| match never {});
+                return Ok(response);
+            }
+            Ok(StatusCode::NOT_FOUND.into_response())
+        }
+    })
+}
+
 /// Builds the Jellyfin router: all routes mounted in root form and canonical
 /// `/api/jf` form, plus the canonical root probe (`/api/jf`, `/api/jf/`).
 pub fn configured_router(state: JfState) -> Router {

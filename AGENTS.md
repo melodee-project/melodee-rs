@@ -52,23 +52,22 @@ template.
 
 Do not silently resolve a material conflict; record it in the PR and propose an ADR when needed.
 
-## Current phase boundary: Phase 8 — OpenSubsonic and Jellyfin adapters
+## Current phase boundary: Phase 8 complete — awaiting next phase assignment
 
-Phases 0–7 are complete. Phase 7's independently accepted native-v1 implementation and evidence are
-in `design/evidence/phase-7/PHASE-7-REPORT.md`. Phase 8 is active under the frozen OpenSubsonic and
-Jellyfin captures, SPEC/PRD requirements, and accepted ADRs. Both adapter route matrices are
-implemented and differentially evidenced (81/81 OpenSubsonic endpoints, 60/60 Jellyfin routes per
-`design/agents/PHASE-8-*-ROUTE-MATRIX.json`), and the full-golden differential replay
-(`scripts/run_phase8_differential.py`) reports zero unexpected differences across both surfaces;
-phase status and the remaining real-client smoke gate are tracked in
-`design/evidence/phase-8/PHASE-8-REPORT.md`.
+Phases 0–8 are complete. Phase 8's evidence is in
+`design/evidence/phase-8/PHASE-8-REPORT.md`: both adapter route matrices are implemented and
+differentially evidenced (81/81 OpenSubsonic endpoints, 60/60 Jellyfin routes per
+`design/agents/PHASE-8-*-ROUTE-MATRIX.json`), the full-golden differential replay
+(`scripts/run_phase8_differential.py`) reports zero unexpected differences across both surfaces,
+and the real-client smoke gate passed: the shipping Feishin v1.15.1 client completes the
+documented workflows on both surfaces (12/12 assertions,
+`design/evidence/phase-8/REAL-CLIENT-ACCEPTANCE.md`). Real-client compatibility fixes landed
+under ADR-0132 (case-insensitive Jellyfin routing, `ApiKey` alias, redirect query-key casing).
+Phase 7's accepted native-v1 evidence is in
+`design/evidence/phase-7/PHASE-7-REPORT.md`.
 
-Allowed when explicitly assigned: Phase 8 work-package/ADR preparation; OpenSubsonic authentication,
-JSON/XML/JSONP envelopes, documented endpoint groups, extensions, intentional Gone/Not Implemented
-behavior, and streaming; music-focused Jellyfin discovery, authentication, tokens, item views,
-Artists, genres, playlists, sessions, images, and audio; representative real-client differential and
-integration tests; migrations backed by accepted schema ADRs; tests/evidence/traceability, CI, and
-documentation.
+Allowed when explicitly assigned: nothing beyond maintenance of completed phases until the next
+phase (9, 10, or 11) is assigned.
 
 Forbidden: Phase 9 remaining parity-domain expansion; Phase 10 admin UI implementation; Phase 11
 migration/import completion; merging native-v1, OpenSubsonic, or Jellyfin wire DTOs; redesigning

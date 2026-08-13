@@ -37,7 +37,9 @@ Non-music Jellyfin behavior is intentionally out of scope.
 - Non-music libraries and features (video, TV, books, Live TV, plugins) are not present.
 
 :::note[Verification status]
-The wire contract is covered by frozen compatibility captures and integration tests. Structured
-real-client smoke results (Finamp, Feishin, Streamyfin) are being collected; check
-`design/evidence/phase-8/` in the repository for the latest acceptance evidence.
+The wire contract is covered by frozen compatibility captures and integration tests, and the
+shipping Feishin client completes the documented smoke workflows (sign-in, browse, playback,
+search, favorites) against the Jellyfin surface. Acceptance evidence:
+`design/evidence/phase-8/REAL-CLIENT-ACCEPTANCE.md` in the repository. Finamp and Streamyfin
+mobile smoke runs are planned hardening on top of the same exercised contract.
 :::

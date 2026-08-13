@@ -374,10 +374,16 @@ pub(crate) fn extract_token(headers: &HeaderMap, uri: &Uri) -> Option<String> {
             return Some(value.to_string());
         }
     }
-    // api_key query param
+    // api_key query param. Real Jellyfin's AuthorizationContext reads
+    // `ApiKey` (case-insensitive) as the primary query token with `api_key`
+    // as a legacy fallback; the legacy Melodee server read only `api_key`,
+    // which broke real clients that build media URLs with `apiKey` (Feishin's
+    // /Download stream URLs). Accepting both is additive: no captured golden
+    // behavior changes (Phase 8 real-client smoke finding).
     if let Some(query) = uri.query() {
         for pair in query.split('&') {
-            if let Some(value) = pair.strip_prefix("api_key=") {
+            let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
+            if key.eq_ignore_ascii_case("api_key") || key.eq_ignore_ascii_case("apiKey") {
                 return Some(value.to_string());
             }
         }

@@ -445,3 +445,133 @@ async fn users_list_and_by_id_scoping() {
     let users = json_body(&bytes);
     assert_eq!(users.as_array().expect("array").len(), 1);
 }
+
+/// Wraps the adapter router with the outer case-rewriting fallback exactly
+/// the way `main.rs` does, so case-insensitive routing is testable without
+/// booting the full server.
+async fn respond_with_case_fallback(
+    state: JfState,
+    request: Request<Body>,
+) -> (StatusCode, Vec<u8>) {
+    let app = melodee_server::jellyfin::configured_router(state);
+    let replay = app.clone();
+    let response = app
+        .fallback_service(melodee_server::jellyfin::case_rewriting_fallback(replay))
+        .oneshot(request)
+        .await
+        .expect("response");
+    let status = response.status();
+    let bytes = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body")
+        .to_bytes()
+        .to_vec();
+    (status, bytes)
+}
+
+#[tokio::test]
+async fn lowercase_jellyfin_routes_match_case_insensitively() {
+    let db = common::TestDb::create("jf_case_routing").await;
+    let state = state(&db).await;
+    // Legacy ASP.NET matched route templates case-insensitively; real clients
+    // (Feishin) call lowercase paths (Phase 8 real-client smoke finding).
+    let (status, _) =
+        respond_with_case_fallback(state.clone(), get_with_token("/system/info/public", "")).await;
+    assert_eq!(status, StatusCode::OK);
+    let body = r#"{"Username":"phase0-fixture","Pw":"Mel0deeR0cks!"}"#;
+    let (status, bytes) =
+        respond_with_case_fallback(state.clone(), post_json("/users/authenticatebyname", body))
+            .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(json_body(&bytes)["AccessToken"].as_str().is_some());
+    // Dynamic segment values keep their original casing/value.
+    let token = json_body(&bytes)["AccessToken"]
+        .as_str()
+        .expect("token")
+        .to_string();
+    let (status, bytes) = respond_with_case_fallback(
+        state.clone(),
+        get_with_token("/users/f78448cc82ec5864877c6c6163b00065", &token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json_body(&bytes)["Name"], "phase0-fixture");
+    // Non-Jellyfin paths keep the captured empty 404.
+    let (status, bytes) =
+        respond_with_case_fallback(state, get_with_token("/nonsense/path", "")).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert!(bytes.is_empty());
+}
+
+#[tokio::test]
+async fn users_items_redirect_matches_query_keys_case_insensitively() {
+    let db = common::TestDb::create("jf_redirect_case").await;
+    let state = state(&db).await;
+    let body = r#"{"Username":"phase0-fixture","Pw":"Mel0deeR0cks!"}"#;
+    let (_, bytes) = respond(state.clone(), post_json("/Users/AuthenticateByName", body)).await;
+    let token = json_body(&bytes)["AccessToken"]
+        .as_str()
+        .expect("token")
+        .to_string();
+    // Real clients (Finamp, Feishin) send PascalCase query keys; legacy
+    // `[FromQuery]` binding matched them case-insensitively and preserved
+    // them in the redirect reconstruction.
+    let (status, headers) = {
+        let request = Request::builder()
+            .method("GET")
+            .uri("/Users/f78448cc82ec5864877c6c6163b00065/Items?IncludeItemTypes=MusicAlbum&Recursive=true&SortBy=SortName")
+            .header("X-Emby-Token", token.as_str())
+            .body(Body::empty())
+            .expect("request");
+        let response = melodee_server::jellyfin::configured_router(state)
+            .oneshot(request)
+            .await
+            .expect("response");
+        (
+            response.status(),
+            response
+                .headers()
+                .get(header::LOCATION)
+                .and_then(|v| v.to_str().ok())
+                .map(str::to_string),
+        )
+    };
+    assert_eq!(status, StatusCode::TEMPORARY_REDIRECT);
+    assert_eq!(
+        headers.as_deref(),
+        Some(
+            "/Items?includeItemTypes=MusicAlbum&recursive=True&sortBy=SortName&userId=f78448cc82ec5864877c6c6163b00065"
+        )
+    );
+}
+
+#[tokio::test]
+async fn apikey_query_param_authenticates_alongside_api_key() {
+    let db = common::TestDb::create("jf_apikey_query").await;
+    let state = state(&db).await;
+    let body = r#"{"Username":"phase0-fixture","Pw":"Mel0deeR0cks!"}"#;
+    let (_, bytes) = respond(state.clone(), post_json("/Users/AuthenticateByName", body)).await;
+    let token = json_body(&bytes)["AccessToken"]
+        .as_str()
+        .expect("token")
+        .to_string();
+    // Real Jellyfin reads `ApiKey` as the primary query token; real clients
+    // build media URLs with it (Feishin /Download stream URLs). /Users is a
+    // captured token-gated route.
+    let bare_get = |path: &str| {
+        Request::builder()
+            .method("GET")
+            .uri(path)
+            .body(Body::empty())
+            .expect("request")
+    };
+    for key in ["apiKey", "ApiKey", "api_key"] {
+        let (status, _) = respond(state.clone(), bare_get(&format!("/Users?{key}={token}"))).await;
+        assert_eq!(status, StatusCode::OK, "query key {key}");
+    }
+    // Garbage tokens still reject through the same params.
+    let (status, _) = respond(state, bare_get("/Users?apiKey=deadbeef")).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+}

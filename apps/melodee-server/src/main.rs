@@ -438,6 +438,14 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .layer(axum::middleware::from_fn(jellyfin::routing_middleware))
         .layer(TraceLayer::new_for_http().make_span_with(melodee_server::make_http_span));
 
+    // Case-insensitive Jellyfin route matching (legacy ASP.NET matched route
+    // templates case-insensitively; real clients like Feishin call lowercase
+    // paths). Route-local layers never see unmatched paths, so the outer
+    // fallback canonicalizes Jellyfin-owned roots and replays; everything
+    // else keeps the captured empty-404 behavior.
+    let replay_app = app.clone();
+    let app = app.fallback_service(jellyfin::case_rewriting_fallback(replay_app));
+
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
     let listener = tokio::net::TcpListener::bind(address).await?;
     let server_handle = tokio::spawn(async move {

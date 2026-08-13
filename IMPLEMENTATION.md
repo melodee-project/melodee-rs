@@ -16,7 +16,8 @@
 [design/evidence/phase-6/PHASE-6-REPORT.md](design/evidence/phase-6/PHASE-6-REPORT.md);
 **Phase 7 complete (2026-08-12)**, see
 [design/evidence/phase-7/PHASE-7-REPORT.md](design/evidence/phase-7/PHASE-7-REPORT.md);
-**Phase 8 active**.
+**Phase 8 complete (2026-08-13)**, see
+[design/evidence/phase-8/PHASE-8-REPORT.md](design/evidence/phase-8/PHASE-8-REPORT.md).
 **Date:** 2026-08-07  
 **Governing documents:** [PRD.md](PRD.md), [SPEC.md](SPEC.md), accepted ADRs
 
@@ -362,7 +363,12 @@ Make existing native clients operate against Rust without a synchronized client 
 
 ## 11. Phase 8 — OpenSubsonic and Jellyfin adapters
 
-**Status:** Active.
+**Status:** Complete (2026-08-13) — exit criteria met: OpenSubsonic matrix reproduced and
+tested (81/81 endpoints, differential replay at zero unexpected differences); a supported
+Jellyfin client (Feishin v1.15.1) completes the documented smoke workflows on both surfaces
+(`design/evidence/phase-8/REAL-CLIENT-ACCEPTANCE.md`); unsupported non-music behavior remains
+intentionally absent per the frozen captures. Report:
+[design/evidence/phase-8/PHASE-8-REPORT.md](design/evidence/phase-8/PHASE-8-REPORT.md).
 
 ### Objective
 

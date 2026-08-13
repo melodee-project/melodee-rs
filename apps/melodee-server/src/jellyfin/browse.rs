@@ -1452,7 +1452,10 @@ async fn get_user_views(State(state): State<JfState>, headers: HeaderMap, uri: U
 
 /// GET /Users/{id}/Items → 307 RedirectPreserveMethod to /Items with the
 /// captured query reconstruction (whitelisted params in fixed order, booleans
-/// re-serialized as `True`/`False`, `userId` appended).
+/// re-serialized as `True`/`False`, `userId` appended). Key matching is
+/// case-insensitive — legacy `[FromQuery]` binding matched case-insensitively
+/// and real clients (Finamp, Feishin) send PascalCase keys like
+/// `IncludeItemTypes`.
 async fn get_user_items_redirect(
     State(state): State<JfState>,
     Path(user_id): Path<String>,
@@ -1471,12 +1474,18 @@ async fn get_user_items_redirect(
         "artistIds",
         "albumIds",
     ] {
-        if let Some((_, value)) = query.iter().find(|(candidate, _)| candidate == key) {
+        if let Some((_, value)) = query
+            .iter()
+            .find(|(candidate, _)| candidate.eq_ignore_ascii_case(key))
+        {
             parts.push(format!("{key}={}", escape_data_string(value)));
         }
     }
     for key in ["recursive", "enableUserData"] {
-        if let Some((_, value)) = query.iter().find(|(candidate, _)| candidate == key) {
+        if let Some((_, value)) = query
+            .iter()
+            .find(|(candidate, _)| candidate.eq_ignore_ascii_case(key))
+        {
             let rendered = if value.eq_ignore_ascii_case("true") {
                 "True"
             } else {
@@ -1495,7 +1504,10 @@ async fn get_user_items_redirect(
         "startIndex",
         "limit",
     ] {
-        if let Some((_, value)) = query.iter().find(|(candidate, _)| candidate == key) {
+        if let Some((_, value)) = query
+            .iter()
+            .find(|(candidate, _)| candidate.eq_ignore_ascii_case(key))
+        {
             parts.push(format!("{key}={}", escape_data_string(value)));
         }
     }

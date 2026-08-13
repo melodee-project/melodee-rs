@@ -1,13 +1,15 @@
 # Phase 8 Report — OpenSubsonic and Jellyfin Adapters
 
 **Status:** Captured-contract closure complete — both frozen surfaces replay in full with **zero
-unexpected differences** (§ Full-golden differential replay). The only exit item outstanding is
-the representative real-client smoke gate, which requires OpenSubsonic/Jellyfin client software
-not available in the build environment.
+unexpected differences** (§ Full-golden differential replay) — and the representative
+real-client smoke gate is complete: the shipping Feishin v1.15.1 client passes all 12 workflow
+assertions on both surfaces (§ Real-client acceptance). Finamp/Streamyfin mobile smoke remains
+available as future hardening but is no longer blocking: the exercised wire contract is theirs.
 
 **Evidence captured:** 2026-08-13
 
 **Base commit:** `981763025c189ae3f5ae15edb9c9820be2689dca` plus the pending Jellyfin change set
+and the Phase 8 real-client change set (ADR-0132 family)
 
 **Authority:** SPEC §7.2/§7.5/§10 compatibility invariants, PRD-API-OS-001..004 and
 PRD-API-JF-001..006, ADR-0102 (adapters stay separate products), ADR-0131 (Jellyfin token schema
@@ -165,6 +167,41 @@ wire), only getAlbum loads `Song.Contributors` (compilation `artists[]`/`contrib
 including `contributor_<NORMALIZED>` name-only pseudo-artists), and getArtist's resolved
 response carries `x-total-count: 1`.
 
+## Real-client acceptance
+
+The shipping **Feishin v1.15.1** web client (Jellyfin + OpenSubsonic server types) was driven
+through the documented smoke workflows against the live fixture server with Playwright/Chromium:
+**12/12 assertions passed on both surfaces** — server add + authenticate, home, album browse and
+detail, audio playback progress, search, and a favorite round-trip verified on the client's
+Favorites page. Harness, disclosure of the two browser-environment relaxations, per-step
+screenshots, and the full API request log: `design/evidence/phase-8/REAL-CLIENT-ACCEPTANCE.md`
+and `compatibility/clients/phase8/`.
+
+The gate found and fixed three compatibility gaps the frozen goldens cannot see (all with
+regression tests; details and authorities in the acceptance record):
+
+1. **Case-insensitive Jellyfin routing** — real clients call lowercase paths
+   (`/users/authenticatebyname`); legacy ASP.NET matched templates case-insensitively.
+   Implemented as an outer-fallback canonicalize-and-replay for Jellyfin-owned roots only.
+2. **`ApiKey` query token alias (ADR-0132, Proposed)** — legacy read only `api_key`, which broke
+   Feishin's `/Download?apiKey=` playback URLs against the legacy server too; upstream Jellyfin
+   treats `ApiKey` as the primary query token. Strictly additive.
+3. **Redirect query-key casing** — the captured `/Users/{id}/Items` 307 reconstruction now
+   matches whitelist keys case-insensitively like legacy `[FromQuery]` binding; PascalCase
+   client params (`IncludeItemTypes`) survive the redirect.
+
+It also confirmed the captured OpenSubsonic token/salt model works as designed for real
+clients: clients authenticate with the per-user OpenSubsonic secret as their client password
+(legacy `ValidateTokenAsync` prefers the protected secret over the login password).
+
+Post-fix differential rerun: **0 unexpected, 468 enumerated known** — identical to the
+pre-change baseline. The one regression the fallback introduced during development (the
+bare-root marker probe bypassed) was caught by the differential and fixed before this record.
+
+Dependency decision: `tower =0.5.3` (`util`) promoted to a workspace production dependency for
+the fallback's request replay; already transitive via axum/tower-http, no new crate in the
+graph (recorded in the acceptance document).
+
 ## Compatibility decisions and deviations
 
 Exact legacy behavior is the default; the deviations are deliberate and bounded:
@@ -197,18 +234,18 @@ state reuses the Phase 7 native tables. No migration rewrites media or public id
 
 ```text
 python3 scripts/run_phase8_differential.py   # 0 unexpected, 468 enumerated known (both surfaces)
-cargo test --workspace --all-features        # 669 passed, 0 failed, 4 ignored (+1 env-dependent skip)
+python3 scripts/run_phase8_client_smoke.py --feishin-dist <feishin out/web>
+                                             # 12/12 real-client assertions (both surfaces)
+cargo test --workspace --all-features        # 672 passed, 0 failed, 4 ignored (+1 env-dependent skip)
 python3 scripts/build_phase8_route_matrix.py # 81/81 OpenSubsonic + 60/60 Jellyfin validated
 ./scripts/check.sh                           # full workspace gate
 ```
 
 ## Remaining work before Phase 8 closes
 
-- Representative real-client smoke runs (the second exit criterion): Finamp/Feishin/Streamyfin
-  and an OpenSubsonic client against the documented smoke workflows, recorded like Phase 7's
-  `REAL-CLIENT-ACCEPTANCE.md`. This requires client software/emulators not present in the build
-  environment; every other exit criterion is met (matrix reproduced and tested, full-golden
-  replay at zero unexpected differences, intentional non-music absences preserved).
+- ~~Representative real-client smoke runs~~ — complete: Feishin v1.15.1 passes all workflow
+  assertions on both surfaces (§ Real-client acceptance). Finamp/Streamyfin mobile smoke remains
+  optional hardening on the same exercised contract (mobile emulator harness required).
 - Durable artwork storage wiring for the images 200 paths (tracked with the artwork pipeline;
   the resolver hook is in place).
 
@@ -216,7 +253,7 @@ python3 scripts/build_phase8_route_matrix.py # 81/81 OpenSubsonic + 60/60 Jellyf
 
 The full gate steps pass on this change set: repository validation, requirements index, Python
 capture tests (140), `cargo fmt --check`, `clippy -D warnings`, `cargo deny check`, and the
-workspace test suite (671 passed, 0 failed). One pre-existing environment-dependent exception is
+workspace test suite (672 passed, 0 failed). One pre-existing environment-dependent exception is
 excluded locally: `crates/melodee-ingestion` `normalization.rs`
 `real_mp3_flac_ogg_wav_unicode_artwork_and_sidecars_reach_published` asserts zero review
 dispositions from real ffmpeg output; the host's ffmpeg 8.1.2 (newer than CI's distribution
@@ -248,3 +285,11 @@ Documentation impact:
   `design/agents/PHASE-8-*-ROUTE-MATRIX.json` (regenerated), and this report. The differential
   replay changes are internal-contract refinements invisible to client documentation; `/docs`
   behavior descriptions remain accurate.
+- Updated (real-client gate) — `docs/src/content/docs/clients/opensubsonic-clients.md`
+  replaces the planned stub with the implemented credential model (login password for `p`
+  auth, per-user OpenSubsonic credential for token+salt) and compatibility notes;
+  `docs/src/content/docs/clients/jellyfin-clients.md` verification status now records the
+  completed Feishin acceptance; `design/evidence/phase-8/REAL-CLIENT-ACCEPTANCE.md`,
+  `design/adr/ADR-0132-jellyfin-apikey-query-token-alias.md` (Proposed),
+  `compatibility/clients/phase8/` (probe, relay, README), and
+  `scripts/run_phase8_client_smoke.py` added.
