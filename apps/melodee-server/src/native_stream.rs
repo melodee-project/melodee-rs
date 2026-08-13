@@ -460,6 +460,32 @@ impl CanonicalAssetRoot {
         }
         Ok(file)
     }
+
+    /// Returns the byte length of a canonical relative file, or `None` when it
+    /// does not exist. Used for sibling files (`.lrc` lyrics) whose size is
+    /// not catalog-recorded.
+    pub fn relative_len(&self, relative_path: &str) -> Result<Option<u64>, StreamError> {
+        let path = Path::new(relative_path);
+        validate_relative_asset_path(path)?;
+        let file = match platform::open_relative(&self.root, path) {
+            Ok(file) => file,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+            Err(_) => return Err(StreamError::AssetUnavailable),
+        };
+        let metadata = file.metadata().map_err(|_| StreamError::AssetUnavailable)?;
+        if !metadata.is_file() {
+            return Err(StreamError::AssetUnavailable);
+        }
+        Ok(Some(metadata.len()))
+    }
+
+    /// Opens a canonical relative file (no symlinks, no traversal) whose size
+    /// was obtained out-of-band, e.g. via [`Self::relative_len`].
+    pub fn open_relative_file(&self, relative_path: &str) -> Result<File, StreamError> {
+        let path = Path::new(relative_path);
+        validate_relative_asset_path(path)?;
+        platform::open_relative(&self.root, path).map_err(|_| StreamError::AssetUnavailable)
+    }
 }
 
 fn validate_relative_asset_path(path: &Path) -> Result<(), StreamError> {
@@ -587,6 +613,91 @@ impl DirectPlayService {
                 return Err(StreamError::AssetUnavailable);
             }
             Ok(bytes)
+        })
+        .await
+        .map_err(|_| StreamError::AssetUnavailable)?
+    }
+
+    /// Streams an explicit inclusive byte range. The Jellyfin adapter parses
+    /// ranges with its captured semantics and reuses this bounded stream.
+    pub async fn stream_range(
+        &self,
+        asset: &PlayableAsset,
+        start: u64,
+        end_inclusive: u64,
+    ) -> Result<Body, StreamError> {
+        if asset.byte_size == 0 || end_inclusive < start || end_inclusive >= asset.byte_size {
+            return Err(StreamError::InvalidRange);
+        }
+        let permit = self
+            .permits
+            .clone()
+            .acquire_owned()
+            .await
+            .map_err(|_| StreamError::CapacityClosed)?;
+        let file = self.root.open_asset(asset)?;
+        stream_file(
+            file,
+            ByteRange {
+                start,
+                end: end_inclusive,
+            },
+            permit,
+        )
+        .await
+    }
+
+    /// Streams the whole asset (no Range handling).
+    pub async fn stream_full(&self, asset: &PlayableAsset) -> Result<Body, StreamError> {
+        if asset.byte_size == 0 {
+            return Err(StreamError::AssetUnavailable);
+        }
+        self.stream_range(asset, 0, asset.byte_size - 1).await
+    }
+
+    /// Whether the catalog-recorded asset currently exists on disk with the
+    /// recorded byte size (the captured "Audio file not found." precheck).
+    pub fn asset_exists(&self, asset: &PlayableAsset) -> bool {
+        self.root
+            .relative_len(&asset.canonical_relative_path)
+            .ok()
+            .flatten()
+            == Some(asset.byte_size)
+    }
+
+    /// Reads a sibling/relative file of unknown size with a hard byte cap —
+    /// used for the captured `.lrc` lyrics sidecar lookup. Returns `None`
+    /// when the file does not exist.
+    pub async fn read_relative_bounded(
+        &self,
+        canonical_relative_path: &str,
+        max_bytes: u64,
+    ) -> Result<Option<Vec<u8>>, StreamError> {
+        let Some(byte_len) = self.root.relative_len(canonical_relative_path)? else {
+            return Ok(None);
+        };
+        if byte_len == 0 || byte_len > max_bytes {
+            return Err(StreamError::AssetUnavailable);
+        }
+        let permit = self
+            .permits
+            .clone()
+            .acquire_owned()
+            .await
+            .map_err(|_| StreamError::CapacityClosed)?;
+        let mut file = self.root.open_relative_file(canonical_relative_path)?;
+        let capacity = usize::try_from(byte_len).map_err(|_| StreamError::AssetUnavailable)?;
+        tokio::task::spawn_blocking(move || {
+            let _permit = permit;
+            let mut bytes = Vec::with_capacity(capacity);
+            file.by_ref()
+                .take(max_bytes.saturating_add(1))
+                .read_to_end(&mut bytes)
+                .map_err(|_| StreamError::AssetUnavailable)?;
+            if bytes.len() != capacity {
+                return Err(StreamError::AssetUnavailable);
+            }
+            Ok(Some(bytes))
         })
         .await
         .map_err(|_| StreamError::AssetUnavailable)?

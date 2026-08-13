@@ -65,6 +65,7 @@ async fn state(db: &common::TestDb) -> JfState {
         direct_play: None,
         client_addresses: melodee_server::native_stream::ClientAddressResolver::default(),
         search: None,
+        libraries: Vec::new(),
     }
 }
 
@@ -175,8 +176,9 @@ async fn token_transports_and_logout_revocation() {
         )
         .body(Body::empty())
         .expect("request");
-    let (status, _) = respond(state.clone(), request).await;
+    let (status, bytes) = respond(state.clone(), request).await;
     assert_eq!(status, StatusCode::OK);
+    assert_eq!(json_body(&bytes)["Name"], "phase0-fixture");
 
     // api_key query transport
     let request = Request::builder()
@@ -184,8 +186,9 @@ async fn token_transports_and_logout_revocation() {
         .uri(format!("/Users/Me?api_key={token}"))
         .body(Body::empty())
         .expect("request");
-    let (status, _) = respond(state.clone(), request).await;
+    let (status, bytes) = respond(state.clone(), request).await;
     assert_eq!(status, StatusCode::OK);
+    assert_eq!(json_body(&bytes)["Name"], "phase0-fixture");
 
     // Logout revokes the token (204, idempotent)
     let logout = Request::builder()
@@ -251,7 +254,8 @@ async fn routing_middleware_rewrites_marker_requests_to_canonical_paths() {
         .body(Body::empty())
         .expect("request");
     let (status, _) = respond(state.clone(), request).await;
-    assert_eq!(status, StatusCode::OK);
+    // Captured: System/Ping returns 204 No Content.
+    assert_eq!(status, StatusCode::NO_CONTENT);
 
     // Non-allowlisted path without a marker falls through (not rewritten -> 404
     // from the outer server's fallback, which axum returns as 404).
@@ -281,7 +285,7 @@ async fn routing_middleware_rewrites_marker_requests_to_canonical_paths() {
 }
 
 #[tokio::test]
-async fn users_public_returns_public_user_list() {
+async fn users_public_returns_empty_public_user_list() {
     let db = common::TestDb::create("jf_users_public").await;
     let state = state(&db).await;
     let request = Request::builder()
@@ -292,6 +296,7 @@ async fn users_public_returns_public_user_list() {
     let (status, bytes) = respond(state, request).await;
     let json = json_body(&bytes);
     assert_eq!(status, StatusCode::OK);
+    // Captured: no local users are public (empty array).
     let users = json.as_array().expect("array");
-    assert!(!users.is_empty());
+    assert!(users.is_empty());
 }

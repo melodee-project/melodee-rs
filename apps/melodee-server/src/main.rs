@@ -119,6 +119,45 @@ fn parse_native_stream_concurrency(value: &str) -> Result<usize, &'static str> {
     Ok(concurrency)
 }
 
+/// Jellyfin UserViews mirror the captured "unlocked Storage libraries" set.
+/// The Rust catalog has no library table, so views are configuration-derived:
+/// the canonical Storage view plus one view per ingestion source (the same
+/// library set the OpenSubsonic adapter exposes as music folders).
+fn jellyfin_libraries(
+    ingestion_config: &IngestionConfig,
+) -> Vec<std::sync::Arc<jellyfin::JfLibrary>> {
+    let mut libraries: Vec<std::sync::Arc<jellyfin::JfLibrary>> = Vec::new();
+    // The captured "Storage" library view has the Unix-epoch DateCreated quirk.
+    let epoch = time::OffsetDateTime::UNIX_EPOCH;
+    libraries.push(std::sync::Arc::new(jellyfin::JfLibrary {
+        id: deterministic_jellyfin_library_id("storage"),
+        name: "Storage".to_string(),
+        created_at: epoch,
+    }));
+    let now = time::OffsetDateTime::now_utc();
+    for source in &ingestion_config.sources {
+        libraries.push(std::sync::Arc::new(jellyfin::JfLibrary {
+            id: source
+                .id
+                .unwrap_or_else(|| deterministic_jellyfin_library_id(&source.name)),
+            name: source.name.clone(),
+            created_at: now,
+        }));
+    }
+    // Captured UserViews order: SortOrder then Name (SortOrder is not
+    // modeled; name ordering is the deterministic equivalent).
+    libraries.sort_by(|left, right| left.name.cmp(&right.name));
+    libraries
+}
+
+/// Deterministic per-name library id (stable across restarts so UserView ids
+/// and their ETags do not churn).
+fn deterministic_jellyfin_library_id(name: &str) -> uuid::Uuid {
+    use md5::{Digest, Md5};
+    let digest = Md5::digest(format!("melodee-jellyfin-library:{name}").as_bytes());
+    uuid::Uuid::from_bytes(digest[..16].try_into().unwrap_or([0u8; 16]))
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     init_tracing()?;
@@ -336,6 +375,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 .collect::<Result<Vec<_>, _>>()?,
         ),
         search: search_config.enabled.then_some(search_config.clone()),
+        libraries: jellyfin_libraries(&ingestion_config),
     };
     let jellyfin_app = jellyfin::configured_router(jellyfin_state);
     let native_state = native::NativeState {
@@ -392,6 +432,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .merge(native_app)
         .merge(opensubsonic_app)
         .merge(jellyfin_app)
+        // The Jellyfin routing middleware must see unmatched paths (the
+        // bare-root probe), so it is an outer layer, matching the captured
+        // ASP.NET pipeline placement (ADR-0131).
+        .layer(axum::middleware::from_fn(jellyfin::routing_middleware))
         .layer(TraceLayer::new_for_http().make_span_with(melodee_server::make_http_span));
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();

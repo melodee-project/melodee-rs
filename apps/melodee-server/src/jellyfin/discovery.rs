@@ -37,7 +37,8 @@ async fn system_info_public(State(state): State<JfState>) -> Response {
 }
 
 async fn system_ping(State(_state): State<JfState>) -> Response {
-    StatusCode::OK.into_response()
+    // Captured: Ping returns 204 No Content (GET and POST, anonymous).
+    StatusCode::NO_CONTENT.into_response()
 }
 
 async fn system_info(State(state): State<JfState>) -> Response {

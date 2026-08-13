@@ -17,7 +17,6 @@ REQUIRED = [
     "PRD.md",
     "SPEC.md",
     "IMPLEMENTATION.md",
-    "GITHUB-SETUP.md",
     "Cargo.toml",
     "rust-toolchain.toml",
     "deny.toml",

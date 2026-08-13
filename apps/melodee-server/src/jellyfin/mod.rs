@@ -1,16 +1,48 @@
-//! Jellyfin compatibility adapter (ADR-0102, ADR-0131, PRD-API-JF-001..006).
+//! Jellyfin adapter (PRD-API-JF-001..005).
 //!
-//! A music-focused subset, not a complete Jellyfin server. Protocol-owned
-//! DTOs (PascalCase Jellyfin shapes) stay inside this module; the core domain
-//! keeps Release/Track. No wire DTO is shared with native-v1 or OpenSubsonic.
+//! Scope locked by SPEC §7.2/§7.5/§10 and ADR-0102: a music-focused Jellyfin
+//! surface. It does not become a general Emby/Jellyfin media server, does not
+//! add video, does not invent libraries Melodee does not manage, and does not
+//! claim full ecosystem support. Served endpoint classes are exactly the ones
+//! pinned by the frozen Jellyfin captures (routing/discovery, auth,
+//! browse/playlists/images/userstate/streaming contract surfaces) plus the
+//! documented intentional gaps and rejects.
+//!
+//! Protocol-owned PascalCase DTOs, N-format GUIDs, `yyyy-MM-ddTHH:mm:ss.fffffffZ`
+//! dates, null-serialization, envelope and ETag behavior stay inside this adapter
+//! and are not shared with OpenSubsonic or native-v1 (ADR-0102). Item/collection
+//! ETags use the exact legacy MD5 preimages from the frozen baseline so cache
+//! identifiers are byte-identical at fixed data.
+//!
+//! Routing and auth placement are governed by ADR-0131 and
+//! `docs/development/jellyfin-routing-inventory.md`: routes are mounted in both
+//! root form (`/System/Info`, `/Items/...`) and canonical form (`/api/jf/...`),
+//! matching the frozen middleware that rewrote detected Jellyfin requests to
+//! `/api/jf{path}`; the routing boundary itself is captured-contract, not
+//! implementation detail.
 
+pub mod audio;
 pub mod auth;
+pub mod browse;
 pub mod discovery;
 pub mod error;
+pub mod images;
+pub mod model;
+pub mod playlists;
+pub mod sessions;
+pub mod userstate;
 
 use std::sync::Arc;
 
-use axum::{Router, extract::Request, middleware::Next, response::Response};
+use axum::{
+    Router,
+    extract::Request,
+    http::StatusCode,
+    middleware::Next,
+    response::{IntoResponse, Response},
+};
+use time::OffsetDateTime;
+use uuid::Uuid;
 
 /// Shared state for the Jellyfin adapter.
 #[derive(Clone)]
@@ -29,6 +61,18 @@ pub struct JfState {
     pub direct_play: Option<crate::native_stream::DirectPlayService>,
     pub client_addresses: crate::native_stream::ClientAddressResolver,
     pub search: Option<melodee_search::SearchConfig>,
+    /// Unlocked Storage libraries exposed as UserViews. The Rust catalog has
+    /// no library table (unlike the legacy fixture), so libraries are server
+    /// configuration — the same pattern as OpenSubsonic music folders.
+    pub libraries: Vec<Arc<JfLibrary>>,
+}
+
+/// One unlocked Storage library exposed as a Jellyfin `UserView`.
+#[derive(Debug, Clone)]
+pub struct JfLibrary {
+    pub id: Uuid,
+    pub name: String,
+    pub created_at: OffsetDateTime,
 }
 
 /// Wraps the token pepper so it is never accidentally logged or serialized.
@@ -57,8 +101,8 @@ impl std::fmt::Debug for SecretPepper {
     }
 }
 
-/// Jellyfin path prefixes that, combined with an `api_key` query param, trigger
-/// a marker rewrite.
+/// Jellyfin path prefixes that, combined with an `api_key` query param, count
+/// as a Jellyfin marker.
 const JELLYFIN_PREFIXES: &[&str] = &[
     "/Audio/",
     "/Items/",
@@ -88,29 +132,30 @@ fn is_jellyfin_marker(request: &Request) -> bool {
         return true;
     }
     let path = request.uri().path();
-    if (path.contains("api_key=")
-        || request
-            .uri()
-            .query()
-            .is_some_and(|q| q.contains("api_key=")))
-        && JELLYFIN_PREFIXES
-            .iter()
-            .any(|prefix| path.starts_with(prefix))
+    if request
+        .uri()
+        .query()
+        .is_some_and(|q| q.split('&').any(|part| part.starts_with("api_key=")))
+        && (path == "/"
+            || JELLYFIN_PREFIXES
+                .iter()
+                .any(|prefix| path.starts_with(prefix)))
     {
         return true;
     }
     false
 }
 
-/// The captured JellyfinRoutingMiddleware: detected requests are rewritten to
-/// `/api/jf{path}` before routing. Allowlisted paths rewrite regardless of
-/// headers; other paths rewrite only when a marker is present. `/api/`,
-/// `/rest/`, `/song/` prefixes always pass through. `GET/HEAD /` rewrites only
-/// The captured JellyfinRoutingMiddleware: allowlisted pre-auth paths and
-/// all registered Jellyfin routes are always accessible (the handler enforces
-/// auth with 401 for missing tokens). Only the server root `/` is gated by a
-/// marker (a no-marker root falls through to the admin SPA). Non-Jellyfin
-/// paths naturally 404 from the router fallback.
+/// The captured JellyfinRoutingMiddleware semantics (ADR-0131): the frozen
+/// middleware rewrote detected root-form requests to `/api/jf{path}`; this
+/// adapter mounts both path forms directly, which is behaviorally identical
+/// for clients. The one case still gated here is the root probe: `/` with a
+/// Jellyfin marker returns the captured 200 empty body (RootController); `/`
+/// without a marker falls through to the non-Jellyfin surface.
+///
+/// Because axum route-local layers only run for matched routes, this
+/// middleware is applied at the outer router in `main.rs` so the bare-root
+/// probe works exactly as captured.
 pub async fn routing_middleware(request: Request, next: Next) -> Response {
     let path = request.uri().path().to_string();
 
@@ -119,22 +164,43 @@ pub async fn routing_middleware(request: Request, next: Next) -> Response {
         return next.run(request).await;
     }
 
-    // The server root is only a Jellyfin request when a marker is present;
-    // otherwise it falls through to the admin SPA.
-    if path == "/" && !is_jellyfin_marker(&request) {
+    // The server root is a Jellyfin request (captured 200 empty) only when a
+    // marker is present; otherwise it falls through to the outer surface.
+    if path == "/" {
+        if is_jellyfin_marker(&request) {
+            return StatusCode::OK.into_response();
+        }
         return next.run(request).await;
     }
 
     next.run(request).await
 }
 
-/// Builds the Jellyfin router with the routing middleware applied. The
-/// canonical `/api/jf/*` routes are mounted; the middleware rewrites detected
-/// root-form requests to canonical paths before routing.
+/// Builds the Jellyfin router: all routes mounted in root form and canonical
+/// `/api/jf` form, plus the canonical root probe (`/api/jf`, `/api/jf/`).
 pub fn configured_router(state: JfState) -> Router {
-    Router::new()
+    let routes = Router::<JfState>::new()
         .merge(discovery::router())
         .merge(auth::router())
-        .layer(axum::middleware::from_fn(routing_middleware))
+        .merge(browse::router())
+        .merge(audio::router())
+        .merge(images::router())
+        .merge(playlists::router())
+        .merge(sessions::router())
+        .merge(userstate::router());
+    Router::new()
+        .merge(routes.clone())
+        .nest("/api/jf", routes)
+        .route("/api/jf", axum::routing::get(server_root).head(server_root))
+        .route(
+            "/api/jf/",
+            axum::routing::get(server_root).head(server_root),
+        )
         .with_state(state)
+}
+
+/// Captured `RootController.ServerRoot`: 200 with `Content-Length: 0`, no
+/// auth (GET and HEAD).
+async fn server_root() -> StatusCode {
+    StatusCode::OK
 }

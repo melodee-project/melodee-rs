@@ -18,6 +18,7 @@ pub struct JellyfinProblemDetails {
     pub title: String,
     pub status: u16,
     pub detail: String,
+    #[serde(rename = "traceId")]
     pub trace_id: Uuid,
     #[serde(rename = "errorCode")]
     pub error_code: Option<String>,
@@ -83,6 +84,32 @@ pub fn bad_request(detail: &str) -> Response {
 /// Returns the captured 404 ProblemDetails for an unknown item id.
 pub fn not_found(detail: &str) -> Response {
     JellyfinProblemDetails::not_found(detail).into_json_response(StatusCode::NOT_FOUND)
+}
+
+/// Returns the captured 403 ProblemDetails.
+pub fn forbidden(detail: &str) -> Response {
+    let problem = JellyfinProblemDetails {
+        r#type: "about:blank".to_string(),
+        title: "Forbidden".to_string(),
+        status: 403,
+        detail: detail.to_string(),
+        trace_id: Uuid::now_v7(),
+        error_code: None,
+    };
+    problem.into_json_response(StatusCode::FORBIDDEN)
+}
+
+/// 500 ProblemDetails for unexpected internal failures.
+pub fn internal_server_error() -> Response {
+    let problem = JellyfinProblemDetails {
+        r#type: "about:blank".to_string(),
+        title: "Internal Server Error".to_string(),
+        status: 500,
+        detail: "An unexpected error occurred.".to_string(),
+        trace_id: Uuid::now_v7(),
+        error_code: None,
+    };
+    problem.into_json_response(StatusCode::INTERNAL_SERVER_ERROR)
 }
 
 /// 416 ProblemDetails for unsatisfiable byte ranges (captured Jellyfin

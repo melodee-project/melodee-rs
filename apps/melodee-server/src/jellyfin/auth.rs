@@ -25,7 +25,13 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use super::JfState;
-use super::error::{bad_request, unauthorized};
+use super::browse::json_response;
+use super::error::{bad_request, forbidden, internal_server_error, not_found, unauthorized};
+use super::model::{self, user_json};
+
+fn internal_error() -> Response {
+    internal_server_error()
+}
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -52,10 +58,6 @@ pub struct AuthenticateByNameRequest {
 
 pub fn router() -> Router<JfState> {
     Router::new()
-        .route(
-            "/api/jf/Users/AuthenticateByName",
-            post(authenticate_by_name),
-        )
         .route("/Users/AuthenticateByName", post(authenticate_by_name))
         .route("/Sessions/Logout", post(logout))
         .route("/Users/Me", get(users_me))
@@ -66,6 +68,7 @@ pub fn router() -> Router<JfState> {
 
 pub async fn authenticate_by_name(
     State(state): State<JfState>,
+    headers: HeaderMap,
     body: axum::body::Bytes,
 ) -> Response {
     // The captured DTO reads ONLY `Pw`; a body with `Password` and no `Pw`
@@ -93,9 +96,6 @@ pub async fn authenticate_by_name(
         Ok(Some(record)) => record,
         _ => return unauthorized_401(),
     };
-    if !record.user.can_authenticate() {
-        return unauthorized_401();
-    }
     let password_valid = melodee_auth::verify_password(
         pw.as_bytes(),
         record.password_hash_algorithm,
@@ -105,6 +105,17 @@ pub async fn authenticate_by_name(
     if !password_valid {
         return unauthorized_401();
     }
+    // Captured order: credentials first, then the explicit locked check.
+    if record.user.locked {
+        return forbidden("User account is locked.");
+    }
+    if !record.user.can_authenticate() {
+        return unauthorized_401();
+    }
+
+    // Captured client metadata from the MediaBrowser auth header kv pairs
+    // (bounded to 255 chars as the legacy insert does).
+    let client_info = parse_client_info(&headers);
 
     // Issue a new token: 32 random bytes hex (64 chars), stored as
     // HMAC-SHA256(pepper, salt+token) with an 8-char cleartext prefix.
@@ -112,74 +123,46 @@ pub async fn authenticate_by_name(
     let token_id = Uuid::now_v7();
     let now = OffsetDateTime::now_utc();
     let expires_at = now + time::Duration::hours(state.token_expiry_hours);
-    if let Err(error) = issue_token(&state, token_id, record.user.id, &token, now, expires_at).await
+    if let Err(error) = issue_token(
+        &state,
+        token_id,
+        record.user.id,
+        &token,
+        now,
+        expires_at,
+        &client_info,
+    )
+    .await
     {
         tracing::error!(%error, "jellyfin token issue failed");
         return unauthorized_401();
     }
 
-    let user_id_n = record.user.public_api_id.simple().to_string();
-    let user = json!({
-        "Name": record.user.username,
-        "ServerId": state.server_id,
-        "Id": user_id_n,
-        "HasPassword": true,
-        "HasConfiguredPassword": true,
-        "HasConfiguredEasyPassword": false,
-        "EnableAutoLogin": false,
-        "LastLoginDate": now,
-        "LastActivityDate": now,
-        "Configuration": {},
-        "Policy": {
-            "IsAdministrator": record.user.is_admin,
-            "IsHidden": false,
-            "IsDisabled": false,
-            "EnableUserPreferenceAccess": true,
-            "EnableRemoteControlOfOtherUsers": false,
-            "EnableSharedDeviceControl": true,
-            "EnableRemoteAccess": true,
-            "EnableLiveTvManagement": false,
-            "EnableLiveTvAccess": false,
-            "EnableMediaPlayback": true,
-            "EnableAudioPlaybackTranscoding": true,
-            "EnableVideoPlaybackTranscoding": false,
-            "EnablePlaybackRemuxing": true,
-            "EnableContentDeletion": false,
-            "EnableContentDownloading": true,
-            "EnableSyncTranscoding": true,
-            "EnableMediaConversion": false,
-            "EnableAllChannels": true,
-            "EnableAllFolders": true,
-            "InvalidLoginAttemptCount": 0,
-            "EnablePublicSharing": true,
-            "RemoteClientBitrateLimit": 0,
-            "AuthenticationProviderId": "Melodee.Blazor.Auth.DefaultAuthenticationProvider",
-            "PasswordResetProviderId": "Melodee.Blazor.Auth.DefaultPasswordResetProvider"
-        }
-    });
-    let session_info = json!({
-        "Id": token_id.simple(),
-        "UserId": user_id_n,
-        "UserName": record.user.username,
-        "Client": "Unknown client",
-        "DeviceName": "Unknown device",
-        "DeviceId": "",
-        "ApplicationVersion": "",
-        "LastActivityDate": now,
-        "LastPlaybackReport": null,
-        "DeviceProfile": null,
-        "SupportedCommands": [],
-        "PlayState": {"PositionTicks": null, "IsPaused": false, "IsMuted": false, "RepeatMode": "RepeatNone"},
-        "NowPlayingItem": null,
-        "PlayMethod": "DirectPlay",
-        "AdditionalUsers": [],
-        "Capabilities": {"PlayableMediaTypes": ["Audio"], "SupportedCommands": [], "SupportsMediaControl": false, "SupportsPersistentIdentifier": true, "SupportsSync": false},
-        "RemoteEndPoint": null,
-        "ServerId": state.server_id,
-        "HasCustomDeviceName": false,
-        "PlaylistItemId": null,
-        "SupportsRemoteControl": false
-    });
+    let user = user_json(
+        &state.server_id,
+        record.user.public_api_id,
+        &record.user.username,
+        record.user.is_admin,
+        false,
+        record.user.roles.iter().any(|role| role == "HasStreamRole"),
+        record
+            .user
+            .roles
+            .iter()
+            .any(|role| role == "HasDownloadRole"),
+        now,
+    );
+    let session_info = model::session_info_json(
+        &state.server_id,
+        &token_id.simple().to_string(),
+        record.user.public_api_id,
+        &record.user.username,
+        client_info.client.as_deref(),
+        client_info.device.as_deref(),
+        client_info.device_id.as_deref(),
+        client_info.version.as_deref(),
+        now,
+    );
     let body = json!({
         "User": user,
         "SessionInfo": session_info,
@@ -192,6 +175,42 @@ pub async fn authenticate_by_name(
         HeaderValue::from_static("application/json; charset=utf-8"),
     );
     response
+}
+
+/// Client metadata parsed from the MediaBrowser/X-Emby-Authorization header
+/// (legacy `JellyfinTokenParser.ParseFromRequest`).
+#[derive(Debug, Default)]
+struct ClientInfo {
+    client: Option<String>,
+    device: Option<String>,
+    device_id: Option<String>,
+    version: Option<String>,
+}
+
+fn parse_client_info(headers: &HeaderMap) -> ClientInfo {
+    let header = headers
+        .get(header::AUTHORIZATION)
+        .or_else(|| headers.get("X-Emby-Authorization"))
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default();
+    let mut info = ClientInfo::default();
+    for part in header.split(',') {
+        let part = part.trim();
+        let Some((key, value)) = part.split_once('=') else {
+            continue;
+        };
+        let value = value.trim().trim_matches('"');
+        // Column cap is 200 chars (migration 0021).
+        let bounded = |value: &str| Some(value.chars().take(200).collect::<String>());
+        match key.trim() {
+            "Client" => info.client = bounded(value),
+            "Device" => info.device = bounded(value),
+            "DeviceId" => info.device_id = bounded(value),
+            "Version" => info.version = bounded(value),
+            _ => {}
+        }
+    }
+    info
 }
 
 fn unauthorized_401() -> Response {
@@ -238,6 +257,7 @@ async fn issue_token(
     token: &str,
     now: OffsetDateTime,
     expires_at: OffsetDateTime,
+    client_info: &ClientInfo,
 ) -> Result<(), sqlx::Error> {
     let mut tx = state.pool.begin().await?;
     // Enforce max-active: soft-revoke the oldest when over the limit.
@@ -258,12 +278,15 @@ async fn issue_token(
     };
     let prefix = &token[..8];
     let digest = token_digest(state.token_pepper.as_bytes(), &salt, token);
-    sqlx::query("INSERT INTO jellyfin_access_tokens (id, user_id, token_prefix, token_digest, token_salt, client, device_name, device_id, issued_at, expires_at, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,NULL,NULL,NULL,$6,$7,$6,$6)")
+    sqlx::query("INSERT INTO jellyfin_access_tokens (id, user_id, token_prefix, token_digest, token_salt, client, device_name, device_id, issued_at, expires_at, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$9,$9)")
         .bind(token_id)
         .bind(user_id)
         .bind(prefix)
         .bind(digest)
         .bind(&salt)
+        .bind(&client_info.client)
+        .bind(&client_info.device)
+        .bind(&client_info.device_id)
         .bind(now)
         .bind(expires_at)
         .execute(&mut *tx)
@@ -280,7 +303,7 @@ pub async fn resolve_token(state: &JfState, headers: &HeaderMap, uri: &Uri) -> O
     validate_token(state, &token).await
 }
 
-fn extract_token(headers: &HeaderMap, uri: &Uri) -> Option<String> {
+pub(crate) fn extract_token(headers: &HeaderMap, uri: &Uri) -> Option<String> {
     // Authorization: MediaBrowser ... Token="..."
     if let Some(auth) = headers
         .get(header::AUTHORIZATION)
@@ -349,27 +372,13 @@ async fn validate_token(state: &JfState, token: &str) -> Option<JfPrincipal> {
     }
     let digest: Vec<u8> = row.try_get("token_digest").ok()?;
     let salt: Vec<u8> = row.try_get("token_salt").ok()?;
-    eprintln!(
-        "JF VALIDATE: digest len={} salt len={}",
-        digest.len(),
-        salt.len()
-    );
     let expected = token_digest(state.token_pepper.as_bytes(), &salt, token);
     if digest != expected {
         return None;
     }
-    let user_id: Uuid = row.try_get("user_id").unwrap_or_else(|e| {
-        eprintln!("JF user_id err: {e}");
-        Uuid::nil()
-    });
-    let public_api_id: Uuid = row.try_get("public_api_id").unwrap_or_else(|e| {
-        eprintln!("JF pid err: {e}");
-        Uuid::nil()
-    });
-    let username: String = row.try_get("username").unwrap_or_else(|e| {
-        eprintln!("JF name err: {e}");
-        String::new()
-    });
+    let user_id: Uuid = row.try_get("user_id").ok()?;
+    let public_api_id: Uuid = row.try_get("public_api_id").ok()?;
+    let username: String = row.try_get("username").ok()?;
     let is_admin: bool = row.try_get("is_admin").unwrap_or(false);
     let is_editor: bool = row.try_get("is_editor").unwrap_or(false);
     let roles: Vec<String> =
@@ -405,37 +414,19 @@ pub async fn logout(State(state): State<JfState>, headers: HeaderMap, uri: Uri) 
 }
 
 pub async fn users_me(State(state): State<JfState>, headers: HeaderMap, uri: Uri) -> Response {
-    eprintln!(
-        "JF USERS_ME: uri={uri} headers={:?}",
-        headers.keys().collect::<Vec<_>>()
-    );
     let Some(principal) = resolve_token(&state, &headers, &uri).await else {
         return unauthorized();
     };
-    let body = json!({
-        "Name": principal.username,
-        "ServerId": state.server_id,
-        "Id": principal.public_api_id.simple(),
-        "HasPassword": true,
-        "HasConfiguredPassword": true,
-        "HasConfiguredEasyPassword": false,
-        "EnableAutoLogin": false,
-        "Configuration": {},
-        "Policy": {
-            "IsAdministrator": principal.is_admin,
-            "IsHidden": false,
-            "IsDisabled": false,
-            "EnableUserPreferenceAccess": true,
-            "EnableContentDownloading": true,
-            "EnableMediaPlayback": true,
-        }
-    });
-    let mut response = (StatusCode::OK, Json(body)).into_response();
-    response.headers_mut().insert(
-        header::CONTENT_TYPE,
-        HeaderValue::from_static("application/json; charset=utf-8"),
-    );
-    response
+    json_response(user_json(
+        &state.server_id,
+        principal.public_api_id,
+        &principal.username,
+        principal.is_admin,
+        false,
+        principal.roles.iter().any(|role| role == "HasStreamRole"),
+        principal.roles.iter().any(|role| role == "HasDownloadRole"),
+        OffsetDateTime::now_utc(),
+    ))
 }
 
 pub async fn users_by_id(
@@ -447,57 +438,101 @@ pub async fn users_by_id(
     let Some(principal) = resolve_token(&state, &headers, &uri).await else {
         return unauthorized();
     };
-    // The captured behavior: /Users/{id} with a valid token returns the user
-    // model for the token bearer (the path id is the N-format public id).
-    let body = json!({
-        "Name": principal.username,
-        "ServerId": state.server_id,
-        "Id": id,
-        "HasPassword": true,
-        "HasConfiguredPassword": true,
-        "Configuration": {},
-        "Policy": {"IsAdministrator": principal.is_admin, "IsHidden": false, "IsDisabled": false}
-    });
-    let mut response = (StatusCode::OK, Json(body)).into_response();
-    response.headers_mut().insert(
-        header::CONTENT_TYPE,
-        HeaderValue::from_static("application/json; charset=utf-8"),
-    );
-    response
+    let Some(parsed) = model::parse_id(&id) else {
+        return bad_request("Invalid user ID format.");
+    };
+    if parsed != principal.public_api_id && !principal.is_admin {
+        return forbidden("Cannot access other users.");
+    }
+    // Captured: returns the requested user, not the bearer.
+    let row = sqlx::query(
+        "SELECT u.public_api_id, u.username, u.is_admin, u.locked, \
+                COALESCE((SELECT array_agg(ur.role ORDER BY ur.role) \
+                            FROM native_user_roles ur WHERE ur.user_id = u.id), '{}') \
+           FROM native_users u \
+          WHERE u.public_api_id = $1 AND u.enabled = TRUE AND u.blacklisted = FALSE",
+    )
+    .bind(parsed)
+    .fetch_optional(&state.pool)
+    .await;
+    match row {
+        Ok(Some(row)) => {
+            let public_id: Uuid = row.get(0);
+            let username: String = row.get(1);
+            let is_admin: bool = row.get(2);
+            let locked: bool = row.get(3);
+            let roles: Vec<String> = row.get(4);
+            json_response(user_json(
+                &state.server_id,
+                public_id,
+                &username,
+                is_admin,
+                locked,
+                roles.iter().any(|role| role == "HasStreamRole"),
+                roles.iter().any(|role| role == "HasDownloadRole"),
+                OffsetDateTime::now_utc(),
+            ))
+        }
+        Ok(None) => not_found("User not found."),
+        Err(error) => {
+            tracing::error!(%error, "jellyfin user fetch failed");
+            not_found("User not found.")
+        }
+    }
 }
 
 pub async fn users_list(State(state): State<JfState>, headers: HeaderMap, uri: Uri) -> Response {
     let Some(principal) = resolve_token(&state, &headers, &uri).await else {
         return unauthorized();
     };
-    if !principal.is_admin {
-        return unauthorized();
+    // Captured: non-admins see only themselves; admins see up to 100 users
+    // ordered by username.
+    let rows = sqlx::query(
+        "SELECT u.public_api_id, u.username, u.is_admin, u.locked, \
+                COALESCE((SELECT array_agg(ur.role ORDER BY ur.role) \
+                            FROM native_user_roles ur WHERE ur.user_id = u.id), '{}') \
+           FROM native_users u \
+          WHERE u.enabled = TRUE AND u.blacklisted = FALSE \
+            AND ($1::boolean OR u.id = $2) \
+          ORDER BY u.username COLLATE \"C\" \
+          LIMIT 100",
+    )
+    .bind(principal.is_admin)
+    .bind(principal.user_id)
+    .fetch_all(&state.pool)
+    .await;
+    match rows {
+        Ok(rows) => {
+            let users: Vec<serde_json::Value> = rows
+                .into_iter()
+                .map(|row| {
+                    let roles: Vec<String> = row.get(4);
+                    user_json(
+                        &state.server_id,
+                        row.get(0),
+                        &row.get::<String, _>(1),
+                        row.get(2),
+                        row.get(3),
+                        roles.iter().any(|role| role == "HasStreamRole"),
+                        roles.iter().any(|role| role == "HasDownloadRole"),
+                        OffsetDateTime::now_utc(),
+                    )
+                })
+                .collect();
+            json_response(serde_json::Value::Array(users))
+        }
+        Err(error) => {
+            tracing::error!(%error, "jellyfin users list failed");
+            internal_error()
+        }
     }
-    let body = json!([{
-        "Name": principal.username,
-        "ServerId": state.server_id,
-        "Id": principal.public_api_id.simple(),
-        "HasPassword": true,
-        "Policy": {"IsAdministrator": true}
-    }]);
-    let mut response = (StatusCode::OK, Json(body)).into_response();
-    response.headers_mut().insert(
-        header::CONTENT_TYPE,
-        HeaderValue::from_static("application/json; charset=utf-8"),
-    );
-    response
 }
 
 pub async fn users_public(State(state): State<JfState>) -> Response {
-    let body = json!([{
-        "Name": state.server_name,
-        "ServerId": state.server_id,
-        "Id": "00000000000000000000000000000000",
-        "HasPassword": false,
-        "Configuration": {},
-        "Policy": {"IsAdministrator": false}
-    }]);
-    let mut response = (StatusCode::OK, Json(body)).into_response();
+    let _ = state;
+    // Captured: no local users are public (`Ok(Array.Empty<JellyfinUser>())`);
+    // clients fall back to username/password login.
+    let mut response = (StatusCode::OK, Json(json!([]))).into_response();
     response.headers_mut().insert(
         header::CONTENT_TYPE,
         HeaderValue::from_static("application/json; charset=utf-8"),
