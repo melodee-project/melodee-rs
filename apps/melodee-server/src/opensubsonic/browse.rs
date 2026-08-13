@@ -73,7 +73,7 @@ fn error_reply(state: &OsState, params: &Option<Extension<Params>>, message: &st
 /// "ok" envelope that ALSO carries an `error` block (code 44). The generic
 /// `OsReply::error` flips status to "error", so the envelope is written
 /// directly here in all three negotiated formats.
-fn ok_with_error_44(state: &OsState, params: &Option<Extension<Params>>) -> Response {
+pub(crate) fn ok_with_error_44(state: &OsState, params: &Option<Extension<Params>>) -> Response {
     const CODE: i64 = 44;
     const MESSAGE: &str = "Invalid API key.";
     let envelope = serde_json::json!({
@@ -539,6 +539,7 @@ struct ArtistAlbumRow {
     year: Option<i32>,
     played_count: i64,
     user_rating: i16,
+    last_played_at: Option<OffsetDateTime>,
 }
 
 pub async fn get_artist(
@@ -695,7 +696,10 @@ async fn load_artist_albums(
                 (SELECT count(*) FROM native_track_plays play
                    JOIN tracks play_track ON play_track.id = play.track_id
                   WHERE play_track.release_id = release.id),
-                COALESCE(ustate.rating, 0)::smallint
+                COALESCE(ustate.rating, 0)::smallint,
+                (SELECT max(play.played_at) FROM native_track_plays play
+                   JOIN tracks play_track ON play_track.id = play.track_id
+                  WHERE play_track.release_id = release.id)
            FROM releases release
            JOIN release_artists billing ON billing.release_id = release.id AND billing.role = 'primary'
            LEFT JOIN release_catalog_aggregates aggregate ON aggregate.release_id = release.id
@@ -717,6 +721,7 @@ async fn load_artist_albums(
                 year: row.try_get(5)?,
                 played_count: row.try_get(6)?,
                 user_rating: row.try_get(7)?,
+                last_played_at: row.try_get(8)?,
             })
         })
         .collect()
@@ -933,9 +938,12 @@ async fn load_album_detail(
         "SELECT release.id, release.public_api_id, release.title, release.sort_title,
                 release.display_artist, release.release_date, release.created_at,
                 COALESCE(aggregate.track_count, 0), COALESCE(aggregate.duration_ms, 0),
-                (SELECT count(*) FROM native_track_plays play
-                   JOIN tracks play_track ON play_track.id = play.track_id
-                  WHERE play_track.release_id = release.id),
+                -- Captured album playCount is the legacy Album.PlayedCount
+                -- column, independent of song plays (the fixture seeds
+                -- Anthology of Echoes with 0 while its Coda song has 9);
+                -- the per-user state sum reproduces every frozen value.
+                (SELECT COALESCE(sum(plays.play_count), 0)::bigint FROM native_release_user_states plays
+                  WHERE plays.release_id = release.id),
                 (SELECT max(play.played_at) FROM native_track_plays play
                    JOIN tracks play_track ON play_track.id = play.track_id
                   WHERE play_track.release_id = release.id),
@@ -1011,7 +1019,10 @@ fn album_detail_json(detail: &AlbumDetailRow, songs: &[Value], genres: &[String]
     {
         album.insert("starred".to_string(), rfc3339_z(starred_at).into());
     }
-    album.insert("duration".to_string(), (detail.duration_ms / 1000).into());
+    // Captured rounding: half-to-even on the millisecond total (7700 -> 8).
+    #[allow(clippy::cast_possible_truncation)]
+    let duration_seconds = (detail.duration_ms as f64 / 1000.0).round_ties_even() as i64;
+    album.insert("duration".to_string(), duration_seconds.into());
     album.insert("playCount".to_string(), detail.played_count.into());
     if !genres.is_empty() {
         album.insert(
@@ -1110,20 +1121,6 @@ async fn album_songs(
     .await?;
     let mut songs = song_children(&state.pool, user_id.unwrap_or(Uuid::nil()), &ids).await?;
     patch_song_average_ratings(&state.pool, user_id, &mut songs).await;
-    // Album context: every song carries `starred` ("" when not starred) and
-    // `userRating` (0 when unrated), matching the captured os-getalbum and
-    // os-getalbum-multidisc goldens. The shared projection omits these when
-    // false/zero for list contexts, so re-insert them here.
-    for song in songs.iter_mut() {
-        if let Value::Object(fields) = song {
-            fields
-                .entry("starred".to_string())
-                .or_insert_with(|| Value::from(""));
-            fields
-                .entry("userRating".to_string())
-                .or_insert_with(|| Value::from(0));
-        }
-    }
     Ok(songs)
 }
 
@@ -1238,17 +1235,7 @@ pub async fn get_song(
         // error 44 block (no song key).
         return ok_with_error_44(&state, &params);
     }
-    let mut song = songs.remove(0);
-    // The captured getSong always carries `starred` ("" when not starred) and
-    // `userRating` (0 when unrated).
-    if let Value::Object(fields) = &mut song {
-        fields
-            .entry("starred".to_string())
-            .or_insert_with(|| Value::from(""));
-        fields
-            .entry("userRating".to_string())
-            .or_insert_with(|| Value::from(0));
-    }
+    let song = songs.remove(0);
     reply(
         &state,
         &params,
@@ -1346,7 +1333,21 @@ async fn music_directory_artist(
         .await
         .unwrap_or_default();
     let artist_id = format!("artist_{}", detail.artist_public_id);
-    let total_play: i64 = albums.iter().map(|a| a.played_count).sum();
+    // Captured directory playCount is the artist-level play count (the
+    // fixture's 7 is less than the 12 song plays under the artist).
+    let total_play: i64 = match sqlx::query_scalar::<_, i64>(
+        "SELECT COALESCE(sum(play_count), 0)::bigint FROM native_artist_user_states WHERE artist_id = $1",
+    )
+    .bind(detail.artist_internal_id)
+    .fetch_one(&state.pool)
+    .await
+    {
+        Ok(value) => value,
+        Err(error) => {
+            tracing::error!(%error, "opensubsonic getMusicDirectory artist play-count query failed");
+            0
+        }
+    };
     let last_played_at: Option<OffsetDateTime> =
         match sqlx::query_scalar::<_, Option<OffsetDateTime>>(
             "SELECT max(play.played_at) FROM native_track_plays play
@@ -1434,6 +1435,15 @@ fn directory_album_child(
     child.insert("starred".to_string(), "".into());
     child.insert("duration".to_string(), (row.duration_ms / 1000).into());
     child.insert("playCount".to_string(), row.played_count.into());
+    // Captured: directory album children carry `played` ("" when never
+    // played), like the album detail.
+    child.insert(
+        "played".to_string(),
+        row.last_played_at
+            .map(super::annotation::rfc3339_z)
+            .unwrap_or_default()
+            .into(),
+    );
     child.insert("created".to_string(), rfc3339_z(row.created_at).into());
     child.insert("albumId".to_string(), album_id.clone().into());
     child.insert("artistId".to_string(), artist_id.to_string().into());
@@ -1559,7 +1569,7 @@ async fn music_directory_album(
 /// caller-rated entity shows 0.0. The shared `song_children` projection
 /// includes the caller; this patches each song's `averageRating` to the
 /// caller-excluded value to match the browse goldens.
-async fn patch_song_average_ratings(pool: &PgPool, user_id: Option<Uuid>, songs: &mut [Value]) {
+async fn patch_song_average_ratings(pool: &PgPool, _user_id: Option<Uuid>, songs: &mut [Value]) {
     let track_ids: Vec<Uuid> = songs
         .iter()
         .filter_map(|song| {
@@ -1573,15 +1583,16 @@ async fn patch_song_average_ratings(pool: &PgPool, user_id: Option<Uuid>, songs:
         return;
     }
     let ratings: HashMap<Uuid, f64> = match sqlx::query(
+        // The captured averageRating includes the caller's own rating
+        // (`os-annotation-rating/verify-rating` shows 4 right after the user
+        // set 4): it mirrors the legacy CalculatedRating aggregate.
         "SELECT track.public_api_id,
                 COALESCE((SELECT AVG(ratings.rating)::float8 FROM native_track_user_states ratings
-                          WHERE ratings.track_id = track.id AND ratings.rating > 0
-                            AND ($2::uuid IS NULL OR ratings.user_id <> $2)), 0)
+                          WHERE ratings.track_id = track.id AND ratings.rating > 0), 0)
            FROM tracks track
           WHERE track.public_api_id = ANY($1)",
     )
     .bind(&track_ids)
-    .bind(user_id)
     .fetch_all(pool)
     .await
     {
@@ -1731,11 +1742,9 @@ pub async fn get_top_songs(
         );
     };
     let user_id = resolve_user_id(&state, &params, &principal).await;
-    // Name-based lookup: the captured getTopSongs matches BOTH normalized-name
-    // collision artists (Dune and Düné), so the lookup folds the artist name
-    // and selects every track whose primary track billing folds to the same
-    // form, ordered by play count desc then track public id.
-    let fold = fold_artist_name(artist_name);
+    // Name-based lookup: the frozen getTopSongs matches the artist Name
+    // EXACTLY — `artist=Dune` returns only the two Dune songs, not Düné's
+    // (`os-gettopsongs`). Ordered by global play count desc then public id.
     let ids: Vec<Uuid> = match sqlx::query_scalar::<_, Uuid>(AssertSqlSafe(format!(
         "SELECT track.public_api_id
            FROM tracks track
@@ -1746,11 +1755,11 @@ pub async fn get_top_songs(
               WHERE billing.track_id = track.id AND billing.role = 'primary'
               ORDER BY billing.presentation_order, billing.id LIMIT 1
            ) artist ON true
-          WHERE {ARTIST_FOLD_SQL} LIKE $1
+          WHERE artist.canonical_name = $1
           ORDER BY (SELECT count(*) FROM native_track_plays play
                      WHERE play.track_id = track.id) DESC, track.public_api_id"
     )))
-    .bind(format!("%{fold}%"))
+    .bind(artist_name)
     .fetch_all(&state.pool)
     .await
     {
@@ -1774,34 +1783,6 @@ pub async fn get_top_songs(
         OsReply::ok(serde_json::json!({"topSongs": {"song": songs}})),
     )
 }
-
-/// Latin-1 fold for artist-name lookup, mirroring the lists group's
-/// `fold_query` (NFD + combining-mark strip + non-alphanumeric removal).
-const FOLD_FROM: &str = "àáâãäåāăąèéêëēėęìíîïīòóôõöōőùúûüūůűçćčñńšýÿžæœøßþðłđħı";
-const FOLD_TO: &str = "aaaaaaaaaeeeeeeeiiiiiooooooouuuuuuucccnnsyyz";
-
-fn fold_artist_name(value: &str) -> String {
-    let from: Vec<char> = FOLD_FROM.chars().collect();
-    let to: Vec<char> = FOLD_TO.chars().collect();
-    let mut out = String::with_capacity(value.len());
-    for ch in value.trim().chars() {
-        for lower in ch.to_lowercase() {
-            if lower.is_ascii_alphanumeric() {
-                out.push(lower.to_ascii_uppercase());
-            } else if let Some(position) = from.iter().position(|&f| f == lower)
-                && let Some(base) = to.get(position)
-            {
-                out.push(base.to_ascii_uppercase());
-            }
-        }
-    }
-    out
-}
-
-/// SQL form of the artist-name fold for the track billing alias.
-const ARTIST_FOLD_SQL: &str = "regexp_replace(upper(translate(lower(artist.canonical_name), \
-    'àáâãäåāăąèéêëēėęìíîïīòóôõöōőùúûüūůűçćčñńšýÿžæœøßþðłđħı', \
-    'aaaaaaaaaeeeeeeeiiiiiooooooouuuuuuucccnnsyyz')), '[^A-Z0-9]', '', 'g')";
 
 // ---------------------------------------------------------------------------
 // Shared genre helper (mirrors lists.rs release_genres)

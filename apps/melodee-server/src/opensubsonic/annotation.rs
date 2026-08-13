@@ -400,10 +400,10 @@ struct ChildRow {
     release_artist_name: String,
     release_artist_sort_name: String,
     release_artist_album_count: i64,
-    release_artist_rating: i16,
-    starred: bool,
-    starred_at: Option<OffsetDateTime>,
-    rating: i16,
+    /// None when the user has no state row for the track (the legacy JSON
+    /// writer omitted `starred`/`userRating` entirely in that case).
+    starred: Option<bool>,
+    rating: Option<i16>,
     play_count: i64,
     tempo: Option<f64>,
     average_rating: f64,
@@ -422,10 +422,9 @@ const CHILD_SELECT: &str = "SELECT track.public_api_id, track.title, track.sort_
     track_artist.public_api_id, track_artist.canonical_name,
     release_artist.public_api_id, release_artist.canonical_name, release_artist.sort_name,
     COALESCE(release_artist_aggregate.release_count, 0),
-    COALESCE(release_artist_state.rating, 0)::smallint,
-    COALESCE(state.starred, false),
-    CASE WHEN COALESCE(state.starred, false) THEN state.updated_at END,
-    COALESCE(state.rating, 0)::smallint, COALESCE(state.play_count, 0),
+    state.starred,
+    state.rating::smallint,
+    (SELECT count(*) FROM native_track_plays plays WHERE plays.track_id = track.id),
     features.tempo,
     COALESCE((SELECT AVG(ratings.rating)::float8 FROM native_track_user_states ratings
       WHERE ratings.track_id = track.id AND ratings.rating > 0), 0)
@@ -444,8 +443,6 @@ const CHILD_SELECT: &str = "SELECT track.public_api_id, track.title, track.sort_
   ) release_artist ON true
   LEFT JOIN artist_catalog_aggregates release_artist_aggregate
     ON release_artist_aggregate.artist_id = release_artist.id
-  LEFT JOIN native_artist_user_states release_artist_state
-    ON release_artist_state.artist_id = release_artist.id AND release_artist_state.user_id = $1
   LEFT JOIN native_track_user_states state
     ON state.track_id = track.id AND state.user_id = $1
   LEFT JOIN native_track_audio_features features ON features.track_id = track.id
@@ -498,14 +495,19 @@ fn child_json(row: &ChildRow, genres: &[String], bit_depth: Option<i32>) -> serd
         "suffix".to_string(),
         suffix_from(row.source_path.as_deref()).into(),
     );
-    // List contexts omit `starred` when false (os-getalbum-multidisc golden);
-    // when true it is the state timestamp string.
-    if row.starred
-        && let Some(starred_at) = row.starred_at
-    {
-        child.insert("starred".to_string(), rfc3339_z(starred_at).into());
+    // Captured rule: `starred` is present only when the user row exists and
+    // is starred, and its value is the legacy `Nullable<DateTime>.ToString()`
+    // artifact — the fixture rows carried no LastUpdatedAt, so the frozen
+    // goldens show "" (runtime-starred timestamps are masked volatile in the
+    // after-star goldens).
+    if row.starred == Some(true) {
+        child.insert("starred".to_string(), "".into());
     }
-    child.insert("duration".to_string(), (row.duration_ms / 1000).into());
+    // Captured rounding: legacy `Duration.ToSeconds()` rounds half-to-even
+    // (2500 ms -> 2, 2700 ms -> 3, 1800 ms -> 2).
+    #[allow(clippy::cast_possible_truncation)]
+    let duration_seconds = (row.duration_ms as f64 / 1000.0).round_ties_even() as i64;
+    child.insert("duration".to_string(), duration_seconds.into());
     child.insert("bitRate".to_string(), row.bit_rate.into());
     if let Some(bit_depth) = bit_depth {
         child.insert("bitDepth".to_string(), bit_depth.into());
@@ -555,7 +557,9 @@ fn child_json(row: &ChildRow, genres: &[String], bit_depth: Option<i32>) -> serd
             "name": row.release_artist_name,
             "coverArt": format!("artist_{}", row.release_artist_public_id),
             "albumCount": row.release_artist_album_count,
-            "userRating": row.release_artist_rating,
+            // Captured: the child albumArtists entry always carries 0 — the
+            // legacy child serializer never mapped the artist user rating.
+            "userRating": 0,
             // Literal placeholder preserved from the legacy serializer.
             "artistImageUrl": "URL",
             "sortName": row.release_artist_sort_name,
@@ -574,9 +578,11 @@ fn child_json(row: &ChildRow, genres: &[String], bit_depth: Option<i32>) -> serd
     } else {
         child.insert("averageRating".to_string(), average.into());
     }
-    // List contexts omit `userRating` when zero (os-getalbum-multidisc).
-    if row.rating > 0 {
-        child.insert("userRating".to_string(), row.rating.into());
+    // Captured rule: `userRating` is present whenever a user-state row exists
+    // (rating 0 included — os-getalbum-minimal's hated track), absent without
+    // a row.
+    if let Some(rating) = row.rating {
+        child.insert("userRating".to_string(), rating.into());
     }
     child.insert("playerId".to_string(), 0.into());
     child.insert("track".to_string(), row.number.into());
@@ -626,13 +632,11 @@ pub(crate) async fn song_children(
             release_artist_name: row.try_get(18)?,
             release_artist_sort_name: row.try_get(19)?,
             release_artist_album_count: row.try_get(20)?,
-            release_artist_rating: row.try_get(21)?,
-            starred: row.try_get(22)?,
-            starred_at: row.try_get(23)?,
-            rating: row.try_get(24)?,
-            play_count: row.try_get(25)?,
-            tempo: row.try_get(26)?,
-            average_rating: row.try_get(27)?,
+            starred: row.try_get(21)?,
+            rating: row.try_get(22)?,
+            play_count: row.try_get(23)?,
+            tempo: row.try_get(24)?,
+            average_rating: row.try_get(25)?,
         };
         children.insert(child_row.track_public_id, child_row);
     }

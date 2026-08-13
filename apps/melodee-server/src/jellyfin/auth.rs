@@ -71,8 +71,24 @@ pub async fn authenticate_by_name(
     headers: HeaderMap,
     body: axum::body::Bytes,
 ) -> Response {
-    // The captured DTO reads ONLY `Pw`; a body with `Password` and no `Pw`
-    // fails JSON deserialization with a captured validation-error 400.
+    // The captured DTO deserialization requires the `Username`/`Pw` keys: a
+    // body sending `Password` instead of `Pw` never reaches the controller —
+    // ASP.NET model validation answers 400 with the frozen problem-details
+    // payload that names the legacy DTO type
+    // (`jf-auth-negative/password-field-not-read`). Keys present but empty fall
+    // through to the controller's own "Username and password are required."
+    // 400 (`jf-auth-negative/missing-fields`).
+    if let Ok(value) = serde_json::from_slice::<serde_json::Value>(&body) {
+        if value.is_object() {
+            let missing: Vec<&str> = ["Username", "Pw"]
+                .into_iter()
+                .filter(|key| value.get(*key).is_none())
+                .collect();
+            if !missing.is_empty() {
+                return validation_400_missing_properties(&missing);
+            }
+        }
+    }
     let request: AuthenticateByNameRequest = match serde_json::from_slice(&body) {
         Ok(request) => request,
         Err(_) => return bad_request("Username and password are required."),
@@ -211,6 +227,38 @@ fn parse_client_info(headers: &HeaderMap) -> ClientInfo {
         }
     }
     info
+}
+
+/// Frozen ASP.NET model-validation 400 for an AuthenticateByName body missing
+/// required DTO keys. The legacy type name inside the message is captured
+/// contract (`compatibility/jellyfin/golden/auth`), not a typo.
+fn validation_400_missing_properties(missing: &[&str]) -> Response {
+    let quoted = missing
+        .iter()
+        .map(|key| format!("'{key}'"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let body = serde_json::json!({
+        "type": "https://tools.ietf.org/html/rfc9110#section-15.5.1",
+        "title": "One or more validation errors occurred.",
+        "status": 400,
+        "errors": {
+            "$": [format!(
+                "JSON deserialization for type 'Melodee.Blazor.Controllers.Jellyfin.Models.JellyfinAuthenticationRequest' was missing required properties including: {quoted}."
+            )],
+            "request": ["The request field is required."],
+        },
+        "traceId": Uuid::now_v7().to_string(),
+    });
+    (
+        StatusCode::BAD_REQUEST,
+        [(
+            axum::http::header::CONTENT_TYPE,
+            "application/problem+json; charset=utf-8",
+        )],
+        serde_json::to_string(&body).unwrap_or_else(|_| "{}".to_string()),
+    )
+        .into_response()
 }
 
 fn unauthorized_401() -> Response {

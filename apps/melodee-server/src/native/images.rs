@@ -35,7 +35,9 @@ const DEFAULT_ARTIST: &[u8] = include_bytes!(
 const DEFAULT_PLAYLIST: &[u8] = include_bytes!(
     "../../../../compatibility/melodee-api-v1/golden/native-catalog/catalog-images-image-playlist-thumb.bin"
 );
-const DEFAULT_USER: &[u8] = include_bytes!(
+/// Legacy default user avatar bytes; shared with the OpenSubsonic getAvatar
+/// fallback (identical bytes in the frozen `os-getavatar` golden).
+pub(crate) const DEFAULT_USER: &[u8] = include_bytes!(
     "../../../../compatibility/melodee-api-v1/golden/native-catalog/catalog-images-image-user-thumb.bin"
 );
 const MAX_IMAGE_INPUT_BYTES: u64 = 10 * 1024 * 1024;

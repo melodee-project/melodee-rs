@@ -256,6 +256,15 @@ impl ClientAddressResolver {
         Ok(peer.ip())
     }
 
+    /// Whether the direct peer is a configured trusted proxy whose forwarded
+    /// headers (`Forwarded`, `X-Forwarded-For`, `X-Forwarded-Host`) may be
+    /// honored.
+    pub fn is_trusted(&self, address: IpAddr) -> bool {
+        self.trusted_proxies
+            .iter()
+            .any(|proxy| proxy.contains(address))
+    }
+
     fn first_untrusted(&self, chain: Vec<IpAddr>) -> Result<IpAddr, ClientAddressError> {
         chain
             .into_iter()

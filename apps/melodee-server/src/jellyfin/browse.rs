@@ -257,6 +257,15 @@ async fn load_artists(
     .bind(search_term.map(fold))
     .fetch_one(pool)
     .await?;
+    // Frozen ordering quirk: unfiltered listings sort by SortName, but the
+    // searchTerm path sorts by Name (canonical_name) — the Dune/Düné
+    // collision pair proves both orders (`jf-browse/items-artists` vs
+    // `jf-browse/items-searchterm-dune`).
+    let order_clause = if search_term.is_some() {
+        "artist.canonical_name COLLATE \"C\", artist.public_api_id"
+    } else {
+        "artist.sort_name COLLATE \"C\", artist.public_api_id"
+    };
     let rows = sqlx::query(sqlx::AssertSqlSafe(format!(
         "SELECT artist.public_api_id, artist.canonical_name, artist.sort_name, \
                 artist.created_at, artist.updated_at, \
@@ -265,7 +274,7 @@ async fn load_artists(
            LEFT JOIN artist_catalog_aggregates aggregate ON aggregate.artist_id = artist.id \
           WHERE artist.status NOT IN ('merged', 'deprecated') \
             AND ($1::text IS NULL OR {fold_expr} LIKE '%' || $1 || '%') \
-          ORDER BY artist.sort_name COLLATE \"C\", artist.public_api_id \
+          ORDER BY {order_clause} \
           LIMIT $2 OFFSET $3"
     )))
     .bind(search_term.map(fold))
@@ -461,9 +470,12 @@ async fn load_album(pool: &PgPool, public_id: Uuid) -> Result<Option<AlbumFacts>
     )))
 }
 
+// The frozen baseline passes the legacy SongNumber through as
+// `IndexNumber` unchanged (multi-disc numbering such as 101/201 is emitted
+// raw; `ParentIndexNumber` stays null), so no disc/track decomposition.
 const SONG_SELECT: &str = "\
     SELECT track.public_api_id, track.title, track.sort_title, \
-           (COALESCE(track.disc_number, 1) * 100 + COALESCE(track.track_number, track.ordinal)), \
+           track.track_number, \
            track.duration_ms, media.container, media.byte_size, media.bitrate_bps, \
            media.sample_rate_hz, \
            release.title, release.public_api_id, track.created_at, track.updated_at";
@@ -1078,7 +1090,7 @@ async fn get_similar_items(
                           JOIN artists artist ON artist.id = billing.artist_id \
                           WHERE billing.release_id = release.id AND billing.role = 'primary' \
                             AND artist.public_api_id = $2)) \
-                        OR release.public_api_id IN ({})) \
+                        OR release.id IN ({})) \
                  ORDER BY track.public_api_id LIMIT $4",
                 genre_overlap_sql("$3")
             )))
@@ -1124,7 +1136,7 @@ async fn get_similar_items(
                           JOIN artists artist ON artist.id = billing.artist_id \
                           WHERE billing.release_id = release.id AND billing.role = 'primary' \
                             AND artist.public_api_id = $2)) \
-                        OR release.public_api_id IN ({})) \
+                        OR release.id IN ({})) \
                  ORDER BY release.public_api_id LIMIT $4",
                 genre_overlap_sql("$3")
             )))
@@ -1184,7 +1196,7 @@ async fn instant_mix_rows(
 ) -> Result<Vec<sqlx::postgres::PgRow>, sqlx::Error> {
     sqlx::query(sqlx::AssertSqlSafe(format!(
         "SELECT track.public_api_id, track.title, \
-                (COALESCE(track.disc_number, 1) * 100 + COALESCE(track.track_number, track.ordinal)), \
+                track.track_number, \
                 track.duration_ms, track.created_at, \
                 release.title, release.public_api_id, \
                 extract(year FROM release.release_date)::integer, \
@@ -1202,7 +1214,7 @@ async fn instant_mix_rows(
                   JOIN artists artist ON artist.id = billing.artist_id \
                   WHERE billing.release_id = release.id AND billing.role = 'primary' \
                     AND artist.public_api_id = $3)) \
-             OR release.public_api_id IN ({}) \
+             OR release.id IN ({}) \
            ) \
          ORDER BY track.public_api_id LIMIT $5",
         genre_overlap_sql("$4")

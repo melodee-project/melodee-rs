@@ -633,10 +633,10 @@ async fn bookmarks_round_trip_matches_the_captures() {
     assert_eq!(entry["userRating"], 5);
     assert_eq!(entry["playerId"], 0);
     assert_eq!(entry["playCount"], 0);
-    assert!(
-        entry["starred"].as_str().unwrap().ends_with('Z'),
-        "starred renders as a timestamp string"
-    );
+    // Captured: song `starred` is the legacy Nullable<DateTime>.ToString()
+    // artifact — "" in every frozen golden (runtime-set timestamps are masked
+    // volatile there).
+    assert_eq!(entry["starred"], "");
     let album_artist = &entry["albumArtists"][0];
     assert_eq!(album_artist["name"], "Aurora Fields");
     assert_eq!(album_artist["artistImageUrl"], "URL", "literal quirk");

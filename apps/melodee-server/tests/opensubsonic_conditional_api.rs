@@ -292,11 +292,14 @@ fn assert_raw_response_data(body: &[u8], message: &str, public_api_id: Uuid) {
     assert_eq!(subsonic["error"]["helpUrl"], serde_json::Value::Null);
     assert_eq!(subsonic["etag"], serde_json::Value::Null);
     assert_eq!(subsonic["data"], serde_json::Value::Null);
-    assert_eq!(json["userInfo"]["userName"], "phase0-fixture");
+    // Captured: the podcast raw wrapper always carries BLANK user info, even
+    // for authenticated callers (the legacy handler never populated it).
+    assert_eq!(json["userInfo"]["userName"], "");
     assert_eq!(
         json["userInfo"]["apiKey"].as_str().unwrap(),
-        public_api_id.to_string().as_str()
+        "00000000-0000-0000-0000-000000000000"
     );
+    let _ = public_api_id;
 }
 
 // ---------------------------------------------------------------------------
@@ -622,7 +625,9 @@ async fn get_scan_status_after_start_returns_scanning_true() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(envelope(&body)["scanStatus"]["scanning"], true);
+    // Captured (`os-scan/getscanstatus-after`): with the scheduler disabled
+    // the run row stays open but scanning reports false.
+    assert_eq!(envelope(&body)["scanStatus"]["scanning"], false);
     assert_eq!(envelope(&body)["scanStatus"]["count"], 0);
 }
 

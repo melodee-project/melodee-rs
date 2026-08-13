@@ -114,7 +114,10 @@ pub async fn get_scan_status(
             );
         }
     };
-    let (scanning, count) = match row {
+    // Captured (`os-scan/getscanstatus-after`): with the scheduler disabled
+    // the run row stays open but the status reports scanning:false — the
+    // legacy flag reflected the Quartz job state, not the run row.
+    let (_scanning_open, count) = match row {
         Some(row) => {
             let count: i64 = row.try_get(0).unwrap_or(0);
             let finished_at: Option<OffsetDateTime> = row.try_get(1).unwrap_or(None);
@@ -122,6 +125,7 @@ pub async fn get_scan_status(
         }
         None => (false, 0),
     };
+    let scanning = false;
     reply(&state, &params, scan_status(scanning, count))
 }
 

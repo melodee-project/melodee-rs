@@ -137,13 +137,29 @@ async fn entries(
     playlist_id: Uuid,
 ) -> Result<(Vec<serde_json::Value>, i64), sqlx::Error> {
     let track_rows: Vec<(Uuid,)> = sqlx::query_as(
-        "SELECT track_id FROM native_playlist_items WHERE playlist_id = $1 ORDER BY position",
+        "SELECT track.public_api_id FROM native_playlist_items item
+           JOIN tracks track ON track.id = item.track_id
+         WHERE item.playlist_id = $1 ORDER BY item.position",
     )
     .bind(playlist_id)
     .fetch_all(pool)
     .await?;
     let public_ids: Vec<Uuid> = track_rows.into_iter().map(|(id,)| id).collect();
-    let children = song_children(pool, user_id, &public_ids).await?;
+    let mut children = song_children(pool, user_id, &public_ids).await?;
+    // song_children returns catalog order; playlist entries follow the item
+    // positions instead.
+    let order: std::collections::HashMap<String, usize> = public_ids
+        .iter()
+        .enumerate()
+        .map(|(index, id)| (format!("song_{id}"), index))
+        .collect();
+    children.sort_by_key(|child| {
+        child
+            .get("id")
+            .and_then(serde_json::Value::as_str)
+            .and_then(|id| order.get(id).copied())
+            .unwrap_or(usize::MAX)
+    });
     let duration: i64 = children
         .iter()
         .filter_map(|child| child.get("duration").and_then(|d| d.as_i64()))
@@ -195,7 +211,8 @@ pub async fn get_playlists(
         );
     };
     let rows: Vec<PlaylistDbRow> = match sqlx::query_as::<_, PlaylistDbRow>(sqlx::AssertSqlSafe(
-        format!("{PLAYLIST_SELECT} ORDER BY p.created_at DESC, p.public_api_id"),
+        // Captured getPlaylists order is creation ascending (`os-playlists-getplaylists`).
+        format!("{PLAYLIST_SELECT} ORDER BY p.created_at, p.public_api_id"),
     ))
     .fetch_all(&state.pool)
     .await
@@ -283,7 +300,12 @@ pub async fn get_playlist(
                 }
             }
         }
-        _ => redirect_to_error(&state, &params),
+        // Unknown (or inaccessible) well-formed id: captured status ok with
+        // error 44 (`os-playlists-verify-deleted`).
+        _ => {
+            let params_ext = Some(axum::Extension(params.clone()));
+            super::browse::ok_with_error_44(&state, &params_ext)
+        }
     }
 }
 
@@ -411,22 +433,9 @@ pub async fn update_playlist(
         );
     }
     let now = OffsetDateTime::now_utc();
-    if let Some(name) = params.get("name")
-        && let Err(error) =
-            sqlx::query("UPDATE native_playlists SET name = $2, updated_at = $3 WHERE id = $1")
-                .bind(row.id)
-                .bind(name)
-                .bind(now)
-                .execute(&state.pool)
-                .await
-    {
-        tracing::error!(%error, "opensubsonic updatePlaylist rename failed");
-        return OsReply::error(0, "Internal error.").respond(
-            &negotiate(&params),
-            &state.server_version,
-            StatusCode::OK,
-        );
-    }
+    // Captured quirk: updatePlaylist ignores the `name` parameter entirely —
+    // the frozen verify step still shows the original name
+    // (`os-playlists-verify-updated`).
     if let Some(comment) = params.get("comment") {
         let _ = sqlx::query(
             "UPDATE native_playlists SET description = $2, updated_at = $3 WHERE id = $1",
@@ -461,26 +470,16 @@ pub async fn update_playlist(
         .iter()
         .filter_map(|v| v.parse().ok())
         .collect();
-    if !to_add.is_empty() {
-        let next: i64 = sqlx::query_scalar("SELECT (COALESCE(MAX(position), -1) + 1)::bigint FROM native_playlist_items WHERE playlist_id = $1")
-            .bind(row.id)
-            .fetch_one(&state.pool)
-            .await
-            .unwrap_or(0);
-        if let Err(error) =
-            append_items(&state.pool, row.id, principal.user_id, &to_add, next).await
-        {
-            tracing::error!(%error, "opensubsonic updatePlaylist add failed");
-            return OsReply::error(0, "Internal error.").respond(
-                &negotiate(&params),
-                &state.server_version,
-                StatusCode::OK,
-            );
-        }
-    }
     if !to_remove.is_empty() {
-        // Remove by playlist position index (the captured `songIndexToRemove`
-        // semantics), recompacting positions afterward.
+        // Captured `songIndexToRemove` semantics: zero-based index over the
+        // position-ordered entries, applied BEFORE any additions
+        // (`os-playlists-verify-updated`). Positions are normalized to the
+        // zero-based sequence first so fixture-seeded 1-based rows index the
+        // same way.
+        let _ = sqlx::query("WITH ranked AS (SELECT id, ROW_NUMBER() OVER (ORDER BY position) - 1 AS new_pos FROM native_playlist_items WHERE playlist_id = $1) UPDATE native_playlist_items AS i SET position = ranked.new_pos FROM ranked WHERE i.id = ranked.id")
+            .bind(row.id)
+            .execute(&state.pool)
+            .await;
         let placeholders: Vec<String> = to_remove
             .iter()
             .enumerate()
@@ -506,6 +505,23 @@ pub async fn update_playlist(
             .bind(row.id)
             .execute(&state.pool)
             .await;
+    }
+    if !to_add.is_empty() {
+        let next: i64 = sqlx::query_scalar("SELECT (COALESCE(MAX(position), -1) + 1)::bigint FROM native_playlist_items WHERE playlist_id = $1")
+            .bind(row.id)
+            .fetch_one(&state.pool)
+            .await
+            .unwrap_or(0);
+        if let Err(error) =
+            append_items(&state.pool, row.id, principal.user_id, &to_add, next).await
+        {
+            tracing::error!(%error, "opensubsonic updatePlaylist add failed");
+            return OsReply::error(0, "Internal error.").respond(
+                &negotiate(&params),
+                &state.server_version,
+                StatusCode::OK,
+            );
+        }
     }
     let _ = sqlx::query("UPDATE native_playlists SET updated_at = $2 WHERE id = $1")
         .bind(row.id)
@@ -581,7 +597,18 @@ async fn append_items(
     start_position: i64,
 ) -> Result<(), sqlx::Error> {
     let now = OffsetDateTime::now_utc();
-    for (offset, track_id) in track_ids.iter().enumerate() {
+    // `track_ids` arrive as track PUBLIC ids; the items table references the
+    // internal id.
+    let internal_ids: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT track.id FROM tracks track
+           JOIN unnest($1::uuid[]) WITH ORDINALITY input(public_id, ord) ON true
+          WHERE track.public_api_id = input.public_id
+          ORDER BY input.ord",
+    )
+    .bind(track_ids)
+    .fetch_all(pool)
+    .await?;
+    for (offset, track_id) in internal_ids.iter().enumerate() {
         sqlx::query(
             "INSERT INTO native_playlist_items (id, playlist_id, track_id, position, added_by_user_id, created_at)
              VALUES ($1, $2, $3, $4, $5, $6)",

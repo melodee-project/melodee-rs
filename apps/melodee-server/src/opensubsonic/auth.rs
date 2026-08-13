@@ -62,15 +62,22 @@ fn is_podcast_path(path: &str) -> bool {
 }
 
 fn auth_failure(params: &Params, path: &str, server_version: &str) -> Response {
-    let status = if is_podcast_path(path) {
-        StatusCode::FORBIDDEN
-    } else {
-        StatusCode::OK
-    };
+    // Captured podcast-controller quirk (`os-getpodcasts-norole`): auth
+    // failures on podcast routes return HTTP 403 with the raw ResponseData
+    // wrapper, not the subsonic envelope other controllers use.
+    if is_podcast_path(path) {
+        return super::podcasts::podcasts_raw_error(
+            server_version,
+            None,
+            StatusCode::FORBIDDEN,
+            40,
+            "Wrong username or password.",
+        );
+    }
     OsReply::error(40, "Wrong username or password.").respond(
         &negotiate(params),
         server_version,
-        status,
+        StatusCode::OK,
     )
 }
 
@@ -78,18 +85,40 @@ fn is_bypass(request: &Request, state: &OsState) -> bool {
     if request.uri().path().contains("/images/") {
         return true;
     }
-    if let Some(connect_info) = request
+    // Captured bypass semantics require the EFFECTIVE client address: the
+    // legacy server ran with UseForwardedHeaders, so a trusted proxy's
+    // Forwarded/X-Forwarded-For replaces RemoteIp (the Phase 0 capture
+    // defeated the bypass exactly this way) and X-Forwarded-Host replaces the
+    // Host used for the baseUrl comparison.
+    let Some(connect_info) = request
         .extensions()
         .get::<ConnectInfo<std::net::SocketAddr>>()
-        && connect_info.ip().is_loopback()
-    {
+        .copied()
+    else {
+        return false;
+    };
+    let peer = connect_info.0;
+    let header_str = |name: &str| {
+        request
+            .headers()
+            .get(name)
+            .and_then(|value| value.to_str().ok())
+    };
+    let client_ip = state
+        .client_addresses
+        .resolve(peer, header_str("forwarded"), header_str("x-forwarded-for"))
+        .unwrap_or_else(|_| peer.ip());
+    if client_ip.is_loopback() {
         return true;
     }
     if let Some(base_host) = &state.base_url_host {
-        let host = request
-            .headers()
-            .get(axum::http::header::HOST)
-            .and_then(|value| value.to_str().ok())
+        let forwarded_host = state
+            .client_addresses
+            .is_trusted(peer.ip())
+            .then(|| header_str("x-forwarded-host"))
+            .flatten();
+        let host = forwarded_host
+            .or_else(|| header_str("host"))
             .map(|value| value.split(':').next().unwrap_or(value));
         if host == Some(base_host.as_str()) {
             return true;

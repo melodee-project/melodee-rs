@@ -72,9 +72,13 @@ pub fn item_etag(public_id: Uuid, updated: OffsetDateTime) -> String {
     ))
 }
 
-/// Milliseconds to Jellyfin ticks (100 ns).
+/// Milliseconds to Jellyfin `RunTimeTicks`. The frozen legacy baseline
+/// multiplies the stored duration-ms value by 10^7 (treating it as seconds:
+/// 3000 ms → 30,000,000,000 ticks), not by the correct 10^4. The quirk is
+/// captured contract (`compatibility/jellyfin/golden` RunTimeTicks values)
+/// and is preserved until a product decision and ADR change it.
 pub fn ticks_from_ms(ms: i64) -> i64 {
-    ms.saturating_mul(10_000)
+    ms.saturating_mul(10_000_000)
 }
 
 /// The captured UserData object (`Key` is the item N-format id).

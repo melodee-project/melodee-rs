@@ -541,17 +541,28 @@ async fn download_disabled_redirects_credential_free_302() {
 }
 
 #[tokio::test]
-async fn get_cover_art_song_returns_200_empty_when_no_artwork() {
+async fn get_cover_art_song_serves_the_captured_default_when_no_artwork() {
+    // Frozen `os-getcoverart-song`: a sized request for a song without stored
+    // artwork is served the processed default JPEG (785 bytes).
     let db = common::TestDb::create("os_media_coverart_song").await;
     let (state, _temp, _wav, track) = setup_media(&db, 9013, "Solar Wind").await;
     let path = format!("/rest/getCoverArt.view?f=json&v=1.16.1&c=phase0&id=song_{track}&size=300");
     let (status, headers, body) = respond(state.clone(), get(&authed(&path))).await;
     assert_eq!(status, StatusCode::OK);
-    assert!(
-        headers.get(header::CONTENT_TYPE).is_none(),
-        "no artwork: no content-type"
-    );
-    assert!(body.is_empty(), "no artwork: empty body");
+    assert_eq!(header_str(&headers, header::CONTENT_TYPE), "image/jpeg");
+    assert_eq!(body.len(), 785, "processed default artwork bytes");
+}
+
+#[tokio::test]
+async fn get_cover_art_unknown_id_returns_200_empty() {
+    let db = common::TestDb::create("os_media_coverart_unknown").await;
+    let state = state(&db).await;
+    let path = "/rest/getCoverArt.view?f=json&v=1.16.1&c=phase0&id=album_00000000-0000-0000-0000-000000000000";
+    let (status, headers, body) = respond(state.clone(), get(&authed(path))).await;
+    // Captured os-getcoverart-unknown: 200 with an empty body.
+    assert_eq!(status, StatusCode::OK);
+    assert!(headers.get(header::CONTENT_TYPE).is_none());
+    assert!(body.is_empty());
 }
 
 /// Creates a playlist through the public API and stores artwork bytes on it.
@@ -615,13 +626,16 @@ async fn get_cover_art_if_none_match_returns_304() {
 }
 
 #[tokio::test]
-async fn get_avatar_missing_returns_404() {
+async fn get_avatar_missing_serves_the_captured_default() {
+    // Frozen `os-getavatar`: a user without stored avatar bytes is served the
+    // legacy default avatar image (image/png), not a 404.
     let db = common::TestDb::create("os_media_avatar_missing").await;
     let state = state(&db).await;
     let path = "/rest/getAvatar.view?f=json&v=1.16.1&c=phase0&username=phase0-fixture";
-    let (status, _headers, body) = respond(state.clone(), get(&authed(path))).await;
-    assert_eq!(status, StatusCode::NOT_FOUND);
-    assert!(body.is_empty());
+    let (status, headers, body) = respond(state.clone(), get(&authed(path))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(header_str(&headers, header::CONTENT_TYPE), "image/png");
+    assert_eq!(body.len(), 2_271_384, "default avatar bytes");
 }
 
 #[tokio::test]
@@ -709,27 +723,7 @@ async fn get_lyrics_by_song_id_returns_bare_ok_envelope() {
     );
 }
 
-#[tokio::test]
-async fn images_route_serves_playlist_artwork_without_auth() {
-    let db = common::TestDb::create("os_media_images_artwork").await;
-    let state = state(&db).await;
-    let jpeg = b"\xFF\xD8\xFF\xE0\x00\x10JFIF\x00images-route-probe".to_vec();
-    let wire_id = seed_playlist_with_artwork(&db, &state, &jpeg).await;
-    // No u/t/s: the `/images/` path is bypass-eligible (no auth required).
-    let path = format!("/images/{wire_id}/300");
-    let (status, headers, body) = respond(state.clone(), get(&path)).await;
-    assert_eq!(status, StatusCode::OK);
-    assert_header(&headers, header::CONTENT_TYPE, "image/jpeg");
-    assert_header(&headers, header::CACHE_CONTROL, "public, max-age=86400");
-    assert_eq!(body, jpeg);
-}
-
-#[tokio::test]
-async fn images_route_unknown_redirects_credential_free_302() {
-    let db = common::TestDb::create("os_media_images_unknown").await;
-    let state = state(&db).await;
-    let path = "/images/song_00000000-0000-0000-0000-000000000000/300";
-    let (status, headers, _body) = respond(state.clone(), get(path)).await;
-    assert_eq!(status, StatusCode::FOUND);
-    assert!(header_str(&headers, header::LOCATION).contains("/Account/Login?ReturnUrl=%2FError"));
-}
+// `/images/{id}/{size}` is owned by the native adapter: it is absent from the
+// OpenSubsonic route inventory, and the frozen baseline serves the native
+// placeholder/empty classes there (see native image captures). The
+// OpenSubsonic auth bypass for `/images/` paths is covered by the auth tests.

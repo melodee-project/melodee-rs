@@ -463,12 +463,35 @@ impl NativeUserStateStore {
         .ok_or(NativeUserStateStoreError::NotFound)
     }
 
-    /// Lists owned playlists in the captured deterministic creation order.
+    /// Lists owned playlists in the captured deterministic creation order
+    /// (newest first, the frozen native-v1 contract).
     pub async fn playlists(
         pool: &PgPool,
         owner_user_id: Uuid,
         page: u32,
         page_size: u16,
+    ) -> Result<(i64, Vec<NativePlaylist>), NativeUserStateStoreError> {
+        Self::playlists_ordered(pool, owner_user_id, page, page_size, false).await
+    }
+
+    /// Lists owned playlists oldest first — the frozen Jellyfin baseline
+    /// orders `/Playlists` by ascending creation time
+    /// (`jf-playlists/playlists-list`).
+    pub async fn playlists_oldest_first(
+        pool: &PgPool,
+        owner_user_id: Uuid,
+        page: u32,
+        page_size: u16,
+    ) -> Result<(i64, Vec<NativePlaylist>), NativeUserStateStoreError> {
+        Self::playlists_ordered(pool, owner_user_id, page, page_size, true).await
+    }
+
+    async fn playlists_ordered(
+        pool: &PgPool,
+        owner_user_id: Uuid,
+        page: u32,
+        page_size: u16,
+        oldest_first: bool,
     ) -> Result<(i64, Vec<NativePlaylist>), NativeUserStateStoreError> {
         let page = page.max(1);
         let page_size = page_size.clamp(1, MAX_NATIVE_PLAYLIST_PAGE_SIZE);
@@ -482,13 +505,14 @@ impl NativeUserStateStore {
                 .bind(owner_user_id)
                 .fetch_one(pool)
                 .await?;
-        let rows = sqlx::query_as::<_, NativePlaylist>(
+        let direction = if oldest_first { "ASC" } else { "DESC" };
+        let rows = sqlx::query_as::<_, NativePlaylist>(sqlx::AssertSqlSafe(format!(
             "SELECT id, public_api_id, owner_user_id, name, description, is_public,
                     revision, created_at, updated_at
              FROM native_playlists WHERE owner_user_id = $1
-             ORDER BY created_at DESC, public_api_id
-             LIMIT $2 OFFSET $3",
-        )
+             ORDER BY created_at {direction}, public_api_id
+             LIMIT $2 OFFSET $3"
+        )))
         .bind(owner_user_id)
         .bind(i64::from(page_size))
         .bind(offset)

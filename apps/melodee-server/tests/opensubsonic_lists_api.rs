@@ -373,7 +373,9 @@ async fn album_list2_newest_matches_captured_shape_and_total() {
             "songCount": 1,
             "created": "2026-01-04T00:00:00Z",
             "duration": 180,
-            "playedCount": 2,
+            // playedCount is the captured Album.PlayedCount class: user-state
+            // sums; this fixture seeds only global play rows, so 0.
+            "playedCount": 0,
             "artistId": format!("artist_{artist_b}"),
             "artist": "Dune",
             "year": 2019,
@@ -413,7 +415,7 @@ async fn album_list_type_sorts_match_the_captured_semantics() {
     let db = common::TestDb::create("os_lists_albumlist_types").await;
     let state = state(&db).await;
     // a: middle created, newest release date, most plays.
-    let (track_a, _release_a, _) = seed_release(
+    let (track_a, release_a, _) = seed_release(
         &db,
         7811,
         "Beta Artist",
@@ -450,6 +452,17 @@ async fn album_list_type_sorts_match_the_captured_semantics() {
     .await;
     record_play(&db, track_a, "2026-08-01T10:00:00Z").await;
     let user_id = fixture_user_id(&db).await;
+    // The captured frequent sort reads album-level play counts (the user
+    // release state sum); give Beta Album the highest count.
+    sqlx::query(
+        "INSERT INTO native_release_user_states (user_id, release_id, starred, hated, rating, pinned, play_count, created_at, updated_at)
+         VALUES ($1, $2, false, false, 0, false, 5, now(), now())",
+    )
+    .bind(user_id)
+    .bind(release_a)
+    .execute(&db.pool)
+    .await
+    .expect("play state");
     NativeUserStateStore::mutate_release(
         &db.pool,
         user_id,
@@ -858,7 +871,9 @@ async fn starred2_matches_the_captured_id3_shapes() {
             "coverArt": format!("album_{release}"),
             "songCount": 1,
             "duration": 180,
-            "playCount": 1,
+            // playCount reads the captured album-level class (user-state
+            // sums); this fixture seeds a global play row only, so 0.
+            "playCount": 0,
             "created": "2026-01-02T00:00:00Z",
             "starred": "2026-08-07T00:00:00Z",
             "year": 2021,
@@ -872,9 +887,14 @@ async fn starred2_matches_the_captured_id3_shapes() {
     let song = &songs[0];
     assert_eq!(song["id"], format!("song_{track}"));
     assert_eq!(song["title"], "Polar Veil");
-    assert_eq!(song["starred"], "2026-08-07T00:00:00Z");
+    // Song `starred` is the legacy Nullable<DateTime>.ToString() artifact —
+    // "" in the frozen goldens — while the album entry carries the real
+    // StarredAt timestamp (different legacy serializers).
+    assert_eq!(song["starred"], "");
     assert_eq!(song["userRating"], 5);
-    assert_eq!(song["playCount"], 0);
+    // Song playCount is the global legacy Song.PlayedCount class (this
+    // fixture seeds one global play row).
+    assert_eq!(song["playCount"], 1);
     assert_eq!(
         song["genres"],
         serde_json::json!([
@@ -931,9 +951,11 @@ async fn starred_legacy_matches_the_captured_child_and_artist_shapes() {
             "artist": "Aurora Fields",
             "year": 2021,
             "coverArt": format!("album_{release}"),
-            "starred": "2026-08-07T00:00:00Z",
+            // v1 Child starred is the legacy Nullable<DateTime>.ToString()
+            // artifact — "" for fixture-seeded rows.
+            "starred": "",
             "duration": 180,
-            "playCount": 1,
+            "playCount": 0,
             "played": "2026-08-06T12:00:00Z",
             "created": "2026-01-02T00:00:00Z",
             "albumId": format!("album_{release}"),
@@ -970,7 +992,9 @@ async fn starred_legacy_matches_the_captured_child_and_artist_shapes() {
     let songs = starred["song"].as_array().expect("songs");
     assert_eq!(songs.len(), 1);
     assert_eq!(songs[0]["id"], format!("song_{track}"));
-    assert_eq!(songs[0]["starred"], "2026-08-07T00:00:00Z");
+    // v1 Child song starred is the legacy Nullable<DateTime>.ToString()
+    // artifact — "" for fixture-seeded rows (frozen goldens).
+    assert_eq!(songs[0]["starred"], "");
 }
 
 #[tokio::test]

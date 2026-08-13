@@ -1272,7 +1272,9 @@ async fn sessions_synthesis_and_playback_reports() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json_body(&bytes), serde_json::json!([]));
 
-    // Playing -> the session appears with NowPlayingItem.
+    // Playing posts do NOT register a listable session: the frozen baseline
+    // lists [] even immediately after Playing/Progress
+    // (`jf-userstate/sessions-list`).
     let body = format!(r#"{{"ItemId":"{track}","PlaySessionId":"ps-1"}}"#);
     let (status, _, _) = respond(
         &fixture.state,
@@ -1282,11 +1284,7 @@ async fn sessions_synthesis_and_playback_reports() {
     assert_eq!(status, StatusCode::NO_CONTENT);
     let (status, _, bytes) = respond(&fixture.state, get("/Sessions", &fixture.token)).await;
     assert_eq!(status, StatusCode::OK);
-    let json = json_body(&bytes);
-    let sessions = json.as_array().expect("sessions array");
-    assert_eq!(sessions.len(), 1);
-    assert_eq!(sessions[0]["NowPlayingItem"]["Id"], track);
-    assert_eq!(sessions[0]["UserId"], nf(fixture.user_public_id));
+    assert_eq!(json_body(&bytes), serde_json::json!([]));
 
     // Progress/Ping/Capabilities are 204.
     for (path, body) in [

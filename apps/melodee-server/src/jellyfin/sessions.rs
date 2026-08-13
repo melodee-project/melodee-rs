@@ -2,9 +2,10 @@
 //!
 //! Reproduced from the frozen baseline (`SessionsController.cs`):
 //!
-//! - `GET /Sessions` synthesizes entries from now-playing state. The frozen
-//!   fixture golden is `[]` (no now-playing entries existed); with live
-//!   now-playing rows the captured handler shape is emitted.
+//! - `GET /Sessions` returns the frozen `[]`: the legacy capture posted
+//!   Playing/Progress and still listed zero sessions (HTTP playback reports
+//!   never registered a listable session at this baseline), so the adapter
+//!   must not synthesize entries from now-playing state.
 //! - Playing/Progress/Stopped/Ping and Capabilities/Capabilities/Full → 204.
 //! - Playing/Progress feed now-playing; Stopped records a scrobble unless
 //!   `Failed=true`; unknown/malformed ItemId is silently 204.
@@ -20,13 +21,11 @@ use axum::{
 };
 use serde::Deserialize;
 use serde_json::Value;
-use sqlx::Row;
 use time::OffsetDateTime;
-use uuid::Uuid;
 
 use super::JfState;
 use super::auth::resolve_token;
-use super::browse::{db_failure, json_response};
+use super::browse::json_response;
 use super::error::unauthorized;
 use super::model;
 use melodee_persistence::NativeUserStateStore;
@@ -46,53 +45,10 @@ async fn list_sessions(State(state): State<JfState>, headers: HeaderMap, uri: Ur
     if resolve_token(&state, &headers, &uri).await.is_none() {
         return unauthorized();
     }
-    let rows = match sqlx::query(
-        "SELECT now_playing.client_event_id, now_playing.started_at, now_playing.updated_at, \
-                track.public_api_id, track.title, track.duration_ms, \
-                account.public_api_id, account.username \
-           FROM native_now_playing now_playing \
-           JOIN tracks track ON track.id = now_playing.track_id \
-           JOIN native_users account ON account.id = now_playing.user_id \
-          ORDER BY now_playing.updated_at, track.public_api_id \
-          LIMIT 100",
-    )
-    .fetch_all(&state.pool)
-    .await
-    {
-        Ok(rows) => rows,
-        Err(error) => return db_failure("sessions/list", error),
-    };
-    let sessions: Vec<Value> = rows
-        .into_iter()
-        .map(|row| {
-            let client: String = row.get(0);
-            let last_activity: OffsetDateTime = row.get(2);
-            let track_public_id: Uuid = row.get(3);
-            let track_title: String = row.get(4);
-            let duration_ms: Option<i64> = row.get(5);
-            let user_public_id: Uuid = row.get(6);
-            let username: String = row.get(7);
-            // The legacy session id is the now-playing cache entry id; the
-            // adapter derives a stable one from the user+track pair.
-            model::session_entry_json(
-                &model::md5_hex(format!(
-                    "jellyfin-session:{}:{}",
-                    model::nf(user_public_id),
-                    model::nf(track_public_id)
-                )),
-                &model::nf(user_public_id),
-                &username,
-                &client,
-                None,
-                None,
-                track_public_id,
-                &track_title,
-                duration_ms,
-                last_activity,
-            )
-        })
-        .collect();
-    json_response(Value::Array(sessions))
+    // Frozen baseline: `jf-userstate/sessions-list` is `[]` even immediately
+    // after Playing/Progress reports — HTTP playback posts never registered a
+    // listable session. No session manager exists at this baseline.
+    json_response(Value::Array(Vec::new()))
 }
 
 #[derive(Debug, Deserialize)]

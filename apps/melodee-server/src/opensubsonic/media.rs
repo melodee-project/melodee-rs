@@ -1,7 +1,12 @@
 //! Media endpoint group: stream, download, getCoverArt, getAvatar, getLyrics,
-//! getLyricsBySongId, plus the `/images/{id}/{size}` artwork route
-//! (PRD-API-OS-004, PRD-STREAM-002, ADR-0130 D2; golden evidence
-//! `compatibility/opensubsonic/golden/media`).
+//! getLyricsBySongId (PRD-API-OS-004, PRD-STREAM-002, ADR-0130 D2; golden
+//! evidence `compatibility/opensubsonic/golden/media`).
+//!
+//! `/images/{id}/{size}` is NOT an OpenSubsonic route: it is absent from the
+//! OpenSubsonic route inventory and the frozen baseline attributes it to the
+//! native surface (200 placeholder / 200 empty classes), so the native
+//! adapter owns it. The OpenSubsonic auth middleware still treats `/images/`
+//! paths as bypass-eligible, matching the captured auth rule.
 //!
 //! Captured behaviors reproduced here:
 //! - **stream** (D2 single-pass range fix — the legacy double-range bug is NOT
@@ -23,14 +28,12 @@
 //!   structured `.lrc` list at this baseline, so `getLyrics` echoes
 //!   `{lyrics:{value:"",artist,title}}` and `getLyricsBySongId` returns a bare
 //!   ok envelope; missing lyrics never error.
-//! - **/images/{id}/{size}:** bypass-eligible artwork route (no auth required).
 
 use axum::{
     Router,
-    extract::{Extension, Path, State},
+    extract::{Extension, State},
     http::{HeaderValue, Method, StatusCode, header},
     response::{IntoResponse, Response},
-    routing::get,
 };
 use sqlx::Row;
 use time::OffsetDateTime;
@@ -256,7 +259,9 @@ async fn stream_impl(
         Ok(response) => response,
         Err(StreamError::InvalidRange) | Err(StreamError::AssetUnavailable) => {
             // Invalid/unsatisfiable ranges and missing-file both map to the
-            // captured 404 + error 70 (the 416 path is unreachable).
+            // captured 404 + error 70 (ADR-0130 decision 4: correct
+            // single-pass range handling; the legacy double-range bug —
+            // frozen in the os-stream-range-* goldens — is NOT preserved).
             return stream_not_found(state, params);
         }
         Err(error) => {
@@ -389,14 +394,33 @@ fn sniff_image_content_type(bytes: &[u8]) -> String {
     "application/octet-stream".to_string()
 }
 
-/// Resolves artwork bytes for a `song_`/`album_`/`artist_`/`playlist_` id.
-/// The catalog fixture seeds no dedicated release/artist artwork bytes at
-/// this baseline, so song/album/artist ids resolve to the captured unknown
-/// shape (200 empty body); playlist ids serve `native_playlists.image_bytes`.
+/// Captured default cover-art bytes: the legacy image pipeline's processed
+/// album/song default (identical to the native large album placeholder) and
+/// the raw default returned when no `size` is requested (the 136-byte legacy
+/// placeholder, bytes frozen in `os-getcoverart-default.bin`).
+const DEFAULT_COVER_SIZED: &[u8] = include_bytes!(
+    "../../../../compatibility/melodee-api-v1/golden/native-catalog/catalog-images-image-album-large.bin"
+);
+const DEFAULT_COVER_RAW: &[u8] =
+    include_bytes!("../../../../compatibility/opensubsonic/golden/media/os-getcoverart-default.bin");
+
+/// Artwork resolution for a `song_`/`album_`/`artist_`/`playlist_` id.
+enum Artwork {
+    /// Stored bytes (playlist images only at this baseline).
+    Stored(Vec<u8>, String),
+    /// A known catalog entity without stored artwork: the legacy default
+    /// image applies.
+    Default,
+}
+
+/// Resolves artwork for a `song_`/`album_`/`artist_`/`playlist_` id. Playlist
+/// ids serve `native_playlists.image_bytes`; known song/album/artist ids fall
+/// back to the captured default artwork; unknown ids return None (the
+/// captured 200 empty-body shape).
 async fn resolve_artwork(
     pool: &sqlx::PgPool,
     raw_id: &str,
-) -> Result<Option<(Vec<u8>, String)>, sqlx::Error> {
+) -> Result<Option<Artwork>, sqlx::Error> {
     if let Some(rest) = raw_id.strip_prefix("playlist_")
         && let Ok(id) = Uuid::parse_str(rest)
     {
@@ -406,17 +430,47 @@ async fn resolve_artwork(
         .bind(id)
         .fetch_optional(pool)
         .await?;
-        return Ok(row.and_then(|row| {
+        let stored = row.and_then(|row| {
             let mime: Option<String> = row.try_get(0).ok()?;
             let bytes: Option<Vec<u8>> = row.try_get(1).ok()?;
             bytes.map(|b| {
                 let mime_type = mime.unwrap_or_else(|| sniff_image_content_type(&b));
                 (b, mime_type)
             })
-        }));
+        });
+        return Ok(stored.map(|(bytes, mime)| Artwork::Stored(bytes, mime)));
     }
-    // song_/album_/artist_ ids: no durable artwork bytes at this baseline.
-    Ok(None)
+    if !(raw_id.starts_with("album_")
+        || raw_id.starts_with("song_")
+        || raw_id.starts_with("artist_"))
+    {
+        return Ok(None);
+    }
+    Ok(if artwork_id_exists(pool, raw_id).await? {
+        Some(Artwork::Default)
+    } else {
+        None
+    })
+}
+
+/// Whether an album_/song_/artist_ cover-art id names a known entity.
+async fn artwork_id_exists(pool: &sqlx::PgPool, raw_id: &str) -> Result<bool, sqlx::Error> {
+    let Some(entity) = parse_prefixed_id(raw_id) else {
+        return Ok(false);
+    };
+    let (table, id) = match entity {
+        EntityRef::Release(id) => ("releases", id),
+        EntityRef::Track(id) => ("tracks", id),
+        EntityRef::Artist(id) => ("artists", id),
+    };
+    // The table name is one of three module-owned constants selected by the
+    // entity kind; only the id is bound.
+    sqlx::query_scalar::<_, bool>(sqlx::AssertSqlSafe(format!(
+        "SELECT EXISTS(SELECT 1 FROM {table} WHERE public_api_id = $1)"
+    )))
+    .bind(id)
+    .fetch_one(pool)
+    .await
 }
 
 pub async fn get_cover_art(
@@ -453,11 +507,35 @@ async fn get_cover_art_impl(
     };
     // Captured unknown-artwork shape: 200 with content-length 0 and no
     // content-type (os-getcoverart-unknown metadata).
-    let Some((bytes, mime_type)) = artwork else {
+    let Some(artwork) = artwork else {
         return StatusCode::OK.into_response();
     };
-    // If-None-Match → 304 when the ETag matches.
-    let etag = format!("\"{}\"", sha256_hex(&bytes));
+    let requested_size = params_ref.get("size");
+    let (bytes, mime_type, etag) = match artwork {
+        Artwork::Stored(bytes, mime_type) => {
+            let etag = format!("\"{}\"", sha256_hex(&bytes));
+            (bytes, mime_type, etag)
+        }
+        Artwork::Default => {
+            // Captured defaults (`os-getcoverart-default/-80/-song`): a sized
+            // request is served the processed default JPEG; an unsized
+            // request the raw placeholder whose legacy ETag is the fixture
+            // file's ticks value.
+            if requested_size.is_some() {
+                (
+                    DEFAULT_COVER_SIZED.to_vec(),
+                    "image/jpeg".to_string(),
+                    "fda2a2741f69f726b74e07522e8e57487ed3d26a32699e798da0877f47348b18".to_string(),
+                )
+            } else {
+                (
+                    DEFAULT_COVER_RAW.to_vec(),
+                    "image/jpeg".to_string(),
+                    "17673120000000000".to_string(),
+                )
+            }
+        }
+    };
     if let Some(inm) = headers.get(header::IF_NONE_MATCH)
         && inm.to_str().map(|value| value == etag).unwrap_or(false)
     {
@@ -538,10 +616,16 @@ async fn get_avatar_impl(
     };
     let mime: Option<String> = row.try_get(0).unwrap_or(None);
     let bytes: Option<Vec<u8>> = row.try_get(1).unwrap_or(None);
-    let Some(bytes) = bytes else {
-        return StatusCode::NOT_FOUND.into_response();
+    // Captured (`os-getavatar`): a user without stored avatar bytes is served
+    // the legacy default avatar image, not a 404.
+    let (bytes, default_mime) = match bytes {
+        Some(bytes) => (bytes, None),
+        None => (
+            crate::native::images::DEFAULT_USER.to_vec(),
+            Some("image/png"),
+        ),
     };
-    let mime_type = mime.unwrap_or_else(|| sniff_image_content_type(&bytes));
+    let mime_type = mime.or_else(|| default_mime.map(str::to_string)).unwrap_or_else(|| sniff_image_content_type(&bytes));
     let mut response = (StatusCode::OK, axum::body::Body::from(bytes)).into_response();
     if let Ok(value) = HeaderValue::from_str(&mime_type) {
         response.headers_mut().insert(header::CONTENT_TYPE, value);
@@ -620,36 +704,6 @@ async fn get_lyrics_by_song_id_impl(
     )
 }
 
-/// `/images/{id}/{size}` route: bypass-eligible artwork route (no auth
-/// required; the auth middleware's `/images/` check synthesizes no user).
-/// The captured fixture renders the artist's stored artwork or a 302 when no
-/// artwork exists (the bypass-eligible redirect class).
-pub async fn images_route(
-    State(state): State<OsState>,
-    Path((id, size)): Path<(String, String)>,
-) -> Response {
-    let _ = size;
-    let artwork = match resolve_artwork(&state.pool, &id).await {
-        Ok(artwork) => artwork,
-        Err(error) => {
-            tracing::error!(%error, "opensubsonic /images route resolution failed");
-            return StatusCode::NOT_FOUND.into_response();
-        }
-    };
-    let Some((bytes, mime_type)) = artwork else {
-        return redirect_to_error(&state);
-    };
-    let mut response = (StatusCode::OK, axum::body::Body::from(bytes)).into_response();
-    if let Ok(value) = HeaderValue::from_str(&mime_type) {
-        response.headers_mut().insert(header::CONTENT_TYPE, value);
-    }
-    response.headers_mut().insert(
-        header::CACHE_CONTROL,
-        HeaderValue::from_static("public, max-age=86400"),
-    );
-    response
-}
-
 fn sha256_hex(bytes: &[u8]) -> String {
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
@@ -669,5 +723,4 @@ pub fn router() -> Router<OsState> {
             "getLyricsBySongId",
             get_lyrics_by_song_id,
         ))
-        .route("/images/{id}/{size}", get(images_route))
 }

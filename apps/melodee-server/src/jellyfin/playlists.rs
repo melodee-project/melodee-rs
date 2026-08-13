@@ -100,10 +100,12 @@ async fn list_playlists(State(state): State<JfState>, headers: HeaderMap, uri: U
             _ => {}
         }
     }
-    // Captured handler pages in memory after fetching take+skip rows.
+    // Captured handler pages in memory after fetching take+skip rows. The
+    // frozen baseline orders ascending by creation time
+    // (`jf-playlists/playlists-list`), unlike the native-v1 newest-first list.
     let page_size = (take + skip).clamp(1, 1000) as u16;
     let (total, playlists) =
-        match NativeUserStateStore::playlists(&state.pool, principal.user_id, 1, page_size).await {
+        match NativeUserStateStore::playlists_oldest_first(&state.pool, principal.user_id, 1, page_size).await {
             Ok(result) => result,
             Err(error) => {
                 tracing::error!(%error, "jellyfin playlist list failed");

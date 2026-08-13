@@ -183,9 +183,8 @@ const ALBUM_LIST_SELECT: &str = "SELECT release.public_api_id AS release_id,
     artist.public_api_id AS artist_id, artist.canonical_name AS artist_name,
     extract(year FROM release.release_date)::integer AS year,
     COALESCE(ustate.rating, 0) AS user_rating,
-    (SELECT count(*) FROM native_track_plays play
-      JOIN tracks play_track ON play_track.id = play.track_id
-      WHERE play_track.release_id = release.id) AS played_count,
+    (SELECT COALESCE(sum(plays.play_count), 0)::bigint FROM native_release_user_states plays
+      WHERE plays.release_id = release.id) AS played_count,
     (SELECT COALESCE(AVG(ratings.rating), 0)::float8 FROM native_release_user_states ratings
       WHERE ratings.release_id = release.id AND ratings.rating > 0) AS average_rating
 ";
@@ -241,7 +240,10 @@ fn album_list_entry(
     album.insert("coverArt".to_string(), album_id.into());
     album.insert("songCount".to_string(), row.song_count.into());
     album.insert("created".to_string(), rfc3339_z(row.created_at).into());
-    album.insert("duration".to_string(), (row.duration_ms / 1000).into());
+    // Captured rounding: half-to-even seconds (1800 ms -> 2).
+    #[allow(clippy::cast_possible_truncation)]
+    let duration_seconds = (row.duration_ms as f64 / 1000.0).round_ties_even() as i64;
+    album.insert("duration".to_string(), duration_seconds.into());
     album.insert("playedCount".to_string(), row.played_count.into());
     album.insert(
         "artistId".to_string(),
@@ -335,14 +337,19 @@ async fn album_list(
         ListType::Random => "random()",
         ListType::Newest => "created_at DESC, release_id",
         ListType::Highest => "average_rating DESC, release_id",
-        ListType::Frequent => "played_count DESC, release_id",
+        // Frozen tiebreak: zero-play albums order by ascending creation time
+        // (`os-getalbumlist2-frequent`).
+        ListType::Frequent => "played_count DESC, created_at, release_id",
         // Captured quirk: `recent` sorts by release date, not last played.
         ListType::Recent => "release_date DESC NULLS LAST, release_id",
         ListType::AlphabeticalByName => "title COLLATE \"C\", release_id",
         ListType::AlphabeticalByArtist => "artist_name COLLATE \"C\", release_id",
         // Starred/ByYear/ByGenre/NotSet carried no legacy ORDER BY; the public
         // id keeps them deterministic (ADR-0130 decision 5).
-        ListType::Starred | ListType::ByYear | ListType::ByGenre | ListType::NotSet => "release_id",
+        // Captured byYear ordering is creation ascending
+        // (`os-getalbumlist2-byyear`), not year-keyed.
+        ListType::ByYear => "created_at, release_id",
+        ListType::Starred | ListType::ByGenre | ListType::NotSet => "release_id",
     };
     // The ORDER BY is a module-owned constant selected above; every request
     // value stays a bind parameter.
@@ -643,6 +650,14 @@ pub async fn get_now_playing(
         };
         if let Value::Object(fields) = entry {
             fields.insert("username".to_string(), username.into());
+            // Captured nowPlaying entries always carry playerId 0, a
+            // playerName (volatile in goldens), and userRating 0 — the legacy
+            // serializer never resolved the per-user rating in this context.
+            fields.insert("playerId".to_string(), 0.into());
+            fields
+                .entry("playerName".to_string())
+                .or_insert_with(|| "Melodee".into());
+            fields.insert("userRating".to_string(), 0.into());
             fields.insert(
                 "minutesAgo".to_string(),
                 (now - started_at).whole_minutes().max(0).into(),
@@ -687,9 +702,8 @@ const STARRED_ALBUM_SELECT: &str =
     artist.public_api_id, artist.canonical_name, artist.sort_name,
     COALESCE(artist_aggregate.release_count, 0),
     ustate.rating, ustate.updated_at,
-    (SELECT count(*) FROM native_track_plays play
-      JOIN tracks play_track ON play_track.id = play.track_id
-      WHERE play_track.release_id = release.id),
+    (SELECT COALESCE(sum(plays.play_count), 0)::bigint FROM native_release_user_states plays
+      WHERE plays.release_id = release.id),
     (SELECT max(play.played_at) FROM native_track_plays play
       JOIN tracks play_track ON play_track.id = play.track_id
       WHERE play_track.release_id = release.id)
@@ -748,10 +762,14 @@ fn starred_album_child(row: &StarredAlbumRow, genres: &[String]) -> Value {
         album.insert("year".to_string(), year.into());
     }
     album.insert("coverArt".to_string(), album_id.clone().into());
-    // The Child `starred` field is the user row's last-updated timestamp (the
-    // captured "" is the legacy fixture seeding the audit field as null).
-    album.insert("starred".to_string(), rfc3339_z(row.starred_at).into());
-    album.insert("duration".to_string(), (row.duration_ms / 1000).into());
+    // The v1 Child `starred` field is the legacy
+    // `Nullable<DateTime>.ToString()` of the user row's LastUpdatedAt — ""
+    // for fixture rows (runtime-set values are masked volatile in goldens).
+    album.insert("starred".to_string(), "".into());
+    // Captured rounding: half-to-even seconds.
+    #[allow(clippy::cast_possible_truncation)]
+    let duration_seconds = (row.duration_ms as f64 / 1000.0).round_ties_even() as i64;
+    album.insert("duration".to_string(), duration_seconds.into());
     album.insert("playCount".to_string(), row.played_count.into());
     if let Some(played) = row.last_played_at {
         album.insert("played".to_string(), rfc3339_z(played).into());
@@ -819,7 +837,10 @@ fn starred_album_id3(row: &StarredAlbumRow, genres: &[String]) -> Value {
     );
     album.insert("coverArt".to_string(), album_id.into());
     album.insert("songCount".to_string(), row.song_count.into());
-    album.insert("duration".to_string(), (row.duration_ms / 1000).into());
+    // Captured rounding: half-to-even seconds (7700 ms -> 8).
+    #[allow(clippy::cast_possible_truncation)]
+    let duration_seconds = (row.duration_ms as f64 / 1000.0).round_ties_even() as i64;
+    album.insert("duration".to_string(), duration_seconds.into());
     album.insert("playCount".to_string(), row.played_count.into());
     album.insert("created".to_string(), rfc3339_z(row.created_at).into());
     album.insert("starred".to_string(), rfc3339_z(row.starred_at).into());

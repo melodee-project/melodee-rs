@@ -32,29 +32,27 @@ use super::{
 /// envelope for podcast conditional failures (HTTP 400, no x-total-count).
 /// `message` is the captured error text ("Podcasts are currently disabled.",
 /// "Invalid channel id", "Invalid episode id").
-fn podcasts_raw_error(state: &OsState, principal: Option<&OsPrincipal>, message: &str) -> Response {
-    let user_info = match principal {
-        Some(user) => serde_json::json!({
-            "id": 0,
-            "apiKey": user.public_api_id,
-            "userName": user.username,
-            "email": "",
-            "publicKey": "",
-            "timeZoneId": "UTC",
-            "passwordEncrypted": null,
-            "roles": null
-        }),
-        None => serde_json::json!({
-            "id": 0,
-            "apiKey": "00000000-0000-0000-0000-000000000000",
-            "userName": "",
-            "email": "",
-            "publicKey": "",
-            "timeZoneId": "UTC",
-            "passwordEncrypted": null,
-            "roles": null
-        }),
-    };
+pub(crate) fn podcasts_raw_error(
+    server_version: &str,
+    principal: Option<&OsPrincipal>,
+    status: StatusCode,
+    code: i64,
+    message: &str,
+) -> Response {
+    // Captured: the podcast controller's raw wrapper always carries the blank
+    // (unauthenticated) user info even for authenticated callers — the legacy
+    // handler never populated it (`os-podcasts-*` goldens).
+    let _ = principal;
+    let user_info = serde_json::json!({
+        "id": 0,
+        "apiKey": "00000000-0000-0000-0000-000000000000",
+        "userName": "",
+        "email": "",
+        "publicKey": "",
+        "timeZoneId": "UTC",
+        "passwordEncrypted": null,
+        "roles": null
+    });
     let body = serde_json::json!({
         "isSuccess": true,
         "apiKeyId": null,
@@ -65,8 +63,8 @@ fn podcasts_raw_error(state: &OsState, principal: Option<&OsPrincipal>, message:
             "dataDetailPropertyName": "",
             "version": "1.16.1",
             "type": "Melodee",
-            "serverVersion": state.server_version,
-            "error": {"code": 0, "message": message, "helpUrl": null},
+            "serverVersion": server_version,
+            "error": {"code": code, "message": message, "helpUrl": null},
             "etag": null,
             "contentType": null,
             "data": null
@@ -74,7 +72,7 @@ fn podcasts_raw_error(state: &OsState, principal: Option<&OsPrincipal>, message:
         "totalCount": 0
     });
     let mut response = (
-        StatusCode::BAD_REQUEST,
+        status,
         serde_json::to_string(&body).unwrap_or_else(|_| "{}".to_string()),
     )
         .into_response();
@@ -88,7 +86,13 @@ fn podcasts_raw_error(state: &OsState, principal: Option<&OsPrincipal>, message:
 /// The captured disabled-podcasts ResponseData shape (error 0 "Podcasts are
 /// currently disabled.").
 fn podcasts_disabled(state: &OsState, principal: Option<&OsPrincipal>) -> Response {
-    podcasts_raw_error(state, principal, "Podcasts are currently disabled.")
+    podcasts_raw_error(
+        &state.server_version,
+        principal,
+        StatusCode::BAD_REQUEST,
+        0,
+        "Podcasts are currently disabled.",
+    )
 }
 
 fn envelope_or_disabled(
@@ -147,8 +151,10 @@ async fn podcast_mutation_impl(
     // The captured shape is the raw ResponseData 400 (NOT the subsonic
     // envelope) with the captured "Invalid channel id"/"Invalid episode id".
     podcasts_raw_error(
-        state,
+        &state.server_version,
         principal.as_ref().map(|Extension(p)| p),
+        StatusCode::BAD_REQUEST,
+        0,
         invalid_message,
     )
 }
