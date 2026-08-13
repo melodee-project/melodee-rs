@@ -38,13 +38,16 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde_json::{Map, Value};
-use sqlx::{AssertSqlSafe, PgPool, Row};
+use sqlx::{PgPool, Row};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
 use super::{
     OsState,
-    annotation::{rfc3339_z, song_children},
+    annotation::{
+        ContributorEntry, rfc3339_z, song_children, song_children_with_contributors,
+        track_contributors,
+    },
     auth::OsPrincipal,
     envelope::{Format, OsReply, negotiate},
     params::Params,
@@ -626,10 +629,13 @@ pub async fn get_artist(
         artist.insert("starred".to_string(), stamp.into());
     }
     artist.insert("album".to_string(), Value::Array(album_entries));
+    // Captured: a resolved getArtist response carries `x-total-count: 1` (the
+    // legacy pagination middleware reported the single artist entity); the
+    // unknown-artist shape keeps the default 0.
     reply(
         &state,
         &params,
-        OsReply::ok(serde_json::json!({"artist": Value::Object(artist)})),
+        OsReply::ok(serde_json::json!({"artist": Value::Object(artist)})).with_total_count(1),
     )
 }
 
@@ -909,19 +915,29 @@ pub async fn get_album(
         // Unknown release id: captured 302 (os-getalbum-unknown).
         return album_unknown_redirect();
     };
-    let songs = match album_songs(&state, user_id, detail.release_internal_id).await {
-        Ok(songs) => songs,
-        Err(error) => {
-            tracing::error!(%error, "opensubsonic getAlbum songs query failed");
-            return error_reply(&state, &params, "A generic error.");
-        }
-    };
+    let (songs, track_contributions) =
+        match album_songs(&state, user_id, detail.release_internal_id).await {
+            Ok(songs) => songs,
+            Err(error) => {
+                tracing::error!(%error, "opensubsonic getAlbum songs query failed");
+                return error_reply(&state, &params, "A generic error.");
+            }
+        };
     let genres = release_genres(&state.pool, &[detail.release_public_id])
         .await
         .unwrap_or_default()
         .remove(&detail.release_public_id)
         .unwrap_or_default();
-    let album = album_detail_json(&detail, &songs, &genres);
+    // Captured `AlbumId3WithSongs.Artists` = legacy `ContributingArtists()`:
+    // performer-type contributors of every song, in song order
+    // (os-getalbum-compilation).
+    let contributing_artists: Vec<Value> = track_contributions
+        .iter()
+        .flat_map(|(_, entries)| entries.iter())
+        .filter(|entry| entry.is_performance)
+        .map(ContributorEntry::album_scoped_artist_id3)
+        .collect();
+    let album = album_detail_json(&detail, &songs, &genres, &contributing_artists);
     reply(
         &state,
         &params,
@@ -998,7 +1014,12 @@ async fn load_album_detail(
 /// Renders the captured getAlbum album object with the OpenSubsonic-rich
 /// fields (ItemDate forms, isCompilation, discTitles, moods, genres[] +
 /// singular genre, artists[] + displayArtist, parent, originalReleaseDate).
-fn album_detail_json(detail: &AlbumDetailRow, songs: &[Value], genres: &[String]) -> Value {
+fn album_detail_json(
+    detail: &AlbumDetailRow,
+    songs: &[Value],
+    genres: &[String],
+    contributing_artists: &[Value],
+) -> Value {
     let album_id = format!("album_{}", detail.release_public_id);
     let artist_id = format!("artist_{}", detail.artist_public_id);
     let display_artist = detail
@@ -1066,7 +1087,10 @@ fn album_detail_json(detail: &AlbumDetailRow, songs: &[Value], genres: &[String]
             ),
         );
     }
-    album.insert("artists".to_string(), Value::Array(Vec::new()));
+    album.insert(
+        "artists".to_string(),
+        Value::Array(contributing_artists.to_vec()),
+    );
     album.insert("displayArtist".to_string(), display_artist.clone().into());
     album.insert("moods".to_string(), Value::Array(Vec::new()));
     album.insert("sortName".to_string(), detail.sort_title.clone().into());
@@ -1098,19 +1122,22 @@ fn item_date(date: Option<time::Date>) -> Value {
 }
 
 /// Loads the album's tracks and renders them via the shared song projection
-/// (annotation.rs `song_children`), then post-processes each Child for the
-/// getAlbum context: the captured album-context song always carries `starred`
-/// ("" when not starred) and `userRating` (0 when unrated), and the album
-/// `artists[]`/`contributors` come from the release-level billing which the
-/// shared projection already fills with empty arrays. The captured contract
-/// additionally keys the per-song `artistId` to the release's primary artist
-/// (not the track billing) for ordinary albums; the shared projection already
-/// does this.
+/// (annotation.rs `song_children_with_contributors`), then post-processes
+/// each Child for the getAlbum context: the captured album-context song
+/// always carries `starred` ("" when not starred) and `userRating` (0 when
+/// unrated). This is the only captured path whose serializer included
+/// `Song.Contributors`, so the per-song `artists[]`/`contributors[]` arrays
+/// are filled here (os-getalbum-compilation) while every other path emits
+/// empty arrays. Also returns the per-track contributor entries in track
+/// order so the caller can build the album-level `artists[]`
+/// (`ContributingArtists()`). The captured contract additionally keys the
+/// per-song `artistId` to the release's primary artist (not the track
+/// billing) for ordinary albums; the shared projection already does this.
 async fn album_songs(
     state: &OsState,
     user_id: Option<Uuid>,
     release_internal_id: Uuid,
-) -> Result<Vec<Value>, sqlx::Error> {
+) -> Result<(Vec<Value>, Vec<(Uuid, Vec<ContributorEntry>)>), sqlx::Error> {
     let ids: Vec<Uuid> = sqlx::query_scalar::<_, Uuid>(
         "SELECT public_api_id FROM tracks
           WHERE release_id = $1
@@ -1119,9 +1146,20 @@ async fn album_songs(
     .bind(release_internal_id)
     .fetch_all(&state.pool)
     .await?;
-    let mut songs = song_children(&state.pool, user_id.unwrap_or(Uuid::nil()), &ids).await?;
+    let contributors = track_contributors(&state.pool, &ids).await?;
+    let mut songs = song_children_with_contributors(
+        &state.pool,
+        user_id.unwrap_or(Uuid::nil()),
+        &ids,
+        Some(&contributors),
+    )
+    .await?;
     patch_song_average_ratings(&state.pool, user_id, &mut songs).await;
-    Ok(songs)
+    let ordered = ids
+        .iter()
+        .map(|id| (*id, contributors.get(id).cloned().unwrap_or_default()))
+        .collect();
+    Ok((songs, ordered))
 }
 
 pub async fn get_album_info(
@@ -1433,7 +1471,12 @@ fn directory_album_child(
     }
     child.insert("coverArt".to_string(), album_id.clone().into());
     child.insert("starred".to_string(), "".into());
-    child.insert("duration".to_string(), (row.duration_ms / 1000).into());
+    // Captured rounding: half-to-even like the album detail (7700 ms -> 8 in
+    // os-getmusicdirectory-artist), unlike the getArtist album entries which
+    // the frozen contract captured with truncation.
+    #[allow(clippy::cast_possible_truncation)]
+    let duration_seconds = (row.duration_ms as f64 / 1000.0).round_ties_even() as i64;
+    child.insert("duration".to_string(), duration_seconds.into());
     child.insert("playCount".to_string(), row.played_count.into());
     // Captured: directory album children carry `played` ("" when never
     // played), like the album detail.
@@ -1510,7 +1553,7 @@ async fn music_directory_album(
             OsReply::ok(serde_json::json!({"directory": {"child": []}})),
         );
     };
-    let songs = match album_songs(state, user_id, detail.release_internal_id).await {
+    let (songs, _) = match album_songs(state, user_id, detail.release_internal_id).await {
         Ok(songs) => songs,
         Err(error) => {
             tracing::error!(%error, "opensubsonic getMusicDirectory songs query failed");
@@ -1745,7 +1788,7 @@ pub async fn get_top_songs(
     // Name-based lookup: the frozen getTopSongs matches the artist Name
     // EXACTLY — `artist=Dune` returns only the two Dune songs, not Düné's
     // (`os-gettopsongs`). Ordered by global play count desc then public id.
-    let ids: Vec<Uuid> = match sqlx::query_scalar::<_, Uuid>(AssertSqlSafe(format!(
+    let ids: Vec<Uuid> = match sqlx::query_scalar::<_, Uuid>(
         "SELECT track.public_api_id
            FROM tracks track
            JOIN releases release ON release.id = track.release_id AND release.status = 'active'
@@ -1757,8 +1800,8 @@ pub async fn get_top_songs(
            ) artist ON true
           WHERE artist.canonical_name = $1
           ORDER BY (SELECT count(*) FROM native_track_plays play
-                     WHERE play.track_id = track.id) DESC, track.public_api_id"
-    )))
+                     WHERE play.track_id = track.id) DESC, track.public_api_id",
+    )
     .bind(artist_name)
     .fetch_all(&state.pool)
     .await
@@ -1906,12 +1949,5 @@ mod tests {
             None
         );
         assert_eq!(parse_prefixed("no-underscore"), None);
-    }
-
-    #[test]
-    fn fold_artist_name_collapses_the_dune_dune_pair() {
-        assert_eq!(fold_artist_name("Dune"), "DUNE");
-        assert_eq!(fold_artist_name("düné"), "DUNE");
-        assert_eq!(fold_artist_name("  Rock Band "), "ROCKBAND");
     }
 }

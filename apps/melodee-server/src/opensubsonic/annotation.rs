@@ -472,7 +472,189 @@ fn suffix_from(source_path: Option<&str>) -> String {
         .map_or_else(String::new, |(_, extension)| format!(".{extension}"))
 }
 
-fn child_json(row: &ChildRow, genres: &[String], bit_depth: Option<i32>) -> serde_json::Value {
+/// Legacy `StringExtensions.ToNormalizedString` for contributor pseudo-ids:
+/// upper-case, then keep only alphanumeric characters
+/// ("The Phase0 Strings" -> "THEPHASE0STRINGS").
+fn normalized_contributor_name(name: &str) -> String {
+    name.chars()
+        .flat_map(char::to_uppercase)
+        .filter(|c| c.is_alphanumeric())
+        .collect()
+}
+
+/// Subject of a captured contribution: either a resolved Artist identity or a
+/// name-only observation (legacy `ContributorName` with no Artist).
+#[derive(Debug, Clone)]
+pub(crate) enum ContributorSubject {
+    Artist {
+        public_id: Uuid,
+        name: String,
+        sort_name: String,
+        album_count: i64,
+    },
+    NameOnly {
+        name: String,
+    },
+}
+
+/// One captured contributor credit on a Track, in presentation order.
+#[derive(Debug, Clone)]
+pub(crate) struct ContributorEntry {
+    pub role: String,
+    pub sub_role: Option<String>,
+    /// Legacy `ContributorTypeValue == ContributorType.Performer`: performer
+    /// credits also surface in the Child/Album `artists[]` arrays.
+    pub is_performance: bool,
+    pub subject: ContributorSubject,
+}
+
+impl ContributorEntry {
+    /// Renders the legacy `ArtistID3` for this contributor. Name-only
+    /// contributors are pseudo-artists keyed `contributor_<NORMALIZED>` whose
+    /// `coverArt` is caller-scoped: the legacy Child serializer used the
+    /// song's cover-art id, while the album-level `ContributingArtists()`
+    /// used the pseudo-id itself.
+    fn artist_id3(&self, name_only_cover_art: &str) -> serde_json::Value {
+        match &self.subject {
+            ContributorSubject::Artist {
+                public_id,
+                name,
+                sort_name,
+                album_count,
+            } => serde_json::json!({
+                "id": format!("artist_{public_id}"),
+                "name": name,
+                "coverArt": format!("artist_{public_id}"),
+                "albumCount": album_count,
+                // Captured: these paths never pass a UserArtist, so the
+                // rating is the `userArtist?.Rating ?? 0` fallback.
+                "userRating": 0,
+                // Literal placeholder preserved from the legacy serializer.
+                "artistImageUrl": "URL",
+                "sortName": sort_name,
+            }),
+            ContributorSubject::NameOnly { name } => {
+                let id = format!("contributor_{}", normalized_contributor_name(name));
+                serde_json::json!({
+                    "id": id,
+                    "name": name,
+                    "coverArt": name_only_cover_art,
+                    "albumCount": 0,
+                    "userRating": 0,
+                })
+            }
+        }
+    }
+
+    /// Album-level `ContributingArtists()` rendering: name-only contributors
+    /// use their own pseudo-id as `coverArt` there.
+    pub(crate) fn album_scoped_artist_id3(&self) -> serde_json::Value {
+        match &self.subject {
+            ContributorSubject::NameOnly { name } => {
+                let id = format!("contributor_{}", normalized_contributor_name(name));
+                self.artist_id3(&id)
+            }
+            ContributorSubject::Artist { .. } => self.artist_id3(""),
+        }
+    }
+}
+
+/// Loads contribution credits for the given Track public ids, keyed by Track
+/// public id, each list in presentation order. Artist-linked credits come
+/// from `contributions`; name-only credits come from `observed_artists` rows
+/// carrying a contribution role in `source_payload` (name-only contributors
+/// have no Artist identity, and `contributions.artist_id` is NOT NULL). Only
+/// the captured getAlbum path renders these: the legacy playlist/starred
+/// serializers never included `Song.Contributors`, so their Child objects
+/// carry empty arrays.
+pub(crate) async fn track_contributors(
+    pool: &PgPool,
+    track_public_ids: &[Uuid],
+) -> Result<std::collections::HashMap<Uuid, Vec<ContributorEntry>>, sqlx::Error> {
+    let mut map: std::collections::HashMap<Uuid, Vec<(i32, ContributorEntry)>> =
+        std::collections::HashMap::new();
+    if track_public_ids.is_empty() {
+        return Ok(std::collections::HashMap::new());
+    }
+    let linked_rows = sqlx::query(
+        "SELECT track.public_api_id, contribution.role, contribution.role_detail,
+                contribution.is_performance, contribution.presentation_order,
+                artist.public_api_id, artist.canonical_name, artist.sort_name,
+                COALESCE(aggregate.release_count, 0)::bigint
+           FROM contributions contribution
+           JOIN tracks track ON track.id = contribution.track_id
+           JOIN artists artist ON artist.id = contribution.artist_id
+           LEFT JOIN artist_catalog_aggregates aggregate ON aggregate.artist_id = artist.id
+          WHERE track.public_api_id = ANY($1)
+          ORDER BY contribution.presentation_order, contribution.id",
+    )
+    .bind(track_public_ids)
+    .fetch_all(pool)
+    .await?;
+    for row in linked_rows {
+        let track_public_id: Uuid = row.try_get(0)?;
+        let entry = ContributorEntry {
+            role: row.try_get(1)?,
+            sub_role: row.try_get(2)?,
+            is_performance: row.try_get(3)?,
+            subject: ContributorSubject::Artist {
+                public_id: row.try_get(5)?,
+                name: row.try_get(6)?,
+                sort_name: row.try_get(7)?,
+                album_count: row.try_get(8)?,
+            },
+        };
+        let ordinal: i32 = row.try_get(4)?;
+        map.entry(track_public_id)
+            .or_default()
+            .push((ordinal, entry));
+    }
+    let observed_rows = sqlx::query(
+        "SELECT track.public_api_id, observed.display_value,
+                observed.source_payload->>'role', observed.source_payload->>'subRole',
+                COALESCE((observed.source_payload->>'contributorType')::integer = 1, false),
+                observed.source_ordinal
+           FROM observed_artists observed
+           JOIN tracks track ON track.id = observed.track_id
+          WHERE track.public_api_id = ANY($1) AND observed.scope = 'track'
+            AND observed.source_payload ? 'role'
+          ORDER BY observed.source_ordinal, observed.id",
+    )
+    .bind(track_public_ids)
+    .fetch_all(pool)
+    .await?;
+    for row in observed_rows {
+        let track_public_id: Uuid = row.try_get(0)?;
+        let name: String = row.try_get(1)?;
+        let entry = ContributorEntry {
+            role: row.try_get::<Option<String>, _>(2)?.unwrap_or_default(),
+            sub_role: row.try_get(3)?,
+            is_performance: row.try_get(4)?,
+            subject: ContributorSubject::NameOnly { name },
+        };
+        let ordinal: i32 = row.try_get(5)?;
+        map.entry(track_public_id)
+            .or_default()
+            .push((ordinal, entry));
+    }
+    Ok(map
+        .into_iter()
+        .map(|(track_id, mut entries)| {
+            entries.sort_by_key(|(ordinal, _)| *ordinal);
+            (
+                track_id,
+                entries.into_iter().map(|(_, entry)| entry).collect(),
+            )
+        })
+        .collect())
+}
+
+fn child_json(
+    row: &ChildRow,
+    genres: &[String],
+    bit_depth: Option<i32>,
+    contributors: &[ContributorEntry],
+) -> serde_json::Value {
     let song_id = format!("song_{}", row.track_public_id);
     let album_id = format!("album_{}", row.release_public_id);
     let artist_id = format!("artist_{}", row.track_artist_public_id);
@@ -545,7 +727,20 @@ fn child_json(row: &ChildRow, genres: &[String], bit_depth: Option<i32>) -> serd
             ),
         );
     }
-    child.insert("artists".to_string(), serde_json::json!([]));
+    // Captured rule: `artists[]` holds performer-type contributors only;
+    // name-only contributors render as `contributor_<NORMALIZED>` pseudo
+    // artists whose coverArt is the song id (legacy `song.ToCoverArtId()`).
+    let song_cover_art = format!("song_{}", row.track_public_id);
+    child.insert(
+        "artists".to_string(),
+        serde_json::Value::Array(
+            contributors
+                .iter()
+                .filter(|contributor| contributor.is_performance)
+                .map(|contributor| contributor.artist_id3(&song_cover_art))
+                .collect(),
+        ),
+    );
     child.insert(
         "displayArtist".to_string(),
         row.track_artist_name.clone().into(),
@@ -569,7 +764,24 @@ fn child_json(row: &ChildRow, genres: &[String], bit_depth: Option<i32>) -> serd
         "displayAlbumArtist".to_string(),
         row.release_artist_name.clone().into(),
     );
-    child.insert("contributors".to_string(), serde_json::json!([]));
+    child.insert(
+        "contributors".to_string(),
+        serde_json::Value::Array(
+            contributors
+                .iter()
+                .map(|contributor| {
+                    let mut entry = serde_json::json!({
+                        "role": contributor.role,
+                        "artistId3": contributor.artist_id3(&song_cover_art),
+                    });
+                    if let Some(sub_role) = &contributor.sub_role {
+                        entry["subRole"] = sub_role.clone().into();
+                    }
+                    entry
+                })
+                .collect(),
+        ),
+    );
     child.insert("replayGain".to_string(), serde_json::json!({}));
     let average = row.average_rating;
     if average.fract() == 0.0 {
@@ -599,6 +811,19 @@ pub(crate) async fn song_children(
     pool: &PgPool,
     user_id: Uuid,
     track_public_ids: &[Uuid],
+) -> Result<Vec<serde_json::Value>, sqlx::Error> {
+    song_children_with_contributors(pool, user_id, track_public_ids, None).await
+}
+
+/// `song_children` variant used by the getAlbum detail path, the only
+/// captured serializer that included `Song.Contributors`
+/// (os-getalbum-compilation); every other legacy path left the navigation
+/// property unloaded and emitted empty `artists`/`contributors` arrays.
+pub(crate) async fn song_children_with_contributors(
+    pool: &PgPool,
+    user_id: Uuid,
+    track_public_ids: &[Uuid],
+    contributors: Option<&std::collections::HashMap<Uuid, Vec<ContributorEntry>>>,
 ) -> Result<Vec<serde_json::Value>, sqlx::Error> {
     if track_public_ids.is_empty() {
         return Ok(Vec::new());
@@ -667,7 +892,16 @@ pub(crate) async fn song_children(
                     .collect()
             })
             .unwrap_or_default();
-        out.push(child_json(&child_row, &genres, bit_depth));
+        let empty: &[ContributorEntry] = &[];
+        let track_contributors = contributors
+            .and_then(|map| map.get(public_id))
+            .map_or(empty, Vec::as_slice);
+        out.push(child_json(
+            &child_row,
+            &genres,
+            bit_depth,
+            track_contributors,
+        ));
     }
     Ok(out)
 }

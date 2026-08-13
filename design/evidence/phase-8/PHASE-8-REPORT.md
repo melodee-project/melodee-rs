@@ -1,7 +1,9 @@
 # Phase 8 Report — OpenSubsonic and Jellyfin Adapters
 
-**Status:** In progress — both adapter route matrices are implemented and differentially
-evidenced; representative real-client differential runs remain before the phase can close.
+**Status:** Captured-contract closure complete — both frozen surfaces replay in full with **zero
+unexpected differences** (§ Full-golden differential replay). The only exit item outstanding is
+the representative real-client smoke gate, which requires OpenSubsonic/Jellyfin client software
+not available in the build environment.
 
 **Evidence captured:** 2026-08-13
 
@@ -29,6 +31,46 @@ unknown routes, missing legacy scenarios, missing Rust tests or requirement IDs,
 normalization/deferral claims without an accepted ADR.
 
 The frozen legacy baseline remains commit `4028b58dbd3302ed431e2c5b32d9dde5634db218`.
+
+## OpenSubsonic implementation
+
+`apps/melodee-server/src/opensubsonic/` implements the captured surface (golden evidence
+`compatibility/opensubsonic/golden/`):
+
+- `auth.rs`/`envelope.rs`/`params.rs` — token+salt auth, the captured localhost/baseUrl/`/images/`
+  bypass (ADR-0130 decision 7; no JWT branch, decision 1), JSON/XML/JSONP envelope writers with
+  the captured XML quirks, and per-endpoint x-total-count semantics (list endpoints report their
+  total; getArtist reports 1; stream error envelopes omit the header).
+- `system.rs` — ping/getLicense/getMusicFolders/getOpenSubsonicExtensions with the byte-preserved
+  extension advertisement (decision 2).
+- `browse.rs` — getArtists/getIndexes/getMusicDirectory/getArtist/getAlbum/getSong/getTopSongs and
+  the album/artist info endpoints with the captured shapes: directory artist playCount from user
+  state sums, album `played` from dated play rows, exact-match getTopSongs, getAlbum-only
+  contributor rendering (see the differential section), and the per-path duration rounding rules
+  (half-to-even except the getArtist album entries, captured with truncation).
+- `lists.rs` — getAlbumList/getAlbumList2/getStarred/getStarred2/getNowPlaying/getGenres/
+  getSongsByGenre/search2/search3 with the captured sort orders, tiebreaks (decision 5), and
+  now-playing field forcing.
+- `annotation.rs` — star/unstar/setRating/scrobble plus the shared Child projection: global
+  song playCount, row-existence `starred`/`userRating` rules (including the legacy
+  `Nullable<DateTime>.ToString()` empty-string artifact), and runtime-recomputed averageRating.
+- `media.rs` — stream/download with correct single-pass ranges (decision 4; the legacy
+  double-range bug is not preserved), 404 + error 70 envelopes for invalid ranges/timeOffset,
+  getCoverArt stored/default/304 classes (Cache-Control only on stored artwork), getAvatar with
+  the captured default user image, and the captured lyrics serializers.
+- `playlists.rs`/`bookmarks.rs`/`playqueue.rs`/`shares.rs`/`radio.rs`/`users.rs`/`podcasts.rs`/
+  `scan.rs`/`negative.rs`/`jukebox` — the captured CRUD, role gates, error shapes, intentional
+  410/501 classes, podcast raw-wrapper/conditional-off behavior, and `scanning: false` scan
+  status.
+- Playlist responses order entries by song creation (the legacy `GetPlaylistAsync` re-queried
+  songs by ApiKey with no ORDER BY, so `PlaylistOrder` never reached the wire); updates apply
+  cleanly (the legacy cover-resolution 302 rollback is phase-0 §7 do-not-preserve evidence).
+
+### Differential evidence
+
+`apps/melodee-server/tests/opensubsonic_*.rs` (7 files) run against PostgreSQL fixtures and
+assert the golden-verified wire rules per endpoint group; the full-golden replay below exercises
+every frozen scenario end to end.
 
 ## Jellyfin implementation (WP4)
 
@@ -75,6 +117,54 @@ seeded through the public Phase 3–5 catalog handoff. They assert frozen-golden
 deterministic ordering, role gates, and the 416 header nuances. The route matrix validator checks
 every evidence row against these tests.
 
+## Full-golden differential replay
+
+`scripts/run_phase8_differential.py` closes the loop between the frozen captures and the real
+server. For each surface it:
+
+1. Boots the real `melodee-server` with the fixture environment (JWT key, token pepper, trusted
+   proxy for the captured X-Forwarded-For, podcast toggle).
+2. Seeds a disposable PostgreSQL database from `compatibility/fixtures/catalog-v1.json` with
+   direct SQL (uuidv7 internal ids, uuid5-shard public ids, manifest/genre/bit-depth evidence
+   rows, dated global play rows, per-user states, roles, playlists, and contribution rows —
+   artist-linked in `contributions`, name-only in `observed_artists` with the role carried in
+   `source_payload`).
+3. Re-seeds (TRUNCATE + re-apply) before every scenario file, mirroring the legacy oracle
+   capture pipeline, so annotation flows cannot leak state into list scenarios.
+4. Replays every scenario step in-process and compares each fresh capture against the frozen
+   golden with the capture normalization (volatile masking) applied.
+5. Classifies every residual difference against the enumerated `KNOWN_DIFFERENCES` registry;
+   anything unregistered fails the run. The report lands in
+   `compatibility/captures/phase8-differential/differential-report.json`.
+
+**Result (2026-08-13, both surfaces): 0 unexpected differences; 468 enumerated known
+differences.** Known classes:
+
+| Class | Count | Authority |
+| --- | ---: | --- |
+| content-length of otherwise-equal bodies (masked volatile values serialize with different byte lengths) | 145+ | transport-level, non-contractual |
+| legacy NULL-SortName empty-index/omission artifacts (Rust requires non-empty sort values, migration 0007) | 71 | schema invariant |
+| image URL fields embed the per-run origin (unmasked capture port) | 31 | capture volatility |
+| updatePlaylist cover-resolution 302 rollback not preserved | 25 | phase-0 evidence §7 "MUST NOT be preserved" |
+| fixture-seeded ratings bypassed legacy CalculatedRating columns | 15+ | capture-seeding artifact |
+| deterministic Storage library/folder ids | 9 | ADR-0131 D10 family |
+| redirect Location forwarded-host + credential strip | 8 | ADR-0130; capture volatility |
+| legacy Album.OriginalReleaseDate column absent from the Rust schema | 6 | deferred schema ADR |
+| legacy unsigned-JWT auth bypass rejected | 3 | R1 / ADR-0130 decision 1 |
+| legacy double-range streaming bug not preserved | 6 | ADR-0130 decision 4 (D2/R2) |
+
+(Counts are per-difference, not per-scenario; the table rounds the two largest classes.)
+
+The replay surfaced and fixed four contract regressions that blanket registrations had masked:
+getPlaylist's nil-uuid/inaccessible 302 class (vs the deleted-id 200 + error 44), the
+updatePlaylist rename (dropped by misreading the cover-bug rollback artifact as a name-ignore
+quirk), the orphaned `fold_artist_name` test after the fold moved to `lists.rs`, and the
+Jellyfin auth 400 test asserting a non-frozen title. It also pinned previously unseen golden
+semantics: playlist entries follow song creation order (legacy ignores `PlaylistOrder` on the
+wire), only getAlbum loads `Song.Contributors` (compilation `artists[]`/`contributors[]`,
+including `contributor_<NORMALIZED>` name-only pseudo-artists), and getArtist's resolved
+response carries `x-total-count: 1`.
+
 ## Compatibility decisions and deviations
 
 Exact legacy behavior is the default; the deviations are deliberate and bounded:
@@ -106,20 +196,21 @@ state reuses the Phase 7 native tables. No migration rewrites media or public id
 ## Test evidence
 
 ```text
-cargo test -p melodee-server --all-features --test jellyfin_core_api    # 11 passed
-cargo test -p melodee-server --all-features --test jellyfin_media_api   # 14 passed
-python3 scripts/build_phase8_route_matrix.py                            # 60/60 + 81/81 validated
-./scripts/check.sh                                                      # full workspace gate
+python3 scripts/run_phase8_differential.py   # 0 unexpected, 468 enumerated known (both surfaces)
+cargo test --workspace --all-features        # 669 passed, 0 failed, 4 ignored (+1 env-dependent skip)
+python3 scripts/build_phase8_route_matrix.py # 81/81 OpenSubsonic + 60/60 Jellyfin validated
+./scripts/check.sh                           # full workspace gate
 ```
 
 ## Remaining work before Phase 8 closes
 
-- Representative real-client differential runs (PRD-API-JF-006 and the OpenSubsonic
-  equivalent): Finamp/Feishin/Streamyfin and OpenSubsonic client smoke workflows, recorded like
-  Phase 7's `REAL-CLIENT-ACCEPTANCE.md`.
+- Representative real-client smoke runs (the second exit criterion): Finamp/Feishin/Streamyfin
+  and an OpenSubsonic client against the documented smoke workflows, recorded like Phase 7's
+  `REAL-CLIENT-ACCEPTANCE.md`. This requires client software/emulators not present in the build
+  environment; every other exit criterion is met (matrix reproduced and tested, full-golden
+  replay at zero unexpected differences, intentional non-music absences preserved).
 - Durable artwork storage wiring for the images 200 paths (tracked with the artwork pipeline;
   the resolver hook is in place).
-- Final phase review and status flip of this report.
 
 ## Local gate note
 
@@ -145,10 +236,15 @@ than silently worked around.
   suspected staleness bug (empty after Playing reports) that is intentionally not reproduced.
 
 Documentation impact:
-- Updated — `docs/src/content/docs/api/jellyfin.md` and
-  `docs/src/content/docs/clients/jellyfin-clients.md` now describe the implemented surface;
+- Updated — `docs/src/content/docs/api/opensubsonic.md` now describes the implemented,
+  differentially verified OpenSubsonic surface (the previous stub said the matrix "will be
+  published"); `docs/src/content/docs/api/jellyfin.md` and
+  `docs/src/content/docs/clients/jellyfin-clients.md` describe the implemented surface;
   `design/requirements/status-overrides.json` (PRD-API-JF-001..005),
   `design/requirements/REQUIREMENTS-INDEX.md` and `requirements.json` (regenerated),
   `design/requirements/FEATURE-PARITY-MATRIX.md`,
-  `compatibility/jellyfin/contracts/phase8-route-evidence.json`,
-  `design/agents/PHASE-8-JELLYFIN-ROUTE-MATRIX.json` (regenerated), and this report.
+  `compatibility/opensubsonic/contracts/phase8-route-evidence.json` (stale test references and
+  rationales corrected to the golden-verified getTopSongs/getCoverArt/getAvatar behavior),
+  `design/agents/PHASE-8-*-ROUTE-MATRIX.json` (regenerated), and this report. The differential
+  replay changes are internal-contract refinements invisible to client documentation; `/docs`
+  behavior descriptions remain accurate.

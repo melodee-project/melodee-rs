@@ -53,6 +53,10 @@ pub struct OsReply {
     /// Value for the `x-total-count` response header; list endpoints report
     /// their total, everything else sends the captured `0`.
     pub total_count: i64,
+    /// Whether the `x-total-count` header is emitted at all. The captured
+    /// stream/download error envelopes (HTTP 404 + error 70) carried no
+    /// `x-total-count`, unlike every other envelope response.
+    pub send_total_count: bool,
 }
 
 impl OsReply {
@@ -61,6 +65,7 @@ impl OsReply {
             payload,
             xml_children_override: None,
             total_count: 0,
+            send_total_count: true,
         }
     }
 
@@ -79,6 +84,14 @@ impl OsReply {
     #[must_use]
     pub const fn with_total_count(mut self, total_count: i64) -> Self {
         self.total_count = total_count;
+        self
+    }
+
+    /// Suppresses the `x-total-count` header entirely (captured stream 404
+    /// error envelopes).
+    #[must_use]
+    pub const fn without_total_count_header(mut self) -> Self {
+        self.send_total_count = false;
         self
     }
 
@@ -168,7 +181,9 @@ impl OsReply {
                 Format::Xml => "application/xml",
             }),
         );
-        if let Ok(value) = HeaderValue::from_str(&self.total_count.to_string()) {
+        if self.send_total_count
+            && let Ok(value) = HeaderValue::from_str(&self.total_count.to_string())
+        {
             headers.insert(header::HeaderName::from_static("x-total-count"), value);
         }
         let _ = content_type;

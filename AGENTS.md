@@ -58,8 +58,10 @@ Phases 0–7 are complete. Phase 7's independently accepted native-v1 implementa
 in `design/evidence/phase-7/PHASE-7-REPORT.md`. Phase 8 is active under the frozen OpenSubsonic and
 Jellyfin captures, SPEC/PRD requirements, and accepted ADRs. Both adapter route matrices are
 implemented and differentially evidenced (81/81 OpenSubsonic endpoints, 60/60 Jellyfin routes per
-`design/agents/PHASE-8-*-ROUTE-MATRIX.json`); phase status and remaining real-client differential
-work are tracked in `design/evidence/phase-8/PHASE-8-REPORT.md`.
+`design/agents/PHASE-8-*-ROUTE-MATRIX.json`), and the full-golden differential replay
+(`scripts/run_phase8_differential.py`) reports zero unexpected differences across both surfaces;
+phase status and the remaining real-client smoke gate are tracked in
+`design/evidence/phase-8/PHASE-8-REPORT.md`.
 
 Allowed when explicitly assigned: Phase 8 work-package/ADR preparation; OpenSubsonic authentication,
 JSON/XML/JSONP envelopes, documented endpoint groups, extensions, intentional Gone/Not Implemented

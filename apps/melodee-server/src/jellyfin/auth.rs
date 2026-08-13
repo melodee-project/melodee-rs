@@ -78,15 +78,15 @@ pub async fn authenticate_by_name(
     // (`jf-auth-negative/password-field-not-read`). Keys present but empty fall
     // through to the controller's own "Username and password are required."
     // 400 (`jf-auth-negative/missing-fields`).
-    if let Ok(value) = serde_json::from_slice::<serde_json::Value>(&body) {
-        if value.is_object() {
-            let missing: Vec<&str> = ["Username", "Pw"]
-                .into_iter()
-                .filter(|key| value.get(*key).is_none())
-                .collect();
-            if !missing.is_empty() {
-                return validation_400_missing_properties(&missing);
-            }
+    if let Ok(value) = serde_json::from_slice::<serde_json::Value>(&body)
+        && value.is_object()
+    {
+        let missing: Vec<&str> = ["Username", "Pw"]
+            .into_iter()
+            .filter(|key| value.get(*key).is_none())
+            .collect();
+        if !missing.is_empty() {
+            return validation_400_missing_properties(&missing);
         }
     }
     let request: AuthenticateByNameRequest = match serde_json::from_slice(&body) {

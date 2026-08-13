@@ -22,7 +22,9 @@
 //!   `Content-Disposition: attachment; filename=...`; unknown → 302
 //!   credential-free.
 //! - **getCoverArt:** serves stored artwork bytes with sniffed content-type,
-//!   `ETag`, `Cache-Control: public, max-age=86400`; unknown → 200 empty body.
+//!   `ETag`, `Cache-Control: public, max-age=86400`; no artwork serves the
+//!   captured default placeholder (sized → processed JPEG, unsized → raw
+//!   fixture bytes) WITHOUT Cache-Control; unknown id → 200 empty body.
 //! - **getAvatar:** serves the user's stored avatar by `username`/`u`/`id`.
 //! - **getLyrics/getLyricsBySongId:** the legacy serializer ignored the
 //!   structured `.lrc` list at this baseline, so `getLyrics` echoes
@@ -73,13 +75,16 @@ fn redirect_to_error(state: &OsState) -> Response {
 
 /// Captured stream/download range/timeOffset failure: HTTP 404 + error 70 JSON
 /// envelope (the legacy 416 path is unreachable; the service re-wraps the
-/// error).
+/// error). The captured error envelopes carried no `x-total-count` header,
+/// unlike the success/other-error envelopes.
 fn stream_not_found(state: &OsState, params: &Option<Extension<Params>>) -> Response {
-    OsReply::error(70, "The requested data was not found.").respond(
-        &format_of(params),
-        &state.server_version,
-        StatusCode::NOT_FOUND,
-    )
+    OsReply::error(70, "The requested data was not found.")
+        .without_total_count_header()
+        .respond(
+            &format_of(params),
+            &state.server_version,
+            StatusCode::NOT_FOUND,
+        )
 }
 
 /// One catalog row resolving a track public id to its playable media asset.
@@ -401,8 +406,9 @@ fn sniff_image_content_type(bytes: &[u8]) -> String {
 const DEFAULT_COVER_SIZED: &[u8] = include_bytes!(
     "../../../../compatibility/melodee-api-v1/golden/native-catalog/catalog-images-image-album-large.bin"
 );
-const DEFAULT_COVER_RAW: &[u8] =
-    include_bytes!("../../../../compatibility/opensubsonic/golden/media/os-getcoverart-default.bin");
+const DEFAULT_COVER_RAW: &[u8] = include_bytes!(
+    "../../../../compatibility/opensubsonic/golden/media/os-getcoverart-default.bin"
+);
 
 /// Artwork resolution for a `song_`/`album_`/`artist_`/`playlist_` id.
 enum Artwork {
@@ -511,10 +517,10 @@ async fn get_cover_art_impl(
         return StatusCode::OK.into_response();
     };
     let requested_size = params_ref.get("size");
-    let (bytes, mime_type, etag) = match artwork {
+    let (bytes, mime_type, etag, is_default) = match artwork {
         Artwork::Stored(bytes, mime_type) => {
             let etag = format!("\"{}\"", sha256_hex(&bytes));
-            (bytes, mime_type, etag)
+            (bytes, mime_type, etag, false)
         }
         Artwork::Default => {
             // Captured defaults (`os-getcoverart-default/-80/-song`): a sized
@@ -526,12 +532,14 @@ async fn get_cover_art_impl(
                     DEFAULT_COVER_SIZED.to_vec(),
                     "image/jpeg".to_string(),
                     "fda2a2741f69f726b74e07522e8e57487ed3d26a32699e798da0877f47348b18".to_string(),
+                    true,
                 )
             } else {
                 (
                     DEFAULT_COVER_RAW.to_vec(),
                     "image/jpeg".to_string(),
                     "17673120000000000".to_string(),
+                    true,
                 )
             }
         }
@@ -552,10 +560,14 @@ async fn get_cover_art_impl(
     if let Ok(value) = HeaderValue::from_str(&etag) {
         response.headers_mut().insert(header::ETAG, value);
     }
-    response.headers_mut().insert(
-        header::CACHE_CONTROL,
-        HeaderValue::from_static("public, max-age=86400"),
-    );
+    // Captured: the legacy default-placeholder responses carry no
+    // Cache-Control header; only stored-artwork responses do.
+    if !is_default {
+        response.headers_mut().insert(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("public, max-age=86400"),
+        );
+    }
     response
 }
 
@@ -625,7 +637,9 @@ async fn get_avatar_impl(
             Some("image/png"),
         ),
     };
-    let mime_type = mime.or_else(|| default_mime.map(str::to_string)).unwrap_or_else(|| sniff_image_content_type(&bytes));
+    let mime_type = mime
+        .or_else(|| default_mime.map(str::to_string))
+        .unwrap_or_else(|| sniff_image_content_type(&bytes));
     let mut response = (StatusCode::OK, axum::body::Body::from(bytes)).into_response();
     if let Ok(value) = HeaderValue::from_str(&mime_type) {
         response.headers_mut().insert(header::CONTENT_TYPE, value);

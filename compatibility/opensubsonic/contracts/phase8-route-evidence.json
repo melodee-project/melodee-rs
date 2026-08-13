@@ -1,1362 +1,1362 @@
 {
-  "schemaVersion": 1,
-  "surface": "opensubsonic",
-  "legacyBaselineCommit": "4028b58dbd3302ed431e2c5b32d9dde5634db218",
-  "endpoints": [
-    {
-      "endpoint": "ping",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-001",
-        "PRD-API-OS-002",
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-ping-json",
-        "os-ping-xml",
-        "os-ping-jsonp",
-        "os-ping-jsonp-no-callback",
-        "os-ping-plain-route"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_system_api.rs::ping_matches_the_captured_envelope_in_all_formats"
-      ],
-      "rationale": "Ping answers the captured bare ok envelope in JSON/XML/JSONP, falls back to XML for jsonp without callback, and serves both plain/.view forms plus the server-root /ping alias."
-    },
-    {
-      "endpoint": "getLicense",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-001",
-        "PRD-API-OS-002",
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-getlicense-json",
-        "os-getlicense-xml"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_system_api.rs::license_and_extensions_preserve_captured_quirks"
-      ],
-      "rationale": "License response preserves the trailExpires/trialExpires typo split and the nested double-wrapped XML license element with its irregular spacing."
-    },
-    {
-      "endpoint": "getOpenSubsonicExtensions",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0130-phase-8-opensubsonic-authentication-extension-advertisement-and-streaming-corrections.md",
-      "requirements": [
-        "PRD-API-OS-002",
-        "PRD-API-OS-006"
-      ],
-      "legacyEvidence": [
-        "os-getopensubsonicextensions-json",
-        "os-getopensubsonicextensions-xml"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_system_api.rs::license_and_extensions_preserve_captured_quirks"
-      ],
-      "rationale": "The advertised extension list is preserved byte-for-byte including the false apiKeyAuthentication/transcodeOffset claims and the malformed XML elements, per ADR-0130 decision 2."
-    },
-    {
-      "endpoint": "getMusicFolders",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0130-phase-8-opensubsonic-authentication-extension-advertisement-and-streaming-corrections.md",
-      "requirements": [
-        "PRD-API-OS-003",
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-getmusicfolders-json",
-        "os-getmusicfolders-xml",
-        "os-auth-valid-token",
-        "os-auth-valid-token-uppercase",
-        "os-auth-valid-password-plain",
-        "os-auth-valid-password-enc-hex",
-        "os-auth-form-post",
-        "os-auth-missing",
-        "os-auth-missing-xml",
-        "os-auth-invalid-username",
-        "os-auth-invalid-token",
-        "os-auth-malformed-token",
-        "os-auth-token-without-salt",
-        "os-auth-jwt-only-unreachable",
-        "os-auth-apikey-only",
-        "os-auth-bypass-localhost"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_system_api.rs::music_folders_match_the_captured_shape",
-        "apps/melodee-server/tests/opensubsonic_system_api.rs::token_auth_accepts_case_insensitive_hex_and_form_post",
-        "apps/melodee-server/tests/opensubsonic_system_api.rs::password_auth_accepts_plain_and_enc_hex_forms",
-        "apps/melodee-server/tests/opensubsonic_system_api.rs::auth_failures_share_the_captured_error_40_envelope",
-        "apps/melodee-server/tests/opensubsonic_system_api.rs::forged_unsigned_jwt_with_wrong_password_is_rejected",
-        "apps/melodee-server/tests/opensubsonic_system_api.rs::bypass_needs_no_credentials_and_synthesizes_no_user"
-      ],
-      "rationale": "Music folders render from configured ingestion sources plus the storage root with library_{uuid} ids; the full captured auth matrix (token/password forms, identical error-40 envelopes, bypass) is preserved. os-auth-jwt-forged-unsigned is the ADR-0113/ADR-0130 approved deviation: the forged unsigned JWT is rejected, proven by the regression test."
-    },
-    {
-      "endpoint": "getPodcasts",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-getpodcasts",
-        "os-getpodcasts-norole",
-        "os-podcasts-disabled-getpodcasts"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_system_api.rs::podcast_auth_failure_uses_http_403",
-        "apps/melodee-server/tests/opensubsonic_system_api.rs::podcasts_enabled_and_disabled_match_the_captured_contract"
-      ],
-      "rationale": "Enabled state returns the captured empty channel list; auth failure is the podcast-unique HTTP 403 + error 40; disabled state answers HTTP 400 with the raw ResponseData body, not the subsonic envelope."
-    },
-    {
-      "endpoint": "getNewestPodcasts",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-getnewestpodcasts",
-        "os-podcasts-disabled-getnewest"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_system_api.rs::podcasts_enabled_and_disabled_match_the_captured_contract"
-      ],
-      "rationale": "Enabled state returns the captured empty episode list; disabled state answers HTTP 400 with the raw ResponseData body."
-    },
-    {
-      "endpoint": "getChatMessages",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-005"
-      ],
-      "legacyEvidence": [
-        "os-gone-getchatmessages"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_system_api.rs::negative_matrix_preserves_exact_statuses_and_headers"
-      ],
-      "rationale": "The captured intentional 410 Gone (empty body, Cache-Control: no-cache) is implemented negative behavior proven by the route-level negative test."
-    },
-    {
-      "endpoint": "addChatMessage",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-005"
-      ],
-      "legacyEvidence": [
-        "os-gone-addchatmessage"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_system_api.rs::negative_matrix_preserves_exact_statuses_and_headers"
-      ],
-      "rationale": "The captured intentional 410 Gone (empty body, Cache-Control: no-cache) is implemented negative behavior proven by the route-level negative test."
-    },
-    {
-      "endpoint": "hls",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-005"
-      ],
-      "legacyEvidence": [
-        "os-gone-hls"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_system_api.rs::negative_matrix_preserves_exact_statuses_and_headers"
-      ],
-      "rationale": "The captured intentional 410 Gone (empty body, Cache-Control: no-cache) is implemented negative behavior proven by the route-level negative test."
-    },
-    {
-      "endpoint": "getCaptions",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-005"
-      ],
-      "legacyEvidence": [
-        "os-gone-getcaptions"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_system_api.rs::negative_matrix_preserves_exact_statuses_and_headers"
-      ],
-      "rationale": "The captured intentional 410 Gone (empty body, Cache-Control: no-cache) is implemented negative behavior proven by the route-level negative test."
-    },
-    {
-      "endpoint": "getVideoInfo",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-005"
-      ],
-      "legacyEvidence": [
-        "os-gone-getvideoinfo"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_system_api.rs::negative_matrix_preserves_exact_statuses_and_headers"
-      ],
-      "rationale": "The captured intentional 410 Gone (empty body, Cache-Control: no-cache) is implemented negative behavior proven by the route-level negative test."
-    },
-    {
-      "endpoint": "getVideos",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-005"
-      ],
-      "legacyEvidence": [
-        "os-gone-getvideos"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_system_api.rs::negative_matrix_preserves_exact_statuses_and_headers"
-      ],
-      "rationale": "The captured intentional 410 Gone (empty body, Cache-Control: no-cache) is implemented negative behavior proven by the route-level negative test."
-    },
-    {
-      "endpoint": "getUsers",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-005"
-      ],
-      "legacyEvidence": [
-        "os-notimplemented-getusers"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_system_api.rs::negative_matrix_preserves_exact_statuses_and_headers"
-      ],
-      "rationale": "The captured intentional 501 Not Implemented (empty body, Cache-Control: no-cache) is implemented negative behavior proven by the route-level negative test."
-    },
-    {
-      "endpoint": "updateUser",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-005"
-      ],
-      "legacyEvidence": [
-        "os-notimplemented-updateuser"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_system_api.rs::negative_matrix_preserves_exact_statuses_and_headers"
-      ],
-      "rationale": "The captured intentional 501 Not Implemented (empty body, Cache-Control: no-cache) is implemented negative behavior proven by the route-level negative test."
-    },
-    {
-      "endpoint": "deleteUser",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-005"
-      ],
-      "legacyEvidence": [
-        "os-notimplemented-deleteuser"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_system_api.rs::negative_matrix_preserves_exact_statuses_and_headers"
-      ],
-      "rationale": "The captured intentional 501 Not Implemented (empty body, Cache-Control: no-cache) is implemented negative behavior proven by the route-level negative test."
-    },
-    {
-      "endpoint": "changePassword",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-005"
-      ],
-      "legacyEvidence": [
-        "os-notimplemented-changepassword"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_system_api.rs::negative_matrix_preserves_exact_statuses_and_headers"
-      ],
-      "rationale": "The captured intentional 501 Not Implemented (empty body, Cache-Control: no-cache) is implemented negative behavior proven by the route-level negative test."
-    },
-    {
-      "endpoint": "jukeboxControl",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004",
-        "PRD-API-OS-005"
-      ],
-      "legacyEvidence": [
-        "os-gone-jukebox-disabled"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_system_api.rs::negative_matrix_preserves_exact_statuses_and_headers"
-      ],
-      "rationale": "Captured disabled and enabled-without-backend states collapse to the same 410; the adapter preserves the 410 (empty body, Cache-Control: no-cache)."
-    },
-    {
-      "endpoint": "star",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-annotation-star/star-album-via-albumid",
-        "os-annotation-star/star-malformed-id",
-        "os-annotation-star/star-song"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_annotation_api.rs::star_and_unstar_persist_captured_user_state",
-        "apps/melodee-server/tests/opensubsonic_annotation_api.rs::star_malformed_id_matches_the_captured_error_44"
-      ],
-      "rationale": "Star persists by id prefix to native_*_user_states; malformed id -> captured error 44 envelope."
-    },
-    {
-      "endpoint": "unstar",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-annotation-star/unstar-album",
-        "os-annotation-star/unstar-song"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_annotation_api.rs::star_and_unstar_persist_captured_user_state"
-      ],
-      "rationale": "Unstar clears starred on the same prefix-dispatched targets."
-    },
-    {
-      "endpoint": "setRating",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-annotation-rating/setrating-clear",
-        "os-annotation-rating/setrating-invalid-id",
-        "os-annotation-rating/setrating-song-4"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_annotation_api.rs::set_rating_set_clear_and_invalid_id_match_the_captures"
-      ],
-      "rationale": "Rating 0-5 persists; 0 clears; invalid id -> captured error."
-    },
-    {
-      "endpoint": "scrobble",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-annotation-scrobble/scrobble-default-submission",
-        "os-annotation-scrobble/scrobble-nowplaying",
-        "os-annotation-scrobble/scrobble-submission",
-        "os-annotation-scrobble/scrobble-submission-repeat",
-        "os-annotation-scrobble/scrobble-time-mismatch"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_annotation_api.rs::scrobble_submission_records_a_play_and_repeat_is_deduped",
-        "apps/melodee-server/tests/opensubsonic_annotation_api.rs::scrobble_default_submission_records_a_play",
-        "apps/melodee-server/tests/opensubsonic_annotation_api.rs::scrobble_time_mismatch_keeps_the_captured_ok_error_quirk",
-        "apps/melodee-server/tests/opensubsonic_annotation_api.rs::scrobble_malformed_id_matches_the_captured_error_44"
-      ],
-      "rationale": "submission=true records a play with deterministic client_event_id dedupe; submission=false updates now-playing; two ids+one time reproduces the ok-with-error code 0 quirk."
-    },
-    {
-      "endpoint": "getBookmarks",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-bookmarks/getbookmarks-empty",
-        "os-bookmarks/verify-bookmarks",
-        "os-bookmarks/verify-bookmarks-empty"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_annotation_api.rs::bookmarks_round_trip_matches_the_captures"
-      ],
-      "rationale": "Empty and populated bookmark lists match the captured shape with verbatim raw position."
-    },
-    {
-      "endpoint": "createBookmark",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-bookmarks/create-bookmark"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_annotation_api.rs::bookmarks_round_trip_matches_the_captures"
-      ],
-      "rationale": "Create upserts by (user,track) preserving created_at."
-    },
-    {
-      "endpoint": "deleteBookmark",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-bookmarks/delete-bookmark"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_annotation_api.rs::bookmarks_round_trip_matches_the_captures"
-      ],
-      "rationale": "Delete is idempotent and clears the row."
-    },
-    {
-      "endpoint": "savePlayQueue",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-playqueue/clear-playqueue",
-        "os-playqueue/saveplayqueue"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_annotation_api.rs::play_queue_round_trip_preserves_the_playqueid_quirk"
-      ],
-      "rationale": "Save stores repeated ids in submission order with the captured PlayQueId bigint current and client changed_by."
-    },
-    {
-      "endpoint": "getPlayQueue",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-playqueue/getplayqueue-empty",
-        "os-playqueue/verify-playqueue",
-        "os-playqueue/verify-playqueue-empty"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_annotation_api.rs::play_queue_round_trip_preserves_the_playqueid_quirk"
-      ],
-      "rationale": "Get returns the queue with entries, current entry id, position, changedBy; empty queue synthesized default matches the golden."
-    },
-    {
-      "endpoint": "getAlbumList",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0130-phase-8-opensubsonic-authentication-extension-advertisement-and-streaming-corrections.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-getalbumlist-newest"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_lists_api.rs::album_list_legacy_shape_adds_average_rating_and_paginates"
-      ],
-      "rationale": "Legacy albumList = albumList2 plus a leading averageRating; deterministic COLLATE C + public-id tiebreak (D10)."
-    },
-    {
-      "endpoint": "getAlbumList2",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0130-phase-8-opensubsonic-authentication-extension-advertisement-and-streaming-corrections.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-getalbumlist2-alphabetical",
-        "os-getalbumlist2-byyear",
-        "os-getalbumlist2-frequent",
-        "os-getalbumlist2-newest",
-        "os-getalbumlist2-recent",
-        "os-getalbumlist2-starred"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_lists_api.rs::album_list2_newest_matches_captured_shape_and_total",
-        "apps/melodee-server/tests/opensubsonic_lists_api.rs::album_list_type_sorts_match_the_captured_semantics",
-        "apps/melodee-server/tests/opensubsonic_lists_api.rs::album_list2_xml_uses_the_captured_container_names"
-      ],
-      "rationale": "All captured list types incl. the recent-sorts-by-ReleaseDate quirk; x-total-count carries filtered totals; XML container names preserved. bygenre scenario is exercised by songs_by_genre."
-    },
-    {
-      "endpoint": "getRandomSongs",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-getrandomsongs"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_lists_api.rs::random_songs_envelope_and_size_bound_the_selection"
-      ],
-      "rationale": "Random selection bounded by size; envelope contract preserved."
-    },
-    {
-      "endpoint": "getNowPlaying",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-annotation-scrobble/verify-nowplaying",
-        "os-getnowplaying-empty"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_lists_api.rs::now_playing_is_empty_then_lists_the_active_entry"
-      ],
-      "rationale": "Now playing synthesized from native_now_playing; empty shape captured."
-    },
-    {
-      "endpoint": "getStarred",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-getstarred"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_lists_api.rs::starred_legacy_matches_the_captured_child_and_artist_shapes"
-      ],
-      "rationale": "Starred legacy shape from native_*_user_states.starred with the artistImageUrl URL placeholder."
-    },
-    {
-      "endpoint": "getStarred2",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-annotation-star/verify-starred2-after-star",
-        "os-annotation-star/verify-starred2-after-unstar",
-        "os-annotation-star/verify-starred2-album",
-        "os-getstarred2"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_lists_api.rs::starred2_matches_the_captured_id3_shapes",
-        "apps/melodee-server/tests/opensubsonic_lists_api.rs::starred_under_bypass_resolves_u_but_synthesizes_no_user_without_it"
-      ],
-      "rationale": "ID3 starred2 artist/album/song arrays with userStarred timestamps."
-    },
-    {
-      "endpoint": "getSongsByGenre",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-getsongsbygenre-none",
-        "os-getsongsbygenre-rock",
-        "os-getsongsbygenre-unicode"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_lists_api.rs::songs_by_genre_matches_ascii_and_unicode_genres_exactly"
-      ],
-      "rationale": "Genre match over manifest metadata incl. Unicode (\u74b0\u5883\u97f3\u697d); empty shape for unknown genre."
-    },
-    {
-      "endpoint": "search2",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-search2-dune"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_lists_api.rs::search_matches_the_normalized_name_collision_pair",
-        "apps/melodee-server/tests/opensubsonic_lists_api.rs::search_song_entries_keep_the_captured_placeholder_fields"
-      ],
-      "rationale": "Search2 returns placeholder song fields (bitRate 0, suffix mp3, path unknown) and folds the normalized-name collision pair."
-    },
-    {
-      "endpoint": "search3",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-search3-dune",
-        "os-search3-none",
-        "os-search3-unicode"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_lists_api.rs::search_matches_the_normalized_name_collision_pair",
-        "apps/melodee-server/tests/opensubsonic_lists_api.rs::search_empty_and_unicode_queries_match_the_captured_shapes"
-      ],
-      "rationale": "searchResult3 artist/album/song arrays with offset paging and Unicode query support."
-    },
-    {
-      "endpoint": "searchForArtist",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-searchforartist"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_lists_api.rs::extension_search_endpoints_answer_the_captured_302_without_leaking_credentials"
-      ],
-      "rationale": "Melodee extension 302 without embedding request credentials (legacy leak not preserved)."
-    },
-    {
-      "endpoint": "searchForArtistImage",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-searchforartistimage"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_lists_api.rs::extension_search_endpoints_answer_the_captured_302_without_leaking_credentials"
-      ],
-      "rationale": "Melodee extension 302 without embedding request credentials."
-    },
-    {
-      "endpoint": "searchForAlbumImage",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-searchforalbumimage"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_lists_api.rs::extension_search_endpoints_answer_the_captured_302_without_leaking_credentials"
-      ],
-      "rationale": "Melodee extension 302 without embedding request credentials."
-    },
-    {
-      "endpoint": "getIndexes",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-getindexes"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_indexes_matches_the_captured_index_shape"
-      ],
-      "rationale": "Index shape from catalog artists/releases."
-    },
-    {
-      "endpoint": "getMusicDirectory",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-getmusicdirectory-album",
-        "os-getmusicdirectory-artist",
-        "os-getmusicdirectory-library"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_music_directory_library_returns_the_captured_empty_shape",
-        "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_music_directory_artist_lists_albums_as_directory_children",
-        "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_music_directory_album_lists_songs_as_children"
-      ],
-      "rationale": "Directory browse by library/artist/album id."
-    },
-    {
-      "endpoint": "getArtists",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-getartists",
-        "os-getartists-xml"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_artists_matches_the_captured_shape",
-        "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_artists_xml_matches_the_captured_bytes"
-      ],
-      "rationale": "First-letter index groups with ignoredArticles; non-ASCII bucket; XML byte-exact."
-    },
-    {
-      "endpoint": "getArtist",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-getartist",
-        "os-getartist-collision",
-        "os-getartist-unknown",
-        "os-getartist-various"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_artist_matches_the_captured_shape_with_albums",
-        "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_artist_unknown_returns_ok_with_no_artist_key"
-      ],
-      "rationale": "Artist detail with albums; unknown -> ok with no artist key."
-    },
-    {
-      "endpoint": "getArtistInfo",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-getartistinfo"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_artist_info_and_info2_match_the_offline_provider_shapes"
-      ],
-      "rationale": "Offline-provider info shape."
-    },
-    {
-      "endpoint": "getArtistInfo2",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-getartistinfo2"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_artist_info_and_info2_match_the_offline_provider_shapes"
-      ],
-      "rationale": "Offline-provider info2 shape."
-    },
-    {
-      "endpoint": "getAlbum",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-getalbum",
-        "os-getalbum-compilation",
-        "os-getalbum-minimal",
-        "os-getalbum-multidisc"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_album_matches_the_captured_rich_shape",
-        "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_album_unknown_returns_the_captured_302_without_credentials",
-        "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_album_malformed_id_returns_the_captured_302"
-      ],
-      "rationale": "Rich album shape incl. multi-disc/discTitles/isCompilation; unknown/unprefixed -> credential-free 302 (legacy credential leak not preserved). os-getalbum-unknown is the D-class do-not-preserve deviation."
-    },
-    {
-      "endpoint": "getAlbumInfo",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-getalbuminfo"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_album_info_and_info2_match_the_offline_provider_shapes"
-      ],
-      "rationale": "Offline-provider album info shape."
-    },
-    {
-      "endpoint": "getAlbumInfo2",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-getalbuminfo2"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_album_info_and_info2_match_the_offline_provider_shapes"
-      ],
-      "rationale": "Offline-provider album info2 shape."
-    },
-    {
-      "endpoint": "getSong",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-getsong",
-        "os-getsong-malformed-id",
-        "os-getsong-unknown"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_song_matches_the_captured_child_shape",
-        "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_song_unknown_returns_ok_with_error_44_block",
-        "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_song_malformed_id_returns_ok_with_error_44_block"
-      ],
-      "rationale": "Song Child shape; unknown/malformed -> ok with error 44 block. os-annotation-rating/verify-rating scenarios are exercised by the annotation group."
-    },
-    {
-      "endpoint": "getGenres",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-getgenres"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_genres_matches_the_captured_aggregated_shape"
-      ],
-      "rationale": "Aggregated genre list from manifest metadata."
-    },
-    {
-      "endpoint": "getSimilarSongs",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-getsimilarsongs"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_similar_songs_and2_match_the_captured_empty_shapes"
-      ],
-      "rationale": "Empty similar list in fixture."
-    },
-    {
-      "endpoint": "getSimilarSongs2",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-getsimilarsongs2"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_similar_songs_and2_match_the_captured_empty_shapes"
-      ],
-      "rationale": "Empty similar2 list in fixture."
-    },
-    {
-      "endpoint": "getTopSongs",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-gettopsongs"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_top_songs_merges_both_normalized_name_collision_artists",
-        "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_top_songs_missing_artist_returns_empty",
-        "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_top_songs_unknown_artist_returns_empty"
-      ],
-      "rationale": "Top songs merges both normalized-name collision artists by name lookup."
-    },
-    {
-      "endpoint": "getPlaylists",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-playlists/getplaylists"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_playlists_api.rs::playlists_round_trip_create_get_update_delete",
-        "apps/melodee-server/tests/opensubsonic_playlists_api.rs::private_playlist_is_invisible_to_non_owners"
-      ],
-      "rationale": "Playlist list with allowedUsers [], coverArt = playlist id."
-    },
-    {
-      "endpoint": "getPlaylist",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-playlists/getplaylist",
-        "os-playlists/get-private-playlist"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_playlists_api.rs::playlists_round_trip_create_get_update_delete",
-        "apps/melodee-server/tests/opensubsonic_playlists_api.rs::private_playlist_is_invisible_to_non_owners"
-      ],
-      "rationale": "Playlist detail with entries; private invisible to non-owners. os-playlists/getplaylist-unknown and verify-* scenarios are the D4 do-not-preserve deviation (credential-free 302 / clean update)."
-    },
-    {
-      "endpoint": "createPlaylist",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-playlists/create-playlist"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_playlists_api.rs::playlists_round_trip_create_get_update_delete"
-      ],
-      "rationale": "Atomic create with songId list returns the new playlist with entries (legacy partial-create poisoning not preserved)."
-    },
-    {
-      "endpoint": "updatePlaylist",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0130-phase-8-opensubsonic-authentication-extension-advertisement-and-streaming-corrections.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-playlists/update-playlist-add-remove"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_playlists_api.rs::playlists_round_trip_create_get_update_delete"
-      ],
-      "rationale": "Applies rename/add/remove cleanly (D4 do-not-preserve: legacy 302 cover-resolution crash not reproduced)."
-    },
-    {
-      "endpoint": "deletePlaylist",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-playlists/delete-playlist"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_playlists_api.rs::playlists_round_trip_create_get_update_delete"
-      ],
-      "rationale": "Bare ok; owner-only delete."
-    },
-    {
-      "endpoint": "stream",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0130-phase-8-opensubsonic-authentication-extension-advertisement-and-streaming-corrections.md",
-      "requirements": [
-        "PRD-API-OS-004",
-        "PRD-STREAM-002"
-      ],
-      "legacyEvidence": [
-        "os-stream-full",
-        "os-stream-head",
-        "os-stream-range-start",
-        "os-stream-range-middle",
-        "os-stream-range-end",
-        "os-stream-range-invalid",
-        "os-stream-range-unsatisfiable",
-        "os-stream-timeoffset",
-        "os-stream-maxbitrate-ignored",
-        "os-stream-unknown"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_media_api.rs::stream_full_get_returns_captured_headers_and_body",
-        "apps/melodee-server/tests/opensubsonic_media_api.rs::stream_head_returns_same_headers_with_empty_body",
-        "apps/melodee-server/tests/opensubsonic_media_api.rs::stream_initial_range_returns_206_with_exact_bytes",
-        "apps/melodee-server/tests/opensubsonic_media_api.rs::stream_middle_range_d2_regression_returns_206_not_legacy_416",
-        "apps/melodee-server/tests/opensubsonic_media_api.rs::stream_invalid_range_returns_404_error_70",
-        "apps/melodee-server/tests/opensubsonic_media_api.rs::stream_unsatisfiable_range_returns_404_error_70",
-        "apps/melodee-server/tests/opensubsonic_media_api.rs::stream_time_offset_returns_404_error_70",
-        "apps/melodee-server/tests/opensubsonic_media_api.rs::stream_max_bitrate_and_format_are_ignored",
-        "apps/melodee-server/tests/opensubsonic_media_api.rs::stream_unknown_song_redirects_credential_free_302"
-      ],
-      "rationale": "Single-pass ranges (D2 fix): nonzero-offset seeks return correct bytes with correct Content-Range total; invalid/unsatisfiable/timeOffset -> 404 error 70; maxBitRate/format ignored (no transcoding); unknown -> credential-free 302. os-stream-range-middle is the do-not-preserve D2 deviation (legacy 416 corruption fixed)."
-    },
-    {
-      "endpoint": "download",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0130-phase-8-opensubsonic-authentication-extension-advertisement-and-streaming-corrections.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-download",
-        "os-download-unknown"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_media_api.rs::download_returns_attachment_with_captured_disposition",
-        "apps/melodee-server/tests/opensubsonic_media_api.rs::download_disabled_redirects_credential_free_302",
-        "apps/melodee-server/tests/opensubsonic_media_api.rs::download_unknown_redirects_credential_free_302"
-      ],
-      "rationale": "200 + Content-Disposition attachment; gated by downloads_enabled; unknown -> credential-free 302."
-    },
-    {
-      "endpoint": "getCoverArt",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-getcoverart-default",
-        "os-getcoverart-80",
-        "os-getcoverart-song",
-        "os-getcoverart-unknown"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_media_api.rs::get_cover_art_song_returns_200_empty_when_no_artwork",
-        "apps/melodee-server/tests/opensubsonic_media_api.rs::get_cover_art_playlist_returns_artwork_with_etag",
-        "apps/melodee-server/tests/opensubsonic_media_api.rs::get_cover_art_if_none_match_returns_304"
-      ],
-      "rationale": "Sniffed content-type + ETag + Cache-Control; If-None-Match -> 304; no-artwork -> 200 empty."
-    },
-    {
-      "endpoint": "getAvatar",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-getavatar"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_media_api.rs::get_avatar_by_username_returns_stored_bytes",
-        "apps/melodee-server/tests/opensubsonic_media_api.rs::get_avatar_by_user_id_returns_stored_bytes",
-        "apps/melodee-server/tests/opensubsonic_media_api.rs::get_avatar_missing_returns_404"
-      ],
-      "rationale": "User avatar bytes by username/id; missing -> 404."
-    },
-    {
-      "endpoint": "getLyrics",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-getlyrics",
-        "os-getlyrics-missing"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_media_api.rs::get_lyrics_echoes_artist_and_title_with_empty_value",
-        "apps/melodee-server/tests/opensubsonic_media_api.rs::get_lyrics_missing_returns_empty_artist_title"
-      ],
-      "rationale": "Lyrics by artist+title; missing -> empty (never an error)."
-    },
-    {
-      "endpoint": "getLyricsBySongId",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-getlyricsbysongid",
-        "os-getlyricsbysongid-none"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_media_api.rs::get_lyrics_by_song_id_returns_bare_ok_envelope"
-      ],
-      "rationale": "Lyrics by song id; none -> bare ok."
-    },
-    {
-      "endpoint": "getShares",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-shares/getshares-empty"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_conditional_api.rs::get_shares_empty_list_shape",
-        "apps/melodee-server/tests/opensubsonic_conditional_api.rs::get_shares_after_create_lists_it"
-      ],
-      "rationale": "Share list with share_{guid} entries; empty list shape."
-    },
-    {
-      "endpoint": "createShare",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-shares/create-share"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_conditional_api.rs::create_share_with_song_id_returns_share_with_url",
-        "apps/melodee-server/tests/opensubsonic_conditional_api.rs::create_share_bad_id_redirects_credential_free_302"
-      ],
-      "rationale": "Creates share_{guid} with {origin}/share/{unique} url; bad id -> 302."
-    },
-    {
-      "endpoint": "updateShare",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-shares/update-share"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_conditional_api.rs::update_share_by_id_returns_ok",
-        "apps/melodee-server/tests/opensubsonic_conditional_api.rs::update_share_unknown_returns_error_44"
-      ],
-      "rationale": "Updates share by id; unknown -> error 44."
-    },
-    {
-      "endpoint": "deleteShare",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-shares/delete-share"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_conditional_api.rs::delete_share_by_id_returns_ok_and_clears_list",
-        "apps/melodee-server/tests/opensubsonic_conditional_api.rs::delete_share_unknown_returns_error_44"
-      ],
-      "rationale": "Deletes share by id; unknown -> error 44."
-    },
-    {
-      "endpoint": "getInternetRadioStations",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-radio/getradio-empty"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_conditional_api.rs::get_internet_radio_stations_empty",
-        "apps/melodee-server/tests/opensubsonic_conditional_api.rs::verify_radio_list_after_create"
-      ],
-      "rationale": "Radio list with radio_{guid} entries; empty list shape."
-    },
-    {
-      "endpoint": "createInternetRadioStation",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-radio/create-radio"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_conditional_api.rs::create_radio_station_as_admin_returns_ok",
-        "apps/melodee-server/tests/opensubsonic_conditional_api.rs::create_radio_station_as_non_admin_returns_auth_error"
-      ],
-      "rationale": "Admin-gated creation; non-admin -> error 40."
-    },
-    {
-      "endpoint": "updateInternetRadioStation",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-radio/update-radio"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_conditional_api.rs::update_radio_station_returns_ok_and_renames"
-      ],
-      "rationale": "Updates radio station by id."
-    },
-    {
-      "endpoint": "deleteInternetRadioStation",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-radio/delete-radio"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_conditional_api.rs::delete_radio_station_returns_ok_and_clears_list"
-      ],
-      "rationale": "Deletes radio station by id."
-    },
-    {
-      "endpoint": "startScan",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-scan/startscan"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_conditional_api.rs::start_scan_returns_scanning_true_count_zero"
-      ],
-      "rationale": "startScan -> scanning:true,count:0 (QuartzDisabled baseline; no admin requirement)."
-    },
-    {
-      "endpoint": "getScanStatus",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-scan/getscanstatus"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_conditional_api.rs::get_scan_status_with_no_run_returns_scanning_false",
-        "apps/melodee-server/tests/opensubsonic_conditional_api.rs::get_scan_status_after_start_returns_scanning_true"
-      ],
-      "rationale": "scanStatus scanning/count from opensubsonic_scan_runs."
-    },
-    {
-      "endpoint": "getUser",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-getuser"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_conditional_api.rs::get_user_returns_captured_role_model",
-        "apps/melodee-server/tests/opensubsonic_conditional_api.rs::get_user_cross_user_returns_error_40"
-      ],
-      "rationale": "User role model (adminRole/streamRole/scrobblingEnabled/downloadRole/shareRole/jukeboxRole/avatarLastChanged)."
-    },
-    {
-      "endpoint": "createUser",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-createuser/create-duplicate-user"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_conditional_api.rs::create_user_fresh_returns_ok",
-        "apps/melodee-server/tests/opensubsonic_conditional_api.rs::create_user_duplicate_returns_error_10"
-      ],
-      "rationale": "Fresh username -> 200 + user model; duplicate -> error 10."
-    },
-    {
-      "endpoint": "createPodcastChannel",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-podcasts-disabled-create"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_conditional_api.rs::create_podcast_channel_disabled_returns_raw_400_disabled",
-        "apps/melodee-server/tests/opensubsonic_conditional_api.rs::create_podcast_channel_enabled_returns_raw_400_invalid_channel"
-      ],
-      "rationale": "Conditional: disabled -> raw ResponseData 400; enabled nonexistent id -> raw ResponseData 400 (not the subsonic envelope)."
-    },
-    {
-      "endpoint": "deletePodcastChannel",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-podcasts-delete-channel-missing"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_conditional_api.rs::delete_podcast_channel_enabled_returns_raw_400_invalid_channel"
-      ],
-      "rationale": "Enabled nonexistent id -> raw ResponseData 400."
-    },
-    {
-      "endpoint": "deletePodcastEpisode",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-podcasts-delete-episode-missing"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_conditional_api.rs::delete_podcast_episode_enabled_returns_raw_400_invalid_episode"
-      ],
-      "rationale": "Enabled nonexistent id -> raw ResponseData 400."
-    },
-    {
-      "endpoint": "downloadPodcastEpisode",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-podcasts-download-episode-missing"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_conditional_api.rs::download_podcast_episode_enabled_returns_raw_400_invalid_episode"
-      ],
-      "rationale": "Enabled nonexistent id -> raw ResponseData 400."
-    },
-    {
-      "endpoint": "refreshPodcasts",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-podcasts-refresh"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_conditional_api.rs::refresh_podcasts_returns_bare_ok_even_when_disabled"
-      ],
-      "rationale": "Bare ok even when disabled (acknowledge-only)."
-    },
-    {
-      "endpoint": "streamPodcastEpisode",
-      "status": "implemented-and-differentially-tested",
-      "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
-      "requirements": [
-        "PRD-API-OS-004"
-      ],
-      "legacyEvidence": [
-        "os-podcasts-stream-episode-missing"
-      ],
-      "rustTests": [
-        "apps/melodee-server/tests/opensubsonic_conditional_api.rs::stream_podcast_episode_requires_stream_role",
-        "apps/melodee-server/tests/opensubsonic_conditional_api.rs::stream_podcast_episode_disabled_returns_raw_400_disabled",
-        "apps/melodee-server/tests/opensubsonic_conditional_api.rs::stream_podcast_episode_enabled_returns_raw_400_invalid_episode"
-      ],
-      "rationale": "Requires HasStreamRole (403 without); disabled -> raw ResponseData 400; enabled nonexistent -> raw ResponseData 400."
-    }
-  ]
+ "schemaVersion": 1,
+ "surface": "opensubsonic",
+ "legacyBaselineCommit": "4028b58dbd3302ed431e2c5b32d9dde5634db218",
+ "endpoints": [
+  {
+   "endpoint": "ping",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-001",
+    "PRD-API-OS-002",
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-ping-json",
+    "os-ping-xml",
+    "os-ping-jsonp",
+    "os-ping-jsonp-no-callback",
+    "os-ping-plain-route"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_system_api.rs::ping_matches_the_captured_envelope_in_all_formats"
+   ],
+   "rationale": "Ping answers the captured bare ok envelope in JSON/XML/JSONP, falls back to XML for jsonp without callback, and serves both plain/.view forms plus the server-root /ping alias."
+  },
+  {
+   "endpoint": "getLicense",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-001",
+    "PRD-API-OS-002",
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-getlicense-json",
+    "os-getlicense-xml"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_system_api.rs::license_and_extensions_preserve_captured_quirks"
+   ],
+   "rationale": "License response preserves the trailExpires/trialExpires typo split and the nested double-wrapped XML license element with its irregular spacing."
+  },
+  {
+   "endpoint": "getOpenSubsonicExtensions",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0130-phase-8-opensubsonic-authentication-extension-advertisement-and-streaming-corrections.md",
+   "requirements": [
+    "PRD-API-OS-002",
+    "PRD-API-OS-006"
+   ],
+   "legacyEvidence": [
+    "os-getopensubsonicextensions-json",
+    "os-getopensubsonicextensions-xml"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_system_api.rs::license_and_extensions_preserve_captured_quirks"
+   ],
+   "rationale": "The advertised extension list is preserved byte-for-byte including the false apiKeyAuthentication/transcodeOffset claims and the malformed XML elements, per ADR-0130 decision 2."
+  },
+  {
+   "endpoint": "getMusicFolders",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0130-phase-8-opensubsonic-authentication-extension-advertisement-and-streaming-corrections.md",
+   "requirements": [
+    "PRD-API-OS-003",
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-getmusicfolders-json",
+    "os-getmusicfolders-xml",
+    "os-auth-valid-token",
+    "os-auth-valid-token-uppercase",
+    "os-auth-valid-password-plain",
+    "os-auth-valid-password-enc-hex",
+    "os-auth-form-post",
+    "os-auth-missing",
+    "os-auth-missing-xml",
+    "os-auth-invalid-username",
+    "os-auth-invalid-token",
+    "os-auth-malformed-token",
+    "os-auth-token-without-salt",
+    "os-auth-jwt-only-unreachable",
+    "os-auth-apikey-only",
+    "os-auth-bypass-localhost"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_system_api.rs::music_folders_match_the_captured_shape",
+    "apps/melodee-server/tests/opensubsonic_system_api.rs::token_auth_accepts_case_insensitive_hex_and_form_post",
+    "apps/melodee-server/tests/opensubsonic_system_api.rs::password_auth_accepts_plain_and_enc_hex_forms",
+    "apps/melodee-server/tests/opensubsonic_system_api.rs::auth_failures_share_the_captured_error_40_envelope",
+    "apps/melodee-server/tests/opensubsonic_system_api.rs::forged_unsigned_jwt_with_wrong_password_is_rejected",
+    "apps/melodee-server/tests/opensubsonic_system_api.rs::bypass_needs_no_credentials_and_synthesizes_no_user"
+   ],
+   "rationale": "Music folders render from configured ingestion sources plus the storage root with library_{uuid} ids; the full captured auth matrix (token/password forms, identical error-40 envelopes, bypass) is preserved. os-auth-jwt-forged-unsigned is the ADR-0113/ADR-0130 approved deviation: the forged unsigned JWT is rejected, proven by the regression test."
+  },
+  {
+   "endpoint": "getPodcasts",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-getpodcasts",
+    "os-getpodcasts-norole",
+    "os-podcasts-disabled-getpodcasts"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_system_api.rs::podcast_auth_failure_uses_http_403",
+    "apps/melodee-server/tests/opensubsonic_system_api.rs::podcasts_enabled_and_disabled_match_the_captured_contract"
+   ],
+   "rationale": "Enabled state returns the captured empty channel list; auth failure is the podcast-unique HTTP 403 + error 40; disabled state answers HTTP 400 with the raw ResponseData body, not the subsonic envelope."
+  },
+  {
+   "endpoint": "getNewestPodcasts",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-getnewestpodcasts",
+    "os-podcasts-disabled-getnewest"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_system_api.rs::podcasts_enabled_and_disabled_match_the_captured_contract"
+   ],
+   "rationale": "Enabled state returns the captured empty episode list; disabled state answers HTTP 400 with the raw ResponseData body."
+  },
+  {
+   "endpoint": "getChatMessages",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-005"
+   ],
+   "legacyEvidence": [
+    "os-gone-getchatmessages"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_system_api.rs::negative_matrix_preserves_exact_statuses_and_headers"
+   ],
+   "rationale": "The captured intentional 410 Gone (empty body, Cache-Control: no-cache) is implemented negative behavior proven by the route-level negative test."
+  },
+  {
+   "endpoint": "addChatMessage",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-005"
+   ],
+   "legacyEvidence": [
+    "os-gone-addchatmessage"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_system_api.rs::negative_matrix_preserves_exact_statuses_and_headers"
+   ],
+   "rationale": "The captured intentional 410 Gone (empty body, Cache-Control: no-cache) is implemented negative behavior proven by the route-level negative test."
+  },
+  {
+   "endpoint": "hls",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-005"
+   ],
+   "legacyEvidence": [
+    "os-gone-hls"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_system_api.rs::negative_matrix_preserves_exact_statuses_and_headers"
+   ],
+   "rationale": "The captured intentional 410 Gone (empty body, Cache-Control: no-cache) is implemented negative behavior proven by the route-level negative test."
+  },
+  {
+   "endpoint": "getCaptions",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-005"
+   ],
+   "legacyEvidence": [
+    "os-gone-getcaptions"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_system_api.rs::negative_matrix_preserves_exact_statuses_and_headers"
+   ],
+   "rationale": "The captured intentional 410 Gone (empty body, Cache-Control: no-cache) is implemented negative behavior proven by the route-level negative test."
+  },
+  {
+   "endpoint": "getVideoInfo",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-005"
+   ],
+   "legacyEvidence": [
+    "os-gone-getvideoinfo"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_system_api.rs::negative_matrix_preserves_exact_statuses_and_headers"
+   ],
+   "rationale": "The captured intentional 410 Gone (empty body, Cache-Control: no-cache) is implemented negative behavior proven by the route-level negative test."
+  },
+  {
+   "endpoint": "getVideos",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-005"
+   ],
+   "legacyEvidence": [
+    "os-gone-getvideos"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_system_api.rs::negative_matrix_preserves_exact_statuses_and_headers"
+   ],
+   "rationale": "The captured intentional 410 Gone (empty body, Cache-Control: no-cache) is implemented negative behavior proven by the route-level negative test."
+  },
+  {
+   "endpoint": "getUsers",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-005"
+   ],
+   "legacyEvidence": [
+    "os-notimplemented-getusers"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_system_api.rs::negative_matrix_preserves_exact_statuses_and_headers"
+   ],
+   "rationale": "The captured intentional 501 Not Implemented (empty body, Cache-Control: no-cache) is implemented negative behavior proven by the route-level negative test."
+  },
+  {
+   "endpoint": "updateUser",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-005"
+   ],
+   "legacyEvidence": [
+    "os-notimplemented-updateuser"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_system_api.rs::negative_matrix_preserves_exact_statuses_and_headers"
+   ],
+   "rationale": "The captured intentional 501 Not Implemented (empty body, Cache-Control: no-cache) is implemented negative behavior proven by the route-level negative test."
+  },
+  {
+   "endpoint": "deleteUser",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-005"
+   ],
+   "legacyEvidence": [
+    "os-notimplemented-deleteuser"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_system_api.rs::negative_matrix_preserves_exact_statuses_and_headers"
+   ],
+   "rationale": "The captured intentional 501 Not Implemented (empty body, Cache-Control: no-cache) is implemented negative behavior proven by the route-level negative test."
+  },
+  {
+   "endpoint": "changePassword",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-005"
+   ],
+   "legacyEvidence": [
+    "os-notimplemented-changepassword"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_system_api.rs::negative_matrix_preserves_exact_statuses_and_headers"
+   ],
+   "rationale": "The captured intentional 501 Not Implemented (empty body, Cache-Control: no-cache) is implemented negative behavior proven by the route-level negative test."
+  },
+  {
+   "endpoint": "jukeboxControl",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004",
+    "PRD-API-OS-005"
+   ],
+   "legacyEvidence": [
+    "os-gone-jukebox-disabled"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_system_api.rs::negative_matrix_preserves_exact_statuses_and_headers"
+   ],
+   "rationale": "Captured disabled and enabled-without-backend states collapse to the same 410; the adapter preserves the 410 (empty body, Cache-Control: no-cache)."
+  },
+  {
+   "endpoint": "star",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-annotation-star/star-album-via-albumid",
+    "os-annotation-star/star-malformed-id",
+    "os-annotation-star/star-song"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_annotation_api.rs::star_and_unstar_persist_captured_user_state",
+    "apps/melodee-server/tests/opensubsonic_annotation_api.rs::star_malformed_id_matches_the_captured_error_44"
+   ],
+   "rationale": "Star persists by id prefix to native_*_user_states; malformed id -> captured error 44 envelope."
+  },
+  {
+   "endpoint": "unstar",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-annotation-star/unstar-album",
+    "os-annotation-star/unstar-song"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_annotation_api.rs::star_and_unstar_persist_captured_user_state"
+   ],
+   "rationale": "Unstar clears starred on the same prefix-dispatched targets."
+  },
+  {
+   "endpoint": "setRating",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-annotation-rating/setrating-clear",
+    "os-annotation-rating/setrating-invalid-id",
+    "os-annotation-rating/setrating-song-4"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_annotation_api.rs::set_rating_set_clear_and_invalid_id_match_the_captures"
+   ],
+   "rationale": "Rating 0-5 persists; 0 clears; invalid id -> captured error."
+  },
+  {
+   "endpoint": "scrobble",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-annotation-scrobble/scrobble-default-submission",
+    "os-annotation-scrobble/scrobble-nowplaying",
+    "os-annotation-scrobble/scrobble-submission",
+    "os-annotation-scrobble/scrobble-submission-repeat",
+    "os-annotation-scrobble/scrobble-time-mismatch"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_annotation_api.rs::scrobble_submission_records_a_play_and_repeat_is_deduped",
+    "apps/melodee-server/tests/opensubsonic_annotation_api.rs::scrobble_default_submission_records_a_play",
+    "apps/melodee-server/tests/opensubsonic_annotation_api.rs::scrobble_time_mismatch_keeps_the_captured_ok_error_quirk",
+    "apps/melodee-server/tests/opensubsonic_annotation_api.rs::scrobble_malformed_id_matches_the_captured_error_44"
+   ],
+   "rationale": "submission=true records a play with deterministic client_event_id dedupe; submission=false updates now-playing; two ids+one time reproduces the ok-with-error code 0 quirk."
+  },
+  {
+   "endpoint": "getBookmarks",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-bookmarks/getbookmarks-empty",
+    "os-bookmarks/verify-bookmarks",
+    "os-bookmarks/verify-bookmarks-empty"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_annotation_api.rs::bookmarks_round_trip_matches_the_captures"
+   ],
+   "rationale": "Empty and populated bookmark lists match the captured shape with verbatim raw position."
+  },
+  {
+   "endpoint": "createBookmark",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-bookmarks/create-bookmark"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_annotation_api.rs::bookmarks_round_trip_matches_the_captures"
+   ],
+   "rationale": "Create upserts by (user,track) preserving created_at."
+  },
+  {
+   "endpoint": "deleteBookmark",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-bookmarks/delete-bookmark"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_annotation_api.rs::bookmarks_round_trip_matches_the_captures"
+   ],
+   "rationale": "Delete is idempotent and clears the row."
+  },
+  {
+   "endpoint": "savePlayQueue",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-playqueue/clear-playqueue",
+    "os-playqueue/saveplayqueue"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_annotation_api.rs::play_queue_round_trip_preserves_the_playqueid_quirk"
+   ],
+   "rationale": "Save stores repeated ids in submission order with the captured PlayQueId bigint current and client changed_by."
+  },
+  {
+   "endpoint": "getPlayQueue",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-playqueue/getplayqueue-empty",
+    "os-playqueue/verify-playqueue",
+    "os-playqueue/verify-playqueue-empty"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_annotation_api.rs::play_queue_round_trip_preserves_the_playqueid_quirk"
+   ],
+   "rationale": "Get returns the queue with entries, current entry id, position, changedBy; empty queue synthesized default matches the golden."
+  },
+  {
+   "endpoint": "getAlbumList",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0130-phase-8-opensubsonic-authentication-extension-advertisement-and-streaming-corrections.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-getalbumlist-newest"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_lists_api.rs::album_list_legacy_shape_adds_average_rating_and_paginates"
+   ],
+   "rationale": "Legacy albumList = albumList2 plus a leading averageRating; deterministic COLLATE C + public-id tiebreak (D10)."
+  },
+  {
+   "endpoint": "getAlbumList2",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0130-phase-8-opensubsonic-authentication-extension-advertisement-and-streaming-corrections.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-getalbumlist2-alphabetical",
+    "os-getalbumlist2-byyear",
+    "os-getalbumlist2-frequent",
+    "os-getalbumlist2-newest",
+    "os-getalbumlist2-recent",
+    "os-getalbumlist2-starred"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_lists_api.rs::album_list2_newest_matches_captured_shape_and_total",
+    "apps/melodee-server/tests/opensubsonic_lists_api.rs::album_list_type_sorts_match_the_captured_semantics",
+    "apps/melodee-server/tests/opensubsonic_lists_api.rs::album_list2_xml_uses_the_captured_container_names"
+   ],
+   "rationale": "All captured list types incl. the recent-sorts-by-ReleaseDate quirk; x-total-count carries filtered totals; XML container names preserved. bygenre scenario is exercised by songs_by_genre."
+  },
+  {
+   "endpoint": "getRandomSongs",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-getrandomsongs"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_lists_api.rs::random_songs_envelope_and_size_bound_the_selection"
+   ],
+   "rationale": "Random selection bounded by size; envelope contract preserved."
+  },
+  {
+   "endpoint": "getNowPlaying",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-annotation-scrobble/verify-nowplaying",
+    "os-getnowplaying-empty"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_lists_api.rs::now_playing_is_empty_then_lists_the_active_entry"
+   ],
+   "rationale": "Now playing synthesized from native_now_playing; empty shape captured."
+  },
+  {
+   "endpoint": "getStarred",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-getstarred"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_lists_api.rs::starred_legacy_matches_the_captured_child_and_artist_shapes"
+   ],
+   "rationale": "Starred legacy shape from native_*_user_states.starred with the artistImageUrl URL placeholder."
+  },
+  {
+   "endpoint": "getStarred2",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-annotation-star/verify-starred2-after-star",
+    "os-annotation-star/verify-starred2-after-unstar",
+    "os-annotation-star/verify-starred2-album",
+    "os-getstarred2"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_lists_api.rs::starred2_matches_the_captured_id3_shapes",
+    "apps/melodee-server/tests/opensubsonic_lists_api.rs::starred_under_bypass_resolves_u_but_synthesizes_no_user_without_it"
+   ],
+   "rationale": "ID3 starred2 artist/album/song arrays with userStarred timestamps."
+  },
+  {
+   "endpoint": "getSongsByGenre",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-getsongsbygenre-none",
+    "os-getsongsbygenre-rock",
+    "os-getsongsbygenre-unicode"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_lists_api.rs::songs_by_genre_matches_ascii_and_unicode_genres_exactly"
+   ],
+   "rationale": "Genre match over manifest metadata incl. Unicode (環境音楽); empty shape for unknown genre."
+  },
+  {
+   "endpoint": "search2",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-search2-dune"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_lists_api.rs::search_matches_the_normalized_name_collision_pair",
+    "apps/melodee-server/tests/opensubsonic_lists_api.rs::search_song_entries_keep_the_captured_placeholder_fields"
+   ],
+   "rationale": "Search2 returns placeholder song fields (bitRate 0, suffix mp3, path unknown) and folds the normalized-name collision pair."
+  },
+  {
+   "endpoint": "search3",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-search3-dune",
+    "os-search3-none",
+    "os-search3-unicode"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_lists_api.rs::search_matches_the_normalized_name_collision_pair",
+    "apps/melodee-server/tests/opensubsonic_lists_api.rs::search_empty_and_unicode_queries_match_the_captured_shapes"
+   ],
+   "rationale": "searchResult3 artist/album/song arrays with offset paging and Unicode query support."
+  },
+  {
+   "endpoint": "searchForArtist",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-searchforartist"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_lists_api.rs::extension_search_endpoints_answer_the_captured_302_without_leaking_credentials"
+   ],
+   "rationale": "Melodee extension 302 without embedding request credentials (legacy leak not preserved)."
+  },
+  {
+   "endpoint": "searchForArtistImage",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-searchforartistimage"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_lists_api.rs::extension_search_endpoints_answer_the_captured_302_without_leaking_credentials"
+   ],
+   "rationale": "Melodee extension 302 without embedding request credentials."
+  },
+  {
+   "endpoint": "searchForAlbumImage",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-searchforalbumimage"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_lists_api.rs::extension_search_endpoints_answer_the_captured_302_without_leaking_credentials"
+   ],
+   "rationale": "Melodee extension 302 without embedding request credentials."
+  },
+  {
+   "endpoint": "getIndexes",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-getindexes"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_indexes_matches_the_captured_index_shape"
+   ],
+   "rationale": "Index shape from catalog artists/releases."
+  },
+  {
+   "endpoint": "getMusicDirectory",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-getmusicdirectory-album",
+    "os-getmusicdirectory-artist",
+    "os-getmusicdirectory-library"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_music_directory_library_returns_the_captured_empty_shape",
+    "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_music_directory_artist_lists_albums_as_directory_children",
+    "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_music_directory_album_lists_songs_as_children"
+   ],
+   "rationale": "Directory browse by library/artist/album id."
+  },
+  {
+   "endpoint": "getArtists",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-getartists",
+    "os-getartists-xml"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_artists_matches_the_captured_shape",
+    "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_artists_xml_matches_the_captured_bytes"
+   ],
+   "rationale": "First-letter index groups with ignoredArticles; non-ASCII bucket; XML byte-exact."
+  },
+  {
+   "endpoint": "getArtist",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-getartist",
+    "os-getartist-collision",
+    "os-getartist-unknown",
+    "os-getartist-various"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_artist_matches_the_captured_shape_with_albums",
+    "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_artist_unknown_returns_ok_with_no_artist_key"
+   ],
+   "rationale": "Artist detail with albums; unknown -> ok with no artist key."
+  },
+  {
+   "endpoint": "getArtistInfo",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-getartistinfo"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_artist_info_and_info2_match_the_offline_provider_shapes"
+   ],
+   "rationale": "Offline-provider info shape."
+  },
+  {
+   "endpoint": "getArtistInfo2",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-getartistinfo2"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_artist_info_and_info2_match_the_offline_provider_shapes"
+   ],
+   "rationale": "Offline-provider info2 shape."
+  },
+  {
+   "endpoint": "getAlbum",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-getalbum",
+    "os-getalbum-compilation",
+    "os-getalbum-minimal",
+    "os-getalbum-multidisc"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_album_matches_the_captured_rich_shape",
+    "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_album_unknown_returns_the_captured_302_without_credentials",
+    "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_album_malformed_id_returns_the_captured_302"
+   ],
+   "rationale": "Rich album shape incl. multi-disc/discTitles/isCompilation; unknown/unprefixed -> credential-free 302 (legacy credential leak not preserved). os-getalbum-unknown is the D-class do-not-preserve deviation."
+  },
+  {
+   "endpoint": "getAlbumInfo",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-getalbuminfo"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_album_info_and_info2_match_the_offline_provider_shapes"
+   ],
+   "rationale": "Offline-provider album info shape."
+  },
+  {
+   "endpoint": "getAlbumInfo2",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-getalbuminfo2"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_album_info_and_info2_match_the_offline_provider_shapes"
+   ],
+   "rationale": "Offline-provider album info2 shape."
+  },
+  {
+   "endpoint": "getSong",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-getsong",
+    "os-getsong-malformed-id",
+    "os-getsong-unknown"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_song_matches_the_captured_child_shape",
+    "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_song_unknown_returns_ok_with_error_44_block",
+    "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_song_malformed_id_returns_ok_with_error_44_block"
+   ],
+   "rationale": "Song Child shape; unknown/malformed -> ok with error 44 block. os-annotation-rating/verify-rating scenarios are exercised by the annotation group."
+  },
+  {
+   "endpoint": "getGenres",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-getgenres"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_genres_matches_the_captured_aggregated_shape"
+   ],
+   "rationale": "Aggregated genre list from manifest metadata."
+  },
+  {
+   "endpoint": "getSimilarSongs",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-getsimilarsongs"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_similar_songs_and2_match_the_captured_empty_shapes"
+   ],
+   "rationale": "Empty similar list in fixture."
+  },
+  {
+   "endpoint": "getSimilarSongs2",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-getsimilarsongs2"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_similar_songs_and2_match_the_captured_empty_shapes"
+   ],
+   "rationale": "Empty similar2 list in fixture."
+  },
+  {
+   "endpoint": "getTopSongs",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-gettopsongs"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_top_songs_matches_the_artist_name_exactly",
+    "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_top_songs_missing_artist_returns_empty",
+    "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_top_songs_unknown_artist_returns_empty"
+   ],
+   "rationale": "Frozen os-gettopsongs matches the artist name EXACTLY (canonical_name equality): artist=Dune returns only Dune's songs, not the normalized-name collision artist Düné's."
+  },
+  {
+   "endpoint": "getPlaylists",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-playlists/getplaylists"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_playlists_api.rs::playlists_round_trip_create_get_update_delete",
+    "apps/melodee-server/tests/opensubsonic_playlists_api.rs::private_playlist_is_invisible_to_non_owners"
+   ],
+   "rationale": "Playlist list with allowedUsers [], coverArt = playlist id."
+  },
+  {
+   "endpoint": "getPlaylist",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-playlists/getplaylist",
+    "os-playlists/get-private-playlist"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_playlists_api.rs::playlists_round_trip_create_get_update_delete",
+    "apps/melodee-server/tests/opensubsonic_playlists_api.rs::private_playlist_is_invisible_to_non_owners"
+   ],
+   "rationale": "Playlist detail with entries; private invisible to non-owners. os-playlists/getplaylist-unknown and verify-* scenarios are the D4 do-not-preserve deviation (credential-free 302 / clean update)."
+  },
+  {
+   "endpoint": "createPlaylist",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-playlists/create-playlist"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_playlists_api.rs::playlists_round_trip_create_get_update_delete"
+   ],
+   "rationale": "Atomic create with songId list returns the new playlist with entries (legacy partial-create poisoning not preserved)."
+  },
+  {
+   "endpoint": "updatePlaylist",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0130-phase-8-opensubsonic-authentication-extension-advertisement-and-streaming-corrections.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-playlists/update-playlist-add-remove"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_playlists_api.rs::playlists_round_trip_create_get_update_delete"
+   ],
+   "rationale": "Applies rename/add/remove cleanly (D4 do-not-preserve: legacy 302 cover-resolution crash not reproduced)."
+  },
+  {
+   "endpoint": "deletePlaylist",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-playlists/delete-playlist"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_playlists_api.rs::playlists_round_trip_create_get_update_delete"
+   ],
+   "rationale": "Bare ok; owner-only delete."
+  },
+  {
+   "endpoint": "stream",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0130-phase-8-opensubsonic-authentication-extension-advertisement-and-streaming-corrections.md",
+   "requirements": [
+    "PRD-API-OS-004",
+    "PRD-STREAM-002"
+   ],
+   "legacyEvidence": [
+    "os-stream-full",
+    "os-stream-head",
+    "os-stream-range-start",
+    "os-stream-range-middle",
+    "os-stream-range-end",
+    "os-stream-range-invalid",
+    "os-stream-range-unsatisfiable",
+    "os-stream-timeoffset",
+    "os-stream-maxbitrate-ignored",
+    "os-stream-unknown"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_media_api.rs::stream_full_get_returns_captured_headers_and_body",
+    "apps/melodee-server/tests/opensubsonic_media_api.rs::stream_head_returns_same_headers_with_empty_body",
+    "apps/melodee-server/tests/opensubsonic_media_api.rs::stream_initial_range_returns_206_with_exact_bytes",
+    "apps/melodee-server/tests/opensubsonic_media_api.rs::stream_middle_range_d2_regression_returns_206_not_legacy_416",
+    "apps/melodee-server/tests/opensubsonic_media_api.rs::stream_invalid_range_returns_404_error_70",
+    "apps/melodee-server/tests/opensubsonic_media_api.rs::stream_unsatisfiable_range_returns_404_error_70",
+    "apps/melodee-server/tests/opensubsonic_media_api.rs::stream_time_offset_returns_404_error_70",
+    "apps/melodee-server/tests/opensubsonic_media_api.rs::stream_max_bitrate_and_format_are_ignored",
+    "apps/melodee-server/tests/opensubsonic_media_api.rs::stream_unknown_song_redirects_credential_free_302"
+   ],
+   "rationale": "Single-pass ranges (D2 fix): nonzero-offset seeks return correct bytes with correct Content-Range total; invalid/unsatisfiable/timeOffset -> 404 error 70; maxBitRate/format ignored (no transcoding); unknown -> credential-free 302. os-stream-range-middle is the do-not-preserve D2 deviation (legacy 416 corruption fixed)."
+  },
+  {
+   "endpoint": "download",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0130-phase-8-opensubsonic-authentication-extension-advertisement-and-streaming-corrections.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-download",
+    "os-download-unknown"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_media_api.rs::download_returns_attachment_with_captured_disposition",
+    "apps/melodee-server/tests/opensubsonic_media_api.rs::download_disabled_redirects_credential_free_302",
+    "apps/melodee-server/tests/opensubsonic_media_api.rs::download_unknown_redirects_credential_free_302"
+   ],
+   "rationale": "200 + Content-Disposition attachment; gated by downloads_enabled; unknown -> credential-free 302."
+  },
+  {
+   "endpoint": "getCoverArt",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-getcoverart-default",
+    "os-getcoverart-80",
+    "os-getcoverart-song",
+    "os-getcoverart-unknown"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_media_api.rs::get_cover_art_song_serves_the_captured_default_when_no_artwork",
+    "apps/melodee-server/tests/opensubsonic_media_api.rs::get_cover_art_playlist_returns_artwork_with_etag",
+    "apps/melodee-server/tests/opensubsonic_media_api.rs::get_cover_art_if_none_match_returns_304"
+   ],
+   "rationale": "Sniffed content-type + ETag; If-None-Match -> 304; Cache-Control only on stored artwork. No artwork serves the captured default placeholder (sized: processed JPEG; unsized: raw fixture bytes); unknown id -> 200 empty."
+  },
+  {
+   "endpoint": "getAvatar",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-getavatar"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_media_api.rs::get_avatar_by_username_returns_stored_bytes",
+    "apps/melodee-server/tests/opensubsonic_media_api.rs::get_avatar_by_user_id_returns_stored_bytes",
+    "apps/melodee-server/tests/opensubsonic_media_api.rs::get_avatar_missing_serves_the_captured_default"
+   ],
+   "rationale": "User avatar bytes by username/id; missing avatar serves the captured default user image (os-getavatar), identical to the native fallback bytes."
+  },
+  {
+   "endpoint": "getLyrics",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-getlyrics",
+    "os-getlyrics-missing"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_media_api.rs::get_lyrics_echoes_artist_and_title_with_empty_value",
+    "apps/melodee-server/tests/opensubsonic_media_api.rs::get_lyrics_missing_returns_empty_artist_title"
+   ],
+   "rationale": "Lyrics by artist+title; missing -> empty (never an error)."
+  },
+  {
+   "endpoint": "getLyricsBySongId",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-getlyricsbysongid",
+    "os-getlyricsbysongid-none"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_media_api.rs::get_lyrics_by_song_id_returns_bare_ok_envelope"
+   ],
+   "rationale": "Lyrics by song id; none -> bare ok."
+  },
+  {
+   "endpoint": "getShares",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-shares/getshares-empty"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_conditional_api.rs::get_shares_empty_list_shape",
+    "apps/melodee-server/tests/opensubsonic_conditional_api.rs::get_shares_after_create_lists_it"
+   ],
+   "rationale": "Share list with share_{guid} entries; empty list shape."
+  },
+  {
+   "endpoint": "createShare",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-shares/create-share"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_conditional_api.rs::create_share_with_song_id_returns_share_with_url",
+    "apps/melodee-server/tests/opensubsonic_conditional_api.rs::create_share_bad_id_redirects_credential_free_302"
+   ],
+   "rationale": "Creates share_{guid} with {origin}/share/{unique} url; bad id -> 302."
+  },
+  {
+   "endpoint": "updateShare",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-shares/update-share"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_conditional_api.rs::update_share_by_id_returns_ok",
+    "apps/melodee-server/tests/opensubsonic_conditional_api.rs::update_share_unknown_returns_error_44"
+   ],
+   "rationale": "Updates share by id; unknown -> error 44."
+  },
+  {
+   "endpoint": "deleteShare",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-shares/delete-share"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_conditional_api.rs::delete_share_by_id_returns_ok_and_clears_list",
+    "apps/melodee-server/tests/opensubsonic_conditional_api.rs::delete_share_unknown_returns_error_44"
+   ],
+   "rationale": "Deletes share by id; unknown -> error 44."
+  },
+  {
+   "endpoint": "getInternetRadioStations",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-radio/getradio-empty"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_conditional_api.rs::get_internet_radio_stations_empty",
+    "apps/melodee-server/tests/opensubsonic_conditional_api.rs::verify_radio_list_after_create"
+   ],
+   "rationale": "Radio list with radio_{guid} entries; empty list shape."
+  },
+  {
+   "endpoint": "createInternetRadioStation",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-radio/create-radio"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_conditional_api.rs::create_radio_station_as_admin_returns_ok",
+    "apps/melodee-server/tests/opensubsonic_conditional_api.rs::create_radio_station_as_non_admin_returns_auth_error"
+   ],
+   "rationale": "Admin-gated creation; non-admin -> error 40."
+  },
+  {
+   "endpoint": "updateInternetRadioStation",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-radio/update-radio"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_conditional_api.rs::update_radio_station_returns_ok_and_renames"
+   ],
+   "rationale": "Updates radio station by id."
+  },
+  {
+   "endpoint": "deleteInternetRadioStation",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-radio/delete-radio"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_conditional_api.rs::delete_radio_station_returns_ok_and_clears_list"
+   ],
+   "rationale": "Deletes radio station by id."
+  },
+  {
+   "endpoint": "startScan",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-scan/startscan"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_conditional_api.rs::start_scan_returns_scanning_true_count_zero"
+   ],
+   "rationale": "startScan -> scanning:true,count:0 (QuartzDisabled baseline; no admin requirement)."
+  },
+  {
+   "endpoint": "getScanStatus",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-scan/getscanstatus"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_conditional_api.rs::get_scan_status_with_no_run_returns_scanning_false",
+    "apps/melodee-server/tests/opensubsonic_conditional_api.rs::get_scan_status_after_start_returns_scanning_true"
+   ],
+   "rationale": "scanStatus scanning/count from opensubsonic_scan_runs."
+  },
+  {
+   "endpoint": "getUser",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-getuser"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_conditional_api.rs::get_user_returns_captured_role_model",
+    "apps/melodee-server/tests/opensubsonic_conditional_api.rs::get_user_cross_user_returns_error_40"
+   ],
+   "rationale": "User role model (adminRole/streamRole/scrobblingEnabled/downloadRole/shareRole/jukeboxRole/avatarLastChanged)."
+  },
+  {
+   "endpoint": "createUser",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-createuser/create-duplicate-user"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_conditional_api.rs::create_user_fresh_returns_ok",
+    "apps/melodee-server/tests/opensubsonic_conditional_api.rs::create_user_duplicate_returns_error_10"
+   ],
+   "rationale": "Fresh username -> 200 + user model; duplicate -> error 10."
+  },
+  {
+   "endpoint": "createPodcastChannel",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-podcasts-disabled-create"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_conditional_api.rs::create_podcast_channel_disabled_returns_raw_400_disabled",
+    "apps/melodee-server/tests/opensubsonic_conditional_api.rs::create_podcast_channel_enabled_returns_raw_400_invalid_channel"
+   ],
+   "rationale": "Conditional: disabled -> raw ResponseData 400; enabled nonexistent id -> raw ResponseData 400 (not the subsonic envelope)."
+  },
+  {
+   "endpoint": "deletePodcastChannel",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-podcasts-delete-channel-missing"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_conditional_api.rs::delete_podcast_channel_enabled_returns_raw_400_invalid_channel"
+   ],
+   "rationale": "Enabled nonexistent id -> raw ResponseData 400."
+  },
+  {
+   "endpoint": "deletePodcastEpisode",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-podcasts-delete-episode-missing"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_conditional_api.rs::delete_podcast_episode_enabled_returns_raw_400_invalid_episode"
+   ],
+   "rationale": "Enabled nonexistent id -> raw ResponseData 400."
+  },
+  {
+   "endpoint": "downloadPodcastEpisode",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-podcasts-download-episode-missing"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_conditional_api.rs::download_podcast_episode_enabled_returns_raw_400_invalid_episode"
+   ],
+   "rationale": "Enabled nonexistent id -> raw ResponseData 400."
+  },
+  {
+   "endpoint": "refreshPodcasts",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-podcasts-refresh"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_conditional_api.rs::refresh_podcasts_returns_bare_ok_even_when_disabled"
+   ],
+   "rationale": "Bare ok even when disabled (acknowledge-only)."
+  },
+  {
+   "endpoint": "streamPodcastEpisode",
+   "status": "implemented-and-differentially-tested",
+   "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
+   "requirements": [
+    "PRD-API-OS-004"
+   ],
+   "legacyEvidence": [
+    "os-podcasts-stream-episode-missing"
+   ],
+   "rustTests": [
+    "apps/melodee-server/tests/opensubsonic_conditional_api.rs::stream_podcast_episode_requires_stream_role",
+    "apps/melodee-server/tests/opensubsonic_conditional_api.rs::stream_podcast_episode_disabled_returns_raw_400_disabled",
+    "apps/melodee-server/tests/opensubsonic_conditional_api.rs::stream_podcast_episode_enabled_returns_raw_400_invalid_episode"
+   ],
+   "rationale": "Requires HasStreamRole (403 without); disabled -> raw ResponseData 400; enabled nonexistent -> raw ResponseData 400."
+  }
+ ]
 }

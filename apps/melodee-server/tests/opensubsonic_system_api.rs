@@ -481,10 +481,17 @@ async fn bypass_needs_no_credentials_and_synthesizes_no_user() {
     let (status, _, _) = respond(state.clone(), host_match).await;
     assert_eq!(status, StatusCode::OK);
 
-    // Paths containing /images/ bypass auth; the WP3 image handler answers
-    // unknown ids with the credential-free 302 class.
-    let (status, _, _) = respond(state.clone(), enforced_get("/images/u_1/64")).await;
-    assert_eq!(status, StatusCode::FOUND);
+    // Paths containing /images/ bypass auth. The route itself is owned by the
+    // native surface (not mounted in this harness), so the request falls
+    // through to 404 — the assertion that matters is that the OS auth
+    // middleware does NOT challenge it (no 403/error-40). The native
+    // unknown-id 200 empty class is covered by the native image tests.
+    let (status, _, _) = respond(
+        state.clone(),
+        enforced_get("/images/song_00000000-0000-0000-0000-000000000000/80"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]

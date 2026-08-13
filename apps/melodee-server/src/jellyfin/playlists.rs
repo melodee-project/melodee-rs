@@ -104,14 +104,20 @@ async fn list_playlists(State(state): State<JfState>, headers: HeaderMap, uri: U
     // frozen baseline orders ascending by creation time
     // (`jf-playlists/playlists-list`), unlike the native-v1 newest-first list.
     let page_size = (take + skip).clamp(1, 1000) as u16;
-    let (total, playlists) =
-        match NativeUserStateStore::playlists_oldest_first(&state.pool, principal.user_id, 1, page_size).await {
-            Ok(result) => result,
-            Err(error) => {
-                tracing::error!(%error, "jellyfin playlist list failed");
-                return not_found("Playlist not found.");
-            }
-        };
+    let (total, playlists) = match NativeUserStateStore::playlists_oldest_first(
+        &state.pool,
+        principal.user_id,
+        1,
+        page_size,
+    )
+    .await
+    {
+        Ok(result) => result,
+        Err(error) => {
+            tracing::error!(%error, "jellyfin playlist list failed");
+            return not_found("Playlist not found.");
+        }
+    };
     let can_download = has_role(&principal, "HasDownloadRole");
     let mut items = Vec::new();
     for playlist in playlists.iter().skip(skip as usize).take(take as usize) {

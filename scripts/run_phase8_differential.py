@@ -41,6 +41,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import unicodedata
 import urllib.request
 from pathlib import Path
 
@@ -172,6 +173,14 @@ KNOWN_DIFFERENCES: list[tuple[str, str, str]] = [
     # 0007 CHECK), so the adapter always emits the resolved sort value.
     ("os-getalbum-minimal", "sortName", "legacy null-SortName omission artifact; Rust requires non-empty sort values"),
     ("os-getsongsbygenre-unicode", "sortName", "legacy null-SortName omission artifact; Rust requires non-empty sort values"),
+    ("os-getalbum-compilation", "sortName", "legacy null-SortName omission artifact; Rust requires non-empty sort values"),
+    ("os-getalbum-multidisc", "sortName", "legacy null-SortName omission artifact; Rust requires non-empty sort values"),
+    ("os-playlists/create-playlist", "sortName", "legacy null-SortName omission artifact; Rust requires non-empty sort values"),
+    ("os-playlists/get-private-playlist", "sortName", "legacy null-SortName omission artifact; Rust requires non-empty sort values"),
+    ("os-playlists/verify-created", "sortName", "legacy null-SortName omission artifact; Rust requires non-empty sort values"),
+    ("os-playlists/verify-updated", "sortName", "legacy null-SortName omission artifact; Rust requires non-empty sort values"),
+    ("os-playlists/getplaylist", "sortName", "legacy null-SortName omission artifact; Rust requires non-empty sort values"),
+    ("os-playqueue/verify-playqueue", "sortName", "legacy null-SortName omission artifact; Rust requires non-empty sort values"),
     # The XML artist index serializes the legacy null-SortName '' group,
     # which the Rust domain cannot reproduce (non-empty sort_name CHECK).
     ("os-getartists-xml", "", "legacy null-SortName empty-index artifact in the XML serializer"),
@@ -186,6 +195,7 @@ KNOWN_DIFFERENCES: list[tuple[str, str, str]] = [
     # 302 + /Account/Login target class is preserved.
     ("os-stream-unknown", "", "redirect Location embeds per-run forwarded host; credential strip per ADR-0130"),
     ("os-download-unknown", "", "redirect Location embeds per-run forwarded host; credential strip per ADR-0130"),
+    ("os-getalbum-unknown", "", "redirect Location embeds per-run forwarded host; credential strip per ADR-0130"),
     ("os-playlists/getplaylist-unknown", "", "redirect Location embeds per-run forwarded host; credential strip per ADR-0130"),
     ("os-shares/create-share-bad-id", "", "redirect Location embeds per-run forwarded host; credential strip per ADR-0130"),
     ("os-searchforartist", "", "redirect Location embeds per-run forwarded host; credential strip per ADR-0130"),
@@ -198,6 +208,18 @@ KNOWN_DIFFERENCES: list[tuple[str, str, str]] = [
     ("os-stream-range-middle", "", "ADR-0130 decision 4 (risk D2/R2): legacy double-range 416 bug intentionally not preserved"),
     ("os-stream-range-middle-mangled", "", "ADR-0130 decision 4 (risk D2/R2): legacy double-range clamp bug intentionally not preserved"),
     ("os-stream-range-end", "", "ADR-0130 decision 4 (risk D2/R2): legacy suffix-range first-N bug intentionally not preserved"),
+    ("os-stream-range-start", "response.headers", "ADR-0130 decision 4 (risk D2/R2): legacy Content-Range total equaled the requested length"),
+    # updatePlaylist on a cover-less playlist: the legacy response
+    # serialization 302'd on cover resolution and rolled the mutation back
+    # (frozen golden). Phase-0 evidence §7 marks this cover-dependent breakage
+    # MUST NOT be preserved; the Rust adapter applies the update cleanly
+    # (rename + remove + add), so the update response and the resulting
+    # playlist state legitimately diverge.
+    ("os-playlists/update-playlist-add-remove", "", "legacy cover-resolution 302 rollback not preserved (phase-0 §7)"),
+    ("os-playlists/verify-updated", "playlist.entry", "legacy cover-resolution 302 rollback not preserved (phase-0 §7)"),
+    ("os-playlists/verify-updated", "playlist.name", "legacy cover-resolution 302 rollback not preserved (phase-0 §7)"),
+    ("os-playlists/verify-updated", "playlist.duration", "legacy cover-resolution 302 rollback not preserved (phase-0 §7)"),
+    ("os-playlists/getplaylist", ".averageRating", "fixture-seeded ratings bypassed legacy CalculatedRating (seeding artifact)"),
     # averageRating = legacy CalculatedRating columns, which the Phase 0
     # oracle seeded directly (bypassing the rating service) — so fixture
     # ratings never reach the legacy aggregate while runtime setRating calls
@@ -213,6 +235,9 @@ KNOWN_DIFFERENCES: list[tuple[str, str, str]] = [
     ("os-shares/create-share", ".averageRating", "fixture-seeded ratings bypassed legacy CalculatedRating (seeding artifact)"),
     ("os-shares/verify-shares", ".averageRating", "fixture-seeded ratings bypassed legacy CalculatedRating (seeding artifact)"),
     ("os-shares/verify-shares-empty", ".averageRating", "fixture-seeded ratings bypassed legacy CalculatedRating (seeding artifact)"),
+    ("os-getalbum", ".averageRating", "fixture-seeded ratings bypassed legacy CalculatedRating (seeding artifact)"),
+    ("os-getmusicdirectory-album", ".averageRating", "fixture-seeded ratings bypassed legacy CalculatedRating (seeding artifact)"),
+    ("os-getsong", ".averageRating", "fixture-seeded ratings bypassed legacy CalculatedRating (seeding artifact)"),
     # Legacy grouped artists with NULL SortName under an empty-name index
     # (Sæglópur 日本, Cassette Ghost); the Rust domain requires a non-empty
     # sort_name, so those artists group under S/C. The legacy artifact is not
@@ -589,6 +614,83 @@ def build_seed_sql(catalog: dict, media: dict[str, tuple[int, str]], password_ha
             f"{track_count},1,{lit(FIXTURE_TS)});"
         )
 
+    # --- contributors (legacy Contributors rows) ------------------------------
+    # Artist-linked contributors land in `contributions`; name-only
+    # contributors (no resolved Artist identity) land in `observed_artists`
+    # because contributions.artist_id is NOT NULL — the contribution role is
+    # carried in source_payload for the adapter to render.
+    contributor_ordinals: dict[str, int] = {}
+    for contributor in catalog.get("contributors", []):
+        track_slug = contributor.get("song")
+        track_id = track_ids[track_slug] if track_slug else None
+        release_id = release_ids[contributor["album"]]
+        # observed_artists uniqueness is (release_id, scope, source_pointer,
+        # source_ordinal) — release-scoped ordinals, not per-track.
+        ordinal_key = contributor["album"]
+        contributor_ordinals[ordinal_key] = contributor_ordinals.get(ordinal_key, 0) + 1
+        ordinal = contributor_ordinals[ordinal_key]
+        is_performance = "true" if contributor.get("contributorType") == 1 else "false"
+        if contributor.get("artist"):
+            artist_row_id = artist_ids[contributor["artist"]]
+            artist_name = next(
+                a["name"] for a in catalog["artists"] if a["slug"] == contributor["artist"]
+            )
+            s.append(
+                "INSERT INTO contributions (id, release_id, track_id, artist_id,"
+                " observed_artist_id, role, role_detail, evidence_source, display_value,"
+                " presentation_order, is_performance, created_at) VALUES ("
+                + ",".join(
+                    [
+                        lit(uuid7()),
+                        lit(release_id),
+                        lit(track_id),
+                        lit(artist_row_id),
+                        lit(None),
+                        lit(contributor["role"]),
+                        lit(contributor.get("subRole")),
+                        lit("phase8-fixture"),
+                        lit(artist_name),
+                        str(ordinal),
+                        is_performance,
+                        lit(FIXTURE_TS),
+                    ]
+                )
+                + ");"
+            )
+        else:
+            name = contributor["contributorName"]
+            normalized = "".join(
+                ch for ch in unicodedata.normalize("NFKD", name.upper()) if ch.isalnum()
+            )
+            payload = json.dumps(
+                {
+                    "role": contributor["role"],
+                    "subRole": contributor.get("subRole"),
+                    "contributorType": contributor.get("contributorType"),
+                }
+            )
+            s.append(
+                "INSERT INTO observed_artists (id, release_id, track_id, scope, source_ordinal,"
+                " raw_value, normalized_value, display_value, source_pointer, source_payload,"
+                " created_at) VALUES ("
+                + ",".join(
+                    [
+                        lit(uuid7()),
+                        lit(release_id),
+                        lit(track_id),
+                        lit("track"),
+                        str(ordinal),
+                        lit(name),
+                        lit(normalized),
+                        lit(name),
+                        lit("phase8-fixture"),
+                        lit(payload),
+                        lit(FIXTURE_TS),
+                    ]
+                )
+                + ");"
+            )
+
     # --- genre evidence: one work item + manifest per release ---------------
     for artist in catalog["artists"]:
         for album in artist["albums"]:
@@ -899,8 +1001,12 @@ def is_known_difference(
         changed = {
             k for k in expected.keys() & actual.keys() if expected[k] != actual[k]
         }
-        if not missing and not changed and set(extra) == {"content-length"}:
-            return "content-length not recorded in Phase 0 captures (chunked JSON)"
+        # Transport-level only: content-length byte counts of otherwise-equal
+        # bodies diverge because masked volatile values (timestamps, origins,
+        # serverVersion) serialize with different lengths than the captured
+        # raw bytes; the tree comparison already proved the bodies equal.
+        if not missing and set(extra) <= {"content-length"} and changed <= {"content-length"}:
+            return "content-length reflects unmasked volatile byte lengths; body tree matches"
     for prefix, field_fragment, reason in KNOWN_DIFFERENCES:
         if name.startswith(prefix) and field_fragment in field:
             return reason

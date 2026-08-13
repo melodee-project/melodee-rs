@@ -133,11 +133,20 @@ async fn authenticate_by_name_password_field_not_read_returns_400() {
     let db = common::TestDb::create("jf_auth_password_field").await;
     let state = state(&db).await;
     // A body with `Password` and no `Pw` -> captured 400 (the DTO reads ONLY Pw).
+    // The frozen payload is the ASP.NET problem-details shape
+    // (`jf-auth-negative/password-field-not-read`).
     let body = r#"{"Username":"phase0-fixture","Password":"Mel0deeR0cks!"}"#;
     let (status, bytes) = respond(state, post_json("/Users/AuthenticateByName", body)).await;
     let json = json_body(&bytes);
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(json["title"], "Bad Request");
+    assert_eq!(json["title"], "One or more validation errors occurred.");
+    assert_eq!(json["status"], 400);
+    assert!(
+        json["errors"]["$"][0]
+            .as_str()
+            .unwrap_or_default()
+            .contains("missing required properties including: 'Pw'")
+    );
 }
 
 #[tokio::test]

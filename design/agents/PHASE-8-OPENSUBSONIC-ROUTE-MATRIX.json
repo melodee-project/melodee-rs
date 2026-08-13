@@ -1033,7 +1033,7 @@
       },
       "phase8": {
         "status": "implemented-and-differentially-tested",
-        "rationale": "User avatar bytes by username/id; missing -> 404.",
+        "rationale": "User avatar bytes by username/id; missing avatar serves the captured default user image (os-getavatar), identical to the native fallback bytes.",
         "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
         "requirements": [
           "PRD-API-OS-004"
@@ -1044,7 +1044,7 @@
         "rustTests": [
           "apps/melodee-server/tests/opensubsonic_media_api.rs::get_avatar_by_username_returns_stored_bytes",
           "apps/melodee-server/tests/opensubsonic_media_api.rs::get_avatar_by_user_id_returns_stored_bytes",
-          "apps/melodee-server/tests/opensubsonic_media_api.rs::get_avatar_missing_returns_404"
+          "apps/melodee-server/tests/opensubsonic_media_api.rs::get_avatar_missing_serves_the_captured_default"
         ]
       }
     },
@@ -1186,7 +1186,7 @@
       },
       "phase8": {
         "status": "implemented-and-differentially-tested",
-        "rationale": "Sniffed content-type + ETag + Cache-Control; If-None-Match -> 304; no-artwork -> 200 empty.",
+        "rationale": "Sniffed content-type + ETag; If-None-Match -> 304; Cache-Control only on stored artwork. No artwork serves the captured default placeholder (sized: processed JPEG; unsized: raw fixture bytes); unknown id -> 200 empty.",
         "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
         "requirements": [
           "PRD-API-OS-004"
@@ -1198,7 +1198,7 @@
           "os-getcoverart-unknown"
         ],
         "rustTests": [
-          "apps/melodee-server/tests/opensubsonic_media_api.rs::get_cover_art_song_returns_200_empty_when_no_artwork",
+          "apps/melodee-server/tests/opensubsonic_media_api.rs::get_cover_art_song_serves_the_captured_default_when_no_artwork",
           "apps/melodee-server/tests/opensubsonic_media_api.rs::get_cover_art_playlist_returns_artwork_with_etag",
           "apps/melodee-server/tests/opensubsonic_media_api.rs::get_cover_art_if_none_match_returns_304"
         ]
@@ -2195,7 +2195,7 @@
       },
       "phase8": {
         "status": "implemented-and-differentially-tested",
-        "rationale": "Top songs merges both normalized-name collision artists by name lookup.",
+        "rationale": "Frozen os-gettopsongs matches the artist name EXACTLY (canonical_name equality): artist=Dune returns only Dune's songs, not the normalized-name collision artist Düné's.",
         "authority": "design/adr/ADR-0102-preserve-public-apis-as-separate-adapters.md",
         "requirements": [
           "PRD-API-OS-004"
@@ -2204,7 +2204,7 @@
           "os-gettopsongs"
         ],
         "rustTests": [
-          "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_top_songs_merges_both_normalized_name_collision_artists",
+          "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_top_songs_matches_the_artist_name_exactly",
           "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_top_songs_missing_artist_returns_empty",
           "apps/melodee-server/tests/opensubsonic_browse_api.rs::get_top_songs_unknown_artist_returns_empty"
         ]

@@ -136,30 +136,23 @@ async fn entries(
     user_id: Uuid,
     playlist_id: Uuid,
 ) -> Result<(Vec<serde_json::Value>, i64), sqlx::Error> {
+    // Captured rule: legacy `GetPlaylistAsync` fetched the playlist songs only
+    // for SongCount/ApiKeys, then re-queried `Songs` by ApiKey with no ORDER
+    // BY, so `entry` followed Song.Id (creation) order — `PlaylistOrder` was
+    // never applied to the response (os-playlists-getplaylist shows
+    // [Solar Wind, Falling, Neon 東京, Coda], the song creation order, not the
+    // catalog playlist order). Track creation order is the surrogate for the
+    // legacy integer Song.Id.
     let track_rows: Vec<(Uuid,)> = sqlx::query_as(
         "SELECT track.public_api_id FROM native_playlist_items item
            JOIN tracks track ON track.id = item.track_id
-         WHERE item.playlist_id = $1 ORDER BY item.position",
+         WHERE item.playlist_id = $1 ORDER BY track.created_at, track.public_api_id",
     )
     .bind(playlist_id)
     .fetch_all(pool)
     .await?;
     let public_ids: Vec<Uuid> = track_rows.into_iter().map(|(id,)| id).collect();
-    let mut children = song_children(pool, user_id, &public_ids).await?;
-    // song_children returns catalog order; playlist entries follow the item
-    // positions instead.
-    let order: std::collections::HashMap<String, usize> = public_ids
-        .iter()
-        .enumerate()
-        .map(|(index, id)| (format!("song_{id}"), index))
-        .collect();
-    children.sort_by_key(|child| {
-        child
-            .get("id")
-            .and_then(serde_json::Value::as_str)
-            .and_then(|id| order.get(id).copied())
-            .unwrap_or(usize::MAX)
-    });
+    let children = song_children(pool, user_id, &public_ids).await?;
     let duration: i64 = children
         .iter()
         .filter_map(|child| child.get("duration").and_then(|d| d.as_i64()))
@@ -300,9 +293,14 @@ pub async fn get_playlist(
                 }
             }
         }
-        // Unknown (or inaccessible) well-formed id: captured status ok with
-        // error 44 (`os-playlists-verify-deleted`).
-        _ => {
+        // Captured unknown-id split (`os-playlists-getplaylist-unknown` vs
+        // `os-playlists-verify-deleted`): the all-zero GUID and ids the caller
+        // may not see take the 302 /Account/Login?ReturnUrl=%2FError class;
+        // a well-formed id that simply no longer resolves answers 200 with
+        // status ok + error 44.
+        Some(_) => redirect_to_error(&state, &params),
+        None if id == Uuid::nil() => redirect_to_error(&state, &params),
+        None => {
             let params_ext = Some(axum::Extension(params.clone()));
             super::browse::ok_with_error_44(&state, &params_ext)
         }
@@ -433,9 +431,27 @@ pub async fn update_playlist(
         );
     }
     let now = OffsetDateTime::now_utc();
-    // Captured quirk: updatePlaylist ignores the `name` parameter entirely —
-    // the frozen verify step still shows the original name
-    // (`os-playlists-verify-updated`).
+    // The frozen `os-playlists-verify-updated` shows the original name only
+    // because the legacy response serialization 302'd on cover resolution and
+    // rolled the whole mutation back — phase-0 evidence §7 marks that
+    // cover-dependent breakage MUST NOT be preserved. The clean update
+    // applies the rename like the legacy service intended.
+    if let Some(name) = params.get("name")
+        && let Err(error) =
+            sqlx::query("UPDATE native_playlists SET name = $2, updated_at = $3 WHERE id = $1")
+                .bind(row.id)
+                .bind(name)
+                .bind(now)
+                .execute(&state.pool)
+                .await
+    {
+        tracing::error!(%error, "opensubsonic updatePlaylist rename failed");
+        return OsReply::error(0, "Internal error.").respond(
+            &negotiate(&params),
+            &state.server_version,
+            StatusCode::OK,
+        );
+    }
     if let Some(comment) = params.get("comment") {
         let _ = sqlx::query(
             "UPDATE native_playlists SET description = $2, updated_at = $3 WHERE id = $1",
@@ -471,11 +487,12 @@ pub async fn update_playlist(
         .filter_map(|v| v.parse().ok())
         .collect();
     if !to_remove.is_empty() {
-        // Captured `songIndexToRemove` semantics: zero-based index over the
-        // position-ordered entries, applied BEFORE any additions
-        // (`os-playlists-verify-updated`). Positions are normalized to the
-        // zero-based sequence first so fixture-seeded 1-based rows index the
-        // same way.
+        // OpenSubsonic `songIndexToRemove` semantics: zero-based index over
+        // the position-ordered entries, applied BEFORE any additions. (The
+        // legacy request model bound only `songIdToRemove` and silently
+        // ignored the index parameter; the spec parameter is the contract
+        // real clients send.) Positions are normalized to the zero-based
+        // sequence first so fixture-seeded 1-based rows index the same way.
         let _ = sqlx::query("WITH ranked AS (SELECT id, ROW_NUMBER() OVER (ORDER BY position) - 1 AS new_pos FROM native_playlist_items WHERE playlist_id = $1) UPDATE native_playlist_items AS i SET position = ranked.new_pos FROM ranked WHERE i.id = ranked.id")
             .bind(row.id)
             .execute(&state.pool)
