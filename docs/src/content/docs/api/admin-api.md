@@ -181,6 +181,82 @@ profile with `"isDefault": true`, or `POST …/{id}/default`, atomically clears 
 default. The listing is bounded and server-side paginated (default first, then name). Unknown
 ids return `404`.
 
+### Notification templates and delivery
+
+```http
+GET /api/admin/v1/notifications/templates?limit=50&offset=0
+GET /api/admin/v1/notifications/templates/{templateKey}/{locale}
+PUT /api/admin/v1/notifications/templates/{templateKey}/{locale}
+DELETE /api/admin/v1/notifications/templates/{templateKey}/{locale}
+GET /api/admin/v1/notifications/deliveries?limit=50&offset=0
+POST /api/admin/v1/notifications/test-send
+```
+
+These routes administer the email notification templates used for password resets, share-created
+and request-fulfilled messages. All routes require an administrator's native access token;
+anonymous callers receive `401` and non-administrators `403`.
+
+Templates are keyed by `(templateKey, locale)` — for example `user.password_reset` in `en` — and
+carry a `subject` plus optional plain-text (`bodyText`) and HTML (`bodyHtml`) bodies with simple
+`{{placeholder}}` substitution (unknown placeholders render verbatim; substituted values are
+HTML-escaped in HTML bodies). `PUT` is a full-replacement upsert that bumps `version`; an explicit
+`null` clears a field. Template keys must be non-blank (at most 100 characters), locales must be
+BCP-47-shaped tags of at most 20 characters, subjects at most 500 characters, and each body at
+most 64 KiB; violations return `400 invalid_template`. The server seeds default `en` templates for
+`user.password_reset`, `share.created`, and `request.fulfilled`; deleting a seeded template is
+allowed and disables the rendered body for that event (deliveries are then recorded as `skipped`).
+
+`GET …/deliveries` lists the append-only delivery audit, newest first (bounded, server-side
+paginated). Rows are metadata only — template key, recipient, `sent`/`failed`/`skipped` status,
+and a bounded operator-safe error; message content is never stored or returned. Rows older than 30
+days are purged automatically.
+
+`POST …/test-send` takes `{"templateKey", "recipient", "locale"?}` (locale defaults to `en`, with
+fallback to `en` for missing locales), renders the template, and attempts a real delivery through
+the configured [email transport](../installation/configuration/), returning the honestly recorded
+audit row — including `skipped` when delivery is disabled and `failed` when the relay refuses.
+Template placeholders that a triggering event would supply (for example `resetUrl`) render
+verbatim in test sends.
+
+### Configuration export/import
+
+```http
+GET /api/admin/v1/config/export
+POST /api/admin/v1/config/import?preview=true&allowUnknown=false
+```
+
+These routes administer the database-backed settings layer (see
+[Configuration](../installation/configuration/)). Both require an administrator's native access
+token; anonymous callers receive `401` and non-administrators `403`.
+
+`GET …/export` returns a `melodee-config-export/v1` JSON document containing every known registry
+setting's database-or-default value plus custom stored keys. Every secret value is replaced by a
+fixed redaction marker and the document carries a header warning; secret values never leave the
+server through this route.
+
+`POST …/import` takes an export document as its body and validates every value against the
+registry's per-key type, range, and enum rules. `preview` defaults to `true` and returns the diff
+(`added`, `changed`, `unchanged`, `secretsReentered`, `secretsSkipped`, `unknown`, `warnings`)
+without writing anything; secret keys are named only. With `preview=false` the import applies
+atomically and records bounded audit evidence. Keys outside the known registry are rejected with
+`400 invalid_document` unless `allowUnknown=true`; a redaction marker submitted as a value is
+rejected with `400 redacted_marker_rejected` (fail closed — a redacted export can never overwrite
+a stored secret); a value violating its key's rule returns `400 invalid_value`.
+
+### Onboarding
+
+```http
+GET /api/admin/v1/onboarding/status
+POST /api/admin/v1/onboarding/complete
+```
+
+First-run onboarding status and completion (administrator-gated). `status` returns the six
+preflight checks (`database`, `storage_paths`, `media_tools`, `search_index`, `admin_user`,
+`email`) with pass/fail and remediation hints, plus `completed`, `bypassed`, and `canComplete`. Installations migrated from a legacy server report
+`bypassed: true` (existing catalog data or imported settings) and never require completion.
+`complete` re-evaluates the checks and fails closed with `409 onboarding_checks_failed` while any
+required check fails; otherwise it records the durable completion marker with the check evidence.
+
 ## Error behavior
 
 Errors use a stable JSON envelope with a machine-readable `code`, an operator-safe `message`, and

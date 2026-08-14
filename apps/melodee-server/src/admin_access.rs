@@ -35,6 +35,14 @@ const MAX_PASSWORD_CHARS: usize = 1024;
 pub struct AdminAccessState {
     pub pool: sqlx::PgPool,
     pub auth: Arc<NativeAuthService>,
+    /// Notification render/delivery service for the WP-09 admin surface
+    /// (test-send). Holds no secrets beyond its transport, whose `Debug`
+    /// never prints credentials.
+    pub notifications: Arc<crate::notifications::NotificationService>,
+    /// Sandboxed scripting service for the WP-11 admin surface (test-run)
+    /// and the ingestion gate; the shared handle keeps the process-wide
+    /// leaked-thread bound (ADR-0135 §3) accurate.
+    pub scripting: Arc<crate::scripting::ScriptingService>,
 }
 
 /// Authenticated administrator identity enforced by the extractor below.

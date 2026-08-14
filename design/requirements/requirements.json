@@ -1968,11 +1968,15 @@
     "status": "tested",
     "implementation": [
       "apps/melodee-server/src/native/auth.rs",
-      "crates/melodee-persistence/src/auth.rs"
+      "crates/melodee-persistence/src/auth.rs",
+      "apps/melodee-server/src/lastfm.rs + native/catalog.rs (Last.fm account linking/session lifecycle: auth-url, session exchange, idempotent disconnect; ADR-0134 section 7 amended)",
+      "crates/melodee-persistence/src/providers.rs (LastfmLinkStore: digest + AEAD-sealed session key, never plaintext at rest)"
     ],
     "tests": [
       "apps/melodee-server/tests/native_auth_api.rs (JWT, refresh, cookie, reset, logout and Google OIDC flows)",
-      "crates/melodee-persistence/tests/auth_phase7.rs"
+      "crates/melodee-persistence/tests/auth_phase7.rs",
+      "apps/melodee-server/tests/lastfm_scrobble.rs (Last.fm link/exchange/disconnect lifecycle against a local mock server)",
+      "crates/melodee-persistence/tests/providers.rs (link round-trip, cascade, plaintext-never-persisted)"
     ]
   },
   {
@@ -2046,11 +2050,17 @@
     "phase": "7,8,9",
     "source": "PRD.md",
     "line": 1465,
-    "status": "in-progress",
+    "status": "tested",
     "implementation": [
-      ".env.example and docs/src/content/docs/installation/configuration.md (secret-safe native configuration guidance)"
+      ".env.example and docs/src/content/docs/installation/configuration.md (secret-safe native configuration guidance)",
+      "crates/melodee-persistence/migrations/0025_phase9_onboarding_settings.sql (server_settings.is_secret)",
+      "crates/melodee-persistence/src/settings.rs (14 secret/credential-adjacent keys from the 190-key inventory; write-only-over-API reads, fixed-marker export redaction with header warning, fail-closed marker rejection on import, secrets named only in import previews)",
+      "apps/melodee-server/src/admin_config.rs (admin-gated export/import)"
     ],
     "tests": [
+      "crates/melodee-persistence/tests/settings.rs (redaction, marker rejection, export contains no secret value)",
+      "apps/melodee-server/tests/admin_config_api.rs (export redaction, import secret handling)",
+      "apps/melodee-cli/tests/config.rs (list/export never print secrets)",
       "cd docs && pnpm check && pnpm check:links && pnpm build"
     ]
   },
@@ -2141,9 +2151,19 @@
     "phase": "9",
     "source": "PRD.md",
     "line": 1493,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "crates/melodee-persistence/migrations/0024_phase9_notifications.sql (notification_templates with (template_key, locale) PK, seeded en templates for user.password_reset/share.created/request.fulfilled, bounded CHECKs; ADR-0134 section 4)",
+      "crates/melodee-persistence/src/notifications.rs (template upsert/get/list/delete and delivery audit stores)",
+      "apps/melodee-server/src/notifications.rs ({{placeholder}} rendering with HTML-escaped values, NotificationService)",
+      "apps/melodee-server/src/admin_notifications.rs (admin-gated /api/admin/v1/notifications templates + deliveries + test-send)",
+      "apps/melodee-server/src/native/auth.rs (password-reset wiring) and native/community.rs (share-created and request-fulfilled wiring)"
+    ],
+    "tests": [
+      "crates/melodee-persistence/tests/notifications.rs (seed shape, CRUD/version churn, locale PK, bounds with SQL backstop, append-only audit, retention purge)",
+      "apps/melodee-server/tests/admin_notifications_api.rs (template lifecycle, validation, admin gating, test-send audit)",
+      "apps/melodee-server/tests/notification_wiring.rs (all three wired events dispatch fire-and-record deliveries)"
+    ]
   },
   {
     "id": "PRD-NOTIF-002",
@@ -2151,9 +2171,17 @@
     "phase": "9",
     "source": "PRD.md",
     "line": 1497,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "apps/melodee-server/src/notifications.rs (lettre 0.11.23 MIT rustls/tokio1 SMTP transport behind the NotificationTransport trait; NoopTransport when disabled; bounded 10s SMTP timeout; no new infrastructure)",
+      "apps/melodee-server/src/notifications.rs (NotificationService::dispatch spawns fire-and-record sends; delivery failures are audited and logged, never propagated to the triggering operation)",
+      "crates/melodee-persistence/migrations/0024_phase9_notifications.sql (notification_deliveries append-only audit stores no message content; 30-day retention purge in code)"
+    ],
+    "tests": [
+      "apps/melodee-server/tests/admin_notifications_api.rs (disabled transport records honest skipped rows; audit rows carry no subject/body)",
+      "apps/melodee-server/tests/notification_wiring.rs (triggering API operations succeed with delivery disabled)",
+      "apps/melodee-server/src/notifications.rs unit tests (EmailSettings Debug redacts the password)"
+    ]
   },
   {
     "id": "PRD-NOTIF-003",
@@ -2161,9 +2189,16 @@
     "phase": "9",
     "source": "PRD.md",
     "line": 1501,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "apps/melodee-cli/src/main.rs (melodee notifications templates list; melodee notifications test-send --template <key> --to <email> [--locale <l>])",
+      "apps/melodee-server/src/admin_notifications.rs (POST /api/admin/v1/notifications/test-send returns the recorded delivery row)",
+      "crates/melodee-persistence/migrations/0024_phase9_notifications.sql (all user-visible notification text lives in locale-keyed notification_templates rows, not in code)"
+    ],
+    "tests": [
+      "apps/melodee-cli/tests/notifications.rs (list shows seeded templates; test-send records skipped/template-not-found honestly; bad recipients fail closed)",
+      "apps/melodee-server/tests/admin_notifications_api.rs (test-send endpoint)"
+    ]
   },
   {
     "id": "PRD-PLAYLIST-001",
@@ -2432,9 +2467,10 @@
     "phase": "9",
     "source": "PRD.md",
     "line": 1613,
-    "status": "in-progress",
+    "status": "deferred",
     "implementation": [
-      "design/agents/PHASE-7-ROUTE-MATRIX.json (32 frozen Party exclusions preserved)"
+      "design/agents/PHASE-7-ROUTE-MATRIX.json (32 frozen Party exclusions preserved)",
+      "design/adr/ADR-0133-phase-9-party-mode-and-jukebox-parity-waiver.md (accepted Phase 9 waiver)"
     ],
     "tests": [
       "apps/melodee-server/tests/native_catalog_api.rs (exact excluded route matrix)",
@@ -2447,9 +2483,15 @@
     "phase": "9",
     "source": "PRD.md",
     "line": 1617,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "deferred",
+    "implementation": [
+      "apps/melodee-server/src/opensubsonic/negative.rs (jukeboxControl intentional 410, captured disabled behavior)",
+      "design/adr/ADR-0133-phase-9-party-mode-and-jukebox-parity-waiver.md (accepted Phase 9 waiver)"
+    ],
+    "tests": [
+      "scripts/run_phase8_differential.py (zero unexpected differences; jukebox 410 pinned)",
+      "design/agents/PHASE-8-OPENSUBSONIC-ROUTE-MATRIX.json (preserved-intentional-legacy-absence disposition)"
+    ]
   },
   {
     "id": "PRD-PARTY-003",
@@ -2531,9 +2573,16 @@
     "phase": "9",
     "source": "PRD.md",
     "line": 1651,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "apps/melodee-server/src/scripting.rs (legacy-compatible hook contract: check(ctx, scriptConfig), bare-expression auto-wrap per the legacy substring rule, strict mode, bool/{result,message} verdicts)",
+      "crates/melodee-ingestion/src/gate.rs + inspect.rs (directoryProcessingStart wired once per stable candidate before media inspection)",
+      "design/evidence/phase-9/script-hook-migration-guide.md (per-hook dispositions; documented incompatibilities: maxStatements no-op, timeout default 250 ms, fail-degraded vs legacy fail-open equivalence)"
+    ],
+    "tests": [
+      "apps/melodee-server/src/scripting.rs unit tests (legacy canonical directoryProcessingStart example evaluates identically; bare-expression auto-wrap; wrap-rule substring parity)",
+      "apps/melodee-server/tests/scripting_service.rs (deny/allow verdicts audited; empty registry allows without audit rows)"
+    ]
   },
   {
     "id": "PRD-SCRIPT-002",
@@ -2541,9 +2590,13 @@
     "phase": "9",
     "source": "PRD.md",
     "line": 1658,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "design/evidence/phase-9/script-events-legacy-inventory.md (all legacy script event names, ctx payloads, return contract, side effects, and failure semantics inventoried from the frozen tree with file:line citations before implementation)"
+    ],
+    "tests": [
+      "design/evidence/phase-9/checklists/09-scripting-hooks.md row 1 acceptance"
+    ]
   },
   {
     "id": "PRD-SCRIPT-003",
@@ -2551,9 +2604,14 @@
     "phase": "9",
     "source": "PRD.md",
     "line": 1662,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "design/adr/ADR-0135-boa-javascript-runtime-and-sandboxing-for-scripting-hooks.md (runtime selection + security review)",
+      "Cargo.toml workspace dependency boa_engine =0.21.1 (Unlicense OR MIT, boa-dev/boa, pure Rust, default features trimmed: no float16/xsum/intl/temporal)"
+    ],
+    "tests": [
+      "cargo deny check (licenses/bans/advisories/sources green with boa_engine pinned exactly)"
+    ]
   },
   {
     "id": "PRD-SCRIPT-004",
@@ -2561,9 +2619,17 @@
     "phase": "9",
     "source": "PRD.md",
     "line": 1666,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "apps/melodee-server/src/scripting.rs (capability-less sandbox: zero host objects registered; dedicated OS thread per execution; wall-clock timeout default 250 ms within the 10 s registry ceiling; 256 KiB ctx / 16 KiB return caps; leaked-thread bound; circuit breaker disabling after 3 consecutive failures with transactional tripped audit row + registry disable)",
+      "crates/melodee-persistence/migrations/0027_phase9_scripting.sql (script_registry/script_runs with bounded CHECKs; append-only audit)",
+      "crates/melodee-persistence/src/scripts.rs (stores, failure-window query, transactional trip)"
+    ],
+    "tests": [
+      "apps/melodee-server/src/scripting.rs unit tests (no fs/net/process/module globals; infinite loop times out without blocking the caller; throwing script; oversize ctx/return rejected; strict mode)",
+      "apps/melodee-server/tests/scripting_service.rs (circuit breaker trip+disable; gate fail-degrades to allow when the store is gone; errors audited)",
+      "crates/melodee-persistence/tests/scripts.rs (bounds with SQL backstop; append-only audit; retention; failure-window; transactional trip)"
+    ]
   },
   {
     "id": "PRD-SCRIPT-005",
@@ -2571,9 +2637,16 @@
     "phase": "9",
     "source": "PRD.md",
     "line": 1670,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "design/evidence/phase-9/script-hook-migration-guide.md (per-hook migration dispositions; contract translation rules; configuration migration table)",
+      "apps/melodee-server/src/admin_scripts.rs (operator CRUD + test-run replacing the legacy editor test button; the never-implemented legacy /api/scripts/validate is not recreated)",
+      "apps/melodee-cli/src/main.rs (melodee scripts list/test, DB-direct parity with the admin API)"
+    ],
+    "tests": [
+      "apps/melodee-server/tests/admin_scripts_api.rs (lifecycle, gating, bounds, sandboxed test-run audit)",
+      "apps/melodee-cli/tests/scripts.rs (list wired/inert flags; ad-hoc and stored test evaluation with recorded runs)"
+    ]
   },
   {
     "id": "PRD-EXT-001",
@@ -2581,9 +2654,16 @@
     "phase": "4,9",
     "source": "PRD.md",
     "line": 1678,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "deferred",
+    "implementation": [
+      "design/evidence/phase-9/lastfm-provider-evidence.md section 9 (enumerated legacy provider inventory: lastfm, musicbrainz, spotify, discogs, wikidata, itunes, deezer, brave, metalapi; AMG has no legacy implementation)",
+      "apps/melodee-server/src/lastfm.rs (Last.fm scrobble/now-playing client + session lifecycle; the only provider wired in Phase 9 WP-07)",
+      "crates/melodee-persistence/src/settings.rs (legacy provider settings keys preserved verbatim, including the capital-E scrobbling.lastFm.Enabled / searchEngine.lastFm.Enabled quirk)",
+      "design/adr/ADR-0136-defer-non-last-fm-external-provider-integrations-to-post-parity.md (approved deferral of the remaining provider legs)"
+    ],
+    "tests": [
+      "apps/melodee-server/tests/lastfm_scrobble.rs (linking, scrobble/now-playing wire mapping, failure semantics against a local mock server)"
+    ]
   },
   {
     "id": "PRD-EXT-002",
@@ -2591,9 +2671,14 @@
     "phase": "4,9",
     "source": "PRD.md",
     "line": 1684,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "apps/melodee-server/src/lastfm.rs (every provider interaction is gated on layered settings; missing/invalid credentials disable the integration per legacy ADR-0003)",
+      "Structural guarantee: catalog/import lives in melodee-persistence/melodee-catalog; all provider clients live in melodee-server and are unreachable from the ingestion path"
+    ],
+    "tests": [
+      "apps/melodee-server/tests/lastfm_scrobble.rs catalog_entry_never_requires_a_provider (full catalog import succeeds with zero provider settings and produces no provider cache traffic)"
+    ]
   },
   {
     "id": "PRD-EXT-003",
@@ -2601,9 +2686,17 @@
     "phase": "4,9",
     "source": "PRD.md",
     "line": 1688,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "deferred",
+    "implementation": [
+      "crates/melodee-persistence/migrations/0028_phase9_external_providers.sql (external_provider_cache: bounded jsonb payload, hashed request key, fetched_at/expires_at)",
+      "crates/melodee-persistence/src/providers.rs (ProviderCacheStore get-if-fresh/upsert/purge-expired)",
+      "apps/melodee-server/src/lastfm.rs (single-attempt scrobble submission with 10 s timeout; failures degrade and drop the scrobble, never the ingestion/playback work — evidence doc section 5)",
+      "design/adr/ADR-0136-defer-non-last-fm-external-provider-integrations-to-post-parity.md (approved deferral of the provider-lookup caching legs)"
+    ],
+    "tests": [
+      "crates/melodee-persistence/tests/providers.rs (cache round-trip, freshness/expiry, bounded purge, SQL CHECK backstops)",
+      "apps/melodee-server/tests/lastfm_scrobble.rs (fail-degraded dispatch outcomes; invalid-session link clearing)"
+    ]
   },
   {
     "id": "PRD-EXT-004",
@@ -2611,9 +2704,15 @@
     "phase": "4,9",
     "source": "PRD.md",
     "line": 1692,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "deferred",
+    "implementation": [
+      "crates/melodee-persistence/migrations/0028_phase9_external_providers.sql (external_provider_cache payload jsonb is the provenance/evidence home; provider payloads never become catalog identity per PRD-ARTIST-012)",
+      "crates/melodee-persistence/src/providers.rs (ProviderCacheStore)",
+      "design/adr/ADR-0136-defer-non-last-fm-external-provider-integrations-to-post-parity.md (approved deferral of the provider-metadata provenance legs)"
+    ],
+    "tests": [
+      "crates/melodee-persistence/tests/providers.rs"
+    ]
   },
   {
     "id": "PRD-UI-001",
@@ -2851,9 +2950,14 @@
     "phase": "9,10",
     "source": "PRD.md",
     "line": 1960,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "design/evidence/phase-9/blazor-page-inventory.md (all 63 legacy Blazor pages / 68 routes inventoried from the frozen oracle at commit 4028b58d with per-page auth level and exposed capability, plus non-page components, controllers, static assets, JS interop, and localization; preliminary keep/replace/drop classification: KEEP 54, REPLACE 6, DROP-candidate 3)"
+    ],
+    "tests": [
+      "python3 scripts/validate_repository.py (repository/documentation validation covering the inventory document and its links)",
+      "design/evidence/phase-9/checklists/11-themes-localization-web.md row 2 acceptance"
+    ]
   },
   {
     "id": "PRD-WEB-002",
@@ -2861,9 +2965,14 @@
     "phase": "9,10",
     "source": "PRD.md",
     "line": 1971,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "implemented",
+    "implementation": [
+      "design/evidence/phase-9/blazor-page-inventory.md (preliminary classification with per-page rationale and component-level follow-ons; every intentional surface move documented: party/jukebox pages follow ADR-0133, script editor follows ADR-0135, onboarding wizard follows the WP-08 API/CLI-first shape, device-profile editing moves to the admin surface per ADR-0134 section 5)",
+      "design/adr/ADR-0109-use-carbon-for-admin-ui.md (Phase 9 amendment: Carbon accepted as the admin UI component library; shell-validation acceptance moved to Phase 10 entry criteria)"
+    ],
+    "tests": [
+      "design/evidence/phase-9/checklists/11-themes-localization-web.md row 3 acceptance"
+    ]
   },
   {
     "id": "PRD-SETUP-001",
@@ -2871,9 +2980,18 @@
     "phase": "9",
     "source": "PRD.md",
     "line": 1979,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "crates/melodee-persistence/migrations/0025_phase9_onboarding_settings.sql (onboarding_state singleton, ADR-0134 section 3)",
+      "apps/melodee-server/src/onboarding.rs (six named preflight checks: database/migrations and admin_user required; storage paths, media tools, search index, email advisory; each with remediation)",
+      "apps/melodee-server/src/admin_onboarding.rs (GET /api/admin/v1/onboarding/status, POST /api/admin/v1/onboarding/complete failing closed while required checks fail)",
+      "apps/melodee-cli/src/main.rs (melodee config validate; melodee users bootstrap-admin creates the first administrator)"
+    ],
+    "tests": [
+      "crates/melodee-persistence/tests/settings.rs (onboarding singleton, completion, bounded evidence)",
+      "apps/melodee-server/tests/admin_onboarding_api.rs (six checks, fail-closed completion, admin gate)",
+      "apps/melodee-cli/tests/config.rs (validate exit codes)"
+    ]
   },
   {
     "id": "PRD-SETUP-002",
@@ -2881,9 +2999,15 @@
     "phase": "9",
     "source": "PRD.md",
     "line": 1993,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "apps/melodee-server/src/onboarding.rs (bypass heuristic: completed marker OR non-empty releases/artists catalog OR any known server_settings row from a legacy Settings import; documented in module rustdoc)",
+      "crates/melodee-persistence/src/settings.rs (OnboardingStore completion marker)"
+    ],
+    "tests": [
+      "apps/melodee-server/tests/admin_onboarding_api.rs::migration_bypass_heuristic_catalog_or_imported_settings",
+      "crates/melodee-persistence/tests/settings.rs::onboarding_bypass_evidence_query_shape"
+    ]
   },
   {
     "id": "PRD-CONFIG-001",
@@ -2891,9 +3015,17 @@
     "phase": "1,9",
     "source": "PRD.md",
     "line": 1997,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "design/evidence/phase-9/configuration-inventory.md (the 190-key legacy registry inventory, Phase 0 gap closed)",
+      "crates/melodee-persistence/src/settings.rs (KNOWN_SETTINGS classification; SettingsStore CRUD with kind validation)",
+      "apps/melodee-cli/src/main.rs (melodee config list/validate/export/import)"
+    ],
+    "tests": [
+      "crates/melodee-persistence/tests/settings.rs",
+      "apps/melodee-cli/tests/config.rs",
+      "apps/melodee-server/tests/admin_config_api.rs"
+    ]
   },
   {
     "id": "PRD-CONFIG-002",
@@ -2901,9 +3033,17 @@
     "phase": "1,9",
     "source": "PRD.md",
     "line": 2001,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "crates/melodee-persistence/src/settings.rs (export_config, plan_config_import preview diff, apply_config_import with per-key kind/range/enum validation, unknown-key rejection without allow-unknown, atomic apply plus bounded audit in onboarding evidence)",
+      "apps/melodee-server/src/admin_config.rs (GET /api/admin/v1/config/export, POST /api/admin/v1/config/import with preview default)",
+      "apps/melodee-cli/src/main.rs (melodee config export/import --apply --allow-unknown)"
+    ],
+    "tests": [
+      "crates/melodee-persistence/tests/settings.rs::export_redacts_and_import_preview_apply_are_fail_closed",
+      "apps/melodee-server/tests/admin_config_api.rs",
+      "apps/melodee-cli/tests/config.rs"
+    ]
   },
   {
     "id": "PRD-CONFIG-003",
@@ -2911,9 +3051,16 @@
     "phase": "1,9",
     "source": "PRD.md",
     "line": 2005,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "crates/melodee-persistence/src/settings.rs (SettingsResolver precedence: MELODEE__* environment, then MELODEE__CONFIG_FILE JSON, then server_settings DB rows, then inventory seeded defaults; explicit env names where the server already had conventions, mechanical MELODEE__<key> mapping otherwise)",
+      "apps/melodee-server/src/notifications.rs (EmailSettings::from_resolved consumes the layer; public struct unchanged)",
+      "apps/melodee-server/src/main.rs and apps/melodee-cli/src/main.rs (composition through the resolver)"
+    ],
+    "tests": [
+      "crates/melodee-persistence/tests/settings.rs::resolution_layers_env_over_file_over_database_over_default",
+      "apps/melodee-cli/tests/notifications.rs (layered email settings keep the audited skip behavior)"
+    ]
   },
   {
     "id": "PRD-WORK-001",
@@ -2921,12 +3068,22 @@
     "phase": "1,2,9",
     "source": "PRD.md",
     "line": 2013,
-    "status": "in-progress",
+    "status": "tested",
     "implementation": [
-      "crates/melodee-persistence/ (durable work queue foundation: items, leases, retries, history)"
+      "crates/melodee-persistence/migrations/0001_release_work_items.sql and 0002_release_work_item_events.sql plus crates/melodee-persistence/src/work_items.rs (durable work items, FOR UPDATE SKIP LOCKED leases, bounded retries, append-only history — the durable-queue replacement for the legacy everything-is-a-Quartz-job model, since Phase 2)",
+      "crates/melodee-ingestion/src/scheduler.rs and apps/melodee-server/src/main.rs (scheduled ingestion reconciliation trigger)",
+      "apps/melodee-server/src/podcast_worker.rs (scheduled podcast refresh/download/cleanup/recovery triggers over leased durable state)",
+      "apps/melodee-server/src/policy_worker.rs (scheduled policy evaluation over leased durable state)",
+      "apps/melodee-server/src/discovery_worker.rs (scheduled chart/recommendation aggregate maintenance, PRD-WORK-003)",
+      "crates/melodee-persistence/migrations/0023_phase9_worker_pool_state.sql and crates/melodee-persistence/src/worker_pool.rs (durable, audited pool pause/resume, PRD-WORK-005, ADR-0134 section 8)"
     ],
     "tests": [
-      "crates/melodee-persistence/tests/"
+      "crates/melodee-persistence/tests/claiming.rs, recovery.rs, transitions.rs, and history.rs (durable queue/lease/retry/history contract)",
+      "crates/melodee-ingestion/tests/reconciliation.rs (scheduler_runs_periodic_reconciliation_with_restart_signal)",
+      "apps/melodee-server/tests/native_podcasts_real_feed.rs and apps/melodee-cli/tests/podcasts.rs (scheduled podcast legs and lease-coordinated recovery)",
+      "apps/melodee-server/tests/policy_worker.rs (scheduled policy worker incl. crash adoption)",
+      "apps/melodee-server/tests/discovery_worker.rs (periodic maintenance loop, idempotency, graceful stop)",
+      "crates/melodee-persistence/tests/worker_pool_state.rs, apps/melodee-server/tests/worker_pools.rs, and apps/melodee-cli/tests/worker_pools.rs (durable pause/resume)"
     ]
   },
   {
@@ -2935,9 +3092,16 @@
     "phase": "1,2,9",
     "source": "PRD.md",
     "line": 2017,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "deferred",
+    "implementation": [
+      "apps/melodee-server/src/admin.rs (GET /api/admin/v1/ingest/work-items/counts per-state queue counts, bounded paged listing, work-item detail, event history, active leases — the queue-depth-by-stage API leg)",
+      "apps/melodee-cli/src/main.rs (work list/show and worker-pools list/pause/resume — the CLI leg over the same durable rows)",
+      "crates/melodee-persistence/migrations/0023_phase9_worker_pool_state.sql and crates/melodee-persistence/src/worker_pool.rs (durable worker pool state, ADR-0134 section 8)"
+    ],
+    "tests": [
+      "apps/melodee-server/tests/admin_diagnostics_api.rs (queue counts/listing/history/leases against real PostgreSQL)",
+      "apps/melodee-cli/tests/worker_pools.rs (pool list/pause/resume durability and audit)"
+    ]
   },
   {
     "id": "PRD-WORK-003",
@@ -3002,9 +3166,14 @@
     "phase": "1,9",
     "source": "PRD.md",
     "line": 2070,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "apps/melodee-cli/src/main.rs — delivered command groups covering the required minimum set: doctor (prerequisite/health inspection), config list/validate/export/import (config health), ingest reconcile/status (library reconciliation trigger and diagnostics), work list/show/seed-test/claim-test (ingestion item inspect), catalog import/status/inspect, policy config/rules/test (diagnostics/report output), search status/rebuild/query, migrate (database migration/status), users bootstrap-admin and operator recovery (user/admin bootstrap and recovery), groups, charts, podcasts stuck/recover (stuck-download recovery), notifications templates/test-send, scripts list/test, worker-pools list/pause/resume, plan"
+    ],
+    "tests": [
+      "apps/melodee-cli/tests/plan.rs, config.rs, policy.rs, search.rs, users_groups.rs, podcasts.rs, notifications.rs, scripts.rs, and worker_pools.rs (command suites against real PostgreSQL)",
+      "apps/melodee-cli/src/main.rs unit tests (clap parse matrix for every command group, incl. fail-closed argument validation)"
+    ]
   },
   {
     "id": "PRD-CLI-002",
@@ -3012,9 +3181,17 @@
     "phase": "1,9",
     "source": "PRD.md",
     "line": 2074,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "apps/melodee-cli/src/main.rs (all mutating commands connect via MELODEE__DATABASE__URL and operate through the same melodee-persistence stores as the server: WorkItemStore, SettingsStore, OnboardingStore, worker_pool rows, podcast lease predicates, notification template/delivery stores, script registry)",
+      "apps/melodee-cli/src/main.rs (users/groups/notifications/scripts commands documented as mirroring the admin API semantics exactly; no HTTP/JWT bypass invented)",
+      "apps/melodee-cli/src/main.rs (podcasts recover reuses the worker's lease predicates and owned-file reconciliation; worker-pools pause/resume writes the same audited durable rows the workers poll)"
+    ],
+    "tests": [
+      "apps/melodee-cli/tests/worker_pools.rs (CLI pause/resume is durable, audited, and observed by server workers)",
+      "apps/melodee-cli/tests/podcasts.rs (recovery requeues only expired leases and removes only orphans)",
+      "apps/melodee-cli/tests/config.rs, notifications.rs, scripts.rs, users_groups.rs (DB-direct coordination through shared stores; secret redaction preserved)"
+    ]
   },
   {
     "id": "PRD-OBS-001",

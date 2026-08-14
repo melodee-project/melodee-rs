@@ -241,6 +241,9 @@ async fn serve_native_phase7_real_client_fixture() {
     let root = CanonicalAssetRoot::open(canonical_root.path()).expect("canonical root handle");
     let state = NativeState {
         pool: db.pool.clone(),
+        notifications: std::sync::Arc::new(
+            melodee_server::notifications::NotificationService::noop(db.pool.clone()),
+        ),
         search: None,
         public_origin: base_url.clone(),
         podcast_config: Arc::new(PodcastConfig::default()),

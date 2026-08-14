@@ -22,3 +22,22 @@ The quick start will cover:
 
 Each step will be validated end-to-end against a shipped release before this page loses its
 planned status.
+
+## First-run onboarding (implemented)
+
+The server carries an implemented first-run preflight that the steps above will use:
+
+1. `melodee users bootstrap-admin --username <name> --email <email>` creates the first
+   administrator (the password comes from `MELODEE__CLI__BOOTSTRAP_ADMIN_PASSWORD`, never a
+   command-line argument).
+2. `melodee config validate` runs the preflight checks — database connectivity and migrations,
+   storage/library paths, media tools (`ffmpeg`/`ffprobe`), search-index readiness, administrator
+   account, and email sanity — each with a remediation hint, exiting non-zero while a required
+   check fails.
+3. Administrators can read the same evaluation over `GET /api/admin/v1/onboarding/status` and
+   record durable completion with `POST /api/admin/v1/onboarding/complete` (see the
+   [Admin API](../api/admin-api/)). Servers migrated from a legacy installation bypass onboarding
+   automatically when the database shows an existing library or imported settings.
+
+The graphical setup wizard remains planned and will be documented when the admin UI ships.
+

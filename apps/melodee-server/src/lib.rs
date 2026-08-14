@@ -4,15 +4,23 @@
 
 pub mod admin;
 pub mod admin_access;
+pub mod admin_config;
 pub mod admin_device_profiles;
+pub mod admin_notifications;
+pub mod admin_onboarding;
 pub mod admin_radio;
+pub mod admin_scripts;
 pub mod discovery_worker;
 pub mod jellyfin;
+pub mod lastfm;
 pub mod native;
 pub mod native_stream;
+pub mod notifications;
+pub mod onboarding;
 pub mod opensubsonic;
 pub mod podcast_worker;
 pub mod policy_worker;
+pub mod scripting;
 pub mod system;
 
 /// Builds the request span without recording the raw URI.

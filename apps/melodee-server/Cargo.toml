@@ -13,16 +13,19 @@ path = "src/lib.rs"
 [dependencies]
 axum.workspace = true
 base64.workspace = true
+boa_engine.workspace = true
 futures-util.workspace = true
 getrandom.workspace = true
 hmac.workspace = true
 image.workspace = true
 jsonwebtoken.workspace = true
+lettre.workspace = true
 md-5.workspace = true
 melodee-auth = { path = "../../crates/melodee-auth", version = "0.1.0" }
 melodee-catalog = { path = "../../crates/melodee-catalog", version = "0.1.0" }
 melodee-domain = { path = "../../crates/melodee-domain", version = "0.1.0" }
 melodee-ingestion = { path = "../../crates/melodee-ingestion", version = "0.1.0" }
+melodee-media = { path = "../../crates/melodee-media", version = "0.1.0" }
 melodee-mql = { path = "../../crates/melodee-mql", version = "0.1.0" }
 melodee-persistence = { path = "../../crates/melodee-persistence", version = "0.1.0" }
 melodee-policy = { path = "../../crates/melodee-policy", version = "0.1.0" }

@@ -16,7 +16,12 @@ use std::{
 };
 
 use blake3::Hasher;
-use lofty::{file::TaggedFileExt, prelude::Accessor, read_from_path, tag::ItemKey};
+use lofty::{
+    file::{AudioFile, TaggedFileExt},
+    prelude::Accessor,
+    read_from_path,
+    tag::ItemKey,
+};
 use melodee_domain::{
     AudioTechnicalObservation, Finding, FindingSeverity, ManifestReleaseObservation,
     ObservedArtwork, ObservedFile, ObservedFileKind, ObservedMetadata, ObservedTrack,
@@ -38,6 +43,54 @@ mod normalize;
 pub use normalize::{
     NormalizationError, NormalizationOptions, NormalizationReport, normalize_release,
 };
+
+/// Audio extensions the inspection classifier treats as media (the song
+/// files the legacy `directoryProcessingStart` hook context counts). Shared
+/// by the scripting-hook context builder (WP-11) so the hook sees exactly
+/// the inspection classifier's vocabulary.
+pub const AUDIO_EXTENSIONS: &[&str] = &[
+    "aac", "ac3", "aif", "aiff", "ape", "flac", "m4a", "m4b", "m4p", "mp2", "mp3", "mp4", "mpc",
+    "ogg", "opus", "spx", "wav", "wma", "wv",
+];
+
+/// Whether `name` ends in a known audio extension (case-insensitive),
+/// matching the inspection classifier's audio branch.
+#[must_use]
+pub fn is_audio_file_name(name: &str) -> bool {
+    Path::new(name)
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(str::to_ascii_lowercase)
+        .is_some_and(|extension| AUDIO_EXTENSIONS.contains(&extension.as_str()))
+}
+
+/// Lightweight tag probe for the scripting-hook context (WP-11, ADR-0135):
+/// duration from container properties and track number from the primary
+/// tag. Mirrors the legacy `DirectoryContextProvider`, which read real tags
+/// through song plugins and skipped files it could not process — hence
+/// `Option`, never an error.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MediaTagProbe {
+    pub duration_ms: Option<u64>,
+    pub track_number: Option<u32>,
+}
+
+/// Probe one media file for the hook context fields. Returns `None` when
+/// the file cannot be read or parsed; callers tolerate per-file failures
+/// exactly like the legacy provider did (log-and-skip).
+#[must_use]
+pub fn probe_media_file(path: &Path) -> Option<MediaTagProbe> {
+    let tagged = read_from_path(path).ok()?;
+    let duration_ms = u64::try_from(tagged.properties().duration().as_millis()).ok();
+    let track_number = tagged
+        .primary_tag()
+        .or_else(|| tagged.first_tag())
+        .and_then(|tag| tag.track());
+    Some(MediaTagProbe {
+        duration_ms,
+        track_number,
+    })
+}
 
 /// Input/resource limits for one inspection. Each worker receives one copy,
 /// so the values also bound aggregate memory when worker concurrency is bounded.
@@ -265,10 +318,45 @@ pub fn inspect_release(
 }
 
 /// Hashes a manifest's stable semantic representation with BLAKE3.
+///
+/// The workspace serializes `serde_json::Value` with `preserve_order`
+/// (insertion order) because captured wire contracts depend on it, but the
+/// manifest is persisted through PostgreSQL `jsonb`, which reorders object
+/// keys. Without canonicalization the same semantic manifest hashes
+/// differently before and after a database round trip (observed as
+/// `validation.input_semantic_manifest_hash_mismatch` for any manifest whose
+/// free-form subdocuments — raw tags, parsed sidecars — have keys whose
+/// insertion order differs from jsonb order). Keys are therefore sorted
+/// recursively here so the hash depends only on semantic content, never on
+/// storage or serialization ordering.
 pub fn hash_manifest(manifest: &ReleaseManifest) -> Result<String, InspectionError> {
     let value = manifest.semantic_value()?;
-    let bytes = serde_json::to_vec(&value)?;
+    let canonical = canonicalize_value(&value);
+    let bytes = serde_json::to_vec(&canonical)?;
     Ok(blake3::hash(&bytes).to_hex().to_string())
+}
+
+/// Returns a copy of `value` with every object key sorted recursively, so
+/// hashing is independent of map insertion/storage order.
+fn canonicalize_value(value: &serde_json::Value) -> serde_json::Value {
+    match value {
+        serde_json::Value::Object(map) => {
+            let mut sorted = serde_json::Map::new();
+            let mut keys: Vec<&String> = map.keys().collect();
+            keys.sort_unstable();
+            for key in keys {
+                // Keys came from `map`; indexing back into it cannot miss.
+                if let Some(entry) = map.get(key) {
+                    sorted.insert(key.clone(), canonicalize_value(entry));
+                }
+            }
+            serde_json::Value::Object(sorted)
+        }
+        serde_json::Value::Array(items) => {
+            serde_json::Value::Array(items.iter().map(canonicalize_value).collect())
+        }
+        scalar => scalar.clone(),
+    }
 }
 
 fn collect_files(
@@ -494,11 +582,13 @@ fn classify(relative_path: &str) -> ObservedFileKind {
         .extension()
         .and_then(|value| value.to_str())
         .map(str::to_ascii_lowercase);
+    if extension
+        .as_deref()
+        .is_some_and(|value| AUDIO_EXTENSIONS.contains(&value))
+    {
+        return ObservedFileKind::Audio;
+    }
     match extension.as_deref() {
-        Some(
-            "aac" | "ac3" | "aif" | "aiff" | "ape" | "flac" | "m4a" | "m4b" | "m4p" | "mp2" | "mp3"
-            | "mp4" | "mpc" | "ogg" | "opus" | "spx" | "wav" | "wma" | "wv",
-        ) => ObservedFileKind::Audio,
         Some("jpg" | "jpeg" | "png" | "gif" | "webp" | "bmp") => ObservedFileKind::Artwork,
         Some("cue") => ObservedFileKind::CueSheet,
         Some("m3u" | "m3u8") => ObservedFileKind::Playlist,
@@ -1048,6 +1138,62 @@ mod tests {
             hash_manifest(&first).unwrap(),
             hash_manifest(&second).unwrap()
         );
+    }
+
+    /// The semantic hash must survive a PostgreSQL `jsonb` round trip, which
+    /// reorders object keys while the workspace serializes `serde_json::Value`
+    /// in insertion order (`preserve_order`). Regression test for
+    /// `validation.input_semantic_manifest_hash_mismatch` on manifests whose
+    /// free-form subdocuments stored keys in non-jsonb order.
+    #[test]
+    fn manifest_hash_is_independent_of_value_key_order() {
+        let mut manifest = ReleaseManifest::new(
+            Uuid::now_v7(),
+            None,
+            "alpha".to_owned(),
+            Some(1),
+            Some("snapshot-a".to_owned()),
+            Some("ffprobe".to_owned()),
+            Some("/usr/bin/ffprobe".to_owned()),
+            Some(0),
+            Some(30_000),
+            true,
+            ManifestReleaseObservation {
+                title: Some("Title".to_owned()),
+                artists: vec!["Artist".to_owned()],
+                date: None,
+                // Multi-key document in insertion order that differs from
+                // jsonb's (length, then bytewise) ordering.
+                source_labels: serde_json::json!({"zz": 1, "a": 2, "mm": 3}),
+            },
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
+        let original = hash_manifest(&manifest).unwrap();
+
+        // Simulate jsonb reordering: rebuild every object with reversed key
+        // order and deserialize the manifest back from it.
+        fn reverse_keys(value: &serde_json::Value) -> serde_json::Value {
+            match value {
+                serde_json::Value::Object(map) => {
+                    let mut reversed = serde_json::Map::new();
+                    for (key, entry) in map.iter().rev() {
+                        reversed.insert(key.clone(), reverse_keys(entry));
+                    }
+                    serde_json::Value::Object(reversed)
+                }
+                serde_json::Value::Array(items) => {
+                    serde_json::Value::Array(items.iter().map(reverse_keys).collect())
+                }
+                scalar => scalar.clone(),
+            }
+        }
+        let reordered = reverse_keys(&serde_json::to_value(&manifest).unwrap());
+        manifest = serde_json::from_value(reordered).unwrap();
+        assert_eq!(original, hash_manifest(&manifest).unwrap());
     }
 
     #[test]

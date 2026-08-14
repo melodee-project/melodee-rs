@@ -87,6 +87,9 @@ fn state(db: &common::TestDb, discovery_endpoint: &str) -> NativeState {
     };
     NativeState {
         pool: db.pool.clone(),
+        notifications: std::sync::Arc::new(
+            melodee_server::notifications::NotificationService::noop(db.pool.clone()),
+        ),
         search: None,
         public_origin: "http://melodee.test".to_owned(),
         podcast_config: Arc::new(podcast_config),

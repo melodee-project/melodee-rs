@@ -492,6 +492,11 @@ pub async fn scrobble(
                 now,
             )
             .await?;
+            // WP-07: fire-and-record Last.fm dispatch. Never blocks or fails
+            // the write path; a no-op unless scrobbling.lastFm is enabled and
+            // the user linked (legacy ADR-0004).
+            crate::lastfm::LastfmDispatch::new(state.pool.clone())
+                .spawn_now_playing(principal.user_id, request.song_id);
         }
         "played" => {
             let duration = request
@@ -503,7 +508,7 @@ pub async fn scrobble(
                     Ok(value.round() as i32)
                 })
                 .transpose()?;
-            NativeUserStateStore::record_scrobble(
+            let result = NativeUserStateStore::record_scrobble(
                 &state.pool,
                 principal.user_id,
                 request.song_id,
@@ -513,6 +518,12 @@ pub async fn scrobble(
                 duration,
             )
             .await?;
+            // Dispatch only on a freshly applied play: an adopted idempotent
+            // replay must not double-scrobble Last.fm.
+            if result == melodee_persistence::NativeScrobbleResult::Applied {
+                crate::lastfm::LastfmDispatch::new(state.pool.clone())
+                    .spawn_scrobble(principal.user_id, request.song_id);
+            }
         }
         _ => return Err(NativeApiError::BadRequest),
     }
@@ -520,6 +531,7 @@ pub async fn scrobble(
 }
 
 pub async fn lastfm_auth_url(
+    State(state): State<NativeState>,
     _authenticated: Authenticated,
     Query(params): Query<LastFmAuthParams>,
 ) -> Result<Json<serde_json::Value>, NativeApiError> {
@@ -531,24 +543,67 @@ pub async fn lastfm_auth_url(
     if !valid_callback {
         return Err(NativeApiError::CapturedBadRequest("Invalid callback url"));
     }
-    // The frozen configuration has no Last.fm credentials. Phase 7 preserves
-    // that explicit behavior without inventing or persisting provider secrets.
-    Err(NativeApiError::CapturedBadRequest("Last.fm not configured"))
+    let callback = params.callback.as_deref().unwrap_or_default();
+    // WP-07: the captured unconfigured shape remains the disabled-state
+    // contract — blank apiKey (the default) reproduces the frozen golden.
+    let api_key = match crate::lastfm::resolve_lastfm_settings(&state.pool).await {
+        Ok(settings) => settings.api_key,
+        Err(error) => {
+            tracing::warn!(%error, "last.fm settings resolution failed");
+            None
+        }
+    };
+    let Some(api_key) = api_key else {
+        return Err(NativeApiError::CapturedBadRequest("Last.fm not configured"));
+    };
+    Ok(Json(
+        serde_json::json!({"url": crate::lastfm::build_auth_url(&api_key, callback)}),
+    ))
 }
 
 pub async fn lastfm_session(
-    _authenticated: Authenticated,
+    State(state): State<NativeState>,
+    Authenticated(principal, _binding): Authenticated,
     Json(request): Json<LastFmSessionRequest>,
 ) -> Result<Json<serde_json::Value>, NativeApiError> {
     if request.token.trim().is_empty() || request.token.chars().count() > 4_096 {
         return Err(NativeApiError::BadRequest);
     }
-    Err(NativeApiError::CapturedBadRequest(
-        "Unable to exchange Last.fm session key",
-    ))
+    // WP-07: every exchange failure — unconfigured, transport, API error,
+    // malformed response — keeps the captured 400 shape (evidence doc §3).
+    let settings = crate::lastfm::resolve_lastfm_settings(&state.pool)
+        .await
+        .map_err(|error| {
+            tracing::warn!(%error, "last.fm settings resolution failed");
+            NativeApiError::CapturedBadRequest("Unable to exchange Last.fm session key")
+        })?;
+    let (Some(api_key), Some(shared_secret)) = (settings.api_key, settings.shared_secret) else {
+        return Err(NativeApiError::CapturedBadRequest(
+            "Unable to exchange Last.fm session key",
+        ));
+    };
+    let client = crate::lastfm::LastfmClient::new(api_key, shared_secret).map_err(|error| {
+        tracing::warn!(%error, "last.fm client construction failed");
+        NativeApiError::CapturedBadRequest("Unable to exchange Last.fm session key")
+    })?;
+    let session = client.get_session(&request.token).await.map_err(|error| {
+        tracing::warn!(%error, "last.fm session exchange failed");
+        NativeApiError::CapturedBadRequest("Unable to exchange Last.fm session key")
+    })?;
+    // The session key is sealed + digested before it reaches the store; the
+    // raw key is never persisted, logged, or returned (ADR-0134 §7 amended).
+    crate::lastfm::store_linked_session(&state.pool, principal.user_id, &session)
+        .await
+        .map_err(|()| NativeApiError::CapturedBadRequest("Unable to save Last.fm session key"))?;
+    Ok(Json(serde_json::json!({"message": "Last.fm linked"})))
 }
 
-pub async fn lastfm_disconnect(_authenticated: Authenticated) -> Json<serde_json::Value> {
+pub async fn lastfm_disconnect(
+    State(state): State<NativeState>,
+    Authenticated(principal, _binding): Authenticated,
+) -> Json<serde_json::Value> {
+    // Idempotent: succeeds unconfigured and unlinked (captured golden).
+    crate::lastfm::unlink_user(&state.pool, principal.user_id).await;
     Json(serde_json::json!({"message": "Last.fm disconnected"}))
 }
 

@@ -92,6 +92,9 @@ fn principal(user: &StoredNativeUser) -> NativePrincipal {
 fn state(db: &common::TestDb, search: Option<SearchConfig>) -> NativeState {
     NativeState {
         pool: db.pool.clone(),
+        notifications: std::sync::Arc::new(
+            melodee_server::notifications::NotificationService::noop(db.pool.clone()),
+        ),
         search,
         public_origin: "http://melodee.test".to_string(),
         podcast_config: Arc::new(melodee_server::podcast_worker::PodcastConfig::default()),

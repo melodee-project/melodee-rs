@@ -74,6 +74,7 @@ impl Scenario {
                 &self.pool,
                 &WorkEngineConfig::default(),
                 common::T0 + Duration::seconds(2 + i64::try_from(inspected).unwrap_or(0)),
+                None,
             )
             .await
             .expect("inspection batch");
@@ -128,8 +129,26 @@ impl Drop for Scenario {
                     .build()
                     .expect("cleanup runtime");
                 runtime.block_on(async move {
-                    pool.close().await;
-                    database.drop().await;
+                    // Bound the database cleanup: `PgPool::close` waits for
+                    // checked-out connections, and a panicking test can leave
+                    // leases held by tasks that will never return them. An
+                    // unbounded wait here previously stalled the whole test
+                    // process (and with it the repository gate) after any
+                    // mid-scenario panic. Leaking one `melodee_test_*`
+                    // database on a failure path is strictly better than
+                    // hanging the suite.
+                    let cleanup = async {
+                        pool.close().await;
+                        database.drop().await;
+                    };
+                    if tokio::time::timeout(std::time::Duration::from_secs(20), cleanup)
+                        .await
+                        .is_err()
+                    {
+                        eprintln!(
+                            "scenario cleanup timed out; leaking the test database rather than blocking the suite"
+                        );
+                    }
                 });
                 let _ = fs::remove_dir_all(root);
                 let _ = fs::remove_dir_all(work_area);

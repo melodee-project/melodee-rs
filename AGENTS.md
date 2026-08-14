@@ -52,34 +52,32 @@ template.
 
 Do not silently resolve a material conflict; record it in the PR and propose an ADR when needed.
 
-## Current phase boundary: Phase 9 active — remaining parity domains
+## Current phase boundary: Phase 9 complete — awaiting next phase assignment
 
-Phases 0–8 are complete. Phase 8's evidence is in
-`design/evidence/phase-8/PHASE-8-REPORT.md`: both adapter route matrices are implemented and
-differentially evidenced (81/81 OpenSubsonic endpoints, 60/60 Jellyfin routes per
-`design/agents/PHASE-8-*-ROUTE-MATRIX.json`), the full-golden differential replay
-(`scripts/run_phase8_differential.py`) reports zero unexpected differences across both surfaces,
-and the real-client smoke gate passed: the shipping Feishin v1.15.1 client completes the
-documented workflows on both surfaces (12/12 assertions,
-`design/evidence/phase-8/REAL-CLIENT-ACCEPTANCE.md`). Real-client compatibility fixes landed
-under ADR-0132 (case-insensitive Jellyfin routing, `ApiKey` alias, redirect query-key casing).
-Phase 7's accepted native-v1 evidence is in
-`design/evidence/phase-7/PHASE-7-REPORT.md`.
+Phases 0–9 are complete. Phase 9's evidence is in
+`design/evidence/phase-9/PHASE-9-REPORT.md`: all twelve per-domain parity checklists are green
+(74 rows ✅ with linked test evidence, 4 rows 🚫 waived by accepted ADRs, 2 rows ➡ Phase 10),
+all 61 Phase-9-tagged requirements are terminal (52 tested, 2 implemented, 7 deferred under
+ADRs 0133/0136 or the Phase 10 boundary), the feature-parity matrix carries no unapproved gaps,
+and the full repository gate passes (834 Rust tests, 140 Python capture tests, zero failures).
+Phase 9 landed under accepted ADRs 0133 (party/jukebox waiver), 0134 (parity-domain schema, §7
+amended for Last.fm session-key sealing), 0135 (Boa scripting runtime), and 0136 (non-Last.fm
+provider deferral), plus dispositions accepting ADR-0109 (with shell validation moved to
+Phase 10 entry criteria) and ADR-0132. Phase 8's accepted adapter evidence is in
+`design/evidence/phase-8/PHASE-8-REPORT.md` (81/81 OpenSubsonic endpoints, 60/60 Jellyfin
+routes, zero-diff replay, Feishin 12/12 real-client acceptance); Phase 7's accepted native-v1
+evidence is in `design/evidence/phase-7/PHASE-7-REPORT.md`.
 
-Phase 9 (remaining parity domains, IMPLEMENTATION §12) is **assigned and active** as of
-2026-08-13, executed per `design/agents/PHASE-9-PLAN.md` (four waves, WP-01..WP-14) with accepted
-ADRs 0133 (party/jukebox waiver), 0134 (Phase 9 parity-domain schema), and 0135 (Boa scripting
-runtime). Per-domain parity checklists live in `design/evidence/phase-9/checklists/`.
+Allowed: nothing new until the next phase is assigned; fixes to existing evidence and
+documentation corrections only.
 
-Allowed: everything inside the Phase 9 plan's work packages, under its ADRs and checklists.
-
-Forbidden: Phase 10 admin UI implementation; Phase 11 migration/import completion; merging
-native-v1, OpenSubsonic, or Jellyfin wire DTOs; redesigning captured external contracts without
-compatibility evidence, a product decision, an accepted ADR, and a migration/client plan; any
-database schema without an accepted schema ADR; message brokers, Redis, Elasticsearch/OpenSearch,
-GraphQL, microservices; copying C# service/class boundaries into Rust; destructive operations
-against an existing Melodee library outside the durable Phase 5 decision/audit/authorization
-contract.
+Forbidden: Phase 10 admin UI implementation and Phase 11 migration/import completion (both
+unassigned); merging native-v1, OpenSubsonic, or Jellyfin wire DTOs; redesigning captured
+external contracts without compatibility evidence, a product decision, an accepted ADR, and a
+migration/client plan; any database schema without an accepted schema ADR; message brokers,
+Redis, Elasticsearch/OpenSearch, GraphQL, microservices; copying C# service/class boundaries
+into Rust; destructive operations against an existing Melodee library outside the durable
+Phase 5 decision/audit/authorization contract.
 
 ## Product language
 

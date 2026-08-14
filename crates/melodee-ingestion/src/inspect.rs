@@ -16,6 +16,7 @@ use tracing::{error, info, warn};
 use crate::{
     InboundSource, IngestionConfig,
     error::{IngestionError, Result},
+    gate::{DirectoryGateOutcome, DirectoryProcessingGate},
     snapshot::snapshot_release_directory,
 };
 
@@ -28,16 +29,21 @@ pub struct InspectionStats {
     pub failed: u64,
     pub errors: u64,
     pub duration_ms: i64,
+    /// Candidates returned to settling unprocessed because the
+    /// `directoryProcessingStart` script hook denied them (WP-11).
+    pub script_skipped: u64,
 }
 
 /// Claims and inspects one bounded batch of Ready work. PostgreSQL owns
 /// exclusivity; the configured batch is also the worker's backpressure bound.
+/// `gate` is the WP-11 scripting hook injection point (None = no hooks).
 pub async fn inspect_ready_once(
     ingestion: &IngestionConfig,
     store: &WorkItemStore,
     pool: &PgPool,
     work_config: &WorkEngineConfig,
     now: OffsetDateTime,
+    gate: Option<&dyn DirectoryProcessingGate>,
 ) -> Result<InspectionStats> {
     let started = Instant::now();
     let mut claim_config = *work_config;
@@ -50,11 +56,23 @@ pub async fn inspect_ready_once(
     };
 
     for item in items {
-        match inspect_one(ingestion, store, pool, &worker, item, work_config, now).await {
+        match inspect_one(
+            ingestion,
+            store,
+            pool,
+            &worker,
+            item,
+            work_config,
+            now,
+            gate,
+        )
+        .await
+        {
             Ok(InspectionOutcome::Published) => stats.completed += 1,
             Ok(InspectionOutcome::SourceChanged) => stats.source_changed += 1,
             Ok(InspectionOutcome::Invalid) => stats.structurally_invalid += 1,
             Ok(InspectionOutcome::Failed) => stats.failed += 1,
+            Ok(InspectionOutcome::ScriptSkipped) => stats.script_skipped += 1,
             Err(error) => {
                 stats.errors += 1;
                 error!(%error, "inspection item failed outside normal failure recording");
@@ -68,6 +86,7 @@ pub async fn inspect_ready_once(
         source_changed = stats.source_changed,
         structurally_invalid = stats.structurally_invalid,
         failed = stats.failed,
+        script_skipped = stats.script_skipped,
         "inspection batch completed"
     );
     Ok(stats)
@@ -79,8 +98,10 @@ enum InspectionOutcome {
     SourceChanged,
     Invalid,
     Failed,
+    ScriptSkipped,
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn inspect_one(
     ingestion: &IngestionConfig,
     store: &WorkItemStore,
@@ -89,6 +110,7 @@ async fn inspect_one(
     item: melodee_domain::ReleaseWorkItem,
     work_config: &WorkEngineConfig,
     now: OffsetDateTime,
+    gate: Option<&dyn DirectoryProcessingGate>,
 ) -> Result<InspectionOutcome> {
     store
         .transition(
@@ -177,6 +199,32 @@ async fn inspect_one(
     store
         .renew_lease(pool, item.id, worker, work_config.lease_duration, now)
         .await?;
+
+    // WP-11 `directoryProcessingStart` hook: the candidate is stable (the
+    // snapshot signature was just re-verified) and about to enter media
+    // inspection — the Rust pipeline point equivalent to the legacy
+    // pre-plugin-processing gate. The boundary is infallible by contract
+    // (fail-degraded allow; ADR-0135 §4). Deny resolves to skip: the item
+    // returns to settling unprocessed and is re-evaluated on a later pass,
+    // matching legacy `onDeny: skip`. Physical quarantine moves are deferred
+    // (durable Phase 5 decision contract); legacy `delete` stays rewritten
+    // to skip.
+    if let Some(gate) = gate {
+        match gate.evaluate(&root, &before).await {
+            DirectoryGateOutcome::Allow => {}
+            DirectoryGateOutcome::Skip { reason } => {
+                info!(
+                    work_item_id = %item.id,
+                    source_path = %item.source_path,
+                    %reason,
+                    "directory processing skipped by directoryProcessingStart hook"
+                );
+                return return_to_settling(store, pool, worker, item.id, "script-denied-skip", now)
+                    .await
+                    .map(|_| InspectionOutcome::ScriptSkipped);
+            }
+        }
+    }
 
     let options = InspectionOptions {
         ffprobe_path: ingestion.ffprobe_path.clone(),
@@ -414,11 +462,13 @@ fn resolve_candidate(
 
 /// Starts a graceful periodic inspection worker. Reconciliation and this loop
 /// share PostgreSQL leases, so a process restart recovers an interrupted claim.
+/// `gate` is the WP-11 scripting hook injection point (None = no hooks).
 pub fn start_inspection_loop(
     ingestion: IngestionConfig,
     pool: PgPool,
     store: WorkItemStore,
     work_config: WorkEngineConfig,
+    gate: Option<std::sync::Arc<dyn DirectoryProcessingGate>>,
 ) -> crate::SchedulerHandle {
     let stop = crate::StopToken::new();
     let notifier = stop.signal.clone();
@@ -434,7 +484,7 @@ pub fn start_inspection_loop(
         loop {
             tokio::select! {
                 _ = ticker.tick() => {
-                    match inspect_ready_once(&ingestion, &store, &pool, &work_config, OffsetDateTime::now_utc()).await {
+                    match inspect_ready_once(&ingestion, &store, &pool, &work_config, OffsetDateTime::now_utc(), gate.as_deref()).await {
                         Ok(stats) => results.push(crate::ReconcileResult {
                             source: "inspection".to_owned(),
                             stats: crate::ReconcileStats {

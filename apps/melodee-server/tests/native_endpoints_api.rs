@@ -80,6 +80,9 @@ async fn user(db: &common::TestDb, name: &str) -> NativePrincipal {
 fn state(db: &common::TestDb) -> NativeState {
     NativeState {
         pool: db.pool.clone(),
+        notifications: std::sync::Arc::new(
+            melodee_server::notifications::NotificationService::noop(db.pool.clone()),
+        ),
         search: None,
         public_origin: "http://melodee.test".to_owned(),
         podcast_config: Arc::new(melodee_server::podcast_worker::PodcastConfig::default()),

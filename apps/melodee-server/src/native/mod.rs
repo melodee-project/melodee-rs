@@ -312,6 +312,10 @@ async fn load_annotations(
 #[derive(Clone)]
 pub struct NativeState {
     pub pool: sqlx::PgPool,
+    /// WP-09 notification render/delivery service. Event wiring dispatches
+    /// fire-and-record sends; failures are audited, never propagated
+    /// (PRD-NOTIF-002).
+    pub notifications: Arc<crate::notifications::NotificationService>,
     pub search: Option<melodee_search::SearchConfig>,
     pub public_origin: String,
     pub podcast_config: Arc<crate::podcast_worker::PodcastConfig>,
@@ -504,6 +508,10 @@ mod tests {
         NativeState {
             pool: sqlx::PgPool::connect_lazy("postgres://melodee:secret@127.0.0.1:9/test")
                 .expect("valid test database URL"),
+            notifications: Arc::new(crate::notifications::NotificationService::noop(
+                sqlx::PgPool::connect_lazy("postgres://melodee:secret@127.0.0.1:9/test")
+                    .expect("valid test database URL"),
+            )),
             search: None,
             public_origin: "http://127.0.0.1:8080".to_string(),
             podcast_config: Arc::new(crate::podcast_worker::PodcastConfig::default()),

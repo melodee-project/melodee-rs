@@ -21,6 +21,10 @@ path checks.
 Use an expiry for links that should not remain valid indefinitely. Deleting a share removes the
 derived share record, not the underlying catalog entity or media.
 
+When [email delivery is configured](../installation/configuration/), creating a share sends the
+owner a share-created notification containing the share URL. A delivery failure is recorded in the
+delivery audit and never fails share creation.
+
 During migration, existing share URLs are preserved only when their bearer has at least 128 bits of
 verified unpredictable material. Weaker legacy bearers are rotated, remain inactive, and are
 reported by the migration so the owner can distribute the replacement URL.

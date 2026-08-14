@@ -19,5 +19,9 @@ Artist/title/year match can complete an unresolved request. Automatic completion
 resolved catalog public ID and one system activity comment in the same database transaction, so a
 retry cannot duplicate its activity history.
 
+When [email delivery is configured](../installation/configuration/), completing a request sends
+the request creator a request-fulfilled notification. A delivery failure is recorded in the
+delivery audit and never fails the completion.
+
 These routes use native-v1 bearer authentication. See the [Melodee API](../api/melodee-api/) for
 the compatibility contract.

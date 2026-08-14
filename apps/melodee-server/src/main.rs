@@ -219,6 +219,13 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         }
         podcast_config.prepare_owned_root(&other_roots)?;
     }
+    // WP-11 sandboxed scripting hooks (ADR-0135): one shared service so the
+    // process-wide leaked-thread bound stays accurate across the ingestion
+    // gate and the admin test-run surface.
+    let scripting = Arc::new(melodee_server::scripting::ScriptingService::new(
+        pool.clone(),
+    ));
+
     let mut reconcile_handle = None;
     let mut inspection_handle = None;
     let mut normalization_handle = None;
@@ -240,6 +247,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             pool.clone(),
             melodee_persistence::WorkItemStore,
             work_config,
+            Some(Arc::new(
+                melodee_server::scripting::ScriptingDirectoryGate::new(Arc::clone(&scripting)),
+            )),
         ));
         normalization_handle = Some(start_normalization_loop(
             ingestion_config.clone(),
@@ -324,6 +334,22 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         None
     };
 
+    // WP-09 notification render/delivery service over WP-08 layered
+    // settings (PRD-CONFIG-003): MELODEE__EMAIL__* env keys and the optional
+    // config file win over DB-backed server_settings rows, which win over
+    // the legacy seeded defaults. Delivery is fail-degraded and audited
+    // (PRD-NOTIF-002).
+    let settings_resolver = melodee_persistence::SettingsResolver::from_env(&pool)
+        .map_err(|error| format!("invalid settings configuration: {error}"))?;
+    let email_settings =
+        melodee_server::notifications::EmailSettings::from_resolved(&settings_resolver)
+            .await
+            .map_err(|error| format!("invalid email configuration: {error}"))?;
+    let notifications = Arc::new(
+        melodee_server::notifications::NotificationService::new(pool.clone(), &email_settings)
+            .map_err(|error| format!("invalid email configuration: {error}"))?,
+    );
+
     let bind = system::configured_bind();
     let address: SocketAddr = bind.parse()?;
     let public_origin = native_public_origin(address)?;
@@ -389,6 +415,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let jellyfin_app = jellyfin::configured_router(jellyfin_state);
     let native_state = native::NativeState {
         pool: pool.clone(),
+        notifications: notifications.clone(),
         search: search_config.enabled.then_some(search_config.clone()),
         public_origin: public_origin.clone(),
         podcast_config: Arc::new(podcast_config.clone()),
@@ -415,6 +442,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let admin_access_state = melodee_server::admin_access::AdminAccessState {
         pool: pool.clone(),
         auth: native_auth,
+        notifications: notifications.clone(),
+        scripting: scripting.clone(),
     };
     let readiness = system::ReadinessState::new(pool.clone())
         .with_search(search_config.enabled.then_some(search_config.clone()));
@@ -445,7 +474,11 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .with_state(admin_state)
         .merge(melodee_server::admin_access::router().with_state(admin_access_state.clone()))
         .merge(melodee_server::admin_radio::router().with_state(admin_access_state.clone()))
-        .merge(melodee_server::admin_device_profiles::router().with_state(admin_access_state))
+        .merge(melodee_server::admin_device_profiles::router().with_state(admin_access_state.clone()))
+        .merge(melodee_server::admin_notifications::router().with_state(admin_access_state.clone()))
+        .merge(melodee_server::admin_scripts::router().with_state(admin_access_state.clone()))
+        .merge(melodee_server::admin_config::router().with_state(admin_access_state.clone()))
+        .merge(melodee_server::admin_onboarding::router().with_state(admin_access_state))
         .merge(native_app)
         .merge(opensubsonic_app)
         .merge(jellyfin_app)

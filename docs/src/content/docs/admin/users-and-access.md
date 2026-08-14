@@ -71,3 +71,9 @@ audit, or account-state controls.
   `melodee groups unbind-library <group> --library-id <uuid>` manage library bindings;
   `melodee groups delete <name>` deletes a group only after its members and bindings were removed
   — an access-control group is never silently detached.
+- `melodee notifications templates list` shows the stored notification templates (key, locale,
+  version, subject). `melodee notifications test-send --template <key> --to <address>
+  [--locale <tag>]` renders a template and attempts a real delivery through the configured
+  [email transport](../installation/configuration/), printing the honestly recorded audit row —
+  including `skipped` when delivery is disabled — so notification behavior is verifiable
+  headlessly.

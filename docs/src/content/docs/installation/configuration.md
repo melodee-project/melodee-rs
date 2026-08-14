@@ -5,15 +5,54 @@ sidebar:
   order: 2
 ---
 
-Melodee reads settings from explicit environment variables only.
+Melodee reads settings from layered sources. Environment variables and the optional config file
+always win over database-backed settings.
 
 ## Configuration sources
 
-1. built-in defaults;
-2. environment variables.
+Effective values resolve through four layers, highest precedence first:
 
-Only documented keys are supported. Database-backed runtime overrides are planned but are not read
-by the current server.
+1. environment variables (`MELODEE__*` — the documented keys below, plus any registry key as
+   `MELODEE__` + the key with `.` replaced by `__`, uppercased);
+2. an optional JSON config file (`MELODEE__CONFIG_FILE` points at a bounded
+   `{"key": value, …}` object);
+3. database-backed settings (`server_settings`, managed at runtime through the CLI and the admin
+   API);
+4. built-in defaults (the legacy registry's seeded values).
+
+Only documented keys are supported. The database layer covers the 190-key legacy settings
+registry; the fixed keys in the tables below (worker, ingestion, search, auth, and email
+transport plumbing) remain environment-driven.
+
+## Database-backed settings
+
+`melodee config list` prints every known setting's effective value with the layer that supplied
+it (`environment`, `config-file`, `database`, or `default`). Secret settings are always redacted
+to a fixed marker — there is no show-secrets option, and no API or CLI surface returns a secret
+value.
+
+`melodee config validate` runs the first-run preflight checks (database and migrations, storage
+paths, media tools, search index, administrator account, email sanity) and exits non-zero when a
+required check fails. See [Quick Start](../getting-started/quick-start/) for the first-run flow.
+
+### Import and export
+
+`melodee config export [--output <path>]` writes a JSON document of the database and defaults
+layer (environment and config-file overlays are deployment concerns and are not captured).
+Administrators can also use `GET /api/admin/v1/config/export` (see the
+[Admin API](../api/admin-api/)).
+
+The export carries a header warning: **every secret value is redacted to a fixed marker and must
+be re-entered after import.** Handle exported files as sensitive even so — non-secret values can
+reveal infrastructure details.
+
+`melodee config import <path>` is a **preview by default**: it prints the diff (added, changed,
+unchanged keys; secret keys by name only with an explicit warning; unknown keys) without writing
+anything. `melodee config import <path> --apply` validates every value against the registry's
+type/range rules and writes the rows atomically; keys outside the known registry are rejected
+unless `--allow-unknown` is passed. The redaction marker is never accepted as a value, so a
+redacted export can never overwrite a stored secret. The admin API equivalent is
+`POST /api/admin/v1/config/import?preview=true|false&allowUnknown=true|false`.
 
 ## Implemented settings
 
@@ -152,6 +191,40 @@ facts. Every pass is bounded, set-based, and idempotent, so the worker is safe t
 | `MELODEE__NATIVE__AUTH__GOOGLE__CLIENT_ID` | — | Exact Google OAuth client ID used as the required token audience. |
 | `MELODEE__NATIVE__AUTH__GOOGLE__JWKS_URL` | Google v3 certificates URL | HTTPS JWKS endpoint. Redirects are rejected and the response/cache are bounded. |
 | `MELODEE__NATIVE__AUTH__GOOGLE__HOSTED_DOMAINS` | empty | Optional comma-separated lowercase hosted-domain allowlist checked after signature, issuer, audience, lifetime, and verified-email validation. |
+
+### Email notifications
+
+Melodee sends user-facing email (password resets, share-created and request-fulfilled
+notifications) through a configured SMTP relay. Delivery is disabled by default; while disabled,
+every notification is still recorded in the delivery audit as `skipped` and the operation that
+triggered it is unaffected. Delivery failures are likewise recorded and logged, never rolled back
+into the triggering request. The password is never logged and never returned by any API.
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `MELODEE__EMAIL__ENABLED` | `false` | Enables SMTP delivery. When `true`, `MELODEE__EMAIL__FROM_EMAIL` and `MELODEE__EMAIL__SMTP_HOST` are required and validated at startup. |
+| `MELODEE__EMAIL__FROM_NAME` | `Melodee` | From display name. |
+| `MELODEE__EMAIL__FROM_EMAIL` | — | From address; required when delivery is enabled. Must be a valid `user@domain` mailbox. |
+| `MELODEE__EMAIL__SMTP_HOST` | — | SMTP relay hostname; required when delivery is enabled. |
+| `MELODEE__EMAIL__SMTP_PORT` | `587` | SMTP port (`587` StartTLS, `465` implicit TLS, `25` plaintext). |
+| `MELODEE__EMAIL__SMTP_USERNAME` | empty | SMTP auth username. When empty, no AUTH is attempted. |
+| `MELODEE__EMAIL__SMTP_PASSWORD` | empty | SMTP auth password. Keep it in the environment or a secret store; it is redacted from logs and diagnostics. |
+| `MELODEE__EMAIL__SMTP_USE_SSL` | `false` | Implicit TLS connection (conventionally port 465). Mutually exclusive with StartTLS. |
+| `MELODEE__EMAIL__SMTP_USE_START_TLS` | `true` | StartTLS upgrade (conventionally port 587). Mutually exclusive with implicit TLS. When both flags are `false`, the relay is contacted in plaintext — use only on trusted networks. |
+
+Notification templates (subject, plain-text and HTML bodies with `{{placeholder}}` substitution)
+are stored in the database and managed through the
+[admin API](../api/admin-api/) or `melodee notifications templates list`. The email keys above are
+also part of the database-backed settings layer (registry keys `email.*`): environment and
+config-file values still win over database rows.
+
+### Last.fm scrobbling
+
+Last.fm integration is disabled by default. The registry keys `scrobbling.lastFm.Enabled`
+(environment `MELODEE__SCROBBLING__LASTFM__ENABLED`), `scrobbling.lastFm.apiKey`,
+`scrobbling.lastFm.sharedSecret`, and `security.secretKey` control it; the API key and shared
+secret are classified secret and are redacted from every API, export, and log. See
+[Last.fm scrobbling](../features/lastfm/) for the linking flow and failure behavior.
 
 ### Notes
 

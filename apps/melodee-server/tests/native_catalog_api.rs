@@ -115,6 +115,9 @@ async fn native_test_state(db: &common::TestDb, username: &str) -> (NativeState,
     };
     let state = NativeState {
         pool: db.pool.clone(),
+        notifications: std::sync::Arc::new(
+            melodee_server::notifications::NotificationService::noop(db.pool.clone()),
+        ),
         search: None,
         public_origin: "http://melodee.test".to_string(),
         podcast_config: Arc::new(melodee_server::podcast_worker::PodcastConfig::default()),
@@ -323,6 +326,9 @@ async fn native_catalog_browse_detail_and_search_preserve_public_ids_and_user_st
     };
     let state = NativeState {
         pool: db.pool.clone(),
+        notifications: std::sync::Arc::new(
+            melodee_server::notifications::NotificationService::noop(db.pool.clone()),
+        ),
         search: None,
         public_origin: "http://melodee.test".to_string(),
         podcast_config: Arc::new(melodee_server::podcast_worker::PodcastConfig::default()),
@@ -1227,6 +1233,9 @@ async fn native_library_acl_prevents_cross_library_browse_search_mutation_and_sc
     };
     let state = NativeState {
         pool: db.pool.clone(),
+        notifications: std::sync::Arc::new(
+            melodee_server::notifications::NotificationService::noop(db.pool.clone()),
+        ),
         search: None,
         public_origin: "http://melodee.test".to_string(),
         podcast_config: Arc::new(melodee_server::podcast_worker::PodcastConfig::default()),

@@ -347,6 +347,124 @@ impl fmt::Debug for RefreshTokenDigest {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Reversible at-rest secret sealing (ADR-0134 §7, amended 2026-08-14, WP-07)
+// ---------------------------------------------------------------------------
+
+/// Domain separator for the Last.fm session-key sealing key derivation.
+/// Changing this value invalidates every stored link; it is a format
+/// version, never a per-deployment value.
+pub const LASTFM_SEALING_KEY_DOMAIN: &str = "melodee-lastfm-session-key/v1";
+
+/// ChaCha20-Poly1305 nonce/tag sizes for the sealed layout
+/// `nonce (12) || ciphertext || tag (16)`.
+const SEAL_NONCE_BYTES: usize = 12;
+const SEAL_TAG_BYTES: usize = 16;
+
+/// Derives a 32-byte AEAD key from a server-held secret via SHA-256 domain
+/// separation: `SHA-256(domain || 0x00 || secret)`. The raw secret is never
+/// used as an AEAD key directly, so a compromise of a sealed payload cannot
+/// be leveraged against the secret's other uses (JWT signing).
+#[must_use]
+pub fn derive_sealing_key(domain: &str, secret: &SecretString) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(domain.as_bytes());
+    hasher.update([0_u8]);
+    hasher.update(secret.expose_secret().as_bytes());
+    hasher.finalize().into()
+}
+
+/// The SHA-256 digest of a Last.fm session key. This is the only
+/// representation of the key permitted in lookup and audit surfaces; the raw
+/// key is never logged, traced, serialized, or exposed by any API
+/// (ADR-0134 §7, legacy ADR-0004).
+#[must_use]
+pub fn lastfm_session_key_digest(session_key: &[u8]) -> [u8; 32] {
+    Sha256::digest(session_key).into()
+}
+
+/// Secret-safe sealing failures. Diagnostics deliberately carry no key or
+/// plaintext material.
+#[derive(Debug, Error)]
+pub enum CipherError {
+    /// The OS random source was unavailable or sealing failed.
+    #[error("sealing failed")]
+    Seal,
+    /// The sealed payload is truncated, malformed, or not authentic.
+    #[error("unsealing failed")]
+    Unseal,
+}
+
+/// ChaCha20-Poly1305 AEAD cipher for reversible at-rest secrets
+/// (ADR-0134 §7 amended). Each [`SecretCipher::seal`] draws a fresh random
+/// 96-bit nonce from the OS CSPRNG, so nonce uniqueness never depends on
+/// caller discipline. Diagnostic output is always redacted.
+pub struct SecretCipher {
+    key: ring::aead::LessSafeKey,
+}
+
+impl SecretCipher {
+    /// Builds a cipher from a 32-byte key (see [`derive_sealing_key`]).
+    ///
+    /// # Errors
+    /// Returns a secret-safe error when the key is rejected.
+    pub fn new(key: &[u8; 32]) -> Result<Self, CipherError> {
+        let unbound = ring::aead::UnboundKey::new(&ring::aead::CHACHA20_POLY1305, key)
+            .map_err(|_| CipherError::Seal)?;
+        Ok(Self {
+            key: ring::aead::LessSafeKey::new(unbound),
+        })
+    }
+
+    /// Seals `plaintext` as `nonce || ciphertext || tag`.
+    ///
+    /// # Errors
+    /// Returns a secret-safe error when the OS random source is unavailable
+    /// or sealing fails.
+    pub fn seal(&self, plaintext: &[u8]) -> Result<Vec<u8>, CipherError> {
+        let mut nonce_bytes = [0_u8; SEAL_NONCE_BYTES];
+        getrandom::fill(&mut nonce_bytes).map_err(|_| CipherError::Seal)?;
+        let nonce = ring::aead::Nonce::assume_unique_for_key(nonce_bytes);
+        let mut buffer = plaintext.to_vec();
+        self.key
+            .seal_in_place_append_tag(nonce, ring::aead::Aad::empty(), &mut buffer)
+            .map_err(|_| CipherError::Seal)?;
+        let mut sealed = Vec::with_capacity(SEAL_NONCE_BYTES + buffer.len());
+        sealed.extend_from_slice(&nonce_bytes);
+        sealed.extend_from_slice(&buffer);
+        Ok(sealed)
+    }
+
+    /// Opens a payload produced by [`SecretCipher::seal`]. The plaintext is
+    /// returned as an owned value; callers handling secrets must keep it out
+    /// of logs, traces, and serialization.
+    ///
+    /// # Errors
+    /// Returns a secret-safe error when the payload is truncated, malformed,
+    /// or fails the Poly1305 authentication check.
+    pub fn open(&self, sealed: &[u8]) -> Result<Vec<u8>, CipherError> {
+        if sealed.len() < SEAL_NONCE_BYTES + SEAL_TAG_BYTES + 1 {
+            return Err(CipherError::Unseal);
+        }
+        let nonce_bytes: [u8; SEAL_NONCE_BYTES] = sealed[..SEAL_NONCE_BYTES]
+            .try_into()
+            .map_err(|_| CipherError::Unseal)?;
+        let nonce = ring::aead::Nonce::assume_unique_for_key(nonce_bytes);
+        let mut buffer = sealed[SEAL_NONCE_BYTES..].to_vec();
+        let plaintext = self
+            .key
+            .open_in_place(nonce, ring::aead::Aad::empty(), &mut buffer)
+            .map_err(|_| CipherError::Unseal)?;
+        Ok(plaintext.to_vec())
+    }
+}
+
+impl fmt::Debug for SecretCipher {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("SecretCipher(<redacted>)")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
@@ -436,5 +554,53 @@ mod tests {
         assert_eq!(first.expose_secret().len(), 88);
         assert_ne!(first, second);
         assert!(!format!("{first:?}").contains(first.expose_secret()));
+    }
+
+    #[test]
+    fn sealing_round_trips_with_random_nonces_and_redacted_debug() {
+        let secret = SecretString::new("test-only server secret, 32+ bytes long".to_string());
+        let key = derive_sealing_key(LASTFM_SEALING_KEY_DOMAIN, &secret);
+        let cipher = SecretCipher::new(&key).expect("cipher");
+        let plaintext = b"synthetic-lastfm-session-key";
+
+        let first = cipher.seal(plaintext).expect("seal");
+        let second = cipher.seal(plaintext).expect("seal");
+        assert_ne!(first, second, "fresh random nonce per seal");
+        assert_eq!(cipher.open(&first).expect("open"), plaintext);
+        assert_eq!(cipher.open(&second).expect("open"), plaintext);
+        // The plaintext never appears in the sealed payload.
+        assert!(
+            !first
+                .windows(plaintext.len())
+                .any(|window| window == plaintext)
+        );
+
+        // Wrong key, truncation, and tampering all fail closed.
+        let other = SecretCipher::new(&derive_sealing_key(
+            LASTFM_SEALING_KEY_DOMAIN,
+            &SecretString::new("a different server secret, 32+ bytes!".to_string()),
+        ))
+        .expect("cipher");
+        assert!(other.open(&first).is_err());
+        assert!(cipher.open(&first[..20]).is_err());
+        let mut tampered = first.clone();
+        tampered[15] ^= 0x01;
+        assert!(cipher.open(&tampered).is_err());
+
+        assert_eq!(format!("{cipher:?}"), "SecretCipher(<redacted>)");
+    }
+
+    #[test]
+    fn sealing_keys_are_domain_separated_and_digests_match_sha256() {
+        let secret = SecretString::new("test-only server secret, 32+ bytes long".to_string());
+        let first = derive_sealing_key(LASTFM_SEALING_KEY_DOMAIN, &secret);
+        let second = derive_sealing_key("melodee-some-other-purpose/v1", &secret);
+        assert_ne!(first, second, "domain separation");
+
+        let digest = lastfm_session_key_digest(b"synthetic-lastfm-session-key");
+        assert_eq!(
+            digest.as_slice(),
+            Sha256::digest(b"synthetic-lastfm-session-key").as_slice()
+        );
     }
 }

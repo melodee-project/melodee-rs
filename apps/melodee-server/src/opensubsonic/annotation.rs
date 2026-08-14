@@ -350,11 +350,19 @@ pub async fn scrobble(
             )
             .await
             {
-                Ok(NativeScrobbleResult::Applied | NativeScrobbleResult::Adopted) => Ok(()),
+                Ok(NativeScrobbleResult::Applied) => {
+                    // WP-07: fire-and-record Last.fm dispatch; never blocks
+                    // or fails the write path, and an adopted idempotent
+                    // replay must not double-scrobble Last.fm.
+                    crate::lastfm::LastfmDispatch::new(state.pool.clone())
+                        .spawn_scrobble(user.user_id, track_public_id);
+                    Ok(())
+                }
+                Ok(NativeScrobbleResult::Adopted) => Ok(()),
                 Err(error) => Err(error),
             }
         } else {
-            NativeUserStateStore::record_now_playing(
+            let result = NativeUserStateStore::record_now_playing(
                 &state.pool,
                 user.user_id,
                 track_public_id,
@@ -362,7 +370,12 @@ pub async fn scrobble(
                 played_at,
                 now,
             )
-            .await
+            .await;
+            if result.is_ok() {
+                crate::lastfm::LastfmDispatch::new(state.pool.clone())
+                    .spawn_now_playing(user.user_id, track_public_id);
+            }
+            result
         };
         match result {
             Ok(()) => {}

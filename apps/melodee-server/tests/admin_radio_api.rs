@@ -140,6 +140,12 @@ fn token_for(public_api_id: Uuid, username: &str) -> String {
 
 fn app(pool: sqlx::PgPool) -> axum::Router {
     melodee_server::admin_radio::router().with_state(AdminAccessState {
+        notifications: std::sync::Arc::new(
+            melodee_server::notifications::NotificationService::noop(pool.clone()),
+        ),
+        scripting: std::sync::Arc::new(melodee_server::scripting::ScriptingService::new(
+            pool.clone(),
+        )),
         pool,
         auth: Arc::new(
             melodee_server::native::auth::NativeAuthService::new(JWT_KEY.to_string(), 90)

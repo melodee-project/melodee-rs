@@ -25,16 +25,33 @@ authors = ["Melodee Project contributors"]
 axum = { version = "=0.8.9", features = ["http1", "json", "multipart", "tokio"] }
 base64 = "=0.22.1"
 bcrypt = "=0.19.2"
+# ADR-0135: Boa is the scripting-hook ECMAScript runtime — pure Rust, no C
+# toolchain, capability-less sandbox (nothing host-provided is registered).
+# boa_engine 0.21.1 (2026-03-29), Unlicense OR MIT, boa-dev/boa. Default
+# features off: float16 (Float16Array) and xsum (precision summation) are not
+# needed by the hook contract; the serde_json JsValue bridge is unconditional
+# in 0.21.x. No intl/temporal: no ICU4X linkage for operator predicates.
+boa_engine = { version = "=0.21.1", default-features = false }
 blake3 = "=1.8.6"
 futures-util = "=0.3.33"
 getrandom = "=0.4.3"
 hmac = "=0.13.0"
 jsonwebtoken = { version = "=11.0.0", default-features = false, features = ["aws_lc_rs", "use_pem"] }
+# PRD-NOTIF-002: FOSS SMTP transport for notification delivery (WP-09).
+# lettre 0.11.23, MIT, lettre/lettre; no hosted service, no broker. rustls
+# TLS only (no native-tls/OpenSSL linkage) on the tokio1 executor; default
+# features off so no connection pool, sendmail, or file transport is linked.
+lettre = { version = "=0.11.23", default-features = false, features = ["smtp-transport", "builder", "tokio1-rustls-tls"] }
 # ADR-0130: OpenSubsonic token+salt authentication is defined by the protocol
 # as md5(secret + salt); the digest is a frozen wire contract, not a security
 # primitive. RustCrypto md-5, MIT/Apache-2.0.
 md-5 = "=0.10.6"
 reqwest = { version = "=0.13.4", default-features = false, features = ["json", "query", "rustls", "stream"] }
+# ADR-0134 §7 (amended 2026-08-14, WP-07): ChaCha20-Poly1305 AEAD sealing of
+# Last.fm session keys at rest. ring 0.17.14 is already in the dependency
+# tree via rustls (Apache-2.0 AND ISC); making it a direct dependency adds
+# no new transitive crates to the lockfile.
+ring = "=0.17.14"
 quick-xml = "=0.41.0"
 tempfile = "=3.20.0"
 clap = { version = "=4.6.4", features = ["derive", "env"] }

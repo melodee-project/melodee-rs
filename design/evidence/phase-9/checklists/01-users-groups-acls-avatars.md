@@ -5,7 +5,7 @@
 | Native auth flows (JWT/refresh/cookie/Google/reset/logout) | PRD-AUTH-001/002 | ✅ | `auth_phase7.rs`, `native_auth_api.rs`; Phase 7 report |
 | Roles/permissions and account states | PRD-AUTH-003, PRD-AUTH-006 | ✅ | `auth_phase7.rs`, `native_catalog_api.rs` |
 | Library ACL enforcement (fail-closed) | PRD-AUTH-004 | ✅ | `native_stream_acl.rs`, `native_catalog_api.rs` ACL cases |
-| Secret-safe handling | PRD-AUTH-005, PRD-AUTH-007 | 🔶 | AUTH-007 closes when WP-08 export/import adds secret warnings |
+| Secret-safe handling | PRD-AUTH-005, PRD-AUTH-007 | ✅ | AUTH-007 closed by WP-08: export redacts every secret to a fixed marker with a header warning; import names secrets only, never accepts the marker as a value (fail-closed), and records bounded audit evidence — `crates/melodee-persistence/src/settings.rs`, `apps/melodee-server/tests/admin_config_api.rs`, `crates/melodee-persistence/tests/settings.rs` |
 | Group CRUD + membership admin API | PRD-AUTH-003/004 | ✅ | `/api/admin/v1/groups…` (`admin_access.rs` over shared `group_admin.rs`); `admin_access_api.rs`, `user_admin_phase9.rs` (fail-closed delete, ACL effects) |
 | Admin user management beyond list | PRD-AUTH-003 | ✅ | `POST/PUT /api/admin/v1/users` (create with bcrypt, flags/roles, disable/enable with session revocation); `admin_access_api.rs`, `user_admin_phase9.rs` |
 | Avatar read (OS getAvatar) | PRD-API-OS-004 | ✅ | Phase 8 differential replay; WP-03 rewired read path to `native_user_avatars` (shape identical): `opensubsonic_media_api.rs::get_avatar_reads_phase9_avatar_store` |

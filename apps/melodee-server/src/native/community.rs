@@ -511,7 +511,35 @@ async fn complete_request(
     .execute(&state.pool)
     .await?;
     owner_mutation_result(&state, id, result.rows_affected()).await?;
+    // WP-09: notify the request creator that the request is fulfilled.
+    // Fire-and-record: a delivery failure never fails the completion
+    // (PRD-NOTIF-002).
+    let detail = sqlx::query_as::<_, (String, String)>(
+        "SELECT u.email, r.description FROM native_requests r \
+         JOIN native_users u ON u.id = r.created_by_user_id WHERE r.public_api_id = $1",
+    )
+    .bind(id)
+    .fetch_optional(&state.pool)
+    .await;
+    if let Ok(Some((email, description))) = detail {
+        state.notifications.dispatch(
+            "request.fulfilled",
+            email,
+            vec![("description".to_string(), description)],
+        );
+    }
     Ok(StatusCode::OK)
+}
+
+/// Email lookup for notification wiring; a missing row or lookup failure
+/// quietly skips the notification (delivery is fail-degraded, PRD-NOTIF-002).
+async fn user_email_by_id(pool: &sqlx::PgPool, user_id: Uuid) -> Option<String> {
+    sqlx::query_scalar::<_, String>("SELECT email FROM native_users WHERE id = $1")
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
 }
 
 async fn delete_request(
@@ -762,7 +790,7 @@ async fn create_share(
     let share_type = request.share_type;
     let resource_id = request.resource_id;
     let description = request.description;
-    retry_unique_share_token(new_share_unique_id, move |unique_id| {
+    let dto = retry_unique_share_token(new_share_unique_id, move |unique_id| {
         let state = state_for_insert.clone();
         let description = description.clone();
         async move {
@@ -791,8 +819,24 @@ async fn create_share(
             Ok(None)
         }
     })
-    .await
-    .map(Json)
+    .await?;
+    // WP-09: notify the share owner that a share was created.
+    // Fire-and-record: a delivery failure never fails share creation
+    // (PRD-NOTIF-002).
+    if let Some(email) = user_email_by_id(&state.pool, principal.user_id).await {
+        state.notifications.dispatch(
+            "share.created",
+            email,
+            vec![
+                ("shareUrl".to_string(), dto.share_url.clone()),
+                (
+                    "description".to_string(),
+                    dto.description.clone().unwrap_or_default(),
+                ),
+            ],
+        );
+    }
+    Ok(Json(dto))
 }
 
 async fn retry_unique_share_token<T, Generate, Insert, InsertFuture>(

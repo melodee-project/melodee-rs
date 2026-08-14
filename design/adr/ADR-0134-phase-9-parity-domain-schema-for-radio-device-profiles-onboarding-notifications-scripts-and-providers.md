@@ -2,6 +2,8 @@
 
 - **Date:** 2026-08-13
 - **Status:** Accepted
+- **Amendments:** §7 amended 2026-08-14 by WP-07 — see "Amendments" below; the Consequences
+  clause authorizes WP amendments when a WP discovers a genuinely different shape is required
 - **Decision owners:** Phase 9 work package
 - **Supersedes:** None
 - **Superseded by:** None
@@ -61,6 +63,27 @@ Existing stores being extended rather than duplicated:
    `lastfm_username`, `session_key_digest` — hash only, never the raw key, `linked_at`).
    Provider payloads are cache/evidence only; they never become catalog identity (PRD-ARTIST-012,
    PRD-EXT-002).
+
+   **Amended 2026-08-14 (WP-07):** `native_lastfm_links` additionally carries
+   `session_key_ciphertext` bytea. The original "hash only, never the raw key" wording is
+   unimplementable as written: Last.fm scrobble/now-playing requests are signed (`api_sig`)
+   with the **raw** per-user session key at runtime, so a digest-only schema can never
+   scrobble. The invariant is therefore refined, not weakened: **the raw session key is never
+   at rest in plaintext**. At rest the table holds (a) `session_key_digest` — SHA-256 of the
+   raw key, for lookup/audit surfaces — and (b) `session_key_ciphertext` — the raw key sealed
+   with ChaCha20-Poly1305 (FOSS AEAD; `ring` 0.17.14, already in the dependency tree via
+   rustls; no new transitive crates) under a server-held key derived by SHA-256 domain
+   separation from the `security.secretKey` layered setting (WP-08):
+   `SHA-256("melodee-lastfm-session-key/v1" || 0x00 || security.secretKey)`. Each seal uses a
+   fresh random 96-bit nonce prepended to the ciphertext. The raw key is never logged, never
+   traced, never serialized, and never exposed by any API; only the digest may appear in audit
+   surfaces. `lastfm_username` is nullable because the legacy exchange discards it (evidence:
+   `design/evidence/phase-9/lastfm-provider-evidence.md` §3). Operational note: because the
+   sealing key derives from `security.secretKey`, rotating that secret invalidates stored
+   links; affected users re-link — re-authentication is the only recovery flow legacy has
+   (legacy ADR-0004: no refresh flow). A missing `security.secretKey` fails Last.fm linking
+   closed (`400` exchange/save failure, matching the legacy DB-save-failure shape) and turns
+   scrobble dispatch into the legacy silent no-op.
 8. **Worker-pool control (WP-05):** new `worker_pool_state` (`pool` text PK, `paused` bool,
    `paused_by`, `paused_at`, `resume_requested_at`, `updated_at`) giving pause/resume a durable,
    auditable, multi-process-safe home (PRD-WORK-005). Workers check the row between claim
@@ -95,6 +118,16 @@ migration, not the consuming adapter.
 This matches the established pattern (ADR-0120 fixed the Phase 5 schema inventory up front, then
 migrations implemented it): one schema ADR per phase increment, concrete tables and invariants,
 per-WP migrations with integrity tests.
+
+## Amendments
+
+- **2026-08-14 (WP-07):** §7 `native_lastfm_links` gains `session_key_ciphertext` (sealed with
+  a server-held AEAD key; see the amended §7 text for the full rationale). This resolves the
+  documented tension between the original digest-only wording and the Last.fm `api_sig`
+  signing protocol, which requires the raw session key at runtime. The standing invariant is
+  "never the raw key in plaintext at rest"; the digest remains the only audit/lookup
+  representation. The WP-07 implementation also records the deliberate improvement over
+  legacy's plaintext `varchar(64)` `User.LastFmSessionKey` column (evidence doc §3 item 3).
 
 ## Consequences
 

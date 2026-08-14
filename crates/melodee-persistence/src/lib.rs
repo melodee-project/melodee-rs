@@ -19,9 +19,13 @@ mod error;
 mod group_admin;
 mod migrate;
 mod native_user_state;
+mod notifications;
 mod policy;
+mod providers;
 mod radio;
+mod scripts;
 mod search;
+mod settings;
 mod user_admin;
 mod work_items;
 mod worker;
@@ -63,13 +67,20 @@ pub use group_admin::{
     AccessGroupDetail, AccessGroupMember, GroupAdminError, GroupAdminStore, MAX_GROUP_NAME_LENGTH,
     StoredAccessGroup,
 };
-pub use migrate::{MIGRATOR, migrate};
+pub use migrate::{MIGRATOR, MigrationStatus, migrate, migration_status};
 pub use native_user_state::{
     MAX_NATIVE_PLAYLIST_ITEMS, MAX_NATIVE_PLAYLIST_PAGE_SIZE, NativeGenrePreference,
     NativePlaylist, NativePlaylistCreate, NativePlaylistItem, NativePlaylistUpdate,
     NativeScrobbleResult, NativeSmartPlaylist, NativeSmartPlaylistCreate,
     NativeSmartPlaylistUpdate, NativeUserState, NativeUserStateMutation, NativeUserStateStore,
     NativeUserStateStoreError,
+};
+pub use notifications::{
+    DeliveryStatus, MAX_BODY_BYTES, MAX_DELIVERY_ERROR_CHARS, MAX_DELIVERY_LIST, MAX_LOCALE_CHARS,
+    MAX_RECIPIENT_CHARS, MAX_SUBJECT_CHARS, MAX_TEMPLATE_KEY_CHARS, MAX_TEMPLATE_LIST,
+    NewNotificationDelivery, NotificationDelivery, NotificationDeliveryStore,
+    NotificationStoreError, NotificationTemplate, NotificationTemplateStore,
+    NotificationTemplateUpsert, is_valid_locale,
 };
 pub use policy::{
     CatalogTrackFact, MAX_POLICY_CLASSIFICATION_EVIDENCE, MAX_POLICY_TEST_CLASSIFICATION_FACTS,
@@ -80,9 +91,21 @@ pub use policy::{
     PolicyDestructiveCompletion, PolicyEvaluationCommit, PolicyReleaseCatalogTraitAssertion,
     PolicyStore, PolicyStoreError, StoredPolicyDecision, StoredReleaseClassification,
 };
+pub use providers::{
+    KNOWN_PROVIDERS, LastfmLinkRecord, LastfmLinkStore, MAX_LASTFM_USERNAME_CHARS,
+    MAX_PROVIDER_CHARS, MAX_PROVIDER_PAYLOAD_BYTES, MAX_REQUEST_KEY_CHARS,
+    MAX_SESSION_KEY_CIPHERTEXT_BYTES, MIN_SESSION_KEY_CIPHERTEXT_BYTES, ProviderCacheEntry,
+    ProviderCacheStore, ProviderStoreError, SESSION_KEY_DIGEST_BYTES, is_known_provider,
+};
 pub use radio::{
     MAX_RADIO_NAME_CHARS, MAX_RADIO_URL_CHARS, NewRadioStation, RadioStation, RadioStationStore,
     RadioStationUpdate, RadioStoreError,
+};
+pub use scripts::{
+    MAX_MEMORY_BYTES, MAX_RUN_ERROR_CHARS, MAX_RUN_LIST, MAX_SCRIPT_EVENT_CHARS, MAX_SCRIPT_LIST,
+    MAX_SCRIPT_NAME_CHARS, MAX_SCRIPT_SOURCE_BYTES, MAX_TIMEOUT_MS, MIN_MEMORY_BYTES, NewScriptRun,
+    RegisteredScript, ScriptRegistryStore, ScriptRun, ScriptRunOutcome, ScriptRunStore,
+    ScriptStoreError, ScriptUpsert,
 };
 pub use search::{
     MAX_SEARCH_OUTBOX_ATTEMPTS, MAX_SEARCH_OUTBOX_BATCH, MAX_SEARCH_SNAPSHOT_PAGE,
@@ -90,6 +113,15 @@ pub use search::{
     SearchEntityType, SearchOperation, SearchOutboxItem, SearchProjectionStatus,
     SearchProjectionStore, SearchReleaseRecord, SearchSnapshotReader, SearchStoreError,
     SearchTrackRecord, StoredSearchGeneration, StoredSearchRebuildJob,
+};
+pub use settings::{
+    CONFIG_EXPORT_FORMAT, CONFIG_EXPORT_WARNING, ConfigExportDocument, ConfigImportPlan,
+    ENV_CONFIG_FILE, KNOWN_SETTINGS, KnownSetting, MAX_IMPORT_AUDIT_ENTRIES,
+    MAX_IMPORT_DOCUMENT_BYTES, MAX_IMPORT_KEYS, MAX_SETTING_KEY_CHARS, MAX_SETTING_VALUE_BYTES,
+    MAX_SETTINGS_LIST, OnboardingState, OnboardingStore, SECRET_REDACTION_MARKER, ServerSetting,
+    SettingKind, SettingSource, SettingValueView, SettingsError, SettingsResolver, SettingsStore,
+    apply_config_import, env_var_name, export_config, is_secret_key, known_setting,
+    plan_config_import,
 };
 pub use user_admin::{
     MAX_AVATAR_BYTES, MAX_USER_IDENTITY_CHARS, MAX_USER_ROLES, NativeUserAdminUpdate,

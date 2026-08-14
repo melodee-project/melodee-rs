@@ -1231,6 +1231,27 @@ async fn password_reset_request(
         Ok(exists) => exists,
         Err(_) => return unavailable(),
     };
+    if exists {
+        // WP-09: notify the account email with the reset URL. Fire-and-record:
+        // the send runs off the request path and a delivery failure never
+        // fails the reset request (PRD-NOTIF-002). The clear token travels
+        // only in memory and in the message body — never in logs or the
+        // delivery audit.
+        let reset_url = format!(
+            "{}/reset-password?token={}",
+            state.public_origin.trim_end_matches('/'),
+            clear.expose_secret()
+        );
+        let email = request.email.trim().to_string();
+        state.notifications.dispatch(
+            "user.password_reset",
+            email.clone(),
+            vec![
+                ("resetUrl".to_string(), reset_url),
+                ("email".to_string(), email),
+            ],
+        );
+    }
     if state.auth.development_reset_tokens && exists {
         let token = clear.expose_secret().to_string();
         let url = format!(

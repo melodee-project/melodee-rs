@@ -76,6 +76,7 @@ async fn ready_release_gets_one_durable_manifest() {
         &scenario.pool,
         &WorkEngineConfig::default(),
         common::T0 + Duration::seconds(2),
+        None,
     )
     .await
     .expect("inspect");
@@ -109,6 +110,7 @@ async fn source_change_before_inspection_returns_to_settling_without_manifest() 
         &scenario.pool,
         &WorkEngineConfig::default(),
         common::T0 + Duration::seconds(2),
+        None,
     )
     .await
     .expect("inspect");
@@ -125,6 +127,103 @@ async fn source_change_before_inspection_returns_to_settling_without_manifest() 
             .expect("manifest lookup")
             .is_none()
     );
+
+    scenario.database.drop().await;
+}
+
+/// WP-11 stub gate: the scripting service implements this trait in the
+/// server; here a stub proves the pipeline wiring (deny → return to
+/// settling unprocessed, no manifest; allow → normal inspection).
+struct StubGate(melodee_ingestion::DirectoryGateOutcome);
+
+impl melodee_ingestion::DirectoryProcessingGate for StubGate {
+    fn evaluate<'a>(
+        &'a self,
+        candidate_root: &'a std::path::Path,
+        snapshot: &'a melodee_ingestion::CandidateSnapshot,
+    ) -> melodee_ingestion::DirectoryGateFuture<'a> {
+        let outcome = self.0.clone();
+        // The gate must see the verified pre-inspection snapshot.
+        assert!(!snapshot.files.is_empty());
+        assert!(candidate_root.is_dir());
+        Box::pin(async move { outcome })
+    }
+}
+
+#[tokio::test]
+async fn script_gate_deny_returns_candidate_to_settling_unprocessed() {
+    let scenario = Scenario::new("inspection-script-deny").await;
+    let item = scenario.settle("denied").await;
+    assert_eq!(IngestionState::Ready, item.state);
+
+    let gate = StubGate(melodee_ingestion::DirectoryGateOutcome::Skip {
+        reason: "denied by test script".to_owned(),
+    });
+    let stats = inspect_ready_once(
+        &scenario.config,
+        &WorkItemStore,
+        &scenario.pool,
+        &WorkEngineConfig::default(),
+        common::T0 + Duration::seconds(2),
+        Some(&gate),
+    )
+    .await
+    .expect("inspect");
+    assert_eq!(1, stats.script_skipped);
+    assert_eq!(0, stats.completed);
+
+    let item = WorkItemStore
+        .get(&scenario.pool, item.id)
+        .await
+        .expect("item");
+    assert_eq!(
+        IngestionState::Settling,
+        item.state,
+        "skip leaves the directory unprocessed this pass"
+    );
+    assert!(
+        WorkItemStore
+            .get_manifest(&scenario.pool, item.id)
+            .await
+            .expect("manifest lookup")
+            .is_none(),
+        "a skipped candidate is never inspected"
+    );
+
+    // A later pass re-settles and re-promotes the candidate (the settling
+    // quiet period is zero in this fixture), and an allowing gate then
+    // processes it — skip is not a terminal parking.
+    reconcile_all_sources(
+        &scenario.config,
+        &WorkItemStore,
+        &scenario.pool,
+        common::T0 + Duration::seconds(3),
+    )
+    .await
+    .expect("re-reconcile");
+    let item = WorkItemStore
+        .get(&scenario.pool, item.id)
+        .await
+        .expect("item");
+    assert_eq!(IngestionState::Ready, item.state);
+
+    let gate = StubGate(melodee_ingestion::DirectoryGateOutcome::Allow);
+    let stats = inspect_ready_once(
+        &scenario.config,
+        &WorkItemStore,
+        &scenario.pool,
+        &WorkEngineConfig::default(),
+        common::T0 + Duration::seconds(4),
+        Some(&gate),
+    )
+    .await
+    .expect("inspect");
+    assert_eq!(1, stats.completed);
+    let item = WorkItemStore
+        .get(&scenario.pool, item.id)
+        .await
+        .expect("item");
+    assert_eq!(IngestionState::Normalizing, item.state);
 
     scenario.database.drop().await;
 }
@@ -163,6 +262,7 @@ async fn source_change_during_inspection_discards_manifest() {
             &pool,
             &WorkEngineConfig::default(),
             common::T0 + Duration::seconds(2),
+            None,
         )
         .await
     });
@@ -224,6 +324,7 @@ async fn two_hundred_releases_reach_one_manifest_each() {
             &scenario.pool,
             &WorkEngineConfig::default(),
             common::T0 + Duration::seconds(2 + i64::try_from(completed).unwrap_or(0)),
+            None,
         )
         .await
         .expect("inspect batch");
@@ -252,6 +353,7 @@ async fn two_hundred_releases_reach_one_manifest_each() {
         &scenario.pool,
         &WorkEngineConfig::default(),
         common::T0 + Duration::seconds(999),
+        None,
     )
     .await
     .expect("no-change inspection");

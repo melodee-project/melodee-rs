@@ -91,6 +91,13 @@ owner process is currently alive.
   no new work, while already-claimed work finishes or is released under the normal lease contract —
   pausing never strands a lease. Pausing a pool name that has no wired worker yet registers the row
   so the pool is paused from its first check once it exists.
+- `melodee config list` prints every known setting's effective value and its source layer;
+  secrets are always redacted. `melodee config validate` runs the first-run preflight checks and
+  exits non-zero when a required check fails. `melodee config export [--output <path>]` writes the
+  redacted export document and `melodee config import <path> [--apply] [--allow-unknown]` previews
+  (default) or applies a validated import. See
+  [Configuration](../installation/configuration/#import-and-export) for the secret-handling
+  contract.
 
 See [Policies](./policies/) for disposition and safety behavior, and
 [Troubleshooting](../troubleshooting/) for operational checks.

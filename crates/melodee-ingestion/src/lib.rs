@@ -7,6 +7,7 @@
 
 mod config;
 mod error;
+mod gate;
 mod inspect;
 mod normalize;
 mod publication;
@@ -29,6 +30,7 @@ pub use config::{
 };
 
 pub use error::{IngestionError, Result};
+pub use gate::{DirectoryGateFuture, DirectoryGateOutcome, DirectoryProcessingGate};
 pub use inspect::{InspectionStats, inspect_ready_once, start_inspection_loop};
 pub use normalize::{NormalizationStats, normalize_once, start_normalization_loop};
 #[cfg(feature = "test-support")]

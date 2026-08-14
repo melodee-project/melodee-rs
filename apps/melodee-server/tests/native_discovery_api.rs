@@ -258,6 +258,9 @@ async fn native_discovery_routes_use_durable_bounded_facts_and_preserve_wire_sha
 
     let state = NativeState {
         pool: db.pool.clone(),
+        notifications: std::sync::Arc::new(
+            melodee_server::notifications::NotificationService::noop(db.pool.clone()),
+        ),
         search: None,
         public_origin: "http://melodee.test".to_owned(),
         podcast_config: Arc::new(melodee_server::podcast_worker::PodcastConfig::default()),

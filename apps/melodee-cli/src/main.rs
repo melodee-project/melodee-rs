@@ -83,6 +83,118 @@ enum Commands {
         #[command(subcommand)]
         command: GroupCommands,
     },
+    /// Notification template administration and delivery test-send
+    /// (mirrors the admin API semantics; fail-degraded and audited).
+    Notifications {
+        #[command(subcommand)]
+        command: NotificationCommands,
+    },
+    /// Scripting hook administration: list registered scripts and evaluate
+    /// one against a ctx mock in the real sandbox (mirrors the admin API;
+    /// every test run is recorded in the script_runs audit).
+    Scripts {
+        #[command(subcommand)]
+        command: ScriptCommands,
+    },
+    /// Server settings: list effective layered values (secrets always
+    /// redacted), validate preflight, and export/import with preview
+    /// (PRD-CONFIG-001/002, PRD-SETUP-001).
+    Config {
+        #[command(subcommand)]
+        command: ConfigCommands,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum ConfigCommands {
+    /// List every known setting's effective value with its source layer.
+    /// Secret values are always redacted — there is no show-secrets flag.
+    List,
+    /// Run the onboarding preflight checks and validate the effective
+    /// configuration; exits non-zero when any required check fails.
+    Validate,
+    /// Export the database+defaults configuration layer as a JSON document
+    /// (secrets redacted to a fixed marker, with a header warning).
+    Export {
+        /// Write to this path instead of stdout.
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+    /// Import a configuration export document. Default is preview (diff
+    /// only); pass --apply to write. Unknown keys are rejected unless
+    /// --allow-unknown. The redaction marker is never accepted as a value.
+    Import {
+        /// Path to the export document.
+        path: PathBuf,
+        /// Apply the validated import (default: preview only).
+        #[arg(long, default_value_t = false)]
+        apply: bool,
+        /// Admit keys outside the 190-key registry as custom rows.
+        #[arg(long, default_value_t = false)]
+        allow_unknown: bool,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum NotificationCommands {
+    /// Notification template operations.
+    Templates {
+        #[command(subcommand)]
+        command: NotificationTemplateCommands,
+    },
+    /// Render a template and attempt a real delivery through the configured
+    /// transport, printing the honestly recorded audit row (sent / failed /
+    /// skipped) — including when email delivery is disabled.
+    TestSend {
+        /// Template key (e.g. user.password_reset).
+        #[arg(long, value_parser = parse_nonblank)]
+        template: String,
+        /// Recipient email address.
+        #[arg(long, value_parser = parse_nonblank)]
+        to: String,
+        /// Locale tag (defaults to en; missing locales fall back to en).
+        #[arg(long)]
+        locale: Option<String>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum NotificationTemplateCommands {
+    /// List stored notification templates (bounded), key then locale.
+    List {
+        /// Maximum rows to print (bounded).
+        #[arg(long, default_value_t = 50)]
+        limit: u32,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum ScriptCommands {
+    /// List registered scripts (bounded), event then name.
+    List {
+        /// Maximum rows to print (bounded).
+        #[arg(long, default_value_t = 50)]
+        limit: u32,
+    },
+    /// Evaluate a script against a ctx mock (JSON file) in the real sandbox
+    /// and print the honestly recorded outcome. Without --source, every
+    /// enabled script for the event runs in registry order with production
+    /// short-circuit; test-runs never trip the circuit breaker.
+    Test {
+        /// Hook event name (e.g. directoryProcessingStart).
+        #[arg(long, value_parser = parse_nonblank)]
+        event: String,
+        /// Path to the ctx mock JSON file.
+        #[arg(long)]
+        ctx: PathBuf,
+        /// Ad-hoc script source file; omit to evaluate the stored scripts.
+        #[arg(long)]
+        source: Option<PathBuf>,
+        /// Wall-clock budget override in milliseconds (bounded by the
+        /// registry ceiling of 10000; ad-hoc default 250).
+        #[arg(long)]
+        timeout_ms: Option<i32>,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -736,6 +848,7 @@ async fn main() {
                         &pool,
                         &work_config,
                         OffsetDateTime::now_utc(),
+                        None,
                     )
                     .await
                     {
@@ -1493,7 +1606,411 @@ async fn main() {
         Commands::WorkerPools { command } => run_worker_pool_command(&command).await,
         Commands::Users { command } => run_user_command(&command).await,
         Commands::Groups { command } => run_group_command(&command).await,
+        Commands::Notifications { command } => run_notification_command(&command).await,
+        Commands::Scripts { command } => run_script_command(&command).await,
+        Commands::Config { command } => run_config_command(&command).await,
     }
+}
+
+/// Configuration commands share the server's stores and onboarding
+/// preflight (PRD-CLI-002: never bypass safety), mirroring the admin API
+/// semantics DB-direct (the CLI authenticates as the database role, not via
+/// HTTP). Secret values are never printed: listings and exports use the
+/// fixed redaction marker, and import plans name secret keys only.
+async fn run_config_command(command: &ConfigCommands) {
+    let pool = pool().await;
+    match command {
+        ConfigCommands::List => {
+            let resolver =
+                melodee_persistence::SettingsResolver::from_env(&pool).unwrap_or_else(|error| {
+                    eprintln!("error: {error}");
+                    std::process::exit(2);
+                });
+            match resolver.resolve_all().await {
+                Ok(settings) => {
+                    for setting in &settings {
+                        let value = match &setting.value {
+                            None => "-".to_string(),
+                            Some(_) => setting.to_redacted_json().to_string(),
+                        };
+                        println!(
+                            "{:<52} {:<12} {}",
+                            setting.key,
+                            setting.source.as_str(),
+                            value
+                        );
+                    }
+                    println!("-- {} setting(s)", settings.len());
+                }
+                Err(error) => {
+                    eprintln!("error: {error}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        ConfigCommands::Validate => {
+            let report = melodee_server::onboarding::evaluate_onboarding(&pool).await;
+            for check in &report.checks {
+                println!(
+                    "{:<14} {:<8} {}{}",
+                    check.name,
+                    if check.passed { "pass" } else { "FAIL" },
+                    check.detail,
+                    check
+                        .remediation
+                        .as_ref()
+                        .map(|hint| format!(" — {hint}"))
+                        .unwrap_or_default(),
+                );
+            }
+            println!(
+                "onboarding: completed={} bypassed={} can_complete={}",
+                report.completed, report.bypassed, report.can_complete
+            );
+            if !report.can_complete {
+                eprintln!("error: required preflight checks are failing");
+                std::process::exit(1);
+            }
+        }
+        ConfigCommands::Export { output } => {
+            let document =
+                match melodee_persistence::export_config(&pool, OffsetDateTime::now_utc()).await {
+                    Ok(document) => document,
+                    Err(error) => {
+                        eprintln!("error: {error}");
+                        std::process::exit(1);
+                    }
+                };
+            let rendered = serde_json::to_string_pretty(&document).unwrap_or_else(|error| {
+                eprintln!("error: cannot serialize export document: {error}");
+                std::process::exit(1);
+            });
+            eprintln!("warning: {}", melodee_persistence::CONFIG_EXPORT_WARNING);
+            match output {
+                Some(path) => {
+                    if let Err(error) = std::fs::write(path, format!("{rendered}\n")) {
+                        eprintln!("error: cannot write {}: {error}", path.display());
+                        std::process::exit(1);
+                    }
+                    println!(
+                        "exported {} setting(s) to {}",
+                        document.settings.len(),
+                        path.display()
+                    );
+                }
+                None => println!("{rendered}"),
+            }
+        }
+        ConfigCommands::Import {
+            path,
+            apply,
+            allow_unknown,
+        } => {
+            let raw = std::fs::read(path).unwrap_or_else(|error| {
+                eprintln!("error: cannot read {}: {error}", path.display());
+                std::process::exit(2);
+            });
+            if raw.len() > melodee_persistence::MAX_IMPORT_DOCUMENT_BYTES {
+                eprintln!(
+                    "error: {} exceeds {} bytes",
+                    path.display(),
+                    melodee_persistence::MAX_IMPORT_DOCUMENT_BYTES
+                );
+                std::process::exit(2);
+            }
+            let document: serde_json::Value = serde_json::from_slice(&raw).unwrap_or_else(|_| {
+                eprintln!("error: {} is not valid JSON", path.display());
+                std::process::exit(2);
+            });
+            let store = melodee_persistence::SettingsStore::new();
+            let stored = store.list_raw(&pool).await.unwrap_or_else(|error| {
+                eprintln!("error: {error}");
+                std::process::exit(1);
+            });
+            let plan = melodee_persistence::plan_config_import(&document, &stored).unwrap_or_else(
+                |error| {
+                    eprintln!("error: {error}");
+                    std::process::exit(2);
+                },
+            );
+            let print_plan = |plan: &melodee_persistence::ConfigImportPlan| {
+                println!("added:             {:?}", plan.added);
+                println!("changed:           {:?}", plan.changed);
+                println!("unchanged:         {}", plan.unchanged.len());
+                println!("secrets_reentered: {:?}", plan.secrets_reentered);
+                println!("secrets_skipped:   {:?}", plan.secrets_skipped);
+                println!("unknown:           {:?}", plan.unknown);
+                for warning in &plan.warnings {
+                    println!("warning: {warning}");
+                }
+            };
+            if !apply {
+                print_plan(&plan);
+                println!("preview only; pass --apply to write these settings");
+                return;
+            }
+            match melodee_persistence::apply_config_import(
+                &pool,
+                &document,
+                &plan,
+                *allow_unknown,
+                "melodee-cli",
+                OffsetDateTime::now_utc(),
+            )
+            .await
+            {
+                Ok(()) => {
+                    print_plan(&plan);
+                    println!("import applied (audit recorded in onboarding evidence)");
+                }
+                Err(error) => {
+                    eprintln!("error: {error}");
+                    std::process::exit(1);
+                }
+            }
+        }
+    }
+}
+
+/// Notification commands go through the same stores and delivery service as
+/// the server (PRD-CLI-002: never bypass safety), mirroring the admin API
+/// semantics. Email settings resolve through the WP-08 layered sources
+/// (env/config-file over `server_settings` over defaults); a disabled
+/// transport records an honest `skipped` delivery instead of failing the
+/// command (PRD-NOTIF-002/003).
+async fn run_notification_command(command: &NotificationCommands) {
+    let pool = pool().await;
+    match command {
+        NotificationCommands::Templates {
+            command: NotificationTemplateCommands::List { limit },
+        } => {
+            match melodee_persistence::NotificationTemplateStore::new()
+                .list(&pool, *limit, 0)
+                .await
+            {
+                Ok(templates) => {
+                    for template in &templates {
+                        println!(
+                            "{:<24} {:<8} v{} subject={:?} updated={}",
+                            template.template_key,
+                            template.locale,
+                            template.version,
+                            template.subject.as_deref().unwrap_or("-"),
+                            template.updated_at,
+                        );
+                    }
+                    println!("-- {} template(s)", templates.len());
+                }
+                Err(error) => {
+                    eprintln!("error: {error}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        NotificationCommands::TestSend {
+            template,
+            to,
+            locale,
+        } => {
+            let settings_resolver = melodee_persistence::SettingsResolver::from_env(&pool)
+                .unwrap_or_else(|error| {
+                    eprintln!("error: invalid settings configuration: {error}");
+                    std::process::exit(2);
+                });
+            let settings =
+                melodee_server::notifications::EmailSettings::from_resolved(&settings_resolver)
+                    .await
+                    .unwrap_or_else(|error| {
+                        eprintln!("error: invalid email configuration: {error}");
+                        std::process::exit(2);
+                    });
+            let service =
+                melodee_server::notifications::NotificationService::new(pool.clone(), &settings)
+                    .unwrap_or_else(|error| {
+                        eprintln!("error: invalid email configuration: {error}");
+                        std::process::exit(2);
+                    });
+            match service
+                .send_templated(template, locale.as_deref().unwrap_or("en"), to.trim(), &[])
+                .await
+            {
+                Ok(delivery) => {
+                    println!("delivery_id: {}", delivery.id);
+                    println!("template:    {}", delivery.template_key);
+                    println!("recipient:   {}", delivery.recipient);
+                    println!("status:      {}", delivery.status);
+                    println!("error:       {}", delivery.error.as_deref().unwrap_or("-"));
+                    println!("created_at:  {}", delivery.created_at);
+                }
+                Err(error) => {
+                    eprintln!("error: {error}");
+                    std::process::exit(1);
+                }
+            }
+        }
+    }
+}
+
+/// WP-11 scripting hook operations (PRD-SCRIPT-001/004, ADR-0135): DB-direct
+/// over the same stores and sandboxed executor as the admin API. Outcomes —
+/// including error/timeout fail-degraded results — are data, never command
+/// failures (exit 1 is reserved for store failures, exit 2 for usage).
+async fn run_script_command(command: &ScriptCommands) {
+    let pool = pool().await;
+    match command {
+        ScriptCommands::List { limit } => {
+            match melodee_persistence::ScriptRegistryStore::new()
+                .list(&pool, *limit, 0)
+                .await
+            {
+                Ok(scripts) => {
+                    for script in &scripts {
+                        let wired = if melodee_server::scripting::WIRED_EVENTS
+                            .contains(&script.event.as_str())
+                        {
+                            "wired"
+                        } else {
+                            "inert"
+                        };
+                        println!(
+                            "{:<28} {:<28} v{} enabled={} timeout={}ms {}",
+                            script.event,
+                            script.name,
+                            script.version,
+                            script.enabled,
+                            script.timeout_ms,
+                            wired,
+                        );
+                    }
+                    println!("-- {} script(s)", scripts.len());
+                }
+                Err(error) => {
+                    eprintln!("error: {error}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        ScriptCommands::Test {
+            event,
+            ctx,
+            source,
+            timeout_ms,
+        } => {
+            let ctx = read_json_file(ctx);
+            let service = melodee_server::scripting::ScriptingService::new(pool.clone());
+            match source {
+                Some(source_path) => {
+                    let source = read_source_file(source_path);
+                    let timeout =
+                        timeout_ms.unwrap_or(melodee_server::scripting::DEFAULT_TIMEOUT_MS);
+                    match service.test_run(event, None, &source, timeout, &ctx).await {
+                        Ok((evaluation, run)) => {
+                            println!(
+                                "outcome:     {} (ad-hoc source)",
+                                evaluation.outcome.as_str()
+                            );
+                            println!(
+                                "message:     {}",
+                                evaluation.message.as_deref().unwrap_or("-")
+                            );
+                            println!(
+                                "error:       {}",
+                                evaluation.error.as_deref().unwrap_or("-")
+                            );
+                            println!("duration_ms: {}", evaluation.duration_ms);
+                            println!("run_id:      {}", run.id);
+                        }
+                        Err(error) => {
+                            eprintln!("error: {error}");
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                None => {
+                    let scripts = melodee_persistence::ScriptRegistryStore::new()
+                        .list_enabled_for_event(&pool, event)
+                        .await
+                        .unwrap_or_else(|error| {
+                            eprintln!("error: {error}");
+                            std::process::exit(1);
+                        });
+                    if scripts.is_empty() {
+                        println!("no enabled scripts for event {event}; verdict: allow (default)");
+                        return;
+                    }
+                    let mut verdict = "allow";
+                    for script in &scripts {
+                        let timeout = timeout_ms.unwrap_or(script.timeout_ms);
+                        let result = service
+                            .test_run(event, Some(script.id), &script.source, timeout, &ctx)
+                            .await;
+                        match result {
+                            Ok((evaluation, run)) => {
+                                println!(
+                                    "script:      {} v{} ({})",
+                                    script.name, script.version, script.id
+                                );
+                                println!(
+                                    "outcome:     {} message={} error={} duration_ms={}",
+                                    evaluation.outcome.as_str(),
+                                    evaluation.message.as_deref().unwrap_or("-"),
+                                    evaluation.error.as_deref().unwrap_or("-"),
+                                    evaluation.duration_ms,
+                                );
+                                println!("run_id:      {}", run.id);
+                                if evaluation.outcome == melodee_persistence::ScriptRunOutcome::Deny
+                                {
+                                    verdict = "deny";
+                                    break;
+                                }
+                            }
+                            Err(error) => {
+                                eprintln!("error: {error}");
+                                std::process::exit(1);
+                            }
+                        }
+                    }
+                    println!(
+                        "verdict: {verdict} (effective onDeny: {})",
+                        melodee_server::scripting::EFFECTIVE_ON_DENY
+                    );
+                }
+            }
+        }
+    }
+}
+
+fn read_json_file(path: &std::path::Path) -> serde_json::Value {
+    let bytes = std::fs::read(path).unwrap_or_else(|error| {
+        eprintln!("error: cannot read {}: {error}", path.display());
+        std::process::exit(2);
+    });
+    if bytes.len() > melodee_server::scripting::MAX_CTX_BYTES {
+        eprintln!(
+            "error: ctx file exceeds {} bytes",
+            melodee_server::scripting::MAX_CTX_BYTES
+        );
+        std::process::exit(2);
+    }
+    serde_json::from_slice(&bytes).unwrap_or_else(|error| {
+        eprintln!("error: {} is not valid JSON: {error}", path.display());
+        std::process::exit(2);
+    })
+}
+
+fn read_source_file(path: &std::path::Path) -> String {
+    let source = std::fs::read_to_string(path).unwrap_or_else(|error| {
+        eprintln!("error: cannot read {}: {error}", path.display());
+        std::process::exit(2);
+    });
+    if source.len() > melodee_persistence::MAX_SCRIPT_SOURCE_BYTES {
+        eprintln!(
+            "error: source file exceeds {} bytes",
+            melodee_persistence::MAX_SCRIPT_SOURCE_BYTES
+        );
+        std::process::exit(2);
+    }
+    source
 }
 
 /// Environment variable carrying the bootstrap-admin password. It is never

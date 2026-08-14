@@ -106,7 +106,12 @@ async fn playback_start(
     )
     .await
     {
-        Ok(_) => {}
+        Ok(_) => {
+            // WP-07: fire-and-record Last.fm dispatch; never blocks or fails
+            // the write path (legacy ADR-0004 silent no-op when unlinked).
+            crate::lastfm::LastfmDispatch::new(state.pool.clone())
+                .spawn_now_playing(principal.user_id, track_public_id);
+        }
         Err(melodee_persistence::NativeUserStateStoreError::NotFound) => {}
         Err(error) => {
             tracing::warn!(%error, "jellyfin playback start failed");
@@ -138,7 +143,7 @@ async fn playback_progress(
     let client_event = request
         .play_session_id
         .unwrap_or_else(|| "Jellyfin".to_string());
-    let _ = NativeUserStateStore::record_now_playing(
+    let now_playing = NativeUserStateStore::record_now_playing(
         &state.pool,
         principal.user_id,
         track_public_id,
@@ -147,6 +152,10 @@ async fn playback_progress(
         now,
     )
     .await;
+    if now_playing.is_ok() {
+        crate::lastfm::LastfmDispatch::new(state.pool.clone())
+            .spawn_now_playing(principal.user_id, track_public_id);
+    }
     StatusCode::NO_CONTENT.into_response()
 }
 
@@ -176,7 +185,7 @@ async fn playback_stopped(
     let client_event = request
         .play_session_id
         .unwrap_or_else(|| "Jellyfin".to_string());
-    let _ = NativeUserStateStore::record_scrobble(
+    let scrobble = NativeUserStateStore::record_scrobble(
         &state.pool,
         principal.user_id,
         track_public_id,
@@ -186,6 +195,15 @@ async fn playback_stopped(
         None,
     )
     .await;
+    // WP-07: dispatch to Last.fm only for a freshly applied play — an
+    // adopted idempotent replay must not double-scrobble.
+    if matches!(
+        scrobble,
+        Ok(melodee_persistence::NativeScrobbleResult::Applied)
+    ) {
+        crate::lastfm::LastfmDispatch::new(state.pool.clone())
+            .spawn_scrobble(principal.user_id, track_public_id);
+    }
     StatusCode::NO_CONTENT.into_response()
 }
 
