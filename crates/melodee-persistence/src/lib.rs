@@ -13,12 +13,14 @@ mod catalog_identity;
 mod catalog_mutations;
 mod community;
 mod config;
+mod device_profiles;
 mod discovery;
 mod error;
 mod group_admin;
 mod migrate;
 mod native_user_state;
 mod policy;
+mod radio;
 mod search;
 mod user_admin;
 mod work_items;
@@ -47,6 +49,11 @@ pub use config::{
     ENV_CLAIM_BATCH_SIZE, ENV_DATABASE_URL, ENV_LEASE_SECONDS, ENV_MAX_ATTEMPTS,
     ENV_RETRY_BASE_SECONDS, ENV_RETRY_MAX_SECONDS, WorkConfigError, WorkEngineConfig,
 };
+pub use device_profiles::{
+    DeviceProfile, DeviceProfileStore, DeviceProfileStoreError, DeviceProfileUpdate,
+    MAX_CLIENT_MATCH_VALUE_CHARS, MAX_DEVICE_PROFILE_LIST, MAX_PROFILE_JSON_BYTES,
+    MAX_PROFILE_NAME_CHARS, NewDeviceProfile,
+};
 pub use discovery::{
     MAX_CHART_CSV_BYTES, MAX_CHART_ITEMS, NativeChartImport, NativeChartImportResult,
     NativeDiscoveryMaintenanceStats, NativeDiscoveryStore, NativeDiscoveryStoreError,
@@ -72,6 +79,10 @@ pub use policy::{
     PolicyCatalogContext, PolicyClaim, PolicyCommitResult, PolicyDecisionAuditEntry,
     PolicyDestructiveCompletion, PolicyEvaluationCommit, PolicyReleaseCatalogTraitAssertion,
     PolicyStore, PolicyStoreError, StoredPolicyDecision, StoredReleaseClassification,
+};
+pub use radio::{
+    MAX_RADIO_NAME_CHARS, MAX_RADIO_URL_CHARS, NewRadioStation, RadioStation, RadioStationStore,
+    RadioStationUpdate, RadioStoreError,
 };
 pub use search::{
     MAX_SEARCH_OUTBOX_ATTEMPTS, MAX_SEARCH_OUTBOX_BATCH, MAX_SEARCH_SNAPSHOT_PAGE,

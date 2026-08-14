@@ -4,6 +4,8 @@
 
 pub mod admin;
 pub mod admin_access;
+pub mod admin_device_profiles;
+pub mod admin_radio;
 pub mod discovery_worker;
 pub mod jellyfin;
 pub mod native;

@@ -6,7 +6,7 @@ by an accepted ADR. Status legend: ✅ done · 🔶 partial · ⬜ pending · �
 
 | # | Checklist | Work package |
 |---|---|---|
-| 01 | [Users, groups, ACLs, profiles, avatars](01-users-groups-acls-avatars.md) | WP-03 |
+| 01 | [Users, groups, ACLs, profiles, avatars](01-users-groups-acls-avatars.md) | WP-03, WP-10 (device profiles section) |
 | 02 | [Playlists, smart playlists, shares](02-playlists-shares.md) | WP-01 |
 | 03 | [Requests, comments, activity](03-requests-comments-activity.md) | WP-01 |
 | 04 | [Podcasts, resume, history](04-podcasts-resume-history.md) | WP-02 |

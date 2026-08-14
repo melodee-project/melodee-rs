@@ -407,6 +407,36 @@
       "apps/melodee-server/tests/native_discovery_api.rs"
     ]
   },
+  "PRD-DEVICE-001": {
+    "status": "tested",
+    "implementation": [
+      "crates/melodee-persistence/migrations/0026_phase9_device_profiles.sql (device_profiles table, bounded name, jsonb object/size CHECKs, partial unique index for at-most-one default; ADR-0134 section 5)",
+      "crates/melodee-persistence/src/device_profiles.rs (bounded CRUD, legacy-parity validation rules, transactional default management)",
+      "apps/melodee-server/src/admin_device_profiles.rs (admin-gated /api/admin/v1/device-profiles CRUD + set-default)"
+    ],
+    "tests": [
+      "crates/melodee-persistence/tests/device_profiles.rs (migration constraints, CRUD round trip, single-default invariant incl. raw-SQL backstop, legacy parity validation)",
+      "apps/melodee-server/tests/admin_device_profiles_api.rs (lifecycle, single-default over the API, validation, admin gating)"
+    ],
+    "note": "Legacy preview behavior (CRUD, one default clearing the previous, direct-play/codec consistency, 255-char names) preserved per design/evidence/phase-9/device-profiles-legacy-inventory.md. Legacy per-user/per-player ownership is superseded by the server-wide ADR-0134 section 5 shape; legacy never exposed the feature on a captured API surface."
+  },
+  "PRD-DEVICE-002": {
+    "status": "implemented",
+    "implementation": [
+      "apps/melodee-server/src/admin_device_profiles.rs (module/DTO docs state profiles are metadata only and stream selection is unwired)",
+      "crates/melodee-persistence/src/device_profiles.rs (store has no stream-negotiation consumer)",
+      "docs/src/content/docs/api/admin-api.md (device profile section documents the non-claim)"
+    ],
+    "tests": [
+      "crates/melodee-persistence/tests/device_profiles.rs",
+      "apps/melodee-server/tests/admin_device_profiles_api.rs"
+    ],
+    "note": "No code path consumes device_profiles for stream negotiation; legacy GetEffectiveProfileAsync had zero call sites in the frozen tree, so parity is the metadata-only surface plus an explicit non-claim."
+  },
+  "PRD-DEVICE-003": {
+    "status": "deferred",
+    "note": "Profile-driven stream selection is post-parity by design (PRD section 35). ADR-0134 section 5 fixes device_profiles as metadata only; wiring profiles into stream negotiation changes client-visible behavior and requires its own ADR and API contract before implementation."
+  },
   "PRD-PARTY-001": {
     "status": "in-progress",
     "implementation": [
@@ -979,7 +1009,7 @@
     "status": "tested",
     "implementation": [
       "crates/melodee-persistence/src/work_items.rs (operator transitions: quarantine/reprocess/retry; release_lease; append-only events)",
-      "crates/melodee-persistence/migrations/0023_phase9_worker_pool_state.sql and crates/melodee-persistence/src/worker_pool.rs (durable, audited, multi-process-safe pool pause/resume, ADR-0134 §8)",
+      "crates/melodee-persistence/migrations/0023_phase9_worker_pool_state.sql and crates/melodee-persistence/src/worker_pool.rs (durable, audited, multi-process-safe pool pause/resume, ADR-0134 \u00a78)",
       "apps/melodee-server/src/podcast_worker.rs, policy_worker.rs, and discovery_worker.rs (pool rows checked between claim batches; in-flight claims finish or are released per the lease contract)",
       "apps/melodee-cli/src/main.rs (worker-pools list/pause/resume operating on the same durable rows)"
     ],
@@ -1993,17 +2023,17 @@
     ],
     "note": "Native-v1 lifecycle, comments, activity/unread state, and frozen-oracle AddRelease/AddTrack catalog matching are implemented. Auto-completion writes public-ID targets and one system activity comment in the authoritative catalog transaction, so retries cannot duplicate completion."
   },
-    "PRD-REQUEST-002": {
-      "status": "tested",
-      "implementation": [
-        "apps/melodee-server/src/native/community.rs (native Melodee API v1 request surface)",
-        "design/evidence/phase-9/request-002-surface-inventory.md (frozen build exposes requests only on native v1)"
-      ],
-      "tests": [
-        "apps/melodee-server/tests/native_community_api.rs::native_community_routes_are_owner_fenced_bounded_and_replay_safe"
-      ],
-      "note": "The frozen legacy build exposes requests only on the native v1 surface (11 routes; zero request routes in the 81-endpoint OpenSubsonic or 60-route Jellyfin inventories), so 'both parity APIs/UI surfaces where currently exposed' is satisfied by the Phase 7 native implementation. The Phase 10 admin UI will add its own request surface."
-    },
+  "PRD-REQUEST-002": {
+    "status": "tested",
+    "implementation": [
+      "apps/melodee-server/src/native/community.rs (native Melodee API v1 request surface)",
+      "design/evidence/phase-9/request-002-surface-inventory.md (frozen build exposes requests only on native v1)"
+    ],
+    "tests": [
+      "apps/melodee-server/tests/native_community_api.rs::native_community_routes_are_owner_fenced_bounded_and_replay_safe"
+    ],
+    "note": "The frozen legacy build exposes requests only on the native v1 surface (11 routes; zero request routes in the 81-endpoint OpenSubsonic or 60-route Jellyfin inventories), so 'both parity APIs/UI surfaces where currently exposed' is satisfied by the Phase 7 native implementation. The Phase 10 admin UI will add its own request surface."
+  },
   "PRD-SHARE-001": {
     "status": "tested",
     "implementation": [
@@ -2074,5 +2104,29 @@
       "design/agents/PHASE-8-OPENSUBSONIC-ROUTE-MATRIX.json (podcast endpoint dispositions)"
     ],
     "note": "Native Melodee API (Phase 7) and OpenSubsonic (Phase 8) podcast compatibility are both implemented and differentially tested."
+  },
+  "PRD-RADIO-001": {
+    "status": "tested",
+    "implementation": [
+      "apps/melodee-server/src/opensubsonic/radio.rs (captured OS CRUD, Phase 8)",
+      "crates/melodee-persistence/src/radio.rs (RadioStationStore over opensubsonic_radio_stations, ADR-0134 \u00a71)",
+      "apps/melodee-server/src/admin_radio.rs (Admin API list/read for any authenticated user, bounded/paginated)"
+    ],
+    "tests": [
+      "apps/melodee-server/tests/opensubsonic_conditional_api.rs (captured OS shapes)",
+      "apps/melodee-server/tests/admin_radio_api.rs (lifecycle, cross-surface visibility)",
+      "crates/melodee-persistence/tests/radio_store.rs (round-trip, ordering, bounds)"
+    ]
+  },
+  "PRD-RADIO-002": {
+    "status": "tested",
+    "implementation": [
+      "crates/melodee-persistence/src/radio.rs (ids issued once as v7 UUIDs, never regenerated)",
+      "apps/melodee-server/src/admin_radio.rs (mutations admin-gated: is_admin or Administrator role, matching the captured OS gate)"
+    ],
+    "tests": [
+      "crates/melodee-persistence/tests/radio_store.rs::public_identity_is_immutable_at_the_database (migration 0020 immutability trigger)",
+      "apps/melodee-server/tests/admin_radio_api.rs::mutations_are_admin_gated_listing_is_authenticated (401/403, role-admin acceptance)"
+    ]
   }
 }

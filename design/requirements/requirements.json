@@ -2299,9 +2299,17 @@
     "phase": "8,9",
     "source": "PRD.md",
     "line": 1555,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "apps/melodee-server/src/opensubsonic/radio.rs (captured OS CRUD, Phase 8)",
+      "crates/melodee-persistence/src/radio.rs (RadioStationStore over opensubsonic_radio_stations, ADR-0134 §1)",
+      "apps/melodee-server/src/admin_radio.rs (Admin API list/read for any authenticated user, bounded/paginated)"
+    ],
+    "tests": [
+      "apps/melodee-server/tests/opensubsonic_conditional_api.rs (captured OS shapes)",
+      "apps/melodee-server/tests/admin_radio_api.rs (lifecycle, cross-surface visibility)",
+      "crates/melodee-persistence/tests/radio_store.rs (round-trip, ordering, bounds)"
+    ]
   },
   {
     "id": "PRD-RADIO-002",
@@ -2309,9 +2317,15 @@
     "phase": "8,9",
     "source": "PRD.md",
     "line": 1559,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "crates/melodee-persistence/src/radio.rs (ids issued once as v7 UUIDs, never regenerated)",
+      "apps/melodee-server/src/admin_radio.rs (mutations admin-gated: is_admin or Administrator role, matching the captured OS gate)"
+    ],
+    "tests": [
+      "crates/melodee-persistence/tests/radio_store.rs::public_identity_is_immutable_at_the_database (migration 0020 immutability trigger)",
+      "apps/melodee-server/tests/admin_radio_api.rs::mutations_are_admin_gated_listing_is_authenticated (401/403, role-admin acceptance)"
+    ]
   },
   {
     "id": "PRD-POD-001",
@@ -2473,9 +2487,16 @@
     "phase": "9",
     "source": "PRD.md",
     "line": 1635,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "crates/melodee-persistence/migrations/0026_phase9_device_profiles.sql (device_profiles table, bounded name, jsonb object/size CHECKs, partial unique index for at-most-one default; ADR-0134 section 5)",
+      "crates/melodee-persistence/src/device_profiles.rs (bounded CRUD, legacy-parity validation rules, transactional default management)",
+      "apps/melodee-server/src/admin_device_profiles.rs (admin-gated /api/admin/v1/device-profiles CRUD + set-default)"
+    ],
+    "tests": [
+      "crates/melodee-persistence/tests/device_profiles.rs (migration constraints, CRUD round trip, single-default invariant incl. raw-SQL backstop, legacy parity validation)",
+      "apps/melodee-server/tests/admin_device_profiles_api.rs (lifecycle, single-default over the API, validation, admin gating)"
+    ]
   },
   {
     "id": "PRD-DEVICE-002",
@@ -2483,9 +2504,16 @@
     "phase": "9",
     "source": "PRD.md",
     "line": 1639,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "implemented",
+    "implementation": [
+      "apps/melodee-server/src/admin_device_profiles.rs (module/DTO docs state profiles are metadata only and stream selection is unwired)",
+      "crates/melodee-persistence/src/device_profiles.rs (store has no stream-negotiation consumer)",
+      "docs/src/content/docs/api/admin-api.md (device profile section documents the non-claim)"
+    ],
+    "tests": [
+      "crates/melodee-persistence/tests/device_profiles.rs",
+      "apps/melodee-server/tests/admin_device_profiles_api.rs"
+    ]
   },
   {
     "id": "PRD-DEVICE-003",
@@ -2493,7 +2521,7 @@
     "phase": "9",
     "source": "PRD.md",
     "line": 1643,
-    "status": "planned",
+    "status": "deferred",
     "implementation": [],
     "tests": []
   },

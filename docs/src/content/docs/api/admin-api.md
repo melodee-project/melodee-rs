@@ -122,6 +122,65 @@ duplicate username returns `409 user_conflict`; passwords shorter than 8 charact
 change bumps the credential revision, and disabling or locking an account revokes all of its
 refresh sessions immediately. Unknown ids return `404`.
 
+### Internet radio stations
+
+```http
+GET /api/admin/v1/radio/stations?limit=50&offset=0
+POST /api/admin/v1/radio/stations
+GET /api/admin/v1/radio/stations/{id}
+PUT /api/admin/v1/radio/stations/{id}
+DELETE /api/admin/v1/radio/stations/{id}
+```
+
+These routes administer the same internet radio stations the OpenSubsonic surface serves
+(`getInternetRadioStations` and friends) — a station created here appears there and vice versa.
+Station ids are immutable public ids (the UUID the OpenSubsonic API renders as `radio_{uuid}`)
+and are never regenerated.
+
+Listing and reading require any authenticated, enabled account (native access token). Creating,
+updating, and deleting additionally require administrator rights (`isAdmin` or the
+`Administrator` role — the same gate as the OpenSubsonic radio mutations); non-administrators
+receive `403`, anonymous callers `401`.
+
+`GET` (list) is bounded and server-side paginated (`limit` clamped to a server maximum, default
+50) and ordered by name. `POST` takes `{"name", "streamUrl", "homePageUrl"?}`; the name and
+stream URL must be non-blank (at most 500 and 2000 characters respectively, homepage at most
+2000) and violations return `400` with `invalid_name`, `invalid_stream_url`, or
+`invalid_home_page_url`. `PUT` applies a field-optional update; an explicit `"homePageUrl": null`
+clears the homepage link. `DELETE` answers `204`. Unknown ids return `404`.
+
+### Device profiles
+
+```http
+GET /api/admin/v1/device-profiles?limit=50&offset=0
+POST /api/admin/v1/device-profiles
+GET /api/admin/v1/device-profiles/{id}
+PUT /api/admin/v1/device-profiles/{id}
+DELETE /api/admin/v1/device-profiles/{id}
+POST /api/admin/v1/device-profiles/{id}/default
+```
+
+Device profiles are operator-managed **metadata records only**. They preserve the legacy
+preview feature: a named profile carrying free-form client-matcher metadata (`clientMatch`, a
+JSON object of bounded string values such as `{"clientName": "feishin"}`) and transcoding-intent
+metadata (`profile`, e.g. `{"directPlay": false, "targetCodec": "opus", "maxBitrate": 192}`).
+
+:::caution[Profiles do not control streaming]
+Stored profiles are **not** consulted by any streaming path. Creating or editing a profile does
+not change how media is delivered to any client. Profile-driven stream selection is planned
+post-parity work and will be introduced through an explicit API contract, not silently.
+:::
+
+All routes require an administrator's native access token; anonymous callers receive `401` and
+non-administrators `403`. Validation preserves the legacy rules: names must be non-blank (at
+most 255 characters); a `profile` with `"directPlay": true` must not set `targetCodec` or
+`maxBitrate`; a `profile` with `"directPlay": false` must set `targetCodec`; numeric fields keep
+their legacy bounds (`maxBitrate` 1–9999, `resampleRate` 1000–192000, `priority` 0–100).
+Violations return `400 invalid_profile`. At most one profile may be the default: creating a
+profile with `"isDefault": true`, or `POST …/{id}/default`, atomically clears the previous
+default. The listing is bounded and server-side paginated (default first, then name). Unknown
+ids return `404`.
+
 ## Error behavior
 
 Errors use a stable JSON envelope with a machine-readable `code`, an operator-safe `message`, and

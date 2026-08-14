@@ -443,7 +443,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             get(admin::list_active_leases),
         )
         .with_state(admin_state)
-        .merge(melodee_server::admin_access::router().with_state(admin_access_state))
+        .merge(melodee_server::admin_access::router().with_state(admin_access_state.clone()))
+        .merge(melodee_server::admin_radio::router().with_state(admin_access_state.clone()))
+        .merge(melodee_server::admin_device_profiles::router().with_state(admin_access_state))
         .merge(native_app)
         .merge(opensubsonic_app)
         .merge(jellyfin_app)
