@@ -17,7 +17,9 @@
 **Phase 7 complete (2026-08-12)**, see
 [design/evidence/phase-7/PHASE-7-REPORT.md](design/evidence/phase-7/PHASE-7-REPORT.md);
 **Phase 8 complete (2026-08-13)**, see
-[design/evidence/phase-8/PHASE-8-REPORT.md](design/evidence/phase-8/PHASE-8-REPORT.md).
+[design/evidence/phase-8/PHASE-8-REPORT.md](design/evidence/phase-8/PHASE-8-REPORT.md);
+**Phase 9 complete (2026-08-14)**, see
+[design/evidence/phase-9/PHASE-9-REPORT.md](design/evidence/phase-9/PHASE-9-REPORT.md).
 **Date:** 2026-08-07  
 **Governing documents:** [PRD.md](PRD.md), [SPEC.md](SPEC.md), accepted ADRs
 
@@ -390,6 +392,14 @@ Restore the implemented compatibility surfaces on the new core.
 
 ## 12. Phase 9 — Remaining parity domains
 
+**Status:** Complete (2026-08-14) — exit criteria met: every domain below has its own parity
+checklist under `design/evidence/phase-9/checklists/` and all twelve are green (74 rows ✅ with
+linked test evidence, 4 rows 🚫 waived by accepted ADRs 0133/0136, 2 rows ➡ Phase 10); all 61
+Phase-9-tagged requirements are terminal (52 tested, 2 implemented, 7 deferred under ADRs
+0133/0136 or the Phase 10 boundary); the feature-parity matrix carries no unapproved gaps.
+Report:
+[design/evidence/phase-9/PHASE-9-REPORT.md](design/evidence/phase-9/PHASE-9-REPORT.md).
+
 Implement and validate:
 
 - users, groups, library ACLs, profiles, avatars;
@@ -406,6 +416,15 @@ Implement and validate:
 - CLI/maintenance capabilities.
 
 Each domain requires its own parity checklist and tests.
+
+**Phase 9: COMPLETE (2026-08-14).** Executed per
+[design/agents/PHASE-9-PLAN.md](design/agents/PHASE-9-PLAN.md) (four waves, WP-01..WP-14) under
+accepted ADRs 0133 (party/jukebox waiver), 0134 (parity-domain schema, §7 amended for Last.fm
+session-key sealing), 0135 (Boa scripting runtime), and 0136 (non-Last.fm provider deferral);
+ADR-0109 and ADR-0132 dispositions recorded as Accepted. Party mode/jukebox parity is preserved
+as the frozen 404/410 absence under the ADR-0133 waiver; themes/localization/RTL remain Phase 10
+scope. The consolidated decision, gate evidence, and honest limitations are in
+[design/evidence/phase-9/PHASE-9-REPORT.md](design/evidence/phase-9/PHASE-9-REPORT.md).
 
 ## 13. Phase 10 — Admin UI
 
