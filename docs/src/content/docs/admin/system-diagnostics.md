@@ -83,6 +83,14 @@ owner process is currently alive.
 - `melodee search rebuild --actor <administrator-id>` synchronously builds, validates, catches up,
   and activates a new generation. `search query`, `autocomplete`, `parse`, and `explain` exercise
   the same bounded query contracts used by the worker.
+- `melodee worker-pools list` prints every registered worker pool with its durable pause state and
+  audit fields. `melodee worker-pools pause <pool> --by <operator>` durably pauses a pool and
+  `melodee worker-pools resume <pool> --by <operator>` resumes it; the `--by` operator identity is
+  mandatory and recorded with the transition (the last-pause audit survives a resume). The podcast,
+  policy, and discovery workers honor the durable row between claim batches: a paused pool claims
+  no new work, while already-claimed work finishes or is released under the normal lease contract —
+  pausing never strands a lease. Pausing a pool name that has no wired worker yet registers the row
+  so the pool is paused from its first check once it exists.
 
 See [Policies](./policies/) for disposition and safety behavior, and
 [Troubleshooting](../troubleshooting/) for operational checks.

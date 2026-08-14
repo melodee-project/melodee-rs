@@ -63,6 +63,145 @@ enum Commands {
         #[command(subcommand)]
         command: ChartCommands,
     },
+    /// Podcast stuck-download and orphan recovery (lease-coordinated).
+    Podcasts {
+        #[command(subcommand)]
+        command: PodcastCommands,
+    },
+    /// Inspect and durably pause/resume background worker pools.
+    WorkerPools {
+        #[command(subcommand)]
+        command: WorkerPoolCommands,
+    },
+    /// User bootstrap and operator account recovery.
+    Users {
+        #[command(subcommand)]
+        command: UserCommands,
+    },
+    /// Library access group management (mirrors the admin API semantics).
+    Groups {
+        #[command(subcommand)]
+        command: GroupCommands,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum WorkerPoolCommands {
+    /// List every registered worker pool with its durable pause state and
+    /// last-pause audit.
+    List,
+    /// Durably pause a pool: workers stop claiming new work between batches;
+    /// in-flight claims finish or are released per the lease contract.
+    Pause {
+        /// Pool name (e.g. podcast, policy, discovery).
+        #[arg(value_parser = parse_pool_name)]
+        pool: String,
+        /// Stable operator identity recorded with the pause audit.
+        #[arg(long, value_parser = parse_nonblank)]
+        by: String,
+    },
+    /// Durably resume a paused pool. The last-pause audit is retained.
+    Resume {
+        /// Pool name (e.g. podcast, policy, discovery).
+        #[arg(value_parser = parse_pool_name)]
+        pool: String,
+        /// Stable operator identity recorded with the resume request.
+        #[arg(long, value_parser = parse_nonblank)]
+        by: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum UserCommands {
+    /// Create the first administrator. Fails closed when any admin already
+    /// exists. The password is read from the
+    /// MELODEE__CLI__BOOTSTRAP_ADMIN_PASSWORD environment variable — never
+    /// from a command-line argument (shell history is not a secret store).
+    BootstrapAdmin {
+        #[arg(long, value_parser = parse_nonblank)]
+        username: String,
+        #[arg(long, value_parser = parse_nonblank)]
+        email: String,
+    },
+    /// Disable a user (operator recovery): the account stops authenticating
+    /// immediately and every refresh family is revoked atomically.
+    Disable {
+        /// Login username (normalized like sign-in).
+        username: String,
+    },
+    /// Re-enable a previously disabled user.
+    Enable {
+        /// Login username (normalized like sign-in).
+        username: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum GroupCommands {
+    /// List access groups with member and library-binding counts.
+    List,
+    /// Create an access group. Fails closed on an exact name conflict.
+    Create {
+        #[arg(value_parser = parse_nonblank)]
+        name: String,
+    },
+    /// Delete an access group. Fails closed while members or library
+    /// bindings remain — remove them first.
+    Delete {
+        #[arg(value_parser = parse_nonblank)]
+        name: String,
+    },
+    /// Add a user to an access group (idempotent).
+    AddUser {
+        #[arg(value_parser = parse_nonblank)]
+        group: String,
+        #[arg(long, value_parser = parse_nonblank)]
+        username: String,
+    },
+    /// Remove a user from an access group.
+    RemoveUser {
+        #[arg(value_parser = parse_nonblank)]
+        group: String,
+        #[arg(long, value_parser = parse_nonblank)]
+        username: String,
+    },
+    /// Bind a library to a group. Once any group binds a library, only
+    /// members of a bound group can access it.
+    BindLibrary {
+        #[arg(value_parser = parse_nonblank)]
+        group: String,
+        #[arg(long)]
+        library_id: Uuid,
+    },
+    /// Remove a library binding from a group.
+    UnbindLibrary {
+        #[arg(value_parser = parse_nonblank)]
+        group: String,
+        #[arg(long)]
+        library_id: Uuid,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum PodcastCommands {
+    /// List failed downloads and stuck (expired-lease) downloads, oldest first.
+    Stuck {
+        /// Maximum rows to print (bounded).
+        #[arg(long, default_value_t = 50)]
+        limit: u32,
+    },
+    /// Requeue stuck downloads (expired leases only — a live worker's claim is
+    /// never stolen) and reconcile orphan files under the configured, owned
+    /// podcast storage root (MELODEE__PODCAST__STORAGE_ROOT).
+    Recover {
+        /// Maximum stuck rows to requeue in this pass (bounded).
+        #[arg(long, default_value_t = 50)]
+        limit: u32,
+        /// Also requeue permanently Failed downloads, resetting their attempt
+        /// counters so they get a fresh bounded retry budget.
+        #[arg(long, default_value_t = false)]
+        retry_failed: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -1258,6 +1397,349 @@ async fn main() {
                 println!("unlinked:    {}", result.item_count - result.linked_count);
             }
         },
+        Commands::Podcasts { command } => {
+            let pool = pool().await;
+            match command {
+                PodcastCommands::Stuck { limit } => {
+                    match melodee_server::podcast_worker::list_stuck_downloads(
+                        &pool,
+                        i64::from(limit.min(500)),
+                    )
+                    .await
+                    {
+                        Ok(rows) => {
+                            for row in &rows {
+                                println!(
+                                    "{}  episode={} channel={} {:<11} attempts={} lease={} lease_expires={:?} error={:?} updated={}",
+                                    row.public_api_id,
+                                    row.episode_id,
+                                    row.channel_id,
+                                    row.download_status,
+                                    row.download_attempt_count,
+                                    row.download_lease_owner
+                                        .map(|worker| worker.to_string())
+                                        .unwrap_or_else(|| "-".to_owned()),
+                                    row.download_lease_expires_at,
+                                    row.download_error,
+                                    row.updated_at,
+                                );
+                                println!(
+                                    "    channel={:?} episode={:?}",
+                                    row.channel_title, row.episode_title
+                                );
+                            }
+                            println!("-- {} stuck download(s)", rows.len());
+                        }
+                        Err(error) => {
+                            eprintln!("error: {error}");
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                PodcastCommands::Recover {
+                    limit,
+                    retry_failed,
+                } => {
+                    let recovered = match melodee_server::podcast_worker::recover_stuck_downloads(
+                        &pool,
+                        i64::from(limit.min(500)),
+                        retry_failed,
+                    )
+                    .await
+                    {
+                        Ok(recovered) => recovered,
+                        Err(error) => {
+                            eprintln!("error: {error}");
+                            std::process::exit(1);
+                        }
+                    };
+                    println!(
+                        "recovered {recovered} stuck download(s) back to Queued (retry_failed={retry_failed})"
+                    );
+                    let podcast_config = melodee_server::podcast_worker::PodcastConfig::from_env()
+                        .unwrap_or_else(|error| {
+                            eprintln!("error: invalid podcast configuration: {error}");
+                            std::process::exit(2);
+                        });
+                    if podcast_config.storage_root.is_some() {
+                        if let Err(error) = podcast_config.require_owned_root() {
+                            eprintln!(
+                                "error: podcast storage root failed ownership verification: {error}"
+                            );
+                            std::process::exit(2);
+                        }
+                        match melodee_server::podcast_worker::reconcile_owned_files(
+                            &pool,
+                            &podcast_config,
+                        )
+                        .await
+                        {
+                            Ok(removed) => {
+                                println!("orphan reconciliation: removed {removed} file(s)");
+                            }
+                            Err(error) => {
+                                eprintln!("error: {error}");
+                                std::process::exit(1);
+                            }
+                        }
+                    } else {
+                        println!(
+                            "orphan reconciliation: skipped (MELODEE__PODCAST__STORAGE_ROOT is not set)"
+                        );
+                    }
+                }
+            }
+        }
+        Commands::WorkerPools { command } => run_worker_pool_command(&command).await,
+        Commands::Users { command } => run_user_command(&command).await,
+        Commands::Groups { command } => run_group_command(&command).await,
+    }
+}
+
+/// Environment variable carrying the bootstrap-admin password. It is never
+/// accepted as a CLI argument: shell history and process listings are not a
+/// secret store.
+const ENV_BOOTSTRAP_ADMIN_PASSWORD: &str = "MELODEE__CLI__BOOTSTRAP_ADMIN_PASSWORD";
+
+fn parse_pool_name(raw: &str) -> Result<String, String> {
+    if melodee_persistence::is_valid_pool_name(raw) {
+        Ok(raw.to_owned())
+    } else {
+        Err("pool name must match ^[a-z][a-z0-9_-]{0,63}$".to_owned())
+    }
+}
+
+fn print_pool_state(state: &melodee_persistence::WorkerPoolState) {
+    println!(
+        "{:<20} paused={:<5} paused_by={:?} paused_at={:?} resume_requested_at={:?} updated_at={}",
+        state.pool,
+        state.paused,
+        state.paused_by.as_deref().unwrap_or("-"),
+        state.paused_at,
+        state.resume_requested_at,
+        state.updated_at,
+    );
+}
+
+async fn run_worker_pool_command(command: &WorkerPoolCommands) {
+    let pool = pool().await;
+    let store = melodee_persistence::WorkerPoolStore;
+    match command {
+        WorkerPoolCommands::List => match store.list(&pool).await {
+            Ok(pools) => {
+                for state in &pools {
+                    print_pool_state(state);
+                }
+                println!("-- {} pool(s)", pools.len());
+            }
+            Err(error) => {
+                eprintln!("error: {error}");
+                std::process::exit(1);
+            }
+        },
+        WorkerPoolCommands::Pause { pool: name, by }
+        | WorkerPoolCommands::Resume { pool: name, by } => {
+            let paused = matches!(command, WorkerPoolCommands::Pause { .. });
+            match store
+                .set_paused(&pool, name, paused, by, OffsetDateTime::now_utc())
+                .await
+            {
+                Ok(state) => {
+                    print_pool_state(&state);
+                    println!(
+                        "{}: {} (in-flight claims finish or are released per the lease contract)",
+                        if paused { "paused" } else { "resumed" },
+                        state.pool
+                    );
+                }
+                Err(error) => {
+                    eprintln!("error: {error}");
+                    std::process::exit(1);
+                }
+            }
+        }
+    }
+}
+
+async fn run_user_command(command: &UserCommands) {
+    let pool = pool().await;
+    let store = melodee_persistence::AuthStore::new();
+    match command {
+        UserCommands::BootstrapAdmin { username, email } => {
+            let password = env::var(ENV_BOOTSTRAP_ADMIN_PASSWORD)
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or_else(|| {
+                    eprintln!(
+                        "error: {ENV_BOOTSTRAP_ADMIN_PASSWORD} is not set; the bootstrap password is never a CLI argument"
+                    );
+                    std::process::exit(2);
+                });
+            let password_hash =
+                melodee_auth::hash_password(password.as_bytes()).unwrap_or_else(|error| {
+                    eprintln!("error: cannot hash bootstrap password: {error}");
+                    std::process::exit(1);
+                });
+            let stream_signing_key =
+                format!("{}{}", Uuid::now_v7().simple(), Uuid::now_v7().simple());
+            match store
+                .bootstrap_admin(
+                    &pool,
+                    &melodee_persistence::BootstrapAdminRequest {
+                        username,
+                        email,
+                        password_hash: &password_hash,
+                        stream_signing_key: &stream_signing_key,
+                        now: OffsetDateTime::now_utc(),
+                    },
+                )
+                .await
+            {
+                Ok(user) => {
+                    println!("bootstrap admin created:");
+                    println!("  username:      {}", user.username);
+                    println!("  public_api_id: {}", user.public_api_id);
+                    println!("  is_admin:      {}", user.is_admin);
+                    println!("  roles:         {:?}", user.roles);
+                }
+                Err(error) => {
+                    eprintln!("error: {error}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        UserCommands::Disable { username } | UserCommands::Enable { username } => {
+            let enabled = matches!(command, UserCommands::Enable { .. });
+            let user = match resolve_user_public_id(&pool, username).await {
+                Ok(user) => user,
+                Err(message) => {
+                    eprintln!("error: {message}");
+                    std::process::exit(1);
+                }
+            };
+            // The admin user-update path bumps auth_revision (fencing
+            // in-flight issuance) and atomically revokes every refresh
+            // family when the account becomes disabled.
+            match melodee_persistence::UserAdminStore
+                .update_user(
+                    &pool,
+                    user,
+                    &melodee_persistence::NativeUserAdminUpdate {
+                        enabled: Some(enabled),
+                        ..melodee_persistence::NativeUserAdminUpdate::default()
+                    },
+                    OffsetDateTime::now_utc(),
+                )
+                .await
+            {
+                Ok(user) => println!(
+                    "{}: {} (enabled={}, auth_revision={})",
+                    if enabled { "enabled" } else { "disabled" },
+                    user.username,
+                    user.enabled,
+                    user.auth_revision
+                ),
+                Err(error) => {
+                    eprintln!("error: {error}");
+                    std::process::exit(1);
+                }
+            }
+        }
+    }
+}
+
+/// Resolves a login username to its stable public id without exposing any
+/// credential material.
+async fn resolve_user_public_id(pool: &PgPool, username: &str) -> Result<Uuid, String> {
+    let normalized = melodee_persistence::normalize_login(username);
+    if normalized.is_empty() {
+        return Err("username must not be blank".to_owned());
+    }
+    match melodee_persistence::AuthStore::new()
+        .user_for_auth(pool, melodee_persistence::AuthLookup::Username(&normalized))
+        .await
+    {
+        Ok(Some(record)) => Ok(record.user.public_api_id),
+        Ok(None) => Err(format!("no user named '{username}'")),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+async fn run_group_command(command: &GroupCommands) {
+    let pool = pool().await;
+    let store = melodee_persistence::GroupAdminStore;
+    let now = OffsetDateTime::now_utc();
+    let result: Result<String, melodee_persistence::GroupAdminError> = match command {
+        GroupCommands::List => store.list_groups(&pool).await.map(|groups| {
+            let mut out = String::new();
+            for group in &groups {
+                out.push_str(&format!(
+                    "{}  {:<30} members={} bindings={} updated={}\n",
+                    group.public_api_id,
+                    group.name,
+                    group.member_count,
+                    group.binding_count,
+                    group.updated_at,
+                ));
+            }
+            out.push_str(&format!("-- {} group(s)", groups.len()));
+            out
+        }),
+        GroupCommands::Create { name } => store
+            .create_group(&pool, name, now)
+            .await
+            .map(|group| format!("created: {} ({})", group.name, group.public_api_id)),
+        GroupCommands::Delete { name } => store
+            .delete_group(&pool, name)
+            .await
+            .map(|()| format!("deleted: {name}")),
+        GroupCommands::AddUser { group, username } => store
+            .add_user(&pool, group, username, now)
+            .await
+            .map(|added| {
+                if added {
+                    format!("added {username} to {group}")
+                } else {
+                    format!("{username} is already a member of {group}")
+                }
+            }),
+        GroupCommands::RemoveUser { group, username } => store
+            .remove_user(&pool, group, username, now)
+            .await
+            .map(|removed| {
+                if removed {
+                    format!("removed {username} from {group}")
+                } else {
+                    format!("{username} was not a member of {group}")
+                }
+            }),
+        GroupCommands::BindLibrary { group, library_id } => store
+            .bind_library(&pool, group, *library_id, now)
+            .await
+            .map(|bound| {
+                if bound {
+                    format!("bound library {library_id} to {group}")
+                } else {
+                    format!("library {library_id} is already bound to {group}")
+                }
+            }),
+        GroupCommands::UnbindLibrary { group, library_id } => store
+            .unbind_library(&pool, group, *library_id, now)
+            .await
+            .map(|unbound| {
+                if unbound {
+                    format!("unbound library {library_id} from {group}")
+                } else {
+                    format!("library {library_id} was not bound to {group}")
+                }
+            }),
+    };
+    match result {
+        Ok(message) => println!("{message}"),
+        Err(error) => {
+            eprintln!("error: {error}");
+            std::process::exit(1);
+        }
     }
 }
 
@@ -1688,6 +2170,48 @@ mod tests {
     }
 
     #[test]
+    fn podcast_recovery_commands_are_bounded_and_explicit() {
+        let stuck = Cli::try_parse_from(["melodee", "podcasts", "stuck"])
+            .expect("valid stuck listing command");
+        assert!(matches!(
+            stuck.command,
+            Commands::Podcasts {
+                command: PodcastCommands::Stuck { limit: 50 }
+            }
+        ));
+
+        let recover = Cli::try_parse_from([
+            "melodee",
+            "podcasts",
+            "recover",
+            "--limit",
+            "10",
+            "--retry-failed",
+        ])
+        .expect("valid recovery command");
+        assert!(matches!(
+            recover.command,
+            Commands::Podcasts {
+                command: PodcastCommands::Recover {
+                    limit: 10,
+                    retry_failed: true
+                }
+            }
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["melodee", "podcasts", "recover"])
+                .expect("recovery defaults")
+                .command,
+            Commands::Podcasts {
+                command: PodcastCommands::Recover {
+                    limit: 50,
+                    retry_failed: false
+                }
+            }
+        ));
+    }
+
+    #[test]
     fn policy_test_evaluation_error_is_typed_and_not_silently_counted() {
         let release_id = melodee_domain::ReleaseId::new();
         let error = require_policy_test_evaluation(
@@ -1811,5 +2335,176 @@ mod tests {
         for command in ["parse", "explain"] {
             assert!(Cli::try_parse_from(["melodee", "search", command, "year:1990..1999"]).is_ok());
         }
+    }
+
+    #[test]
+    fn worker_pool_commands_require_pool_and_operator_identity() {
+        assert!(matches!(
+            Cli::try_parse_from(["melodee", "worker-pools", "list"])
+                .expect("pool list")
+                .command,
+            Commands::WorkerPools {
+                command: WorkerPoolCommands::List
+            }
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["melodee", "worker-pools", "pause", "podcast", "--by", "ops-1"])
+                .expect("pool pause")
+                .command,
+            Commands::WorkerPools {
+                command: WorkerPoolCommands::Pause { pool, by }
+            } if pool == "podcast" && by == "ops-1"
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["melodee", "worker-pools", "resume", "policy", "--by", "ops-2"])
+                .expect("pool resume")
+                .command,
+            Commands::WorkerPools {
+                command: WorkerPoolCommands::Resume { pool, by }
+            } if pool == "policy" && by == "ops-2"
+        ));
+        // The operator audit identity is mandatory and non-blank.
+        assert!(Cli::try_parse_from(["melodee", "worker-pools", "pause", "podcast"]).is_err());
+        assert!(
+            Cli::try_parse_from(["melodee", "worker-pools", "pause", "podcast", "--by", "  "])
+                .is_err()
+        );
+        // Pool names are machine identifiers, validated before any SQL runs.
+        assert!(
+            Cli::try_parse_from(["melodee", "worker-pools", "pause", "Podcast", "--by", "ops"])
+                .is_err()
+        );
+        assert!(
+            Cli::try_parse_from(["melodee", "worker-pools", "pause", "1pool", "--by", "ops"])
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn user_bootstrap_and_recovery_commands_never_take_a_password_argument() {
+        let bootstrap = Cli::try_parse_from([
+            "melodee",
+            "users",
+            "bootstrap-admin",
+            "--username",
+            "admin",
+            "--email",
+            "admin@example.test",
+        ])
+        .expect("valid bootstrap command");
+        assert!(matches!(
+            bootstrap.command,
+            Commands::Users {
+                command: UserCommands::BootstrapAdmin { username, email }
+            } if username == "admin" && email == "admin@example.test"
+        ));
+        // No positional/flag password surface exists to parse at all.
+        assert!(
+            Cli::try_parse_from([
+                "melodee",
+                "users",
+                "bootstrap-admin",
+                "--username",
+                "admin",
+                "--email",
+                "admin@example.test",
+                "--password",
+                "secret",
+            ])
+            .is_err()
+        );
+        for verb in ["disable", "enable"] {
+            assert!(matches!(
+                Cli::try_parse_from(["melodee", "users", verb, "operator-user"])
+                    .expect("valid recovery command")
+                    .command,
+                Commands::Users { .. }
+            ));
+        }
+    }
+
+    #[test]
+    fn group_commands_cover_membership_and_library_bindings() {
+        assert!(matches!(
+            Cli::try_parse_from(["melodee", "groups", "list"])
+                .expect("groups list")
+                .command,
+            Commands::Groups {
+                command: GroupCommands::List
+            }
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["melodee", "groups", "create", "Family"])
+                .expect("groups create")
+                .command,
+            Commands::Groups {
+                command: GroupCommands::Create { name }
+            } if name == "Family"
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["melodee", "groups", "add-user", "Family", "--username", "kid"])
+                .expect("groups add-user")
+                .command,
+            Commands::Groups {
+                command: GroupCommands::AddUser { group, username }
+            } if group == "Family" && username == "kid"
+        ));
+        let library = Uuid::now_v7();
+        assert!(matches!(
+            Cli::try_parse_from([
+                "melodee",
+                "groups",
+                "bind-library",
+                "Family",
+                "--library-id",
+                &library.to_string(),
+            ])
+            .expect("groups bind-library")
+            .command,
+            Commands::Groups {
+                command: GroupCommands::BindLibrary { group, library_id }
+            } if group == "Family" && library_id == library
+        ));
+        assert!(matches!(
+            Cli::try_parse_from([
+                "melodee",
+                "groups",
+                "unbind-library",
+                "Family",
+                "--library-id",
+                &library.to_string(),
+            ])
+            .expect("groups unbind-library")
+            .command,
+            Commands::Groups {
+                command: GroupCommands::UnbindLibrary { .. }
+            }
+        ));
+        assert!(matches!(
+            Cli::try_parse_from([
+                "melodee",
+                "groups",
+                "remove-user",
+                "Family",
+                "--username",
+                "kid",
+            ])
+            .expect("groups remove-user")
+            .command,
+            Commands::Groups {
+                command: GroupCommands::RemoveUser { .. }
+            }
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["melodee", "groups", "delete", "Family"])
+                .expect("groups delete")
+                .command,
+            Commands::Groups {
+                command: GroupCommands::Delete { name }
+            } if name == "Family"
+        ));
+        // Blank names are rejected before any SQL runs.
+        assert!(Cli::try_parse_from(["melodee", "groups", "create", "   "]).is_err());
+        assert!(Cli::try_parse_from(["melodee", "groups", "delete", "   "]).is_err());
     }
 }

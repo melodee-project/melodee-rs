@@ -129,6 +129,35 @@ impl PodcastConfig {
         }
         Ok(())
     }
+
+    /// Verify — creating nothing — that the configured storage root already is
+    /// a Melodee-owned podcast root. Recovery tooling (CLI) must never
+    /// initialize a directory or claim ownership of one; it may only operate
+    /// on a root the server previously took ownership of.
+    pub fn require_owned_root(&self) -> Result<(), PodcastConfigError> {
+        let root = self
+            .storage_root
+            .as_deref()
+            .ok_or(PodcastConfigError::MissingRoot)?;
+        if !root.is_absolute() {
+            return Err(PodcastConfigError::InvalidRoot);
+        }
+        reject_symlink_components(root)?;
+        let metadata = std::fs::symlink_metadata(root).map_err(PodcastConfigError::RootIo)?;
+        if !metadata.is_dir() || metadata.file_type().is_symlink() {
+            return Err(PodcastConfigError::InvalidRoot);
+        }
+        let marker = root.join(ROOT_MARKER);
+        let marker_metadata =
+            std::fs::symlink_metadata(&marker).map_err(|error| match error.kind() {
+                std::io::ErrorKind::NotFound => PodcastConfigError::UnownedRoot,
+                _ => PodcastConfigError::RootIo(error),
+            })?;
+        if !marker_metadata.is_file() || marker_metadata.file_type().is_symlink() {
+            return Err(PodcastConfigError::InvalidRoot);
+        }
+        verify_root_marker(root)
+    }
 }
 
 impl Default for PodcastConfig {
@@ -963,10 +992,23 @@ pub async fn run_podcast_once(
     if !config.enabled || !config.worker_enabled {
         return Ok(0);
     }
+    // Durable pool gate (ADR-0134 §8): a paused pool does no work this pass.
+    // One pass is one claim batch; already-claimed downloads from earlier
+    // passes keep their leases and finish or expire per the lease contract.
+    if melodee_persistence::is_pool_paused(pool, melodee_persistence::POOL_PODCAST).await? {
+        info!("podcast worker pool is durably paused; skipping pass");
+        return Ok(0);
+    }
     refresh_due_channels(pool, config).await?;
     let worker = Uuid::now_v7();
     let mut completed = 0;
     for _ in 0..config.claim_batch_size {
+        // Re-check between claims so a pause mid-batch stops new claims
+        // immediately without touching in-flight leases.
+        if melodee_persistence::is_pool_paused(pool, melodee_persistence::POOL_PODCAST).await? {
+            info!("podcast worker pool paused mid-batch; stopping new claims");
+            break;
+        }
         let Some(claim) = claim_download(pool, config, worker).await? else {
             break;
         };
@@ -990,9 +1032,96 @@ pub async fn run_podcast_once(
             }
         }
     }
-    reconcile_owned_files(pool, config).await?;
+    let orphans = reconcile_owned_files(pool, config).await?;
+    if orphans > 0 {
+        info!(
+            orphans,
+            "podcast orphan reconciliation removed unreferenced files"
+        );
+    }
     cleanup_retention(pool, config).await?;
     Ok(completed)
+}
+
+/// One failed or stuck enclosure download, joined with its channel for
+/// operator reporting. "Stuck" means a `Downloading` row whose lease has
+/// expired — the worker that claimed it is gone or wedged. This is exactly
+/// the set [`claim_download`] is allowed to reclaim, so recovery tooling can
+/// act on it without bypassing lease safety.
+#[derive(Debug, FromRow)]
+pub struct StuckPodcastDownload {
+    pub episode_id: i64,
+    pub public_api_id: Uuid,
+    pub channel_id: i64,
+    pub channel_title: String,
+    pub episode_title: String,
+    pub download_status: String,
+    pub download_attempt_count: i32,
+    pub download_error: Option<String>,
+    pub download_lease_owner: Option<Uuid>,
+    pub download_lease_expires_at: Option<OffsetDateTime>,
+    pub updated_at: OffsetDateTime,
+}
+
+// "Stuck" predicate shared by the list/recover queries below: a `Downloading`
+// row whose lease has expired. This is exactly the set `claim_download` is
+// allowed to reclaim, so recovery tooling acting on it never steals a live
+// worker's claim. Kept as adjacent literal SQL (sqlx requires static SQL).
+/// List failed and stuck (expired-lease) enclosure downloads, oldest update
+/// first, bounded by `limit`. Read-only; safe against a running worker.
+pub async fn list_stuck_downloads(
+    pool: &PgPool,
+    limit: i64,
+) -> Result<Vec<StuckPodcastDownload>, PodcastWorkerError> {
+    Ok(sqlx::query_as::<_, StuckPodcastDownload>(
+        "SELECT episode.id AS episode_id,episode.public_api_id,episode.channel_id,\
+         channel.title AS channel_title,episode.title AS episode_title,episode.download_status,\
+         episode.download_attempt_count,episode.download_error,episode.download_lease_owner,\
+         episode.download_lease_expires_at,episode.updated_at \
+         FROM native_podcast_episodes episode \
+         JOIN native_podcast_channels channel ON channel.id=episode.channel_id \
+         WHERE episode.soft_deleted_at IS NULL AND channel.soft_deleted_at IS NULL \
+         AND ((episode.download_status='Downloading' AND episode.download_lease_expires_at<=now()) \
+           OR episode.download_status='Failed') \
+         ORDER BY episode.updated_at,episode.id LIMIT $1",
+    )
+    .bind(limit)
+    .fetch_all(pool)
+    .await?)
+}
+
+/// Requeue stuck downloads back to `Queued`, bounded by `limit`.
+///
+/// Lease safety: only rows whose lease has *expired* are touched — the same
+/// predicate [`claim_download`] uses to reclaim — so a live worker's claim is
+/// never stolen. Publication remains fenced by the lease re-check in
+/// [`publish_download`]. With `retry_failed`, permanently `Failed` rows are
+/// also requeued with their attempt counter and error reset, giving them a
+/// fresh bounded retry budget. Rows skipped by `SKIP LOCKED` are left for a
+/// later pass rather than blocking on a concurrent worker.
+pub async fn recover_stuck_downloads(
+    pool: &PgPool,
+    limit: i64,
+    retry_failed: bool,
+) -> Result<u64, PodcastWorkerError> {
+    let changed = sqlx::query(
+        "WITH stuck AS (SELECT episode.id,episode.download_status FROM native_podcast_episodes episode \
+         JOIN native_podcast_channels channel ON channel.id=episode.channel_id \
+         WHERE episode.soft_deleted_at IS NULL AND channel.soft_deleted_at IS NULL \
+         AND ((episode.download_status='Downloading' AND episode.download_lease_expires_at<=now()) \
+           OR ($2 AND episode.download_status='Failed')) \
+         ORDER BY episode.updated_at,episode.id FOR UPDATE OF episode SKIP LOCKED LIMIT $1) \
+         UPDATE native_podcast_episodes e SET download_status='Queued',\
+         download_attempt_count=CASE WHEN stuck.download_status='Failed' THEN 0 ELSE e.download_attempt_count END,\
+         download_error=NULL,download_available_at=now(),\
+         download_lease_owner=NULL,download_lease_expires_at=NULL,updated_at=now() \
+         FROM stuck WHERE e.id=stuck.id",
+    )
+    .bind(limit)
+    .bind(retry_failed)
+    .execute(pool)
+    .await?;
+    Ok(changed.rows_affected())
 }
 
 async fn refresh_due_channels(
@@ -1018,13 +1147,20 @@ async fn refresh_due_channels(
     Ok(())
 }
 
-async fn reconcile_owned_files(
+/// Remove files under the owned podcast storage root that no live database
+/// row references (orphaned temporary and media files), in bounded batches.
+/// Returns the number of files removed. Also used by the recovery CLI: the
+/// same durable reference checks protect in-flight downloads (a `.tmp` file
+/// whose episode row is `Downloading` under a live lease owned by the temp
+/// file's worker is never removed).
+pub async fn reconcile_owned_files(
     pool: &PgPool,
     config: &PodcastConfig,
-) -> Result<(), PodcastWorkerError> {
+) -> Result<u64, PodcastWorkerError> {
     let Some(root) = config.storage_root.as_deref() else {
-        return Ok(());
+        return Ok(0);
     };
+    let mut removed = 0_u64;
     let mut entries = tokio::fs::read_dir(root).await?;
     let mut candidates = Vec::with_capacity(MAX_RECONCILE_FILES_PER_BATCH);
     let mut inspected_in_batch = 0_usize;
@@ -1033,7 +1169,7 @@ async fn reconcile_owned_files(
         let path = entry.path();
         let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
             if inspected_in_batch >= MAX_RECONCILE_ENTRIES_PER_BATCH {
-                reconcile_owned_file_batch(pool, root, &mut candidates).await?;
+                removed += reconcile_owned_file_batch(pool, root, &mut candidates).await?;
                 inspected_in_batch = 0;
             }
             continue;
@@ -1046,20 +1182,21 @@ async fn reconcile_owned_files(
         if candidates.len() >= MAX_RECONCILE_FILES_PER_BATCH
             || inspected_in_batch >= MAX_RECONCILE_ENTRIES_PER_BATCH
         {
-            reconcile_owned_file_batch(pool, root, &mut candidates).await?;
+            removed += reconcile_owned_file_batch(pool, root, &mut candidates).await?;
             inspected_in_batch = 0;
         }
     }
-    reconcile_owned_file_batch(pool, root, &mut candidates).await
+    removed += reconcile_owned_file_batch(pool, root, &mut candidates).await?;
+    Ok(removed)
 }
 
 async fn reconcile_owned_file_batch(
     pool: &PgPool,
     root: &Path,
     candidates: &mut Vec<(PathBuf, OwnedFileKind)>,
-) -> Result<(), PodcastWorkerError> {
+) -> Result<u64, PodcastWorkerError> {
     if candidates.is_empty() {
-        return Ok(());
+        return Ok(0);
     }
     let ids = candidates
         .iter()
@@ -1079,6 +1216,7 @@ async fn reconcile_owned_file_batch(
     .into_iter()
     .map(|fact| (fact.0, fact))
     .collect::<HashMap<_, _>>();
+    let mut removed = 0_u64;
     for (path, kind) in candidates.drain(..) {
         let referenced = facts.get(&kind.public_id()).is_some_and(|fact| match kind {
             OwnedFileKind::Media(_) => fact.1.as_deref() == path.to_str(),
@@ -1086,9 +1224,10 @@ async fn reconcile_owned_file_batch(
         });
         if !referenced {
             remove_owned_file(root, &path).await?;
+            removed += 1;
         }
     }
-    Ok(())
+    Ok(removed)
 }
 
 #[derive(Clone, Copy, Debug)]

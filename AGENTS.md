@@ -52,7 +52,7 @@ template.
 
 Do not silently resolve a material conflict; record it in the PR and propose an ADR when needed.
 
-## Current phase boundary: Phase 8 complete — awaiting next phase assignment
+## Current phase boundary: Phase 9 active — remaining parity domains
 
 Phases 0–8 are complete. Phase 8's evidence is in
 `design/evidence/phase-8/PHASE-8-REPORT.md`: both adapter route matrices are implemented and
@@ -66,16 +66,20 @@ under ADR-0132 (case-insensitive Jellyfin routing, `ApiKey` alias, redirect quer
 Phase 7's accepted native-v1 evidence is in
 `design/evidence/phase-7/PHASE-7-REPORT.md`.
 
-Allowed when explicitly assigned: nothing beyond maintenance of completed phases until the next
-phase (9, 10, or 11) is assigned.
+Phase 9 (remaining parity domains, IMPLEMENTATION §12) is **assigned and active** as of
+2026-08-13, executed per `design/agents/PHASE-9-PLAN.md` (four waves, WP-01..WP-14) with accepted
+ADRs 0133 (party/jukebox waiver), 0134 (Phase 9 parity-domain schema), and 0135 (Boa scripting
+runtime). Per-domain parity checklists live in `design/evidence/phase-9/checklists/`.
 
-Forbidden: Phase 9 remaining parity-domain expansion; Phase 10 admin UI implementation; Phase 11
-migration/import completion; merging native-v1, OpenSubsonic, or Jellyfin wire DTOs; redesigning
-captured external contracts without compatibility evidence, a product decision, an accepted ADR,
-and a migration/client plan; any database schema without an accepted schema ADR; message brokers,
-Redis, Elasticsearch/OpenSearch, GraphQL, microservices; copying C# service/class boundaries into
-Rust; destructive operations against an existing Melodee library outside the durable Phase 5
-decision/audit/authorization contract.
+Allowed: everything inside the Phase 9 plan's work packages, under its ADRs and checklists.
+
+Forbidden: Phase 10 admin UI implementation; Phase 11 migration/import completion; merging
+native-v1, OpenSubsonic, or Jellyfin wire DTOs; redesigning captured external contracts without
+compatibility evidence, a product decision, an accepted ADR, and a migration/client plan; any
+database schema without an accepted schema ADR; message brokers, Redis, Elasticsearch/OpenSearch,
+GraphQL, microservices; copying C# service/class boundaries into Rust; destructive operations
+against an existing Melodee library outside the durable Phase 5 decision/audit/authorization
+contract.
 
 ## Product language
 

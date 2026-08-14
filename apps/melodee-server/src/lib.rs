@@ -3,6 +3,8 @@
 #![recursion_limit = "512"]
 
 pub mod admin;
+pub mod admin_access;
+pub mod discovery_worker;
 pub mod jellyfin;
 pub mod native;
 pub mod native_stream;

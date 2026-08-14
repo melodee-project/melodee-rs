@@ -121,6 +121,19 @@ by the current server.
 | `MELODEE__PODCAST__WORKER__MAX_ATTEMPTS` | `5` | Failed attempts before a download becomes a permanent operator-visible failure (`1`–`100`). |
 | `MELODEE__PODCAST__MAX_DOWNLOAD_BYTES` | `536870912` | Maximum enclosure body size (`1 MiB`–`4 GiB`). |
 
+### Discovery maintenance
+
+A periodic worker reconciles the materialized discovery projections
+(recommendation popularity and chart-item catalog links) against committed listening and catalog
+facts. Every pass is bounded, set-based, and idempotent, so the worker is safe to leave enabled.
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `MELODEE__DISCOVERY__WORKER__ENABLED` | `true` | Whether the server periodically reconciles recommendation candidates and retries chart-item linkage. |
+| `MELODEE__DISCOVERY__WORKER__POLL_INTERVAL_SECONDS` | `300` | Delay between maintenance passes (`1`–`86400`). |
+| `MELODEE__DISCOVERY__WORKER__BATCH_SIZE` | `500` | Maximum rows touched by one reconciliation statement (`1`–`10000`). |
+| `MELODEE__DISCOVERY__WORKER__MAX_BATCHES_PER_PASS` | `100` | Maximum batches in one pass (`1`–`10000`); a capped pass reports truncation and the next pass resumes the work. |
+
 ### Native API URLs, streaming, and proxies
 
 | Key | Default | Effect |

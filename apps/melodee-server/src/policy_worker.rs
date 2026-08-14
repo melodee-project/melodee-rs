@@ -286,6 +286,16 @@ pub async fn run_policy_once_with_cancellation(
     cancellation: &PolicyCancellation,
 ) -> Result<PolicyWorkerStats, PolicyWorkerError> {
     let started = Instant::now();
+    // Durable pool gate (ADR-0134 §8): a paused pool claims no new work.
+    // Leases claimed by earlier passes are untouched — they finish or are
+    // released per the existing lease contract, never stranded.
+    if melodee_persistence::is_pool_paused(pool, melodee_persistence::POOL_POLICY)
+        .await
+        .map_err(PolicyStoreError::from)?
+    {
+        info!("policy worker pool is durably paused; skipping claim batch");
+        return Ok(PolicyWorkerStats::default());
+    }
     let worker = WorkerId::new();
     let claim_config = bounded_claim_config(config, work_config)?;
     let claims = store

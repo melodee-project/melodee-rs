@@ -659,6 +659,47 @@ async fn get_user_returns_captured_role_model() {
 }
 
 #[tokio::test]
+async fn get_user_avatar_last_changed_reflects_avatar_store() {
+    // WP-03 (ADR-0134 §2): when an avatar row exists, avatarLastChanged is
+    // the avatar store's updated_at; otherwise the user row's updated_at as
+    // at the captured baseline. Response shape is unchanged.
+    let db = common::TestDb::create("os_cond_get_user_avatar_changed").await;
+    let state = state(&db).await;
+    let internal_id: Uuid = sqlx::query_scalar(
+        "SELECT id FROM native_users WHERE normalized_username='PHASE0-FIXTURE'",
+    )
+    .fetch_one(&db.pool)
+    .await
+    .expect("user id");
+    let avatar_time = OffsetDateTime::now_utc() + time::Duration::days(1);
+    melodee_persistence::UserAdminStore::new()
+        .set_avatar(
+            &db.pool,
+            internal_id,
+            "image/png",
+            b"\x89PNG\r\n\x1a\nx",
+            avatar_time,
+        )
+        .await
+        .expect("set avatar");
+    let (status, _headers, body) =
+        respond(state.clone(), get(&authed("/rest/getUser.view?f=json"))).await;
+    assert_eq!(status, StatusCode::OK);
+    let user = &envelope(&body)["user"];
+    let expected = format!(
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
+        avatar_time.year(),
+        avatar_time.month() as u8,
+        avatar_time.day(),
+        avatar_time.hour(),
+        avatar_time.minute(),
+        avatar_time.second()
+    );
+    assert_eq!(user["avatarLastChanged"].as_str(), Some(expected.as_str()));
+    db.drop().await;
+}
+
+#[tokio::test]
 async fn get_user_cross_user_returns_error_40() {
     let db = common::TestDb::create("os_cond_get_user_cross").await;
     let state = state(&db).await;

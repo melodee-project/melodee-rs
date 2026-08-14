@@ -161,6 +161,264 @@ impl NativeDiscoveryStore {
     }
 }
 
+/// Observable result of one bounded chart/recommendation maintenance pass.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct NativeDiscoveryMaintenanceStats {
+    pub candidates_inserted: u64,
+    pub candidates_corrected: u64,
+    pub chart_items_relinked: u64,
+    pub batches: u32,
+    /// `true` when the pass batch cap was reached while rows remained; the
+    /// next pass resumes the same work, so convergence is eventual.
+    pub truncated: bool,
+}
+
+const RECOMMENDATION_ENTITY_TYPES: [&str; 3] = ["track", "release", "artist"];
+
+impl NativeDiscoveryStore {
+    /// Reconciles the materialized discovery projections against durable
+    /// catalog and listening facts in bounded, idempotent, set-based batches.
+    ///
+    /// `native_recommendation_candidates` is trigger-maintained; this pass is
+    /// the convergence backstop for rows missed or drifted while triggers
+    /// could not run (backup restore, binary downgrade window). It re-adds
+    /// missing catalog candidates and recomputes popularity from
+    /// `native_track_plays` only where the stored value differs. Unlinked
+    /// chart items are retried against the catalog under the same
+    /// unique-exact-match rule as import; existing links are never rewritten
+    /// or cleared because names are never semantic identity.
+    pub async fn refresh_discovery_aggregates(
+        &self,
+        pool: &PgPool,
+        batch_size: u32,
+        max_batches: u32,
+    ) -> Result<NativeDiscoveryMaintenanceStats, NativeDiscoveryStoreError> {
+        let mut stats = NativeDiscoveryMaintenanceStats::default();
+        for entity_type in RECOMMENDATION_ENTITY_TYPES {
+            insert_missing_candidates(pool, entity_type, batch_size, max_batches, &mut stats)
+                .await?;
+        }
+        for entity_type in RECOMMENDATION_ENTITY_TYPES {
+            correct_candidate_popularity(pool, entity_type, batch_size, max_batches, &mut stats)
+                .await?;
+        }
+        relink_chart_items(pool, batch_size, max_batches, &mut stats).await?;
+        Ok(stats)
+    }
+}
+
+fn missing_candidate_insert_sql(entity_type: &str) -> &'static str {
+    match entity_type {
+        "track" => {
+            "INSERT INTO native_recommendation_candidates(\
+               entity_type,entity_id,popularity,updated_at) \
+             SELECT 'track',track.id,0,now() FROM tracks track \
+             WHERE NOT EXISTS(SELECT 1 FROM native_recommendation_candidates candidate \
+               WHERE candidate.entity_type='track' AND candidate.entity_id=track.id) \
+             ORDER BY track.id LIMIT $1 \
+             ON CONFLICT(entity_type,entity_id) DO NOTHING"
+        }
+        "release" => {
+            "INSERT INTO native_recommendation_candidates(\
+               entity_type,entity_id,popularity,updated_at) \
+             SELECT 'release',release.id,0,now() FROM releases release \
+             WHERE NOT EXISTS(SELECT 1 FROM native_recommendation_candidates candidate \
+               WHERE candidate.entity_type='release' AND candidate.entity_id=release.id) \
+             ORDER BY release.id LIMIT $1 \
+             ON CONFLICT(entity_type,entity_id) DO NOTHING"
+        }
+        _ => {
+            "INSERT INTO native_recommendation_candidates(\
+               entity_type,entity_id,popularity,updated_at) \
+             SELECT 'artist',artist.id,0,now() FROM artists artist \
+             WHERE NOT EXISTS(SELECT 1 FROM native_recommendation_candidates candidate \
+               WHERE candidate.entity_type='artist' AND candidate.entity_id=artist.id) \
+             ORDER BY artist.id LIMIT $1 \
+             ON CONFLICT(entity_type,entity_id) DO NOTHING"
+        }
+    }
+}
+
+async fn insert_missing_candidates(
+    pool: &PgPool,
+    entity_type: &str,
+    batch_size: u32,
+    max_batches: u32,
+    stats: &mut NativeDiscoveryMaintenanceStats,
+) -> Result<(), NativeDiscoveryStoreError> {
+    let sql = missing_candidate_insert_sql(entity_type);
+    loop {
+        if stats_batch_exhausted(stats, max_batches) {
+            stats.truncated = true;
+            return Ok(());
+        }
+        let inserted = sqlx::query(sql)
+            .bind(i64::from(batch_size))
+            .execute(pool)
+            .await
+            .map_err(map_sql)?
+            .rows_affected();
+        stats.batches = stats.batches.saturating_add(1);
+        stats.candidates_inserted = stats.candidates_inserted.saturating_add(inserted);
+        if inserted == 0 {
+            return Ok(());
+        }
+    }
+}
+
+fn candidate_popularity_correction_sql(entity_type: &str) -> &'static str {
+    match entity_type {
+        "track" => {
+            "WITH actual AS (\
+               SELECT candidate.entity_id,count(play.id) AS popularity \
+               FROM native_recommendation_candidates candidate \
+               LEFT JOIN native_track_plays play ON play.track_id=candidate.entity_id \
+               WHERE candidate.entity_type='track' AND candidate.entity_id=ANY($1) \
+               GROUP BY candidate.entity_id) \
+             UPDATE native_recommendation_candidates candidate \
+             SET popularity=actual.popularity,updated_at=now() \
+             FROM actual \
+             WHERE candidate.entity_type='track' AND candidate.entity_id=actual.entity_id \
+               AND candidate.popularity<>actual.popularity"
+        }
+        "release" => {
+            "WITH actual AS (\
+               SELECT candidate.entity_id,count(play.id) AS popularity \
+               FROM native_recommendation_candidates candidate \
+               LEFT JOIN tracks track ON track.release_id=candidate.entity_id \
+               LEFT JOIN native_track_plays play ON play.track_id=track.id \
+               WHERE candidate.entity_type='release' AND candidate.entity_id=ANY($1) \
+               GROUP BY candidate.entity_id) \
+             UPDATE native_recommendation_candidates candidate \
+             SET popularity=actual.popularity,updated_at=now() \
+             FROM actual \
+             WHERE candidate.entity_type='release' AND candidate.entity_id=actual.entity_id \
+               AND candidate.popularity<>actual.popularity"
+        }
+        _ => {
+            "WITH actual AS (\
+               SELECT candidate.entity_id,count(play.id) AS popularity \
+               FROM native_recommendation_candidates candidate \
+               LEFT JOIN track_artists billing \
+                 ON billing.artist_id=candidate.entity_id AND billing.role='primary' \
+               LEFT JOIN native_track_plays play ON play.track_id=billing.track_id \
+               WHERE candidate.entity_type='artist' AND candidate.entity_id=ANY($1) \
+               GROUP BY candidate.entity_id) \
+             UPDATE native_recommendation_candidates candidate \
+             SET popularity=actual.popularity,updated_at=now() \
+             FROM actual \
+             WHERE candidate.entity_type='artist' AND candidate.entity_id=actual.entity_id \
+               AND candidate.popularity<>actual.popularity"
+        }
+    }
+}
+
+async fn correct_candidate_popularity(
+    pool: &PgPool,
+    entity_type: &str,
+    batch_size: u32,
+    max_batches: u32,
+    stats: &mut NativeDiscoveryMaintenanceStats,
+) -> Result<(), NativeDiscoveryStoreError> {
+    let correction_sql = candidate_popularity_correction_sql(entity_type);
+    let mut cursor = Uuid::nil();
+    loop {
+        if stats_batch_exhausted(stats, max_batches) {
+            stats.truncated = true;
+            return Ok(());
+        }
+        // Keyset pagination walks every candidate exactly once per pass even
+        // when a batch needs no correction, so the pass always terminates.
+        let batch = sqlx::query_scalar::<_, Uuid>(
+            "SELECT entity_id FROM native_recommendation_candidates \
+             WHERE entity_type=$1 AND entity_id>$2 ORDER BY entity_id LIMIT $3",
+        )
+        .bind(entity_type)
+        .bind(cursor)
+        .bind(i64::from(batch_size))
+        .fetch_all(pool)
+        .await
+        .map_err(map_sql)?;
+        stats.batches = stats.batches.saturating_add(1);
+        let Some(last) = batch.last().copied() else {
+            return Ok(());
+        };
+        cursor = last;
+        let corrected = sqlx::query(correction_sql)
+            .bind(&batch)
+            .execute(pool)
+            .await
+            .map_err(map_sql)?
+            .rows_affected();
+        stats.candidates_corrected = stats.candidates_corrected.saturating_add(corrected);
+        if batch.len() < usize::try_from(batch_size).unwrap_or(usize::MAX) {
+            return Ok(());
+        }
+    }
+}
+
+async fn relink_chart_items(
+    pool: &PgPool,
+    batch_size: u32,
+    max_batches: u32,
+    stats: &mut NativeDiscoveryMaintenanceStats,
+) -> Result<(), NativeDiscoveryStoreError> {
+    loop {
+        if stats_batch_exhausted(stats, max_batches) {
+            stats.truncated = true;
+            return Ok(());
+        }
+        // Only unique exact matches link, exactly as at import time. Rows
+        // that stay unlinked terminate the loop; later passes retry them as
+        // the catalog changes.
+        let relinked = sqlx::query(
+            r#"WITH batch AS (
+                 SELECT item.chart_id,item.rank
+                 FROM native_chart_items item
+                 WHERE item.linked_artist_id IS NULL OR item.linked_release_id IS NULL
+                 ORDER BY item.chart_id,item.rank LIMIT $1)
+               UPDATE native_chart_items item SET
+                 (linked_artist_id,linked_release_id)=(
+                   SELECT artist.id,release.id
+                   FROM artists artist
+                   JOIN release_artists credit
+                     ON credit.artist_id=artist.id AND credit.role='primary'
+                   JOIN releases release
+                     ON release.id=credit.release_id AND release.status='active'
+                   WHERE lower(btrim(artist.canonical_name))=lower(btrim(item.artist_name))
+                     AND lower(btrim(release.title))=lower(btrim(item.release_title))
+                     AND (item.release_year IS NULL OR
+                       EXTRACT(YEAR FROM release.release_date)::integer=item.release_year)
+                   ORDER BY release.id LIMIT 1)
+               FROM batch
+               WHERE item.chart_id=batch.chart_id AND item.rank=batch.rank AND 1=(
+                 SELECT count(*) FROM artists artist
+                 JOIN release_artists credit
+                   ON credit.artist_id=artist.id AND credit.role='primary'
+                 JOIN releases release
+                   ON release.id=credit.release_id AND release.status='active'
+                 WHERE lower(btrim(artist.canonical_name))=lower(btrim(item.artist_name))
+                   AND lower(btrim(release.title))=lower(btrim(item.release_title))
+                   AND (item.release_year IS NULL OR
+                     EXTRACT(YEAR FROM release.release_date)::integer=item.release_year))"#,
+        )
+        .bind(i64::from(batch_size))
+        .execute(pool)
+        .await
+        .map_err(map_sql)?
+        .rows_affected();
+        stats.batches = stats.batches.saturating_add(1);
+        stats.chart_items_relinked = stats.chart_items_relinked.saturating_add(relinked);
+        if relinked == 0 {
+            return Ok(());
+        }
+    }
+}
+
+const fn stats_batch_exhausted(stats: &NativeDiscoveryMaintenanceStats, max_batches: u32) -> bool {
+    stats.batches >= max_batches
+}
+
 fn validate_chart_metadata(request: &NativeChartImport) -> Result<(), NativeDiscoveryStoreError> {
     let slug = request.slug.trim();
     if slug.is_empty()

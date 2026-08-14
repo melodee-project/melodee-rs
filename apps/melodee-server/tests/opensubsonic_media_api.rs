@@ -680,6 +680,62 @@ async fn get_avatar_by_user_id_returns_stored_bytes() {
 }
 
 #[tokio::test]
+async fn get_avatar_reads_phase9_avatar_store() {
+    // WP-03 (ADR-0134 §2): `native_user_avatars` is the avatar authority; the
+    // migration-0010 `native_users` image columns are the legacy-import
+    // fallback. The response shape (bytes + content type) is unchanged.
+    let db = common::TestDb::create("os_media_avatar_phase9_store").await;
+    let state = state(&db).await;
+    let internal_id: Uuid = sqlx::query_scalar(
+        "SELECT id FROM native_users WHERE normalized_username='PHASE0-FIXTURE'",
+    )
+    .fetch_one(&db.pool)
+    .await
+    .expect("user id");
+    // Legacy-imported bytes remain visible when no new-store row exists.
+    let legacy = b"\x89PNG\r\n\x1a\nlegacy-imported-avatar".to_vec();
+    sqlx::query(
+        "UPDATE native_users SET image_mime_type = 'image/png', image_bytes = $1 WHERE id = $2",
+    )
+    .bind(&legacy)
+    .bind(internal_id)
+    .execute(&db.pool)
+    .await
+    .expect("seed legacy avatar");
+    let path = "/rest/getAvatar.view?f=json&v=1.16.1&c=phase0&username=phase0-fixture";
+    let (status, _, body) = respond(state.clone(), get(&authed(path))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, legacy, "legacy column fallback");
+
+    // A new-store row wins over the legacy columns.
+    let uploaded = b"\xFF\xD8\xFF\xE0\x00\x10JFIF\x00wp03-uploaded-avatar".to_vec();
+    melodee_persistence::UserAdminStore::new()
+        .set_avatar(
+            &db.pool,
+            internal_id,
+            "image/jpeg",
+            &uploaded,
+            OffsetDateTime::now_utc(),
+        )
+        .await
+        .expect("set avatar");
+    let (status, headers, body) = respond(state.clone(), get(&authed(path))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_header(&headers, header::CONTENT_TYPE, "image/jpeg");
+    assert_eq!(body, uploaded, "native_user_avatars row wins");
+
+    // Deleting the avatar row restores the legacy fallback.
+    melodee_persistence::UserAdminStore::new()
+        .delete_avatar(&db.pool, internal_id)
+        .await
+        .expect("delete avatar");
+    let (status, _, body) = respond(state.clone(), get(&authed(path))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, legacy, "fallback restored after delete");
+    db.drop().await;
+}
+
+#[tokio::test]
 async fn get_lyrics_echoes_artist_and_title_with_empty_value() {
     let db = common::TestDb::create("os_media_lyrics").await;
     let state = state(&db).await;

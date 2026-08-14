@@ -946,3 +946,296 @@ async fn native_community_routes_are_owner_fenced_bounded_and_replay_safe() {
     assert_eq!(status, StatusCode::BAD_REQUEST);
     db.drop().await;
 }
+
+/// Phase 9 WP-01: public share Track assembly is set-based (one items
+/// statement per Release/Playlist) and produces a byte-identical shape to the
+/// previous sequential per-Track DTO loads. The repository has no
+/// statement-counting test harness (the `catalog_performance.rs` pattern
+/// counts statements through store-returned fields), so the constant
+/// statement bound is pinned structurally: the handler issues a fixed
+/// inventory of statements (share row `FOR UPDATE`, owner/ACL checks, one
+/// resource row query, one set-based items query, one visit update)
+/// regardless of item count, the items statement is proven index-backed via
+/// EXPLAIN, and the shape is verified against an in-test sequential reference
+/// at two playlist sizes.
+#[tokio::test]
+async fn public_share_track_assembly_is_set_based_with_identical_shape() {
+    let db = common::TestDb::create("server_native_share_assembly").await;
+    let owner = import_user(&db, "share-assembly-owner").await;
+    let state = state(&db);
+    let owner_principal = principal(&owner);
+
+    // Three single-track Releases with distinct numbering/duration so any
+    // field swap or ordering regression is observable. Beta keeps
+    // `track_number` NULL so the COALESCE-to-ordinal leg is exercised.
+    let mut tracks = Vec::new();
+    for (ordinal, title, track_number, duration_ms) in [
+        (9201_u32, "Assembly Alpha", Some(7_i32), 111_000_i64),
+        (9202_u32, "Assembly Beta", None, 222_000_i64),
+        (9203_u32, "Assembly Gamma", Some(3_i32), 333_000_i64),
+    ] {
+        let fixture = phase5_common::seed_cataloged_release(
+            &db,
+            ordinal,
+            CatalogFixturePresentation {
+                release_title: title,
+                release_artist: "Share Assembly Artist",
+                track_title: title,
+                track_artist: "Share Assembly Artist",
+                release_date: "2026-08-13",
+            },
+        )
+        .await;
+        let track_id: Uuid =
+            sqlx::query_scalar("SELECT public_api_id FROM tracks WHERE release_id = $1")
+                .bind(fixture.release_id().into_uuid())
+                .fetch_one(&db.pool)
+                .await
+                .expect("Track public ID");
+        sqlx::query("UPDATE tracks SET track_number=$2, duration_ms=$3 WHERE public_api_id=$1")
+            .bind(track_id)
+            .bind(track_number)
+            .bind(duration_ms)
+            .execute(&db.pool)
+            .await
+            .expect("set Track numbering/duration");
+        tracks.push((track_id, title, track_number, duration_ms));
+    }
+    let [alpha, beta, gamma] = tracks.try_into().expect("three tracks");
+
+    // Playlist position order deliberately differs from seed order.
+    let playlist_id = Uuid::now_v7();
+    sqlx::query(
+        "INSERT INTO native_playlists (
+             id, public_api_id, owner_user_id, name, description,
+             is_public, created_at, updated_at
+         ) VALUES ($1,$1,$2,'Set-Based Assembly','batch shape pin',true,now(),now())",
+    )
+    .bind(playlist_id)
+    .bind(owner.id)
+    .execute(&db.pool)
+    .await
+    .expect("assembly playlist");
+    for (position, track) in [gamma, alpha, beta].iter().enumerate() {
+        sqlx::query(
+            "INSERT INTO native_playlist_items (
+                 id,playlist_id,track_id,position,added_by_user_id,created_at
+             ) VALUES ($1,$2,(SELECT id FROM tracks WHERE public_api_id=$3),$4,$5,now())",
+        )
+        .bind(Uuid::now_v7())
+        .bind(playlist_id)
+        .bind(track.0)
+        .bind(i32::try_from(position).expect("position fits i32"))
+        .bind(owner.id)
+        .execute(&db.pool)
+        .await
+        .expect("assembly playlist item");
+    }
+
+    let (status, share) = call(
+        state.clone(),
+        Some(owner_principal),
+        Method::POST,
+        "/api/v1/shares",
+        Some(serde_json::json!({
+            "shareType": 3,
+            "resourceId": playlist_id,
+            "description": "Set-based assembly pin",
+            "isDownloadable": false
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let public_path = share.expect("share body")["shareUrl"]
+        .as_str()
+        .expect("share URL")
+        .to_owned();
+    let (status, public) = call(state.clone(), None, Method::GET, &public_path, None).await;
+    assert_eq!(status, StatusCode::OK);
+    let public = public.expect("public share body");
+
+    // The previous sequential shape, recomputed in-test from the exact legacy
+    // per-Track queries: ids+positions first, then one Track row per item.
+    let id_positions: Vec<(Uuid, i32)> = sqlx::query_as(
+        "SELECT t.public_api_id, pi.position FROM native_playlist_items pi \
+         JOIN tracks t ON t.id = pi.track_id \
+         WHERE pi.playlist_id = (SELECT id FROM native_playlists WHERE public_api_id = $1) \
+         ORDER BY pi.position",
+    )
+    .bind(playlist_id)
+    .fetch_all(&db.pool)
+    .await
+    .expect("sequential reference ids");
+    let mut sequential_reference = Vec::with_capacity(id_positions.len());
+    for (track_id, position) in id_positions {
+        let (title, number, duration): (String, i32, i64) = sqlx::query_as(
+            "SELECT title, COALESCE(track_number, ordinal), COALESCE(duration_ms, 0) \
+             FROM tracks WHERE public_api_id = $1",
+        )
+        .bind(track_id)
+        .fetch_one(&db.pool)
+        .await
+        .expect("sequential reference Track");
+        sequential_reference.push(serde_json::json!({
+            "id": track_id.to_string(),
+            "title": title,
+            "trackNumber": if number < 1 { position } else { number },
+            "durationMs": duration as f64,
+            "streamUrl": format!("http://melodee.test/rest/stream?id=song_{track_id}"),
+        }));
+    }
+    assert_eq!(
+        public["playlist"]["songs"],
+        serde_json::Value::Array(sequential_reference),
+        "the set-based assembly must be identical to the sequential shape"
+    );
+    // Literal pin of the same content: position order [gamma, alpha, beta],
+    // effective numbers [3, 7, ordinal 1] and durations survive exactly.
+    assert_eq!(
+        public["playlist"]["songs"],
+        serde_json::json!([
+            {"id": gamma.0.to_string(), "title": "Assembly Gamma", "trackNumber": 3,
+             "durationMs": 333_000.0,
+             "streamUrl": format!("http://melodee.test/rest/stream?id=song_{}", gamma.0)},
+            {"id": alpha.0.to_string(), "title": "Assembly Alpha", "trackNumber": 7,
+             "durationMs": 111_000.0,
+             "streamUrl": format!("http://melodee.test/rest/stream?id=song_{}", alpha.0)},
+            {"id": beta.0.to_string(), "title": "Assembly Beta", "trackNumber": 1,
+             "durationMs": 222_000.0,
+             "streamUrl": format!("http://melodee.test/rest/stream?id=song_{}", beta.0)},
+        ])
+    );
+    assert_eq!(public["playlist"]["id"], playlist_id.to_string());
+    assert_eq!(public["playlist"]["name"], "Set-Based Assembly");
+
+    // The set-based items statement must stay index-backed on the per-playlist
+    // position ordering (same evidence style as the M3U lookup plan pin).
+    let plan: serde_json::Value = sqlx::query_scalar(
+        "EXPLAIN (FORMAT JSON, COSTS OFF)
+         SELECT t.public_api_id, t.title, COALESCE(t.track_number, t.ordinal) AS effective_number,
+                COALESCE(t.duration_ms, 0) AS duration_ms, pi.position AS fallback_number
+         FROM native_playlist_items pi JOIN tracks t ON t.id = pi.track_id
+         WHERE pi.playlist_id = (SELECT id FROM native_playlists WHERE public_api_id = $1)
+         ORDER BY pi.position",
+    )
+    .bind(playlist_id)
+    .fetch_one(&db.pool)
+    .await
+    .expect("set-based items plan");
+    assert!(
+        plan.to_string()
+            .contains("native_playlist_items_position_unique"),
+        "set-based playlist items must plan against the position index: {plan}"
+    );
+
+    // Scale leg: a 120-item playlist (40 repetitions of the 3-Track pattern)
+    // assembles through the same single set-based statement; the shape per
+    // item is identical and the handler statement inventory does not grow
+    // with the item count (bounded above by MAX_NATIVE_PLAYLIST_ITEMS).
+    let large_playlist_id = Uuid::now_v7();
+    sqlx::query(
+        "INSERT INTO native_playlists (
+             id, public_api_id, owner_user_id, name, description,
+             is_public, created_at, updated_at
+         ) VALUES ($1,$1,$2,'Set-Based Assembly Large',NULL,true,now(),now())",
+    )
+    .bind(large_playlist_id)
+    .bind(owner.id)
+    .execute(&db.pool)
+    .await
+    .expect("large assembly playlist");
+    sqlx::query(
+        "WITH pattern(ord, track_id) AS (
+             SELECT 0, (SELECT id FROM tracks WHERE public_api_id=$3)
+             UNION ALL SELECT 1, (SELECT id FROM tracks WHERE public_api_id=$4)
+             UNION ALL SELECT 2, (SELECT id FROM tracks WHERE public_api_id=$5)
+         )
+         INSERT INTO native_playlist_items (
+             id,playlist_id,track_id,position,added_by_user_id,created_at
+         )
+         SELECT uuidv7(), $1, pattern.track_id, (cycle * 3 + pattern.ord)::integer, $2, now()
+         FROM pattern CROSS JOIN generate_series(0, 39) AS cycle",
+    )
+    .bind(large_playlist_id)
+    .bind(owner.id)
+    .bind(gamma.0)
+    .bind(alpha.0)
+    .bind(beta.0)
+    .execute(&db.pool)
+    .await
+    .expect("large assembly playlist items");
+    let (status, large_share) = call(
+        state.clone(),
+        Some(owner_principal),
+        Method::POST,
+        "/api/v1/shares",
+        Some(serde_json::json!({
+            "shareType": 3,
+            "resourceId": large_playlist_id,
+            "isDownloadable": false
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let large_path = large_share.expect("large share body")["shareUrl"]
+        .as_str()
+        .expect("large share URL")
+        .to_owned();
+    let (status, large_public) = call(state.clone(), None, Method::GET, &large_path, None).await;
+    assert_eq!(status, StatusCode::OK);
+    let large_songs = large_public.expect("large public body")["playlist"]["songs"]
+        .as_array()
+        .expect("large songs")
+        .clone();
+    assert_eq!(large_songs.len(), 120);
+    assert_eq!(large_songs[0]["id"], gamma.0.to_string());
+    assert_eq!(large_songs[1]["id"], alpha.0.to_string());
+    assert_eq!(large_songs[119]["id"], beta.0.to_string());
+    assert!(
+        large_songs
+            .windows(2)
+            .all(|pair| pair[0]["streamUrl"] != pair[1]["streamUrl"]
+                || pair[0]["id"] != pair[1]["id"]),
+        "repeated entries keep per-item identity in position order"
+    );
+
+    // Release-share assembly uses the same set-based row mapping; pin its
+    // single-Track shape against the sequential reference as well.
+    let alpha_release: Uuid =
+        sqlx::query_scalar("SELECT public_api_id FROM releases WHERE title = 'Assembly Alpha'")
+            .fetch_one(&db.pool)
+            .await
+            .expect("Alpha Release public ID");
+    let (status, release_share) = call(
+        state.clone(),
+        Some(owner_principal),
+        Method::POST,
+        "/api/v1/shares",
+        Some(serde_json::json!({
+            "shareType": 2,
+            "resourceId": alpha_release,
+            "isDownloadable": false
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let release_path = release_share.expect("release share body")["shareUrl"]
+        .as_str()
+        .expect("release share URL")
+        .to_owned();
+    let (status, release_public) =
+        call(state.clone(), None, Method::GET, &release_path, None).await;
+    assert_eq!(status, StatusCode::OK);
+    let release_public = release_public.expect("release public body");
+    assert_eq!(
+        release_public["album"]["songs"],
+        serde_json::json!([{
+            "id": alpha.0.to_string(),
+            "title": "Assembly Alpha",
+            "trackNumber": 7,
+            "durationMs": 111_000.0,
+            "streamUrl": format!("http://melodee.test/rest/stream?id=song_{}", alpha.0)
+        }])
+    );
+    db.drop().await;
+}

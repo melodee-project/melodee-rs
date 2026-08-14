@@ -1,7 +1,7 @@
 # ADR-0109: Use Carbon Design System for the administration UI
 
 - **Date:** 2026-08-07
-- **Status:** Proposed
+- **Status:** Accepted
 - **Decision owners:** Unassigned
 - **Supersedes:** None
 - **Superseded by:** None
@@ -33,3 +33,16 @@ behavior, then accept or reject this ADR.
   2026-08-08), Apache-2.0, no commercial boundary. Carbon remains the preferred candidate;
   the approved mockups under design/ remain consistent with it.
 
+## Phase 9 amendment (2026-08-13)
+
+- **Status changed: Proposed → Accepted.** The technology decision (React + TypeScript + Carbon,
+  Carbon DataTable first, TanStack Table only for a proven gap) is accepted: Phase 0 revalidated
+  Carbon's active, Apache-2.0, fully-FOSS status and the approved mockups remain consistent with
+  it.
+- **Scope ambiguity resolved.** This ADR's validation section (implement Processing Queue,
+  Release Review, and Artist Identity Review shells with light/dark, a translated locale, RTL
+  smoke, keyboard navigation, and responsive behavior) is **Phase 10 entry criteria**, not Phase 9
+  scope. Phase 9's only obligation toward this ADR is WP-14's confirmation that theming/i18n/RTL
+  requirement rows are Phase-10-owned and outside the Phase 9 exit gate.
+- The shell-validation evidence must still be produced and recorded here (or in a superseding
+  note) before Phase 10 is accepted.

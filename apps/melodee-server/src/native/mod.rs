@@ -1,6 +1,7 @@
 //! Native Melodee API v1 compatibility adapter (ADR-0102).
 
 pub mod auth;
+pub mod avatars;
 pub mod catalog;
 pub mod community;
 pub mod discovery;
@@ -391,6 +392,7 @@ pub fn router() -> Router<NativeState> {
         .merge(preferences::router())
         .merge(podcasts::router())
         .merge(auth::protected_router())
+        .merge(avatars::router())
         .merge(discovery::cookie_protected_router())
         .merge(auth::cookie_protected_router())
         .route_layer(middleware::from_fn(require_native_principal));
@@ -417,6 +419,7 @@ pub fn configured_router(state: NativeState) -> Router {
         .merge(preferences::router())
         .merge(podcasts::router())
         .merge(auth::protected_router())
+        .merge(avatars::router())
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             auth::authenticate_request,

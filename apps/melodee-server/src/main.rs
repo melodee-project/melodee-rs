@@ -9,9 +9,11 @@ use melodee_ingestion::{
 use melodee_persistence::{CatalogStore, WorkEngineConfig, WorkItemStore, migrate};
 use melodee_policy::PolicyConfig;
 use melodee_search::{SearchConfig, SearchRoot, start_search_loop};
+use melodee_server::discovery_worker::{DiscoveryWorkerConfig, start_discovery_loop};
 use melodee_server::policy_worker::{PolicyWorkerConfig, start_policy_loop};
 use melodee_server::{
-    admin, jellyfin, native, native_stream, opensubsonic, podcast_worker, policy_worker, system,
+    admin, discovery_worker, jellyfin, native, native_stream, opensubsonic, podcast_worker,
+    policy_worker, system,
 };
 use tokio::sync::oneshot;
 use tower_http::trace::TraceLayer;
@@ -61,6 +63,12 @@ async fn stop_search_worker(handle: Option<melodee_search::SearchSchedulerHandle
 }
 
 async fn stop_podcast_worker(handle: Option<podcast_worker::PodcastSchedulerHandle>) {
+    if let Some(handle) = handle {
+        handle.stop().await;
+    }
+}
+
+async fn stop_discovery_worker(handle: Option<discovery_worker::DiscoverySchedulerHandle>) {
     if let Some(handle) = handle {
         handle.stop().await;
     }
@@ -178,6 +186,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let podcast_config = podcast_worker::PodcastConfig::from_env()?;
     let policy_config = PolicyConfig::from_env()?;
     let policy_worker_config = PolicyWorkerConfig::from_env()?;
+    let discovery_worker_config = DiscoveryWorkerConfig::from_env()?;
     let publication_roots = ingestion_config.publication_roots()?;
     let mut search_config = SearchConfig::from_env()
         .map_err(|error| format!("invalid search configuration: {error}"))?;
@@ -393,14 +402,19 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         user_state: Arc::new(native::PostgresNativeUserStateReader::new(pool.clone())),
         direct_play,
         client_addresses: native_stream::ClientAddressResolver::new(trusted_proxies),
-        auth: native_auth,
+        auth: native_auth.clone(),
     };
     let native_app = native::configured_router(native_state).layer(native_cors);
     let podcast_handle = podcast_worker::start_podcast_loop(pool.clone(), podcast_config);
+    let discovery_handle = start_discovery_loop(discovery_worker_config, pool.clone());
 
     let admin_state = admin::AdminState {
         pool: pool.clone(),
         store: WorkItemStore,
+    };
+    let admin_access_state = melodee_server::admin_access::AdminAccessState {
+        pool: pool.clone(),
+        auth: native_auth,
     };
     let readiness = system::ReadinessState::new(pool.clone())
         .with_search(search_config.enabled.then_some(search_config.clone()));
@@ -429,6 +443,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             get(admin::list_active_leases),
         )
         .with_state(admin_state)
+        .merge(melodee_server::admin_access::router().with_state(admin_access_state))
         .merge(native_app)
         .merge(opensubsonic_app)
         .merge(jellyfin_app)
@@ -466,7 +481,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     // Signal every worker immediately, then await server drain and worker
     // cancellation together while PostgreSQL is still available for safe
     // lease/error bookkeeping.
-    let (server_result, (), (), (), (), (), (), (), (), ()) = tokio::join!(
+    let (server_result, (), (), (), (), (), (), (), (), (), ()) = tokio::join!(
         server_handle,
         stop_worker(reconcile_handle),
         stop_worker(inspection_handle),
@@ -477,6 +492,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         stop_policy_worker(policy_handle),
         stop_search_worker(search_handle),
         stop_podcast_worker(podcast_handle),
+        stop_discovery_worker(discovery_handle),
     );
     server_result??;
     pool.close().await;

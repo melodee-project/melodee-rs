@@ -394,6 +394,14 @@ impl NativeAuthService {
         validate_access_token(&self.signing_key, token, now.unix_timestamp()).ok()
     }
 
+    /// Validates one native access JWT. Shared with the Rust-native admin API
+    /// gate (`/api/admin/v1` user/group administration), which authorizes
+    /// operators through the same native identity authority.
+    #[must_use]
+    pub fn validate_access(&self, token: &str, now: OffsetDateTime) -> Option<NativeAccessClaims> {
+        self.validate(token, now)
+    }
+
     fn validate_cookie(&self, value: &str, now: OffsetDateTime) -> Option<NativeCookieClaims> {
         validate_cookie_session(&self.signing_key, value, now.unix_timestamp()).ok()
     }

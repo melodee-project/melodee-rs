@@ -15,18 +15,22 @@ mod community;
 mod config;
 mod discovery;
 mod error;
+mod group_admin;
 mod migrate;
 mod native_user_state;
 mod policy;
 mod search;
+mod user_admin;
 mod work_items;
 mod worker;
+mod worker_pool;
 
 pub use auth::{
-    AuthLookup, AuthStore, AuthStoreError, AuthenticationRecord, MigrationIdentityBinding,
-    NativeUserImport, PasswordResetIssue, PasswordResetOutcome, RateLimitOutcome, RateLimitPolicy,
-    RefreshFamilyIssue, RefreshRotationOutcome, RefreshRotationRequest, SocialLoginLink,
-    StoredNativeUser, StoredSocialLogin, StreamPrincipal,
+    AuthLookup, AuthStore, AuthStoreError, AuthenticationRecord, BootstrapAdminRequest,
+    MigrationIdentityBinding, NativeUserImport, PasswordResetIssue, PasswordResetOutcome,
+    RateLimitOutcome, RateLimitPolicy, RefreshFamilyIssue, RefreshRotationOutcome,
+    RefreshRotationRequest, SocialLoginLink, StoredNativeUser, StoredSocialLogin, StreamPrincipal,
+    normalize_login,
 };
 pub use catalog::{
     CatalogCorrectionDimension, CatalogCounts, CatalogImportRequest, CatalogImportResult,
@@ -45,9 +49,13 @@ pub use config::{
 };
 pub use discovery::{
     MAX_CHART_CSV_BYTES, MAX_CHART_ITEMS, NativeChartImport, NativeChartImportResult,
-    NativeDiscoveryStore, NativeDiscoveryStoreError,
+    NativeDiscoveryMaintenanceStats, NativeDiscoveryStore, NativeDiscoveryStoreError,
 };
 pub use error::WorkStoreError;
+pub use group_admin::{
+    AccessGroupDetail, AccessGroupMember, GroupAdminError, GroupAdminStore, MAX_GROUP_NAME_LENGTH,
+    StoredAccessGroup,
+};
 pub use migrate::{MIGRATOR, migrate};
 pub use native_user_state::{
     MAX_NATIVE_PLAYLIST_ITEMS, MAX_NATIVE_PLAYLIST_PAGE_SIZE, NativeGenrePreference,
@@ -72,8 +80,16 @@ pub use search::{
     SearchProjectionStore, SearchReleaseRecord, SearchSnapshotReader, SearchStoreError,
     SearchTrackRecord, StoredSearchGeneration, StoredSearchRebuildJob,
 };
+pub use user_admin::{
+    MAX_AVATAR_BYTES, MAX_USER_IDENTITY_CHARS, MAX_USER_ROLES, NativeUserAdminUpdate,
+    NativeUserCreate, StoredAvatar, UserAdminError, UserAdminStore,
+};
 pub use work_items::{
     ActiveLease, PublicationJournalEntry, SettlingSnapshot, SettlingSnapshotFile, StateCount,
     StoredManifest, StoredPublication, WorkItemStore,
 };
 pub use worker::WorkerId;
+pub use worker_pool::{
+    MAX_POOL_ACTOR_LENGTH, MAX_POOL_NAME_LENGTH, POOL_DISCOVERY, POOL_PODCAST, POOL_POLICY,
+    WorkerPoolState, WorkerPoolStore, WorkerPoolStoreError, is_pool_paused, is_valid_pool_name,
+};

@@ -1,7 +1,7 @@
 # ADR-0132: Jellyfin ApiKey query token alias
 
 - **Date:** 2026-08-13
-- **Status:** Proposed
+- **Status:** Accepted
 - **Decision owners:** Phase 8 real-client smoke work package (explicitly authorized by the
   assigning session prompt)
 - **Supersedes:** None
@@ -101,3 +101,10 @@ primary token parameter, and was proven necessary and sufficient by the shipping
 - `design/evidence/phase-8/REAL-CLIENT-ACCEPTANCE.md`
 - Upstream: `jellyfin/jellyfin` `MediaBrowser.Controller/Net/AuthorizationContext.cs`
   (`queryString["ApiKey"]` primary, `api_key` legacy-gated fallback)
+
+## Phase 9 status note (2026-08-13)
+
+- **Status changed: Proposed → Accepted.** The validation evidence named above now exists:
+  the Phase 8 differential replay reports zero unexpected differences and the shipping Feishin
+  v1.15.1 client completed the documented Jellyfin workflows (12/12 assertions,
+  `design/evidence/phase-8/REAL-CLIENT-ACCEPTANCE.md`) against the shipped implementation.

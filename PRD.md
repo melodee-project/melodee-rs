@@ -1490,6 +1490,18 @@ Preserve queue persistence and current queue operations exposed by supported API
 
 Preserve user statistics/listening analytics currently available.
 
+### PRD-NOTIF-001
+
+Preserve the email/notification template capability where currently used: admin-manageable templates for user-facing notifications (for example password reset, share, and request-activity messages), including template storage, rendering, and delivery wiring.
+
+### PRD-NOTIF-002
+
+Notification delivery must use a FOSS transport, require no new infrastructure service, and fail degraded: a notification failure must never block or roll back the operation that triggered it, and notifications must never log secrets or rendered private content in clear text.
+
+### PRD-NOTIF-003
+
+Notification behavior must be operator-verifiable headlessly (CLI test-send with evidence) and must externalize all user-visible text so the Phase 10 localization work can translate it.
+
 ---
 
 ## 28. Playlists and Smart Playlists
@@ -1539,6 +1551,14 @@ Existing share identifiers/URLs should survive migration when technically possib
 ## 31. Internet Radio
 
 Preserve current internet radio listing/create/update/delete functionality and OpenSubsonic compatibility behavior.
+
+### PRD-RADIO-001
+
+Preserve internet radio station listing/create/update/delete behavior and the captured OpenSubsonic internet-radio compatibility contract.
+
+### PRD-RADIO-002
+
+Internet radio station data must survive migration, and station create/update/delete must remain admin-gated exactly as captured.
 
 ---
 
@@ -2046,6 +2066,14 @@ Minimum expected capability set:
 - Diagnostics/report output.
 
 Commands must coordinate with running server/workers through PostgreSQL/API/leases rather than bypassing safety controls.
+
+### PRD-CLI-001
+
+The CLI must provide the minimum capability set above: server/config health inspection, library reconciliation trigger, ingestion item inspect/retry/reprocess, search status/rebuild, database migration/status, C# data migration/import, user/admin bootstrap and recovery, and diagnostics/report output.
+
+### PRD-CLI-002
+
+CLI commands must coordinate with the running server/workers through PostgreSQL, the API, or leases; a CLI command must never bypass durable safety controls (leases, authorization, audit, or non-destructive disposition rules).
 
 ---
 

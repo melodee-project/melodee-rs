@@ -98,3 +98,121 @@ async fn bounded_chart_import_is_atomic_and_links_only_unique_catalog_identity()
     );
     db.drop().await;
 }
+
+#[tokio::test]
+async fn discovery_maintenance_relinks_chart_items_only_on_unique_catalog_identity() {
+    let db = TestDb::create("native_discovery_maintenance_relink").await;
+    // Import a chart whose items have no catalog counterpart yet; both rows
+    // stay unlinked at import time.
+    let request = NativeChartImport {
+        slug: "maintenance-relink".to_owned(),
+        title: "Maintenance Relink".to_owned(),
+        source_name: None,
+        source_url: None,
+        chart_year: Some(2026),
+        is_visible: true,
+        is_generated_playlist_enabled: false,
+    };
+    let imported = NativeDiscoveryStore
+        .import_chart_csv(
+            &db.pool,
+            &request,
+            b"Rank,ArtistName,ReleaseTitle,ReleaseYear\n1,Late Artist,Late Release,2026\n2,Duplicate Artist,Duplicate Release,2026\n",
+        )
+        .await
+        .expect("import unlinked chart");
+    assert_eq!(imported.linked_count, 0);
+
+    // The catalog later gains a unique match for rank 1 and two ambiguous
+    // matches for rank 2.
+    let matched = seed_published_release(
+        &db,
+        702,
+        CatalogFixturePresentation {
+            release_title: "Late Release",
+            release_artist: "Late Artist",
+            track_title: "Late Track",
+            track_artist: "Late Artist",
+            release_date: "2026-01-02",
+        },
+    )
+    .await;
+    let worker = WorkerId::new();
+    let claimed = CatalogStore
+        .claim_cataloging(&db.pool, &worker, &test_config(), OffsetDateTime::now_utc())
+        .await
+        .expect("claim matched fixture");
+    assert_eq!(claimed.len(), 1);
+    CatalogStore
+        .import_manifest_v3(
+            &db.pool,
+            matched.work_item_id,
+            &worker,
+            &CatalogImportRequest::new("phase7.chart-relink.v1", "chart-relink"),
+            OffsetDateTime::now_utc(),
+        )
+        .await
+        .expect("catalog matched fixture");
+    for ordinal in [703, 704] {
+        let duplicate = seed_published_release(
+            &db,
+            ordinal,
+            CatalogFixturePresentation {
+                release_title: "Duplicate Release",
+                release_artist: "Duplicate Artist",
+                track_title: "Duplicate Track",
+                track_artist: "Duplicate Artist",
+                release_date: "2026-03-04",
+            },
+        )
+        .await;
+        let claimed = CatalogStore
+            .claim_cataloging(&db.pool, &worker, &test_config(), OffsetDateTime::now_utc())
+            .await
+            .expect("claim duplicate fixture");
+        assert_eq!(claimed.len(), 1);
+        CatalogStore
+            .import_manifest_v3(
+                &db.pool,
+                duplicate.work_item_id,
+                &worker,
+                &CatalogImportRequest::new("phase7.chart-relink.v1", "chart-relink"),
+                OffsetDateTime::now_utc(),
+            )
+            .await
+            .expect("catalog duplicate fixture");
+    }
+
+    let stats = NativeDiscoveryStore
+        .refresh_discovery_aggregates(&db.pool, 500, 100)
+        .await
+        .expect("maintenance pass");
+    assert_eq!(stats.chart_items_relinked, 1);
+    assert!(!stats.truncated);
+    let rows = sqlx::query_as::<_, (i32, Option<uuid::Uuid>)>(
+        "SELECT rank,linked_release_id FROM native_chart_items WHERE chart_id=$1 ORDER BY rank",
+    )
+    .bind(imported.chart_id)
+    .fetch_all(&db.pool)
+    .await
+    .expect("relinked chart rows");
+    assert_eq!(
+        rows[0].1,
+        Some(matched.release_id.into_uuid()),
+        "unique late-arriving catalog identity links"
+    );
+    assert_eq!(
+        rows[1].1, None,
+        "ambiguous observations stay unlinked; names are never identity"
+    );
+
+    // A second pass converges to a no-op: maintenance is idempotent.
+    let second = NativeDiscoveryStore
+        .refresh_discovery_aggregates(&db.pool, 500, 100)
+        .await
+        .expect("idempotent second pass");
+    assert_eq!(second.chart_items_relinked, 0);
+    assert_eq!(second.candidates_inserted, 0);
+    assert_eq!(second.candidates_corrected, 0);
+    db.drop().await;
+}

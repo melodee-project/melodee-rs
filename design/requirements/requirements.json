@@ -1694,12 +1694,17 @@
     "phase": "8",
     "source": "PRD.md",
     "line": 1302,
-    "status": "captured",
+    "status": "tested",
     "implementation": [
-      "compatibility/opensubsonic/contracts/route-inventory.json (164 routes; plain and .view forms)"
+      "compatibility/opensubsonic/contracts/route-inventory.json (164 routes; plain and .view forms)",
+      "apps/melodee-server/src/opensubsonic/ (Phase 8 adapter)",
+      "design/agents/PHASE-8-OPENSUBSONIC-ROUTE-MATRIX.json (81/81 endpoints dispositioned)"
     ],
     "tests": [
-      "tests/python/test_opensubsonic_capture.py"
+      "tests/python/test_opensubsonic_capture.py",
+      "scripts/run_phase8_differential.py (full-golden replay, zero unexpected differences)",
+      "apps/melodee-server/tests/opensubsonic_*.rs",
+      "design/evidence/phase-8/PHASE-8-REPORT.md"
     ]
   },
   {
@@ -1708,12 +1713,15 @@
     "phase": "8",
     "source": "PRD.md",
     "line": 1306,
-    "status": "captured",
+    "status": "tested",
     "implementation": [
-      "compatibility/opensubsonic/golden/system/ (JSON/XML/JSONP envelope evidence incl. quirks)"
+      "compatibility/opensubsonic/golden/system/ (JSON/XML/JSONP envelope evidence incl. quirks)",
+      "apps/melodee-server/src/opensubsonic/ (frozen envelope/format behavior)"
     ],
     "tests": [
-      "tests/python/test_opensubsonic_capture.py (SystemAndFormatTests)"
+      "tests/python/test_opensubsonic_capture.py (SystemAndFormatTests)",
+      "scripts/run_phase8_differential.py",
+      "apps/melodee-server/tests/opensubsonic_system.rs"
     ]
   },
   {
@@ -1722,13 +1730,16 @@
     "phase": "8",
     "source": "PRD.md",
     "line": 1310,
-    "status": "captured",
+    "status": "tested",
     "implementation": [
       "compatibility/opensubsonic/golden/auth/ (token/salt, plain+enc password, JWT, apiKey, form POST, bypass)",
-      "design/evidence/phase-0/opensubsonic-capture.md section 3"
+      "design/evidence/phase-0/opensubsonic-capture.md section 3",
+      "design/adr/ADR-0130-phase-8-opensubsonic-authentication-extension-advertisement-and-streaming-corrections.md"
     ],
     "tests": [
-      "tests/python/test_opensubsonic_capture.py (AuthEvidenceTests)"
+      "tests/python/test_opensubsonic_capture.py (AuthEvidenceTests)",
+      "apps/melodee-server/tests/opensubsonic_system.rs",
+      "design/evidence/phase-8/PHASE-8-REPORT.md"
     ]
   },
   {
@@ -1737,13 +1748,16 @@
     "phase": "8",
     "source": "PRD.md",
     "line": 1314,
-    "status": "captured",
+    "status": "tested",
     "implementation": [
       "compatibility/opensubsonic/golden/ (browse, lists, media, annotation, playlists, community)",
-      "compatibility/opensubsonic/contracts/route-inventory.json (81 endpoints classified)"
+      "compatibility/opensubsonic/contracts/route-inventory.json (81 endpoints classified)",
+      "apps/melodee-server/src/opensubsonic/ (browse/lists/media/annotation/playlists/podcasts/radio/shares/users)"
     ],
     "tests": [
-      "tests/python/test_opensubsonic_capture.py"
+      "tests/python/test_opensubsonic_capture.py",
+      "scripts/run_phase8_differential.py (zero unexpected differences across all groups)",
+      "apps/melodee-server/tests/opensubsonic_*.rs"
     ]
   },
   {
@@ -1752,12 +1766,15 @@
     "phase": "8",
     "source": "PRD.md",
     "line": 1337,
-    "status": "captured",
+    "status": "tested",
     "implementation": [
-      "compatibility/opensubsonic/golden/negative/ (all 410/501 routes automated)"
+      "compatibility/opensubsonic/golden/negative/ (all 410/501 routes automated)",
+      "apps/melodee-server/src/opensubsonic/negative.rs (intentional 410/501 matrix)"
     ],
     "tests": [
-      "tests/python/test_opensubsonic_capture.py (NegativeAndConditionalTests)"
+      "tests/python/test_opensubsonic_capture.py (NegativeAndConditionalTests)",
+      "scripts/run_phase8_differential.py",
+      "design/agents/PHASE-8-OPENSUBSONIC-ROUTE-MATRIX.json (preserved-intentional-legacy-absence rows)"
     ]
   },
   {
@@ -1766,12 +1783,14 @@
     "phase": "8",
     "source": "PRD.md",
     "line": 1343,
-    "status": "captured",
+    "status": "tested",
     "implementation": [
-      "compatibility/opensubsonic/golden/system/os-getopensubsonicextensions-* (advertised set incl. two non-functional entries)"
+      "compatibility/opensubsonic/golden/system/os-getopensubsonicextensions-* (advertised set incl. two non-functional entries)",
+      "design/adr/ADR-0130-phase-8-opensubsonic-authentication-extension-advertisement-and-streaming-corrections.md (extension advertisement decision)"
     ],
     "tests": [
-      "tests/python/test_opensubsonic_capture.py (test_extensions_advertised)"
+      "tests/python/test_opensubsonic_capture.py (test_extensions_advertised)",
+      "apps/melodee-server/tests/opensubsonic_system.rs"
     ]
   },
   {
@@ -1780,12 +1799,14 @@
     "phase": "8",
     "source": "PRD.md",
     "line": 1347,
-    "status": "in-progress",
+    "status": "tested",
     "implementation": [
-      "design/evidence/phase-0/opensubsonic-capture.md (server-side evidence for login/browse/search/stream+seek/playlists/download/star)"
+      "design/evidence/phase-0/opensubsonic-capture.md (server-side evidence for login/browse/search/stream+seek/playlists/download/star)",
+      "design/evidence/phase-8/REAL-CLIENT-ACCEPTANCE.md (Feishin v1.15.1 OpenSubsonic smoke)"
     ],
     "tests": [
-      "tests/python/test_opensubsonic_capture.py"
+      "tests/python/test_opensubsonic_capture.py",
+      "design/evidence/phase-8/REAL-CLIENT-ACCEPTANCE.md (12/12 assertions across both surfaces)"
     ]
   },
   {
@@ -1794,7 +1815,7 @@
     "phase": "8",
     "source": "PRD.md",
     "line": 1365,
-    "status": "implemented",
+    "status": "tested",
     "implementation": [
       "apps/melodee-server/src/jellyfin/ (adapter module: mod.rs router, error.rs ProblemDetails envelope, model.rs PascalCase DTOs and captured ETag preimages)",
       "compatibility/jellyfin/contracts/route-inventory.json (60 routes, music-focused subset)",
@@ -1802,7 +1823,9 @@
     ],
     "tests": [
       "tests/python/test_jellyfin_capture.py",
-      "apps/melodee-server/tests/jellyfin_core_api.rs and jellyfin_media_api.rs (25 integration tests against PostgreSQL fixtures with frozen-golden shape comparisons)"
+      "apps/melodee-server/tests/jellyfin_core_api.rs and jellyfin_media_api.rs (25 integration tests against PostgreSQL fixtures with frozen-golden shape comparisons)",
+      "scripts/run_phase8_differential.py",
+      "design/evidence/phase-8/PHASE-8-REPORT.md"
     ]
   },
   {
@@ -1811,7 +1834,7 @@
     "phase": "8",
     "source": "PRD.md",
     "line": 1369,
-    "status": "implemented",
+    "status": "tested",
     "implementation": [
       "apps/melodee-server/src/jellyfin/mod.rs (routing middleware: marker detection, allowlist, marker-gated root probe; routes mounted in root and /api/jf forms)",
       "apps/melodee-server/src/jellyfin/discovery.rs (System/Info, System/Info/Public, System/Ping 204)",
@@ -1828,7 +1851,7 @@
     "phase": "8",
     "source": "PRD.md",
     "line": 1373,
-    "status": "implemented",
+    "status": "tested",
     "implementation": [
       "apps/melodee-server/src/jellyfin/auth.rs (Pw-only AuthenticateByName, 64-hex tokens with HMAC-SHA256 peppered digests, 168h expiry, max-10 revocation, all five captured token transports, idempotent logout)",
       "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md"
@@ -1844,7 +1867,7 @@
     "phase": "8",
     "source": "PRD.md",
     "line": 1377,
-    "status": "implemented",
+    "status": "tested",
     "implementation": [
       "apps/melodee-server/src/jellyfin/browse.rs (Items dispatch, Artists, Genres/MusicGenres, UserViews, Filters, Similar, InstantMix, /Users/{id}/Items redirects)",
       "apps/melodee-server/src/jellyfin/audio.rs (stream/stream.{ext}/universal, lyrics, Download/File, PlaybackInfo)",
@@ -1880,11 +1903,14 @@
     "phase": "8",
     "source": "PRD.md",
     "line": 1395,
-    "status": "in-progress",
+    "status": "tested",
     "implementation": [
-      "design/evidence/phase-0/jellyfin-capture.md section 9 (documented music-client smoke path covered server-side)"
+      "design/evidence/phase-0/jellyfin-capture.md section 9 (documented music-client smoke path covered server-side)",
+      "design/evidence/phase-8/REAL-CLIENT-ACCEPTANCE.md (Feishin v1.15.1 Jellyfin smoke)"
     ],
-    "tests": []
+    "tests": [
+      "design/evidence/phase-8/REAL-CLIENT-ACCEPTANCE.md (12/12 assertions across both surfaces)"
+    ]
   },
   {
     "id": "PRD-API-ADMIN-001",
@@ -2110,18 +2136,53 @@
     ]
   },
   {
+    "id": "PRD-NOTIF-001",
+    "title": "PRD-NOTIF-001",
+    "phase": "9",
+    "source": "PRD.md",
+    "line": 1493,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-NOTIF-002",
+    "title": "PRD-NOTIF-002",
+    "phase": "9",
+    "source": "PRD.md",
+    "line": 1497,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-NOTIF-003",
+    "title": "PRD-NOTIF-003",
+    "phase": "9",
+    "source": "PRD.md",
+    "line": 1501,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
     "id": "PRD-PLAYLIST-001",
     "title": "PRD-PLAYLIST-001",
     "phase": "9",
     "source": "PRD.md",
-    "line": 1497,
-    "status": "in-progress",
+    "line": 1509,
+    "status": "tested",
     "implementation": [
       "crates/melodee-persistence/migrations/0016_phase7_native_playlists.sql",
-      "apps/melodee-server/src/native/playlists.rs"
+      "apps/melodee-server/src/native/playlists.rs",
+      "apps/melodee-server/src/opensubsonic/ (playlist adapter group, Phase 8)",
+      "apps/melodee-server/src/jellyfin/playlists.rs (Phase 8)"
     ],
     "tests": [
-      "apps/melodee-server/tests/native_playlists.rs"
+      "apps/melodee-server/tests/native_playlists.rs",
+      "apps/melodee-server/tests/opensubsonic_playlists.rs",
+      "apps/melodee-server/tests/jellyfin_core_api.rs",
+      "scripts/run_phase8_differential.py (zero unexpected playlist differences)"
     ]
   },
   {
@@ -2129,7 +2190,7 @@
     "title": "PRD-PLAYLIST-002",
     "phase": "9",
     "source": "PRD.md",
-    "line": 1501,
+    "line": 1513,
     "status": "tested",
     "implementation": [
       "crates/melodee-persistence/migrations/0016_phase7_native_playlists.sql",
@@ -2144,7 +2205,7 @@
     "title": "PRD-PLAYLIST-003",
     "phase": "9",
     "source": "PRD.md",
-    "line": 1505,
+    "line": 1517,
     "status": "tested",
     "implementation": [
       "crates/melodee-persistence/migrations/0016_phase7_native_playlists.sql (stable public IDs and ordered items)"
@@ -2159,7 +2220,7 @@
     "title": "PRD-REQUEST-001",
     "phase": "9",
     "source": "PRD.md",
-    "line": 1513,
+    "line": 1525,
     "status": "tested",
     "implementation": [
       "crates/melodee-persistence/migrations/0012_phase7_native_community.sql",
@@ -2176,10 +2237,11 @@
     "title": "PRD-REQUEST-002",
     "phase": "9",
     "source": "PRD.md",
-    "line": 1517,
-    "status": "in-progress",
+    "line": 1529,
+    "status": "tested",
     "implementation": [
-      "apps/melodee-server/src/native/community.rs (native Melodee API v1 request surface)"
+      "apps/melodee-server/src/native/community.rs (native Melodee API v1 request surface)",
+      "design/evidence/phase-9/request-002-surface-inventory.md (frozen build exposes requests only on native v1)"
     ],
     "tests": [
       "apps/melodee-server/tests/native_community_api.rs::native_community_routes_are_owner_fenced_bounded_and_replay_safe"
@@ -2190,7 +2252,7 @@
     "title": "PRD-SHARE-001",
     "phase": "9",
     "source": "PRD.md",
-    "line": 1525,
+    "line": 1537,
     "status": "tested",
     "implementation": [
       "crates/melodee-persistence/migrations/0012_phase7_native_community.sql",
@@ -2206,7 +2268,7 @@
     "title": "PRD-SHARE-002",
     "phase": "9",
     "source": "PRD.md",
-    "line": 1529,
+    "line": 1541,
     "status": "tested",
     "implementation": [
       "apps/melodee-server/src/native/community.rs (anonymous public share resolution with expiry fencing)"
@@ -2220,7 +2282,7 @@
     "title": "PRD-SHARE-003",
     "phase": "9",
     "source": "PRD.md",
-    "line": 1533,
+    "line": 1545,
     "status": "tested",
     "implementation": [
       "crates/melodee-persistence/migrations/0012_phase7_native_community.sql (immutable public IDs and secure bearer constraint)",
@@ -2232,11 +2294,31 @@
     ]
   },
   {
+    "id": "PRD-RADIO-001",
+    "title": "PRD-RADIO-001",
+    "phase": "8,9",
+    "source": "PRD.md",
+    "line": 1555,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-RADIO-002",
+    "title": "PRD-RADIO-002",
+    "phase": "8,9",
+    "source": "PRD.md",
+    "line": 1559,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
     "id": "PRD-POD-001",
     "title": "PRD-POD-001",
     "phase": "9",
     "source": "PRD.md",
-    "line": 1547,
+    "line": 1567,
     "status": "tested",
     "implementation": [
       "apps/melodee-server/src/native/podcasts.rs",
@@ -2252,16 +2334,18 @@
     "title": "PRD-POD-002",
     "phase": "9",
     "source": "PRD.md",
-    "line": 1551,
+    "line": 1571,
     "status": "tested",
     "implementation": [
       "crates/melodee-persistence/migrations/0013_phase7_native_podcasts.sql",
       "apps/melodee-server/src/native/podcasts.rs",
-      "apps/melodee-server/src/podcast_worker.rs (bounded feed refresh, leased downloads, retention, and owned-file recovery)"
+      "apps/melodee-server/src/podcast_worker.rs (bounded feed refresh, leased downloads, retention, and owned-file recovery); apps/melodee-cli/src/main.rs (podcasts stuck/recover commands reusing the worker lease predicates and owned-file reconciliation)"
     ],
     "tests": [
       "crates/melodee-persistence/tests/native_podcasts_phase7.rs::podcast_schema_is_tenant_scoped_bounded_and_cascades_playback_state",
-      "apps/melodee-server/tests/native_podcasts_api.rs::all_native_podcast_routes_are_tenant_scoped_bounded_and_authorized"
+      "apps/melodee-server/tests/native_podcasts_api.rs::all_native_podcast_routes_are_tenant_scoped_bounded_and_authorized",
+      "apps/melodee-server/tests/native_podcasts_real_feed.rs::real_itunes_feed_drives_refresh_download_and_playback_state_end_to_end",
+      "apps/melodee-cli/tests/podcasts.rs::podcasts_recovery_requeues_only_expired_leases_and_removes_only_orphans"
     ]
   },
   {
@@ -2269,14 +2353,17 @@
     "title": "PRD-POD-003",
     "phase": "9",
     "source": "PRD.md",
-    "line": 1567,
-    "status": "in-progress",
+    "line": 1587,
+    "status": "tested",
     "implementation": [
       "apps/melodee-server/src/native/podcasts.rs (all 19 compiled native-v1 routes)",
-      "compatibility/melodee-api-v1/golden/native-podcasts"
+      "compatibility/melodee-api-v1/golden/native-podcasts",
+      "apps/melodee-server/src/opensubsonic/ (getPodcasts/getNewestPodcasts/refreshPodcasts, Phase 8)"
     ],
     "tests": [
-      "apps/melodee-server/tests/native_podcasts_api.rs::all_native_podcast_routes_are_tenant_scoped_bounded_and_authorized"
+      "apps/melodee-server/tests/native_podcasts_api.rs::all_native_podcast_routes_are_tenant_scoped_bounded_and_authorized",
+      "scripts/run_phase8_differential.py (zero unexpected podcast differences)",
+      "design/agents/PHASE-8-OPENSUBSONIC-ROUTE-MATRIX.json (podcast endpoint dispositions)"
     ]
   },
   {
@@ -2284,7 +2371,7 @@
     "title": "PRD-DISCOVERY-001",
     "phase": "9",
     "source": "PRD.md",
-    "line": 1575,
+    "line": 1595,
     "status": "tested",
     "implementation": [
       "crates/melodee-persistence/src/discovery.rs",
@@ -2300,7 +2387,7 @@
     "title": "PRD-DISCOVERY-002",
     "phase": "9",
     "source": "PRD.md",
-    "line": 1579,
+    "line": 1599,
     "status": "tested",
     "implementation": [
       "apps/melodee-server/src/native/discovery.rs (bounded user-scoped recommendations)"
@@ -2314,7 +2401,7 @@
     "title": "PRD-DISCOVERY-003",
     "phase": "9",
     "source": "PRD.md",
-    "line": 1583,
+    "line": 1603,
     "status": "tested",
     "implementation": [
       "crates/melodee-persistence/src/discovery.rs (indexed/materialized listening facts)",
@@ -2330,7 +2417,7 @@
     "title": "PRD-PARTY-001",
     "phase": "9",
     "source": "PRD.md",
-    "line": 1593,
+    "line": 1613,
     "status": "in-progress",
     "implementation": [
       "design/agents/PHASE-7-ROUTE-MATRIX.json (32 frozen Party exclusions preserved)"
@@ -2345,7 +2432,7 @@
     "title": "PRD-PARTY-002",
     "phase": "9",
     "source": "PRD.md",
-    "line": 1597,
+    "line": 1617,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2355,7 +2442,7 @@
     "title": "PRD-PARTY-003",
     "phase": "9",
     "source": "PRD.md",
-    "line": 1601,
+    "line": 1621,
     "status": "tested",
     "implementation": [
       "crates/melodee-persistence/migrations/0017_phase7_native_endpoint_sessions.sql",
@@ -2370,7 +2457,7 @@
     "title": "PRD-PARTY-004",
     "phase": "9",
     "source": "PRD.md",
-    "line": 1605,
+    "line": 1625,
     "status": "tested",
     "implementation": [
       "design/adr/ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md",
@@ -2385,7 +2472,7 @@
     "title": "PRD-DEVICE-001",
     "phase": "9",
     "source": "PRD.md",
-    "line": 1615,
+    "line": 1635,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2395,7 +2482,7 @@
     "title": "PRD-DEVICE-002",
     "phase": "9",
     "source": "PRD.md",
-    "line": 1619,
+    "line": 1639,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2405,7 +2492,7 @@
     "title": "PRD-DEVICE-003",
     "phase": "9",
     "source": "PRD.md",
-    "line": 1623,
+    "line": 1643,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2415,7 +2502,7 @@
     "title": "PRD-SCRIPT-001",
     "phase": "9",
     "source": "PRD.md",
-    "line": 1631,
+    "line": 1651,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2425,7 +2512,7 @@
     "title": "PRD-SCRIPT-002",
     "phase": "9",
     "source": "PRD.md",
-    "line": 1638,
+    "line": 1658,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2435,7 +2522,7 @@
     "title": "PRD-SCRIPT-003",
     "phase": "9",
     "source": "PRD.md",
-    "line": 1642,
+    "line": 1662,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2445,7 +2532,7 @@
     "title": "PRD-SCRIPT-004",
     "phase": "9",
     "source": "PRD.md",
-    "line": 1646,
+    "line": 1666,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2455,7 +2542,7 @@
     "title": "PRD-SCRIPT-005",
     "phase": "9",
     "source": "PRD.md",
-    "line": 1650,
+    "line": 1670,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2465,7 +2552,7 @@
     "title": "PRD-EXT-001",
     "phase": "4,9",
     "source": "PRD.md",
-    "line": 1658,
+    "line": 1678,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2475,7 +2562,7 @@
     "title": "PRD-EXT-002",
     "phase": "4,9",
     "source": "PRD.md",
-    "line": 1664,
+    "line": 1684,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2485,7 +2572,7 @@
     "title": "PRD-EXT-003",
     "phase": "4,9",
     "source": "PRD.md",
-    "line": 1668,
+    "line": 1688,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2495,7 +2582,7 @@
     "title": "PRD-EXT-004",
     "phase": "4,9",
     "source": "PRD.md",
-    "line": 1672,
+    "line": 1692,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2505,7 +2592,7 @@
     "title": "Modern, slick, simple, intuitive",
     "phase": "10",
     "source": "PRD.md",
-    "line": 1688,
+    "line": 1708,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2515,7 +2602,7 @@
     "title": "Preferred stack",
     "phase": "10",
     "source": "PRD.md",
-    "line": 1692,
+    "line": 1712,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2525,7 +2612,7 @@
     "title": "TanStack Table is optional",
     "phase": "10",
     "source": "PRD.md",
-    "line": 1698,
+    "line": 1718,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2535,7 +2622,7 @@
     "title": "Admin navigation",
     "phase": "10",
     "source": "PRD.md",
-    "line": 1702,
+    "line": 1722,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2545,7 +2632,7 @@
     "title": "Remove `/Data` vs `/Media` from the user mental model",
     "phase": "10",
     "source": "PRD.md",
-    "line": 1736,
+    "line": 1756,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2555,7 +2642,7 @@
     "title": "Primary/detail workflows",
     "phase": "10",
     "source": "PRD.md",
-    "line": 1748,
+    "line": 1768,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2565,7 +2652,7 @@
     "title": "Preview playback only where useful",
     "phase": "10",
     "source": "PRD.md",
-    "line": 1752,
+    "line": 1772,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2575,7 +2662,7 @@
     "title": "Destructive action UX",
     "phase": "10",
     "source": "PRD.md",
-    "line": 1756,
+    "line": 1776,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2585,7 +2672,7 @@
     "title": "Command palette",
     "phase": "10",
     "source": "PRD.md",
-    "line": 1766,
+    "line": 1786,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2595,7 +2682,7 @@
     "title": "Server-side data operations",
     "phase": "10",
     "source": "PRD.md",
-    "line": 1770,
+    "line": 1790,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2605,7 +2692,7 @@
     "title": "PRD-UI-REF-001",
     "phase": "10",
     "source": "PRD.md",
-    "line": 1789,
+    "line": 1809,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2615,7 +2702,7 @@
     "title": "PRD-UI-REF-002",
     "phase": "10",
     "source": "PRD.md",
-    "line": 1793,
+    "line": 1813,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2625,7 +2712,7 @@
     "title": "PRD-UI-REF-003",
     "phase": "10",
     "source": "PRD.md",
-    "line": 1797,
+    "line": 1817,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2635,7 +2722,7 @@
     "title": "PRD-THEME-001",
     "phase": "10",
     "source": "PRD.md",
-    "line": 1860,
+    "line": 1880,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2645,7 +2732,7 @@
     "title": "PRD-THEME-002",
     "phase": "10",
     "source": "PRD.md",
-    "line": 1864,
+    "line": 1884,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2655,7 +2742,7 @@
     "title": "PRD-THEME-003",
     "phase": "10",
     "source": "PRD.md",
-    "line": 1875,
+    "line": 1895,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2665,7 +2752,7 @@
     "title": "PRD-THEME-004",
     "phase": "10",
     "source": "PRD.md",
-    "line": 1879,
+    "line": 1899,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2675,7 +2762,7 @@
     "title": "PRD-I18N-001",
     "phase": "10",
     "source": "PRD.md",
-    "line": 1889,
+    "line": 1909,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2685,7 +2772,7 @@
     "title": "PRD-I18N-002",
     "phase": "10",
     "source": "PRD.md",
-    "line": 1914,
+    "line": 1934,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2695,7 +2782,7 @@
     "title": "PRD-I18N-003",
     "phase": "10",
     "source": "PRD.md",
-    "line": 1918,
+    "line": 1938,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2705,7 +2792,7 @@
     "title": "PRD-I18N-004",
     "phase": "10",
     "source": "PRD.md",
-    "line": 1922,
+    "line": 1942,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2715,7 +2802,7 @@
     "title": "PRD-I18N-005",
     "phase": "10",
     "source": "PRD.md",
-    "line": 1926,
+    "line": 1946,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2725,7 +2812,7 @@
     "title": "PRD-I18N-006",
     "phase": "10",
     "source": "PRD.md",
-    "line": 1930,
+    "line": 1950,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2735,7 +2822,7 @@
     "title": "PRD-WEB-001",
     "phase": "9,10",
     "source": "PRD.md",
-    "line": 1940,
+    "line": 1960,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2745,7 +2832,7 @@
     "title": "PRD-WEB-002",
     "phase": "9,10",
     "source": "PRD.md",
-    "line": 1951,
+    "line": 1971,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2755,7 +2842,7 @@
     "title": "PRD-SETUP-001",
     "phase": "9",
     "source": "PRD.md",
-    "line": 1959,
+    "line": 1979,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2765,7 +2852,7 @@
     "title": "PRD-SETUP-002",
     "phase": "9",
     "source": "PRD.md",
-    "line": 1973,
+    "line": 1993,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2775,7 +2862,7 @@
     "title": "PRD-CONFIG-001",
     "phase": "1,9",
     "source": "PRD.md",
-    "line": 1977,
+    "line": 1997,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2785,7 +2872,7 @@
     "title": "PRD-CONFIG-002",
     "phase": "1,9",
     "source": "PRD.md",
-    "line": 1981,
+    "line": 2001,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2795,7 +2882,7 @@
     "title": "PRD-CONFIG-003",
     "phase": "1,9",
     "source": "PRD.md",
-    "line": 1985,
+    "line": 2005,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2805,7 +2892,7 @@
     "title": "PRD-WORK-001",
     "phase": "1,2,9",
     "source": "PRD.md",
-    "line": 1993,
+    "line": 2013,
     "status": "in-progress",
     "implementation": [
       "crates/melodee-persistence/ (durable work queue foundation: items, leases, retries, history)"
@@ -2819,7 +2906,7 @@
     "title": "PRD-WORK-002",
     "phase": "1,2,9",
     "source": "PRD.md",
-    "line": 1997,
+    "line": 2017,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -2829,15 +2916,19 @@
     "title": "PRD-WORK-003",
     "phase": "1,2,9",
     "source": "PRD.md",
-    "line": 2009,
+    "line": 2029,
     "status": "tested",
     "implementation": [
       "apps/melodee-server/src/main.rs (ingest scheduler startup)",
       "crates/melodee-ingestion/src/scheduler.rs (graceful periodic reconcile task)",
-      "crates/melodee-ingestion/src/reconcile.rs (reconcile_all_sources and per-source loop)"
+      "crates/melodee-ingestion/src/reconcile.rs (reconcile_all_sources and per-source loop)",
+      "apps/melodee-server/src/discovery_worker.rs (periodic chart/recommendation aggregate maintenance loop)",
+      "crates/melodee-persistence/src/discovery.rs (NativeDiscoveryStore::refresh_discovery_aggregates bounded set-based reconciliation)"
     ],
     "tests": [
-      "crates/melodee-ingestion/tests/reconciliation.rs (scheduler_runs_periodic_reconciliation_with_restart_signal)"
+      "crates/melodee-ingestion/tests/reconciliation.rs (scheduler_runs_periodic_reconciliation_with_restart_signal)",
+      "apps/melodee-server/tests/discovery_worker.rs (drift/missing-row reconciliation, idempotency, bounded-batch convergence, periodic run, graceful stop)",
+      "crates/melodee-persistence/tests/native_discovery_phase7.rs (discovery_maintenance_relinks_chart_items_only_on_unique_catalog_identity)"
     ]
   },
   {
@@ -2845,7 +2936,7 @@
     "title": "PRD-WORK-004",
     "phase": "1,2,9",
     "source": "PRD.md",
-    "line": 2023,
+    "line": 2043,
     "status": "tested",
     "implementation": [
       "apps/melodee-cli/src/main.rs (work list/show/seed-test/claim-test sharing WorkItemStore)",
@@ -2862,21 +2953,47 @@
     "title": "PRD-WORK-005",
     "phase": "1,2,9",
     "source": "PRD.md",
-    "line": 2027,
-    "status": "in-progress",
+    "line": 2047,
+    "status": "tested",
     "implementation": [
-      "crates/melodee-persistence/src/work_items.rs (operator transitions: quarantine/reprocess/retry; release_lease; append-only events)"
+      "crates/melodee-persistence/src/work_items.rs (operator transitions: quarantine/reprocess/retry; release_lease; append-only events)",
+      "crates/melodee-persistence/migrations/0023_phase9_worker_pool_state.sql and crates/melodee-persistence/src/worker_pool.rs (durable, audited, multi-process-safe pool pause/resume, ADR-0134 §8)",
+      "apps/melodee-server/src/podcast_worker.rs, policy_worker.rs, and discovery_worker.rs (pool rows checked between claim batches; in-flight claims finish or are released per the lease contract)",
+      "apps/melodee-cli/src/main.rs (worker-pools list/pause/resume operating on the same durable rows)"
     ],
     "tests": [
-      "crates/melodee-persistence/tests/transitions.rs (operator_review_decisions_and_reprocess)"
+      "crates/melodee-persistence/tests/transitions.rs (operator_review_decisions_and_reprocess)",
+      "crates/melodee-persistence/tests/worker_pool_state.rs (seed, constraints, audited transitions, lazy registration)",
+      "apps/melodee-server/tests/worker_pools.rs (paused podcast/policy/discovery pools claim nothing; in-flight leases intact; resume recovers)",
+      "apps/melodee-cli/tests/worker_pools.rs (CLI pause/resume durability and audit)"
     ]
+  },
+  {
+    "id": "PRD-CLI-001",
+    "title": "PRD-CLI-001",
+    "phase": "1,9",
+    "source": "PRD.md",
+    "line": 2070,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
+  },
+  {
+    "id": "PRD-CLI-002",
+    "title": "PRD-CLI-002",
+    "phase": "1,9",
+    "source": "PRD.md",
+    "line": 2074,
+    "status": "planned",
+    "implementation": [],
+    "tests": []
   },
   {
     "id": "PRD-OBS-001",
     "title": "PRD-OBS-001",
     "phase": "1,2",
     "source": "PRD.md",
-    "line": 2054,
+    "line": 2082,
     "status": "in-progress",
     "implementation": [
       "crates/melodee-persistence/src/work_items.rs (tracing events with work_item_id/worker_id/correlation_id/lease fields)",
@@ -2890,7 +3007,7 @@
     "title": "PRD-OBS-002",
     "phase": "1,2",
     "source": "PRD.md",
-    "line": 2058,
+    "line": 2086,
     "status": "in-progress",
     "implementation": [
       "apps/melodee-server/src/system.rs (bounded PostgreSQL readiness plus active search generation/schema/count validation; liveness remains separate)",
@@ -2905,7 +3022,7 @@
     "title": "PRD-OBS-003",
     "phase": "1,2",
     "source": "PRD.md",
-    "line": 2072,
+    "line": 2100,
     "status": "in-progress",
     "implementation": [
       "apps/melodee-cli/src/main.rs (search status JSON with backlog, lease, active generation, latest rebuild, and failure evidence)",
@@ -2920,7 +3037,7 @@
     "title": "PRD-OBS-004",
     "phase": "1,2",
     "source": "PRD.md",
-    "line": 2076,
+    "line": 2104,
     "status": "tested",
     "implementation": [
       "apps/melodee-cli/src/main.rs (work show, ingest manifest/publication, and catalog inspect/status error/history evidence)",
@@ -2939,7 +3056,7 @@
     "title": "PRD-OBS-005",
     "phase": "1,2",
     "source": "PRD.md",
-    "line": 2080,
+    "line": 2108,
     "status": "implemented",
     "implementation": [
       "Cargo.toml and Cargo.lock (FOSS local tracing/PostgreSQL/Tantivy stack)",
@@ -2954,7 +3071,7 @@
     "title": "PRD-PERF-001",
     "phase": "0,all",
     "source": "PRD.md",
-    "line": 2088,
+    "line": 2116,
     "status": "tested",
     "implementation": [
       "compatibility/benchmarks/ (datasets, results with environment metadata, SUMMARY.md)",
@@ -2980,7 +3097,7 @@
     "title": "PRD-PERF-002",
     "phase": "0,all",
     "source": "PRD.md",
-    "line": 2092,
+    "line": 2120,
     "status": "tested",
     "implementation": [
       "scripts/generate_benchmark_dataset.py (three deterministic SQL tiers)",
@@ -3000,7 +3117,7 @@
     "title": "PRD-PERF-003",
     "phase": "0,all",
     "source": "PRD.md",
-    "line": 2100,
+    "line": 2128,
     "status": "in-progress",
     "implementation": [
       "compatibility/benchmarks/results/ (wall-clock cold/warm, response sizes, server memory at Tier C)",
@@ -3022,7 +3139,7 @@
     "title": "PRD-PERF-004",
     "phase": "0,all",
     "source": "PRD.md",
-    "line": 2112,
+    "line": 2140,
     "status": "in-progress",
     "implementation": [
       "design/evidence/phase-0/scale-baseline.md section 4 (per-Release pipeline cost shape ~3s; non-transactional restart behavior evidence)",
@@ -3041,7 +3158,7 @@
     "title": "PRD-PERF-005",
     "phase": "0,all",
     "source": "PRD.md",
-    "line": 2116,
+    "line": 2144,
     "status": "tested",
     "implementation": [
       "design/evidence/phase-0/scale-baseline.md sections 3, 5 (bottlenecks + proposed budgets labeled requirement-vs-proposal)",
@@ -3059,7 +3176,7 @@
     "title": "PRD-PERF-006",
     "phase": "0,all",
     "source": "PRD.md",
-    "line": 2120,
+    "line": 2148,
     "status": "tested",
     "implementation": [
       "crates/melodee-persistence/src/search.rs (bounded keyset snapshot pages and bounded outbox reads)",
@@ -3078,7 +3195,7 @@
     "title": "Preserve media",
     "phase": "11",
     "source": "PRD.md",
-    "line": 2130,
+    "line": 2158,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -3088,7 +3205,7 @@
     "title": "Preserve public identity",
     "phase": "11",
     "source": "PRD.md",
-    "line": 2134,
+    "line": 2162,
     "status": "in-progress",
     "implementation": [
       "crates/melodee-persistence/migrations/0007_phase4_catalog.sql (separate immutable public_api_id columns and legacy mapping evidence)",
@@ -3104,7 +3221,7 @@
     "title": "Preserve user state",
     "phase": "11",
     "source": "PRD.md",
-    "line": 2138,
+    "line": 2166,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -3114,7 +3231,7 @@
     "title": "Preserve catalog relationships",
     "phase": "11",
     "source": "PRD.md",
-    "line": 2156,
+    "line": 2184,
     "status": "in-progress",
     "implementation": [
       "crates/melodee-persistence/src/catalog_mutations.rs (set-wise legacy Artist/Release/Track/relationship mapping)",
@@ -3130,7 +3247,7 @@
     "title": "No mandatory upfront fingerprint of every byte",
     "phase": "11",
     "source": "PRD.md",
-    "line": 2160,
+    "line": 2188,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -3140,7 +3257,7 @@
     "title": "Search is rebuildable",
     "phase": "11",
     "source": "PRD.md",
-    "line": 2164,
+    "line": 2192,
     "status": "tested",
     "implementation": [
       "crates/melodee-search/src/rebuild.rs and generation.rs (disposable generational Tantivy rebuild from PostgreSQL)",
@@ -3156,7 +3273,7 @@
     "title": "Rollback",
     "phase": "11",
     "source": "PRD.md",
-    "line": 2168,
+    "line": 2196,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -3166,7 +3283,7 @@
     "title": "C# server as oracle",
     "phase": "0,all",
     "source": "PRD.md",
-    "line": 2200,
+    "line": 2228,
     "status": "in-progress",
     "implementation": [
       "compatibility/scenarios/*.json (22 scenario files, declarative flows)",
@@ -3188,7 +3305,7 @@
     "title": "Differential API harness",
     "phase": "0,all",
     "source": "PRD.md",
-    "line": 2204,
+    "line": 2232,
     "status": "in-progress",
     "implementation": [
       "compatibility/melodee-api-v1/golden/ + opensubsonic/golden/ + jellyfin/golden/ (normalized golden request/response fixtures incl. negative paths)"
@@ -3204,7 +3321,7 @@
     "title": "Golden contracts",
     "phase": "0,all",
     "source": "PRD.md",
-    "line": 2220,
+    "line": 2248,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -3214,7 +3331,7 @@
     "title": "Real-client compatibility",
     "phase": "0,all",
     "source": "PRD.md",
-    "line": 2224,
+    "line": 2252,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -3224,7 +3341,7 @@
     "title": "Media corpus",
     "phase": "0,all",
     "source": "PRD.md",
-    "line": 2233,
+    "line": 2261,
     "status": "in-progress",
     "implementation": [
       "compatibility/media/ (31-case synthetic corpus incl. malformed tags, corrupt/truncated audio, invalid artwork, duplicate track numbers)",
@@ -3247,7 +3364,7 @@
     "title": "Fault injection",
     "phase": "0,all",
     "source": "PRD.md",
-    "line": 2257,
+    "line": 2285,
     "status": "in-progress",
     "implementation": [
       "design/evidence/phase-0/media-baseline.md section 11 (interruption/non-atomicity evidence)",
@@ -3276,7 +3393,7 @@
     "title": "Invariant",
     "phase": "0,all",
     "source": "PRD.md",
-    "line": 2275,
+    "line": 2303,
     "status": "in-progress",
     "implementation": [
       "crates/melodee-domain/src/ingestion.rs (legal durable states/transitions and next-action vocabulary)",
@@ -3302,7 +3419,7 @@
     "title": "UI testing",
     "phase": "0,all",
     "source": "PRD.md",
-    "line": 2281,
+    "line": 2309,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -3312,7 +3429,7 @@
     "title": "PRD-SEC-001",
     "phase": "all",
     "source": "PRD.md",
-    "line": 2291,
+    "line": 2319,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -3322,7 +3439,7 @@
     "title": "PRD-SEC-002",
     "phase": "all",
     "source": "PRD.md",
-    "line": 2295,
+    "line": 2323,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -3332,7 +3449,7 @@
     "title": "PRD-SEC-003",
     "phase": "all",
     "source": "PRD.md",
-    "line": 2299,
+    "line": 2327,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -3342,7 +3459,7 @@
     "title": "PRD-SEC-004",
     "phase": "all",
     "source": "PRD.md",
-    "line": 2303,
+    "line": 2331,
     "status": "tested",
     "implementation": [
       "apps/melodee-server/src/native/community.rs (128-bit OS-CSPRNG public-share bearer with bounded collision retry)",
@@ -3360,7 +3477,7 @@
     "title": "PRD-SEC-005",
     "phase": "all",
     "source": "PRD.md",
-    "line": 2307,
+    "line": 2335,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -3370,7 +3487,7 @@
     "title": "PRD-SEC-006",
     "phase": "all",
     "source": "PRD.md",
-    "line": 2311,
+    "line": 2339,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -3380,7 +3497,7 @@
     "title": "PRD-SEC-007",
     "phase": "all",
     "source": "PRD.md",
-    "line": 2315,
+    "line": 2343,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -3390,7 +3507,7 @@
     "title": "PRD-DEPLOY-001",
     "phase": "1,11",
     "source": "PRD.md",
-    "line": 2395,
+    "line": 2423,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -3400,7 +3517,7 @@
     "title": "PRD-DEPLOY-002",
     "phase": "1,11",
     "source": "PRD.md",
-    "line": 2399,
+    "line": 2427,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -3410,7 +3527,7 @@
     "title": "PRD-DEPLOY-003",
     "phase": "1,11",
     "source": "PRD.md",
-    "line": 2403,
+    "line": 2431,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -3420,7 +3537,7 @@
     "title": "PRD-DEPLOY-004",
     "phase": "1,11",
     "source": "PRD.md",
-    "line": 2419,
+    "line": 2447,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -3430,7 +3547,7 @@
     "title": "PRD-DEPLOY-005",
     "phase": "1,11",
     "source": "PRD.md",
-    "line": 2423,
+    "line": 2451,
     "status": "planned",
     "implementation": [],
     "tests": []
@@ -3440,7 +3557,7 @@
     "title": "PRD-DEPLOY-006",
     "phase": "1,11",
     "source": "PRD.md",
-    "line": 2427,
+    "line": 2455,
     "status": "planned",
     "implementation": [],
     "tests": []

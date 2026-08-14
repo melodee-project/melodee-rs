@@ -1272,6 +1272,40 @@ async fn load_public_track_connection(
     })
 }
 
+/// One set-based Track row for public-share assembly.
+///
+/// Phase 9 WP-01 replaced the per-Track sequential DTO loads with one query
+/// per shared Release/Playlist (assembly stays bounded by
+/// `MAX_NATIVE_PLAYLIST_ITEMS`, enforced at playlist write time). The mapping
+/// preserves the previous shape exactly: `effective_number` is
+/// `COALESCE(track_number, ordinal)` and the positional fallback below 1 is
+/// retained verbatim even though catalog CHECK constraints (`ordinal > 0`)
+/// make it unreachable for valid rows.
+#[derive(Debug, FromRow)]
+struct PublicTrackRow {
+    public_api_id: Uuid,
+    title: String,
+    effective_number: i32,
+    duration_ms: i64,
+    fallback_number: i32,
+}
+
+impl PublicTrackRow {
+    fn into_dto(self, public_origin: &str) -> PublicTrackInfo {
+        PublicTrackInfo {
+            id: self.public_api_id,
+            title: self.title,
+            track_number: if self.effective_number < 1 {
+                self.fallback_number
+            } else {
+                self.effective_number
+            },
+            duration_ms: self.duration_ms as f64,
+            stream_url: format!("{public_origin}/rest/stream?id=song_{}", self.public_api_id),
+        }
+    }
+}
+
 async fn load_public_release_connection(
     state: &NativeState,
     connection: &mut PgConnection,
@@ -1294,14 +1328,22 @@ async fn load_public_release_connection(
     .fetch_optional(&mut *connection)
     .await?
     .ok_or(NativeApiError::NotFound)?;
-    let tracks = sqlx::query_as::<_, (Uuid, i32)>(
-        "SELECT public_api_id, track_number FROM tracks WHERE release_id = \
-         (SELECT id FROM releases WHERE public_api_id = $1) ORDER BY disc_number, track_number, public_api_id",
-    ).bind(id).fetch_all(&mut *connection).await?;
-    let mut songs = Vec::with_capacity(tracks.len());
-    for (track_id, number) in tracks {
-        songs.push(load_public_track_connection(state, connection, track_id, number).await?);
-    }
+    // `fallback_number` decodes `track_number` as non-null exactly like the
+    // previous outer query, so a NULL track_number fails the same way.
+    let tracks = sqlx::query_as::<_, PublicTrackRow>(
+        "SELECT public_api_id, title, COALESCE(track_number, ordinal) AS effective_number, \
+         COALESCE(duration_ms, 0) AS duration_ms, track_number AS fallback_number \
+         FROM tracks WHERE release_id = \
+         (SELECT id FROM releases WHERE public_api_id = $1) \
+         ORDER BY disc_number, track_number, public_api_id",
+    )
+    .bind(id)
+    .fetch_all(&mut *connection)
+    .await?;
+    let songs = tracks
+        .into_iter()
+        .map(|track| track.into_dto(&state.public_origin))
+        .collect();
     Ok(PublicReleaseInfo {
         id,
         name: row.0,
@@ -1323,14 +1365,20 @@ async fn load_public_playlist_connection(
     .fetch_optional(&mut *connection)
     .await?
     .ok_or(NativeApiError::NotFound)?;
-    let tracks = sqlx::query_as::<_, (Uuid, i32)>(
-        "SELECT t.public_api_id, pi.position FROM native_playlist_items pi JOIN tracks t ON t.id = pi.track_id \
-         WHERE pi.playlist_id = (SELECT id FROM native_playlists WHERE public_api_id = $1) ORDER BY pi.position",
-    ).bind(id).fetch_all(&mut *connection).await?;
-    let mut songs = Vec::with_capacity(tracks.len());
-    for (track_id, number) in tracks {
-        songs.push(load_public_track_connection(state, connection, track_id, number).await?);
-    }
+    let tracks = sqlx::query_as::<_, PublicTrackRow>(
+        "SELECT t.public_api_id, t.title, COALESCE(t.track_number, t.ordinal) AS effective_number, \
+         COALESCE(t.duration_ms, 0) AS duration_ms, pi.position AS fallback_number \
+         FROM native_playlist_items pi JOIN tracks t ON t.id = pi.track_id \
+         WHERE pi.playlist_id = (SELECT id FROM native_playlists WHERE public_api_id = $1) \
+         ORDER BY pi.position",
+    )
+    .bind(id)
+    .fetch_all(&mut *connection)
+    .await?;
+    let songs = tracks
+        .into_iter()
+        .map(|track| track.into_dto(&state.public_origin))
+        .collect();
     Ok(PublicPlaylistInfo {
         id,
         name: row.0,

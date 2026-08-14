@@ -79,6 +79,49 @@ acquired/expiry timestamps, and last activity. This is lease evidence proven by 
 shows that a row holds an unexpired lease, not that the owner process is currently alive (no
 heartbeat store exists yet).
 
+## User and access-group administration
+
+The user and group routes below are additionally gated: every request must carry a valid native
+access token (`Authorization: Bearer …`) for an enabled, unlocked account with administrator
+rights. Requests without a token return `401`; authenticated non-administrators receive `403`.
+Every mutation is audit-logged with the acting administrator's public user id. Passwords are
+accepted only on creation, are stored as bcrypt hashes, and never appear in responses or logs.
+
+### Groups
+
+```http
+GET /api/admin/v1/groups
+POST /api/admin/v1/groups
+GET /api/admin/v1/groups/{id}
+PUT /api/admin/v1/groups/{id}
+DELETE /api/admin/v1/groups/{id}
+PUT /api/admin/v1/groups/{id}/members/{userId}
+DELETE /api/admin/v1/groups/{id}/members/{userId}
+PUT /api/admin/v1/groups/{id}/libraries/{libraryId}
+DELETE /api/admin/v1/groups/{id}/libraries/{libraryId}
+```
+
+Groups are addressed by their immutable public id; names are display values. `POST` and `PUT`
+take `{"name": "…"}` (non-blank, at most 200 characters, unique per exact name). `GET` detail
+includes member public ids/usernames and bound library ids. `DELETE` fails closed with
+`409 group_not_empty` while the group still has members or library bindings — detach them first.
+Membership changes take effect on the next request: once any group binds a library, only members
+of a bound group can access it (see [Users and Access](../admin/users-and-access/)).
+
+### Users
+
+```http
+POST /api/admin/v1/users
+PUT /api/admin/v1/users/{id}
+```
+
+`POST` creates an enabled, unlocked account from `{"username", "email", "password", "isAdmin"?,
+"isEditor"?, "roles"?}`; when `roles` is omitted the account receives the streaming role. A
+duplicate username returns `409 user_conflict`; passwords shorter than 8 characters are rejected.
+`PUT` applies a field-optional update (`isAdmin`, `isEditor`, `enabled`, `locked`, `roles`); any
+change bumps the credential revision, and disabling or locking an account revokes all of its
+refresh sessions immediately. Unknown ids return `404`.
+
 ## Error behavior
 
 Errors use a stable JSON envelope with a machine-readable `code`, an operator-safe `message`, and
@@ -96,7 +139,7 @@ Status codes follow standard HTTP conventions: `400` for malformed requests, `40
 resources, `500` for upstream persistence failures.
 
 :::caution[Partial implementation]
-The endpoints above are the diagnostics subset shipped with the durable ingestion engine. Full
+The endpoints above are the diagnostics subset plus user/access-group administration. Full
 catalog curation, policy, and identity-review endpoints arrive in later phases and will be
 documented here when implemented.
 :::

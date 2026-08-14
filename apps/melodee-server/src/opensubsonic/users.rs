@@ -60,9 +60,9 @@ fn has_role(roles: &[String], role: &str) -> bool {
     roles.iter().any(|held| held.eq_ignore_ascii_case(role))
 }
 
-/// Builds the captured user role model. `avatarLastChanged` is the user's
-/// `updated_at` (no dedicated avatar timestamp column exists at this baseline;
-/// the golden masks it as volatile).
+/// Builds the captured user role model. `avatarLastChanged` is the avatar
+/// store's `updated_at` when present, else the user's `updated_at` (the
+/// captured baseline; the golden masks it as volatile).
 fn user_model(
     username: &str,
     email: &str,
@@ -104,8 +104,15 @@ pub async fn get_user(
         // baseline; fail closed with the auth error envelope.
         return error_reply(&state, &params, 40, "Wrong username or password.");
     }
+    // `avatarLastChanged` reflects the avatar store's `updated_at` when an
+    // avatar row exists (ADR-0134 §2), else the user row's `updated_at` as at
+    // the captured baseline. The golden masks this field as volatile; the
+    // response shape is unchanged.
     let row = match sqlx::query(
-        "SELECT username, email, is_admin, updated_at FROM native_users WHERE id = $1",
+        "SELECT u.username, u.email, u.is_admin, COALESCE(a.updated_at, u.updated_at)
+         FROM native_users u
+         LEFT JOIN native_user_avatars a ON a.user_id = u.id
+         WHERE u.id = $1",
     )
     .bind(user.user_id)
     .fetch_optional(&state.pool)

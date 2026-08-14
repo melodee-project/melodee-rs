@@ -591,9 +591,15 @@ async fn get_avatar_impl(
     // The avatar is selected by `username`/`u`/`id`. The `id` form is
     // `user_<uuid>` (native public_api_id); `username`/`u` is the login name.
     let username = params_ref.get("username").or_else(|| params_ref.get("u"));
+    // WP-03: the avatar authority is `native_user_avatars` (migration 0022,
+    // ADR-0134 §2). The migration-0010 `native_users` image columns remain the
+    // fallback for legacy-imported avatars; the response shape is unchanged.
     let row = if let Some(name) = username {
         sqlx::query(
-            "SELECT image_mime_type, image_bytes FROM native_users WHERE normalized_username = UPPER($1)",
+            "SELECT COALESCE(a.content_type, u.image_mime_type), COALESCE(a.image, u.image_bytes)
+             FROM native_users u
+             LEFT JOIN native_user_avatars a ON a.user_id = u.id
+             WHERE u.normalized_username = UPPER($1)",
         )
         .bind(name)
         .fetch_optional(&state.pool)
@@ -602,7 +608,10 @@ async fn get_avatar_impl(
         if let Some(rest) = raw_id.strip_prefix("user_") {
             if let Ok(id) = Uuid::parse_str(rest) {
                 sqlx::query(
-                    "SELECT image_mime_type, image_bytes FROM native_users WHERE public_api_id = $1",
+                    "SELECT COALESCE(a.content_type, u.image_mime_type), COALESCE(a.image, u.image_bytes)
+                     FROM native_users u
+                     LEFT JOIN native_user_avatars a ON a.user_id = u.id
+                     WHERE u.public_api_id = $1",
                 )
                 .bind(id)
                 .fetch_optional(&state.pool)

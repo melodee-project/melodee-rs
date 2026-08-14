@@ -95,6 +95,25 @@ pub enum AuthLookup<'a> {
     Email(&'a str),
 }
 
+/// Login-identifier normalization shared by authentication, password reset,
+/// and operator account recovery: trimmed and uppercased, matching the
+/// captured `normalized_username`/`normalized_email` columns.
+#[must_use]
+pub fn normalize_login(value: &str) -> String {
+    value.trim().to_uppercase()
+}
+
+/// First-admin bootstrap facts. The password is already bcrypt-hashed by the
+/// caller (`melodee_auth::hash_password`); clear password material never
+/// reaches persistence.
+pub struct BootstrapAdminRequest<'a> {
+    pub username: &'a str,
+    pub email: &'a str,
+    pub password_hash: &'a str,
+    pub stream_signing_key: &'a str,
+    pub now: OffsetDateTime,
+}
+
 /// Initial refresh family and token facts. The token value is already digested.
 pub struct RefreshFamilyIssue<'a> {
     pub family_id: Uuid,
@@ -209,6 +228,10 @@ pub enum AuthStoreError {
     InvalidRefreshRequest,
     #[error("invalid rate-limit policy")]
     InvalidRateLimitPolicy,
+    #[error("an administrator already exists; bootstrap refuses to create another")]
+    AdminExists,
+    #[error("invalid administrator bootstrap request")]
+    InvalidBootstrapRequest,
 }
 
 /// Stateless entry point for native authentication persistence.
@@ -216,8 +239,8 @@ pub enum AuthStoreError {
 pub struct AuthStore;
 
 #[derive(FromRow)]
-struct UserRow {
-    id: Uuid,
+pub(crate) struct UserRow {
+    pub(crate) id: Uuid,
     public_api_id: Uuid,
     username: String,
     email: String,
@@ -1052,6 +1075,74 @@ impl AuthStore {
         Ok(result.rows_affected())
     }
 
+    /// Creates the first administrator, failing closed when any admin already
+    /// exists (operator bootstrap/recovery, PRD-CLI-001). The advisory lock
+    /// serializes the existence check with a concurrent bootstrap in another
+    /// process. The account receives the captured `Administrator` and
+    /// `HasStreamRole` roles and fresh v7 identities.
+    pub async fn bootstrap_admin(
+        &self,
+        pool: &PgPool,
+        request: &BootstrapAdminRequest<'_>,
+    ) -> Result<StoredNativeUser, AuthStoreError> {
+        let username = request.username.trim();
+        let email = request.email.trim();
+        if username.is_empty()
+            || email.is_empty()
+            || request.password_hash.trim().is_empty()
+            || request.stream_signing_key.trim().is_empty()
+        {
+            return Err(AuthStoreError::InvalidBootstrapRequest);
+        }
+        let mut tx = pool.begin().await?;
+        sqlx::query("SELECT pg_advisory_xact_lock(hashtext('native_users_bootstrap_admin'))")
+            .execute(&mut *tx)
+            .await?;
+        let admin_exists = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM native_users WHERE is_admin)",
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+        if admin_exists {
+            tx.rollback().await?;
+            return Err(AuthStoreError::AdminExists);
+        }
+        let id = Uuid::now_v7();
+        sqlx::query(
+            "INSERT INTO native_users (
+                id, public_api_id, username, normalized_username, email, normalized_email,
+                password_hash, password_hash_algorithm, stream_signing_key, is_admin, is_editor,
+                enabled, locked, blacklisted, auth_revision, created_at, updated_at
+             ) VALUES ($1,$2,$3,$4,$5,$6,$7,'bcrypt',$8,true,false,true,false,false,1,$9,$9)",
+        )
+        .bind(id)
+        .bind(Uuid::now_v7())
+        .bind(username)
+        .bind(normalize_login(username))
+        .bind(email)
+        .bind(normalize_login(email))
+        .bind(request.password_hash)
+        .bind(request.stream_signing_key)
+        .bind(request.now)
+        .execute(&mut *tx)
+        .await?;
+        for role in ["Administrator", "HasStreamRole"] {
+            sqlx::query(
+                "INSERT INTO native_user_roles (user_id, role, created_at)
+                 VALUES ($1,$2,$3) ON CONFLICT (user_id, role) DO NOTHING",
+            )
+            .bind(id)
+            .bind(role)
+            .bind(request.now)
+            .execute(&mut *tx)
+            .await?;
+        }
+        tx.commit().await?;
+        self.user_by_id(pool, id)
+            .await?
+            .ok_or(AuthStoreError::CorruptState)
+    }
+
     /// Records an idempotent public-ID import binding.
     pub async fn bind_migration_identity(
         &self,
@@ -1175,7 +1266,7 @@ async fn user_import_matches(
         && row.updated_at == imported.updated_at)
 }
 
-fn stored_user_from_row(row: UserRow, roles: Vec<String>) -> StoredNativeUser {
+pub(crate) fn stored_user_from_row(row: UserRow, roles: Vec<String>) -> StoredNativeUser {
     StoredNativeUser {
         id: row.id,
         public_api_id: row.public_api_id,

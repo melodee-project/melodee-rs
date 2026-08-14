@@ -36,6 +36,24 @@ when its Artist, Release title, and optional year identify exactly one active ca
 Ambiguous or missing observations remain unlinked for later review; names are never treated as
 catalog identity.
 
+A periodic maintenance worker (see
+[discovery maintenance settings](../installation/configuration.md#discovery-maintenance)) keeps the
+discovery projections current. It reconciles stored recommendation popularity against committed
+scrobbles and retries linkage for unlinked chart rows as the catalog grows, applying the same
+unique-exact-match rule as the import. Existing links are never rewritten or cleared by the worker;
+an ambiguous observation stays unlinked until it identifies exactly one active Release. Each pass
+runs in bounded batches and is idempotent, so re-running it never duplicates or double-counts
+popularity.
+
+## Audio features and tempo
+
+The audio-feature detail and tempo-search routes serve stored per-Track feature rows. Tempo values
+are stored in the bounded range 0–1000 BPM; tempo searches require a finite, non-negative
+`min`/`max` pair with `min` not greater than `max`, and results are paged (default page size 50).
+Melodee does not analyze media to derive these features itself — rows populated by external tooling
+are served as-is, and Tracks without a stored feature row are absent from tempo search results and
+return `404` from the audio-feature detail route.
+
 ## Playback backend
 
 The native playback-backend routes report status and capabilities, initialize or stop the optional

@@ -181,6 +181,50 @@ fn process_image(
     Ok(output)
 }
 
+/// Decoded, dimension-bounded, re-encoded avatar bytes for the WP-03 native
+/// avatar store. Output never exceeds the 1 MiB `native_user_avatars` bound.
+pub(super) async fn normalize_avatar_image(
+    input: Vec<u8>,
+    format: ImageFormat,
+) -> Result<Vec<u8>, ImageUploadValidationError> {
+    const MAX_AVATAR_STORE_BYTES: usize = 1024 * 1024;
+    const MAX_AVATAR_DIMENSION: u32 = 1024;
+    if input.is_empty() || u64::try_from(input.len()).unwrap_or(u64::MAX) > MAX_IMAGE_INPUT_BYTES {
+        return Err(ImageUploadValidationError::Invalid);
+    }
+    let processor =
+        IMAGE_PROCESSOR.get_or_init(|| ImageProcessor::new(IMAGE_PROCESSING_CONCURRENCY));
+    let permit = processor
+        .try_admit()
+        .map_err(|_| ImageUploadValidationError::Busy)?;
+    tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        let image = decode_image(&input).map_err(|_| ImageUploadValidationError::Invalid)?;
+        // Bound the long edge without ever upscaling small uploads.
+        let resized =
+            if image.width() > MAX_AVATAR_DIMENSION || image.height() > MAX_AVATAR_DIMENSION {
+                image.resize(
+                    MAX_AVATAR_DIMENSION,
+                    MAX_AVATAR_DIMENSION,
+                    FilterType::Lanczos3,
+                )
+            } else {
+                image
+            };
+        let mut output = Cursor::new(Vec::new());
+        resized
+            .write_to(&mut output, format)
+            .map_err(|_| ImageUploadValidationError::Invalid)?;
+        let bytes = output.into_inner();
+        if bytes.is_empty() || bytes.len() > MAX_AVATAR_STORE_BYTES {
+            return Err(ImageUploadValidationError::Invalid);
+        }
+        Ok(bytes)
+    })
+    .await
+    .map_err(|_| ImageUploadValidationError::Invalid)?
+}
+
 fn decode_image(input: &[u8]) -> Result<image::DynamicImage, ImageProcessingError> {
     let reader = ImageReader::new(Cursor::new(input))
         .with_guessed_format()
@@ -290,8 +334,13 @@ async fn load_image(
             }
         }
         ImageKind::User => {
+            // WP-03: `native_user_avatars` is the avatar authority; the
+            // migration-0010 columns remain the legacy-import fallback.
             let image = sqlx::query_as::<_, (Option<String>, Option<Vec<u8>>)>(
-                "SELECT image_mime_type, image_bytes FROM native_users WHERE public_api_id = $1",
+                "SELECT COALESCE(a.content_type, u.image_mime_type), COALESCE(a.image, u.image_bytes)
+                 FROM native_users u
+                 LEFT JOIN native_user_avatars a ON a.user_id = u.id
+                 WHERE u.public_api_id = $1",
             )
             .bind(public_id)
             .fetch_optional(&state.pool)
