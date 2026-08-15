@@ -24,11 +24,86 @@ use crate::config::WorkEngineConfig;
 use crate::error::WorkStoreError;
 use crate::worker::WorkerId;
 
+/// Rolling-window failure/completion counts for dashboard aggregation
+/// (Phase 10 WP-14). Durable facts only: a "failed in window" item is one
+/// currently in `failed` whose last update is inside the window; a
+/// "completed in window" item carries a `completed_at` inside the window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WorkItemWindowCounts {
+    pub failed: i64,
+    pub completed: i64,
+}
+
+/// One hourly bucket of completed work items for the dashboard activity
+/// series (Phase 10 WP-14).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HourlyCompletionCount {
+    pub hour: OffsetDateTime,
+    pub count: i64,
+}
+
 /// Per-state row counts for operator diagnostics.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StateCount {
     pub state: IngestionState,
     pub count: i64,
+}
+
+/// Sort keys accepted by the operator work-item listing (WP-10). Each variant
+/// maps to a constant `ORDER BY` fragment over plain indexed columns — the
+/// whitelist is the injection boundary, so client input never reaches SQL.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkItemSort {
+    AddedAtAsc,
+    AddedAtDesc,
+    UpdatedAtAsc,
+    UpdatedAtDesc,
+    StateAsc,
+    StateDesc,
+    AttemptCountAsc,
+    AttemptCountDesc,
+}
+
+impl WorkItemSort {
+    /// Parses a strict `key:asc|desc` sort expression. Keys are camelCase API
+    /// names (`addedAt`, `updatedAt`, `state`, `attemptCount`); anything else
+    /// — including a missing or unknown direction suffix — is rejected.
+    #[must_use]
+    pub fn parse(raw: &str) -> Option<Self> {
+        let (key, direction) = raw.split_once(':')?;
+        match (key, direction) {
+            ("addedAt", "asc") => Some(Self::AddedAtAsc),
+            ("addedAt", "desc") => Some(Self::AddedAtDesc),
+            ("updatedAt", "asc") => Some(Self::UpdatedAtAsc),
+            ("updatedAt", "desc") => Some(Self::UpdatedAtDesc),
+            ("state", "asc") => Some(Self::StateAsc),
+            ("state", "desc") => Some(Self::StateDesc),
+            ("attemptCount", "asc") => Some(Self::AttemptCountAsc),
+            ("attemptCount", "desc") => Some(Self::AttemptCountDesc),
+            _ => None,
+        }
+    }
+
+    /// The historical default ordering (newest first).
+    #[must_use]
+    pub const fn default_order() -> Self {
+        Self::AddedAtDesc
+    }
+
+    /// Constant SQL fragment; every variant ends with the unique `id`
+    /// tiebreaker so paging is deterministic.
+    const fn order_by(self) -> &'static str {
+        match self {
+            Self::AddedAtAsc => "created_at ASC, id",
+            Self::AddedAtDesc => "created_at DESC, id",
+            Self::UpdatedAtAsc => "updated_at ASC, id",
+            Self::UpdatedAtDesc => "updated_at DESC, id",
+            Self::StateAsc => "state ASC, created_at DESC, id",
+            Self::StateDesc => "state DESC, created_at DESC, id",
+            Self::AttemptCountAsc => "attempt_count ASC, id",
+            Self::AttemptCountDesc => "attempt_count DESC, id",
+        }
+    }
 }
 
 /// An active lease proven by PostgreSQL evidence (PRD-WORK-002, PRD-INGEST-010).
@@ -2346,6 +2421,101 @@ impl WorkItemStore {
             .collect::<Result<Vec<_>, _>>()
     }
 
+    /// Lists one page of work items, optionally filtered by state, ordered by
+    /// a whitelisted sort, bounded — and returns the total row count for the
+    /// filter (ignoring the page) so callers can render pagination honestly.
+    pub async fn list_page(
+        &self,
+        pool: &PgPool,
+        state: Option<IngestionState>,
+        limit: u32,
+        offset: u32,
+        sort: WorkItemSort,
+    ) -> Result<(Vec<ReleaseWorkItem>, i64), WorkStoreError> {
+        let total = self.count(pool, state).await?;
+        // Injection audit: `order_by` returns a constant `&'static str`
+        // fragment selected from the WorkItemSort whitelist; only bind
+        // parameters carry client-influenced values.
+        let rows = sqlx::query_as::<_, WorkItemRow>(sqlx::AssertSqlSafe(format!(
+            "SELECT * FROM release_work_items
+             WHERE ($1::text IS NULL OR state = $1)
+             ORDER BY {}
+             LIMIT $2 OFFSET $3",
+            sort.order_by()
+        )))
+        .bind(state.map(IngestionState::as_str))
+        .bind(i64::from(limit))
+        .bind(i64::from(offset))
+        .fetch_all(pool)
+        .await?;
+        let items = rows
+            .into_iter()
+            .map(ReleaseWorkItem::try_from)
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok((items, total))
+    }
+
+    /// Lists one page of work items whose state is in `states`, ordered by a
+    /// whitelisted sort, bounded — plus the total row count for the filter
+    /// (ignoring the page). Read-side companion to [`Self::list_page`] for
+    /// multi-state operator queues (Phase 10 release review). An empty state
+    /// set short-circuits to an empty page without touching the database.
+    pub async fn list_page_states(
+        &self,
+        pool: &PgPool,
+        states: &[IngestionState],
+        limit: u32,
+        offset: u32,
+        sort: WorkItemSort,
+    ) -> Result<(Vec<ReleaseWorkItem>, i64), WorkStoreError> {
+        if states.is_empty() {
+            return Ok((Vec::new(), 0));
+        }
+        let state_names: Vec<&str> = states.iter().map(|state| state.as_str()).collect();
+        let total = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*)::bigint FROM release_work_items WHERE state = ANY($1)",
+        )
+        .bind(&state_names)
+        .fetch_one(pool)
+        .await?;
+        // Injection audit: `order_by` returns a constant `&'static str`
+        // fragment selected from the WorkItemSort whitelist; only bind
+        // parameters carry client-influenced values.
+        let rows = sqlx::query_as::<_, WorkItemRow>(sqlx::AssertSqlSafe(format!(
+            "SELECT * FROM release_work_items
+             WHERE state = ANY($1)
+             ORDER BY {}
+             LIMIT $2 OFFSET $3",
+            sort.order_by()
+        )))
+        .bind(&state_names)
+        .bind(i64::from(limit))
+        .bind(i64::from(offset))
+        .fetch_all(pool)
+        .await?;
+        let items = rows
+            .into_iter()
+            .map(ReleaseWorkItem::try_from)
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok((items, total))
+    }
+
+    /// Total work-item rows, optionally filtered by state.
+    pub async fn count(
+        &self,
+        pool: &PgPool,
+        state: Option<IngestionState>,
+    ) -> Result<i64, WorkStoreError> {
+        let total = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*)::bigint FROM release_work_items
+             WHERE ($1::text IS NULL OR state = $1)",
+        )
+        .bind(state.map(IngestionState::as_str))
+        .fetch_one(pool)
+        .await?;
+        Ok(total)
+    }
+
     /// Per-state counts for operator diagnostics (PRD-WORK-002 shape).
     pub async fn counts_by_state(&self, pool: &PgPool) -> Result<Vec<StateCount>, WorkStoreError> {
         let rows: Vec<(String, i64)> = sqlx::query_as(
@@ -2362,6 +2532,50 @@ impl WorkItemStore {
                 })
             })
             .collect()
+    }
+
+    /// Failure/completion counts since `since` (set-based, single pass).
+    pub async fn window_counts(
+        &self,
+        pool: &PgPool,
+        since: OffsetDateTime,
+    ) -> Result<WorkItemWindowCounts, WorkStoreError> {
+        let row: (i64, i64) = sqlx::query_as(
+            "SELECT
+                 COUNT(*) FILTER (WHERE state = 'failed' AND updated_at >= $1)::bigint,
+                 COUNT(*) FILTER (WHERE completed_at IS NOT NULL AND completed_at >= $1)::bigint
+             FROM release_work_items",
+        )
+        .bind(since)
+        .fetch_one(pool)
+        .await?;
+        Ok(WorkItemWindowCounts {
+            failed: row.0,
+            completed: row.1,
+        })
+    }
+
+    /// Per-hour completed counts since `since`, oldest first (set-based;
+    /// bounded by the window, never by row cardinality beyond one row per
+    /// hour).
+    pub async fn completed_hourly(
+        &self,
+        pool: &PgPool,
+        since: OffsetDateTime,
+    ) -> Result<Vec<HourlyCompletionCount>, WorkStoreError> {
+        let rows: Vec<(OffsetDateTime, i64)> = sqlx::query_as(
+            "SELECT date_trunc('hour', completed_at) AS hour, COUNT(*)::bigint AS count
+             FROM release_work_items
+             WHERE completed_at IS NOT NULL AND completed_at >= $1
+             GROUP BY 1 ORDER BY 1",
+        )
+        .bind(since)
+        .fetch_all(pool)
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(|(hour, count)| HourlyCompletionCount { hour, count })
+            .collect())
     }
 
     /// Active (unexpired) leases proven by PostgreSQL evidence, bounded by

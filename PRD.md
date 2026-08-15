@@ -1795,7 +1795,7 @@ Large catalog tables must use server-side filtering, sorting, paging, and search
 
 ## 39. Canonical Admin UI Screens
 
-The following eight screens are the canonical visual references for implementation. Full-size 1600×1200+ mockups already exist and should be copied into `docs/ui/reference/` when the Rust repository is initialized.
+The following eight screens are the canonical visual references for implementation. Full-size 1600×1200 mockups live in `design/ui/reference/` (internal engineering documentation). They are never published to `/docs` as product screenshots; once real screens are accepted, implementation screenshots supersede them (PRD-UI-REF-002).
 
 1. `01-overview-dashboard.png`
 2. `02-processing-queue.png`

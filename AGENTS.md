@@ -7,9 +7,13 @@ template.
 ## Commands and environment
 
 - **Local gate: `./scripts/check.sh`** (also `make check`). Runs, in order: repository/doc
-  validation → requirements index check → Python tests → `cargo fmt --check` →
+  validation → requirements index check → Python tests → admin-ui gate (pnpm install
+  --frozen-lockfile, typecheck, lint, i18n check, unit tests, build; skipped locally if pnpm is
+  absent) → `cargo fmt --check` →
   `clippy -D warnings` → `cargo test --workspace --all-features` → `cargo deny check` (skipped
   locally if cargo-deny is absent; CI installs it). Run this before considering work done.
+  Admin UI work additionally runs Playwright e2e/visual tests via `cd admin-ui && pnpm test:e2e`
+  (CI: `.github/workflows/admin-ui.yml`).
 - **Run `cargo fmt --all` before `check.sh`.** `fmt --check` is a hard gate and fails on
   non-canonical formatting.
 - **Focused runs:** `cargo test -p melodee-domain` for one crate; `make lint`, `make test`,
@@ -52,9 +56,21 @@ template.
 
 Do not silently resolve a material conflict; record it in the PR and propose an ADR when needed.
 
-## Current phase boundary: Phase 9 complete — awaiting next phase assignment
+## Current phase boundary: Phase 10 complete — awaiting next phase assignment
 
-Phases 0–9 are complete. Phase 9's evidence is in
+Phases 0–10 are complete. Phase 10's evidence is in
+`design/evidence/phase-10/PHASE-10-REPORT.md`: the Carbon admin SPA (served at `/admin`)
+implements all eight canonical screens plus supporting surfaces, all ten per-screen checklists
+are green, ADR-0109 shell-validation evidence is recorded, theming/localization/RTL,
+accessibility, responsive, and visual-regression suites are evidenced, and all Phase-10-tagged
+requirements are terminal (metadata edit forms are the single deliberate deferral, recorded in
+the Phase 10 decision log). Phase 10 landed under accepted ADRs 0137 (localization stack),
+0138 (SPA tooling + static serving), 0139 (session strategy + admin API gating), 0140/0141
+(legacy jukebox/party web-route retirements), 0142 (admin browse indexes), and 0143 (catalog
+artwork overrides with evidenced frozen-endpoint precedence). The full repository gate passes
+(904 Rust tests, 232 JS unit tests, 259 Playwright e2e runs, 140 Python capture tests, zero
+failures); the local gate now includes the admin-ui toolchain (`scripts/check.sh`). Phase 9's
+evidence is in
 `design/evidence/phase-9/PHASE-9-REPORT.md`: all twelve per-domain parity checklists are green
 (74 rows ✅ with linked test evidence, 4 rows 🚫 waived by accepted ADRs, 2 rows ➡ Phase 10),
 all 61 Phase-9-tagged requirements are terminal (52 tested, 2 implemented, 7 deferred under
@@ -71,8 +87,8 @@ evidence is in `design/evidence/phase-7/PHASE-7-REPORT.md`.
 Allowed: nothing new until the next phase is assigned; fixes to existing evidence and
 documentation corrections only.
 
-Forbidden: Phase 10 admin UI implementation and Phase 11 migration/import completion (both
-unassigned); merging native-v1, OpenSubsonic, or Jellyfin wire DTOs; redesigning captured
+Forbidden: Phase 11 migration/import completion (unassigned); merging native-v1, OpenSubsonic,
+or Jellyfin wire DTOs; redesigning captured
 external contracts without compatibility evidence, a product decision, an accepted ADR, and a
 migration/client plan; any database schema without an accepted schema ADR; message brokers,
 Redis, Elasticsearch/OpenSearch, GraphQL, microservices; copying C# service/class boundaries

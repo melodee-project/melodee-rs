@@ -74,6 +74,51 @@ impl From<AuthStoreError> for UserAdminError {
     }
 }
 
+/// Sort keys accepted by the admin user listing (WP-10). Each variant maps to
+/// a constant `ORDER BY` fragment — the whitelist is the injection boundary,
+/// so client input never reaches SQL.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UserSort {
+    UsernameAsc,
+    UsernameDesc,
+    CreatedAtAsc,
+    CreatedAtDesc,
+}
+
+impl UserSort {
+    /// Parses a strict `key:asc|desc` sort expression with camelCase API keys
+    /// (`username`, `createdAt`); anything else is rejected.
+    #[must_use]
+    pub fn parse(raw: &str) -> Option<Self> {
+        let (key, direction) = raw.split_once(':')?;
+        match (key, direction) {
+            ("username", "asc") => Some(Self::UsernameAsc),
+            ("username", "desc") => Some(Self::UsernameDesc),
+            ("createdAt", "asc") => Some(Self::CreatedAtAsc),
+            ("createdAt", "desc") => Some(Self::CreatedAtDesc),
+            _ => None,
+        }
+    }
+
+    /// Constant SQL fragment; every variant ends with the unique `id`
+    /// tiebreaker so paging is deterministic.
+    const fn order_by(self) -> &'static str {
+        match self {
+            Self::UsernameAsc => "normalized_username ASC, id",
+            Self::UsernameDesc => "normalized_username DESC, id",
+            Self::CreatedAtAsc => "created_at ASC, id",
+            Self::CreatedAtDesc => "created_at DESC, id",
+        }
+    }
+}
+
+/// One page of admin user listing plus the filter's total row count.
+#[derive(Debug)]
+pub struct UserListPage {
+    pub users: Vec<StoredNativeUser>,
+    pub total: i64,
+}
+
 /// Stateless entry point for Phase 9 user/group/avatar administration.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct UserAdminStore;
@@ -165,6 +210,99 @@ impl UserAdminStore {
     // ------------------------------------------------------------------
     // Admin user management (migration 0010 columns)
     // ------------------------------------------------------------------
+
+    /// Lists one page of users, optionally filtered by a case-insensitive
+    /// substring match on username or email, ordered by a whitelisted sort,
+    /// bounded — plus the filter's total row count for pagination envelopes.
+    pub async fn list_users(
+        &self,
+        pool: &PgPool,
+        query: Option<&str>,
+        limit: u32,
+        offset: u32,
+        sort: UserSort,
+    ) -> Result<UserListPage, UserAdminError> {
+        let pattern = query
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(like_contains_pattern);
+        let total = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*)::bigint FROM native_users
+             WHERE ($1::text IS NULL OR username ILIKE $1 ESCAPE '\\' OR email ILIKE $1 ESCAPE '\\')",
+        )
+        .bind(pattern.as_deref())
+        .fetch_one(pool)
+        .await?;
+        // Injection audit: `order_by` returns a constant `&'static str`
+        // fragment selected from the UserSort whitelist; only bind parameters
+        // carry client-influenced values.
+        let rows = sqlx::query_as::<_, UserRow>(sqlx::AssertSqlSafe(format!(
+            "SELECT id, public_api_id, username, email, is_admin, is_editor, enabled, locked,
+                    blacklisted, preferred_language, preferred_theme, auth_revision,
+                    created_at, updated_at FROM native_users
+             WHERE ($1::text IS NULL OR username ILIKE $1 ESCAPE '\\' OR email ILIKE $1 ESCAPE '\\')
+             ORDER BY {} LIMIT $2 OFFSET $3",
+            sort.order_by()
+        )))
+        .bind(pattern.as_deref())
+        .bind(i64::from(limit))
+        .bind(i64::from(offset))
+        .fetch_all(pool)
+        .await?;
+        let mut users = Vec::with_capacity(rows.len());
+        for row in rows {
+            let roles = sqlx::query_scalar::<_, String>(
+                "SELECT role FROM native_user_roles WHERE user_id=$1 ORDER BY role",
+            )
+            .bind(row.id)
+            .fetch_all(pool)
+            .await?;
+            users.push(stored_user_from_row(row, roles));
+        }
+        Ok(UserListPage { users, total })
+    }
+
+    /// Replaces one user's password with a caller-supplied bcrypt hash. The
+    /// credential revision is bumped (invalidating in-flight issuance) and
+    /// every refresh family is revoked in the same transaction, matching the
+    /// disable/lock revocation semantics of `update_user`.
+    pub async fn set_password(
+        &self,
+        pool: &PgPool,
+        public_api_id: Uuid,
+        new_password_hash: &str,
+        now: OffsetDateTime,
+    ) -> Result<StoredNativeUser, UserAdminError> {
+        if new_password_hash.trim().is_empty() || !new_password_hash.starts_with("$2") {
+            return Err(UserAdminError::InvalidRequest("credentials"));
+        }
+        let mut tx = pool.begin().await?;
+        let row = sqlx::query_as::<_, (Uuid,)>(
+            "SELECT id FROM native_users WHERE public_api_id=$1 FOR UPDATE",
+        )
+        .bind(public_api_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let Some((user_id,)) = row else {
+            tx.rollback().await?;
+            return Err(UserAdminError::NotFound);
+        };
+        sqlx::query(
+            "UPDATE native_users SET password_hash=$2, password_hash_algorithm='bcrypt',
+                auth_revision=auth_revision+1, updated_at=$3
+             WHERE id=$1",
+        )
+        .bind(user_id)
+        .bind(new_password_hash)
+        .bind(now)
+        .execute(&mut *tx)
+        .await?;
+        revoke_all_families(&mut tx, user_id, now, "admin_password_reset").await?;
+        tx.commit().await?;
+        load_user_by_public_id(pool, public_api_id)
+            .await?
+            .ok_or(UserAdminError::NotFound)
+    }
 
     /// Creates one enabled, unlocked user with a caller-supplied bcrypt hash.
     /// Duplicate normalized username/email fails closed with `UserConflict`.
@@ -304,6 +442,21 @@ impl UserAdminStore {
             .await?
             .ok_or(UserAdminError::NotFound)
     }
+}
+
+/// Builds a safely-escaped `ILIKE '%…%'` pattern: `%`, `_`, and the escape
+/// character itself are escaped so the filter is always a literal substring.
+fn like_contains_pattern(raw: &str) -> String {
+    let mut pattern = String::with_capacity(raw.len() + 2);
+    pattern.push('%');
+    for ch in raw.chars() {
+        if matches!(ch, '\\' | '%' | '_') {
+            pattern.push('\\');
+        }
+        pattern.push(ch);
+    }
+    pattern.push('%');
+    pattern
 }
 
 fn validate_roles(roles: &[String]) -> Result<(), UserAdminError> {

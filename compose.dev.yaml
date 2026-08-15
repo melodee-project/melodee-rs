@@ -19,7 +19,10 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
-    shm_size: 512mb
+    # PostgreSQL 18 uses large dynamic shared-memory segments for parallel
+    # redo/query work (observed 128–256MB each); 512mb is exhausted under the
+    # full test gate's parallel load and even blocks crash recovery.
+    shm_size: 2gb
 
 volumes:
   melodee_pg_data:

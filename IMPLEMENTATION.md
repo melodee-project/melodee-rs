@@ -19,7 +19,9 @@
 **Phase 8 complete (2026-08-13)**, see
 [design/evidence/phase-8/PHASE-8-REPORT.md](design/evidence/phase-8/PHASE-8-REPORT.md);
 **Phase 9 complete (2026-08-14)**, see
-[design/evidence/phase-9/PHASE-9-REPORT.md](design/evidence/phase-9/PHASE-9-REPORT.md).
+[design/evidence/phase-9/PHASE-9-REPORT.md](design/evidence/phase-9/PHASE-9-REPORT.md);
+**Phase 10 complete (2026-08-15)**, see
+[design/evidence/phase-10/PHASE-10-REPORT.md](design/evidence/phase-10/PHASE-10-REPORT.md).
 **Date:** 2026-08-07  
 **Governing documents:** [PRD.md](PRD.md), [SPEC.md](SPEC.md), accepted ADRs
 
@@ -427,6 +429,14 @@ scope. The consolidated decision, gate evidence, and honest limitations are in
 [design/evidence/phase-9/PHASE-9-REPORT.md](design/evidence/phase-9/PHASE-9-REPORT.md).
 
 ## 13. Phase 10 — Admin UI
+
+**Status:** Complete (2026-08-15) — exit criteria met: the Carbon SPA (served at `/admin` per
+ADR-0138) implements all eight canonical screens plus supporting surfaces; all ten per-screen
+checklists are green under `design/evidence/phase-10/checklists/`; ADR-0109 shell-validation
+evidence is recorded in the ADR; theming (System/Light/Dark × theme packs), 20-culture
+localization with RTL, accessibility (axe WCAG 2.2 A/AA), responsive (three breakpoints), and
+the visual-regression suite are evidenced. Report:
+[design/evidence/phase-10/PHASE-10-REPORT.md](design/evidence/phase-10/PHASE-10-REPORT.md).
 
 ### Objective
 

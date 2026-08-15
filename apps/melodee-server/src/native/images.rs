@@ -3,6 +3,9 @@
 //! Entity IDs are parsed as typed compatibility IDs and never become paths.
 //! Catalog artwork is resolved from the immutable publication plan and opened
 //! through the same no-follow canonical-root boundary used by direct play.
+//! ADR-0143 §2: an operator-uploaded override (`catalog_entity_images`) takes
+//! precedence for the `album_`/`artist_`/`song_` kinds; entities without an
+//! override keep the captured plan-then-placeholder behavior exactly.
 
 use std::{
     io::Cursor,
@@ -134,12 +137,15 @@ impl ImageProcessor {
 struct ImageProcessingError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum ImageUploadValidationError {
+pub(crate) enum ImageUploadValidationError {
     Invalid,
     Busy,
 }
 
-pub(super) async fn validate_uploaded_image(
+/// Shared upload validation for raw image bodies (avatars, playlist images,
+/// and the ADR-0143 admin catalog artwork overrides): the encoded-input
+/// bound plus magic-byte/dimension/pixel decode under the bounded pipeline.
+pub(crate) async fn validate_uploaded_image(
     input: Vec<u8>,
 ) -> Result<Vec<u8>, ImageUploadValidationError> {
     if input.is_empty() || u64::try_from(input.len()).unwrap_or(u64::MAX) > MAX_IMAGE_INPUT_BYTES {
@@ -359,6 +365,15 @@ async fn load_image(
             }
         }
         ImageKind::Album | ImageKind::Artist | ImageKind::Song => {
+            // ADR-0143 §2: an operator-uploaded artwork override takes
+            // precedence over the immutable publication plan. Absence of an
+            // override preserves the captured behavior exactly below (plan
+            // artwork, then placeholder).
+            if let Some(bytes) = artwork_override_bytes(&state.pool, kind, public_id).await? {
+                return Ok(Some(
+                    processed_response(kind, bytes, size, headers, permit).await?,
+                ));
+            }
             let release = resolve_release(&state.pool, kind, public_id).await?;
             let Some(release_id) = release else {
                 return Ok(None);
@@ -416,6 +431,42 @@ async fn resolve_release(
         }
         ImageKind::Playlist | ImageKind::User => Ok(None),
     }
+}
+
+/// ADR-0143 §2 precedence lookup: the operator-uploaded override bytes for
+/// the addressed entity, when one is stored. `album_`/`song_` resolve to the
+/// Release override (a Song's artwork is its Release's, as today); `artist_`
+/// resolves to the Artist override. The same status gates as
+/// `resolve_release` apply so an override never revives an entity the frozen
+/// endpoint would not serve.
+async fn artwork_override_bytes(
+    pool: &sqlx::PgPool,
+    kind: ImageKind,
+    public_id: Uuid,
+) -> Result<Option<Vec<u8>>, sqlx::Error> {
+    let query = match kind {
+        ImageKind::Album => {
+            "SELECT img.image_bytes FROM catalog_entity_images img
+             JOIN releases release ON release.id = img.release_id AND release.status = 'active'
+             WHERE img.entity_type = 'release' AND release.public_api_id = $1"
+        }
+        ImageKind::Song => {
+            "SELECT img.image_bytes FROM catalog_entity_images img
+             JOIN releases release ON release.id = img.release_id AND release.status = 'active'
+             JOIN tracks track ON track.release_id = release.id
+             WHERE img.entity_type = 'release' AND track.public_api_id = $1"
+        }
+        ImageKind::Artist => {
+            "SELECT img.image_bytes FROM catalog_entity_images img
+             JOIN artists artist ON artist.id = img.artist_id
+             WHERE img.entity_type = 'artist' AND artist.public_api_id = $1"
+        }
+        ImageKind::Playlist | ImageKind::User => return Ok(None),
+    };
+    sqlx::query_scalar(query)
+        .bind(public_id)
+        .fetch_optional(pool)
+        .await
 }
 
 async fn canonical_artwork_bytes(

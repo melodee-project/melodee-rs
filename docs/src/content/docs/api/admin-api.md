@@ -12,11 +12,18 @@ API v1, OpenSubsonic, and Jellyfin compatibility surfaces. It uses Melodee's own
 It is intended for operators and administrators monitoring ingestion, diagnosing failures, and
 eventually curating the catalog. It is **not** a compatibility surface for existing clients.
 
-:::caution[Pre-release access control]
-The current Rust development server does not yet have an application authentication layer. Its
-listener defaults to `127.0.0.1`; do not expose these operator diagnostics to an untrusted network.
-Authentication and permission behavior will be documented when that implementation ships.
-:::
+## Authentication and authorization
+
+Every `/api/admin/v1` route requires a valid native access token
+(`Authorization: Bearer …`) for an enabled, unlocked account with administrator rights. Requests
+without a valid token return `401`; authenticated non-administrators receive `403`. Both use the
+stable [error envelope](#error-behavior). The infrastructure probes `/healthz` and `/readyz` are
+separate routes and remain anonymous.
+
+The admin single-page application (served by the server at `/admin` when the built bundle is
+deployed — see [Configuration](../installation/configuration/)) signs in through the native
+cookie sign-in endpoints and is bound by the same gate; route guards in the UI are a convenience
+only.
 
 ## Implemented endpoints
 
@@ -43,12 +50,29 @@ Returns per-state counts for the ingestion queue (e.g. `ready`, `failed`, `needs
 ### Work-item listing
 
 ```http
-GET /api/admin/v1/ingest/work-items?state=ready&limit=50&offset=0
+GET /api/admin/v1/ingest/work-items?state=ready&limit=50&offset=0&sort=addedAt:desc
 ```
 
-Returns a bounded, server-side paginated list of work items. Supports optional `state` filtering
-and `limit`/`offset` pagination. `limit` is clamped to a server maximum; clients cannot pull the
-whole queue in one request.
+Returns a bounded, server-side paginated list of work items inside a pagination envelope:
+
+```json
+{
+  "items": [ /* work items */ ],
+  "total": 137,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+`total` is the row count for the current filter (it respects `state` but ignores `limit`/`offset`),
+so clients can render paging honestly. Supports optional `state` filtering and `limit`/`offset`
+pagination. `limit` defaults to 50 and is clamped to a server maximum (500); clients cannot pull
+the whole queue in one request.
+
+The optional `sort` parameter is a strict whitelist in `key:asc|desc` form; keys are `addedAt`,
+`updatedAt`, `state`, and `attemptCount`. An omitted `sort` keeps the newest-first ordering
+(`addedAt:desc`). Unknown keys, unknown directions, or a missing `:asc|:desc` suffix return `400`
+with code `unknown_sort`.
 
 ### Work-item detail
 
@@ -81,11 +105,9 @@ heartbeat store exists yet).
 
 ## User and access-group administration
 
-The user and group routes below are additionally gated: every request must carry a valid native
-access token (`Authorization: Bearer …`) for an enabled, unlocked account with administrator
-rights. Requests without a token return `401`; authenticated non-administrators receive `403`.
-Every mutation is audit-logged with the acting administrator's public user id. Passwords are
-accepted only on creation, are stored as bcrypt hashes, and never appear in responses or logs.
+These routes follow the same administrator gate described above. Every mutation is audit-logged
+with the acting administrator's public user id. Passwords are accepted only on creation and on
+the password-set route, are stored as bcrypt hashes, and never appear in responses or logs.
 
 ### Groups
 
@@ -111,9 +133,18 @@ of a bound group can access it (see [Users and Access](../admin/users-and-access
 ### Users
 
 ```http
+GET /api/admin/v1/users?query=ann&limit=50&offset=0&sort=username:asc
 POST /api/admin/v1/users
 PUT /api/admin/v1/users/{id}
+POST /api/admin/v1/users/{id}/password
 ```
+
+`GET` returns the paginated user listing in the same envelope shape as the work-item listing
+(`{"items", "total", "limit", "offset"}`). `query` is an optional case-insensitive substring
+filter on username or email; `limit` defaults to 50 and is clamped to 500; `sort` is a strict
+whitelist in `key:asc|desc` form with keys `username` and `createdAt` (default `username:asc`);
+unknown sorts return `400 unknown_sort`. Items contain operator-safe account fields only — never
+password hashes or signing keys.
 
 `POST` creates an enabled, unlocked account from `{"username", "email", "password", "isAdmin"?,
 "isEditor"?, "roles"?}`; when `roles` is omitted the account receives the streaming role. A
@@ -121,6 +152,12 @@ duplicate username returns `409 user_conflict`; passwords shorter than 8 charact
 `PUT` applies a field-optional update (`isAdmin`, `isEditor`, `enabled`, `locked`, `roles`); any
 change bumps the credential revision, and disabling or locking an account revokes all of its
 refresh sessions immediately. Unknown ids return `404`.
+
+`POST …/{id}/password` sets a new password from `{"password": "…"}` (8–1024 characters) and
+answers `204`. The credential revision is bumped and **all** of the account's refresh sessions are
+revoked immediately, exactly as when an account is disabled or locked — the user must sign in
+again on every device. The change is audit-logged with the acting administrator's public user id;
+the new password never appears in responses or logs.
 
 ### Internet radio stations
 
@@ -257,6 +294,461 @@ preflight checks (`database`, `storage_paths`, `media_tools`, `search_index`, `a
 `complete` re-evaluates the checks and fails closed with `409 onboarding_checks_failed` while any
 required check fails; otherwise it records the durable completion marker with the check evidence.
 
+## Release review
+
+These routes back the operator review workflow for ingestion work items parked in
+`needs_review` (awaiting an operator decision), `failed`, or `quarantined`. All routes require
+an administrator's native access token; every mutation is audit-logged with the acting
+administrator's public user id.
+
+### Review queue
+
+```http
+GET /api/admin/v1/review/queue?state=needs_review&limit=50&offset=0&sort=addedAt:desc
+```
+
+Returns the bounded, server-side paginated queue of review-able work items plus
+`countsByState` for the three review states (so the UI can render tab badges from one request).
+The optional `state` filter only accepts the review-able states (`needs_review`, `failed`,
+`quarantined`); any other value returns `400` (`state_not_reviewable` or `unknown_state`).
+`sort` uses the same whitelist as the work-item listing. Each row additionally carries
+`releaseId` when the work item is bound to a catalog Release.
+
+### Review detail
+
+```http
+GET /api/admin/v1/review/{workItemId}
+```
+
+Returns the full review picture for one work item: the durable work item, the manifest summary
+(track inventory with per-Track fingerprint status, artwork and sidecar observations, finding
+count — never the raw payload blob), the persisted classification with its evidence, the catalog
+comparison (Known/New/Alternate/Uncertain aggregates grouped from the per-Track novelty
+categories plus the durable counts), the durable policy decision (matched rules, evidence
+summary, override reason), and the append-only timeline.
+
+### Apply a review decision
+
+```http
+POST /api/admin/v1/review/{workItemId}/decision
+```
+
+Body: `{"action": "accept"|"quarantine"|"ignore"|"delete", "reason": "…", "override": false}`.
+A non-blank `reason` is required and audited. The work item must be in `needs_review`
+(otherwise `409 invalid_state`).
+
+When the Release has a pending policy decision, the decision applies the durable override path:
+`accept` resumes the pipeline (the work item moves to `indexing`), `quarantine`, `ignore`, and
+`delete` record the corresponding disposition. `delete` additionally requires the explicit
+`"override": true` acknowledgement (`400 override_required` otherwise) and only records the
+destructive authorization — the response carries `pendingExecution: true` and execution remains
+with the durable pipeline. For items parked before cataloging (no policy decision),
+`quarantine` and `ignore` park the work item directly; `accept` and `delete` are unavailable in
+that state (`409`).
+
+### Reprocess a work item
+
+```http
+POST /api/admin/v1/review/{workItemId}/reprocess
+```
+
+Body: `{"reason": "…"}` (optional). Moves a `failed` or `quarantined` work item back to `ready`
+so the pipeline picks it up again. Any other state returns `409 not_reprocessable`.
+
+### Pre-publication track preview
+
+```http
+GET /api/admin/v1/review/{workItemId}/tracks/{trackIndex}/preview
+```
+
+Streams one track's audio for review **before** publication: the normalized work-area output
+when available, otherwise the observed source file. The file is located exclusively from the
+durable manifest and the configured inbound source roots / work area — paths are canonicalized
+and must remain inside those configured roots, so no client input can steer the read outside
+them. HTTP `Range` is honored (`206` with `Content-Range`) so clients can seek; responses carry
+`Cache-Control: no-store` because pre-publication bytes are not cacheable catalog content.
+When no previewable file exists under the configured roots the route returns
+`404 preview_unavailable`.
+
+## Artist identity review
+
+These routes back the Artist identity curation workflow: resolving observed artist strings to
+Melodee-owned Artist identities, recording do-not-match assertions, and correcting identities
+through explicit merge/split operations. All routes require an administrator's native access
+token; every mutation is audit-logged with the acting administrator's public user id.
+
+### Unresolved observation queue
+
+```http
+GET /api/admin/v1/identity/unresolved?limit=50&offset=0&sort=createdAt:asc
+```
+
+Returns the bounded, server-side paginated queue of observed artist strings that have no
+authoritative match decision. Each row carries the display/raw/normalized values, the source
+Release (and Track when the observation is track-scoped), and the pending candidate match and
+evidence counts. `sort` is a strict whitelist with keys `createdAt` and `displayValue`;
+unknown sorts return `400 unknown_sort`.
+
+### Observation detail
+
+```http
+GET /api/admin/v1/identity/observations/{id}
+```
+
+Returns the observation, the current authoritative decision when one exists, every candidate
+Artist with its latest decision and the full persisted evidence breakdown, and any recorded
+do-not-match assertions.
+
+### Resolve an observation
+
+```http
+POST /api/admin/v1/identity/observations/{id}/resolve
+```
+
+Body: `{"resolution": "confirm"|"create-new"|"leave-provisional", "artistId": "…", "reason": "…"}`.
+A non-blank `reason` is required and audited.
+
+- `confirm` requires `artistId` (the Artist public id) and records a locked administrator
+  decision, so no automated resolver supersedes it; the observation leaves the unresolved queue.
+- `create-new` must not carry `artistId`; it creates a new provisional Artist from the
+  observation's display value and records the same locked decision.
+- `leave-provisional` must not carry `artistId` and is an honest, audited no-op — no decision
+  row is written and the observation stays queued for a later review pass
+  (`"changed": false`).
+
+### Record a do-not-match assertion
+
+```http
+POST /api/admin/v1/identity/observations/{id}/never-match
+```
+
+Body: `{"artistId": "…", "reason": "…"}`. Records a durable, locked negative assertion against
+the exact observation/candidate pair; automated resolvers then fail closed for that pair.
+Repeating the same pair returns `409`.
+
+### Identity decision feed
+
+```http
+GET /api/admin/v1/identity/decisions?limit=50&offset=0
+```
+
+Returns the append-only audit feed of identity decisions (observed-artist matches, evidence,
+assertions, and Artist-level events), newest first, with actor and reason.
+
+### Merge two Artists
+
+```http
+POST /api/admin/v1/identity/artists/merge
+```
+
+Body: `{"sourceArtistId": "…", "targetArtistId": "…", "reason": "…"}`. Merges the source Artist
+into the target; the source's public id is preserved as a redirect and the merged Artist can no
+longer participate in identity mutations (`409 artist_not_resolvable`). Merging an Artist into
+itself returns `400 self_merge`.
+
+### Split an Artist
+
+```http
+POST /api/admin/v1/identity/artists/{id}/split
+```
+
+Body: `{"reason": "…", "newArtist": {"canonicalName": "…", "sortName"?, "artistType"?,
+"disambiguation"?}, "assignments": [{"kind": "…", "id": "…"}]}`. Creates a new provisional
+Artist and moves **only** the explicitly selected assignments off the source Artist —
+`assignments` must be non-empty (`400 empty_split`). `kind` is one of `releaseArtist`,
+`trackArtist`, `contribution`, `alias`, or `externalIdentity`; each `id` is the internal durable
+row identity of the selected link.
+
+## Catalog browsing and detail
+
+These routes back the catalog browsing tables and the Artist/Release/Track detail views. All
+routes are read-only, require an administrator's native access token, and use Melodee's own
+vocabulary (`Artist`, `Release`, `Track`) with public ids as lookup keys; unknown ids return
+`404 not_found`. Every listing uses the shared pagination envelope (`items`, `total`, `limit`,
+`offset`; `limit` defaults to 50 and clamps to 500) and a strict `key:asc|desc` sort whitelist
+(`400 unknown_sort` otherwise). The optional `query` parameter is a bounded case-insensitive
+substring filter (overlong queries return `400 invalid_query`).
+
+### Browse Artists
+
+```http
+GET /api/admin/v1/catalog/artists?query=…&limit=50&offset=0&sort=name:asc
+```
+
+Returns Artists with identity facts (`name`, `sortName`, `artistType`, `disambiguation`,
+`status`), set-based catalog counts (`releaseCount`, `trackCount`), and an `imageId`. Sort keys:
+`name`, `createdAt`, `updatedAt` (default `name:asc`). `query` matches the canonical/sort name
+and recorded aliases.
+
+### Browse Releases
+
+```http
+GET /api/admin/v1/catalog/releases?query=…&artistId=…&limit=50&offset=0&sort=releaseDate:desc
+```
+
+Returns Releases with `title`, `displayArtist`, `releaseDate` (extended ISO `YYYY-MM-DD` or
+`null`), `releaseDateText`, `status`, aggregate `trackCount`/`durationMs`, and an `imageId`.
+Sort keys: `title`, `releaseDate`, `createdAt`, `updatedAt` (default `title:asc`). `query`
+matches the title; `artistId` (an Artist public id) restricts to Releases that Artist is billed
+on.
+
+### Browse Tracks
+
+```http
+GET /api/admin/v1/catalog/tracks?query=…&releaseId=…&limit=50&offset=0&sort=title:asc
+```
+
+Returns Tracks with `title`, `displayArtist`, `ordinal`, `discNumber`/`trackNumber`,
+`durationMs`, the Release linkage (`releaseId`, `releaseTitle`), and an `imageId`. Sort keys:
+`title`, `durationMs`, `createdAt` (default `title:asc`). `query` matches the title;
+`releaseId` (a Release public id) restricts to one Release.
+
+### Artist detail
+
+```http
+GET /api/admin/v1/catalog/artists/{id}
+```
+
+Returns the full operator image of one Artist: identity facts (name, sort name, type,
+disambiguation, status, begin/end dates, merge target when merged), set-based stats
+(`releaseCount`, `billedTrackCount`, `performanceTrackCount`, `allCreditTrackCount`), typed
+aliases, external provider identities, the Releases the Artist is billed on, contributions
+(appearances), Artist relationships, group memberships, an `imageId`, and the append-only audit
+history. Every sub-list is bounded (at most 100 items) and carries its full `total` as
+`{items, total}` so truncation is visible.
+
+### Release detail
+
+```http
+GET /api/admin/v1/catalog/releases/{id}
+```
+
+Returns the full operator image of one Release: overview facts (title, sort title, display
+artist, release date, status, revision), aggregate stats (`trackCount`, `durationMs`,
+`mediaBytes`), the ordered Track list with media format facts (container, codec, byte size)
+and a per-Track `streamUrl` (see [Track detail](#track-detail) below),
+billed Artists with roles and join phrases, contributors, the distinct media files, the
+persisted Phase 5 classification (traits, confidence, classifier version) when policy has
+evaluated the Release, the immutable import provenance (work item, manifest ids and hashes,
+resolver version, import time), an `imageId`, and the audit history. Sub-lists are bounded as
+above.
+
+### Track detail
+
+```http
+GET /api/admin/v1/catalog/tracks/{id}
+```
+
+Returns one Track: title/sort title, display artist, ordinal and disc/track numbers, duration,
+source path, audio identity id, the Release linkage, billed Artists, contributors, every
+linked media asset with its purpose (exactly one `playable`), and `streamUrl`.
+
+`streamUrl` is a short-lived signed audio preview URL (PRD-UI-007) for the acting
+administrator on the native `/song/stream/{trackId}/{userId}/{token}` route, issued only when
+the Track has a playable media asset; it is `null` when there is no playable asset or the
+administrator is not stream-authorized (no streaming role, or no access to the source
+library). The URL is bound to the requesting client address like any native stream URL.
+
+The `imageId` values returned by these routes are consumed by the existing
+`/images/{imageId}/{size}` endpoint shared with the native API; its id prefixes (`album_`,
+`artist_`, `song_`) are that endpoint's frozen contract. Artwork bytes are never served by the
+admin API itself.
+
+### Catalog artwork overrides
+
+Operators can upload or remove custom artwork for one Artist or Release (ADR-0143). An
+override is served with precedence by the shared `/images/{imageId}/{size}` endpoint for the
+`album_`, `artist_`, and `song_` id prefixes (a Song serves its Release's override); entities
+without an override keep the publication-plan/placeholder behavior unchanged. Overrides are
+curation data only: upload and removal never touch canonical media files or publication plans.
+
+```http
+PUT /api/admin/v1/catalog/artists/{id}/image
+PUT /api/admin/v1/catalog/releases/{id}/image
+```
+
+Raw request body with `Content-Type: image/jpeg` or `image/png`; the declared type must match
+the magic bytes. Uploads are validated against the shared image pipeline bounds (at most
+10 MiB encoded, dimension and pixel caps, decodability) — invalid, truncated, mismatched, or
+oversized uploads return `400 invalid_image`. Unknown entity ids return `404 not_found`. The
+response is `{"message", "imageId", "updatedAt"}` where `imageId` carries the frozen endpoint
+prefix (`artist_…` / `album_…`). Re-uploading replaces the override.
+
+```http
+DELETE /api/admin/v1/catalog/artists/{id}/image
+DELETE /api/admin/v1/catalog/releases/{id}/image
+```
+
+Removes the override row only, restoring plan artwork or the placeholder. Idempotent: `204 No
+Content` whether or not an override existed; `404 not_found` for unknown entity ids. An
+optional JSON body `{"reason": "…"}` is recorded in the audit event. Every upload and removal
+is audit-logged (`catalog_audit_events`, event types `image_override_set` /
+`image_override_removed`) with the acting administrator id.
+
+## Dashboard
+
+```http
+GET /api/admin/v1/dashboard
+```
+
+One aggregated read for the overview page. All figures come from durable PostgreSQL state with
+bounded, set-based queries:
+
+- `catalog` — total `artists`, `releases`, `tracks`, `mediaAssets`, and the pending
+  search-projection outbox depth (`pendingSearchOutbox`).
+- `workItems` — `countsByState` for the ingestion queue plus the rolling 24-hour windows
+  `failedLast24h` (items currently `failed` whose last update is inside the window) and
+  `completedLast24h` (items with a `completedAt` inside the window).
+- `attention` — queue depths needing an operator: `unresolvedIdentities` (observed artist
+  strings without an authoritative match decision), `pendingPolicyDecisions` (durable decisions
+  awaiting completion), `failedProcessing`, and `quarantined`.
+- `health` — the subsystem panel described under [System health](#system-health) below.
+- `activity.completedPerHour` — completed work items per hour over the trailing 24 hours
+  (`[{hour, count}]`, oldest first; hours without completions are omitted).
+
+## Policies
+
+These routes manage the versioned policy rule set that maps Release classification and Track
+novelty facts to a disposition. Rule sets are **immutable and versioned**: every mutation
+produces a new `(name, version)` row validated through the policy engine invariants (the
+administrator-override rule first, the corrupt-media quarantine rule second, per-type
+disposition safety, unique rule ids); nothing is edited in place and history is never
+rewritten. A concurrent mutation loses with `409 rule_set_conflict`. The running policy worker
+adopts a new version when its configured rule-set version matches
+(`MELODEE__POLICY__RULE_SET_VERSION`); authoring a version here never interrupts in-flight
+evaluations and never touches a work item or decision.
+
+### List rules
+
+```http
+GET /api/admin/v1/policies/rules
+```
+
+Returns the active rule-set metadata (`ruleSet: {id, name, version, createdAt, createdBy}`) and
+the rule table inside the standard pagination envelope. Each rule carries `id`, `ruleType`,
+`disposition`, `confidenceThreshold` (basis points, 0–10000), the engine `predicate`
+(`required_traits`, `existing_dispositions`), `priority` (zero-based evaluation position — lower
+wins, first match applies), `enabled`, and `matchCount` (how many durable decisions the rule
+produced). Rules removed from the active version remain listed from immutable history with
+`enabled: false` and `priority: null` so they can be re-enabled.
+
+### Create, update, delete
+
+```http
+POST /api/admin/v1/policies/rules
+PUT /api/admin/v1/policies/rules/{id}
+DELETE /api/admin/v1/policies/rules/{id}
+```
+
+Create/update bodies: `{"id": "…", "ruleType": "…", "disposition": "…",
+"confidenceThreshold"?: 9000, "predicate": {…}}`. `ruleType` is one of `administrator_override`,
+`corrupt_media`, `greatest_hits_redundancy`, `greatest_hits_novelty`, `greatest_hits_uncertain`,
+`unknown_classification`, `trait_disposition`; `disposition` is one of `accept`, `review`,
+`ignore`, `quarantine`, `delete`. New rules are appended at the lowest priority of a new
+version; updates preserve the rule's position (`400 rule_id_mismatch` when the path and body
+ids differ — renaming a rule is delete + create). Rules violating the engine's per-type
+disposition safety (e.g. `delete` without a confidence floor) are rejected with
+`400 invalid_rule` and never persist. The two safety rules (`administrator_override` first,
+`corrupt_media` second) can be neither deleted nor disabled (`409 protected_rule`).
+
+### Enable and disable
+
+```http
+POST /api/admin/v1/policies/rules/{id}/enable
+POST /api/admin/v1/policies/rules/{id}/disable
+```
+
+Enable/disable are expressed as rule membership in the latest immutable version. Disabling
+removes the rule in a new version (its definition survives in history); enabling restores the
+most recent historical definition at the lowest priority (`404` when the rule never existed).
+Both are idempotent: repeating the current state returns `200` with `changed: false` and creates
+no version.
+
+### Test a rule against the catalog
+
+```http
+POST /api/admin/v1/policies/rules/test
+```
+
+Body: exactly one of `{"ruleId": "…"}` (test an enabled rule of the active rule set) or
+`{"rule": {…}}` (test an ad-hoc definition appended to the active set **without** persisting
+it); optional `limit` clamps the evaluated Release count (default and maximum 500). The dry run
+classifies and evaluates a bounded catalog snapshot read-only and returns `evaluated`,
+`matchedCount` (Releases matched by the tested rule), per-rule `matchedRuleCounts`,
+`proposedDispositionCounts`, `existingDispositionCounts`, `destructiveImpact` (Releases whose
+proposed disposition is `delete`), `destructive` (whether the tested rule's action is
+destructive-class), and a bounded `sample` of matched Releases (`{releaseId, title, artist}`).
+
+Runs against a stored rule are persisted to the durable test-run audit (`persisted: true` with
+the `testRunId`). Runs carrying an ad-hoc rule cannot be persisted — the audit table references
+durably stored rule sets by foreign key, and storing the candidate would silently change the
+active policy — so they return `persisted: false`.
+
+## System, workers, and search
+
+### Worker pools
+
+```http
+GET /api/admin/v1/workers/pools
+POST /api/admin/v1/workers/pools/{name}/pause
+POST /api/admin/v1/workers/pools/{name}/resume
+```
+
+The pool table lists every registered pool (`policy`, `podcast`, `discovery` are seeded) with
+its durable pause state and audit (`paused`, `pausedBy`, `pausedAt`, `resumeRequestedAt`) plus
+queue metrics where the pool's worker owns a durable queue table: `queued`, `running` (unexpired
+leases — lease evidence, not a worker liveness claim), `oldestQueuedAgeSeconds`,
+`completedLastHour`, `throughputPerMinute`, and `failedLast24h`. Pools without a durable queue
+(discovery maintenance runs bounded idempotent passes) report `metricsAvailable: false` and null
+metrics instead of invented zeros.
+
+Pause/resume use the same lease-coordinated durable control plane as
+`melodee worker-pools pause|resume`: workers honor the pool row between claim batches, so a
+pause stops new claims without stranding in-flight leases, and resume stamps
+`resumeRequestedAt`. Unknown-but-valid pool names upsert a paused row (a pool wired in a later
+binary is paused the moment it first checks); invalid names return `400 invalid_pool_name`.
+
+### Recent failures
+
+```http
+GET /api/admin/v1/workers/failures?limit=50&offset=0&sort=updatedAt:desc
+```
+
+Bounded, paginated listing of work items currently in `failed`, inside the standard pagination
+envelope, with the same whitelisted `sort` keys as the work-item listing. Each row is the full
+operator-safe work item (state, attempts, last error code/message, lease evidence).
+
+### Search index administration
+
+```http
+GET /api/admin/v1/search/status
+POST /api/admin/v1/search/rebuild
+```
+
+`status` reports the projection (`pending`/`failed`/`leased` outbox rows, last processed outbox
+id, active generation id, latest rebuild status/error) and the active generation's document
+counts (`artists`, `releases`, `tracks`, `schemaVersion`) when one is validated; when the search
+worker is disabled the response is `{"enabled": false}`.
+
+`rebuild` records the durable rebuild request through the same path as
+`melodee search rebuild` and returns `202` with the `jobId` — the running search worker claims
+and executes the job, so the HTTP call never blocks on the rebuild. A second request while an
+unfinished job exists returns `409 rebuild_in_progress`; a disabled search worker returns
+`409 search_disabled`.
+
+### System health
+
+```http
+GET /api/admin/v1/system/health
+```
+
+Aggregated subsystem health: `postgresql` (bounded probe, as in `readyz`), `tantivy` (active
+search-generation diagnostic, or `disabled` when the search worker is off), `storage` and
+`ffmpeg` (the onboarding preflight checks), and `apiSurfaces` (the process-local API surfaces,
+`serving`). Each subsystem reports `status` (`ok`, `degraded`, or `disabled`) and an
+operator-safe `detail`; the top-level `status` is `ok` when PostgreSQL is reachable and Tantivy
+is healthy or disabled, otherwise `degraded`.
+
 ## Error behavior
 
 Errors use a stable JSON envelope with a machine-readable `code`, an operator-safe `message`, and
@@ -270,11 +762,13 @@ a `correlationId`:
 }
 ```
 
-Status codes follow standard HTTP conventions: `400` for malformed requests, `404` for unknown
-resources, `500` for upstream persistence failures.
+Status codes follow standard HTTP conventions: `400` for malformed requests (including unknown
+state filters and sort keys), `401` for missing/invalid/expired credentials, `403` for
+authenticated non-administrators, `404` for unknown resources, `409` for conflicts, and `500` for
+upstream persistence failures.
 
-:::caution[Partial implementation]
-The endpoints above are the diagnostics subset plus user/access-group administration. Full
-catalog curation, policy, and identity-review endpoints arrive in later phases and will be
-documented here when implemented.
+:::note[Admin UI]
+Every endpoint above backs the Carbon-based admin single-page application served at `/admin`;
+see [Admin Overview](../admin/overview/) for the screens built on these routes. Remaining
+catalog curation endpoints will be documented here when implemented.
 :::

@@ -1,0 +1,788 @@
+=== W1. work-items list_page: state filter + addedAt:desc (default), page 1
+                                                                                            QUERY PLAN                                                                                             
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=35.90..147.52 rows=50 width=425) (actual time=2.405..2.757 rows=50.00 loops=1)
+   Buffers: shared hit=850 read=319
+   ->  Incremental Sort  (cost=35.90..24993.57 rows=11180 width=425) (actual time=2.404..2.752 rows=50.00 loops=1)
+         Sort Key: created_at DESC, id
+         Presorted Key: created_at
+         Full-sort Groups: 2  Sort Method: quicksort  Average Memory: 33kB  Peak Memory: 33kB
+         Buffers: shared hit=850 read=319
+         ->  Index Scan Backward using release_work_items_admin_browse_created_idx on release_work_items  (cost=0.42..24616.37 rows=11180 width=425) (actual time=0.047..2.618 rows=64.00 loops=1)
+               Filter: (state = 'needs_review'::text)
+               Rows Removed by Filter: 1087
+               Index Searches: 1
+               Buffers: shared hit=841 read=319
+ Planning:
+   Buffers: shared hit=344 read=32
+ Planning Time: 3.175 ms
+ Execution Time: 2.838 ms
+(16 rows)
+
+=== W1b. same query, deep page (OFFSET 10000)
+                                                                             QUERY PLAN                                                                             
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=6917.66..6923.48 rows=50 width=425) (actual time=15.835..20.968 rows=50.00 loops=1)
+   Buffers: shared hit=382 read=3984
+   ->  Gather Merge  (cost=5752.99..7054.97 rows=11179 width=425) (actual time=13.012..20.661 rows=10050.00 loops=1)
+         Workers Planned: 2
+         Workers Launched: 2
+         Buffers: shared hit=382 read=3984
+         ->  Sort  (cost=4752.97..4764.61 rows=4658 width=425) (actual time=8.133..8.398 rows=3528.00 loops=3)
+               Sort Key: created_at DESC, id
+               Sort Method: quicksort  Memory: 1608kB
+               Buffers: shared hit=382 read=3984
+               Worker 0:  Sort Method: quicksort  Memory: 860kB
+               Worker 1:  Sort Method: quicksort  Memory: 782kB
+               ->  Parallel Bitmap Heap Scan on release_work_items  (cost=126.94..4469.17 rows=4658 width=425) (actual time=0.768..5.976 rows=3703.67 loops=3)
+                     Recheck Cond: (state = 'needs_review'::text)
+                     Heap Blocks: exact=2111
+                     Buffers: shared hit=352 read=3984
+                     Worker 0:  Heap Blocks: exact=1145
+                     Worker 1:  Heap Blocks: exact=1028
+                     ->  Bitmap Index Scan on release_work_items_state_idx  (cost=0.00..124.14 rows=11180 width=0) (actual time=1.262..1.263 rows=11111.00 loops=1)
+                           Index Cond: (state = 'needs_review'::text)
+                           Index Searches: 1
+                           Buffers: shared read=10
+ Planning:
+   Buffers: shared hit=1
+ Planning Time: 0.168 ms
+ Execution Time: 21.280 ms
+(26 rows)
+
+=== W2. work-items list_page: no filter + updatedAt:desc
+                                                                      QUERY PLAN                                                                       
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=8885.62..8891.44 rows=50 width=425) (actual time=23.392..30.217 rows=50.00 loops=1)
+   Buffers: shared hit=4376
+   ->  Gather Merge  (cost=8885.62..32178.80 rows=199999 width=425) (actual time=23.391..30.211 rows=50.00 loops=1)
+         Workers Planned: 2
+         Workers Launched: 2
+         Buffers: shared hit=4376
+         ->  Sort  (cost=7885.60..8093.93 rows=83333 width=425) (actual time=18.958..18.960 rows=44.33 loops=3)
+               Sort Key: updated_at DESC, id
+               Sort Method: top-N heapsort  Memory: 37kB
+               Buffers: shared hit=4376
+               Worker 0:  Sort Method: top-N heapsort  Memory: 37kB
+               Worker 1:  Sort Method: top-N heapsort  Memory: 37kB
+               ->  Parallel Seq Scan on release_work_items  (cost=0.00..5117.33 rows=83333 width=425) (actual time=0.010..8.370 rows=66666.67 loops=3)
+                     Buffers: shared hit=4284
+ Planning:
+   Buffers: shared hit=1
+ Planning Time: 0.122 ms
+ Execution Time: 30.326 ms
+(18 rows)
+
+=== W3. work-items list_page: no filter + attemptCount:desc
+                                                                      QUERY PLAN                                                                       
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=8885.62..8891.44 rows=50 width=425) (actual time=21.498..27.771 rows=50.00 loops=1)
+   Buffers: shared hit=4374
+   ->  Gather Merge  (cost=8885.62..32178.80 rows=199999 width=425) (actual time=21.496..27.765 rows=50.00 loops=1)
+         Workers Planned: 2
+         Workers Launched: 2
+         Buffers: shared hit=4374
+         ->  Sort  (cost=7885.60..8093.93 rows=83333 width=425) (actual time=17.708..17.711 rows=50.00 loops=3)
+               Sort Key: attempt_count DESC, id
+               Sort Method: top-N heapsort  Memory: 45kB
+               Buffers: shared hit=4374
+               Worker 0:  Sort Method: top-N heapsort  Memory: 45kB
+               Worker 1:  Sort Method: top-N heapsort  Memory: 45kB
+               ->  Parallel Seq Scan on release_work_items  (cost=0.00..5117.33 rows=83333 width=425) (actual time=0.008..7.925 rows=66666.67 loops=3)
+                     Buffers: shared hit=4284
+ Planning:
+   Buffers: shared hit=12
+ Planning Time: 0.181 ms
+ Execution Time: 27.863 ms
+(18 rows)
+
+=== W4. work-items list_page: state filter + state:asc sort
+                                                                                            QUERY PLAN                                                                                             
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=35.90..148.24 rows=50 width=425) (actual time=0.401..0.653 rows=50.00 loops=1)
+   Buffers: shared hit=1155
+   ->  Incremental Sort  (cost=35.90..24990.68 rows=11107 width=425) (actual time=0.400..0.649 rows=50.00 loops=1)
+         Sort Key: created_at DESC, id
+         Presorted Key: created_at
+         Full-sort Groups: 2  Sort Method: quicksort  Average Memory: 33kB  Peak Memory: 33kB
+         Buffers: shared hit=1155
+         ->  Index Scan Backward using release_work_items_admin_browse_created_idx on release_work_items  (cost=0.42..24616.37 rows=11107 width=425) (actual time=0.020..0.603 rows=65.00 loops=1)
+               Filter: (state = 'failed'::text)
+               Rows Removed by Filter: 1081
+               Index Searches: 1
+               Buffers: shared hit=1155
+ Planning:
+   Buffers: shared hit=6
+ Planning Time: 0.197 ms
+ Execution Time: 0.685 ms
+(16 rows)
+
+=== W5. review queue list_page_states: 3-state ANY + addedAt:desc
+                                                                                            QUERY PLAN                                                                                             
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=37.29..76.20 rows=50 width=425) (actual time=0.205..0.210 rows=50.00 loops=1)
+   Buffers: shared hit=295
+   ->  Incremental Sort  (cost=37.29..26242.12 rows=33673 width=425) (actual time=0.204..0.206 rows=50.00 loops=1)
+         Sort Key: created_at DESC, id
+         Presorted Key: created_at
+         Full-sort Groups: 1  Sort Method: quicksort  Average Memory: 41kB  Peak Memory: 41kB
+         Buffers: shared hit=295
+         ->  Index Scan Backward using release_work_items_admin_browse_created_idx on release_work_items  (cost=0.42..24866.37 rows=33673 width=425) (actual time=0.014..0.138 rows=65.00 loops=1)
+               Filter: (state = ANY ('{needs_review,failed,quarantined}'::text[]))
+               Rows Removed by Filter: 225
+               Index Searches: 1
+               Buffers: shared hit=295
+ Planning:
+   Buffers: shared hit=1
+ Planning Time: 0.105 ms
+ Execution Time: 0.243 ms
+(16 rows)
+
+=== W6. work-items count (state filter)
+                                                                       QUERY PLAN                                                                       
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=4578.64..4578.65 rows=1 width=8) (actual time=6.201..6.201 rows=1.00 loops=1)
+   Buffers: shared hit=4294
+   ->  Bitmap Heap Scan on release_work_items  (cost=126.94..4550.69 rows=11180 width=0) (actual time=1.468..5.683 rows=11111.00 loops=1)
+         Recheck Cond: (state = 'needs_review'::text)
+         Heap Blocks: exact=4284
+         Buffers: shared hit=4294
+         ->  Bitmap Index Scan on release_work_items_state_idx  (cost=0.00..124.14 rows=11180 width=0) (actual time=0.947..0.947 rows=11111.00 loops=1)
+               Index Cond: (state = 'needs_review'::text)
+               Index Searches: 1
+               Buffers: shared hit=10
+ Planning:
+   Buffers: shared hit=6 read=1
+ Planning Time: 0.130 ms
+ Execution Time: 6.308 ms
+(14 rows)
+
+=== W7. counts_by_state (GROUP BY state)
+                                                                        QUERY PLAN                                                                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+ Finalize GroupAggregate  (cost=6534.58..6539.98 rows=18 width=17) (actual time=25.672..31.753 rows=18.00 loops=1)
+   Group Key: state
+   Buffers: shared hit=4300
+   ->  Gather Merge  (cost=6534.58..6539.59 rows=43 width=17) (actual time=25.666..31.738 rows=54.00 loops=1)
+         Workers Planned: 2
+         Workers Launched: 2
+         Buffers: shared hit=4300
+         ->  Sort  (cost=5534.55..5534.60 rows=18 width=17) (actual time=21.345..21.347 rows=18.00 loops=3)
+               Sort Key: state
+               Sort Method: quicksort  Memory: 25kB
+               Buffers: shared hit=4300
+               Worker 0:  Sort Method: quicksort  Memory: 25kB
+               Worker 1:  Sort Method: quicksort  Memory: 25kB
+               ->  Partial HashAggregate  (cost=5534.00..5534.18 rows=18 width=17) (actual time=21.282..21.285 rows=18.00 loops=3)
+                     Group Key: state
+                     Batches: 1  Memory Usage: 32kB
+                     Buffers: shared hit=4284
+                     Worker 0:  Batches: 1  Memory Usage: 32kB
+                     Worker 1:  Batches: 1  Memory Usage: 32kB
+                     ->  Parallel Seq Scan on release_work_items  (cost=0.00..5117.33 rows=83333 width=9) (actual time=0.008..7.597 rows=66666.67 loops=3)
+                           Buffers: shared hit=4284
+ Planning:
+   Buffers: shared hit=16
+ Planning Time: 0.151 ms
+ Execution Time: 31.858 ms
+(25 rows)
+
+=== W8. active leases listing
+                                                                                    QUERY PLAN                                                                                    
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=8.15..8.20 rows=2 width=425) (actual time=0.026..0.027 rows=0.00 loops=1)
+   Buffers: shared hit=2
+   ->  Incremental Sort  (cost=8.15..8.20 rows=2 width=425) (actual time=0.026..0.026 rows=0.00 loops=1)
+         Sort Key: lease_expires_at DESC, id
+         Presorted Key: lease_expires_at
+         Full-sort Groups: 1  Sort Method: quicksort  Average Memory: 25kB  Peak Memory: 25kB
+         Buffers: shared hit=2
+         ->  Index Scan Backward using release_work_items_lease_expiry_idx on release_work_items  (cost=0.13..8.14 rows=1 width=425) (actual time=0.013..0.013 rows=0.00 loops=1)
+               Index Cond: (lease_expires_at > now())
+               Index Searches: 1
+               Buffers: shared hit=2
+ Planning:
+   Buffers: shared hit=1
+ Planning Time: 0.133 ms
+ Execution Time: 0.059 ms
+(15 rows)
+
+=== W9. users list: ILIKE filter + username:asc
+                                                                                QUERY PLAN                                                                                
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.69..22.81 rows=50 width=328) (actual time=0.103..0.132 rows=50.00 loops=1)
+   Buffers: shared hit=6 read=7
+   ->  Incremental Sort  (cost=0.69..874.46 rows=1975 width=328) (actual time=0.102..0.128 rows=50.00 loops=1)
+         Sort Key: normalized_username, id
+         Presorted Key: normalized_username
+         Full-sort Groups: 2  Sort Method: quicksort  Average Memory: 33kB  Peak Memory: 33kB
+         Buffers: shared hit=6 read=7
+         ->  Index Scan using native_users_normalized_username_key on native_users  (cost=0.28..785.59 rows=1975 width=328) (actual time=0.040..0.103 rows=51.00 loops=1)
+               Filter: ((username ~~* '%user1%'::text) OR (email ~~* '%user1%'::text))
+               Index Searches: 1
+               Buffers: shared hit=6 read=7
+ Planning:
+   Buffers: shared hit=112 read=8
+ Planning Time: 0.960 ms
+ Execution Time: 0.157 ms
+(15 rows)
+
+=== W10. users list: no filter + createdAt:desc
+                                                          QUERY PLAN                                                           
+-------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=367.10..367.22 rows=50 width=328) (actual time=1.830..1.836 rows=50.00 loops=1)
+   Buffers: shared hit=5 read=146
+   ->  Sort  (cost=367.10..379.60 rows=5000 width=328) (actual time=1.830..1.832 rows=50.00 loops=1)
+         Sort Key: created_at DESC, id
+         Sort Method: top-N heapsort  Memory: 37kB
+         Buffers: shared hit=5 read=146
+         ->  Seq Scan on native_users  (cost=0.00..201.00 rows=5000 width=328) (actual time=0.014..0.794 rows=5000.00 loops=1)
+               Buffers: shared hit=5 read=146
+ Planning Time: 0.034 ms
+ Execution Time: 1.861 ms
+(10 rows)
+
+=== A1. catalog artists: no filter + name:asc
+                                                                                     QUERY PLAN                                                                                      
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.83..30.93 rows=50 width=137) (actual time=0.060..0.219 rows=50.00 loops=1)
+   Buffers: shared hit=202 read=11
+   ->  Nested Loop Left Join  (cost=0.83..60191.68 rows=100001 width=137) (actual time=0.059..0.214 rows=50.00 loops=1)
+         Buffers: shared hit=202 read=11
+         ->  Index Scan using artists_admin_browse_name_idx on artists a  (cost=0.42..10591.32 rows=100001 width=121) (actual time=0.044..0.075 rows=50.00 loops=1)
+               Index Searches: 1
+               Buffers: shared hit=7 read=6
+         ->  Index Scan using artist_catalog_aggregates_pkey on artist_catalog_aggregates aggregate  (cost=0.42..0.50 rows=1 width=32) (actual time=0.002..0.002 rows=1.00 loops=50)
+               Index Cond: (artist_id = a.id)
+               Index Searches: 50
+               Buffers: shared hit=195 read=5
+ Planning:
+   Buffers: shared hit=247 read=30
+ Planning Time: 2.118 ms
+ Execution Time: 0.275 ms
+(15 rows)
+
+=== A2. catalog artists: ILIKE substring filter + name:asc
+                                                                                     QUERY PLAN                                                                                      
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.83..853.32 rows=50 width=137) (actual time=115.252..115.431 rows=50.00 loops=1)
+   Buffers: shared hit=15549 read=2420
+   ->  Nested Loop Left Join  (cost=0.83..869637.10 rows=51006 width=137) (actual time=115.251..115.425 rows=50.00 loops=1)
+         Buffers: shared hit=15549 read=2420
+         ->  Index Scan using artists_admin_browse_name_idx on artists a  (cost=0.42..841349.63 rows=51006 width=121) (actual time=115.188..115.245 rows=50.00 loops=1)
+               Filter: ((canonical_name ~~* '%artist 99%'::text) OR (sort_name ~~* '%artist 99%'::text) OR (ANY (id = (hashed SubPlan 2).col1)))
+               Rows Removed by Filter: 79111
+               Index Searches: 1
+               Buffers: shared hit=15354 read=2415
+               SubPlan 2
+                 ->  Seq Scan on artist_aliases alias  (cost=0.00..139.50 rows=1 width=16) (actual time=2.967..2.967 rows=0.00 loops=1)
+                       Filter: (alias ~~* '%artist 99%'::text)
+                       Rows Removed by Filter: 5000
+                       Buffers: shared read=77
+         ->  Index Scan using artist_catalog_aggregates_pkey on artist_catalog_aggregates aggregate  (cost=0.42..0.55 rows=1 width=32) (actual time=0.003..0.003 rows=1.00 loops=50)
+               Index Cond: (artist_id = a.id)
+               Index Searches: 50
+               Buffers: shared hit=195 read=5
+ Planning:
+   Buffers: shared hit=96 read=8
+ Planning Time: 1.541 ms
+ Execution Time: 115.526 ms
+(22 rows)
+
+=== A3. catalog artists: no filter + updatedAt:desc
+                                                                                         QUERY PLAN                                                                                          
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=640.37..672.66 rows=50 width=137) (actual time=9.704..9.711 rows=50.00 loops=1)
+   Buffers: shared hit=3625 read=1388
+   ->  Incremental Sort  (cost=640.37..65206.59 rows=100001 width=137) (actual time=9.703..9.706 rows=50.00 loops=1)
+         Sort Key: a.updated_at DESC, a.id
+         Presorted Key: a.updated_at
+         Full-sort Groups: 1  Sort Method: quicksort  Average Memory: 41kB  Peak Memory: 41kB
+         Pre-sorted Groups: 1  Sort Method: top-N heapsort  Average Memory: 47kB  Peak Memory: 47kB
+         Buffers: shared hit=3625 read=1388
+         ->  Nested Loop Left Join  (cost=0.83..60632.61 rows=100001 width=137) (actual time=0.055..9.085 rows=1001.00 loops=1)
+               Buffers: shared hit=3625 read=1388
+               ->  Index Scan Backward using artists_admin_browse_updated_idx on artists a  (cost=0.42..11032.26 rows=100001 width=121) (actual time=0.042..1.011 rows=1001.00 loops=1)
+                     Index Searches: 1
+                     Buffers: shared hit=992 read=17
+               ->  Index Scan using artist_catalog_aggregates_pkey on artist_catalog_aggregates aggregate  (cost=0.42..0.50 rows=1 width=32) (actual time=0.008..0.008 rows=1.00 loops=1001)
+                     Index Cond: (artist_id = a.id)
+                     Index Searches: 1001
+                     Buffers: shared hit=2633 read=1371
+ Planning:
+   Buffers: shared hit=16
+ Planning Time: 0.301 ms
+ Execution Time: 9.777 ms
+(21 rows)
+
+=== R1. catalog releases: no filter + title:asc
+                                                                                      QUERY PLAN                                                                                       
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.83..30.79 rows=50 width=117) (actual time=0.090..0.239 rows=50.00 loops=1)
+   Buffers: shared hit=208 read=11
+   ->  Nested Loop Left Join  (cost=0.83..59912.21 rows=100000 width=117) (actual time=0.088..0.234 rows=50.00 loops=1)
+         Buffers: shared hit=208 read=11
+         ->  Index Scan using releases_admin_browse_title_idx on releases r  (cost=0.42..10736.28 rows=100000 width=101) (actual time=0.051..0.075 rows=50.00 loops=1)
+               Index Searches: 1
+               Buffers: shared hit=16 read=3
+         ->  Index Scan using release_catalog_aggregates_pkey on release_catalog_aggregates aggregate  (cost=0.42..0.49 rows=1 width=32) (actual time=0.003..0.003 rows=1.00 loops=50)
+               Index Cond: (release_id = r.id)
+               Index Searches: 50
+               Buffers: shared hit=192 read=8
+ Planning:
+   Buffers: shared hit=255 read=26
+ Planning Time: 2.187 ms
+ Execution Time: 0.273 ms
+(15 rows)
+
+=== R2. catalog releases: ILIKE filter + title:asc
+                                                                                      QUERY PLAN                                                                                       
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.83..777.51 rows=50 width=117) (actual time=10.824..11.030 rows=50.00 loops=1)
+   Buffers: shared hit=3459 read=74
+   ->  Nested Loop Left Join  (cost=0.83..15689.63 rows=1010 width=117) (actual time=10.823..11.025 rows=50.00 loops=1)
+         Buffers: shared hit=3459 read=74
+         ->  Index Scan using releases_admin_browse_title_idx on releases r  (cost=0.42..10986.28 rows=1010 width=101) (actual time=10.771..10.826 rows=50.00 loops=1)
+               Filter: (title ~~* '%release 77%'::text)
+               Rows Removed by Filter: 10633
+               Index Searches: 1
+               Buffers: shared hit=3269 read=64
+         ->  Index Scan using release_catalog_aggregates_pkey on release_catalog_aggregates aggregate  (cost=0.42..4.66 rows=1 width=32) (actual time=0.003..0.003 rows=1.00 loops=50)
+               Index Cond: (release_id = r.id)
+               Index Searches: 50
+               Buffers: shared hit=190 read=10
+ Planning:
+   Buffers: shared hit=16 read=1
+ Planning Time: 0.343 ms
+ Execution Time: 11.076 ms
+(17 rows)
+
+=== R3. catalog releases: artistId EXISTS filter + title:asc
+                                                                                      QUERY PLAN                                                                                       
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=1.55..1790.51 rows=50 width=117) (actual time=14.898..26.855 rows=1.00 loops=1)
+   Buffers: shared hit=22384 read=541
+   InitPlan 1
+     ->  Limit  (cost=0.66..0.71 rows=1 width=32) (actual time=0.013..0.014 rows=1.00 loops=1)
+           Buffers: shared hit=4
+           ->  Index Scan using artists_pkey on artists  (cost=0.42..4939.43 rows=100001 width=32) (actual time=0.012..0.013 rows=6.00 loops=1)
+                 Index Searches: 1
+                 Buffers: shared hit=4
+   ->  Nested Loop Left Join  (cost=0.83..1797904.69 rows=50250 width=117) (actual time=14.897..26.851 rows=1.00 loops=1)
+         Buffers: shared hit=22384 read=541
+         ->  Index Scan using releases_admin_browse_title_idx on releases r  (cost=0.42..1770370.08 rows=50250 width=101) (actual time=14.859..26.811 rows=1.00 loops=1)
+               Filter: (((InitPlan 1).col1 IS NULL) OR (ANY (id = (hashed SubPlan 5).col1)))
+               Rows Removed by Filter: 99999
+               Index Searches: 1
+               Buffers: shared hit=22380 read=541
+               SubPlan 5
+                 ->  Nested Loop  (cost=1.55..17.59 rows=1 width=16) (actual time=0.055..0.057 rows=1.00 loops=1)
+                       Buffers: shared hit=5 read=3
+                       InitPlan 4
+                         ->  Limit  (cost=0.66..0.71 rows=1 width=32) (actual time=0.014..0.014 rows=1.00 loops=1)
+                               Buffers: shared hit=4
+                               ->  Index Scan using artists_pkey on artists artists_1  (cost=0.42..4939.43 rows=100001 width=32) (actual time=0.013..0.014 rows=6.00 loops=1)
+                                     Index Searches: 1
+                                     Buffers: shared hit=4
+                       ->  Index Scan using artists_public_api_id_key on artists billed  (cost=0.42..8.44 rows=1 width=16) (actual time=0.037..0.037 rows=1.00 loops=1)
+                             Index Cond: (public_api_id = (InitPlan 4).col1)
+                             Index Searches: 1
+                             Buffers: shared hit=1 read=3
+                       ->  Index Only Scan using release_artists_artist_idx on release_artists billing  (cost=0.42..8.44 rows=1 width=32) (actual time=0.017..0.017 rows=1.00 loops=1)
+                             Index Cond: (artist_id = billed.id)
+                             Heap Fetches: 1
+                             Index Searches: 1
+                             Buffers: shared hit=4
+         ->  Index Scan using release_catalog_aggregates_pkey on release_catalog_aggregates aggregate  (cost=0.42..0.55 rows=1 width=32) (actual time=0.032..0.032 rows=1.00 loops=1)
+               Index Cond: (release_id = r.id)
+               Index Searches: 1
+               Buffers: shared hit=4
+ Planning:
+   Buffers: shared hit=129 read=12
+ Planning Time: 1.704 ms
+ Execution Time: 27.016 ms
+(41 rows)
+
+=== R4. catalog releases: no filter + releaseDate:desc NULLS LAST
+                                                                                      QUERY PLAN                                                                                       
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.83..31.21 rows=50 width=103) (actual time=0.091..0.240 rows=50.00 loops=1)
+   Buffers: shared hit=242 read=11
+   ->  Nested Loop Left Join  (cost=0.83..60752.85 rows=100000 width=103) (actual time=0.089..0.235 rows=50.00 loops=1)
+         Buffers: shared hit=242 read=11
+         ->  Index Scan using releases_admin_browse_date_idx on releases r  (cost=0.42..11576.92 rows=100000 width=87) (actual time=0.055..0.073 rows=50.00 loops=1)
+               Index Searches: 1
+               Buffers: shared hit=50 read=3
+         ->  Index Scan using release_catalog_aggregates_pkey on release_catalog_aggregates aggregate  (cost=0.42..0.49 rows=1 width=32) (actual time=0.003..0.003 rows=1.00 loops=50)
+               Index Cond: (release_id = r.id)
+               Index Searches: 50
+               Buffers: shared hit=192 read=8
+ Planning:
+   Buffers: shared hit=21
+ Planning Time: 0.421 ms
+ Execution Time: 0.280 ms
+(15 rows)
+
+=== T1. catalog tracks: no filter + title:asc
+                                                                                QUERY PLAN                                                                                
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=1.28..24.61 rows=50 width=123) (actual time=0.953..0.994 rows=50.00 loops=1)
+   Buffers: shared hit=52 read=8
+   ->  Incremental Sort  (cost=1.28..233291.31 rows=500000 width=123) (actual time=0.953..0.990 rows=50.00 loops=1)
+         Sort Key: t.sort_title, t.id
+         Presorted Key: t.sort_title
+         Full-sort Groups: 2  Sort Method: quicksort  Average Memory: 33kB  Peak Memory: 33kB
+         Buffers: shared hit=52 read=8
+         ->  Nested Loop  (cost=0.85..210791.31 rows=500000 width=123) (actual time=0.856..0.950 rows=51.00 loops=1)
+               Buffers: shared hit=52 read=8
+               ->  Index Scan using tracks_native_browse_title_idx on tracks t  (cost=0.42..70646.40 rows=500000 width=110) (actual time=0.044..0.076 rows=51.00 loops=1)
+                     Index Searches: 1
+                     Buffers: shared hit=10 read=6
+               ->  Memoize  (cost=0.43..0.46 rows=1 width=45) (actual time=0.017..0.017 rows=1.00 loops=51)
+                     Cache Key: t.release_id
+                     Cache Mode: logical
+                     Hits: 40  Misses: 11  Evictions: 0  Overflows: 0  Memory Usage: 2kB
+                     Buffers: shared hit=42 read=2
+                     ->  Index Scan using releases_pkey on releases r  (cost=0.42..0.45 rows=1 width=45) (actual time=0.004..0.004 rows=1.00 loops=11)
+                           Index Cond: (id = t.release_id)
+                           Index Searches: 11
+                           Buffers: shared hit=42 read=2
+ Planning:
+   Buffers: shared hit=291 read=26
+ Planning Time: 2.405 ms
+ Execution Time: 1.215 ms
+(25 rows)
+
+=== T2. catalog tracks: no filter + durationMs:desc (NO covering index)
+                                                                             QUERY PLAN                                                                              
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.85..22.16 rows=50 width=111) (actual time=0.837..0.895 rows=50.00 loops=1)
+   Buffers: shared hit=43 read=6
+   ->  Nested Loop  (cost=0.85..213059.52 rows=500000 width=111) (actual time=0.837..0.891 rows=50.00 loops=1)
+         Buffers: shared hit=43 read=6
+         ->  Index Scan using tracks_admin_browse_duration_idx on tracks t  (cost=0.42..72914.61 rows=500000 width=98) (actual time=0.047..0.061 rows=50.00 loops=1)
+               Index Searches: 1
+               Buffers: shared read=5
+         ->  Memoize  (cost=0.43..0.46 rows=1 width=45) (actual time=0.016..0.016 rows=1.00 loops=50)
+               Cache Key: t.release_id
+               Cache Mode: logical
+               Hits: 39  Misses: 11  Evictions: 0  Overflows: 0  Memory Usage: 2kB
+               Buffers: shared hit=43 read=1
+               ->  Index Scan using releases_pkey on releases r  (cost=0.42..0.45 rows=1 width=45) (actual time=0.003..0.003 rows=1.00 loops=11)
+                     Index Cond: (id = t.release_id)
+                     Index Searches: 11
+                     Buffers: shared hit=43 read=1
+ Planning:
+   Buffers: shared hit=20
+ Planning Time: 0.338 ms
+ Execution Time: 1.088 ms
+(20 rows)
+
+=== T3. catalog tracks: no filter + createdAt:desc
+                                                                                     QUERY PLAN                                                                                      
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=343.69..368.28 rows=50 width=111) (actual time=4.632..4.639 rows=50.00 loops=1)
+   Buffers: shared hit=431 read=307
+   ->  Incremental Sort  (cost=343.69..246250.88 rows=500000 width=111) (actual time=4.631..4.634 rows=50.00 loops=1)
+         Sort Key: t.created_at DESC, t.id
+         Presorted Key: t.created_at
+         Full-sort Groups: 1  Sort Method: quicksort  Average Memory: 41kB  Peak Memory: 41kB
+         Pre-sorted Groups: 1  Sort Method: top-N heapsort  Average Memory: 42kB  Peak Memory: 42kB
+         Buffers: shared hit=431 read=307
+         ->  Nested Loop  (cost=0.85..223377.23 rows=500000 width=111) (actual time=0.795..4.131 rows=711.00 loops=1)
+               Buffers: shared hit=431 read=307
+               ->  Index Scan Backward using tracks_native_browse_created_idx on tracks t  (cost=0.42..83232.32 rows=500000 width=98) (actual time=0.042..1.521 rows=711.00 loops=1)
+                     Index Searches: 1
+                     Buffers: shared hit=1 read=165
+               ->  Memoize  (cost=0.43..0.46 rows=1 width=45) (actual time=0.003..0.003 rows=1.00 loops=711)
+                     Cache Key: t.release_id
+                     Cache Mode: logical
+                     Hits: 568  Misses: 143  Evictions: 0  Overflows: 0  Memory Usage: 23kB
+                     Buffers: shared hit=430 read=142
+                     ->  Index Scan using releases_pkey on releases r  (cost=0.42..0.45 rows=1 width=45) (actual time=0.009..0.009 rows=1.00 loops=143)
+                           Index Cond: (id = t.release_id)
+                           Index Searches: 143
+                           Buffers: shared hit=430 read=142
+ Planning:
+   Buffers: shared hit=16
+ Planning Time: 0.284 ms
+ Execution Time: 4.917 ms
+(26 rows)
+
+=== T4. catalog tracks: ILIKE filter + title:asc
+                                                                            QUERY PLAN                                                                            
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=872.67..872.79 rows=50 width=123) (actual time=18.326..18.332 rows=50.00 loops=1)
+   Buffers: shared hit=516 read=347 written=2
+   ->  Sort  (cost=872.67..872.79 rows=50 width=123) (actual time=18.324..18.326 rows=50.00 loops=1)
+         Sort Key: t.sort_title, t.id
+         Sort Method: quicksort  Memory: 39kB
+         Buffers: shared hit=516 read=347 written=2
+         ->  Nested Loop  (cost=270.05..871.26 rows=50 width=123) (actual time=18.145..18.270 rows=55.00 loops=1)
+               Buffers: shared hit=516 read=347 written=2
+               ->  Bitmap Heap Scan on tracks t  (cost=269.63..461.51 rows=50 width=110) (actual time=18.111..18.148 rows=55.00 loops=1)
+                     Recheck Cond: (title ~~* '%track 5000%'::text)
+                     Heap Blocks: exact=3
+                     Buffers: shared hit=298 read=345 written=2
+                     ->  Bitmap Index Scan on tracks_native_search_title_idx  (cost=0.00..269.62 rows=50 width=0) (actual time=18.004..18.004 rows=55.00 loops=1)
+                           Index Cond: (title ~~* '%track 5000%'::text)
+                           Index Searches: 1
+                           Buffers: shared hit=298 read=342 written=2
+               ->  Index Scan using releases_pkey on releases r  (cost=0.42..8.20 rows=1 width=45) (actual time=0.002..0.002 rows=1.00 loops=55)
+                     Index Cond: (id = t.release_id)
+                     Index Searches: 55
+                     Buffers: shared hit=218 read=2
+ Planning:
+   Buffers: shared hit=16 read=1
+ Planning Time: 0.532 ms
+ Execution Time: 18.648 ms
+(24 rows)
+
+=== T5. catalog tracks: releaseId filter + title:asc
+                                                                                          QUERY PLAN                                                                                          
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=1058.98..3882.61 rows=50 width=123) (actual time=214.526..226.185 rows=5.00 loops=1)
+   Buffers: shared hit=529477 read=20380 written=14
+   InitPlan 1
+     ->  Limit  (cost=0.77..0.82 rows=1 width=32) (actual time=0.017..0.018 rows=1.00 loops=1)
+           Buffers: shared hit=4
+           ->  Index Scan using releases_pkey on releases  (cost=0.42..5090.42 rows=100000 width=32) (actual time=0.015..0.017 rows=8.00 loops=1)
+                 Index Searches: 1
+                 Buffers: shared hit=4
+   InitPlan 2
+     ->  Limit  (cost=0.77..0.82 rows=1 width=32) (actual time=0.021..0.021 rows=1.00 loops=1)
+           Buffers: shared hit=4
+           ->  Index Scan using releases_pkey on releases releases_1  (cost=0.42..5090.42 rows=100000 width=32) (actual time=0.020..0.021 rows=8.00 loops=1)
+                 Index Searches: 1
+                 Buffers: shared hit=4
+   ->  Incremental Sort  (cost=1057.33..142521.19 rows=2505 width=123) (actual time=214.524..226.181 rows=5.00 loops=1)
+         Sort Key: t.sort_title, t.id
+         Presorted Key: t.sort_title
+         Full-sort Groups: 1  Sort Method: quicksort  Average Memory: 26kB  Peak Memory: 26kB
+         Buffers: shared hit=529477 read=20380 written=14
+         ->  Gather Merge  (cost=1000.87..142408.47 rows=2505 width=123) (actual time=214.445..226.169 rows=5.00 loops=1)
+               Workers Planned: 2
+               Workers Launched: 2
+               Buffers: shared hit=529477 read=20380 written=14
+               ->  Nested Loop  (cost=0.85..141119.30 rows=1044 width=123) (actual time=158.449..193.906 rows=1.67 loops=3)
+                     Buffers: shared hit=529469 read=20380 written=14
+                     ->  Parallel Index Scan using tracks_native_browse_title_idx on tracks t  (cost=0.42..67729.73 rows=208333 width=110) (actual time=0.042..72.160 rows=166666.67 loops=3)
+                           Index Searches: 1
+                           Buffers: shared hit=100680 read=19799 written=13
+                     ->  Memoize  (cost=0.43..0.47 rows=1 width=45) (actual time=0.001..0.001 rows=0.00 loops=500000)
+                           Cache Key: t.release_id
+                           Cache Mode: logical
+                           Hits: 106306  Misses: 28958  Evictions: 0  Overflows: 0  Memory Usage: 2263kB
+                           Buffers: shared hit=428789 read=581 written=1
+                           Worker 0:  Hits: 145630  Misses: 39858  Evictions: 0  Overflows: 0  Memory Usage: 3114kB
+                           Worker 1:  Hits: 140722  Misses: 38526  Evictions: 0  Overflows: 0  Memory Usage: 3010kB
+                           ->  Index Scan using releases_pkey on releases r  (cost=0.42..0.46 rows=1 width=45) (actual time=0.002..0.002 rows=0.00 loops=107342)
+                                 Index Cond: (id = t.release_id)
+                                 Filter: (((InitPlan 1).col1 IS NULL) OR (public_api_id = (InitPlan 2).col1))
+                                 Rows Removed by Filter: 1
+                                 Index Searches: 107342
+                                 Buffers: shared hit=428789 read=581 written=1
+ Planning:
+   Buffers: shared hit=16
+ Planning Time: 0.422 ms
+ Execution Time: 226.803 ms
+(45 rows)
+
+=== I1. identity unresolved queue: NOT EXISTS + createdAt:asc
+                                                                                                 QUERY PLAN                                                                                                 
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=1.56..929.29 rows=50 width=202) (actual time=0.994..3.075 rows=50.00 loops=1)
+   Buffers: shared hit=447 read=306
+   ->  Nested Loop Left Join  (cost=1.56..3339850.31 rows=180000 width=202) (actual time=0.993..3.067 rows=50.00 loops=1)
+         Buffers: shared hit=447 read=306
+         ->  Nested Loop  (cost=1.14..155621.16 rows=180000 width=158) (actual time=0.883..1.635 rows=50.00 loops=1)
+               Buffers: shared hit=255 read=98
+               ->  Nested Loop Anti Join  (cost=0.71..85396.30 rows=180000 width=129) (actual time=0.049..0.482 rows=50.00 loops=1)
+                     Buffers: shared hit=74 read=79
+                     ->  Index Scan using observed_artists_admin_queue_created_idx on observed_artists o  (cost=0.42..23212.30 rows=200000 width=129) (actual time=0.032..0.273 rows=50.00 loops=1)
+                           Index Searches: 1
+                           Buffers: shared read=53
+                     ->  Index Only Scan using artist_match_current_pkey on artist_match_current current  (cost=0.29..0.31 rows=1 width=16) (actual time=0.004..0.004 rows=0.00 loops=50)
+                           Index Cond: (observed_artist_id = o.id)
+                           Heap Fetches: 0
+                           Index Searches: 50
+                           Buffers: shared hit=74 read=26
+               ->  Memoize  (cost=0.43..0.49 rows=1 width=45) (actual time=0.023..0.023 rows=1.00 loops=50)
+                     Cache Key: o.release_id
+                     Cache Mode: logical
+                     Hits: 0  Misses: 50  Evictions: 0  Overflows: 0  Memory Usage: 8kB
+                     Buffers: shared hit=181 read=19
+                     ->  Index Scan using releases_pkey on releases r  (cost=0.42..0.48 rows=1 width=45) (actual time=0.005..0.005 rows=1.00 loops=50)
+                           Index Cond: (id = o.release_id)
+                           Index Searches: 50
+                           Buffers: shared hit=181 read=19
+         ->  Index Scan using tracks_native_random_candidate_idx on tracks t  (cost=0.42..0.77 rows=1 width=44) (actual time=0.000..0.000 rows=0.00 loops=50)
+               Index Cond: (id = o.track_id)
+               Index Searches: 0
+         SubPlan 1
+           ->  Aggregate  (cost=8.46..8.47 rows=1 width=8) (actual time=0.015..0.015 rows=1.00 loops=50)
+                 Buffers: shared hit=97 read=103
+                 ->  Sort  (cost=8.45..8.46 rows=1 width=16) (actual time=0.013..0.013 rows=1.00 loops=50)
+                       Sort Key: proposed.artist_id
+                       Sort Method: quicksort  Memory: 25kB
+                       Buffers: shared hit=97 read=103
+                       ->  Index Scan using artist_match_decisions_observed_outcome_idx on artist_match_decisions proposed  (cost=0.42..8.44 rows=1 width=16) (actual time=0.011..0.012 rows=1.00 loops=50)
+                             Index Cond: ((observed_artist_id = o.id) AND (outcome = 'proposed'::text))
+                             Index Searches: 50
+                             Buffers: shared hit=97 read=103
+         SubPlan 2
+           ->  Aggregate  (cost=8.44..8.45 rows=1 width=8) (actual time=0.012..0.012 rows=1.00 loops=50)
+                 Buffers: shared hit=95 read=105
+                 ->  Index Only Scan using artist_match_evidence_observation_idx on artist_match_evidence evidence  (cost=0.42..8.44 rows=1 width=0) (actual time=0.012..0.012 rows=1.00 loops=50)
+                       Index Cond: (observed_artist_id = o.id)
+                       Heap Fetches: 50
+                       Index Searches: 50
+                       Buffers: shared hit=95 read=105
+ Planning:
+   Buffers: shared hit=342 read=63 dirtied=2
+ Planning Time: 3.842 ms
+ Execution Time: 3.505 ms
+(51 rows)
+
+=== I2. identity unresolved queue: NOT EXISTS + displayValue:desc
+                                                                                                       QUERY PLAN                                                                                                        
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=3.21..933.84 rows=50 width=202) (actual time=1.123..1.611 rows=50.00 loops=1)
+   Buffers: shared hit=659 read=29
+   ->  Result  (cost=3.21..3350265.53 rows=180000 width=202) (actual time=1.122..1.606 rows=50.00 loops=1)
+         Buffers: shared hit=659 read=29
+         ->  Incremental Sort  (cost=3.21..303315.53 rows=180000 width=186) (actual time=1.039..1.116 rows=50.00 loops=1)
+               Sort Key: o.display_value DESC, o.id
+               Presorted Key: o.display_value
+               Full-sort Groups: 2  Sort Method: quicksort  Average Memory: 33kB  Peak Memory: 33kB
+               Buffers: shared hit=282 read=6
+               ->  Nested Loop Left Join  (cost=1.56..295215.53 rows=180000 width=186) (actual time=0.880..1.078 rows=51.00 loops=1)
+                     Buffers: shared hit=282 read=6
+                     ->  Nested Loop  (cost=1.14..156136.38 rows=180000 width=158) (actual time=0.866..1.045 rows=51.00 loops=1)
+                           Buffers: shared hit=282 read=6
+                           ->  Nested Loop Anti Join  (cost=0.71..85911.52 rows=180000 width=129) (actual time=0.046..0.152 rows=51.00 loops=1)
+                                 Buffers: shared hit=170 read=6
+                                 ->  Index Scan Backward using observed_artists_admin_queue_display_idx on observed_artists o  (cost=0.42..23727.52 rows=200000 width=129) (actual time=0.031..0.068 rows=56.00 loops=1)
+                                       Index Searches: 1
+                                       Buffers: shared hit=53 read=6
+                                 ->  Index Only Scan using artist_match_current_pkey on artist_match_current current  (cost=0.29..0.31 rows=1 width=16) (actual time=0.001..0.001 rows=0.09 loops=56)
+                                       Index Cond: (observed_artist_id = o.id)
+                                       Heap Fetches: 5
+                                       Index Searches: 56
+                                       Buffers: shared hit=117
+                           ->  Memoize  (cost=0.43..0.49 rows=1 width=45) (actual time=0.017..0.017 rows=1.00 loops=51)
+                                 Cache Key: o.release_id
+                                 Cache Mode: logical
+                                 Hits: 23  Misses: 28  Evictions: 0  Overflows: 0  Memory Usage: 5kB
+                                 Buffers: shared hit=112
+                                 ->  Index Scan using releases_pkey on releases r  (cost=0.42..0.48 rows=1 width=45) (actual time=0.002..0.002 rows=1.00 loops=28)
+                                       Index Cond: (id = o.release_id)
+                                       Index Searches: 28
+                                       Buffers: shared hit=112
+                     ->  Index Scan using tracks_native_random_candidate_idx on tracks t  (cost=0.42..0.77 rows=1 width=44) (actual time=0.000..0.000 rows=0.00 loops=51)
+                           Index Cond: (id = o.track_id)
+                           Index Searches: 0
+         SubPlan 1
+           ->  Aggregate  (cost=8.46..8.47 rows=1 width=8) (actual time=0.005..0.005 rows=1.00 loops=50)
+                 Buffers: shared hit=189 read=11
+                 ->  Sort  (cost=8.45..8.46 rows=1 width=16) (actual time=0.004..0.004 rows=1.00 loops=50)
+                       Sort Key: proposed.artist_id
+                       Sort Method: quicksort  Memory: 25kB
+                       Buffers: shared hit=189 read=11
+                       ->  Index Scan using artist_match_decisions_observed_outcome_idx on artist_match_decisions proposed  (cost=0.42..8.44 rows=1 width=16) (actual time=0.003..0.003 rows=1.00 loops=50)
+                             Index Cond: ((observed_artist_id = o.id) AND (outcome = 'proposed'::text))
+                             Index Searches: 50
+                             Buffers: shared hit=189 read=11
+         SubPlan 2
+           ->  Aggregate  (cost=8.44..8.45 rows=1 width=8) (actual time=0.004..0.004 rows=1.00 loops=50)
+                 Buffers: shared hit=188 read=12
+                 ->  Index Only Scan using artist_match_evidence_observation_idx on artist_match_evidence evidence  (cost=0.42..8.44 rows=1 width=0) (actual time=0.003..0.003 rows=1.00 loops=50)
+                       Index Cond: (observed_artist_id = o.id)
+                       Heap Fetches: 50
+                       Index Searches: 50
+                       Buffers: shared hit=188 read=12
+ Planning:
+   Buffers: shared hit=29 read=3
+ Planning Time: 1.113 ms
+ Execution Time: 1.934 ms
+(58 rows)
+
+=== I3. identity unresolved count
+                                                                            QUERY PLAN                                                                            
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Finalize Aggregate  (cost=7674.17..7674.18 rows=1 width=8) (actual time=30.530..36.572 rows=1.00 loops=1)
+   Buffers: shared hit=391 read=4168
+   ->  Gather  (cost=7673.96..7674.17 rows=2 width=8) (actual time=29.409..36.563 rows=3.00 loops=1)
+         Workers Planned: 2
+         Workers Launched: 2
+         Buffers: shared hit=391 read=4168
+         ->  Partial Aggregate  (cost=6673.96..6673.97 rows=1 width=8) (actual time=25.061..25.063 rows=1.00 loops=3)
+               Buffers: shared hit=391 read=4168
+               ->  Hash Anti Join  (cost=617.00..6486.46 rows=75000 width=0) (actual time=4.888..22.340 rows=60000.00 loops=3)
+                     Hash Cond: (o.id = current.observed_artist_id)
+                     Buffers: shared hit=391 read=4168
+                     ->  Parallel Seq Scan on observed_artists o  (cost=0.00..4891.33 rows=83333 width=16) (actual time=0.032..7.793 rows=66666.67 loops=3)
+                           Buffers: shared hit=55 read=4003
+                     ->  Hash  (cost=367.00..367.00 rows=20000 width=16) (actual time=4.722..4.722 rows=20000.00 loops=3)
+                           Buckets: 32768  Batches: 1  Memory Usage: 1194kB
+                           Buffers: shared hit=336 read=165
+                           ->  Seq Scan on artist_match_current current  (cost=0.00..367.00 rows=20000 width=16) (actual time=0.017..1.745 rows=20000.00 loops=3)
+                                 Buffers: shared hit=336 read=165
+ Planning:
+   Buffers: shared hit=10
+ Planning Time: 0.222 ms
+ Execution Time: 36.981 ms
+(22 rows)
+
+=== I4. identity decisions feed: entity_type IN + created_at DESC
+                                                                       QUERY PLAN                                                                        
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=8975.50..8981.32 rows=50 width=85) (actual time=33.190..35.880 rows=50.00 loops=1)
+   Buffers: shared hit=91 read=4349
+   ->  Gather Merge  (cost=8975.50..26351.02 rows=149189 width=85) (actual time=33.189..35.875 rows=50.00 loops=1)
+         Workers Planned: 2
+         Workers Launched: 2
+         Buffers: shared hit=91 read=4349
+         ->  Sort  (cost=7975.48..8130.88 rows=62162 width=85) (actual time=28.695..28.697 rows=38.33 loops=3)
+               Sort Key: created_at DESC, id DESC
+               Sort Method: top-N heapsort  Memory: 31kB
+               Buffers: shared hit=91 read=4349
+               Worker 0:  Sort Method: top-N heapsort  Memory: 31kB
+               Worker 1:  Sort Method: top-N heapsort  Memory: 31kB
+               ->  Parallel Seq Scan on catalog_audit_events  (cost=0.00..5910.50 rows=62162 width=85) (actual time=0.067..17.015 rows=50000.00 loops=3)
+                     Filter: (entity_type = ANY ('{observed_artist,artist}'::text[]))
+                     Rows Removed by Filter: 50000
+                     Buffers: shared read=4348
+ Planning:
+   Buffers: shared hit=76 read=4
+ Planning Time: 0.618 ms
+ Execution Time: 35.971 ms
+(20 rows)
+
+=== G1. groups listing (tiny table, seq scan acceptable)
+                                                               QUERY PLAN                                                               
+----------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=27308.16..27310.04 rows=750 width=96) (actual time=0.014..0.015 rows=0.00 loops=1)
+   Sort Key: g.name, g.id
+   Sort Method: quicksort  Memory: 25kB
+   ->  Seq Scan on native_library_access_groups g  (cost=0.00..27272.35 rows=750 width=96) (actual time=0.010..0.010 rows=0.00 loops=1)
+         SubPlan 1
+           ->  Aggregate  (cost=22.64..22.65 rows=1 width=8) (never executed)
+                 ->  Bitmap Heap Scan on native_user_library_groups m  (cost=13.15..22.62 rows=6 width=0) (never executed)
+                       Recheck Cond: (group_id = g.id)
+                       ->  Bitmap Index Scan on native_user_library_groups_pkey  (cost=0.00..13.15 rows=6 width=0) (never executed)
+                             Index Cond: (group_id = g.id)
+                             Index Searches: 0
+         SubPlan 2
+           ->  Aggregate  (cost=13.68..13.69 rows=1 width=8) (never executed)
+                 ->  Bitmap Heap Scan on native_library_group_libraries b  (cost=4.20..13.67 rows=6 width=0) (never executed)
+                       Recheck Cond: (group_id = g.id)
+                       ->  Bitmap Index Scan on native_library_group_libraries_pkey  (cost=0.00..4.20 rows=6 width=0) (never executed)
+                             Index Cond: (group_id = g.id)
+                             Index Searches: 0
+ Planning:
+   Buffers: shared hit=105 read=6
+ Planning Time: 0.924 ms
+ Execution Time: 0.094 ms
+(22 rows)
+

@@ -1,0 +1,6 @@
+# pnpm 11 build-script allowlist (same mechanism as docs/pnpm-workspace.yaml).
+# Carbon/IBM Plex packages ship prebuilt assets; their postinstall scripts are not required.
+# @parcel/watcher is an optional native file-watching enhancement used by Vite in dev.
+allowBuilds:
+  '@parcel/watcher': true
+  esbuild: true

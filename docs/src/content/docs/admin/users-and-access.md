@@ -5,6 +5,20 @@ sidebar:
   order: 5
 ---
 
+## Users & Access screen
+
+Open **System → Users & Access** (`/admin/system/users`). The screen provides:
+
+- **Users** — a server-paged, server-sorted, server-filtered account table with create, edit
+  (roles and the admin/editor flags, enable/disable), and password-reset flows. Every mutation
+  surfaces the stable error envelope (`409 user_conflict`, `400 invalid_password`, …) localized;
+  passwords are accepted only at creation and on the set-password flow and never render.
+- **Groups** — the library-access groups tab: create, rename, list, delete, add or remove member
+  users, and bind or unbind libraries. The server refuses to delete a group that still has
+  members or bindings (`409 group_not_empty`).
+
+## Account model
+
 Native Melodee accounts have durable public IDs, bcrypt password hashes, roles, refresh-token
 families, and optional library-access group membership. Access tokens do not contain library
 lists; each catalog or streaming operation evaluates the current PostgreSQL membership, so an

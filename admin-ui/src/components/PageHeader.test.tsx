@@ -1,0 +1,21 @@
+import { render, screen } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
+
+import { PageHeader } from './PageHeader';
+
+describe('PageHeader', () => {
+  it('renders title as a heading with subtitle and actions', () => {
+    render(
+      <PageHeader title="Processing" subtitle="Ingestion pipeline" actions={<button>Refresh</button>} />,
+    );
+    expect(screen.getByRole('heading', { name: 'Processing' })).toBeInTheDocument();
+    expect(screen.getByText('Ingestion pipeline')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Refresh' })).toBeInTheDocument();
+  });
+
+  it('omits subtitle when not provided', () => {
+    render(<PageHeader title="Overview" />);
+    expect(screen.getByRole('heading', { name: 'Overview' })).toBeInTheDocument();
+    expect(screen.queryByText('Ingestion pipeline')).not.toBeInTheDocument();
+  });
+});

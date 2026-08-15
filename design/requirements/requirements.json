@@ -1249,18 +1249,13 @@
     "phase": "5",
     "source": "PRD.md",
     "line": 1055,
-    "status": "in-progress",
+    "status": "tested",
     "implementation": [
-      "crates/melodee-domain/src/policy.rs (PolicyTestSummary)",
-      "crates/melodee-persistence/src/policy.rs (bounded dry_run_inputs and store_test_run)",
-      "crates/melodee-policy/src/dry_run.rs (bounded zero-write PolicyDryRunner)",
-      "crates/melodee-persistence/migrations/0008_phase5_policy.sql (policy_test_runs audit summaries)",
-      "apps/melodee-cli/src/main.rs (policy test command)"
+      "admin-ui/src/screens/policies/ (rule editor + test-against-catalog: matched count, representative samples, destructive-impact preview)",
+      "apps/melodee-server/src/admin_policies.rs (POST /policies/rules/test; immutable versioned rule sets)"
     ],
     "tests": [
-      "crates/melodee-policy/tests/policy_acceptance.rs (bounded dry-run, zero buckets, nested cap+1 rejection)",
-      "crates/melodee-persistence/tests/policy_phase5.rs",
-      "apps/melodee-cli/tests/policy.rs"
+      "apps/melodee-server/tests/admin_policies_api.rs; admin-ui/e2e/policies.spec.ts"
     ]
   },
   {
@@ -1918,9 +1913,13 @@
     "phase": "10",
     "source": "PRD.md",
     "line": 1403,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "apps/melodee-server/src/admin_*.rs (/api/admin/v1, Rust-native vocabulary, independently versioned)"
+    ],
+    "tests": [
+      "apps/melodee-server/tests/admin_*_api.rs (13 surface suites)"
+    ]
   },
   {
     "id": "PRD-API-ADMIN-002",
@@ -1928,9 +1927,13 @@
     "phase": "10",
     "source": "PRD.md",
     "line": 1407,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "admin.rs, admin_review.rs, admin_identity.rs, admin_policies.rs, admin_system.rs, admin_catalog.rs, admin_access.rs, admin_config.rs, admin_onboarding.rs, admin_notifications.rs, admin_scripts.rs, admin_radio.rs, admin_device_profiles.rs (work items, evidence, decisions, policies, queues, workers, health, identities, Releases, Tracks, users, config, audit)"
+    ],
+    "tests": [
+      "apps/melodee-server/tests/ (all admin suites green; full workspace gate)"
+    ]
   },
   {
     "id": "PRD-API-ADMIN-003",
@@ -1938,9 +1941,13 @@
     "phase": "10",
     "source": "PRD.md",
     "line": 1421,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "ADR-0139 + Phase 10 evidence: no native-v1/OpenSubsonic/Jellyfin route or DTO changed for the admin UI (frozen surfaces untouched; only ADR-0143's evidenced image precedence extension)"
+    ],
+    "tests": [
+      "apps/melodee-server/tests/ native/opensubsonic/jellyfin suites + image goldens unchanged and green"
+    ]
   },
   {
     "id": "PRD-AUTH-001",
@@ -2720,9 +2727,15 @@
     "phase": "10",
     "source": "PRD.md",
     "line": 1708,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "admin-ui/src/shell/AppShell.tsx (canonical IA shell, header controls, command palette)",
+      "design/ui/UI-SPEC.md (binding design tokens, shell dimensions, density, patterns)"
+    ],
+    "tests": [
+      "admin-ui unit suite (225 tests) + e2e suite (259 runs incl. all screens at 3 viewports)",
+      "design/evidence/phase-10/accessibility-visual-report.md"
+    ]
   },
   {
     "id": "PRD-UI-002",
@@ -2730,9 +2743,14 @@
     "phase": "10",
     "source": "PRD.md",
     "line": 1712,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "admin-ui/package.json (React 19.2.8, TypeScript, @carbon/react 1.114.0 exact pins)",
+      "design/adr/ADR-0109-use-carbon-for-admin-ui.md (Accepted; Phase 10 validation evidence section)"
+    ],
+    "tests": [
+      "admin-ui/e2e/ (Carbon components exercised across all canonical screens)"
+    ]
   },
   {
     "id": "PRD-UI-003",
@@ -2740,9 +2758,13 @@
     "phase": "10",
     "source": "PRD.md",
     "line": 1718,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "admin-ui/src/components/EntityTable.tsx (Carbon DataTable with server-side sort/page; TanStack not adopted — no proven gap)"
+    ],
+    "tests": [
+      "admin-ui/src/components/EntityTable.test.tsx"
+    ]
   },
   {
     "id": "PRD-UI-004",
@@ -2750,9 +2772,13 @@
     "phase": "10",
     "source": "PRD.md",
     "line": 1722,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "admin-ui/src/shell/AppShell.tsx (canonical nav tree: Overview; Processing; Catalog; Policies; System)"
+    ],
+    "tests": [
+      "admin-ui/e2e/smoke.spec.ts (nav groups asserted)"
+    ]
   },
   {
     "id": "PRD-UI-005",
@@ -2760,9 +2786,14 @@
     "phase": "10",
     "source": "PRD.md",
     "line": 1756,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "admin-ui screens expose one Release lifecycle (Discovered/Processing/Review/Cataloged); no /Data vs /Media concepts",
+      "design/ui/UI-SPEC.md section 10 rule 6"
+    ],
+    "tests": [
+      "admin-ui/e2e/ suite (lifecycle states rendered via ProcessingStateTag)"
+    ]
   },
   {
     "id": "PRD-UI-006",
@@ -2770,9 +2801,14 @@
     "phase": "10",
     "source": "PRD.md",
     "line": 1768,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "admin-ui/src/screens/processing/ (table + right inspector, queue position preserved, URL state)",
+      "admin-ui/src/screens/review/ + identity/ (review workspaces)"
+    ],
+    "tests": [
+      "admin-ui/e2e/processing-queue.spec.ts (inspector preserves table state)"
+    ]
   },
   {
     "id": "PRD-UI-007",
@@ -2780,9 +2816,16 @@
     "phase": "10",
     "source": "PRD.md",
     "line": 1772,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "admin-ui/src/components/AudioPreview.tsx (labeled, no autoplay)",
+      "apps/melodee-server/src/admin_review.rs (pre-publication preview endpoint)",
+      "apps/melodee-server/src/admin_catalog.rs (streamUrl on track/release detail via DatabaseStreamUrlSigner)"
+    ],
+    "tests": [
+      "apps/melodee-server/tests/admin_catalog_api.rs (signed URL streams 200/206)",
+      "admin-ui/e2e/release-review.spec.ts + catalog.spec.ts (preview assertions)"
+    ]
   },
   {
     "id": "PRD-UI-008",
@@ -2790,9 +2833,14 @@
     "phase": "10",
     "source": "PRD.md",
     "line": 1776,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "admin-ui/src/components/DestructiveActionDialog.tsx (affected counts, storage impact, rule/reason, quarantine alternative, typed confirmation)",
+      "apps/melodee-server/src/admin_review.rs decision endpoint (reason required, audited, fail-closed)"
+    ],
+    "tests": [
+      "admin-ui/e2e/release-review.spec.ts (delete impact dialog + typed confirmation)"
+    ]
   },
   {
     "id": "PRD-UI-009",
@@ -2800,9 +2848,13 @@
     "phase": "10",
     "source": "PRD.md",
     "line": 1786,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "implemented",
+    "implementation": [
+      "admin-ui/src/shell/AppShell.tsx (command palette entry, ⌘K/Ctrl+K, accessible modal navigating to screens)"
+    ],
+    "tests": [
+      "admin-ui shell unit tests"
+    ]
   },
   {
     "id": "PRD-UI-010",
@@ -2810,9 +2862,15 @@
     "phase": "10",
     "source": "PRD.md",
     "line": 1790,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "admin-api pagination envelopes + sort whitelists (admin.rs, admin_catalog.rs, admin_identity.rs, admin_review.rs)",
+      "admin-ui EntityTable server-side only; migration 0029 admin browse indexes (ADR-0142)"
+    ],
+    "tests": [
+      "design/evidence/phase-10/performance-report.md (EXPLAIN at synthetic catalog scale)",
+      "crates/melodee-persistence/tests/ (envelope/sort whitelist tests)"
+    ]
   },
   {
     "id": "PRD-UI-REF-001",
@@ -2820,9 +2878,13 @@
     "phase": "10",
     "source": "PRD.md",
     "line": 1809,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "design/ui/MOCKUPS.md + UI-SPEC.md (mockups are intent only; implemented screens follow written specs)"
+    ],
+    "tests": [
+      "design/evidence/phase-10/checklists/ (per-screen acceptance vs written spec, not mockup text)"
+    ]
   },
   {
     "id": "PRD-UI-REF-002",
@@ -2830,9 +2892,14 @@
     "phase": "10",
     "source": "PRD.md",
     "line": 1813,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "admin-ui/e2e/visual.spec.ts + snapshots (real React screenshots supersede mockups; light/dark/RTL baselines)"
+    ],
+    "tests": [
+      "admin-ui/e2e/visual.spec.ts (27+ committed baselines, 1% tolerance)",
+      "design/evidence/phase-10/accessibility-visual-report.md"
+    ]
   },
   {
     "id": "PRD-UI-REF-003",
@@ -2840,9 +2907,13 @@
     "phase": "10",
     "source": "PRD.md",
     "line": 1817,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "design/ui/UI-SPEC.md (tokens, Carbon overrides, shell dimensions, density, status semantics, shared components, interaction patterns, responsive breakpoints, accessibility, agent rules)"
+    ],
+    "tests": [
+      "python3 scripts/validate_repository.py (doc gate)"
+    ]
   },
   {
     "id": "PRD-THEME-001",
@@ -2850,9 +2921,15 @@
     "phase": "10",
     "source": "PRD.md",
     "line": 1880,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "admin-ui/src/theme/ThemeProvider.tsx + tokens.css (Melodee token layer over Carbon g10/g100)",
+      "admin-ui/src/theme/packs.ts + screens/settings/ThemeSection.tsx (theme-pack list/apply/rescan/import/export/delete via native theme endpoints)"
+    ],
+    "tests": [
+      "admin-ui/src/theme/ThemeProvider.test.tsx + packs.test.ts",
+      "admin-ui/e2e/theme-packs.spec.ts"
+    ]
   },
   {
     "id": "PRD-THEME-002",
@@ -2860,9 +2937,13 @@
     "phase": "10",
     "source": "PRD.md",
     "line": 1884,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "ThemeProvider: appearance (System/Light/Dark) independent of theme pack axis; persisted separately"
+    ],
+    "tests": [
+      "admin-ui/src/theme/ThemeProvider.test.tsx"
+    ]
   },
   {
     "id": "PRD-THEME-003",
@@ -2870,9 +2951,13 @@
     "phase": "10",
     "source": "PRD.md",
     "line": 1895,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "admin-ui/src/theme/tokens.css (--melodee-* custom properties layered on Carbon themes)"
+    ],
+    "tests": [
+      "design/ui/UI-SPEC.md sections 1-2; visual baselines in light/dark"
+    ]
   },
   {
     "id": "PRD-THEME-004",
@@ -2880,9 +2965,13 @@
     "phase": "10",
     "source": "PRD.md",
     "line": 1899,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "admin-ui/src/screens/settings/ThemeSection.tsx consuming native theme-pack endpoints; token-only mapping documented in admin-ui/src/theme/packs.ts"
+    ],
+    "tests": [
+      "admin-ui/e2e/theme-packs.spec.ts (apply + failure fallback)"
+    ]
   },
   {
     "id": "PRD-I18N-001",
@@ -2890,9 +2979,14 @@
     "phase": "10",
     "source": "PRD.md",
     "line": 1909,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "admin-ui/src/i18n/index.ts (20-culture inventory preserved)",
+      "scripts/harvest_legacy_i18n.py + design/evidence/phase-10/i18n-harvest.md (legacy resx harvest)"
+    ],
+    "tests": [
+      "admin-ui/e2e/localization.spec.ts (all 20 cultures load without errors)"
+    ]
   },
   {
     "id": "PRD-I18N-002",
@@ -2900,9 +2994,14 @@
     "phase": "10",
     "source": "PRD.md",
     "line": 1934,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "design/adr/ADR-0137-localization-stack-and-rtl-preservation.md (i18next + react-i18next, Accepted)",
+      "admin-ui/package.json (i18next 26.3.6, react-i18next 17.0.11)"
+    ],
+    "tests": [
+      "admin-ui unit + e2e suites"
+    ]
   },
   {
     "id": "PRD-I18N-003",
@@ -2910,9 +3009,13 @@
     "phase": "10",
     "source": "PRD.md",
     "line": 1938,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "admin-ui/src/i18n/locales/en-US.json (1100+ externalized keys; all visible strings via useTranslation)"
+    ],
+    "tests": [
+      "admin-ui/scripts/check-locales.mjs (structural validation gate)"
+    ]
   },
   {
     "id": "PRD-I18N-004",
@@ -2920,9 +3023,13 @@
     "phase": "10",
     "source": "PRD.md",
     "line": 1942,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "admin-ui/src/i18n/format.ts (Intl date/number/bytes/duration/relative-time on active locale)"
+    ],
+    "tests": [
+      "admin-ui unit tests for non-English formatting/plurals"
+    ]
   },
   {
     "id": "PRD-I18N-005",
@@ -2930,9 +3037,14 @@
     "phase": "10",
     "source": "PRD.md",
     "line": 1946,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "admin-ui/src/i18n/index.ts dirFor() (ar-SA/fa-IR -> rtl, document.dir sync); logical CSS properties throughout"
+    ],
+    "tests": [
+      "admin-ui/e2e/ RTL smoke specs on all canonical screens (ar-SA + fa-IR)",
+      "admin-ui/e2e/visual.spec.ts RTL baselines"
+    ]
   },
   {
     "id": "PRD-I18N-006",
@@ -2940,9 +3052,13 @@
     "phase": "10",
     "source": "PRD.md",
     "line": 1950,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "ADR-0137 fallback semantics (en-US source+fallback); check-locales.mjs key validation"
+    ],
+    "tests": [
+      "admin-ui/e2e/localization.spec.ts (fallback rendering assertions)"
+    ]
   },
   {
     "id": "PRD-WEB-001",
@@ -2965,13 +3081,13 @@
     "phase": "9,10",
     "source": "PRD.md",
     "line": 1971,
-    "status": "implemented",
+    "status": "tested",
     "implementation": [
-      "design/evidence/phase-9/blazor-page-inventory.md (preliminary classification with per-page rationale and component-level follow-ons; every intentional surface move documented: party/jukebox pages follow ADR-0133, script editor follows ADR-0135, onboarding wizard follows the WP-08 API/CLI-first shape, device-profile editing moves to the admin surface per ADR-0134 section 5)",
-      "design/adr/ADR-0109-use-carbon-for-admin-ui.md (Phase 9 amendment: Carbon accepted as the admin UI component library; shell-validation acceptance moved to Phase 10 entry criteria)"
+      "design/evidence/phase-10/web-parity-verification.md (final ratification: all 6 REPLACE landed, 3 DROP retired by ADR-0140/0141, KEEP surfaces verified)",
+      "design/adr/ADR-0140 + ADR-0141 (Accepted)"
     ],
     "tests": [
-      "design/evidence/phase-9/checklists/11-themes-localization-web.md row 3 acceptance"
+      "design/evidence/phase-10/checklists/ (green); admin-ui e2e suite"
     ]
   },
   {
@@ -3092,15 +3208,13 @@
     "phase": "1,2,9",
     "source": "PRD.md",
     "line": 2017,
-    "status": "deferred",
+    "status": "tested",
     "implementation": [
-      "apps/melodee-server/src/admin.rs (GET /api/admin/v1/ingest/work-items/counts per-state queue counts, bounded paged listing, work-item detail, event history, active leases — the queue-depth-by-stage API leg)",
-      "apps/melodee-cli/src/main.rs (work list/show and worker-pools list/pause/resume — the CLI leg over the same durable rows)",
-      "crates/melodee-persistence/migrations/0023_phase9_worker_pool_state.sql and crates/melodee-persistence/src/worker_pool.rs (durable worker pool state, ADR-0134 section 8)"
+      "admin-ui/src/screens/system/SystemWorkersScreen.tsx (pools: queued/active/throughput/oldest-age/failures/lease status; pause/resume)",
+      "apps/melodee-server/src/admin_system.rs (workers/pools + pause/resume + failures)"
     ],
     "tests": [
-      "apps/melodee-server/tests/admin_diagnostics_api.rs (queue counts/listing/history/leases against real PostgreSQL)",
-      "apps/melodee-cli/tests/worker_pools.rs (pool list/pause/resume durability and audit)"
+      "apps/melodee-server/tests/admin_system_api.rs; admin-ui/e2e/system-workers.spec.ts"
     ]
   },
   {
@@ -3625,9 +3739,13 @@
     "phase": "0,all",
     "source": "PRD.md",
     "line": 2309,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "admin-ui Vitest component/unit suite (232 tests) + Playwright e2e (259 runs, 3 viewports) + visual regression baselines (light/dark/RTL) + axe accessibility specs"
+    ],
+    "tests": [
+      "design/evidence/phase-10/accessibility-visual-report.md; .github/workflows/admin-ui.yml (CI)"
+    ]
   },
   {
     "id": "PRD-SEC-001",

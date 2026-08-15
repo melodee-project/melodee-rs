@@ -46,3 +46,29 @@ behavior, then accept or reject this ADR.
   requirement rows are Phase-10-owned and outside the Phase 9 exit gate.
 - The shell-validation evidence must still be produced and recorded here (or in a superseding
   note) before Phase 10 is accepted.
+
+## Phase 10 validation evidence (2026-08-14)
+
+The required validation shells are implemented in `admin-ui/` (React 19 + TypeScript strict +
+Carbon 1.114, Vite build, served at `/admin` per ADR-0138):
+
+- **Processing Queue** — `admin-ui/src/screens/processing/ProcessingQueueScreen.tsx` +
+  `WorkItemInspector.tsx`.
+- **Release Review** — `admin-ui/src/screens/review/{ReviewQueueScreen,ReleaseReviewScreen}.tsx`.
+- **Artist Identity Review** — `admin-ui/src/screens/identity/IdentityReviewScreen.tsx`.
+
+Validation matrix evidence:
+
+- **Light/dark:** theme system (`admin-ui/src/theme/ThemeProvider.tsx`, `tokens.css`) with
+  System/Light/Dark appearance over Carbon g10/g100; covered by component tests and the e2e
+  suite.
+- **Translated locale:** 20-culture i18next catalog (ADR-0137) with legacy-harvested translations
+  (`design/evidence/phase-10/i18n-harvest.md`); locale switching covered by e2e.
+- **RTL smoke:** ar-SA `dir="rtl"` assertions in `admin-ui/e2e/` (shell, processing queue,
+  release review, identity review specs) at 1600×1200, 768×1024, and 375×812.
+- **Keyboard navigation:** e2e keyboard specs (table row focus/Enter activation, decision-action
+  tab order) in the processing-queue/release-review/identity-review e2e files.
+- **Responsive:** all e2e specs run at the three UI-SPEC §8 viewports.
+
+Test counts at time of recording: 96 unit/component tests, 42 e2e runs — all green; see
+`design/evidence/phase-10/checklists/04..06`. **ADR-0109 validation is satisfied.**

@@ -70,6 +70,28 @@ pub async fn is_pool_paused(pool: &PgPool, name: &str) -> Result<bool, sqlx::Err
         .map(|paused| paused.unwrap_or(false))
 }
 
+/// Per-pool work-queue metrics derived from durable state (Phase 10 WP-17).
+///
+/// Only pools whose worker owns a durable queue table report metrics:
+/// `policy` reads `release_work_items`/`release_work_item_events`, `podcast`
+/// reads `native_podcast_episodes`. Pools without a durable queue (discovery
+/// maintenance runs bounded idempotent passes) report `None` — the API
+/// surfaces that honestly instead of inventing zeros. "Running" is lease
+/// evidence (an unexpired lease exists), not a live-worker liveness claim.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct WorkerPoolMetrics {
+    /// Work waiting to be claimed (no active lease).
+    pub queued: i64,
+    /// Work under an unexpired lease right now.
+    pub running: i64,
+    /// Last update of the oldest queued item (queue age evidence).
+    pub oldest_queued_at: Option<OffsetDateTime>,
+    /// Items completed by this pool in the last hour.
+    pub completed_last_hour: i64,
+    /// Failures recorded by this pool in the last 24 hours.
+    pub failed_last_24h: i64,
+}
+
 /// Stateless entry point for operator pool control.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct WorkerPoolStore;
@@ -106,6 +128,84 @@ impl WorkerPoolStore {
         .bind(name)
         .fetch_optional(pool)
         .await?)
+    }
+
+    /// Set-based queue metrics for one pool, or `None` when the pool has no
+    /// durable queue table (see [`WorkerPoolMetrics`]).
+    pub async fn metrics(
+        &self,
+        pool: &PgPool,
+        name: &str,
+        now: OffsetDateTime,
+    ) -> Result<Option<WorkerPoolMetrics>, WorkerPoolStoreError> {
+        if !is_valid_pool_name(name) {
+            return Err(WorkerPoolStoreError::InvalidPoolName);
+        }
+        let hour_ago = now - time::Duration::hours(1);
+        let day_ago = now - time::Duration::hours(24);
+        match name {
+            POOL_POLICY => {
+                let queue: (i64, i64, Option<OffsetDateTime>) = sqlx::query_as(
+                    "SELECT
+                         COUNT(*) FILTER (WHERE lease_expires_at IS NULL OR lease_expires_at <= $1)::bigint,
+                         COUNT(*) FILTER (WHERE lease_expires_at > $1)::bigint,
+                         MIN(updated_at) FILTER (WHERE lease_expires_at IS NULL OR lease_expires_at <= $1)
+                     FROM release_work_items WHERE state = 'cataloged'",
+                )
+                .bind(now)
+                .fetch_one(pool)
+                .await?;
+                let events: (i64, i64) = sqlx::query_as(
+                    "SELECT
+                         COUNT(*) FILTER (WHERE event_type = 'transitioned'
+                              AND reason_code = 'policy.decision_applied'
+                              AND created_at >= $1)::bigint,
+                         COUNT(*) FILTER (WHERE event_type = 'failed'
+                              AND reason_code LIKE 'policy.%'
+                              AND created_at >= $2)::bigint
+                     FROM release_work_item_events",
+                )
+                .bind(hour_ago)
+                .bind(day_ago)
+                .fetch_one(pool)
+                .await?;
+                Ok(Some(WorkerPoolMetrics {
+                    queued: queue.0,
+                    running: queue.1,
+                    oldest_queued_at: queue.2,
+                    completed_last_hour: events.0,
+                    failed_last_24h: events.1,
+                }))
+            }
+            POOL_PODCAST => {
+                let row: (i64, i64, Option<OffsetDateTime>, i64, i64) = sqlx::query_as(
+                    "SELECT
+                         COUNT(*) FILTER (WHERE download_status = 'Queued')::bigint,
+                         COUNT(*) FILTER (WHERE download_status = 'Downloading'
+                              AND download_lease_expires_at > $1)::bigint,
+                         MIN(updated_at) FILTER (WHERE download_status = 'Queued'),
+                         COUNT(*) FILTER (WHERE download_status = 'Downloaded'
+                              AND updated_at >= $2)::bigint,
+                         COUNT(*) FILTER (WHERE download_status = 'Failed'
+                              AND updated_at >= $3)::bigint
+                     FROM native_podcast_episodes
+                     WHERE soft_deleted_at IS NULL",
+                )
+                .bind(now)
+                .bind(hour_ago)
+                .bind(day_ago)
+                .fetch_one(pool)
+                .await?;
+                Ok(Some(WorkerPoolMetrics {
+                    queued: row.0,
+                    running: row.1,
+                    oldest_queued_at: row.2,
+                    completed_last_hour: row.3,
+                    failed_last_24h: row.4,
+                }))
+            }
+            _ => Ok(None),
+        }
     }
 
     /// Durably pauses or resumes a pool, recording the operator audit.

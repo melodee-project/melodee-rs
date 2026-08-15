@@ -12,14 +12,14 @@ use std::sync::Arc;
 
 use axum::{
     Json, Router,
-    extract::{FromRequestParts, Path, State},
+    extract::{FromRequestParts, Path, Query, State},
     http::{StatusCode, header, request::Parts},
     response::{IntoResponse, Response},
     routing::{get, post, put},
 };
 use melodee_persistence::{
     AccessGroupDetail, GroupAdminError, GroupAdminStore, NativeUserAdminUpdate, NativeUserCreate,
-    StoredAccessGroup, StoredNativeUser, UserAdminError, UserAdminStore,
+    StoredAccessGroup, StoredNativeUser, UserAdminError, UserAdminStore, UserSort,
 };
 use serde::{Deserialize, Serialize};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
@@ -262,6 +262,49 @@ pub struct UpdateUserRequest {
     pub roles: Option<Vec<String>>,
 }
 
+/// Query parameters for the paginated user listing (WP-10). All optional.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListUsersParams {
+    /// Case-insensitive substring filter on username or email.
+    pub query: Option<String>,
+    /// Maximum rows to return (clamped to MAX_USER_LIST_LIMIT). Default 50.
+    #[serde(default = "default_user_list_limit")]
+    pub limit: u32,
+    /// Zero-based offset for paging.
+    #[serde(default)]
+    pub offset: u32,
+    /// Whitelisted sort expression `key:asc|desc`: `username` or `createdAt`.
+    /// Omitted sorts by ascending username. Unknown keys produce a 400.
+    pub sort: Option<String>,
+}
+
+const fn default_user_list_limit() -> u32 {
+    50
+}
+
+/// Upper bound for one user-listing page (same clamp as the ingest listing).
+const MAX_USER_LIST_LIMIT: u32 = 500;
+
+/// One page of users plus the filter's total row count (WP-10 pagination
+/// envelope). `total` respects the `query` filter but ignores `limit`/`offset`.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AdminUserPageDto {
+    pub items: Vec<AdminUserDto>,
+    pub total: i64,
+    pub limit: u32,
+    pub offset: u32,
+}
+
+/// Admin password-set request (WP-10). The clear password is hashed
+/// immediately and never stored, logged, or returned (PRD-AUTH-005).
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetPasswordRequest {
+    pub password: String,
+}
+
 pub fn router() -> Router<AdminAccessState> {
     Router::new()
         .route("/api/admin/v1/groups", get(list_groups).post(create_group))
@@ -277,8 +320,9 @@ pub fn router() -> Router<AdminAccessState> {
             "/api/admin/v1/groups/{id}/libraries/{libraryId}",
             put(bind_group_library).delete(unbind_group_library),
         )
-        .route("/api/admin/v1/users", post(create_user))
+        .route("/api/admin/v1/users", get(list_users).post(create_user))
         .route("/api/admin/v1/users/{id}", put(update_user))
+        .route("/api/admin/v1/users/{id}/password", post(set_user_password))
         .route_layer(axum::extract::DefaultBodyLimit::max(64 * 1024))
 }
 
@@ -465,6 +509,73 @@ async fn unbind_group_library(
         }
         Ok(false) => group_error(GroupAdminError::GroupNotFound),
         Err(error) => group_error(error),
+    }
+}
+
+async fn list_users(
+    State(state): State<AdminAccessState>,
+    _admin: AdminPrincipal,
+    Query(params): Query<ListUsersParams>,
+) -> Response {
+    let sort = match params.sort.as_deref() {
+        None => UserSort::UsernameAsc,
+        Some(raw) => match UserSort::parse(raw) {
+            Some(sort) => sort,
+            None => return admin_error(StatusCode::BAD_REQUEST, "unknown_sort"),
+        },
+    };
+    let limit = params.limit.clamp(1, MAX_USER_LIST_LIMIT);
+    let offset = params.offset;
+    match UserAdminStore::new()
+        .list_users(&state.pool, params.query.as_deref(), limit, offset, sort)
+        .await
+    {
+        Ok(page) => match page
+            .users
+            .iter()
+            .map(user_dto)
+            .collect::<Result<Vec<_>, _>>()
+        {
+            Ok(items) => Json(AdminUserPageDto {
+                items,
+                total: page.total,
+                limit,
+                offset,
+            })
+            .into_response(),
+            Err(()) => admin_error(StatusCode::INTERNAL_SERVER_ERROR, "store_error"),
+        },
+        Err(error) => store_error(error),
+    }
+}
+
+async fn set_user_password(
+    State(state): State<AdminAccessState>,
+    admin: AdminPrincipal,
+    Path(id): Path<Uuid>,
+    Json(request): Json<SetPasswordRequest>,
+) -> Response {
+    if request.password.chars().count() < 8 || request.password.chars().count() > MAX_PASSWORD_CHARS
+    {
+        return admin_error(StatusCode::BAD_REQUEST, "invalid_password");
+    }
+    let password_hash = match melodee_auth::hash_password(request.password.as_bytes()) {
+        Ok(hash) => hash,
+        Err(_) => return admin_error(StatusCode::SERVICE_UNAVAILABLE, "store_error"),
+    };
+    match UserAdminStore::new()
+        .set_password(&state.pool, id, &password_hash, OffsetDateTime::now_utc())
+        .await
+    {
+        Ok(_) => {
+            tracing::info!(
+                actor = %admin.public_api_id,
+                user = %id,
+                "admin reset user password"
+            );
+            StatusCode::NO_CONTENT.into_response()
+        }
+        Err(error) => store_error(error),
     }
 }
 

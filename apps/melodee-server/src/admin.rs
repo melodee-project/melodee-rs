@@ -11,22 +11,32 @@
 //! contents, or raw SQLx rows; DTOs are explicit and bounded. No compatibility
 //! route is invented here.
 //!
+//! Phase 10 (ADR-0139): every route in this module is gated behind
+//! [`AdminPrincipal`] — anonymous requests receive 401, authenticated
+//! non-administrators 403, both with the stable error envelope. `/healthz`
+//! and `/readyz` remain anonymous infrastructure probes and are not routed
+//! here.
+//!
 //! Error/correlation conventions: errors use a stable JSON envelope with a
 //! machine-readable `code` and a request `correlation_id` (sourced from the
 //! `x-request-id` header when present, otherwise generated). This establishes
 //! the admin API error/correlation shape required by SPEC for later phases.
 
 use axum::{
-    Json,
+    Json, Router,
     extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
+    routing::get,
 };
 use melodee_domain::{IngestionState, ReleaseWorkItem, ReleaseWorkItemEvent, WorkEventType};
-use melodee_persistence::{ActiveLease, StateCount, WorkItemStore};
+use melodee_persistence::{ActiveLease, StateCount, WorkItemSort, WorkItemStore};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use uuid::Uuid;
+
+use crate::admin_access::{AdminAccessState, AdminPrincipal};
+use crate::system::SystemInfo;
 
 /// Maximum rows returned by list endpoints. The query layer clamps to this
 /// even when a client requests more, so a misbehaving caller cannot pull the
@@ -193,6 +203,10 @@ pub struct ListWorkItemsParams {
     /// Zero-based offset for paging.
     #[serde(default)]
     pub offset: u32,
+    /// Whitelisted sort expression `key:asc|desc` (WP-10): `addedAt`,
+    /// `updatedAt`, `state`, or `attemptCount`. Omitted keeps the historical
+    /// newest-first ordering. Unknown keys or directions produce a 400.
+    pub sort: Option<String>,
 }
 
 fn default_list_limit() -> u32 {
@@ -240,30 +254,60 @@ impl AdminApiErrorKind {
     }
 }
 
-/// Shared application state: the pool and the stateless store.
-#[derive(Clone)]
-pub struct AdminState {
-    pub pool: sqlx::PgPool,
-    pub store: WorkItemStore,
+/// One page of work items plus the filter's total row count (WP-10 pagination
+/// envelope). `total` respects the `state` filter but ignores `limit`/`offset`.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkItemPageDto {
+    pub items: Vec<WorkItemDto>,
+    pub total: i64,
+    pub limit: u32,
+    pub offset: u32,
+}
+
+/// The admin-gated diagnostics router (ADR-0139). Shares `AdminAccessState`
+/// so the `AdminPrincipal` extractor can validate native access JWTs.
+pub fn router() -> Router<AdminAccessState> {
+    Router::new()
+        .route("/api/admin/v1/system/info", get(system_info))
+        .route(
+            "/api/admin/v1/ingest/work-items/counts",
+            get(work_item_counts),
+        )
+        .route("/api/admin/v1/ingest/work-items", get(list_work_items))
+        .route("/api/admin/v1/ingest/work-items/{id}", get(get_work_item))
+        .route(
+            "/api/admin/v1/ingest/work-items/{id}/events",
+            get(list_work_item_events),
+        )
+        .route("/api/admin/v1/ingest/leases", get(list_active_leases))
+}
+
+/// GET /api/admin/v1/system/info — health/version metadata, admin-gated per
+/// ADR-0139 (the anonymous infrastructure probes remain `/healthz`/`/readyz`).
+pub async fn system_info(_admin: AdminPrincipal) -> Json<SystemInfo> {
+    crate::system::healthz().await
 }
 
 /// GET /api/admin/v1/ingest/work-items/counts — per-state queue counts.
 pub async fn work_item_counts(
-    State(state): State<AdminState>,
+    State(state): State<AdminAccessState>,
+    _admin: AdminPrincipal,
 ) -> Result<Json<Vec<StateCountDto>>, AdminApiError> {
-    let counts = state
-        .store
+    let counts = WorkItemStore
         .counts_by_state(&state.pool)
         .await
         .map_err(AdminApiError::from_store)?;
     Ok(Json(counts.into_iter().map(StateCountDto::from).collect()))
 }
 
-/// GET /api/admin/v1/ingest/work-items — bounded, filtered, paged listing.
+/// GET /api/admin/v1/ingest/work-items — bounded, filtered, sorted, paged
+/// listing inside a pagination envelope.
 pub async fn list_work_items(
-    State(state): State<AdminState>,
+    State(state): State<AdminAccessState>,
+    _admin: AdminPrincipal,
     Query(params): Query<ListWorkItemsParams>,
-) -> Result<Json<Vec<WorkItemDto>>, AdminApiError> {
+) -> Result<Json<WorkItemPageDto>, AdminApiError> {
     let parsed_state = match params.state.as_deref() {
         None => None,
         Some(raw) => Some(IngestionState::parse(raw).ok_or_else(|| {
@@ -273,23 +317,36 @@ pub async fn list_work_items(
             )
         })?),
     };
+    let sort = match params.sort.as_deref() {
+        None => WorkItemSort::default_order(),
+        Some(raw) => WorkItemSort::parse(raw).ok_or_else(|| {
+            AdminApiError::new(
+                AdminApiErrorKind::BadRequest("unknown_sort"),
+                format!("unknown sort '{raw}'"),
+            )
+        })?,
+    };
     let limit = params.limit.clamp(1, MAX_LIST_LIMIT);
     let offset = params.offset;
-    let items = state
-        .store
-        .list(&state.pool, parsed_state, limit, offset)
+    let (items, total) = WorkItemStore
+        .list_page(&state.pool, parsed_state, limit, offset, sort)
         .await
         .map_err(AdminApiError::from_store)?;
-    Ok(Json(items.into_iter().map(WorkItemDto::from).collect()))
+    Ok(Json(WorkItemPageDto {
+        items: items.into_iter().map(WorkItemDto::from).collect(),
+        total,
+        limit,
+        offset,
+    }))
 }
 
 /// GET /api/admin/v1/ingest/work-items/:id — one work item by id or api key.
 pub async fn get_work_item(
-    State(state): State<AdminState>,
+    State(state): State<AdminAccessState>,
+    _admin: AdminPrincipal,
     Path(id): Path<Uuid>,
 ) -> Result<Json<WorkItemDto>, AdminApiError> {
-    let item = state
-        .store
+    let item = WorkItemStore
         .get(&state.pool, id)
         .await
         .map_err(AdminApiError::from_store)?;
@@ -298,19 +355,18 @@ pub async fn get_work_item(
 
 /// GET /api/admin/v1/ingest/work-items/:id/events — append-only history.
 pub async fn list_work_item_events(
-    State(state): State<AdminState>,
+    State(state): State<AdminAccessState>,
+    _admin: AdminPrincipal,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Vec<WorkItemEventDto>>, AdminApiError> {
     // The store lists events by id; a nonexistent work item yields an empty
     // list rather than a 404. Resolve the item first so the endpoint reports
     // 404 for an unknown id consistently with get_work_item.
-    state
-        .store
+    WorkItemStore
         .get(&state.pool, id)
         .await
         .map_err(AdminApiError::from_store)?;
-    let events = state
-        .store
+    let events = WorkItemStore
         .list_events(&state.pool, id)
         .await
         .map_err(AdminApiError::from_store)?;
@@ -321,12 +377,12 @@ pub async fn list_work_item_events(
 
 /// GET /api/admin/v1/ingest/leases — active (unexpired) lease evidence.
 pub async fn list_active_leases(
-    State(state): State<AdminState>,
+    State(state): State<AdminAccessState>,
+    _admin: AdminPrincipal,
     Query(params): Query<ListActiveLeasesParams>,
 ) -> Result<Json<Vec<ActiveLeaseDto>>, AdminApiError> {
     let limit = params.limit.clamp(1, MAX_LIST_LIMIT);
-    let leases = state
-        .store
+    let leases = WorkItemStore
         .list_active_leases(&state.pool, OffsetDateTime::now_utc(), limit)
         .await
         .map_err(AdminApiError::from_store)?;

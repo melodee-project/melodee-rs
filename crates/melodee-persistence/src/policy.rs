@@ -195,6 +195,39 @@ pub struct PolicyAudioIdentityAlternateAssertion {
     pub created_at: OffsetDateTime,
 }
 
+/// Raw `policy_rule_sets` row shared by the rule-set loaders.
+type PolicyRuleSetRow = (
+    Uuid,
+    String,
+    i32,
+    serde_json::Value,
+    serde_json::Value,
+    OffsetDateTime,
+);
+
+fn parse_rule_set_row(row: PolicyRuleSetRow) -> Result<PolicyRuleSet, PolicyStoreError> {
+    let (id, name, version, rules_json, actor_json, created_at) = row;
+    let rules: Vec<melodee_domain::PolicyRule> = serde_json::from_value(rules_json)?;
+    let created_by: PolicyActor = serde_json::from_value(actor_json)?;
+    Ok(PolicyRuleSet {
+        id: melodee_domain::PolicyRuleSetId::from_uuid(id),
+        name,
+        version: u32::try_from(version).map_err(|_| PolicyStoreError::NumericOverflow)?,
+        rules,
+        created_by,
+        created_at,
+    })
+}
+
+/// Title and primary-Artist display value for one dry-run sample Release
+/// (Phase 10 WP-16). A display string is never an Artist identity.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PolicyTestSampleRelease {
+    pub release_id: Uuid,
+    pub title: String,
+    pub artist: Option<String>,
+}
+
 /// Independently derived catalog knowledge supporting one Release trait.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PolicyReleaseCatalogTraitAssertion {
@@ -278,14 +311,7 @@ impl PolicyStore {
         pool: &PgPool,
         name: &str,
     ) -> Result<Option<PolicyRuleSet>, PolicyStoreError> {
-        let row: Option<(
-            Uuid,
-            String,
-            i32,
-            serde_json::Value,
-            serde_json::Value,
-            OffsetDateTime,
-        )> = sqlx::query_as(
+        let row: Option<PolicyRuleSetRow> = sqlx::query_as(
             r#"SELECT id, name, version, rules, created_by, created_at
                    FROM policy_rule_sets
                   WHERE name = $1
@@ -295,20 +321,7 @@ impl PolicyStore {
         .bind(name)
         .fetch_optional(pool)
         .await?;
-
-        let Some((id, name, version, rules_json, actor_json, created_at)) = row else {
-            return Ok(None);
-        };
-        let rules: Vec<melodee_domain::PolicyRule> = serde_json::from_value(rules_json)?;
-        let created_by: PolicyActor = serde_json::from_value(actor_json)?;
-        Ok(Some(PolicyRuleSet {
-            id: melodee_domain::PolicyRuleSetId::from_uuid(id),
-            name,
-            version: u32::try_from(version).map_err(|_| PolicyStoreError::NumericOverflow)?,
-            rules,
-            created_by,
-            created_at,
-        }))
+        row.map(parse_rule_set_row).transpose()
     }
 
     /// Loads a rule set by its UUID.
@@ -318,35 +331,107 @@ impl PolicyStore {
         pool: &PgPool,
         id: melodee_domain::PolicyRuleSetId,
     ) -> Result<Option<PolicyRuleSet>, PolicyStoreError> {
-        let row: Option<(
-            Uuid,
-            String,
-            i32,
-            serde_json::Value,
-            serde_json::Value,
-            OffsetDateTime,
-        )> = sqlx::query_as(
+        let row: Option<PolicyRuleSetRow> = sqlx::query_as(
             r#"SELECT id, name, version, rules, created_by, created_at
                FROM policy_rule_sets
-              WHERE id = $1"#,
+               WHERE id = $1"#,
         )
         .bind(id.into_uuid())
         .fetch_optional(pool)
         .await?;
+        row.map(parse_rule_set_row).transpose()
+    }
 
-        let Some((id, name, version, rules_json, actor_json, created_at)) = row else {
-            return Ok(None);
-        };
-        let rules: Vec<melodee_domain::PolicyRule> = serde_json::from_value(rules_json)?;
-        let created_by: PolicyActor = serde_json::from_value(actor_json)?;
-        Ok(Some(PolicyRuleSet {
-            id: melodee_domain::PolicyRuleSetId::from_uuid(id),
-            name,
-            version: u32::try_from(version).map_err(|_| PolicyStoreError::NumericOverflow)?,
-            rules,
-            created_by,
-            created_at,
-        }))
+    /// Lists every persisted version of a named rule set, oldest first. Rule
+    /// sets are immutable; this history is how the admin surface (Phase 10
+    /// WP-16) finds the last-seen definition of a rule removed from the
+    /// current version.
+    #[instrument(skip_all)]
+    pub async fn list_rule_set_versions(
+        &self,
+        pool: &PgPool,
+        name: &str,
+    ) -> Result<Vec<PolicyRuleSet>, PolicyStoreError> {
+        let rows: Vec<PolicyRuleSetRow> = sqlx::query_as(
+            r#"SELECT id, name, version, rules, created_by, created_at
+               FROM policy_rule_sets
+               WHERE name = $1
+               ORDER BY version"#,
+        )
+        .bind(name)
+        .fetch_all(pool)
+        .await?;
+        rows.into_iter().map(parse_rule_set_row).collect()
+    }
+
+    /// Set-based per-rule match counts from durable policy decisions (how
+    /// often each rule id decided a Release). Powers the admin rule listing's
+    /// match column (Phase 10 WP-16).
+    pub async fn rule_match_counts(
+        &self,
+        pool: &PgPool,
+    ) -> Result<Vec<(String, i64)>, PolicyStoreError> {
+        let rows: Vec<(String, i64)> = sqlx::query_as(
+            r#"SELECT matched.rule_id, COUNT(*)::bigint
+                 FROM policy_decisions decision,
+                      jsonb_array_elements_text(decision.matched_rule_ids) AS matched(rule_id)
+                GROUP BY matched.rule_id
+                ORDER BY matched.rule_id"#,
+        )
+        .fetch_all(pool)
+        .await?;
+        Ok(rows)
+    }
+
+    /// Counts durable decisions still awaiting completion — the dashboard
+    /// "pending policy decisions" attention count (Phase 10 WP-14).
+    pub async fn count_pending_decisions(&self, pool: &PgPool) -> Result<i64, PolicyStoreError> {
+        Ok(sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*)::bigint FROM policy_decisions WHERE completion_state = 'pending'",
+        )
+        .fetch_one(pool)
+        .await?)
+    }
+
+    /// Loads title and primary-Artist display name for a bounded set of
+    /// Release ids (dry-run sample enrichment, Phase 10 WP-16). Bounded by
+    /// the caller; the admin surface passes at most `MAX_POLICY_TEST_SAMPLES`.
+    pub async fn test_sample_releases(
+        &self,
+        pool: &PgPool,
+        release_ids: &[ReleaseId],
+    ) -> Result<Vec<PolicyTestSampleRelease>, PolicyStoreError> {
+        if release_ids.len() > MAX_POLICY_TEST_SAMPLES {
+            return Err(PolicyStoreError::ScopeExceeded {
+                dimension: "policy test sample Releases",
+                limit: MAX_POLICY_TEST_SAMPLES,
+            });
+        }
+        let ids: Vec<Uuid> = release_ids.iter().map(|id| id.into_uuid()).collect();
+        let rows: Vec<(Uuid, String, Option<String>)> = sqlx::query_as(
+            r#"SELECT release.id, release.title,
+                      (SELECT artist.canonical_name
+                         FROM release_artists billing
+                         JOIN artists artist ON artist.id = billing.artist_id
+                        WHERE billing.release_id = release.id
+                          AND billing.role = 'primary'
+                        ORDER BY billing.presentation_order, billing.id
+                        LIMIT 1) AS artist
+                 FROM releases release
+                WHERE release.id = ANY($1)
+                ORDER BY release.id"#,
+        )
+        .bind(&ids)
+        .fetch_all(pool)
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(|(release_id, title, artist)| PolicyTestSampleRelease {
+                release_id,
+                title,
+                artist,
+            })
+            .collect())
     }
 
     /// Inserts an immutable no-catalog-match fact or adopts an exact retry.
@@ -2472,6 +2557,67 @@ impl PolicyStore {
             classifier_version: row.classifier_version,
         }))
     }
+
+    /// Loads the persisted novelty evaluation for a Release, including the
+    /// per-Track novelty rows, for operator review display (Phase 10). This
+    /// is a pure read: it replays no evaluation and computes nothing new.
+    #[instrument(skip_all)]
+    pub async fn load_novelty(
+        &self,
+        pool: &PgPool,
+        release_id: melodee_domain::ReleaseId,
+    ) -> Result<Option<StoredNoveltyEvaluation>, PolicyStoreError> {
+        let row: Option<StoredNoveltyEvaluationRow> = sqlx::query_as(
+            r#"SELECT id, release_id, exact_duplicate_count,
+                      known_audio_identity_count, alternate_recording_count,
+                      new_track_count, uncertain_count, total_track_count,
+                      evaluated_at, evaluator_version
+                 FROM release_novelty_evaluations
+                WHERE release_id = $1"#,
+        )
+        .bind(release_id.into_uuid())
+        .fetch_optional(pool)
+        .await?;
+
+        let Some(row) = row else {
+            return Ok(None);
+        };
+
+        let track_rows: Vec<StoredTrackNoveltyRow> = sqlx::query_as(
+            r#"SELECT track_id, category, confidence, evidence_kind, detail
+                 FROM track_novelty
+                WHERE evaluation_id = $1
+                ORDER BY track_id"#,
+        )
+        .bind(row.id)
+        .fetch_all(pool)
+        .await?;
+
+        let tracks = track_rows
+            .into_iter()
+            .map(StoredTrackNovelty::try_from)
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(Some(StoredNoveltyEvaluation {
+            id: row.id,
+            release_id: melodee_domain::ReleaseId::from_uuid(row.release_id),
+            exact_duplicate_count: u32::try_from(row.exact_duplicate_count)
+                .map_err(|_| PolicyStoreError::NumericOverflow)?,
+            known_audio_identity_count: u32::try_from(row.known_audio_identity_count)
+                .map_err(|_| PolicyStoreError::NumericOverflow)?,
+            alternate_recording_count: u32::try_from(row.alternate_recording_count)
+                .map_err(|_| PolicyStoreError::NumericOverflow)?,
+            new_track_count: u32::try_from(row.new_track_count)
+                .map_err(|_| PolicyStoreError::NumericOverflow)?,
+            uncertain_count: u32::try_from(row.uncertain_count)
+                .map_err(|_| PolicyStoreError::NumericOverflow)?,
+            total_track_count: u32::try_from(row.total_track_count)
+                .map_err(|_| PolicyStoreError::NumericOverflow)?,
+            evaluated_at: row.evaluated_at,
+            evaluator_version: row.evaluator_version,
+            tracks,
+        }))
+    }
 }
 
 // ------------------------------------------------------------------
@@ -3303,6 +3449,75 @@ struct StoredEvidenceRow {
     kind: String,
     confidence: i32,
     detail: String,
+}
+
+/// Persisted per-Track novelty row (Phase 10 operator review read).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoredTrackNovelty {
+    pub track_id: melodee_domain::TrackId,
+    pub category: melodee_domain::TrackNoveltyCategory,
+    pub confidence: melodee_domain::Confidence,
+    pub evidence_kind: melodee_domain::NoveltyEvidenceKind,
+    pub detail: String,
+}
+
+/// Persisted aggregate novelty evaluation plus its per-Track rows (Phase 10
+/// operator review read). Counts are the durable evaluation facts, not a
+/// recomputation.
+#[derive(Debug, Clone)]
+pub struct StoredNoveltyEvaluation {
+    pub id: Uuid,
+    pub release_id: melodee_domain::ReleaseId,
+    pub exact_duplicate_count: u32,
+    pub known_audio_identity_count: u32,
+    pub alternate_recording_count: u32,
+    pub new_track_count: u32,
+    pub uncertain_count: u32,
+    pub total_track_count: u32,
+    pub evaluated_at: OffsetDateTime,
+    pub evaluator_version: String,
+    pub tracks: Vec<StoredTrackNovelty>,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct StoredNoveltyEvaluationRow {
+    id: Uuid,
+    release_id: Uuid,
+    exact_duplicate_count: i32,
+    known_audio_identity_count: i32,
+    alternate_recording_count: i32,
+    new_track_count: i32,
+    uncertain_count: i32,
+    total_track_count: i32,
+    evaluated_at: OffsetDateTime,
+    evaluator_version: String,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct StoredTrackNoveltyRow {
+    track_id: Uuid,
+    category: String,
+    confidence: i32,
+    evidence_kind: String,
+    detail: String,
+}
+
+impl TryFrom<StoredTrackNoveltyRow> for StoredTrackNovelty {
+    type Error = PolicyStoreError;
+
+    fn try_from(row: StoredTrackNoveltyRow) -> Result<Self, Self::Error> {
+        Ok(Self {
+            track_id: melodee_domain::TrackId::from_uuid(row.track_id),
+            category: melodee_domain::TrackNoveltyCategory::parse(&row.category)
+                .ok_or(PolicyStoreError::CorruptValue(row.category))?,
+            confidence: melodee_domain::Confidence::new(
+                u16::try_from(row.confidence).map_err(|_| PolicyStoreError::NumericOverflow)?,
+            )?,
+            evidence_kind: melodee_domain::NoveltyEvidenceKind::parse(&row.evidence_kind)
+                .ok_or(PolicyStoreError::CorruptValue(row.evidence_kind))?,
+            detail: row.detail,
+        })
+    }
 }
 
 #[derive(Debug, Clone)]

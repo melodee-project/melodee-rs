@@ -1,0 +1,5 @@
+// Carbon styles, imported the supported way for @carbon/react 1.114
+// (its package.json `sass` field points at index.scss). Emits the Carbon
+// token themes (including .cds--g10/.cds--g100) the Melodee token layer in
+// tokens.css scopes against.
+@use '@carbon/react';

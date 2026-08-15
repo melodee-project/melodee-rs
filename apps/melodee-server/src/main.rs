@@ -6,14 +6,14 @@ use melodee_ingestion::{
     IngestionConfig, SchedulerHandle, start_inspection_loop, start_normalization_loop,
     start_publication_loop, start_reconciliation_loop, start_validation_loop,
 };
-use melodee_persistence::{CatalogStore, WorkEngineConfig, WorkItemStore, migrate};
+use melodee_persistence::{CatalogStore, WorkEngineConfig, migrate};
 use melodee_policy::PolicyConfig;
 use melodee_search::{SearchConfig, SearchRoot, start_search_loop};
 use melodee_server::discovery_worker::{DiscoveryWorkerConfig, start_discovery_loop};
 use melodee_server::policy_worker::{PolicyWorkerConfig, start_policy_loop};
 use melodee_server::{
-    admin, discovery_worker, jellyfin, native, native_stream, opensubsonic, podcast_worker,
-    policy_worker, system,
+    admin, admin_ui, discovery_worker, jellyfin, native, native_stream, opensubsonic,
+    podcast_worker, policy_worker, system,
 };
 use tokio::sync::oneshot;
 use tower_http::trace::TraceLayer;
@@ -424,64 +424,88 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         )?,
         stream_url_signer: Arc::new(native::stream::DatabaseStreamUrlSigner::new(
             pool.clone(),
-            public_origin,
+            public_origin.clone(),
         )),
         user_state: Arc::new(native::PostgresNativeUserStateReader::new(pool.clone())),
         direct_play,
-        client_addresses: native_stream::ClientAddressResolver::new(trusted_proxies),
+        client_addresses: native_stream::ClientAddressResolver::new(trusted_proxies.clone()),
         auth: native_auth.clone(),
     };
     let native_app = native::configured_router(native_state).layer(native_cors);
     let podcast_handle = podcast_worker::start_podcast_loop(pool.clone(), podcast_config);
     let discovery_handle = start_discovery_loop(discovery_worker_config, pool.clone());
 
-    let admin_state = admin::AdminState {
-        pool: pool.clone(),
-        store: WorkItemStore,
-    };
     let admin_access_state = melodee_server::admin_access::AdminAccessState {
         pool: pool.clone(),
         auth: native_auth,
         notifications: notifications.clone(),
         scripting: scripting.clone(),
     };
+    // WP-12 review preview path-safety context: the configured inbound source
+    // roots plus the normalization work area are the only directories a
+    // pre-publication preview may stream from (containment is re-validated
+    // per request against canonicalized paths).
+    let admin_review_state = melodee_server::admin_review::AdminReviewState::new(
+        admin_access_state.clone(),
+        ingestion_config
+            .sources
+            .iter()
+            .map(|source| melodee_server::admin_review::PreviewSourceRoot {
+                id: source.id,
+                root: source.root.clone(),
+            })
+            .collect(),
+        ingestion_config.work_area_base.clone(),
+    );
+    // WP-14/WP-17 dashboard + system/workers/search surface: the configured
+    // search projection handle lets health/status/rebuild report honestly
+    // (search disabled → explicit `disabled`/`search_disabled`, never an
+    // invented failure).
+    let admin_system_state = melodee_server::admin_system::AdminSystemState::new(
+        admin_access_state.clone(),
+        search_config.enabled.then_some(search_config.clone()),
+    );
+    // WP-15 catalog surface: the shared read-only signer issues admin
+    // preview URLs on the frozen native stream route (PRD-UI-007); the
+    // resolver mirrors the native trusted-proxy rules so issued tokens
+    // validate for the requesting browser.
+    let admin_catalog_state = melodee_server::admin_catalog::AdminCatalogState::new(
+        admin_access_state.clone(),
+        Arc::new(native::stream::DatabaseStreamUrlSigner::new(
+            pool.clone(),
+            public_origin,
+        )),
+        native_stream::ClientAddressResolver::new(trusted_proxies),
+    );
     let readiness = system::ReadinessState::new(pool.clone())
         .with_search(search_config.enabled.then_some(search_config.clone()));
     let app = Router::new()
         .route("/healthz", get(system::healthz))
         .route("/readyz", get(system::readyz).with_state(readiness))
-        .route("/api/admin/v1/system/info", get(system::healthz))
-        .route(
-            "/api/admin/v1/ingest/work-items/counts",
-            get(admin::work_item_counts),
-        )
-        .route(
-            "/api/admin/v1/ingest/work-items",
-            get(admin::list_work_items),
-        )
-        .route(
-            "/api/admin/v1/ingest/work-items/{id}",
-            get(admin::get_work_item),
-        )
-        .route(
-            "/api/admin/v1/ingest/work-items/{id}/events",
-            get(admin::list_work_item_events),
-        )
-        .route(
-            "/api/admin/v1/ingest/leases",
-            get(admin::list_active_leases),
-        )
-        .with_state(admin_state)
+        // Admin-gated diagnostics (ADR-0139): every /api/admin/v1 route
+        // requires AdminPrincipal; /healthz and /readyz stay anonymous.
+        .merge(admin::router().with_state(admin_access_state.clone()))
         .merge(melodee_server::admin_access::router().with_state(admin_access_state.clone()))
         .merge(melodee_server::admin_radio::router().with_state(admin_access_state.clone()))
         .merge(melodee_server::admin_device_profiles::router().with_state(admin_access_state.clone()))
         .merge(melodee_server::admin_notifications::router().with_state(admin_access_state.clone()))
         .merge(melodee_server::admin_scripts::router().with_state(admin_access_state.clone()))
         .merge(melodee_server::admin_config::router().with_state(admin_access_state.clone()))
+        .merge(melodee_server::admin_review::router().with_state(admin_review_state))
+        .merge(melodee_server::admin_identity::router().with_state(admin_access_state.clone()))
+        .merge(melodee_server::admin_catalog::router().with_state(admin_catalog_state))
+        .merge(melodee_server::admin_policies::router().with_state(admin_access_state.clone()))
+        .merge(melodee_server::admin_system::router().with_state(admin_system_state))
         .merge(melodee_server::admin_onboarding::router().with_state(admin_access_state))
         .merge(native_app)
         .merge(opensubsonic_app)
-        .merge(jellyfin_app)
+        .merge(jellyfin_app);
+    // Admin SPA static serving (ADR-0138): built assets at /admin with an
+    // index.html fallback for client-side deep links. A missing dist is not
+    // fatal — the APIs keep serving and /admin falls through to the 404
+    // fallback.
+    let app = admin_ui::nest_admin_spa(app, &admin_ui::configured_dist());
+    let app = app
         // The Jellyfin routing middleware must see unmatched paths (the
         // bare-root probe), so it is an outer layer, matching the captured
         // ASP.NET pipeline placement (ADR-0131).

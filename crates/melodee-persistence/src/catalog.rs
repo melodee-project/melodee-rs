@@ -356,6 +356,26 @@ impl CatalogStore {
         .await?)
     }
 
+    /// Resolves catalog `release_id` bindings for a bounded set of work
+    /// items in one statement (Phase 10 review-queue display). Items without
+    /// an import receipt are simply absent from the result.
+    pub async fn list_import_release_ids(
+        &self,
+        pool: &PgPool,
+        work_item_ids: &[Uuid],
+    ) -> Result<Vec<(Uuid, Uuid)>, CatalogStoreError> {
+        if work_item_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        Ok(sqlx::query_as::<_, (Uuid, Uuid)>(
+            "SELECT work_item_id, release_id
+             FROM catalog_imports WHERE work_item_id = ANY($1)",
+        )
+        .bind(work_item_ids)
+        .fetch_all(pool)
+        .await?)
+    }
+
     /// Claims up to `batch_size` work items in the `Cataloged` state that are
     /// eligible for policy evaluation, establishing leases and returning each
     /// item alongside its catalog `release_id`.

@@ -67,7 +67,39 @@ The actor and non-empty reason are mandatory. `Accept`, `Ignore`, and `Quarantin
 non-destructive decision and route the work item accordingly. `Review` and `Delete` remain pending
 in `NeedsReview`; the command does not access, move, or delete media.
 
-:::caution[No graphical policy editor yet]
-These PostgreSQL, worker, and CLI surfaces are implemented. A graphical rule editor and Release
-review screen remain planned.
-:::
+## Policies screen
+
+Open **Policies → Release Rules** (`/admin/policies/releases`). The screen lists the active
+rule set as an ordered table — rule type, disposition, confidence threshold, priority
+(zero-based evaluation position; lower wins, first match applies), enabled state, and how many
+durable decisions each rule produced — plus the rule-set identity (`name`, `version`,
+`createdBy`).
+
+![The Policies screen with the active rule set](./images/policies-light.png)
+
+Key workflows:
+
+- **Structured rule editor** — creating or editing a rule builds its conditions from the two
+  dimensions the engine evaluates (`release_trait` and existing dispositions), the disposition,
+  and the confidence threshold. There is no free-text predicate surface.
+- **Immutable, versioned rule sets** — every mutation (create, update, delete, enable, disable)
+  appends a new immutable `(name, version)` rule-set row validated through the engine
+  invariants; nothing is edited in place and history is never rewritten. A concurrent edit
+  loses with a conflict and the listing refetches after each mutation so the displayed version
+  always reflects durable state. The running policy worker adopts a new version when its
+  configured version matches (`MELODEE__POLICY__RULE_SET_VERSION`); authoring a version here
+  never interrupts in-flight evaluations.
+- **Protected safety rules** — the built-in administrator-override and corrupt-media quarantine
+  rules cannot be removed; the UI explains this and the server enforces it
+  (`409 protected_rule`).
+- **Test against the catalog** — any enabled rule, or an ad-hoc candidate definition, can be
+  dry-run against a bounded catalog sample. The result reports evaluated and matched counts,
+  proposed and existing disposition counts, the destructive impact (Releases whose proposed
+  disposition is `delete`), and a bounded sample of matched Releases. Tests of stored rules are
+  persisted to the durable test-run audit; ad-hoc tests are marked as not persisted because the
+  candidate rule has no durable identity. Tests never persist proposed decisions.
+
+The equivalent CLI commands remain available and are listed above; the underlying routes are
+documented under [Admin API — Policies](../api/admin-api/#policies). Deciding a specific
+pending Release happens in [Release Review](../library-management/release-review/), not in the
+rule editor.

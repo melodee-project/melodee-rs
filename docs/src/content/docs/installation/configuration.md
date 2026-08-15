@@ -60,8 +60,9 @@ redacted export can never overwrite a stored secret. The admin API equivalent is
 
 | Key | Default | Effect |
 | --- | --- | --- |
-| `MELODEE__SERVER__BIND` | `127.0.0.1:8080` | HTTP listener address. Keep the loopback default unless trusted network controls protect the pre-release diagnostics API. |
+| `MELODEE__SERVER__BIND` | `127.0.0.1:8080` | HTTP listener address. |
 | `MELODEE__DATABASE__URL` | — (required) | PostgreSQL connection URL. |
+| `MELODEE__ADMIN_UI__DIST` | `admin-ui/dist` | Directory containing the built admin SPA, served at `/admin` with client-side routing fallback to `index.html`. A missing directory is not fatal: the server starts, all APIs serve normally, and `/admin` answers 404 until the bundle is deployed. |
 | `MELODEE__WORK__LEASE_SECONDS` | `300` | PostgreSQL lease duration for claimed work items. |
 | `MELODEE__WORK__RETRY_BASE_SECONDS` | `60` | Base retry delay (`base * 2^(attempt-1)`). |
 | `MELODEE__WORK__RETRY_MAX_SECONDS` | `3600` | Maximum retry delay. |

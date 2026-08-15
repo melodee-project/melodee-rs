@@ -1,4 +1,4 @@
-.PHONY: bootstrap check fmt lint test docs deny postgres-up postgres-down capture-baseline
+.PHONY: bootstrap check fmt lint test docs deny postgres-up postgres-down capture-baseline admin-ui-check
 
 bootstrap:
 	./scripts/bootstrap.sh
@@ -21,6 +21,9 @@ docs:
 
 deny:
 	cargo deny check
+
+admin-ui-check:
+	cd admin-ui && pnpm install --frozen-lockfile && pnpm check && pnpm lint && pnpm i18n:check && pnpm test && pnpm build
 
 postgres-up:
 	docker compose -f compose.dev.yaml up -d postgres

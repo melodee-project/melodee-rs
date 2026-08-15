@@ -4,12 +4,18 @@
 
 pub mod admin;
 pub mod admin_access;
+pub mod admin_catalog;
 pub mod admin_config;
 pub mod admin_device_profiles;
+pub mod admin_identity;
 pub mod admin_notifications;
 pub mod admin_onboarding;
+pub mod admin_policies;
 pub mod admin_radio;
+pub mod admin_review;
 pub mod admin_scripts;
+pub mod admin_system;
+pub mod admin_ui;
 pub mod discovery_worker;
 pub mod jellyfin;
 pub mod lastfm;

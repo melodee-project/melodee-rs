@@ -110,6 +110,10 @@ survive script deletion and are purged after 90 days.
 
 ## Managing scripts
 
+In the admin UI, open **System → Settings → Scripts** (`/admin/system/settings`, Scripts tab) to
+list scripts with their wired/inert events, enable or disable them, edit source (a plain
+textarea — no code editor is claimed), and test-run a script against a `ctx` mock.
+
 Admin API (administrator JWT required):
 
 - `GET /api/admin/v1/scripts` — list (each row is flagged `wired`/`inert` via `wiredEvents`);

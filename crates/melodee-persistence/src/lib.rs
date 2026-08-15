@@ -9,7 +9,9 @@
 
 mod auth;
 mod catalog;
+mod catalog_browse;
 mod catalog_identity;
+mod catalog_images;
 mod catalog_mutations;
 mod community;
 mod config;
@@ -17,6 +19,7 @@ mod device_profiles;
 mod discovery;
 mod error;
 mod group_admin;
+mod identity_review;
 mod migrate;
 mod native_user_state;
 mod notifications;
@@ -46,6 +49,19 @@ pub use catalog::{
     PolicyEligibleWorkItem, ProviderNegativeAssertion, StoredArtistCandidate,
     StoredArtistTrackAssociation, StoredCatalogImport,
 };
+pub use catalog_browse::{
+    ArtistAliasRow, ArtistCatalogDetail, ArtistContributionRow, ArtistExternalIdRow,
+    ArtistMembershipRow, ArtistRelationshipRow, ArtistReleaseRow, BilledArtistRow, BoundedSection,
+    CatalogArtistListRow, CatalogArtistSort, CatalogAuditEventRow, CatalogBrowseError,
+    CatalogReleaseListRow, CatalogReleaseSort, CatalogTrackListRow, CatalogTrackSort,
+    ContributionRow, MAX_CATALOG_BROWSE_QUERY_CHARS, MAX_CATALOG_DETAIL_ITEMS, MediaAssetRow,
+    ReleaseCatalogDetail, ReleaseProvenanceRow, ReleaseTrackRow, TrackCatalogDetail,
+    contains_pattern,
+};
+pub use catalog_images::{
+    CatalogImageAudit, CatalogImageEntity, CatalogImageError, CatalogImageStore,
+    MAX_ENTITY_IMAGE_BYTES, StoredCatalogEntityImage,
+};
 pub use community::{
     NativeShareImport, NativeShareImportResult, NativeShareStore, NativeShareStoreError,
 };
@@ -66,6 +82,11 @@ pub use error::WorkStoreError;
 pub use group_admin::{
     AccessGroupDetail, AccessGroupMember, GroupAdminError, GroupAdminStore, MAX_GROUP_NAME_LENGTH,
     StoredAccessGroup,
+};
+pub use identity_review::{
+    ArtistIdentityRef, IdentityDecisionFeedEntry, ObservedArtistCandidate,
+    ObservedArtistCurrentDecision, ObservedArtistDetail, ObservedArtistMatchEvidence,
+    ObservedArtistNegativeAssertion, ObservedArtistSort, UnresolvedObservedArtist,
 };
 pub use migrate::{MIGRATOR, MigrationStatus, migrate, migration_status};
 pub use native_user_state::{
@@ -89,7 +110,8 @@ pub use policy::{
     PolicyAudioIdentityAlternateAssertion, PolicyAudioIdentityNoMatchAssertion,
     PolicyCatalogContext, PolicyClaim, PolicyCommitResult, PolicyDecisionAuditEntry,
     PolicyDestructiveCompletion, PolicyEvaluationCommit, PolicyReleaseCatalogTraitAssertion,
-    PolicyStore, PolicyStoreError, StoredPolicyDecision, StoredReleaseClassification,
+    PolicyStore, PolicyStoreError, PolicyTestSampleRelease, StoredNoveltyEvaluation,
+    StoredPolicyDecision, StoredReleaseClassification, StoredTrackNovelty,
 };
 pub use providers::{
     KNOWN_PROVIDERS, LastfmLinkRecord, LastfmLinkStore, MAX_LASTFM_USERNAME_CHARS,
@@ -125,14 +147,16 @@ pub use settings::{
 };
 pub use user_admin::{
     MAX_AVATAR_BYTES, MAX_USER_IDENTITY_CHARS, MAX_USER_ROLES, NativeUserAdminUpdate,
-    NativeUserCreate, StoredAvatar, UserAdminError, UserAdminStore,
+    NativeUserCreate, StoredAvatar, UserAdminError, UserAdminStore, UserListPage, UserSort,
 };
 pub use work_items::{
-    ActiveLease, PublicationJournalEntry, SettlingSnapshot, SettlingSnapshotFile, StateCount,
-    StoredManifest, StoredPublication, WorkItemStore,
+    ActiveLease, HourlyCompletionCount, PublicationJournalEntry, SettlingSnapshot,
+    SettlingSnapshotFile, StateCount, StoredManifest, StoredPublication, WorkItemSort,
+    WorkItemStore, WorkItemWindowCounts,
 };
 pub use worker::WorkerId;
 pub use worker_pool::{
     MAX_POOL_ACTOR_LENGTH, MAX_POOL_NAME_LENGTH, POOL_DISCOVERY, POOL_PODCAST, POOL_POLICY,
-    WorkerPoolState, WorkerPoolStore, WorkerPoolStoreError, is_pool_paused, is_valid_pool_name,
+    WorkerPoolMetrics, WorkerPoolState, WorkerPoolStore, WorkerPoolStoreError, is_pool_paused,
+    is_valid_pool_name,
 };

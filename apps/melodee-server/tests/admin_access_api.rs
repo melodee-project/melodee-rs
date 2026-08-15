@@ -645,3 +645,247 @@ async fn group_names_are_bounded() {
     assert_eq!(body["code"], "group_exists");
     db.drop().await;
 }
+
+#[tokio::test]
+async fn list_users_is_paginated_filtered_sorted_and_gated() {
+    let db = common::TestDb::create("wp10_admin_list_users").await;
+    let fixture = seed(&db).await;
+    let admin = token_for(fixture.admin_public, "wp03-admin");
+    let plain = token_for(fixture.plain_public, "wp03-plain");
+    let app = app(db.pool.clone());
+
+    // Gating: anonymous 401, non-admin 403 with the stable envelope.
+    let (status, body) = call(app.clone(), "GET", "/api/admin/v1/users", None, None).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(body["code"], "unauthenticated");
+    assert!(body["correlationId"].as_str().is_some());
+    let (status, body) = call(
+        app.clone(),
+        "GET",
+        "/api/admin/v1/users",
+        None,
+        Some(&plain),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["code"], "forbidden");
+
+    // The seeded pair is returned in a pagination envelope, username ascending.
+    let (status, page) = call(
+        app.clone(),
+        "GET",
+        "/api/admin/v1/users",
+        None,
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{page}");
+    assert_eq!(page["total"], 2);
+    assert_eq!(page["limit"], 50);
+    assert_eq!(page["offset"], 0);
+    let items = page["items"].as_array().expect("items");
+    assert_eq!(items.len(), 2);
+    assert_eq!(items[0]["username"], "wp03-admin");
+    assert_eq!(items[1]["username"], "wp03-plain");
+    // The envelope never carries secret material.
+    let serialized = serde_json::to_string(&page).expect("serialize");
+    assert!(!serialized.contains("password"));
+    assert!(!serialized.contains("$2"));
+
+    // Substring query filter matches username or email, case-insensitively.
+    let (status, page) = call(
+        app.clone(),
+        "GET",
+        "/api/admin/v1/users?query=PLAIN",
+        None,
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(page["total"], 1);
+    assert_eq!(page["items"][0]["username"], "wp03-plain");
+    let (status, page) = call(
+        app.clone(),
+        "GET",
+        "/api/admin/v1/users?query=example.test&limit=1&offset=1",
+        None,
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(page["total"], 2, "total respects the filter, not the page");
+    assert_eq!(page["items"].as_array().expect("items").len(), 1);
+    assert_eq!(page["limit"], 1);
+    assert_eq!(page["offset"], 1);
+    // LIKE metacharacters in the query are literal, not wildcards.
+    let (status, page) = call(
+        app.clone(),
+        "GET",
+        "/api/admin/v1/users?query=%25",
+        None,
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(page["total"], 0);
+
+    // Sort whitelist: descending username reverses the order.
+    let (status, page) = call(
+        app.clone(),
+        "GET",
+        "/api/admin/v1/users?sort=username:desc",
+        None,
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(page["items"][0]["username"], "wp03-plain");
+    for sort in ["username:asc", "createdAt:asc", "createdAt:desc"] {
+        let (status, page) = call(
+            app.clone(),
+            "GET",
+            &format!("/api/admin/v1/users?sort={sort}"),
+            None,
+            Some(&admin),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{sort}");
+        assert_eq!(page["items"].as_array().expect("items").len(), 2, "{sort}");
+    }
+    for sort in ["email:asc", "username:sideways", "username"] {
+        let (status, body) = call(
+            app.clone(),
+            "GET",
+            &format!("/api/admin/v1/users?sort={sort}"),
+            None,
+            Some(&admin),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{sort}");
+        assert_eq!(body["code"], "unknown_sort", "{sort}");
+    }
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn password_reset_rotates_credential_and_revokes_sessions() {
+    let db = common::TestDb::create("wp10_admin_password_reset").await;
+    let fixture = seed(&db).await;
+    let admin = token_for(fixture.admin_public, "wp03-admin");
+    let plain = token_for(fixture.plain_public, "wp03-plain");
+    let app = app(db.pool.clone());
+    let path = format!("/api/admin/v1/users/{}/password", fixture.plain_public);
+
+    // Gating: anonymous 401, non-admin 403.
+    let body = Some(serde_json::json!({"password": "N3wPasswordLongEnough!"}));
+    let (status, _) = call(app.clone(), "POST", &path, body.clone(), None).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    let (status, _) = call(app.clone(), "POST", &path, body, Some(&plain)).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    // Issue a live refresh family for the target user so revocation is
+    // observable after the reset.
+    let plain_internal: Uuid =
+        sqlx::query_scalar("SELECT id FROM native_users WHERE public_api_id=$1")
+            .bind(fixture.plain_public)
+            .fetch_one(&db.pool)
+            .await
+            .expect("internal id");
+    AuthStore::new()
+        .issue_refresh_family(
+            &db.pool,
+            &melodee_persistence::RefreshFamilyIssue {
+                family_id: Uuid::now_v7(),
+                token_id: Uuid::now_v7(),
+                user_id: plain_internal,
+                expected_auth_revision: 1,
+                token_digest: &melodee_auth::RefreshTokenDigest::from_token(b"pre-reset-session"),
+                device_id: Some("fixture-device"),
+                session_started_at: OffsetDateTime::now_utc(),
+                family_expires_at: OffsetDateTime::now_utc() + time::Duration::days(90),
+                token_expires_at: OffsetDateTime::now_utc() + time::Duration::days(30),
+                issued_at: OffsetDateTime::now_utc(),
+            },
+        )
+        .await
+        .expect("issue family");
+
+    // Weak passwords are rejected before any mutation.
+    let (status, body) = call(
+        app.clone(),
+        "POST",
+        &path,
+        Some(serde_json::json!({"password": "short"})),
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["code"], "invalid_password");
+
+    // Unknown user is 404.
+    let (status, _) = call(
+        app.clone(),
+        "POST",
+        &format!("/api/admin/v1/users/{}/password", Uuid::now_v7()),
+        Some(serde_json::json!({"password": "N3wPasswordLongEnough!"})),
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    // The reset succeeds.
+    let (status, response) = call(
+        app.clone(),
+        "POST",
+        &path,
+        Some(serde_json::json!({"password": "N3wPasswordLongEnough!"})),
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "{response}");
+
+    // The new password authenticates; the old one does not; the credential
+    // revision moved so pre-reset issuance fences reject.
+    let record = AuthStore::new()
+        .user_for_auth(&db.pool, AuthLookup::Username("WP03-PLAIN"))
+        .await
+        .expect("lookup")
+        .expect("user");
+    assert!(
+        melodee_auth::verify_password(
+            b"N3wPasswordLongEnough!",
+            record.password_hash_algorithm,
+            record.password_hash.expose_secret(),
+        )
+        .expect("verify new")
+    );
+    assert!(
+        !melodee_auth::verify_password(
+            b"Mel0deeR0cks!",
+            record.password_hash_algorithm,
+            record.password_hash.expose_secret(),
+        )
+        .expect("verify old")
+    );
+    assert_eq!(record.user.auth_revision, 2);
+
+    // Every refresh family for the account is revoked.
+    let open_families: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)::bigint FROM native_refresh_families
+         WHERE user_id=$1 AND revoked_at IS NULL",
+    )
+    .bind(plain_internal)
+    .fetch_one(&db.pool)
+    .await
+    .expect("family count");
+    assert_eq!(open_families, 0);
+    let reason: String = sqlx::query_scalar(
+        "SELECT revocation_reason FROM native_refresh_families WHERE user_id=$1",
+    )
+    .bind(plain_internal)
+    .fetch_one(&db.pool)
+    .await
+    .expect("revocation reason");
+    assert_eq!(reason, "admin_password_reset");
+    db.drop().await;
+}

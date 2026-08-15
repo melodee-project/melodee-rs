@@ -5,8 +5,39 @@ sidebar:
   order: 6
 ---
 
-The Rust server exposes service health and version metadata plus durable queue diagnostics. These
-surfaces are available today even though the graphical admin diagnostics screen is not yet built.
+The Rust server exposes service health and version metadata plus durable queue diagnostics,
+surfaced both in the admin UI and over the [Admin API](../api/admin-api/).
+
+## System → Workers screen
+
+Open **System → Workers** (`/admin/system/workers`). The screen aggregates the operational
+surfaces:
+
+- **Worker pools** — every registered pool with its durable pause state and audit fields
+  (`pausedBy`, timestamps), plus running, queued, throughput, completed-last-hour, and
+  failed-24 h metrics. Pools without a durable queue table report *not reported* instead of
+  invented zeros. **Pause** and **Resume** write the durable pause row (pause asks for
+  confirmation): a paused pool claims no new work, while already-claimed items finish or are
+  released under the normal lease contract — pausing never strands a lease.
+- **Recent failures** — the failed work items, server-paged and sortable; activating a row jumps
+  to that item in the [Processing queue](./processing/).
+- **Search index** — pending/failed/leased projection rows, active generation, and the last
+  rebuild status, with a **Rebuild** trigger (confirmation-gated). The button requests a durable
+  rebuild job that the search worker claims in the background — it never fakes progress — and
+  reports honestly when a rebuild is already running or search is disabled.
+- **System health** — the aggregated subsystem health panel (database, search index, storage,
+  media tools, API surfaces).
+- **Active leases** — unexpired lease evidence with owner and acquire/expiry timestamps. An
+  active lease proves PostgreSQL holds an unexpired lease; it does not prove the owner process
+  is currently alive.
+
+![The System Workers screen with pool pause/resume and search rebuild](./images/system-workers-light.png)
+
+Structured logs and performance metrics are not exposed over HTTP; use the command-line
+diagnostics below for those. The routes behind this screen are documented under
+[Admin API — System, workers, and search](../api/admin-api/#system-workers-and-search).
+
+## Service health
 
 ## Service health
 
@@ -102,7 +133,6 @@ owner process is currently alive.
 See [Policies](./policies/) for disposition and safety behavior, and
 [Troubleshooting](../troubleshooting/) for operational checks.
 
-:::caution[Partial implementation]
-The health and queue diagnostics above are implemented. A graphical diagnostics screen and
-media-tool/filesystem readiness reporting remain planned and will be documented when they ship.
-:::
+Media-tool and filesystem checks also run as part of the first-run preflight — see
+[Quick Start — First-run onboarding](../getting-started/quick-start/#first-run-onboarding) — and
+`melodee doctor` verifies that `ffmpeg`, `ffprobe`, and `fpcalc` are executable on the host.

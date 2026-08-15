@@ -130,7 +130,7 @@ fn directory_is_writable(directory: &std::path::Path) -> bool {
     writable
 }
 
-async fn check_database(pool: &PgPool) -> PreflightCheck {
+pub(crate) async fn check_database(pool: &PgPool) -> PreflightCheck {
     match migration_status(pool).await {
         Ok(status) if status.is_current() => PreflightCheck::pass(
             "database",
@@ -158,7 +158,7 @@ async fn check_database(pool: &PgPool) -> PreflightCheck {
     }
 }
 
-fn check_storage_paths() -> PreflightCheck {
+pub(crate) fn check_storage_paths() -> PreflightCheck {
     let config = match IngestionConfig::from_env() {
         Ok(config) => config,
         Err(error) => {
@@ -242,7 +242,7 @@ async fn probe_tool(path: &std::path::Path) -> bool {
     )
 }
 
-async fn check_media_tools() -> PreflightCheck {
+pub(crate) async fn check_media_tools() -> PreflightCheck {
     let config = match IngestionConfig::from_env() {
         Ok(config) => config,
         Err(error) => {
@@ -280,7 +280,7 @@ async fn check_media_tools() -> PreflightCheck {
     }
 }
 
-fn check_search_index() -> PreflightCheck {
+pub(crate) fn check_search_index() -> PreflightCheck {
     let config = match SearchConfig::from_env() {
         Ok(config) => config,
         Err(error) => {
