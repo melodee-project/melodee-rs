@@ -33,6 +33,7 @@ bcrypt = "=0.19.2"
 # in 0.21.x. No intl/temporal: no ICU4X linkage for operator predicates.
 boa_engine = { version = "=0.21.1", default-features = false }
 blake3 = "=1.8.6"
+dotenvy = "=0.15.7"
 futures-util = "=0.3.33"
 getrandom = "=0.4.3"
 hmac = "=0.13.0"

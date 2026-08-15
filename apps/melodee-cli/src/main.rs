@@ -561,6 +561,7 @@ fn print_item(item: &ReleaseWorkItem) {
 
 #[tokio::main]
 async fn main() {
+    let _ = dotenvy::dotenv();
     let cli = Cli::parse();
 
     match cli.command {

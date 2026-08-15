@@ -16,16 +16,9 @@ export function PageHeader({
 }) {
   return (
     <header className="melodee-page-header">
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          justifyContent: 'space-between',
-          gap: '1rem',
-        }}
-      >
+      <div className="melodee-page-header__content">
         <div>
-          <Heading style={{ fontSize: '1.5rem' }}>{title}</Heading>
+          <Heading className="melodee-page-header__title">{title}</Heading>
           {subtitle ? <p className="melodee-page-header__subtitle">{subtitle}</p> : null}
         </div>
         {actions ? <div>{actions}</div> : null}

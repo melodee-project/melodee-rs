@@ -128,14 +128,15 @@ describe('OverviewScreen', () => {
     expect(await screen.findByText('35,214')).toBeInTheDocument();
     expect(screen.getByText('50,482')).toBeInTheDocument();
     expect(screen.getByText('560,291')).toBeInTheDocument();
-    // Work-item KPIs: inbound = discovered 3, failed 24h = 4.
-    expect(screen.getByText('Failed (24h)')).toBeInTheDocument();
-    expect(screen.getByText('4')).toBeInTheDocument();
+    // Failures are actionable attention, not a seventh KPI that forces the
+    // dashboard's six-card metric row to wrap.
+    expect(screen.queryByText('Failed (24h)')).not.toBeInTheDocument();
 
     const attention = screen.getByRole('heading', { name: 'Needs attention' }).closest('section');
     expect(attention).not.toBeNull();
     expect(within(attention as HTMLElement).getByText('Unresolved artist identities')).toBeInTheDocument();
     expect(within(attention as HTMLElement).getByText('23')).toBeInTheDocument();
+    expect(within(attention as HTMLElement).getByText('Failed processing')).toBeInTheDocument();
     expect(
       within(attention as HTMLElement).getByRole('link', { name: /Quarantined/ }),
     ).toHaveAttribute('href', '/processing/review?state=quarantined');

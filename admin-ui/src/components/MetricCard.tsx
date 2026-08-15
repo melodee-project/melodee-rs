@@ -21,7 +21,7 @@ export function MetricCard({
   children?: ReactNode;
 }) {
   return (
-    <Tile aria-label={description ? `${label}: ${description}` : label}>
+    <Tile className="melodee-metric-card" aria-label={description ? `${label}: ${description}` : label}>
       <p className="melodee-metric-card__label">{label}</p>
       <p className="melodee-metric-card__value">{value}</p>
       {status ? <StatusTag kind={status} /> : null}

@@ -36,8 +36,6 @@ import {
   SideNav,
   SideNavItems,
   SideNavLink,
-  SideNavMenu,
-  SideNavMenuItem,
   SkipToContent,
   SwitcherItem,
 } from '@carbon/react';
@@ -239,6 +237,7 @@ export function AppShell() {
     return (
       <SideNavLink
         key={leaf.key}
+        className="melodee-shell__nav-link"
         renderIcon={Icon}
         isActive={active}
         onClick={() => navigate(leaf.path)}
@@ -254,19 +253,51 @@ export function AppShell() {
   // an inline closure would remount the whole routed screen (wiping local
   // state) on every shell re-render.
   const expanded = navExpanded;
+  const shellStateClass = expanded ? 'melodee-shell--expanded' : 'melodee-shell--rail';
   return (
     <>
-      <Header aria-label="Melodee Admin">
+      <div className={`melodee-shell__brand ${shellStateClass}`}>
+        <button
+          type="button"
+          className="melodee-shell__brand-link"
+          aria-label="Melodee Admin"
+          tabIndex={-1}
+          onClick={() => navigate('/')}
+        >
+          <img
+            className="melodee-shell__brand-logo"
+            src="/admin/brand/melodee-logo-horizontal-for-dark.svg"
+            alt="Melodee"
+          />
+          <img
+            className="melodee-shell__brand-mark"
+            src="/admin/brand/melodee-mark-spectrum-carbon.svg"
+            alt=""
+          />
+        </button>
+      </div>
+      <Header className={`melodee-shell__header ${shellStateClass}`} aria-label="Melodee Admin">
         <SkipToContent>{t('shell.skipToContent')}</SkipToContent>
         <HeaderMenuButton
+          className="melodee-shell__header-menu"
           aria-label={expanded ? t('shell.collapseNav') : t('shell.expandNav')}
           onClick={() => setNavExpanded((current) => !current)}
           isActive={expanded}
           isCollapsible
         />
-        <HeaderName href="/admin/" prefix="Melodee">
+        <HeaderName className="melodee-shell__header-name" href="/admin/" prefix="Melodee">
           Admin
         </HeaderName>
+        <button
+          type="button"
+          className="melodee-shell__command-entry"
+          aria-label={t('shell.openSearch', { shortcut: '⌘K' })}
+          onClick={() => setSearchOpen(true)}
+        >
+          <SearchIcon size={16} aria-hidden />
+          <span>{t('shell.searchPlaceholder')}</span>
+          <kbd>⌘K</kbd>
+        </button>
         <HeaderGlobalBar>
           <span className="melodee-shell__health">
             <HealthIndicator state={health} />
@@ -376,6 +407,7 @@ export function AppShell() {
         </HeaderPanel>
       </Header>
       <SideNav
+        className={`melodee-shell__nav ${shellStateClass}`}
         aria-label={t('shell.mainNavigation')}
         expanded={expanded}
         isRail={!expanded}
@@ -383,39 +415,23 @@ export function AppShell() {
         isChildOfHeader
       >
         <SideNavItems>
-          {NAV_TREE.map((entry) =>
-            'items' in entry ? (
-              <SideNavMenu
-                key={entry.key}
-                title={t(entry.labelKey)}
-                renderIcon={Folder}
-                defaultExpanded={entry.items.some(
-                  (item) =>
-                    location.pathname === item.path ||
-                    location.pathname.startsWith(`${item.path}/`),
-                )}
-              >
-                {entry.items.map((leaf) => {
-                  const active =
-                    location.pathname === leaf.path ||
-                    location.pathname.startsWith(`${leaf.path}/`);
-                  return (
-                    <SideNavMenuItem
-                      key={leaf.key}
-                      isActive={active}
-                      onClick={() => navigate(leaf.path)}
-                    >
-                      {t(`nav.${leaf.key}`)}
-                    </SideNavMenuItem>
-                  );
-                })}
-              </SideNavMenu>
-            ) : (
-              renderLeaf(entry)
-            ),
+          {NAV_TREE.flatMap((entry) =>
+            'items' in entry
+              ? [
+                  <li className="melodee-shell__nav-group" key={`${entry.key}-label`}>
+                    <span className="melodee-shell__nav-group-label">
+                      {t(entry.labelKey)}
+                    </span>
+                  </li>,
+                  ...entry.items.map(renderLeaf),
+                ]
+              : [renderLeaf(entry)],
           )}
         </SideNavItems>
         <div className="melodee-shell__footer">
+          <span className="melodee-shell__footer-health">
+            <HealthIndicator state={health} />
+          </span>
           <HeaderGlobalAction
             aria-label={expanded ? t('shell.collapseNav') : t('shell.expandNav')}
             onClick={() => setNavExpanded((current) => !current)}
@@ -424,12 +440,12 @@ export function AppShell() {
           </HeaderGlobalAction>
           {expanded ? (
             <span>
-              {t(`health.${health}`)} · {i18n.language} · {appearanceLabel}
+              {i18n.language} · {appearanceLabel}
             </span>
           ) : null}
         </div>
       </SideNav>
-      <Content id="main-content" className="melodee-shell__content">
+      <Content id="main-content" className={`melodee-shell__content ${shellStateClass}`}>
         {/* Lazy route screens suspend here so a chunk fetch never
             unmounts the shell chrome (Phase 10 W4-5 code splitting). */}
         {/* A screen that throws during render degrades to the localized

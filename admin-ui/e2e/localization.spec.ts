@@ -58,14 +58,6 @@ function collectConsoleErrors(page: Page): string[] {
   return errors;
 }
 
-/** Expands the Catalog nav group so the (translated) Artists leaf renders. */
-async function expandCatalogNav(page: Page): Promise<void> {
-  const catalog = page.getByRole('button', { name: 'Catalog' });
-  if ((await catalog.getAttribute('aria-expanded')) !== 'true') {
-    await catalog.click();
-  }
-}
-
 // eslint-disable-next-line no-empty-pattern -- Playwright requires the destructured-fixtures first arg.
 test.beforeEach(({}, testInfo) => {
   // Culture boot, fallback, and dir derivation are viewport-independent;
@@ -100,7 +92,6 @@ test('every culture boots without console errors, with harvest + English fallbac
 
       // Harvested where coverage exists: nav.artists is translated in all 19
       // non-English locales (legacy resx mapping).
-      await expandCatalogNav(page);
       const artistsLabel = culture.catalog['nav.artists'] ?? EN!.catalog['nav.artists']!;
       await expect(
         page.getByRole('navigation', { name: 'Main navigation' }).getByText(artistsLabel, { exact: true }),
@@ -151,7 +142,6 @@ test('canonical screens render under ja-JP (100% harvested) without console erro
     await expect(page.locator('html')).toHaveAttribute('lang', 'ja-JP');
   }
   // Harvested shell vocabulary renders in Japanese.
-  await expandCatalogNav(page);
   await expect(
     page.getByRole('navigation', { name: 'Main navigation' }).getByText('アーティスト', { exact: true }),
   ).toBeVisible();

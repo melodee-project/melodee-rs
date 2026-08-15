@@ -93,24 +93,45 @@ fn store_error(error: RadioStoreError) -> Response {
         .into_response()
 }
 
-/// Shared JWT authentication: a valid native access token for an enabled,
-/// unlocked, non-blacklisted account.
+/// Shared native authentication: a valid bearer token or browser-session
+/// cookie for an enabled, unlocked, non-blacklisted account.
+///
+/// The admin SPA uses the cookie flow selected by ADR-0139. List/read retain
+/// their deliberately broader "any authenticated user" policy, while the
+/// mutation extractor below applies the captured radio administrator rule.
 async fn authenticate(
     parts: &Parts,
     state: &AdminAccessState,
 ) -> Result<StoredNativeUser, Response> {
-    let token = parts
+    let now = OffsetDateTime::now_utc();
+    let public_api_id = if let Some(token) = parts
         .headers
         .get(header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.strip_prefix("Bearer "))
-        .ok_or_else(|| admin_error(StatusCode::UNAUTHORIZED, "unauthenticated"))?;
-    let claims = state
-        .auth
-        .validate_access(token, OffsetDateTime::now_utc())
-        .ok_or_else(|| admin_error(StatusCode::UNAUTHORIZED, "unauthenticated"))?;
+    {
+        state
+            .auth
+            .validate_access(token, now)
+            .ok_or_else(|| admin_error(StatusCode::UNAUTHORIZED, "unauthenticated"))?
+            .sid
+    } else if let Some(cookie_header) = parts
+        .headers
+        .get(header::COOKIE)
+        .and_then(|value| value.to_str().ok())
+    {
+        let cookie = crate::native::auth::cookie_value(cookie_header)
+            .ok_or_else(|| admin_error(StatusCode::UNAUTHORIZED, "unauthenticated"))?;
+        state
+            .auth
+            .validate_cookie(cookie, now)
+            .ok_or_else(|| admin_error(StatusCode::UNAUTHORIZED, "unauthenticated"))?
+            .public_api_id
+    } else {
+        return Err(admin_error(StatusCode::UNAUTHORIZED, "unauthenticated"));
+    };
     let user = match melodee_persistence::AuthStore::new()
-        .user_by_public_id(&state.pool, claims.sid)
+        .user_by_public_id(&state.pool, public_api_id)
         .await
     {
         Ok(Some(user)) => user,

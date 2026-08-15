@@ -192,6 +192,7 @@ fn deterministic_jellyfin_library_id(name: &str) -> uuid::Uuid {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
+    let _ = dotenvy::dotenv();
     init_tracing()?;
 
     let database_url = database_url();

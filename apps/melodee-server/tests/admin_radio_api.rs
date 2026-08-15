@@ -19,7 +19,10 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use md5::{Digest, Md5};
-use melodee_auth::{NativeAccessClaims, PasswordHashAlgorithm, SecretString, issue_access_token};
+use melodee_auth::{
+    NativeAccessClaims, NativeCookieClaims, PasswordHashAlgorithm, SecretString,
+    issue_access_token, issue_cookie_session,
+};
 use melodee_persistence::{AuthStore, NativeUserImport};
 use melodee_server::admin_access::AdminAccessState;
 use melodee_server::opensubsonic::{MusicFolder, OsState};
@@ -138,6 +141,19 @@ fn token_for(public_api_id: Uuid, username: &str) -> String {
     .expect("issue token")
 }
 
+fn cookie_for(public_api_id: Uuid) -> String {
+    let now = OffsetDateTime::now_utc().unix_timestamp();
+    issue_cookie_session(
+        &SecretString::new(JWT_KEY.to_string()),
+        &NativeCookieClaims {
+            public_api_id,
+            iat: now,
+            exp: now + 3_600,
+        },
+    )
+    .expect("issue cookie")
+}
+
 fn app(pool: sqlx::PgPool) -> axum::Router {
     melodee_server::admin_radio::router().with_state(AdminAccessState {
         notifications: std::sync::Arc::new(
@@ -165,6 +181,43 @@ async fn call(
     if let Some(token) = bearer {
         builder = builder.header(header::AUTHORIZATION, format!("Bearer {token}"));
     }
+    let body = match body {
+        Some(value) => {
+            builder = builder.header(header::CONTENT_TYPE, "application/json");
+            Body::from(serde_json::to_vec(&value).expect("serialize"))
+        }
+        None => Body::empty(),
+    };
+    let response = app
+        .oneshot(builder.body(body).expect("request"))
+        .await
+        .expect("response");
+    let status = response.status();
+    let bytes = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body")
+        .to_bytes();
+    let json = if bytes.is_empty() {
+        Value::Null
+    } else {
+        serde_json::from_slice(&bytes).expect("json body")
+    };
+    (status, json)
+}
+
+async fn call_with_cookie(
+    app: axum::Router,
+    method: &str,
+    path: &str,
+    body: Option<Value>,
+    cookie: &str,
+) -> (StatusCode, Value) {
+    let mut builder = Request::builder()
+        .method(method)
+        .uri(path)
+        .header(header::COOKIE, format!("melodee_auth={cookie}"));
     let body = match body {
         Some(value) => {
             builder = builder.header(header::CONTENT_TYPE, "application/json");
@@ -456,6 +509,42 @@ async fn mutations_are_admin_gated_listing_is_authenticated() {
     )
     .await;
     assert_eq!(status, StatusCode::NO_CONTENT);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn browser_cookie_sessions_are_accepted_by_radio_routes() {
+    let db = common::TestDb::create("wp06_radio_cookie_auth").await;
+    let fixture = seed(&db).await;
+    let plain_cookie = cookie_for(fixture.plain_public);
+    let admin_cookie = cookie_for(fixture.admin_public);
+    let app = app(db.pool.clone());
+
+    // The SPA is cookie-authenticated (ADR-0139): the list preserves its
+    // documented any-enabled-user policy, and mutations still require admin.
+    let (status, list) = call_with_cookie(
+        app.clone(),
+        "GET",
+        "/api/admin/v1/radio/stations",
+        None,
+        &plain_cookie,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{list}");
+
+    let (status, created) = call_with_cookie(
+        app,
+        "POST",
+        "/api/admin/v1/radio/stations",
+        Some(serde_json::json!({
+            "name": "Cookie Admin Radio",
+            "streamUrl": "http://cookie.example.test/stream"
+        })),
+        &admin_cookie,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{created}");
+    assert_eq!(created["name"], "Cookie Admin Radio");
     db.drop().await;
 }
 

@@ -195,11 +195,6 @@ export function OverviewScreen() {
               label={t('overview.kpi.review')}
               value={formatNumber(countStates(countsByState, ['needs_review']))}
             />
-            <MetricCard
-              label={t('overview.kpi.failed24h')}
-              value={formatNumber(dashboard.workItems.failedLast24h)}
-              status={dashboard.workItems.failedLast24h > 0 ? 'error' : undefined}
-            />
             <MetricCard label={t('overview.kpi.artists')} value={formatNumber(dashboard.catalog.artists)} />
             <MetricCard label={t('overview.kpi.releases')} value={formatNumber(dashboard.catalog.releases)} />
             <MetricCard label={t('overview.kpi.tracks')} value={formatNumber(dashboard.catalog.tracks)} />
@@ -253,7 +248,7 @@ export function OverviewScreen() {
               )}
             </section>
           </div>
-          <div className="melodee-overview-columns">
+          <div className="melodee-overview-columns melodee-overview-columns--secondary">
             <SystemHealthPanel
               health={dashboard.health}
               title={t('overview.health.title')}

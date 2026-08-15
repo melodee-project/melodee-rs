@@ -79,12 +79,7 @@ test('the nav shows Release Rules but no Matching Rules entry', async ({ page })
   }
 
   const nav = page.getByRole('navigation', { name: 'Main navigation' });
-  // The Policies menu is default-expanded on its own route at lg; after a
-  // manual expand (rail/overlay) the submenu needs an explicit open.
   const releaseRules = nav.getByText('Release Rules');
-  if (!(await releaseRules.isVisible())) {
-    await nav.getByRole('button', { name: 'Policies' }).click();
-  }
   await expect(releaseRules).toBeVisible();
   // Removed, not placeholder-routed: no matching-rule model exists.
   await expect(nav.getByText('Matching Rules')).toHaveCount(0);

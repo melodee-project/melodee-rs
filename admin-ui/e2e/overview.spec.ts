@@ -90,12 +90,13 @@ test('loads the dashboard with KPIs, attention, health, activity, and queue summ
   // KPI cards from the dashboard DTO.
   await expect(page.getByText('35,214')).toBeVisible();
   await expect(page.getByText('560,291')).toBeVisible();
-  await expect(page.getByText('Failed (24h)')).toBeVisible();
+  await expect(page.getByText('Failed (24h)')).not.toBeVisible();
 
   // Needs attention panel with links into the owning screens.
   const attention = page.locator('section', { has: page.getByRole('heading', { name: 'Needs attention' }) });
   await expect(attention.getByText('Unresolved artist identities')).toBeVisible();
   await expect(attention.getByText('23')).toBeVisible();
+  await expect(attention.getByRole('link', { name: 'Failed processing' })).toBeVisible();
   await expect(attention.getByRole('link', { name: /Quarantined/ })).toHaveAttribute(
     'href',
     '/admin/processing/review?state=quarantined',
