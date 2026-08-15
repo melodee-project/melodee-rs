@@ -33,6 +33,30 @@ fn init_tracing() -> Result<(), Box<dyn Error + Send + Sync>> {
 }
 
 async fn wait_for_shutdown_signal() {
+    #[cfg(unix)]
+    {
+        let mut terminate =
+            match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+                Ok(signal) => signal,
+                Err(error) => {
+                    tracing::error!(%error, "unable to install SIGTERM signal handler");
+                    return;
+                }
+            };
+
+        tokio::select! {
+            result = tokio::signal::ctrl_c() => {
+                if let Err(error) = result {
+                    tracing::error!(%error, "unable to install CTRL+C signal handler");
+                }
+            }
+            _ = terminate.recv() => {
+                tracing::info!("received SIGTERM; beginning graceful shutdown");
+            }
+        }
+    }
+
+    #[cfg(not(unix))]
     if let Err(error) = tokio::signal::ctrl_c().await {
         tracing::error!(%error, "unable to install CTRL+C signal handler");
     }

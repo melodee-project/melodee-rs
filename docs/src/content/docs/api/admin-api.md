@@ -703,7 +703,7 @@ leases — lease evidence, not a worker liveness claim), `oldestQueuedAgeSeconds
 metrics instead of invented zeros.
 
 Pause/resume use the same lease-coordinated durable control plane as
-`melodee worker-pools pause|resume`: workers honor the pool row between claim batches, so a
+`melodee-cli worker-pools pause|resume`: workers honor the pool row between claim batches, so a
 pause stops new claims without stranding in-flight leases, and resume stamps
 `resumeRequestedAt`. Unknown-but-valid pool names upsert a paused row (a pool wired in a later
 binary is paused the moment it first checks); invalid names return `400 invalid_pool_name`.
@@ -731,7 +731,7 @@ counts (`artists`, `releases`, `tracks`, `schemaVersion`) when one is validated;
 worker is disabled the response is `{"enabled": false}`.
 
 `rebuild` records the durable rebuild request through the same path as
-`melodee search rebuild` and returns `202` with the `jobId` — the running search worker claims
+`melodee-cli search rebuild` and returns `202` with the `jobId` — the running search worker claims
 and executes the job, so the HTTP call never blocks on the rebuild. A second request while an
 unfinished job exists returns `409 rebuild_in_progress`; a disabled search worker returns
 `409 search_disabled`.

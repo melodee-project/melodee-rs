@@ -17,7 +17,7 @@ the relevant feature or configuration documentation.
   answer in time or, when search is enabled, no healthy active generation is available.
 - Use the [Admin diagnostics API](../api/admin-api/) to inspect queue counts, bounded work-item
   listings, one item's last error and history, and active lease evidence.
-- Run `melodee work list` or `melodee work show <id>` for the same durable work state from the CLI.
+- Run `melodee-cli work list` or `melodee-cli work show <id>` for the same durable work state from the CLI.
   These commands require a working `MELODEE__DATABASE__URL` connection.
 - Treat an active lease as database evidence, not worker liveness. An expired lease is recovered by
   the durable work engine; an unexpired lease does not prove its owner process is alive.
@@ -28,14 +28,14 @@ compatibility adapters. See
 
 ## Catalog import checks
 
-- Run `melodee catalog status` to confirm whether the catalog worker is enabled and compare
+- Run `melodee-cli catalog status` to confirm whether the catalog worker is enabled and compare
   Release/import counts. `pending_outbox` represents work not yet acknowledged by the search
   projection; inspect search status if it continues growing.
-- Run `melodee catalog inspect <work-item-id>` to compare the work item's durable state with its
+- Run `melodee-cli catalog inspect <work-item-id>` to compare the work item's durable state with its
   immutable import receipt. `Published` is awaiting a claim, `Cataloging` is leased, waiting for its
   retry time, or reclaimable, and `Cataloged` should have a receipt. Failed attempts include the
   next retry time and last durable error.
-- Run `melodee catalog import` to execute one bounded pass while diagnosing the background worker.
+- Run `melodee-cli catalog import` to execute one bounded pass while diagnosing the background worker.
   This command uses PostgreSQL evidence only and does not require access to inbound or canonical
   media roots.
 - Check `MELODEE__CATALOG__ENABLED`, the catalog concurrency/batch/poll settings, and the shared work
@@ -46,7 +46,7 @@ compatibility adapters. See
 
 Implemented normalization checks:
 
-- Run `melodee doctor` and confirm `ffmpeg`, `ffprobe`, and `fpcalc` report `ok`.
+- Run `melodee-cli doctor` and confirm `ffmpeg`, `ffprobe`, and `fpcalc` report `ok`.
 - Verify the configured executable paths and timeouts under
   `MELODEE__NORMALIZATION__*`. FFmpeg must include the `libmp3lame` encoder.
 - Inspect the work item's durable error code and manifest findings. Tool failures, timeouts,
@@ -62,14 +62,14 @@ Implemented normalization checks:
 
 ## Policy evaluation checks
 
-- Run `melodee policy config` and `melodee policy rules` to confirm the configured immutable
+- Run `melodee-cli policy config` and `melodee-cli policy rules` to confirm the configured immutable
   rule-set version and safe disposition preferences. If a preference changed, increment
   `MELODEE__POLICY__RULE_SET_VERSION`; a same-version payload conflict deliberately fails closed.
-- Run `melodee policy test --limit 100 --actor <administrator-id>` to compare proposed dispositions, matched rules, existing
+- Run `melodee-cli policy test --limit 100 --actor <administrator-id>` to compare proposed dispositions, matched rules, existing
   decisions/states, and destructive impact without writing proposed decisions.
-- Run `melodee policy inspect <release-id>` to inspect the current decision and append-only audit.
+- Run `melodee-cli policy inspect <release-id>` to inspect the current decision and append-only audit.
   A `Review` or `Delete` decision should remain pending in `NeedsReview`.
-- Run `melodee policy evaluate <release-id>` when a cataloged Release has no durable decision or
+- Run `melodee-cli policy evaluate <release-id>` when a cataloged Release has no durable decision or
   needs a read-only comparison. Policy evaluation uses PostgreSQL facts and the sealed-manifest
   fingerprint; it does not need source or canonical media access.
 - Check the `MELODEE__POLICY__*` settings in
@@ -79,27 +79,20 @@ Implemented normalization checks:
 
 ## Search index checks
 
-- Run `melodee search status`. No active generation, a schema/open error, permanently failed rows,
+- Run `melodee-cli search status`. No active generation, a schema/open error, permanently failed rows,
   or an old growing backlog is actionable; retryable rows remain scheduled by `available_at` and
   become permanent evidence after the configured maximum attempt count. Pending and leased counts
   are disjoint, so add them when assessing all unfinished, non-failed work.
 - Verify `MELODEE__SEARCH__ROOT` is absolute, dedicated, writable, and separate from inbound,
   normalization, and canonical storage roots. Do not replace its ownership marker or insert
   symlinks beneath it.
-- Run `melodee search rebuild --actor <administrator-id>` to recover a missing/corrupt index. The
+- Run `melodee-cli search rebuild --actor <administrator-id>` to recover a missing/corrupt index. The
   command reads catalog rows from PostgreSQL in bounded pages and does not reopen media.
 - A crash after an index commit but before PostgreSQL acknowledgement is safe: the row is reclaimed
   and revision fencing makes replay idempotent. A stale owner cannot acknowledge after lease loss.
 - If `/healthz` is healthy but `/readyz` reports not ready, compare PostgreSQL connectivity with
-  `melodee search status`; rebuild if the configured active generation is missing or incompatible.
+  `melodee-cli search status`; rebuild if the configured active generation is missing or incompatible.
 
-Remaining topics will be added as their behavior ships:
-
-- database connection and migration problems;
-- client connection and authentication problems;
-
-:::note[Rust pre-release]
-These checks describe the implemented Rust development server. If you hit a problem with the
-currently shipping C# server, refer to the legacy
-[Melodee repository](https://github.com/melodee-project/melodee).
-:::
+For container-specific checks, image tags, attestation verification, and persistent paths, see
+[Container deployment](../installation/docker/). Legacy C# migration/cutover troubleshooting will
+be added with its Phase 11 tooling; it is not part of a Rust container upgrade.

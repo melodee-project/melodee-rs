@@ -22,7 +22,7 @@ files and restart, or through the validated import flow:
   (unless explicitly allowed), and invalid values with stable error codes. Re-entering secrets
   happens only through an import document you author, never in the browser.
 
-The CLI equivalents are `melodee config list|validate|export|import`; the API contract is
+The CLI equivalents are `melodee-cli config list|validate|export|import`; the API contract is
 [Admin API — Configuration export/import](../api/admin-api/#configuration-exportimport) and the
 secret-handling rules are in
 [Configuration — Import and export](../installation/configuration/#import-and-export).
@@ -32,7 +32,7 @@ secret-handling rules are in
 Lists the stored notification templates (key, locale, version, subject) and renders a **test
 send** through the configured email transport, showing the honestly recorded audit row —
 including `skipped` when delivery is disabled. The headless equivalents are
-`melodee notifications templates list` and `melodee notifications test-send`; see
+`melodee-cli notifications templates list` and `melodee-cli notifications test-send`; see
 [Users and Access — Operator CLI](./users-and-access/#operator-cli).
 
 ## Scripts

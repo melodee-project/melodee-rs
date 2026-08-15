@@ -70,11 +70,11 @@ The `melodee` CLI provides headless account and group administration. All comman
 configured `MELODEE__DATABASE__URL` and coordinate through PostgreSQL; they never bypass leases,
 audit, or account-state controls.
 
-- `melodee users bootstrap-admin --username <name> --email <address>` creates the first
+- `melodee-cli users bootstrap-admin --username <name> --email <address>` creates the first
   administrator and fails closed once any administrator exists. The password is read from the
   `MELODEE__CLI__BOOTSTRAP_ADMIN_PASSWORD` environment variable — it is never accepted as a
   command-line argument, because shell history and process listings are not secret stores.
-- `melodee users disable <username>` / `melodee users enable <username>` are the operator
+- `melodee-cli users disable <username>` / `melodee-cli users enable <username>` are the operator
   recovery path. Disabling takes effect immediately: in-flight credential issuance is fenced and
   every refresh family is revoked atomically.
 - `melodee groups list` shows every library-access group with its member and binding counts.
@@ -85,8 +85,8 @@ audit, or account-state controls.
   `melodee groups unbind-library <group> --library-id <uuid>` manage library bindings;
   `melodee groups delete <name>` deletes a group only after its members and bindings were removed
   — an access-control group is never silently detached.
-- `melodee notifications templates list` shows the stored notification templates (key, locale,
-  version, subject). `melodee notifications test-send --template <key> --to <address>
+- `melodee-cli notifications templates list` shows the stored notification templates (key, locale,
+  version, subject). `melodee-cli notifications test-send --template <key> --to <address>
   [--locale <tag>]` renders a template and attempts a real delivery through the configured
   [email transport](../installation/configuration/), printing the honestly recorded audit row —
   including `skipped` when delivery is disabled — so notification behavior is verifiable

@@ -18,10 +18,9 @@ hero:
 ---
 
 :::note[Project status]
-Melodee is being rewritten in Rust. This documentation describes the **current
-shipping C# Melodee server** wherever behavior is established and verified.
-Pages that describe behavior planned for the Rust rewrite are clearly marked
-**Planned** and must not be read as available functionality.
+This documentation describes the Rust Melodee server and its official GHCR
+container deployment. Legacy C# migration, dual run, and cutover remain planned
+Phase 11 work and are explicitly identified where relevant.
 :::
 
 ## Documentation map

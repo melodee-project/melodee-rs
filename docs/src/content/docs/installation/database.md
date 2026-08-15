@@ -14,7 +14,12 @@ Melodee uses PostgreSQL as its authoritative state store.
 Schema changes ship as migrations with rollback plans. Upgrades apply migrations automatically at
 startup; see [Upgrading](./upgrading/).
 
-:::caution[Planned documentation]
-Connection settings, role/privilege guidance, and backup procedures will be documented and tested
-as the Rust server's persistence layer lands.
-:::
+The reference Compose deployment provisions the `melodee` database and persists PostgreSQL under
+the `melodee_postgres` named volume. For an external database, create a dedicated database and
+least-privilege application role, keep `MELODEE__DATABASE__URL` in your deployment secret store,
+and use TLS/network controls appropriate to your environment. The server applies its embedded SQLx
+migrations before it starts listening, so a failed migration prevents readiness rather than serving
+against an unknown schema.
+
+Back up PostgreSQL before every image upgrade. The [upgrade guide](./upgrading/) gives the
+container-oriented backup, validation, and rollback sequence.

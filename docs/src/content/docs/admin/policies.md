@@ -38,11 +38,11 @@ instead of changing the meaning of historical decisions.
 These commands require `MELODEE__DATABASE__URL`:
 
 ```bash
-melodee policy config
-melodee policy rules
-melodee policy test --limit 100 --actor <administrator-id>
-melodee policy evaluate <release-id>
-melodee policy inspect <release-id>
+melodee-cli policy config
+melodee-cli policy rules
+melodee-cli policy test --limit 100 --actor <administrator-id>
+melodee-cli policy evaluate <release-id>
+melodee-cli policy inspect <release-id>
 ```
 
 `policy test` requires a nonblank administrator identity, evaluates a bounded catalog sample, and stores an audit summary containing proposed
@@ -57,7 +57,7 @@ decision and its append-only audit history.
 A pending `NeedsReview` decision can be overridden explicitly:
 
 ```bash
-melodee policy decide <release-id> <accept|review|ignore|quarantine|delete> \
+melodee-cli policy decide <release-id> <accept|review|ignore|quarantine|delete> \
   --actor <administrator-id> \
   --reason "<operator-safe reason>"
 ```

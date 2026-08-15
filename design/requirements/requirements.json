@@ -2198,7 +2198,7 @@
     "line": 1501,
     "status": "tested",
     "implementation": [
-      "apps/melodee-cli/src/main.rs (melodee notifications templates list; melodee notifications test-send --template <key> --to <email> [--locale <l>])",
+      "apps/melodee-cli/src/main.rs (melodee-cli notifications templates list; melodee-cli notifications test-send --template <key> --to <email> [--locale <l>])",
       "apps/melodee-server/src/admin_notifications.rs (POST /api/admin/v1/notifications/test-send returns the recorded delivery row)",
       "crates/melodee-persistence/migrations/0024_phase9_notifications.sql (all user-visible notification text lives in locale-keyed notification_templates rows, not in code)"
     ],
@@ -2648,7 +2648,7 @@
     "implementation": [
       "design/evidence/phase-9/script-hook-migration-guide.md (per-hook migration dispositions; contract translation rules; configuration migration table)",
       "apps/melodee-server/src/admin_scripts.rs (operator CRUD + test-run replacing the legacy editor test button; the never-implemented legacy /api/scripts/validate is not recreated)",
-      "apps/melodee-cli/src/main.rs (melodee scripts list/test, DB-direct parity with the admin API)"
+      "apps/melodee-cli/src/main.rs (melodee-cli scripts list/test, DB-direct parity with the admin API)"
     ],
     "tests": [
       "apps/melodee-server/tests/admin_scripts_api.rs (lifecycle, gating, bounds, sandboxed test-run audit)",
@@ -3101,7 +3101,7 @@
       "crates/melodee-persistence/migrations/0025_phase9_onboarding_settings.sql (onboarding_state singleton, ADR-0134 section 3)",
       "apps/melodee-server/src/onboarding.rs (six named preflight checks: database/migrations and admin_user required; storage paths, media tools, search index, email advisory; each with remediation)",
       "apps/melodee-server/src/admin_onboarding.rs (GET /api/admin/v1/onboarding/status, POST /api/admin/v1/onboarding/complete failing closed while required checks fail)",
-      "apps/melodee-cli/src/main.rs (melodee config validate; melodee users bootstrap-admin creates the first administrator)"
+      "apps/melodee-cli/src/main.rs (melodee-cli config validate; melodee-cli users bootstrap-admin creates the first administrator)"
     ],
     "tests": [
       "crates/melodee-persistence/tests/settings.rs (onboarding singleton, completion, bounded evidence)",
@@ -3135,7 +3135,7 @@
     "implementation": [
       "design/evidence/phase-9/configuration-inventory.md (the 190-key legacy registry inventory, Phase 0 gap closed)",
       "crates/melodee-persistence/src/settings.rs (KNOWN_SETTINGS classification; SettingsStore CRUD with kind validation)",
-      "apps/melodee-cli/src/main.rs (melodee config list/validate/export/import)"
+      "apps/melodee-cli/src/main.rs (melodee-cli config list/validate/export/import)"
     ],
     "tests": [
       "crates/melodee-persistence/tests/settings.rs",
@@ -3153,7 +3153,7 @@
     "implementation": [
       "crates/melodee-persistence/src/settings.rs (export_config, plan_config_import preview diff, apply_config_import with per-key kind/range/enum validation, unknown-key rejection without allow-unknown, atomic apply plus bounded audit in onboarding evidence)",
       "apps/melodee-server/src/admin_config.rs (GET /api/admin/v1/config/export, POST /api/admin/v1/config/import with preview default)",
-      "apps/melodee-cli/src/main.rs (melodee config export/import --apply --allow-unknown)"
+      "apps/melodee-cli/src/main.rs (melodee-cli config export/import --apply --allow-unknown)"
     ],
     "tests": [
       "crates/melodee-persistence/tests/settings.rs::export_redacts_and_import_preview_apply_are_fail_closed",
@@ -3831,58 +3831,93 @@
     "phase": "1,11",
     "source": "PRD.md",
     "line": 2423,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "Dockerfile (multi-stage OCI image with melodee-server, melodee CLI, admin SPA, FFmpeg/ffprobe/fpcalc, UID 10001)",
+      ".github/workflows/release-container.yml (release-published-only GHCR linux/amd64+linux/arm64 manifest workflow)",
+      "design/adr/ADR-0144-publish-official-releases-as-ghcr-oci-images.md"
+    ],
+    "tests": [
+      "local Docker build and PostgreSQL-backed runtime smoke test",
+      ".github/workflows/release-container.yml (native image smoke before publication; multi-platform Buildx publication)"
+    ]
   },
   {
     "id": "PRD-DEPLOY-002",
     "title": "PRD-DEPLOY-002",
     "phase": "1,11",
     "source": "PRD.md",
-    "line": 2427,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "line": 2434,
+    "status": "tested",
+    "implementation": [
+      "compose.yml (FOSS Docker Engine/Moby and Compose-compatible reference deployment)",
+      "docs/src/content/docs/installation/docker.md"
+    ],
+    "tests": [
+      "docker compose config",
+      "local production-image PostgreSQL startup/readiness smoke"
+    ]
   },
   {
     "id": "PRD-DEPLOY-003",
     "title": "PRD-DEPLOY-003",
     "phase": "1,11",
     "source": "PRD.md",
-    "line": 2431,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "line": 2438,
+    "status": "tested",
+    "implementation": [
+      "compose.yml (explicit PostgreSQL, canonical, work, search, and read-only inbound mounts)",
+      "docs/src/content/docs/installation/docker.md (persistent-state table and optional podcast-root guidance)"
+    ],
+    "tests": [
+      "docker compose config",
+      "local compose-backed persistent-volume smoke"
+    ]
   },
   {
     "id": "PRD-DEPLOY-004",
     "title": "PRD-DEPLOY-004",
     "phase": "1,11",
     "source": "PRD.md",
-    "line": 2447,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "line": 2454,
+    "status": "implemented",
+    "implementation": [
+      "compose.yml (operator-selected absolute inbound bind mount and named-volume defaults)",
+      "docs/src/content/docs/installation/docker.md (NAS/mounted-path ownership and containment guidance)"
+    ],
+    "tests": [
+      "crates/melodee-ingestion configuration and publication root-safety tests"
+    ]
   },
   {
     "id": "PRD-DEPLOY-005",
     "title": "PRD-DEPLOY-005",
     "phase": "1,11",
     "source": "PRD.md",
-    "line": 2451,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "line": 2458,
+    "status": "tested",
+    "implementation": [
+      "apps/melodee-server/src/main.rs (migrations before listener startup; graceful SIGTERM handling)",
+      "docs/src/content/docs/installation/upgrading.md"
+    ],
+    "tests": [
+      "crates/melodee-persistence migration tests",
+      "local production image startup/readiness and graceful-stop smoke"
+    ]
   },
   {
     "id": "PRD-DEPLOY-006",
     "title": "PRD-DEPLOY-006",
     "phase": "1,11",
     "source": "PRD.md",
-    "line": 2455,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "line": 2462,
+    "status": "implemented",
+    "implementation": [
+      "docs/src/content/docs/installation/upgrading.md (PostgreSQL backup validation and rollback procedure)",
+      "docs/src/content/docs/installation/docker.md (persistent-state inventory)"
+    ],
+    "tests": [
+      "local PostgreSQL dump/restore command validation against the Compose service"
+    ]
   }
 ]

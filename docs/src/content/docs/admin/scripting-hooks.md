@@ -127,9 +127,9 @@ Admin API (administrator JWT required):
 CLI equivalents:
 
 ```bash
-melodee scripts list
-melodee scripts test --event directoryProcessingStart --ctx ctx.json
-melodee scripts test --event directoryProcessingStart --ctx ctx.json --source my-script.js
+melodee-cli scripts list
+melodee-cli scripts test --event directoryProcessingStart --ctx ctx.json
+melodee-cli scripts test --event directoryProcessingStart --ctx ctx.json --source my-script.js
 ```
 
 `--source` evaluates an ad-hoc file; without it, every enabled script for the event runs in

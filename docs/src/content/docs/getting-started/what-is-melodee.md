@@ -19,11 +19,11 @@ Key characteristics:
   Jellyfin-compatible clients.
 - **Fully FOSS.** Melodee and every capability it requires are free and open source software.
 
-:::note[Status]
-This page describes the current shipping C# Melodee server. The Rust rewrite in the
-[`melodee-rs`](https://github.com/melodee-project/melodee-rs) repository is pre-release and does
-not yet implement the full feature set. See the repository's `IMPLEMENTATION.md` for the phased
-plan.
+:::note[Deployment]
+The official release artifact is the Linux OCI image at
+`ghcr.io/melodee-project/melodee` for amd64 and arm64. Native source builds remain available for
+development and community use; GitHub Releases do not ship native binary assets. See
+[Container deployment](../installation/docker/).
 :::
 
 ## Next steps

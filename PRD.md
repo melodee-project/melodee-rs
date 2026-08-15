@@ -1175,7 +1175,7 @@ Warm search p95 target: **< 50 ms** on the agreed synthetic 10-million-Track cat
 Provide an operational command equivalent to:
 
 ```text
-melodee search rebuild
+melodee-cli search rebuild
 ```
 
 that can destroy and regenerate the full index from PostgreSQL without catalog data loss.
@@ -2423,6 +2423,13 @@ These are **preferred/proposed architecture choices** and should be ratified thr
 ### PRD-DEPLOY-001
 
 Provide OCI-compliant images for Linux `amd64` and `arm64`.
+
+Official production releases are distributed exclusively as OCI images at
+`ghcr.io/melodee-project/melodee`. GitHub Releases are the version and release-note record and
+retain GitHub-generated source archives, but do not carry precompiled native executables,
+installers, operating-system packages, or binary archives. Users who want a native executable may
+build it from source for their target platform; this is a supported development/community workflow,
+not an official production release artifact. See ADR-0144.
 
 ### PRD-DEPLOY-002
 

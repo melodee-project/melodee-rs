@@ -67,6 +67,47 @@ rebuilt without re-ingesting media. See the [core concepts](docs/src/content/doc
 and [storage model](docs/src/content/docs/installation/storage.md) for the data model and safety
 invariants.
 
+## Deploy with the official container image
+
+Melodee production releases are distributed exclusively as OCI images from:
+
+```text
+ghcr.io/melodee-project/melodee
+```
+
+GitHub Releases provide the version record, release notes, and GitHub-generated source archives.
+They do **not** include precompiled Linux, Windows, or macOS binaries; installers; `.deb`/`.rpm`;
+AppImages; Homebrew artifacts; or ZIP/TAR native binary bundles. Official images support
+`linux/amd64` and `linux/arm64` and run with FOSS Docker Engine/Moby plus Compose-compatible tooling
+on Linux. Docker Desktop is not required.
+
+The primary deployment path is the committed reference Compose file:
+
+```bash
+git clone https://github.com/melodee-project/melodee-rs.git
+cd melodee-rs
+cp compose.env.example .env
+# Set unique secrets, a public HTTPS origin, and an absolute inbound-media path.
+docker compose pull
+docker compose up -d
+curl --fail http://127.0.0.1:8080/readyz
+```
+
+The Compose file pulls `ghcr.io/melodee-project/melodee:${MELODEE_IMAGE_TAG:-latest}`, persists
+PostgreSQL, canonical media, normalization work, and Tantivy separately, and mounts inbound media
+read-only. For a reproducible production deployment, set `MELODEE_IMAGE_TAG` to an exact `X.Y.Z`
+release (or a digest), not `latest`. See the [container deployment guide](docs/src/content/docs/installation/docker.md)
+for required configuration, image tags, upgrades, backups, attestation verification, and first-time
+GHCR package visibility.
+
+## Build from source
+
+Developers and advanced users can still build native executables for their target system. This is a
+supported source-build workflow, but native executables are not official production release
+artifacts or part of the tested release-distribution matrix. See
+[Build from source](docs/src/content/docs/installation/build-from-source.md) for prerequisites and
+commands.
+
 ## Quick start for contributors
 
 The pinned toolchain is Rust **1.97.1**. For a full local environment you also need Python 3.11+,
@@ -114,58 +155,6 @@ unset MELODEE__CLI__BOOTSTRAP_ADMIN_PASSWORD
 Visit `http://127.0.0.1:8080/admin` and use the onboarding flow. It checks the live database,
 storage roots, media tools, search index, administrator account, and email configuration before it
 can be completed.
-
-## Deploy from source
-
-There is currently no published Melodee server container image. The committed
-[`compose.dev.yaml`](compose.dev.yaml) supplies **only a development PostgreSQL service**. A
-simple source deployment therefore consists of a release build, PostgreSQL 17 or 18, persistent
-filesystem mounts, and a TLS-terminating reverse proxy.
-
-1. Create a dedicated service account and persistent directories for canonical storage,
-   normalization work, and (if enabled) search. Give the service account write access only to its
-   owned directories. Mount inbound media read-only.
-2. Provision PostgreSQL and a least-privilege application role. Store the database URL and
-   secrets in the service manager or a secret store, not in the checkout.
-3. Build the server, CLI, and admin UI from the tagged source you intend to run:
-
-   ```bash
-   corepack enable
-   (cd admin-ui && pnpm install --frozen-lockfile && pnpm build)
-   cargo build --release -p melodee-server -p melodee-cli
-   ```
-
-4. Set, at minimum, these configuration values in the service environment. Use real absolute
-   paths and generate independent secrets of at least 32 random bytes.
-
-   ```text
-   MELODEE__DATABASE__URL=postgres://melodee:...@db.example:5432/melodee
-   MELODEE__SERVER__BIND=127.0.0.1:8080
-   MELODEE__NATIVE__PUBLIC_ORIGIN=https://music.example.com
-   MELODEE__NATIVE__AUTH__JWT_KEY=<unique-random-secret>
-   MELODEE__JELLYFIN__TOKEN_PEPPER=<different-unique-random-secret>
-   MELODEE__INGEST__SOURCE_ROOT=/srv/melodee/inbound
-   MELODEE__INGEST__SOURCE_LIBRARY_NAME=main
-   MELODEE__NORMALIZATION__WORK_AREA=/var/lib/melodee/work
-   MELODEE__STORAGE__ROOT=/srv/melodee/library
-   MELODEE__SEARCH__ENABLED=true
-   MELODEE__SEARCH__ROOT=/var/lib/melodee/search
-   MELODEE__ADMIN_UI__DIST=/opt/melodee/admin-ui/dist
-   ```
-
-   Set `MELODEE__NATIVE__TRUSTED_PROXIES` only to proxy addresses or CIDRs you control, and set
-   `MELODEE__NATIVE__CORS__ALLOWED_ORIGINS` only to exact browser origins that need it. See the
-   [configuration reference](docs/src/content/docs/installation/configuration.md) for all bounds,
-   defaults, and security behavior.
-
-5. Start `target/release/melodee-server` with its working directory set to the checkout (or set
-   `MELODEE__ADMIN_UI__DIST` explicitly). The server applies its SQLx migrations at startup.
-   Check `GET /healthz` for process health and `GET /readyz` for database/search readiness, then
-   bootstrap the first administrator with `target/release/melodee-cli users bootstrap-admin …`.
-
-Back up PostgreSQL before upgrading a deployment that matters. The current server can apply its
-own additive schema migrations, but there is no supported migration/cutover path from the legacy
-C# application yet. That release gate is intentionally deferred to Phase 11.
 
 ## Interfaces and clients
 
@@ -228,9 +217,9 @@ the required definition of done. The primary engineering references are the
 
 ## Documentation, compatibility, and migration
 
-- Public documentation source lives in [`docs/`](docs/). The documentation workflow always
-  validates and builds it; GitHub Pages publication is currently unavailable on this repository's
-  plan and is explicitly disabled until a supported deployment target is configured.
+- Public documentation source lives in [`docs/`](docs/). The documentation workflow validates and
+  builds it; GitHub Pages deployment is opt-in through `MELODEE_PAGES_ENABLED` repository
+  configuration.
 - Captured compatibility contracts, golden responses, media evidence, and client exercises live
   in [`compatibility/`](compatibility/). They are executable release evidence, not examples to
   hand-edit.

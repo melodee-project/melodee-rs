@@ -45,7 +45,7 @@ latest rebuild status, and the confirmation-gated **Rebuild** trigger — so the
 behavior is identical on both screens.
 
 Query tooling is intentionally not part of this screen: MQL query, autocomplete, parse, and
-explain run through the CLI (`melodee search …`) and the native search API. The admin API exposes
+explain run through the CLI (`melodee-cli search …`) and the native search API. The admin API exposes
 index status and rebuild only, so there is no query box.
 
 ## System → Storage screen
@@ -59,7 +59,7 @@ Open **System → Storage** (`/admin/system/storage`). It renders real server da
   remediation guidance.
 
 Per-path capacity and free space are not exposed over HTTP and are not shown; use
-`melodee doctor` and `melodee config validate` for path-level checks.
+`melodee-cli doctor` and `melodee-cli config validate` for path-level checks.
 
 ## System → Diagnostics screen
 
@@ -119,44 +119,44 @@ owner process is currently alive.
 
 ## Command-line diagnostics
 
-- `melodee doctor` checks whether `ffmpeg`, `ffprobe`, and `fpcalc` are executable and whether the
+- `melodee-cli doctor` checks whether `ffmpeg`, `ffprobe`, and `fpcalc` are executable and whether the
   database URL variable is present. It does not connect to PostgreSQL.
-- `melodee work list` and `melodee work show <id>` inspect durable queue state and event history.
+- `melodee-cli work list` and `melodee-cli work show <id>` inspect durable queue state and event history.
 - `melodee ingest status` prints a concise ingestion queue summary.
-- `melodee catalog status` prints bounded catalog entity/outbox counts and the effective worker
+- `melodee-cli catalog status` prints bounded catalog entity/outbox counts and the effective worker
   limits.
-- `melodee catalog inspect <id>` resolves a work-item ID or API key and prints its immutable catalog
+- `melodee-cli catalog inspect <id>` resolves a work-item ID or API key and prints its immutable catalog
   import receipt. A pending or failed item reports `catalog_import: none` alongside its current
   durable state, attempt count, next retry time, and last error.
-- `melodee catalog import` runs one bounded import pass using the same lease, retry, and catalog
+- `melodee-cli catalog import` runs one bounded import pass using the same lease, retry, and catalog
   concurrency configuration as the server worker.
-- `melodee policy config` and `melodee policy rules` print the active safe preferences and exact
+- `melodee-cli policy config` and `melodee-cli policy rules` print the active safe preferences and exact
   immutable rule-set identity.
-- `melodee policy test --limit 100 --actor <administrator-id>` runs a bounded catalog test and reports proposed outcomes,
+- `melodee-cli policy test --limit 100 --actor <administrator-id>` runs a bounded catalog test and reports proposed outcomes,
   matched rules, existing dispositions/states, destructive impact, and sample Release IDs.
-- `melodee policy evaluate <release-id>` proposes one decision without persisting it;
-  `melodee policy inspect <release-id>` prints the current durable decision and audit history.
-- `melodee policy decide <release-id> <disposition> --actor <id> --reason <reason>` records an
+- `melodee-cli policy evaluate <release-id>` proposes one decision without persisting it;
+  `melodee-cli policy inspect <release-id>` prints the current durable decision and audit history.
+- `melodee-cli policy decide <release-id> <disposition> --actor <id> --reason <reason>` records an
   explicit administrator override. It does not complete or execute deletion.
-- `melodee search status` reports unleased pending rows, separately leased rows, permanently failed
+- `melodee-cli search status` reports unleased pending rows, separately leased rows, permanently failed
   outbox rows, oldest availability, checkpoint, latest rebuild, active generation, sealed snapshot
   and current live document counts, and index-open errors. Retryable rows become permanent failures
   after `MELODEE__SEARCH__MAX_OUTBOX_ATTEMPTS` so a poison row cannot churn forever.
-- `melodee search rebuild --actor <administrator-id>` synchronously builds, validates, catches up,
+- `melodee-cli search rebuild --actor <administrator-id>` synchronously builds, validates, catches up,
   and activates a new generation. `search query`, `autocomplete`, `parse`, and `explain` exercise
   the same bounded query contracts used by the worker.
-- `melodee worker-pools list` prints every registered worker pool with its durable pause state and
-  audit fields. `melodee worker-pools pause <pool> --by <operator>` durably pauses a pool and
-  `melodee worker-pools resume <pool> --by <operator>` resumes it; the `--by` operator identity is
+- `melodee-cli worker-pools list` prints every registered worker pool with its durable pause state and
+  audit fields. `melodee-cli worker-pools pause <pool> --by <operator>` durably pauses a pool and
+  `melodee-cli worker-pools resume <pool> --by <operator>` resumes it; the `--by` operator identity is
   mandatory and recorded with the transition (the last-pause audit survives a resume). The podcast,
   policy, and discovery workers honor the durable row between claim batches: a paused pool claims
   no new work, while already-claimed work finishes or is released under the normal lease contract —
   pausing never strands a lease. Pausing a pool name that has no wired worker yet registers the row
   so the pool is paused from its first check once it exists.
-- `melodee config list` prints every known setting's effective value and its source layer;
-  secrets are always redacted. `melodee config validate` runs the first-run preflight checks and
-  exits non-zero when a required check fails. `melodee config export [--output <path>]` writes the
-  redacted export document and `melodee config import <path> [--apply] [--allow-unknown]` previews
+- `melodee-cli config list` prints every known setting's effective value and its source layer;
+  secrets are always redacted. `melodee-cli config validate` runs the first-run preflight checks and
+  exits non-zero when a required check fails. `melodee-cli config export [--output <path>]` writes the
+  redacted export document and `melodee-cli config import <path> [--apply] [--allow-unknown]` previews
   (default) or applies a validated import. See
   [Configuration](../installation/configuration/#import-and-export) for the secret-handling
   contract.
@@ -166,4 +166,4 @@ See [Policies](./policies/) for disposition and safety behavior, and
 
 Media-tool and filesystem checks also run as part of the first-run preflight — see
 [Quick Start — First-run onboarding](../getting-started/quick-start/#first-run-onboarding) — and
-`melodee doctor` verifies that `ffmpeg`, `ffprobe`, and `fpcalc` are executable on the host.
+`melodee-cli doctor` verifies that `ffmpeg`, `ffprobe`, and `fpcalc` are executable on the host.

@@ -109,7 +109,7 @@ describe('StorageScreen', () => {
     expect(
       await screen.findByText('Per-path usage stays a CLI surface'),
     ).toBeInTheDocument();
-    expect(screen.getByText(/melodee doctor/)).toBeInTheDocument();
+    expect(screen.getByText(/melodee-cli doctor/)).toBeInTheDocument();
   });
 
   it('renders retryable error states when either fetch fails', async () => {

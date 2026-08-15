@@ -1,0 +1,336 @@
+name: Publish release container
+
+# A published GitHub Release is the sole production-image publication event.
+# Normal push, pull-request, tag-push, and scheduled workflows never receive
+# package-write credentials and therefore cannot publish an official image.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_NAME: ghcr.io/melodee-project/melodee
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
+
+jobs:
+  validate-release:
+    name: Validate release tag and package version
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      minor: ${{ steps.version.outputs.minor }}
+      stable: ${{ steps.version.outputs.stable }}
+      revision: ${{ steps.revision.outputs.revision }}
+    steps:
+      - name: Check out the published release tag
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
+
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal
+          rustup default 1.97.1
+
+      - name: Validate SemVer and Cargo package versions
+        id: version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_PRERELEASE: ${{ github.event.release.prerelease }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_TAG" =~ ^v?([0-9]+)\.([0-9]+)\.([0-9]+)(-[0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]; then
+            echo "Published release tag must be SemVer, optionally prefixed with v: $RELEASE_TAG" >&2
+            exit 1
+          fi
+          version="${RELEASE_TAG#v}"
+          minor="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
+          tag_has_prerelease=false
+          if [[ "$version" == *-* ]]; then
+            tag_has_prerelease=true
+          fi
+          if [[ "$RELEASE_PRERELEASE" == "false" && "$tag_has_prerelease" == "true" ]]; then
+            echo "A SemVer prerelease tag must be marked as a GitHub prerelease." >&2
+            exit 1
+          fi
+          stable=false
+          if [[ "$RELEASE_PRERELEASE" == "false" ]]; then
+            stable=true
+          fi
+          mapfile -t package_versions < <(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "melodee-server" or .name == "melodee-cli") | .version')
+          if [[ "${#package_versions[@]}" -ne 2 ]] || [[ "${package_versions[0]}" != "$version" ]] || [[ "${package_versions[1]}" != "$version" ]]; then
+            printf 'Release tag %s must match melodee-server and melodee-cli versions; found: %s\n' "$version" "${package_versions[*]:-none}" >&2
+            exit 1
+          fi
+          printf 'version=%s\nminor=%s\nstable=%s\n' "$version" "$minor" "$stable" >> "$GITHUB_OUTPUT"
+
+      - name: Record checked-out release revision
+        id: revision
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "Published release tag must resolve to a commit reachable from origin/main." >&2
+            exit 1
+          fi
+          printf 'revision=%s\n' "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  quality-gate:
+    name: Run full release quality gate
+    needs: validate-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:18.4-alpine
+        env:
+          POSTGRES_USER: melodee
+          POSTGRES_PASSWORD: melodee-dev
+          POSTGRES_DB: postgres
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U melodee"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Check out the published release tag
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Free GitHub-hosted runner disk space
+        if: runner.environment == 'github-hosted'
+        run: |
+          df -h /
+          sudo rm -rf -- /usr/local/lib/android /usr/share/dotnet /opt/ghc
+          df -h /
+
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --component rustfmt --component clippy
+          rustup default 1.97.1
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          package_json_file: admin-ui/package.json
+          run_install: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: admin-ui/pnpm-lock.yaml
+
+      - name: Install media inspection tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y ffmpeg libchromaprint-tools
+          ffprobe -version | head -1
+          ffmpeg -version | head -1
+          fpcalc -version
+
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --version 0.20.2 --locked
+
+      - name: Run complete repository gate
+        run: ./scripts/check.sh
+
+  build-and-test:
+    name: Build, smoke-test, and scan release image
+    needs: [validate-release, quality-gate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out the published release tag
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build native release image without publishing
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          push: false
+          platforms: linux/amd64
+          tags: melodee-release-smoke:${{ github.run_id }}
+          build-args: |
+            VERSION=${{ needs.validate-release.outputs.version }}
+            REVISION=${{ needs.validate-release.outputs.revision }}
+            CREATED=${{ github.event.release.published_at }}
+          provenance: false
+          sbom: false
+
+      - name: Verify runtime tools, user, startup, readiness, SPA, and SIGTERM
+        env:
+          SMOKE_IMAGE: melodee-release-smoke:${{ github.run_id }}
+          RELEASE_VERSION: ${{ needs.validate-release.outputs.version }}
+        run: |
+          set -euo pipefail
+          network="melodee-release-smoke-${GITHUB_RUN_ID}"
+          database="${network}-postgres"
+          server="${network}-server"
+          cleanup() {
+            docker rm -f "$server" "$database" >/dev/null 2>&1 || true
+            docker network rm "$network" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          docker network create "$network"
+          docker run -d --name "$database" --network "$network" \
+            -e POSTGRES_USER=melodee -e POSTGRES_PASSWORD=melodee-test \
+            -e POSTGRES_DB=melodee postgres:18.4-alpine
+          for _ in $(seq 1 30); do
+            if docker exec "$database" pg_isready -U melodee -d melodee >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          docker exec "$database" pg_isready -U melodee -d melodee >/dev/null
+          test "$(docker run --rm --entrypoint id "$SMOKE_IMAGE" -u)" = "10001"
+          docker run --rm --entrypoint ffmpeg "$SMOKE_IMAGE" -version | head -1
+          docker run --rm --entrypoint ffprobe "$SMOKE_IMAGE" -version | head -1
+          docker run --rm --entrypoint fpcalc "$SMOKE_IMAGE" -version
+          docker run --rm --entrypoint melodee-cli "$SMOKE_IMAGE" --version | grep -F "$RELEASE_VERSION"
+          docker run -d --name "$server" --network "$network" -p 127.0.0.1:18080:8080 \
+            -e MELODEE__DATABASE__URL=postgres://melodee:melodee-test@"$database":5432/melodee \
+            -e MELODEE__NATIVE__PUBLIC_ORIGIN=http://127.0.0.1:18080 \
+            -e MELODEE__NATIVE__AUTH__JWT_KEY=release-smoke-native-jwt-key-at-least-thirty-two-bytes \
+            -e MELODEE__JELLYFIN__TOKEN_PEPPER=release-smoke-jellyfin-pepper-at-least-thirty-two-bytes \
+            -e MELODEE__INGEST__ENABLED=false "$SMOKE_IMAGE"
+          for _ in $(seq 1 30); do
+            if curl --fail --silent --show-error http://127.0.0.1:18080/readyz >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          curl --fail --silent --show-error http://127.0.0.1:18080/healthz | jq -e --arg version "$RELEASE_VERSION" '.status == "ok" and .version == $version' >/dev/null
+          curl --fail --silent --show-error http://127.0.0.1:18080/readyz | jq -e --arg version "$RELEASE_VERSION" '.status == "ready" and .version == $version' >/dev/null
+          curl --fail --silent --show-error http://127.0.0.1:18080/admin/ | grep -q '<div id="root"'
+          docker stop --time 15 "$server"
+          test "$(docker inspect --format '{{.State.ExitCode}}' "$server")" = "0"
+
+      # Critical findings always block publication. High findings block only
+      # when a fix is available; no ignore file exists, so exceptions require
+      # a reviewed, versioned policy change rather than a silent waiver.
+      - name: Fail on critical vulnerabilities in the release image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: melodee-release-smoke:${{ github.run_id }}
+          format: table
+          exit-code: "1"
+          ignore-unfixed: false
+          severity: CRITICAL
+          vuln-type: os,library
+
+      - name: Fail on actionable high vulnerabilities in the release image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: melodee-release-smoke:${{ github.run_id }}
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: HIGH
+          vuln-type: os,library
+
+      - name: Verify required OCI labels
+        env:
+          SMOKE_IMAGE: melodee-release-smoke:${{ github.run_id }}
+          RELEASE_VERSION: ${{ needs.validate-release.outputs.version }}
+          RELEASE_REVISION: ${{ needs.validate-release.outputs.revision }}
+        run: |
+          set -euo pipefail
+          labels="$(docker image inspect --format '{{json .Config.Labels}}' "$SMOKE_IMAGE")"
+          jq -e --arg version "$RELEASE_VERSION" --arg revision "$RELEASE_REVISION" '
+            .["org.opencontainers.image.title"] == "Melodee" and
+            .["org.opencontainers.image.source"] == "https://github.com/melodee-project/melodee-rs" and
+            .["org.opencontainers.image.version"] == $version and
+            .["org.opencontainers.image.revision"] == $revision and
+            .["org.opencontainers.image.licenses"] == "MIT"
+          ' <<< "$labels" >/dev/null
+
+  publish:
+    name: Publish amd64 and arm64 image to GHCR
+    needs: [validate-release, quality-gate, build-and-test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      artifact-metadata: write
+      id-token: write
+    steps:
+      - name: Check out the published release tag
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Extract release image metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ needs.validate-release.outputs.version }}
+            type=raw,value=${{ needs.validate-release.outputs.minor }},enable=${{ needs.validate-release.outputs.stable == 'true' }}
+            type=raw,value=latest,enable=${{ needs.validate-release.outputs.stable == 'true' }}
+          labels: |
+            org.opencontainers.image.title=Melodee
+            org.opencontainers.image.description=Self-hosted Melodee music server
+            org.opencontainers.image.source=https://github.com/melodee-project/melodee-rs
+            org.opencontainers.image.revision=${{ needs.validate-release.outputs.revision }}
+            org.opencontainers.image.version=${{ needs.validate-release.outputs.version }}
+            org.opencontainers.image.licenses=MIT
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up QEMU for arm64
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build and publish multi-platform release image
+        id: push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ needs.validate-release.outputs.version }}
+            REVISION=${{ needs.validate-release.outputs.revision }}
+            CREATED=${{ github.event.release.published_at }}
+          # BuildKit publishes an SPDX SBOM attestation. GitHub's keyless
+          # artifact attestation below supplies the release provenance.
+          provenance: false
+          sbom: true
+
+      - name: Generate keyless GitHub build provenance attestation
+        uses: actions/attest@v4
+        with:
+          subject-name: ${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true

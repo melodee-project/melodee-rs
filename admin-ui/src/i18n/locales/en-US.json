@@ -832,7 +832,7 @@
   "system.storage.checkMissing": "The storage-paths preflight result is not available.",
   "system.storage.remediationTitle": "Remediation",
   "system.storage.perPathNoteTitle": "Per-path usage stays a CLI surface",
-  "system.storage.perPathNote": "Per-path capacity and free space are not exposed over HTTP. Use melodee doctor and melodee config validate for path-level checks.",
+  "system.storage.perPathNote": "Per-path capacity and free space are not exposed over HTTP. Use melodee-cli doctor and melodee-cli config validate for path-level checks.",
   "settings.title": "Settings",
   "settings.subtitle": "Server configuration, export, and import.",
   "settings.exportConfiguration": "Export configuration",

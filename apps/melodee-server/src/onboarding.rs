@@ -18,7 +18,7 @@
 //!    writable parent) without creating or claiming anything. Disabled
 //!    search passes vacuously. Advisory.
 //! 5. `admin_user` (**required**) — at least one enabled, unlocked
-//!    administrator exists (`melodee users bootstrap-admin` creates the
+//!    administrator exists (`melodee-cli users bootstrap-admin` creates the
 //!    first one).
 //! 6. `email` — layered email settings validate (enabled ⇒ from/host set).
 //!    Advisory (delivery disabled is a valid steady state).
@@ -375,7 +375,7 @@ async fn check_admin_user(pool: &PgPool) -> PreflightCheck {
             "admin_user",
             true,
             "no enabled administrator account exists",
-            "run `melodee users bootstrap-admin --username <name> --email <email>` with MELODEE__CLI__BOOTSTRAP_ADMIN_PASSWORD set",
+            "run `melodee-cli users bootstrap-admin --username <name> --email <email>` with MELODEE__CLI__BOOTSTRAP_ADMIN_PASSWORD set",
         )
     }
 }

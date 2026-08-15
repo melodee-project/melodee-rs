@@ -463,6 +463,10 @@ Build the Carbon operator/curation SPA using the canonical screens.
 
 Move the current production installation safely with rollback.
 
+Official container-only distribution is governed separately by ADR-0144 and does not start or
+complete this migration phase. Phase 11 still owns the legacy-import, dual-run, cutover, and
+rollback evidence below.
+
 ### Work
 
 - Repeatable migration tooling and dry runs.

@@ -40,13 +40,13 @@ queue mutation in this build is a per-item, audited decision made from the
 ## Steering processing
 
 Queue throughput is controlled at the worker-pool level, not per item: pause or resume pools from
-[System and Diagnostics](./system-diagnostics/) (or `melodee worker-pools pause|resume`). A
+[System and Diagnostics](./system-diagnostics/) (or `melodee-cli worker-pools pause|resume`). A
 paused pool claims no new work; already-claimed items finish or are released under the normal
 lease contract, so pausing never strands a lease.
 
 Reprocessing a Release that already carries a policy decision is a review action — see
 [Release Review](../library-management/release-review/).
 
-The equivalent CLI surfaces are `melodee ingest status`, `melodee work list`,
-`melodee work show <id>`, and `melodee catalog status`; see
+The equivalent CLI surfaces are `melodee ingest status`, `melodee-cli work list`,
+`melodee-cli work show <id>`, and `melodee-cli catalog status`; see
 [System and Diagnostics](./system-diagnostics/#command-line-diagnostics).

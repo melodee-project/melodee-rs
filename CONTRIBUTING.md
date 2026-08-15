@@ -53,8 +53,22 @@ The first dependency-resolving change must generate and commit `Cargo.lock`.
 Use:
 
 ```bash
-python3 scripts/new-adr.py "short descriptive title"
+python3 scripts/new_adr.py "short descriptive title"
 ```
 
 A proposed ADR can accompany implementation exploration, but irreversible implementation must wait
 for acceptance.
+
+## Maintainer release flow
+
+Official deployable releases are GHCR OCI images, not native binary assets. Before publishing a
+GitHub Release, ensure the exact release commit is on `main`, its Cargo server/CLI version matches
+the intended SemVer tag, and the full gate is green. Publish the GitHub Release with release notes;
+do not upload executables, installers, binary archives, or operating-system packages.
+
+The `Publish release container` workflow then validates the tag, runs the full quality gate,
+builds/tests/scans the production image, and publishes the amd64/arm64 manifest to
+`ghcr.io/melodee-project/melodee`. Stable releases receive `X.Y.Z`, `X.Y`, and `latest`; a GitHub
+prerelease receives only its exact prerelease tag. Verify the manifest, GHCR package visibility,
+image attestation, and an actual deployment after the workflow succeeds. The detailed operator
+flow is in the [container deployment guide](docs/src/content/docs/installation/docker.md).

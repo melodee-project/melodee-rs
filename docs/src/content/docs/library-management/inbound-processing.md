@@ -105,9 +105,9 @@ require an explicit canonical storage root.
 `melodee ingest manifest <work-item-id>` prints the durable manifest. These commands are not a
 replacement for the server worker.
 
-For the catalog handoff, `melodee catalog import` runs one bounded import pass,
-`melodee catalog status` prints catalog counts and worker limits, and
-`melodee catalog inspect <work-item-id>` prints the immutable import receipt when present. The
+For the catalog handoff, `melodee-cli catalog import` runs one bounded import pass,
+`melodee-cli catalog status` prints catalog counts and worker limits, and
+`melodee-cli catalog inspect <work-item-id>` prints the immutable import receipt when present. The
 periodic catalog worker runs independently from inbound discovery, so already-published work can
 continue to catalog while inbound scanning is disabled. During graceful server shutdown, a claimed
 Release whose catalog transaction has not started releases its lease for another worker. A fenced,
@@ -115,7 +115,7 @@ atomic catalog transaction that has already started is allowed to finish before 
 
 The independent policy worker claims at most the lower of its batch and concurrency limits. It
 renews leases before loading facts and before the atomic commit, evaluates only PostgreSQL catalog
-evidence, and releases pre-commit claims on graceful cancellation. `melodee policy test`,
+evidence, and releases pre-commit claims on graceful cancellation. `melodee-cli policy test`,
 `evaluate`, `inspect`, and `decide` provide bounded operator diagnostics and audited review; see
 [Policies](../admin/policies/).
 

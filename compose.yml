@@ -1,0 +1,71 @@
+name: melodee
+
+services:
+  postgres:
+    image: postgres:18.4-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: melodee
+      POSTGRES_USER: melodee
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      # PostgreSQL 18 stores data below a versioned subdirectory. Mount its
+      # documented parent, not the old /var/lib/postgresql/data location.
+      - melodee_postgres:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U melodee -d melodee"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    shm_size: 2gb
+
+  initialize-storage:
+    image: alpine:3.22
+    user: "0:0"
+    command: ["sh", "-ec", "chown 10001:10001 /library /work /search"]
+    volumes:
+      - melodee_library:/library
+      - melodee_work:/work
+      - melodee_search:/search
+    restart: "no"
+
+  melodee:
+    image: ghcr.io/melodee-project/melodee:${MELODEE_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    init: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+      initialize-storage:
+        condition: service_completed_successfully
+    environment:
+      MELODEE__DATABASE__URL: ${MELODEE_DATABASE_URL:?Set MELODEE_DATABASE_URL in .env}
+      MELODEE__SERVER__BIND: 0.0.0.0:8080
+      MELODEE__NATIVE__PUBLIC_ORIGIN: ${MELODEE_NATIVE_PUBLIC_ORIGIN:?Set MELODEE_NATIVE_PUBLIC_ORIGIN in .env}
+      MELODEE__NATIVE__AUTH__JWT_KEY: ${MELODEE_NATIVE_JWT_KEY:?Set MELODEE_NATIVE_JWT_KEY in .env}
+      MELODEE__JELLYFIN__TOKEN_PEPPER: ${MELODEE_JELLYFIN_TOKEN_PEPPER:?Set MELODEE_JELLYFIN_TOKEN_PEPPER in .env}
+      MELODEE__INGEST__SOURCE_ROOT: /mnt/inbound
+      MELODEE__INGEST__SOURCE_LIBRARY_NAME: main
+      MELODEE__NORMALIZATION__WORK_AREA: /var/lib/melodee/work
+      MELODEE__STORAGE__ROOT: /var/lib/melodee/library
+      MELODEE__SEARCH__ENABLED: "true"
+      MELODEE__SEARCH__ROOT: /var/lib/melodee/search
+    ports:
+      # Bind to loopback by default and place a TLS reverse proxy in front for
+      # remote access. Set MELODEE_BIND_ADDRESS only for a deliberately
+      # firewalled direct deployment.
+      - "${MELODEE_BIND_ADDRESS:-127.0.0.1}:8080:8080"
+    volumes:
+      - melodee_library:/var/lib/melodee/library
+      - melodee_work:/var/lib/melodee/work
+      - melodee_search:/var/lib/melodee/search
+      - type: bind
+        source: ${MELODEE_INBOUND_PATH:?Set MELODEE_INBOUND_PATH in .env}
+        target: /mnt/inbound
+        read_only: true
+
+volumes:
+  melodee_postgres:
+  melodee_library:
+  melodee_work:
+  melodee_search:

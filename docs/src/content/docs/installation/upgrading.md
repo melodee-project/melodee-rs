@@ -1,43 +1,64 @@
 ---
 title: Upgrading
-description: How to upgrade a Melodee server, including migrations and rollback.
+description: Upgrade a containerized Melodee server safely.
 sidebar:
   order: 5
 ---
 
-:::caution[Planned documentation]
-The Rust rewrite is pre-release; no upgrade path between Rust releases exists yet. Migration from
-the C# server is planned for the final rewrite phase and will be documented here with dry-run,
-rollback, and backup guidance before any migration tool ships.
-:::
+Upgrade by selecting a released GHCR image tag. Do not use `latest` for unattended production
+updates unless you intentionally accept each new stable release automatically. Prefer an exact
+`X.Y.Z` tag or image digest.
 
-Upgrade documentation will cover, for each release:
+## Before the upgrade
 
-- applying the new version and its database migrations;
-- rollback behavior and backups required before upgrading;
-- migration guidance when moving from the legacy C# server, preserving public IDs and user state.
+1. Read the GitHub Release notes for the target version.
+2. Record the current image digest and retain the current image tag for a binary rollback.
+3. Stop writes or otherwise schedule a maintenance window appropriate to your installation.
+4. Back up PostgreSQL and validate the backup before changing the container:
 
-## Phase 7 development migrations
+   ```bash
+   docker compose exec -T postgres pg_dump -U melodee -d melodee --format=custom \
+     > melodee-before-X.Y.Z.dump
+   pg_restore --list melodee-before-X.Y.Z.dump >/dev/null
+   ```
 
-Pre-release development builds apply migrations `0010` through `0019` automatically at server
-startup. They add the native authentication and public-ID authority, per-user catalog state,
-community and podcast state, genre preferences, discovery state, playlists, endpoint sessions,
-catalog browse indexes, and bounded route-state constraints. These migrations do not read, move, or
-delete music-library media. If the podcast worker is enabled, retention can remove only downloaded
-enclosures beneath its separately configured, marker-owned podcast root.
+5. Keep the named volumes for PostgreSQL, canonical media, work, and search. Do not recreate or
+   delete volumes as part of an image upgrade.
 
-Create and verify a backup before applying a Phase 7 development build to a database that matters:
+## Upgrade
+
+Set `MELODEE_IMAGE_TAG=X.Y.Z` in `.env`, then pull and recreate only the application service:
 
 ```bash
-pg_dump --format=custom --file=/safe/backup/location/melodee-pre-0010.dump "$MELODEE__DATABASE__URL"
-pg_restore --list /safe/backup/location/melodee-pre-0010.dump >/dev/null
-cargo run -p melodee-cli -- migrate
-psql "$MELODEE__DATABASE__URL" --set ON_ERROR_STOP=1 --command \
-  "SELECT version, description, success FROM _sqlx_migrations WHERE version BETWEEN 10 AND 19 ORDER BY version"
+docker compose pull melodee
+docker compose up -d --no-deps melodee
+docker compose logs --follow melodee
 ```
 
-A binary downgrade leaves the additive Phase 7 relations in place. Test the exact older binary
-against an isolated database copy before cutover; do not drop Phase 7 tables in place. Full schema
-rollback means draining writes, restoring the verified pre-`0010` backup into a new empty database,
-checking migration history and catalog counts, and only then repointing the service. Keep both the
-post-upgrade database and backup until the restored service passes health and client checks.
+At startup, Melodee applies embedded SQLx migrations before opening the HTTP listener. Check both
+health endpoints and your ordinary client/admin flows before ending the maintenance window:
+
+```bash
+curl --fail http://127.0.0.1:8080/healthz
+curl --fail http://127.0.0.1:8080/readyz
+docker compose exec melodee melodee-cli config validate
+```
+
+## Rollback
+
+An image rollback and a database-schema rollback are different operations. The current migrations
+are additive, so an older image may not understand every newer feature even if it can start against
+the upgraded database. Test the exact older image against an isolated copy of the database before
+cutover; never drop Melodee tables in place just to make an older image start.
+
+To restore a failed upgrade, stop the service, restore the verified pre-upgrade PostgreSQL backup
+into a new or emptied database instance, point the deployment at that recovered database, set the
+previous image tag, and validate migration history, catalog counts, `/readyz`, and representative
+client playback before returning traffic. Keep the failed database and original backup until the
+restored service is verified.
+
+## Legacy C# migration
+
+Migration, dual run, final delta sync, cutover, and demonstrable rollback from an existing C#
+Melodee installation are Phase 11 work and are not yet supported. Do not treat a container upgrade
+as a legacy-server migration.

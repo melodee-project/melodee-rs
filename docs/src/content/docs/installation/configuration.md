@@ -26,18 +26,18 @@ transport plumbing) remain environment-driven.
 
 ## Database-backed settings
 
-`melodee config list` prints every known setting's effective value with the layer that supplied
+`melodee-cli config list` prints every known setting's effective value with the layer that supplied
 it (`environment`, `config-file`, `database`, or `default`). Secret settings are always redacted
 to a fixed marker — there is no show-secrets option, and no API or CLI surface returns a secret
 value.
 
-`melodee config validate` runs the first-run preflight checks (database and migrations, storage
+`melodee-cli config validate` runs the first-run preflight checks (database and migrations, storage
 paths, media tools, search index, administrator account, email sanity) and exits non-zero when a
 required check fails. See [Quick Start](../getting-started/quick-start/) for the first-run flow.
 
 ### Import and export
 
-`melodee config export [--output <path>]` writes a JSON document of the database and defaults
+`melodee-cli config export [--output <path>]` writes a JSON document of the database and defaults
 layer (environment and config-file overlays are deployment concerns and are not captured).
 Administrators can also use `GET /api/admin/v1/config/export` (see the
 [Admin API](../api/admin-api/)).
@@ -46,9 +46,9 @@ The export carries a header warning: **every secret value is redacted to a fixed
 be re-entered after import.** Handle exported files as sensitive even so — non-secret values can
 reveal infrastructure details.
 
-`melodee config import <path>` is a **preview by default**: it prints the diff (added, changed,
+`melodee-cli config import <path>` is a **preview by default**: it prints the diff (added, changed,
 unchanged keys; secret keys by name only with an explicit warning; unknown keys) without writing
-anything. `melodee config import <path> --apply` validates every value against the registry's
+anything. `melodee-cli config import <path> --apply` validates every value against the registry's
 type/range rules and writes the rows atomically; keys outside the known registry are rejected
 unless `--allow-unknown` is passed. The redaction marker is never accepted as a value, so a
 redacted export can never overwrite a stored secret. The admin API equivalent is
@@ -227,7 +227,7 @@ into the triggering request. The password is never logged and never returned by 
 
 Notification templates (subject, plain-text and HTML bodies with `{{placeholder}}` substitution)
 are stored in the database and managed through the
-[admin API](../api/admin-api/) or `melodee notifications templates list`. The email keys above are
+[admin API](../api/admin-api/) or `melodee-cli notifications templates list`. The email keys above are
 also part of the database-backed settings layer (registry keys `email.*`): environment and
 config-file values still win over database rows.
 

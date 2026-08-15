@@ -14,8 +14,8 @@ parallel headless surface.
 The CLI can inspect and override a pending decision:
 
 ```bash
-melodee policy inspect <release-id>
-melodee policy decide <release-id> review \
+melodee-cli policy inspect <release-id>
+melodee-cli policy decide <release-id> review \
   --actor <administrator-id> \
   --reason "<operator-safe reason>"
 ```

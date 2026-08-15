@@ -15,10 +15,10 @@ the index can be discarded and regenerated without reading source or canonical a
 ## Querying from the CLI
 
 ```bash
-melodee search query 'artist:"Colin Hay" AND year>=2000' --limit 50
-melodee search autocomplete artist Bjo --limit 10
-melodee search parse '(genre:rock OR genre:jazz) AND year:1990..1999'
-melodee search explain 'performer:"Guest Artist"'
+melodee-cli search query 'artist:"Colin Hay" AND year>=2000' --limit 50
+melodee-cli search autocomplete artist Bjo --limit 10
+melodee-cli search parse '(genre:rock OR genre:jazz) AND year:1990..1999'
+melodee-cli search explain 'performer:"Guest Artist"'
 ```
 
 `query` and `autocomplete` require an active search generation. `parse` prints the pure syntax tree;
@@ -60,8 +60,8 @@ wildcard `*`, scripts, and function queries are not supported.
 ## Rebuild and recovery
 
 ```bash
-melodee search status
-melodee search rebuild --actor administrator-id
+melodee-cli search status
+melodee-cli search rebuild --actor administrator-id
 ```
 
 Rebuild creates a separate owned generation, validates its schema/counts, catches up catalog changes,
