@@ -7,34 +7,22 @@ import {
   Link,
   Loading,
   Modal,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableHeader,
-  TableRow,
 } from '@carbon/react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import {
   getDashboard,
-  getSearchStatus,
   getSystemHealth,
-  listLeases,
   listWorkerFailures,
   listWorkerPools,
   pauseWorkerPool,
-  requestSearchRebuild,
   resumeWorkerPool,
 } from '../../api/admin';
 import { ApiError } from '../../api/client';
 import type {
-  Lease,
   Page,
-  SearchStatus,
   SortParam,
   SystemHealth,
   WorkItem,
@@ -44,16 +32,19 @@ import { EmptyState } from '../../components/EmptyState';
 import { EntityTable, type EntityColumn, type EntityRow } from '../../components/EntityTable';
 import { MetricCard } from '../../components/MetricCard';
 import { PageHeader } from '../../components/PageHeader';
-import { ProcessingStateTag } from '../../components/ProcessingStateTag';
 import { StatusTag } from '../../components/StatusTag';
 import { SystemHealthPanel } from '../../components/SystemHealthPanel';
 import { formatDateTime, formatDuration, formatNumber, formatRelativeTime } from '../../i18n/format';
+import { LeasesPanel } from './LeasesPanel';
+import { SearchPanel } from './SearchPanel';
 
 /**
  * System / Workers / Diagnostics (WP-17, PRD-WORK-002, SPEC §22):
  * durable worker-pool table with lease-coordinated pause/resume, aggregated
  * subsystem health, recent failed work items, search index status with a
- * rebuild trigger, and active lease evidence.
+ * rebuild trigger, and active lease evidence. The search and lease panels
+ * are the shared SearchPanel/LeasesPanel also used by the System → Search
+ * and System → Diagnostics screens — the logic exists exactly once.
  *
  * Honesty rules honored throughout: pools without a durable queue table
  * report `metricsAvailable: false` and render "not reported" instead of
@@ -122,14 +113,12 @@ export function SystemWorkersScreen() {
   const [healthError, setHealthError] = useState<ApiError | null>(null);
   const [failures, setFailures] = useState<Page<WorkItem> | null>(null);
   const [failuresError, setFailuresError] = useState<ApiError | null>(null);
-  const [searchStatus, setSearchStatus] = useState<SearchStatus | null>(null);
-  const [searchError, setSearchError] = useState<ApiError | null>(null);
-  const [leases, setLeases] = useState<Lease[] | null>(null);
   const [pauseTarget, setPauseTarget] = useState<WorkerPool | null>(null);
   const [poolBusy, setPoolBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
-  const [rebuildConfirmOpen, setRebuildConfirmOpen] = useState(false);
-  const [rebuildBusy, setRebuildBusy] = useState(false);
+  // Bumped by the refresh action so the shared SearchPanel/LeasesPanel
+  // re-run their fetches without this screen owning them.
+  const [panelRefreshKey, setPanelRefreshKey] = useState(0);
 
   const fetchPools = useCallback((signal: { cancelled: boolean }) => {
     return Promise.all([listWorkerPools(), getDashboard()])
@@ -187,43 +176,14 @@ export function SystemWorkersScreen() {
     [failuresPage, failuresPageSize, failuresSort],
   );
 
-  const fetchSearch = useCallback((signal: { cancelled: boolean }) => {
-    return getSearchStatus()
-      .then((result) => {
-        if (!signal.cancelled) {
-          setSearchStatus(result);
-          setSearchError(null);
-        }
-      })
-      .catch((cause: unknown) => {
-        if (!signal.cancelled) {
-          setSearchError(toApiError(cause));
-        }
-      });
-  }, []);
-
-  const fetchLeases = useCallback((signal: { cancelled: boolean }) => {
-    return listLeases({ limit: 100 })
-      .then((result) => {
-        if (!signal.cancelled) {
-          setLeases(result);
-        }
-      })
-      .catch(() => {
-        // Lease evidence is supplementary; a failure leaves the empty state.
-      });
-  }, []);
-
   useEffect(() => {
     const signal = { cancelled: false };
     void fetchPools(signal);
     void fetchHealth(signal);
-    void fetchSearch(signal);
-    void fetchLeases(signal);
     return () => {
       signal.cancelled = true;
     };
-  }, [fetchPools, fetchHealth, fetchSearch, fetchLeases]);
+  }, [fetchPools, fetchHealth]);
 
   useEffect(() => {
     const signal = { cancelled: false };
@@ -265,35 +225,6 @@ export function SystemWorkersScreen() {
       .finally(() => {
         setPoolBusy(null);
         setPauseTarget(null);
-      });
-  };
-
-  const confirmRebuild = () => {
-    setRebuildBusy(true);
-    requestSearchRebuild()
-      .then((job) => {
-        setNotice({
-          kind: 'success',
-          text: t('system.search.rebuildRequested', { jobId: job.jobId }),
-        });
-        void fetchSearch({ cancelled: false });
-      })
-      .catch((cause: unknown) => {
-        const error = toApiError(cause);
-        if (error.status === 409 && error.code === 'rebuild_in_progress') {
-          setNotice({ kind: 'warning', text: t('system.search.rebuildInProgress') });
-        } else if (error.status === 409 && error.code === 'search_disabled') {
-          setNotice({ kind: 'info', text: t('system.search.disabledNote') });
-        } else {
-          setNotice({
-            kind: 'error',
-            text: t('system.search.rebuildError', { message: error.message }),
-          });
-        }
-      })
-      .finally(() => {
-        setRebuildBusy(false);
-        setRebuildConfirmOpen(false);
       });
   };
 
@@ -424,8 +355,7 @@ export function SystemWorkersScreen() {
               void fetchPools({ cancelled: false });
               void fetchHealth({ cancelled: false });
               void fetchFailures({ cancelled: false });
-              void fetchSearch({ cancelled: false });
-              void fetchLeases({ cancelled: false });
+              setPanelRefreshKey((key) => key + 1);
             }}
           >
             {t('actions.refresh')}
@@ -513,56 +443,7 @@ export function SystemWorkersScreen() {
             }
           />
 
-          <section className="melodee-panel" aria-labelledby="system-leases-title">
-            <Heading id="system-leases-title" className="melodee-panel__title">
-              {t('system.leases.title')}
-            </Heading>
-            {leases === null || leases.length === 0 ? (
-              <EmptyState compact title={t('system.leases.empty')} />
-            ) : (
-              <TableContainer title={t('system.leases.caption')}>
-                <Table size="sm" aria-label={t('system.leases.caption')}>
-                  <TableHead>
-                    <TableRow>
-                      <TableHeader>{t('system.leases.column.workItem')}</TableHeader>
-                      <TableHeader>{t('system.leases.column.owner')}</TableHeader>
-                      <TableHeader>{t('system.leases.column.state')}</TableHeader>
-                      <TableHeader>{t('system.leases.column.acquired')}</TableHeader>
-                      <TableHeader>{t('system.leases.column.expires')}</TableHeader>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {leases.map((lease) => (
-                      <TableRow key={lease.workItemId}>
-                        <TableCell>
-                          <Link
-                            as={RouterLink}
-                            to={`/processing?item=${encodeURIComponent(lease.workItemId)}`}
-                          >
-                            {lease.workItemId}
-                          </Link>
-                        </TableCell>
-                        <TableCell>{lease.leaseOwner}</TableCell>
-                        <TableCell>
-                          <ProcessingStateTag state={lease.state} />
-                        </TableCell>
-                        <TableCell>
-                          <span title={formatDateTime(lease.leaseAcquiredAt)}>
-                            {formatRelativeTime(lease.leaseAcquiredAt)}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <span title={formatDateTime(lease.leaseExpiresAt)}>
-                            {formatRelativeTime(lease.leaseExpiresAt)}
-                          </span>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            )}
-          </section>
+          <LeasesPanel refreshKey={panelRefreshKey} />
         </div>
 
         <div className="melodee-system-rail">
@@ -586,76 +467,7 @@ export function SystemWorkersScreen() {
             />
           ) : null}
 
-          <section className="melodee-panel" aria-labelledby="system-search-title">
-            <Heading id="system-search-title" className="melodee-panel__title">
-              {t('system.search.title')}
-            </Heading>
-            {searchError ? (
-              <ActionableNotification
-                inline
-                kind="error"
-                lowContrast
-                title={t('system.loadErrorTitle')}
-                subtitle={searchError.message}
-                hideCloseButton
-                actionButtonLabel={t('actions.retry')}
-                onActionButtonClick={() => void fetchSearch({ cancelled: false })}
-              />
-            ) : null}
-            {searchStatus && !searchStatus.enabled ? (
-              <InlineNotification
-                kind="info"
-                lowContrast
-                title={t('system.search.disabledTitle')}
-                subtitle={t('system.search.disabledNote')}
-                hideCloseButton
-              />
-            ) : null}
-            {searchStatus?.enabled ? (
-              <dl className="melodee-fact-list">
-                <div className="melodee-fact">
-                  <dt>{t('system.search.pending')}</dt>
-                  <dd>{formatNumber(searchStatus.projection?.pending ?? 0)}</dd>
-                </div>
-                <div className="melodee-fact">
-                  <dt>{t('system.search.failed')}</dt>
-                  <dd>{formatNumber(searchStatus.projection?.failed ?? 0)}</dd>
-                </div>
-                <div className="melodee-fact">
-                  <dt>{t('system.search.leased')}</dt>
-                  <dd>{formatNumber(searchStatus.projection?.leased ?? 0)}</dd>
-                </div>
-                <div className="melodee-fact">
-                  <dt>{t('system.search.generation')}</dt>
-                  <dd>{formatNumber(searchStatus.generation?.total ?? 0)}</dd>
-                </div>
-                {searchStatus.projection?.latestRebuildStatus ? (
-                  <div className="melodee-fact">
-                    <dt>{t('system.search.lastRebuild')}</dt>
-                    <dd>
-                      <ProcessingStateTag state={searchStatus.projection.latestRebuildStatus} />
-                      {searchStatus.projection.latestRebuildError ? (
-                        <span className="melodee-fact__detail">
-                          {searchStatus.projection.latestRebuildError}
-                        </span>
-                      ) : null}
-                    </dd>
-                  </div>
-                ) : null}
-              </dl>
-            ) : null}
-            <div className="melodee-panel__footer">
-              <Button
-                kind="primary"
-                size="sm"
-                disabled={!searchStatus?.enabled || rebuildBusy}
-                title={!searchStatus?.enabled ? t('system.search.disabledNote') : undefined}
-                onClick={() => setRebuildConfirmOpen(true)}
-              >
-                {t('system.search.rebuild')}
-              </Button>
-            </div>
-          </section>
+          <SearchPanel refreshKey={panelRefreshKey} />
 
           <section className="melodee-panel" aria-labelledby="system-diagnostics-title">
             <Heading id="system-diagnostics-title" className="melodee-panel__title">
@@ -687,17 +499,6 @@ export function SystemWorkersScreen() {
         }}
       >
         <p>{t('system.pools.pauseConfirmBody')}</p>
-      </Modal>
-      <Modal
-        open={rebuildConfirmOpen}
-        modalHeading={t('system.search.rebuildConfirmTitle')}
-        primaryButtonText={t('system.search.rebuild')}
-        secondaryButtonText={t('actions.cancel')}
-        primaryButtonDisabled={rebuildBusy}
-        onRequestClose={() => setRebuildConfirmOpen(false)}
-        onRequestSubmit={confirmRebuild}
-      >
-        <p>{t('system.search.rebuildConfirmBody')}</p>
       </Modal>
     </>
   );

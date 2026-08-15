@@ -103,6 +103,13 @@ table, ADR-0143; rollback = DROP TABLE). Both have data-integrity tests; no dest
    `i18n-harvest.md`).
 7. Visual baselines are Chromium-on-Linux only; deliberate visual changes require
    `--update-snapshots` with PR review.
+8. Closeout residue resolved: the four remaining placeholder routes are gone. System → Search,
+   Storage, and Diagnostics are real screens (shared `SearchPanel`/`LeasesPanel` extracted from
+   the Workers screen — no duplicated logic). The PRD-UI-004 Policies → Matching Rules nav entry
+   was removed rather than placeholder-shipped: no matching-rule model exists (identity matching
+   is evidence-based); a future matching-rule engine would restore it (decision log §3,
+   checklist 08 🚫 row). Per-path storage capacity and MQL query tooling remain CLI/native-API
+   surfaces and are stated as such on the screens.
 
 ## Documentation impact
 

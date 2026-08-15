@@ -37,6 +37,37 @@ Structured logs and performance metrics are not exposed over HTTP; use the comma
 diagnostics below for those. The routes behind this screen are documented under
 [Admin API — System, workers, and search](../api/admin-api/#system-workers-and-search).
 
+## System → Search screen
+
+Open **System → Search** (`/admin/system/search`). It carries the same search index panel as the
+Workers screen — projection pending/failed/leased counts, active-generation document counts,
+latest rebuild status, and the confirmation-gated **Rebuild** trigger — so the status and rebuild
+behavior is identical on both screens.
+
+Query tooling is intentionally not part of this screen: MQL query, autocomplete, parse, and
+explain run through the CLI (`melodee search …`) and the native search API. The admin API exposes
+index status and rebuild only, so there is no query box.
+
+## System → Storage screen
+
+Open **System → Storage** (`/admin/system/storage`). It renders real server data only:
+
+- **Storage subsystem** — the storage verdict of the aggregated health check (status plus the
+  server-reported detail).
+- **Storage paths preflight** — the `storage_paths` first-run check re-evaluated on every read:
+  how many inbound sources are configured and the storage root, or the failing path with its
+  remediation guidance.
+
+Per-path capacity and free space are not exposed over HTTP and are not shown; use
+`melodee doctor` and `melodee config validate` for path-level checks.
+
+## System → Diagnostics screen
+
+Open **System → Diagnostics** (`/admin/system/diagnostics`). It aggregates the subsystem health
+panel (the same storage, database, index, and media-tool checks as onboarding and readiness),
+the active-leases table, and a link to the recent-failures table on System → Workers. Structured
+logs and performance metrics remain CLI surfaces, as noted on the screen.
+
 ## Service health
 
 ## Service health

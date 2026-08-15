@@ -58,15 +58,17 @@ a retryable error banner appears instead of a blank screen.
 | Catalog → Artists / Releases / Tracks | `/admin/catalog/…` | Server-side search, sort, and paging over the catalog |
 | Catalog → Identity Review | `/admin/catalog/identity` | Unresolved artist-name observations; see [Identity Review](./identity-review/) |
 | Policies → Release Rules | `/admin/policies/releases` | The immutable, versioned policy rule set; see [Policies](./policies/) |
+| System → Storage | `/admin/system/storage` | Storage subsystem health and the storage-paths preflight; see [System and Diagnostics](./system-diagnostics/) |
 | System → Workers | `/admin/system/workers` | Worker pools, failures, search status, health, leases; see [System and Diagnostics](./system-diagnostics/) |
+| System → Search | `/admin/system/search` | Search index status and the rebuild trigger; see [System and Diagnostics](./system-diagnostics/) |
 | System → Users & Access | `/admin/system/users` | Accounts, groups, and library bindings; see [Users and Access](./users-and-access/) |
 | System → Settings | `/admin/system/settings` | Configuration, notifications, scripts, radio, device profiles, themes; see [Settings](./settings/) |
+| System → Diagnostics | `/admin/system/diagnostics` | Subsystem health, active leases, and failure drill-down; see [System and Diagnostics](./system-diagnostics/) |
 
-A few navigation entries (System → Storage, System → Search, System → Diagnostics, and
-Policies → Matching Rules) render as labeled placeholders: the engine has exactly one policy
-rule model (served by Release Rules) and the other surfaces are not built yet, so the
-placeholder states this rather than inventing a screen. The diagnostics content that does exist
-— health, worker pools, failures, search status, leases — lives on System → Workers.
+The PRD's Policies → Matching Rules entry is deliberately absent: the policy engine has exactly
+one rule model (Release policy rules, served by Release Rules) and artist identity matching is
+evidence-based rather than rule-based, so there is no matching-rule surface to show. It returns
+only if a future matching-rule engine exists.
 
 Every screen keeps its filter, sort, page, and selection state in the URL, so any view can be
 shared as a link with another administrator.

@@ -4,7 +4,6 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { RequireAuth } from './auth/RequireAuth';
 import { ErrorState } from './components/ErrorState';
 import { LoginScreen } from './screens/LoginScreen';
-import { PlaceholderScreen } from './screens/PlaceholderScreen';
 import { AppShell } from './shell/AppShell';
 
 // Route-level code splitting (Phase 10 W4-5 bundle budget): every
@@ -59,6 +58,15 @@ const ReviewQueueScreen = lazy(() =>
 const SettingsScreen = lazy(() =>
   import('./screens/settings/SettingsScreen').then((m) => ({ default: m.SettingsScreen })),
 );
+const DiagnosticsScreen = lazy(() =>
+  import('./screens/system/DiagnosticsScreen').then((m) => ({ default: m.DiagnosticsScreen })),
+);
+const SearchScreen = lazy(() =>
+  import('./screens/system/SearchScreen').then((m) => ({ default: m.SearchScreen })),
+);
+const StorageScreen = lazy(() =>
+  import('./screens/system/StorageScreen').then((m) => ({ default: m.StorageScreen })),
+);
 const SystemWorkersScreen = lazy(() =>
   import('./screens/system/SystemWorkersScreen').then((m) => ({ default: m.SystemWorkersScreen })),
 );
@@ -68,9 +76,9 @@ const UsersScreen = lazy(() =>
 
 /**
  * Router for the admin SPA. basename is '/admin' (ADR-0138 static serving).
- * Every IA entry routes to a placeholder until its wave lands; /login is the
- * only public route. Unknown in-app paths render the localized, themed
- * not-found state inside the shell (PRD-WEB-002 `/Error` replacement).
+ * Every nav entry routes to a real screen; /login is the only public route.
+ * Unknown in-app paths render the localized, themed not-found state inside
+ * the shell (PRD-WEB-002 `/Error` replacement).
  */
 
 export default function App() {
@@ -99,13 +107,12 @@ export default function App() {
           <Route path="catalog/tracks/:id" element={<TrackDetailScreen />} />
           <Route path="catalog/identity" element={<IdentityReviewScreen />} />
           <Route path="policies/releases" element={<PoliciesScreen />} />
-          <Route path="policies/matching" element={<PlaceholderScreen titleKey="policies.matchingRulesTitle" subtitleKey="policies.subtitle" />} />
-          <Route path="system/storage" element={<PlaceholderScreen titleKey="system.storageTitle" subtitleKey="system.subtitle" />} />
+          <Route path="system/storage" element={<StorageScreen />} />
           <Route path="system/workers" element={<SystemWorkersScreen />} />
-          <Route path="system/search" element={<PlaceholderScreen titleKey="system.searchTitle" />} />
+          <Route path="system/search" element={<SearchScreen />} />
           <Route path="system/users" element={<UsersScreen />} />
           <Route path="system/settings" element={<SettingsScreen />} />
-          <Route path="system/diagnostics" element={<PlaceholderScreen titleKey="system.diagnosticsTitle" subtitleKey="system.subtitle" />} />
+          <Route path="system/diagnostics" element={<DiagnosticsScreen />} />
           <Route path="onboarding" element={<OnboardingWizard />} />
           <Route path="*" element={<ErrorState kind="notFound" />} />
         </Route>

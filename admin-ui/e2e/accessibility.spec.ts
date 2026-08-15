@@ -87,6 +87,12 @@ const KEYBOARD_TARGETS: Record<string, (page: Page) => Promise<Locator> | Locato
   'release-detail': (page) => page.getByRole('tab', { name: 'Overview', selected: true }),
   policies: (page) => page.getByRole('row', { name: /POL-LIVE-REVIEW/ }),
   'system-workers': (page) => page.getByRole('button', { name: 'Pause' }).first(),
+  'system-search': (page) =>
+    page
+      .locator('section', { has: page.getByRole('heading', { name: 'Search Index' }) })
+      .getByRole('button', { name: 'Rebuild search index' }),
+  'system-storage': (page) => page.getByRole('button', { name: 'Refresh' }),
+  'system-diagnostics': (page) => page.getByRole('button', { name: 'Refresh' }),
   users: (page) => page.getByRole('button', { name: 'Create user' }),
   settings: (page) => page.getByRole('tab', { name: 'Configuration', selected: true }),
   onboarding: (page) => page.getByRole('button', { name: 'Re-run checks' }),

@@ -226,6 +226,7 @@ translated locale, RTL smoke rendering, keyboard navigation, responsive behavior
 | API explorer | **Defer to Phase 11+** with an explicit matrix note; ship accurate `/docs` API pages instead | Matrix note |
 | TanStack Table | Keep deferred; Carbon DataTable until a proven gap (ADR-0109 mechanism) | ADR-0109 |
 | DROP candidates | Approve the three per-route ADRs in Wave 4 (capability already waived by ADR-0133) | 3 small ADRs |
+| Matching Rules nav entry (PRD-UI-004) | **Removed at closeout, not placeholder-shipped**: no matching-rule model exists (the engine has exactly one rule model — Release policy rules — and identity matching is evidence-based); a future matching-rule engine would restore the entry. Recorded with checklist 08 🚫 row; System → Search/Storage/Diagnostics placeholder routes replaced by real screens in the same closeout | Product decision, recorded here |
 
 ## 4. Cross-cutting requirements for every WP
 

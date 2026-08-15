@@ -36,9 +36,10 @@ import { PolicyEditor } from './PolicyEditor';
  * and match counts always reflect durable state. Disabled rules are listed
  * from immutable history (priority null) and can be re-enabled.
  *
- * The Matching Rules nav entry stays a placeholder: the engine has exactly
- * one rule model (Release policy rules), so a separate surface would be
- * fake (recorded in the WP-16 report).
+ * The PRD-UI-004 Matching Rules nav entry is removed, not placeholder-routed:
+ * the engine has exactly one rule model (Release policy rules) and identity
+ * matching is evidence-based, so a separate surface would be fake (Phase 10
+ * decision log).
  */
 
 interface Notice {

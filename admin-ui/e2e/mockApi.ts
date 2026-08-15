@@ -612,12 +612,25 @@ const ONBOARDING_PENDING = {
   ],
 };
 
+// The server re-evaluates all six preflight checks on every status read, so
+// a completed server still reports them — the Storage screen renders the
+// storage_paths detail from this payload.
 const ONBOARDING_COMPLETED = {
   completed: true,
   bypassed: false,
   canComplete: true,
   completedBy: 'admin',
-  checks: [],
+  checks: [
+    onboardingCheck('database'),
+    onboardingCheck('storage_paths', {
+      required: false,
+      detail: '2 inbound source(s), storage root /srv/melodee',
+    }),
+    onboardingCheck('media_tools'),
+    onboardingCheck('search_index', { required: false }),
+    onboardingCheck('admin_user'),
+    onboardingCheck('email', { required: false }),
+  ],
 };
 
 export interface MockOptions {
@@ -985,6 +998,38 @@ export const CANONICAL_SCREENS: CanonicalScreen[] = [
     ready: async (page) => {
       await expect(page.getByText('phase5-default-rules', { exact: false })).toHaveCount(0);
       await expect(page.getByRole('button', { name: 'Pause' }).first()).toBeVisible();
+    },
+  },
+  {
+    key: 'system-search',
+    path: 'system/search',
+    ready: async (page) => {
+      await expect(
+        page
+          .locator('section', { has: page.getByRole('heading', { name: 'Search Index' }) })
+          .getByRole('button', { name: 'Rebuild search index' }),
+      ).toBeVisible();
+      await expect(page.getByText('Indexed documents')).toBeVisible();
+    },
+  },
+  {
+    key: 'system-storage',
+    path: 'system/storage',
+    ready: async (page) => {
+      await expect(
+        page.getByRole('heading', { name: 'Storage Paths Preflight' }),
+      ).toBeVisible();
+      await expect(page.getByText('storage paths writable')).toBeVisible();
+    },
+  },
+  {
+    key: 'system-diagnostics',
+    path: 'system/diagnostics',
+    ready: async (page) => {
+      await expect(page.getByRole('heading', { name: 'System Health' })).toBeVisible();
+      await expect(
+        page.getByRole('table', { name: 'Active worker leases' }),
+      ).toBeVisible();
     },
   },
   {

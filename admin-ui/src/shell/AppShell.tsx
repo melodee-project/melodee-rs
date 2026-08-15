@@ -98,10 +98,11 @@ const NAV_TREE: (NavLeaf | NavGroup)[] = [
   {
     key: 'policies',
     labelKey: 'nav.group.policies',
-    items: [
-      { key: 'releaseRules', path: '/policies/releases', icon: Rule },
-      { key: 'matchingRules', path: '/policies/matching', icon: Rule },
-    ],
+    // The PRD-UI-004 "Matching Rules" entry is deliberately absent: the
+    // policy engine has exactly one rule model (Release policy rules) and
+    // identity matching is evidence-based, so no matching-rule surface
+    // exists to route to (Phase 10 decision log).
+    items: [{ key: 'releaseRules', path: '/policies/releases', icon: Rule }],
   },
   {
     key: 'system',
