@@ -7,6 +7,10 @@ Cargo.lock.tmp
 .env.*
 !.env.example
 *.pem
+# The native OIDC integration test signs only synthetic tokens with this
+# non-production fixture. Keep the broad credential rule above for every
+# other PEM file.
+!apps/melodee-server/tests/fixtures/google-test-private.pem
 *.key
 *.pfx
 

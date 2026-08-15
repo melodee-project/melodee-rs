@@ -5,11 +5,12 @@ import starlightLinksValidator from 'starlight-links-validator';
 
 // Melodee public documentation site.
 //
-// Deployed to GitHub Pages by .github/workflows/docs.yml, which provides
-// DOCS_SITE and DOCS_BASE for the project Pages URL
-// (https://<owner>.github.io/<repo>/). If a custom domain is configured for
-// the Pages deployment later, set DOCS_SITE to that domain and DOCS_BASE to
-// '/' in the workflow and add the domain's CNAME file under docs/public/.
+// A supported GitHub Pages deployment can provide DOCS_SITE and DOCS_BASE for
+// the project Pages URL (https://<owner>.github.io/<repo>/). The workflow
+// always validates and builds docs, but publication is opt-in because some
+// repository plans do not support Pages. If a custom domain is configured,
+// set DOCS_SITE to that domain and DOCS_BASE to '/' in the workflow and add
+// the domain's CNAME file under docs/public/.
 const site = process.env.DOCS_SITE ?? 'https://melodee-project.github.io';
 const base = process.env.DOCS_BASE ?? '/melodee-rs';
 

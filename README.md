@@ -1,6 +1,7 @@
 # Melodee
 
 [![CI](https://github.com/melodee-project/melodee-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/melodee-project/melodee-rs/actions/workflows/ci.yml)
+[![Documentation build](https://github.com/melodee-project/melodee-rs/actions/workflows/docs.yml/badge.svg)](https://github.com/melodee-project/melodee-rs/actions/workflows/docs.yml)
 [![Documentation](https://github.com/melodee-project/melodee-rs/actions/workflows/docs.yml/badge.svg)](https://melodee-project.github.io/melodee-rs/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -168,12 +169,12 @@ C# application yet. That release gate is intentionally deferred to Phase 11.
 
 ## Interfaces and clients
 
-| Surface | Scope | Reference |
-| --- | --- | --- |
-| Native Melodee API v1 | First-party catalog, user, playback, sharing, request, podcast, and administration features | [Native API](docs/src/content/docs/api/melodee-api.md) |
-| OpenSubsonic | Captured protocol routes, JSON/XML/JSONP forms, auth variants, direct streaming, and music-client behavior | [OpenSubsonic API](docs/src/content/docs/api/opensubsonic.md) |
-| Jellyfin | Music-focused discovery, login, catalog, artwork, playlists, sessions, and direct-play compatibility | [Jellyfin API](docs/src/content/docs/api/jellyfin.md) |
-| Admin UI | Localized, accessible Carbon SPA for processing, catalog, identity, policy, access, settings, workers, and diagnostics | [Admin overview](docs/src/content/docs/admin/overview.md) |
+| Surface               | Scope                                                                                                                  | Reference                                                     |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| Native Melodee API v1 | First-party catalog, user, playback, sharing, request, podcast, and administration features                            | [Native API](docs/src/content/docs/api/melodee-api.md)        |
+| OpenSubsonic          | Captured protocol routes, JSON/XML/JSONP forms, auth variants, direct streaming, and music-client behavior             | [OpenSubsonic API](docs/src/content/docs/api/opensubsonic.md) |
+| Jellyfin              | Music-focused discovery, login, catalog, artwork, playlists, sessions, and direct-play compatibility                   | [Jellyfin API](docs/src/content/docs/api/jellyfin.md)         |
+| Admin UI              | Localized, accessible Carbon SPA for processing, catalog, identity, policy, access, settings, workers, and diagnostics | [Admin overview](docs/src/content/docs/admin/overview.md)     |
 
 The three API adapters intentionally do not share wire DTOs. Compatibility means preserving
 observable contracts, not retaining known security defects. Consult
@@ -212,9 +213,9 @@ the required definition of done. The primary engineering references are the
 
 ## Documentation, compatibility, and migration
 
-- The public documentation site is at
-  [melodee-project.github.io/melodee-rs](https://melodee-project.github.io/melodee-rs/); its
-  source is [`docs/`](docs/).
+- Public documentation source lives in [`docs/`](docs/). The documentation workflow always
+  validates and builds it; GitHub Pages publication is currently unavailable on this repository's
+  plan and is explicitly disabled until a supported deployment target is configured.
 - Captured compatibility contracts, golden responses, media evidence, and client exercises live
   in [`compatibility/`](compatibility/). They are executable release evidence, not examples to
   hand-edit.

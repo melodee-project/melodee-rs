@@ -14,6 +14,11 @@ declare const process: { env: Record<string, string | undefined> };
 export default defineConfig({
   testDir: './e2e',
   timeout: 30_000,
+  // The default worker count is half the host CPUs (12 here), which can
+  // exhaust a GitHub runner and kill the single Vite preview process halfway
+  // through this 351-case cross-viewport suite. Four workers complete within
+  // the CI budget while keeping the server stable.
+  workers: 4,
   fullyParallel: true,
   reporter: [['list']],
   use: {

@@ -1,8 +1,9 @@
 # Melodee public documentation
 
 This directory contains the public, user-facing Melodee documentation site. It is an
-[Astro Starlight](https://starlight.astro.build) project deployed to GitHub Pages by
-`.github/workflows/docs.yml`.
+[Astro Starlight](https://starlight.astro.build) project. `.github/workflows/docs.yml` always
+validates and builds it; it deploys to GitHub Pages only when the repository supports Pages and
+the `MELODEE_PAGES_ENABLED` repository variable is explicitly enabled.
 
 Internal engineering documentation — requirements, architecture, ADRs, work packages,
 implementation notes, UI references — lives under [`/design`](../design) and must not be moved
@@ -52,18 +53,21 @@ generated output, is listed in the repository `.gitignore`, and must never be co
 
 ## Deployment
 
-`.github/workflows/docs.yml` builds the site on every pull request that touches `docs/` and
-deploys it to GitHub Pages on pushes to `main` (or via manual `workflow_dispatch`). The
-workflow installs Node and pnpm deterministically, runs `pnpm install --frozen-lockfile`,
-`pnpm check`, `pnpm check:links`, and `pnpm build`, then uploads `docs/dist` through the
-official GitHub Pages actions (`actions/upload-pages-artifact` +
-`actions/deploy-pages`).
+`.github/workflows/docs.yml` builds the site on every pull request that touches `docs/` and on
+the corresponding pushes to `main`. The workflow installs Node and pnpm deterministically, runs
+`pnpm install --frozen-lockfile`, `pnpm check`, `pnpm check:links`, and `pnpm build`.
 
-The site URL and base path are provided to the build through the `DOCS_SITE` and `DOCS_BASE`
-environment variables (see `astro.config.mjs`). For the default project Pages deployment this is
-`https://<owner>.github.io/<repo>/`. If a custom domain is configured for the Pages deployment,
-set `DOCS_SITE` to that domain and `DOCS_BASE` to `/` in the workflow, and add the domain's
-`CNAME` file under `public/`.
+To enable GitHub Pages publication on a repository and plan that support it:
+
+1. In **Settings → Pages**, select **GitHub Actions** as the publishing source.
+2. Create the repository Actions variable `MELODEE_PAGES_ENABLED` with value `true`.
+3. For a project Pages URL, keep the workflow's `DOCS_SITE` and `DOCS_BASE` values. For a custom
+   domain, set `DOCS_SITE` to that domain, `DOCS_BASE` to `/`, and add the domain's `CNAME` file
+   under `public/`.
+
+When that variable is not `true`, the workflow intentionally skips `configure-pages`, artifact
+upload, and deployment while retaining the complete documentation quality gate. This keeps the
+repository green on plans that do not offer GitHub Pages.
 
 ## Navigation
 
