@@ -15,6 +15,49 @@ and the Phase 8 real-client change set (ADR-0132 family)
 PRD-API-JF-001..006, ADR-0102 (adapters stay separate products), ADR-0131 (Jellyfin token schema
 and routing-middleware preservation), and the frozen Phase 0 captures under `compatibility/`.
 
+## Post-close Jellyfin authentication correction
+
+The Phase 8 implementation was corrected after independent review without changing the captured
+wire DTOs, token transports, expiry/default, or logout status contract. The correction makes the
+ADR-0131 token model safe under normal production concurrency:
+
+- lookup now verifies every indexed eight-hex-character prefix candidate, rather than accepting
+  the database's arbitrary first candidate;
+- logout revokes the exact resolved token row, never another token sharing the prefix;
+- issuance fails with a 500 rather than emitting an all-zero token or salt if OS randomness is
+  unavailable, and per-user issuance locks the user row before applying the max-ten policy;
+- a token is rejected immediately when its account becomes disabled, locked, or blacklisted; and
+- the HMAC pepper is required at startup and token expiry is configured and bounded as ADR-0131
+  specifies (`MELODEE__JELLYFIN__TOKEN_EXPIRES_AFTER_HOURS`, default 168, range 1–8760).
+
+`apps/melodee-server/tests/jellyfin_core_api.rs` now covers deliberate prefix collision/logout
+isolation, account-state invalidation, and sixteen concurrent login attempts retaining exactly ten
+active tokens. The `jellyfin::auth` unit test proves entropy failure returns an error rather than
+a fallback bearer token; `jellyfin::tests` covers pepper and expiry validation.
+
+## Post-close catalog artwork correction
+
+Phase 10's accepted ADR-0143 introduced durable, audited Artist/Release artwork overrides. A
+post-close integration review found that the native image route honored that precedence while the
+two independently implemented Phase 8 adapter image routes still retained their former
+no-artwork-only resolvers. This correction makes all three consumer contracts read the common
+override store without sharing adapter DTOs or changing the captured no-override behavior:
+
+- OpenSubsonic `getCoverArt` now returns the stored Artist/Release override for `artist_` and
+  `album_` identifiers, and the Release override for `song_`; without an override, its captured
+  default-artwork and unknown-id branches remain byte-identical.
+- Jellyfin `Items`/`Artists` image routes now read the override first, then the immutable
+  publication-plan artwork via the no-follow `DirectPlayService` boundary. The captured Artist,
+  Album, and Song no-artwork 404 classes remain the fallback.
+- The Jellyfin ETag for an image is content-derived, so replacement cannot yield a stale `304`
+  when two override mutations occur within the same timestamp tick.
+
+Regression evidence is in `opensubsonic_media_api.rs`
+`get_cover_art_catalog_overrides_are_served_for_artist_release_and_song` and
+`jellyfin_media_api.rs` `images_serve_artist_and_release_overrides_on_all_catalog_routes`.
+`images_fall_back_to_published_canonical_artwork` additionally proves the immutable-plan branch
+through the real no-follow canonical-root service.
+
 ## Current state
 
 Both frozen adapter surfaces are mounted by `melodee-server` and every inventory row carries
@@ -58,8 +101,8 @@ The frozen legacy baseline remains commit `4028b58dbd3302ed431e2c5b32d9dde5634db
   `Nullable<DateTime>.ToString()` empty-string artifact), and runtime-recomputed averageRating.
 - `media.rs` — stream/download with correct single-pass ranges (decision 4; the legacy
   double-range bug is not preserved), 404 + error 70 envelopes for invalid ranges/timeOffset,
-  getCoverArt stored/default/304 classes (Cache-Control only on stored artwork), getAvatar with
-  the captured default user image, and the captured lyrics serializers.
+  getCoverArt override/stored/default/304 classes (Cache-Control only on stored artwork),
+  getAvatar with the captured default user image, and the captured lyrics serializers.
 - `playlists.rs`/`bookmarks.rs`/`playqueue.rs`/`shares.rs`/`radio.rs`/`users.rs`/`podcasts.rs`/
   `scan.rs`/`negative.rs`/`jukebox` — the captured CRUD, role gates, error shapes, intentional
   410/501 classes, podcast raw-wrapper/conditional-off behavior, and `scanning: false` scan
@@ -84,8 +127,9 @@ every frozen scenario end to end.
 - `discovery.rs` — System/Info, System/Info/Public, and the captured 204 System/Ping (GET/POST).
 - `auth.rs` — Pw-only AuthenticateByName (a `Password`-only body is the captured 400), locked
   ordering (credentials verified before the 403), 64-hex tokens stored as HMAC-SHA256 peppered
-  digests with an 8-char lookup prefix, 168h expiry, max-10 active revocation, all five captured
-  token transports, and idempotent logout.
+  digests with an 8-char lookup prefix, bounded configurable expiry, serialized max-10 active
+  revocation, all five captured token transports, immediate account-state invalidation, and
+  idempotent exact-token logout.
 - `browse.rs` — Items dispatch (includeItemTypes then the parentId probe), Artists/AlbumArtists,
   artist detail, genre-overlap Similar, Genres/MusicGenres, Filters (lowercase keys), item detail
   (artist → album → song probe, no ETag header), Similar/InstantMix with deterministic public-id
@@ -100,8 +144,9 @@ every frozen scenario end to end.
 - `playlists.rs` — playlist list/detail (ETag + 304), create/update/delete, items with 1-based
   ParentIndexNumber and UserData hydrated only with `enableUserData=true`, move, remove, and the
   DELETE /Items/{id} delete surface.
-- `images.rs` — artist → album → song probe with the captured size buckets; the resolver is the
-  single wiring point for durable artwork.
+- `images.rs` — artist → album → song probe with the captured size buckets; it gives ADR-0143
+  overrides precedence, then reads immutable publication-plan artwork through the no-follow
+  direct-play boundary, with captured 404 classes as the absence fallback.
 - `sessions.rs` — GET /Sessions synthesized from durable now-playing state; Playing/Progress feed
   it, Stopped scrobbles unless `Failed=true`, Ping/Capabilities are captured 204s.
 - `userstate.rs` — FavoriteItems/PlayedItems with durable per-user counters, the self-only 403
@@ -112,8 +157,8 @@ every frozen scenario end to end.
 
 ### Differential evidence
 
-`apps/melodee-server/tests/jellyfin_core_api.rs` (11 tests) and
-`apps/melodee-server/tests/jellyfin_media_api.rs` (14 tests) run against PostgreSQL fixtures
+`apps/melodee-server/tests/jellyfin_core_api.rs` (17 tests) and
+`apps/melodee-server/tests/jellyfin_media_api.rs` (16 tests) run against PostgreSQL fixtures
 seeded through the public Phase 3–5 catalog handoff. They assert frozen-golden wire shapes
 (recursive property-set/type comparison), captured status/detail strings, ETag/304 round trips,
 deterministic ordering, role gates, and the 416 header nuances. The route matrix validator checks
@@ -183,7 +228,7 @@ regression tests; details and authorities in the acceptance record):
 1. **Case-insensitive Jellyfin routing** — real clients call lowercase paths
    (`/users/authenticatebyname`); legacy ASP.NET matched templates case-insensitively.
    Implemented as an outer-fallback canonicalize-and-replay for Jellyfin-owned roots only.
-2. **`ApiKey` query token alias (ADR-0132, Proposed)** — legacy read only `api_key`, which broke
+2. **`ApiKey` query token alias (ADR-0132, Accepted)** — legacy read only `api_key`, which broke
    Feishin's `/Download?apiKey=` playback URLs against the legacy server too; upstream Jellyfin
    treats `ApiKey` as the primary query token. Strictly additive.
 3. **Redirect query-key casing** — the captured `/Users/{id}/Items` 307 reconstruction now
@@ -213,12 +258,11 @@ Exact legacy behavior is the default; the deviations are deliberate and bounded:
 - **Deterministic ordering (D10 family).** Legacy random Similar/InstantMix ordering and
   nondeterministic DB-order ties are replaced with stable public-id tiebreaks (ADR-0131 decision
   7). Repetition determinism is asserted by the differential tests.
-- **Artwork 404s at this baseline.** The frozen fixture served 200 PNGs from its artwork store;
-  the Rust catalog has no durable artwork bytes yet (same documented gap as the OpenSubsonic
-  adapter), so catalog entities resolve to the captured no-artwork 404 classes
-  ("Artist image not found." / "Album image not found." / "Song album image not found.").
-  `images.rs::resolve_image` is the single wiring point; the 200-path shape (sniffed content
-  type, `Cache-Control: public, max-age=86400`, ETag/304, HEAD) is implemented behind it.
+- **Captured no-artwork fallback.** The frozen fixture served 200 PNGs from its artwork store.
+  With neither a Phase 10 override nor immutable publication-plan artwork, catalog entities
+  retain the captured no-artwork 404 classes ("Artist image not found." / "Album image not
+  found." / "Song album image not found."). Successful artwork responses use sniffed content
+  type, `Cache-Control: public, max-age=86400`, content-derived ETag/304, and HEAD handling.
 - **Playlist move ownership hardening.** The legacy move handler did not scope to the owner;
   the adapter requires ownership like the other playlist mutations.
 - **Library-scoped parentId.** The legacy partitioned songs by Library rows; the Rust catalog has
@@ -246,8 +290,9 @@ python3 scripts/build_phase8_route_matrix.py # 81/81 OpenSubsonic + 60/60 Jellyf
 - ~~Representative real-client smoke runs~~ — complete: Feishin v1.15.1 passes all workflow
   assertions on both surfaces (§ Real-client acceptance). Finamp/Streamyfin mobile smoke remains
   optional hardening on the same exercised contract (mobile emulator harness required).
-- Durable artwork storage wiring for the images 200 paths (tracked with the artwork pipeline;
-  the resolver hook is in place).
+- ~~Durable artwork storage wiring for the images 200 paths~~ — complete in the Phase 10
+  ADR-0143 correction recorded above; overrides are served by all three client surfaces and
+  Jellyfin also reads immutable publication-plan artwork.
 
 ## Local gate note
 

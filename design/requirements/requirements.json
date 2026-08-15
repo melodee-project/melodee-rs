@@ -1747,12 +1747,12 @@
     "implementation": [
       "compatibility/opensubsonic/golden/ (browse, lists, media, annotation, playlists, community)",
       "compatibility/opensubsonic/contracts/route-inventory.json (81 endpoints classified)",
-      "apps/melodee-server/src/opensubsonic/ (browse/lists/media/annotation/playlists/podcasts/radio/shares/users)"
+      "apps/melodee-server/src/opensubsonic/ (browse/lists/media/annotation/playlists/podcasts/radio/shares/users; media getCoverArt reads ADR-0143 Artist/Release overrides, with Song-to-Release inheritance and captured default fallback)"
     ],
     "tests": [
       "tests/python/test_opensubsonic_capture.py",
       "scripts/run_phase8_differential.py (zero unexpected differences across all groups)",
-      "apps/melodee-server/tests/opensubsonic_*.rs"
+      "apps/melodee-server/tests/opensubsonic_*.rs (including get_cover_art_catalog_overrides_are_served_for_artist_release_and_song)"
     ]
   },
   {
@@ -1818,7 +1818,7 @@
     ],
     "tests": [
       "tests/python/test_jellyfin_capture.py",
-      "apps/melodee-server/tests/jellyfin_core_api.rs and jellyfin_media_api.rs (25 integration tests against PostgreSQL fixtures with frozen-golden shape comparisons)",
+      "apps/melodee-server/tests/jellyfin_core_api.rs and jellyfin_media_api.rs (33 integration tests against PostgreSQL fixtures with frozen-golden shape comparisons)",
       "scripts/run_phase8_differential.py",
       "design/evidence/phase-8/PHASE-8-REPORT.md"
     ]
@@ -1848,12 +1848,12 @@
     "line": 1373,
     "status": "tested",
     "implementation": [
-      "apps/melodee-server/src/jellyfin/auth.rs (Pw-only AuthenticateByName, 64-hex tokens with HMAC-SHA256 peppered digests, 168h expiry, max-10 revocation, all five captured token transports, idempotent logout)",
+      "apps/melodee-server/src/jellyfin/auth.rs (Pw-only AuthenticateByName, required HMAC-SHA256 peppered 64-hex tokens, bounded configurable expiry, row-locked max-10 revocation, all five captured token transports, immediate account-state invalidation, exact-token logout)",
       "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md"
     ],
     "tests": [
       "tests/python/test_jellyfin_capture.py (AuthEvidenceTests)",
-      "apps/melodee-server/tests/jellyfin_core_api.rs (authenticate_by_name_*, token_transports_and_logout_revocation, users_me_without_token_returns_401, users_public_returns_empty_public_user_list, users_list_and_by_id_scoping)"
+      "apps/melodee-server/tests/jellyfin_core_api.rs (authenticate_by_name_*, token_transports_and_logout_revocation, prefix_collisions_authenticate_independently_and_logout_revokes_only_presented_token, issued_token_stops_authorizing_when_account_becomes_ineligible, concurrent_logins_never_exceed_the_configured_active_token_cap, users_me_without_token_returns_401, users_public_returns_empty_public_user_list, users_list_and_by_id_scoping)"
     ]
   },
   {
@@ -1867,14 +1867,14 @@
       "apps/melodee-server/src/jellyfin/browse.rs (Items dispatch, Artists, Genres/MusicGenres, UserViews, Filters, Similar, InstantMix, /Users/{id}/Items redirects)",
       "apps/melodee-server/src/jellyfin/audio.rs (stream/stream.{ext}/universal, lyrics, Download/File, PlaybackInfo)",
       "apps/melodee-server/src/jellyfin/playlists.rs (playlist CRUD, items, move, DELETE /Items/{id}; D4 clean-add deviation)",
-      "apps/melodee-server/src/jellyfin/images.rs (size buckets, no-artwork 404 classes at this baseline)",
+      "apps/melodee-server/src/jellyfin/images.rs (size buckets, ADR-0143 override precedence, immutable publication-plan artwork through the bounded direct-play boundary, captured no-artwork 404 fallback)",
       "apps/melodee-server/src/jellyfin/sessions.rs (session synthesis from now-playing, Playing/Progress/Stopped/Ping, Capabilities)",
       "apps/melodee-server/src/jellyfin/userstate.rs (FavoriteItems/PlayedItems with durable counters)",
       "compatibility/jellyfin/contracts/phase8-route-evidence.json (per-route authority, requirements, legacy evidence, and Rust tests)"
     ],
     "tests": [
       "tests/python/test_jellyfin_capture.py",
-      "apps/melodee-server/tests/jellyfin_media_api.rs (14 integration tests incl. frozen-golden wire-shape comparisons and deterministic-order deviation assertions)"
+      "apps/melodee-server/tests/jellyfin_media_api.rs (16 integration tests incl. frozen-golden wire-shape comparisons, deterministic-order deviation assertions, and Artist/Release/Track artwork override/canonical-source/cache/bucket coverage)"
     ]
   },
   {

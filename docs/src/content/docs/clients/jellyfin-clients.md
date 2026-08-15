@@ -32,8 +32,9 @@ Non-music Jellyfin behavior is intentionally out of scope.
 ## Known limitations
 
 - No transcoding (direct play only).
-- Artist/release images answer `404` until durable artwork storage ships; clients show their
-  placeholder art.
+- Artist and Release images use an administrator's catalog artwork override when present, then
+  published canonical artwork. Clients show their own placeholder art only when neither source
+  exists.
 - Non-music libraries and features (video, TV, books, Live TV, plugins) are not present.
 
 :::note[Verification status]

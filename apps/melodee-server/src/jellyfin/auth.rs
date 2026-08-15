@@ -38,6 +38,7 @@ type HmacSha256 = Hmac<Sha256>;
 /// Authenticated Jellyfin identity installed by [`authenticate`].
 #[derive(Debug, Clone)]
 pub struct JfPrincipal {
+    token_id: Uuid,
     pub user_id: Uuid,
     pub public_api_id: Uuid,
     pub username: String,
@@ -135,7 +136,13 @@ pub async fn authenticate_by_name(
 
     // Issue a new token: 32 random bytes hex (64 chars), stored as
     // HMAC-SHA256(pepper, salt+token) with an 8-char cleartext prefix.
-    let token = generate_token();
+    let token = match generate_token() {
+        Ok(token) => token,
+        Err(error) => {
+            tracing::error!(%error, "jellyfin token generation failed");
+            return internal_error();
+        }
+    };
     let token_id = Uuid::now_v7();
     let now = OffsetDateTime::now_utc();
     let expires_at = now + time::Duration::hours(state.token_expiry_hours);
@@ -151,7 +158,7 @@ pub async fn authenticate_by_name(
     .await
     {
         tracing::error!(%error, "jellyfin token issue failed");
-        return unauthorized_401();
+        return internal_error();
     }
 
     let user = user_json(
@@ -266,10 +273,22 @@ fn unauthorized_401() -> Response {
         .into_json_response(StatusCode::UNAUTHORIZED)
 }
 
-fn generate_token() -> String {
+fn generate_token_with(
+    fill: impl FnOnce(&mut [u8]) -> Result<(), getrandom::Error>,
+) -> Result<String, getrandom::Error> {
     let mut bytes = [0u8; 32];
-    let _ = getrandom::fill(&mut bytes);
-    hex_encode(&bytes)
+    fill(&mut bytes)?;
+    Ok(hex_encode(&bytes))
+}
+
+fn generate_token() -> Result<String, getrandom::Error> {
+    generate_token_with(getrandom::fill)
+}
+
+fn generate_salt() -> Result<[u8; 16], getrandom::Error> {
+    let mut salt = [0u8; 16];
+    getrandom::fill(&mut salt)?;
+    Ok(salt)
 }
 
 fn hex_encode(bytes: &[u8]) -> String {
@@ -286,16 +305,33 @@ fn hex_encode(bytes: &[u8]) -> String {
         .collect()
 }
 
-fn token_digest(pepper: &[u8], salt: &[u8], token: &str) -> [u8; 32] {
-    let Ok(mut mac) = HmacSha256::new_from_slice(pepper) else {
-        return [0u8; 32];
-    };
+fn token_digest(pepper: &[u8], salt: &[u8], token: &str) -> Option<[u8; 32]> {
+    let mut mac = HmacSha256::new_from_slice(pepper).ok()?;
     mac.update(salt);
     mac.update(token.as_bytes());
     let result = mac.finalize().into_bytes();
     let mut out = [0u8; 32];
     out.copy_from_slice(&result);
-    out
+    Some(out)
+}
+
+fn token_matches(pepper: &[u8], salt: &[u8], token: &str, digest: &[u8]) -> bool {
+    let Some(mut mac) = HmacSha256::new_from_slice(pepper).ok() else {
+        return false;
+    };
+    mac.update(salt);
+    mac.update(token.as_bytes());
+    mac.verify_slice(digest).is_ok()
+}
+
+#[derive(Debug, thiserror::Error)]
+enum TokenIssueError {
+    #[error("operating-system randomness unavailable: {0}")]
+    Random(#[from] getrandom::Error),
+    #[error("Jellyfin token digest could not be initialized")]
+    Digest,
+    #[error("database error while issuing Jellyfin token: {0}")]
+    Database(#[from] sqlx::Error),
 }
 
 async fn issue_token(
@@ -306,8 +342,14 @@ async fn issue_token(
     now: OffsetDateTime,
     expires_at: OffsetDateTime,
     client_info: &ClientInfo,
-) -> Result<(), sqlx::Error> {
+) -> Result<(), TokenIssueError> {
     let mut tx = state.pool.begin().await?;
+    // Serialize issuance per user. A token-table count alone does not protect
+    // the max-active invariant when two login requests race.
+    sqlx::query_scalar::<_, Uuid>("SELECT id FROM native_users WHERE id = $1 FOR UPDATE")
+        .bind(user_id)
+        .fetch_one(&mut *tx)
+        .await?;
     // Enforce max-active: soft-revoke the oldest when over the limit.
     let active: i64 = sqlx::query_scalar("SELECT count(*) FROM jellyfin_access_tokens WHERE user_id=$1 AND revoked_at IS NULL AND expires_at > now()")
         .bind(user_id)
@@ -319,19 +361,16 @@ async fn issue_token(
             .execute(&mut *tx)
             .await?;
     }
-    let salt = {
-        let mut s = [0u8; 16];
-        let _ = getrandom::fill(&mut s);
-        s.to_vec()
-    };
+    let salt = generate_salt()?;
     let prefix = &token[..8];
-    let digest = token_digest(state.token_pepper.as_bytes(), &salt, token);
+    let digest =
+        token_digest(state.token_pepper.as_bytes(), &salt, token).ok_or(TokenIssueError::Digest)?;
     sqlx::query("INSERT INTO jellyfin_access_tokens (id, user_id, token_prefix, token_digest, token_salt, client, device_name, device_id, issued_at, expires_at, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$9,$9)")
         .bind(token_id)
         .bind(user_id)
         .bind(prefix)
         .bind(digest)
-        .bind(&salt)
+        .bind(salt.as_slice())
         .bind(&client_info.client)
         .bind(&client_info.device)
         .bind(&client_info.device_id)
@@ -414,54 +453,63 @@ async fn validate_token(state: &JfState, token: &str) -> Option<JfPrincipal> {
         return None;
     }
     let prefix = &token[..8];
-    let row = sqlx::query("SELECT t.id, t.user_id, t.token_digest, t.token_salt, t.expires_at, t.revoked_at, u.public_api_id, u.username, u.is_admin, u.is_editor, u.enabled, u.locked, u.blacklisted FROM jellyfin_access_tokens t JOIN native_users u ON u.id = t.user_id WHERE t.token_prefix = $1")
+    let rows = sqlx::query("SELECT t.id, t.user_id, t.token_digest, t.token_salt, t.expires_at, t.revoked_at, u.public_api_id, u.username, u.is_admin, u.is_editor, u.enabled, u.locked, u.blacklisted FROM jellyfin_access_tokens t JOIN native_users u ON u.id = t.user_id WHERE t.token_prefix = $1 ORDER BY t.id")
         .bind(prefix)
-        .fetch_optional(&state.pool)
+        .fetch_all(&state.pool)
         .await
-        .ok()??;
-    let expires_at: OffsetDateTime = row.try_get("expires_at").ok()?;
-    let revoked_at: Option<OffsetDateTime> = row.try_get("revoked_at").ok()?;
-    if revoked_at.is_some() || expires_at <= OffsetDateTime::now_utc() {
-        return None;
+        .ok()?;
+    for row in rows {
+        let expires_at: OffsetDateTime = row.try_get("expires_at").ok()?;
+        let revoked_at: Option<OffsetDateTime> = row.try_get("revoked_at").ok()?;
+        let enabled: bool = row.try_get("enabled").ok()?;
+        let locked: bool = row.try_get("locked").ok()?;
+        let blacklisted: bool = row.try_get("blacklisted").ok()?;
+        if revoked_at.is_some()
+            || expires_at <= OffsetDateTime::now_utc()
+            || !enabled
+            || locked
+            || blacklisted
+        {
+            continue;
+        }
+        let digest: Vec<u8> = row.try_get("token_digest").ok()?;
+        let salt: Vec<u8> = row.try_get("token_salt").ok()?;
+        if !token_matches(state.token_pepper.as_bytes(), &salt, token, &digest) {
+            continue;
+        }
+        let token_id: Uuid = row.try_get("id").ok()?;
+        let user_id: Uuid = row.try_get("user_id").ok()?;
+        let public_api_id: Uuid = row.try_get("public_api_id").ok()?;
+        let username: String = row.try_get("username").ok()?;
+        let is_admin: bool = row.try_get("is_admin").ok()?;
+        let is_editor: bool = row.try_get("is_editor").ok()?;
+        let roles: Vec<String> = sqlx::query_scalar(
+            "SELECT role FROM native_user_roles WHERE user_id = $1 ORDER BY role",
+        )
+        .bind(user_id)
+        .fetch_all(&state.pool)
+        .await
+        .ok()?;
+        return Some(JfPrincipal {
+            token_id,
+            user_id,
+            public_api_id,
+            username,
+            is_admin,
+            is_editor,
+            roles,
+        });
     }
-    let digest: Vec<u8> = row.try_get("token_digest").ok()?;
-    let salt: Vec<u8> = row.try_get("token_salt").ok()?;
-    let expected = token_digest(state.token_pepper.as_bytes(), &salt, token);
-    if digest != expected {
-        return None;
-    }
-    let user_id: Uuid = row.try_get("user_id").ok()?;
-    let public_api_id: Uuid = row.try_get("public_api_id").ok()?;
-    let username: String = row.try_get("username").ok()?;
-    let is_admin: bool = row.try_get("is_admin").unwrap_or(false);
-    let is_editor: bool = row.try_get("is_editor").unwrap_or(false);
-    let roles: Vec<String> =
-        sqlx::query_scalar("SELECT role FROM native_user_roles WHERE user_id = $1 ORDER BY role")
-            .bind(user_id)
-            .fetch_all(&state.pool)
-            .await
-            .unwrap_or_default();
-    Some(JfPrincipal {
-        user_id,
-        public_api_id,
-        username,
-        is_admin,
-        is_editor,
-        roles,
-    })
+    None
 }
 
 pub async fn logout(State(state): State<JfState>, headers: HeaderMap, uri: Uri) -> Response {
     if let Some(principal) = resolve_token(&state, &headers, &uri).await {
-        let token = extract_token(&headers, &uri).unwrap_or_default();
-        if token.len() >= 8 {
-            let prefix = &token[..8];
-            let _ = sqlx::query("UPDATE jellyfin_access_tokens SET revoked_at = now(), updated_at = now() WHERE token_prefix = $1 AND user_id = $2 AND revoked_at IS NULL")
-                .bind(prefix)
-                .bind(principal.user_id)
-                .execute(&state.pool)
-                .await;
-        }
+        let _ = sqlx::query("UPDATE jellyfin_access_tokens SET revoked_at = now(), updated_at = now() WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL")
+            .bind(principal.token_id)
+            .bind(principal.user_id)
+            .execute(&state.pool)
+            .await;
     }
     // Idempotent 204 even for garbage tokens (captured).
     StatusCode::NO_CONTENT.into_response()
@@ -592,4 +640,15 @@ pub async fn users_public(State(state): State<JfState>) -> Response {
         HeaderValue::from_static("application/json; charset=utf-8"),
     );
     response
+}
+
+#[cfg(test)]
+mod tests {
+    use super::generate_token_with;
+
+    #[test]
+    fn entropy_failure_never_returns_a_fallback_bearer_token() {
+        let token = generate_token_with(|_| Err(getrandom::Error::UNSUPPORTED));
+        assert!(token.is_err());
+    }
 }

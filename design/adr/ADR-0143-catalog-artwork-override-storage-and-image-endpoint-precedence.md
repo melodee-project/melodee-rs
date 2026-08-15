@@ -154,6 +154,27 @@ Implemented as decided above; no deviations from the Decision section.
   `docs/src/content/docs/api/admin-api.md`; checklist row:
   `design/evidence/phase-10/checklists/07-artist-release-detail.md` (artwork row ✅).
 
+### Post-acceptance adapter completion (2026-08-15)
+
+The phrase "one shared endpoint" in the Consequences section was imprecise: ADR-0102 requires
+Native, OpenSubsonic, and Jellyfin to remain separate adapters, so they cannot share an HTTP
+endpoint or wire DTO. They share the bounded artwork sources and precedence rule instead. The
+initial implementation evidence proved the native endpoint branch; a subsequent integration
+review completed the corresponding adapter reads without changing any no-artwork captured branch:
+
+- `opensubsonic/media.rs` resolves `artist_` and `album_` IDs to their override and maps a
+  `song_` ID to its Release override before retaining the captured default-artwork fallback.
+- `jellyfin/images.rs` resolves an override, then immutable publication-plan artwork through
+  `DirectPlayService`, and processes PNG/JPEG output through the shared bounded image pipeline
+  for its existing size buckets.
+- `opensubsonic_media_api.rs`
+  `get_cover_art_catalog_overrides_are_served_for_artist_release_and_song` and
+  `jellyfin_media_api.rs`
+  `images_serve_artist_and_release_overrides_on_all_catalog_routes` cover the additional
+  routes, inheritance, cache behavior, HEAD, and size processing;
+  `images_fall_back_to_published_canonical_artwork` covers the immutable-plan branch through
+  the no-follow canonical root.
+
 ## Validation
 
 - Upload → `GET /images/{kind}_{id}/{size}` serves the uploaded bytes (resized pipeline

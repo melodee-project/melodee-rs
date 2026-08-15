@@ -13,8 +13,10 @@
 //!   ignored.
 //! - **download** 200 + `Content-Disposition: attachment`, gated by
 //!   `downloads_enabled`; unknown → credential-free 302.
-//! - **getCoverArt** song id → 200 empty (no artwork at baseline); playlist id
-//!   → stored artwork with sniffed/stored content-type + ETag + 304 on match.
+//! - **getCoverArt** catalog overrides → stored artwork (a Song uses its
+//!   Release override), catalog entities without artwork → captured default,
+//!   playlist id → stored artwork with sniffed/stored content-type + ETag +
+//!   304 on match.
 //! - **getAvatar** by username and by `user_<id>`, 404 when absent.
 //! - **getLyrics/getLyricsBySongId** captured baseline shape (`.lrc` sidecars
 //!   are intentionally not parsed at this baseline; getLyrics echoes the
@@ -41,7 +43,9 @@ use catalog_common::CatalogFixturePresentation;
 use http_body_util::BodyExt;
 use md5::{Digest, Md5};
 use melodee_auth::PasswordHashAlgorithm;
-use melodee_persistence::{AuthStore, NativeUserImport};
+use melodee_persistence::{
+    AuthStore, CatalogImageAudit, CatalogImageEntity, CatalogImageStore, NativeUserImport,
+};
 use melodee_server::native_stream::{CanonicalAssetRoot, DirectPlayService};
 use melodee_server::opensubsonic::{MusicFolder, OsState};
 use tempfile::TempDir;
@@ -551,6 +555,77 @@ async fn get_cover_art_song_serves_the_captured_default_when_no_artwork() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(header_str(&headers, header::CONTENT_TYPE), "image/jpeg");
     assert_eq!(body.len(), 785, "processed default artwork bytes");
+}
+
+#[tokio::test]
+async fn get_cover_art_catalog_overrides_are_served_for_artist_release_and_song() {
+    let db = common::TestDb::create("os_media_coverart_catalog_override").await;
+    let state = state(&db).await;
+    let track = seed_track(&db, 90131, "Override Probe").await;
+    let (release_id, release_public_id): (Uuid, Uuid) = sqlx::query_as(
+        "SELECT release.id, release.public_api_id
+         FROM tracks track JOIN releases release ON release.id = track.release_id
+         WHERE track.public_api_id = $1",
+    )
+    .bind(track)
+    .fetch_one(&db.pool)
+    .await
+    .expect("release ids");
+    let (artist_id, artist_public_id): (Uuid, Uuid) = sqlx::query_as(
+        "SELECT artist.id, artist.public_api_id
+         FROM release_artists billing JOIN artists artist ON artist.id = billing.artist_id
+         WHERE billing.release_id = $1 AND billing.role = 'primary'",
+    )
+    .bind(release_id)
+    .fetch_one(&db.pool)
+    .await
+    .expect("artist ids");
+    let release_artwork = b"\xff\xd8\xff\xe0catalog-release-override".to_vec();
+    let artist_artwork = b"\x89PNG\r\n\x1a\ncatalog-artist-override".to_vec();
+    let audit = CatalogImageAudit {
+        actor: "os-media-test",
+        reason: "verify adapter artwork precedence",
+        now: OffsetDateTime::now_utc(),
+    };
+    CatalogImageStore::set_image(
+        &db.pool,
+        CatalogImageEntity::Release,
+        release_id,
+        "image/jpeg",
+        &release_artwork,
+        audit,
+    )
+    .await
+    .expect("store release override");
+    CatalogImageStore::set_image(
+        &db.pool,
+        CatalogImageEntity::Artist,
+        artist_id,
+        "image/png",
+        &artist_artwork,
+        audit,
+    )
+    .await
+    .expect("store artist override");
+
+    for id in [
+        format!("album_{release_public_id}"),
+        format!("song_{track}"),
+    ] {
+        let path = format!("/rest/getCoverArt.view?f=json&v=1.16.1&c=phase0&id={id}");
+        let (status, headers, body) = respond(state.clone(), get(&authed(&path))).await;
+        assert_eq!(status, StatusCode::OK, "{id}");
+        assert_header(&headers, header::CONTENT_TYPE, "image/jpeg");
+        assert_header(&headers, header::CACHE_CONTROL, "public, max-age=86400");
+        assert_eq!(body, release_artwork, "{id}");
+    }
+
+    let path =
+        format!("/rest/getCoverArt.view?f=json&v=1.16.1&c=phase0&id=artist_{artist_public_id}");
+    let (status, headers, body) = respond(state, get(&authed(&path))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_header(&headers, header::CONTENT_TYPE, "image/png");
+    assert_eq!(body, artist_artwork);
 }
 
 #[tokio::test]

@@ -159,7 +159,7 @@
       },
       "phase8": {
         "status": "implemented-and-differentially-tested",
-        "rationale": "Artist images probe the artwork resolver; at this baseline no durable artwork bytes exist, so the captured no-artwork 404 class is served (the legacy fixture's 200 PNGs are a documented evidence gap pending durable artwork storage).",
+        "rationale": "Artist images probe the ADR-0143 override first, then immutable publication-plan artwork through the bounded direct-play boundary. The captured no-artwork 404 class remains when neither source exists.",
         "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
         "requirements": [
           "PRD-API-JF-004"
@@ -168,7 +168,9 @@
           "jf-images/artist-image"
         ],
         "rustTests": [
-          "apps/melodee-server/tests/jellyfin_media_api.rs::images_no_artwork_404_classes"
+          "apps/melodee-server/tests/jellyfin_media_api.rs::images_no_artwork_404_classes",
+          "apps/melodee-server/tests/jellyfin_media_api.rs::images_serve_artist_and_release_overrides_on_all_catalog_routes",
+          "apps/melodee-server/tests/jellyfin_media_api.rs::images_fall_back_to_published_canonical_artwork"
         ]
       }
     },
@@ -578,7 +580,7 @@
       },
       "phase8": {
         "status": "implemented-and-differentially-tested",
-        "rationale": "Artist->album->song probe with the captured size buckets; catalog entities resolve to the captured no-artwork 404 classes at this baseline (documented evidence gap: the legacy fixture served stored PNGs).",
+        "rationale": "Artist->album->song probe with the captured size buckets. ADR-0143 overrides take precedence, then immutable publication-plan artwork is rendered through the bounded image processor; the captured no-artwork 404 classes remain the absence branch.",
         "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
         "requirements": [
           "PRD-API-JF-004"
@@ -591,7 +593,9 @@
           "jf-images/item-image-primary"
         ],
         "rustTests": [
-          "apps/melodee-server/tests/jellyfin_media_api.rs::images_no_artwork_404_classes"
+          "apps/melodee-server/tests/jellyfin_media_api.rs::images_no_artwork_404_classes",
+          "apps/melodee-server/tests/jellyfin_media_api.rs::images_serve_artist_and_release_overrides_on_all_catalog_routes",
+          "apps/melodee-server/tests/jellyfin_media_api.rs::images_fall_back_to_published_canonical_artwork"
         ]
       }
     },
@@ -610,7 +614,7 @@
       },
       "phase8": {
         "status": "implemented-and-differentially-tested",
-        "rationale": "Indexed image variant; same probe and 404 classes as the unindexed route.",
+        "rationale": "Indexed image variant; same ADR-0143 source ordering, size processing, and captured no-artwork fallback as the unindexed route.",
         "authority": "design/adr/ADR-0131-phase-8-jellyfin-token-schema-and-routing-middleware-preservation.md",
         "requirements": [
           "PRD-API-JF-004"
@@ -619,7 +623,9 @@
           "jf-images/item-image-indexed"
         ],
         "rustTests": [
-          "apps/melodee-server/tests/jellyfin_media_api.rs::images_no_artwork_404_classes"
+          "apps/melodee-server/tests/jellyfin_media_api.rs::images_no_artwork_404_classes",
+          "apps/melodee-server/tests/jellyfin_media_api.rs::images_serve_artist_and_release_overrides_on_all_catalog_routes",
+          "apps/melodee-server/tests/jellyfin_media_api.rs::images_fall_back_to_published_canonical_artwork"
         ]
       }
     },

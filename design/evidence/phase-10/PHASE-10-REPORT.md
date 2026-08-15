@@ -74,10 +74,33 @@ shipped; follow-on ADR required).
 
 ## Compatibility impact
 
-No native-v1/OpenSubsonic/Jellyfin route, DTO, status, or auth behavior changed. The single
-frozen-surface touch is ADR-0143's evidenced precedence extension in `GET /images/{id}/{size}`
-(override first; absence → byte-identical captured behavior; golden suite green). Party/jukebox
-absence preserved (ADR-0133) with legacy web routes retired by ADR-0140/0141.
+No native-v1/OpenSubsonic/Jellyfin DTO, status, or auth behavior changed. ADR-0143 deliberately
+extends artwork read behavior: native `GET /images/{id}/{size}`, OpenSubsonic `getCoverArt`, and
+Jellyfin `Items`/`Artists` image routes serve a stored Artist/Release override when one exists;
+Jellyfin then falls back to immutable publication-plan artwork. Each surface preserves its
+captured no-artwork fallback when neither source exists. Party/jukebox absence is preserved
+(ADR-0133) with legacy web routes retired by ADR-0140/0141.
+
+## Post-close artwork adapter completion
+
+The initial ADR-0143 evidence proved the native endpoint precedence branch, but an independent
+integration review found that the separate OpenSubsonic and Jellyfin image handlers had retained
+their previous no-artwork-only resolver paths. This was corrected without merging wire DTOs or
+altering their no-override captured branches:
+
+- `opensubsonic/media.rs` now serves Artist/Release overrides through `getCoverArt`, with Song
+  identifiers resolving their Release override; `opensubsonic_media_api.rs`
+  `get_cover_art_catalog_overrides_are_served_for_artist_release_and_song` proves all three
+  identifiers.
+- `jellyfin/images.rs` now applies the override → publication-plan ordering through the bounded,
+  no-follow direct-play read boundary, and renders stored PNG/JPEG bytes through the shared
+  bounded image processor for its documented size buckets. Its ETag is content-derived so an
+  immediate replacement cannot produce a stale `304`.
+- `jellyfin_media_api.rs`
+  `images_serve_artist_and_release_overrides_on_all_catalog_routes` proves both route families,
+  album/track inheritance, the indexed form, size processing, HEAD, and conditional caching;
+  `images_fall_back_to_published_canonical_artwork` proves the Artist/Release/Track fallback
+  through a real immutable plan and no-follow canonical root.
 
 ## Data/migration impact
 

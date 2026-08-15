@@ -390,14 +390,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         server_id: "93cd3cc3a120127ccfda124620290cae".to_string(),
         local_address: public_origin.clone(),
         public_origin: public_origin.clone(),
-        token_pepper: jellyfin::SecretPepper::new(
-            std::env::var("MELODEE__JELLYFIN__TOKEN_PEPPER")
-                .unwrap_or_else(|_| {
-                    "melodee-jellyfin-fixture-pepper-NOT-A-REAL-SECRET-32b!".to_string()
-                })
-                .into_bytes(),
-        ),
-        token_expiry_hours: 168,
+        token_pepper: jellyfin::token_pepper_from_env()?,
+        token_expiry_hours: jellyfin::token_expiry_hours_from_env()?,
         max_active_tokens: 10,
         direct_play: direct_play.clone(),
         client_addresses: native_stream::ClientAddressResolver::new(

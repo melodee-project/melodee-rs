@@ -39,3 +39,11 @@ Streams serve the original audio bytes with single-pass byte ranges (`206` respo
 correct `Content-Range` total). Invalid or unsatisfiable ranges and unsupported time offsets
 answer `404` with an OpenSubsonic error envelope. Transcoding parameters are accepted for
 compatibility but silently ignored.
+
+## Cover art
+
+`getCoverArt` serves an administrator's catalog artwork override for `artist_`, `album_`, and
+`song_` identifiers when one exists; a `song_` identifier uses its Release override. Without an
+override, catalog identifiers retain the captured default-artwork behavior. Playlist artwork is
+separate user-state data. Stored artwork responses carry an ETag and
+`Cache-Control: public, max-age=86400`.

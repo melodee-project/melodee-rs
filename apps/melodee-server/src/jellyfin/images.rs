@@ -11,10 +11,9 @@
 //! - No-artwork classes: "Artist image not found." / "Album image not
 //!   found." / "Song album image not found." / "Item not found."
 //!
-//! The Rust catalog has no durable artwork bytes at this baseline (same as
-//! the OpenSubsonic adapter), so catalog entities currently resolve to the
-//! captured no-artwork 404 classes; the resolver is the single wiring point
-//! for when published artwork lands.
+//! Artwork resolution observes the same immutable publication-plan and
+//! operator-override sources as the native endpoint (ADR-0143). The captured
+//! no-artwork 404 classes remain the fallback when neither source has bytes.
 
 use axum::{
     Router,
@@ -23,6 +22,8 @@ use axum::{
     response::{IntoResponse, Response},
     routing::get,
 };
+use image::ImageFormat;
+use sha2::{Digest, Sha256};
 use sqlx::Row;
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -32,6 +33,9 @@ use super::auth::resolve_token;
 use super::browse::{db_failure, raw_query};
 use super::error::{bad_request, not_found, unauthorized};
 use super::model;
+use crate::native_stream::PlayableAsset;
+
+const MAX_IMAGE_BYTES: u64 = 10 * 1024 * 1024;
 
 pub fn router() -> Router<JfState> {
     Router::new()
@@ -63,19 +67,157 @@ fn bucket(max_width: Option<i64>, max_height: Option<i64>) -> ImageSizeBucket {
 
 struct ResolvedImage {
     bytes: Vec<u8>,
-    created_at: OffsetDateTime,
 }
 
-/// Artwork resolution hook. No durable artist/release artwork bytes exist in
-/// the Rust catalog at this baseline; this is the single wiring point.
+/// Resolves an operator override first, then immutable canonical artwork for
+/// the addressed catalog entity. This does not alter the captured 404 branch:
+/// an entity without either source remains no-artwork.
 async fn resolve_image(
     state: &JfState,
     kind: &str,
     public_id: Uuid,
     size: ImageSizeBucket,
 ) -> Result<Option<ResolvedImage>, sqlx::Error> {
-    let _ = (state, kind, public_id, size);
-    Ok(None)
+    if let Some(bytes) = artwork_override_bytes(&state.pool, kind, public_id).await? {
+        return processed_image(bytes, size).await.map(Some);
+    }
+
+    let release_id = resolve_release(&state.pool, kind, public_id).await?;
+    let Some(release_id) = release_id else {
+        return Ok(None);
+    };
+    match canonical_artwork_bytes(state, release_id).await? {
+        Some(bytes) => processed_image(bytes, size).await.map(Some),
+        None => Ok(None),
+    }
+}
+
+const fn output_size(size: ImageSizeBucket) -> u32 {
+    match size {
+        ImageSizeBucket::Small => 100,
+        ImageSizeBucket::Medium => 300,
+        ImageSizeBucket::Large => 1024,
+    }
+}
+
+/// Jellyfin's size-bucket contract shares native's bounded processor while
+/// preserving the source PNG/JPEG format expected by Jellyfin clients.
+async fn processed_image(
+    bytes: Vec<u8>,
+    size: ImageSizeBucket,
+) -> Result<ResolvedImage, sqlx::Error> {
+    let format = if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        ImageFormat::Png
+    } else {
+        // Published artwork is canonical JPEG and catalog overrides only
+        // admit JPEG/PNG through the admin validation boundary.
+        ImageFormat::Jpeg
+    };
+    crate::native::images::resize_compatibility_image(bytes, output_size(size), format)
+        .await
+        .map(|bytes| ResolvedImage { bytes })
+        .map_err(|_| sqlx::Error::Protocol("Jellyfin image processing failed".to_string()))
+}
+
+/// ADR-0143 precedence lookup. Tracks resolve their Release override; Artist
+/// overrides remain artist-scoped even when the artist has no released media.
+async fn artwork_override_bytes(
+    pool: &sqlx::PgPool,
+    kind: &str,
+    public_id: Uuid,
+) -> Result<Option<Vec<u8>>, sqlx::Error> {
+    let query = match kind {
+        "artist" => {
+            "SELECT image.image_bytes
+             FROM catalog_entity_images image
+             JOIN artists artist ON artist.id = image.artist_id
+             WHERE image.entity_type = 'artist'
+               AND artist.public_api_id = $1
+               AND artist.status NOT IN ('merged', 'deprecated')"
+        }
+        "album" => {
+            "SELECT image.image_bytes
+             FROM catalog_entity_images image
+             JOIN releases release ON release.id = image.release_id
+             WHERE image.entity_type = 'release'
+               AND release.public_api_id = $1
+               AND release.status = 'active'"
+        }
+        _ => return Ok(None),
+    };
+    sqlx::query_scalar(query)
+        .bind(public_id)
+        .fetch_optional(pool)
+        .await
+}
+
+/// The immutable publication-plan artwork source used after the operator
+/// override lookup. `DirectPlayService` retains no-follow containment and a
+/// second byte bound while the asset is read.
+async fn canonical_artwork_bytes(
+    state: &JfState,
+    release_id: Uuid,
+) -> Result<Option<Vec<u8>>, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT plan.target_relative_path || '/' || (asset.value->>'canonical_path'),
+                (asset.value->>'size_bytes')::bigint
+         FROM catalog_imports catalog_import
+         JOIN release_publication_plans plan ON plan.work_item_id = catalog_import.work_item_id
+         CROSS JOIN LATERAL jsonb_array_elements(COALESCE(plan.plan_payload->'assets', '[]')) asset(value)
+         WHERE catalog_import.release_id = $1 AND asset.value->>'kind' = 'artwork'
+         ORDER BY asset.value->>'canonical_path' LIMIT 1",
+    )
+    .bind(release_id)
+    .fetch_optional(&state.pool)
+    .await?;
+    let (Some(service), Some(row)) = (state.direct_play.as_ref(), row) else {
+        return Ok(None);
+    };
+    let byte_size: i64 = row.try_get(1)?;
+    let Ok(byte_size) = u64::try_from(byte_size) else {
+        return Ok(None);
+    };
+    let asset = PlayableAsset {
+        canonical_relative_path: row.try_get(0)?,
+        byte_size,
+        mime_type: "image/jpeg".to_string(),
+    };
+    let Ok(bytes) = service.read_asset_bounded(&asset, MAX_IMAGE_BYTES).await else {
+        return Ok(None);
+    };
+    Ok(Some(bytes))
+}
+
+async fn resolve_release(
+    pool: &sqlx::PgPool,
+    kind: &str,
+    public_id: Uuid,
+) -> Result<Option<Uuid>, sqlx::Error> {
+    match kind {
+        "album" => {
+            sqlx::query_scalar(
+                "SELECT id FROM releases WHERE public_api_id = $1 AND status = 'active'",
+            )
+            .bind(public_id)
+            .fetch_optional(pool)
+            .await
+        }
+        "artist" => {
+            sqlx::query_scalar(
+                "SELECT billing.release_id FROM artists artist
+                 JOIN release_artists billing ON billing.artist_id = artist.id
+                 JOIN releases release ON release.id = billing.release_id
+                 WHERE artist.public_api_id = $1
+                   AND artist.status NOT IN ('merged', 'deprecated')
+                   AND release.status = 'active'
+                 ORDER BY release.release_date DESC NULLS LAST, release.public_api_id LIMIT 1",
+            )
+            .bind(public_id)
+            .fetch_optional(pool)
+            .await
+        }
+        _ => Ok(None),
+    }
 }
 
 /// Captured magic-byte content sniffing (default image/jpeg).
@@ -111,8 +253,9 @@ fn sniff_content_type(bytes: &[u8]) -> &'static str {
 }
 
 fn image_response(image: ResolvedImage, headers: &HeaderMap, is_head: bool) -> Response {
-    // Captured ETag form: quoted unix-seconds-of-created-at ticks.
-    let etag = format!("\"{}\"", image.created_at.unix_timestamp() * 10_000_000);
+    // Content-derived tags avoid a stale 304 if an operator replaces an
+    // override more than once in a single timestamp tick.
+    let etag = format!("\"{}\"", hex_digest(&image.bytes));
     let not_modified = headers
         .get(header::IF_NONE_MATCH)
         .and_then(|value| value.to_str().ok())
@@ -150,6 +293,13 @@ fn image_response(image: ResolvedImage, headers: &HeaderMap, is_head: bool) -> R
     );
     insert(&mut response, header::ETAG, &etag);
     response
+}
+
+fn hex_digest(bytes: &[u8]) -> String {
+    Sha256::digest(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 fn insert(response: &mut Response, name: header::HeaderName, value: &str) {

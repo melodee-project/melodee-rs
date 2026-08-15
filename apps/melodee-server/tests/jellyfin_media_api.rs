@@ -1,6 +1,6 @@
 //! Jellyfin media-surface compatibility evidence (Phase 8): browse/items,
 //! genres, user views, similar/instant-mix, favorites/played state, playlists,
-//! images 404 classes, sessions, and audio streaming — against PostgreSQL
+//! images (including Phase 10 catalog artwork overrides), sessions, and audio streaming — against PostgreSQL
 //! fixtures seeded through the public Phase 3–5 catalog handoff, with
 //! frozen-golden shape comparisons for the captured wire shapes.
 
@@ -13,17 +13,20 @@ mod common;
 #[path = "../../../crates/melodee-persistence/tests/phase5_common/mod.rs"]
 mod phase5_common;
 
-use std::sync::Arc;
+use std::{io::Cursor, sync::Arc};
 
 use axum::{
     body::Body,
-    http::{HeaderMap, Request, StatusCode, header},
+    http::{HeaderMap, HeaderName, Request, StatusCode, header},
 };
 use catalog_common::CatalogFixturePresentation;
 use http_body_util::BodyExt;
+use image::{ImageFormat, ImageReader, Rgba, RgbaImage};
 use melodee_auth::PasswordHashAlgorithm;
 use melodee_domain::ReleaseId;
-use melodee_persistence::{AuthStore, NativeUserImport};
+use melodee_persistence::{
+    AuthStore, CatalogImageAudit, CatalogImageEntity, CatalogImageStore, NativeUserImport,
+};
 use melodee_server::jellyfin::{JfLibrary, JfState, SecretPepper};
 use melodee_server::native_stream::{CanonicalAssetRoot, ClientAddressResolver, DirectPlayService};
 use tempfile::TempDir;
@@ -84,7 +87,7 @@ fn base_state(db: &common::TestDb) -> JfState {
         server_id: "93cd3cc3a120127ccfda124620290cae".to_string(),
         local_address: "http://melodee.test".to_string(),
         public_origin: "http://melodee.test".to_string(),
-        token_pepper: SecretPepper::new(PEPPER.to_vec()),
+        token_pepper: SecretPepper::new(PEPPER.to_vec()).expect("valid fixture pepper"),
         token_expiry_hours: 168,
         max_active_tokens: 10,
         direct_play: None,
@@ -122,6 +125,31 @@ fn get(path: &str, token: &str) -> Request<Body> {
         .header("X-Emby-Token", token)
         .body(Body::empty())
         .expect("request")
+}
+
+fn header_str(headers: &HeaderMap, name: HeaderName) -> String {
+    headers
+        .get(name)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default()
+        .to_string()
+}
+
+fn catalog_artwork(format: ImageFormat, color: [u8; 4]) -> Vec<u8> {
+    let image = image::DynamicImage::ImageRgba8(RgbaImage::from_pixel(512, 512, Rgba(color)));
+    let mut encoded = Cursor::new(Vec::new());
+    image
+        .write_to(&mut encoded, format)
+        .expect("encode catalog artwork");
+    encoded.into_inner()
+}
+
+fn dimensions(bytes: &[u8]) -> (u32, u32) {
+    ImageReader::new(Cursor::new(bytes))
+        .with_guessed_format()
+        .expect("detect image")
+        .into_dimensions()
+        .expect("image dimensions")
 }
 
 fn post_json(path: &str, token: &str, body: &str) -> Request<Body> {
@@ -1177,7 +1205,7 @@ async fn playlist_full_lifecycle_and_d4_clean_add() {
 }
 
 // ---------------------------------------------------------------------------
-// Images (documented no-artwork 404 classes at this baseline)
+// Images (captured no-artwork 404 classes and Phase 10 override precedence)
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -1202,9 +1230,8 @@ async fn images_no_artwork_404_classes() {
     );
     assert_eq!(json_body(&bytes)["detail"], "Item not found.");
 
-    // Documented deviation: the Rust catalog has no durable artwork bytes at
-    // this baseline, so catalog entities resolve to the captured no-artwork
-    // 404 classes (the legacy fixture served 200 PNGs from its artwork store).
+    // The captured 404 classes remain intact when neither an operator override
+    // nor immutable publication-plan artwork exists.
     let (status, _, bytes) = respond(
         &fixture.state,
         get(
@@ -1256,6 +1283,179 @@ async fn images_no_artwork_404_classes() {
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(json_body(&bytes)["detail"], "Invalid item ID format.");
+}
+
+#[tokio::test]
+async fn images_serve_artist_and_release_overrides_on_all_catalog_routes() {
+    let (db, fixture, ids) = seeded_fixture("jf_media_images_overrides").await;
+    let artist_id: Uuid = sqlx::query_scalar("SELECT id FROM artists WHERE public_api_id = $1")
+        .bind(ids.artist)
+        .fetch_one(&db.pool)
+        .await
+        .expect("artist internal id");
+    let release_id: Uuid = sqlx::query_scalar("SELECT id FROM releases WHERE public_api_id = $1")
+        .bind(ids.release)
+        .fetch_one(&db.pool)
+        .await
+        .expect("release internal id");
+    let artist_artwork = catalog_artwork(ImageFormat::Png, [10, 20, 30, 255]);
+    let release_artwork = catalog_artwork(ImageFormat::Jpeg, [60, 70, 80, 255]);
+    let audit = CatalogImageAudit {
+        actor: "jf-media-test",
+        reason: "verify adapter artwork precedence",
+        now: OffsetDateTime::now_utc(),
+    };
+    CatalogImageStore::set_image(
+        &db.pool,
+        CatalogImageEntity::Artist,
+        artist_id,
+        "image/png",
+        &artist_artwork,
+        audit,
+    )
+    .await
+    .expect("store artist override");
+    CatalogImageStore::set_image(
+        &db.pool,
+        CatalogImageEntity::Release,
+        release_id,
+        "image/jpeg",
+        &release_artwork,
+        audit,
+    )
+    .await
+    .expect("store release override");
+
+    // Artist artwork is served from both Jellyfin image-route forms.
+    let artist_path = format!("/Items/{}/Images/Primary?maxWidth=100", nf(ids.artist));
+    let (status, headers, bytes) = respond(&fixture.state, get(&artist_path, &fixture.token)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(header_str(&headers, header::CONTENT_TYPE), "image/png");
+    assert_eq!(
+        header_str(&headers, header::CACHE_CONTROL),
+        "public, max-age=86400"
+    );
+    assert_eq!(dimensions(&bytes), (100, 100), "small bucket is bounded");
+    let etag = header_str(&headers, header::ETAG);
+    let body_length = bytes.len().to_string();
+    let head = Request::builder()
+        .method("HEAD")
+        .uri(&artist_path)
+        .header("X-Emby-Token", &fixture.token)
+        .body(Body::empty())
+        .expect("HEAD request");
+    let (status, headers, bytes) = respond(&fixture.state, head).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(header_str(&headers, header::CONTENT_LENGTH), body_length);
+    assert!(bytes.is_empty());
+    let conditional = Request::builder()
+        .method("GET")
+        .uri(&artist_path)
+        .header("X-Emby-Token", &fixture.token)
+        .header(header::IF_NONE_MATCH, &etag)
+        .body(Body::empty())
+        .expect("conditional request");
+    let (status, headers, bytes) = respond(&fixture.state, conditional).await;
+    assert_eq!(status, StatusCode::NOT_MODIFIED);
+    assert_eq!(header_str(&headers, header::ETAG), etag);
+    assert!(bytes.is_empty());
+    let (status, headers, bytes) = respond(
+        &fixture.state,
+        get(
+            &format!("/Artists/{}/Images/Primary", nf(ids.artist)),
+            &fixture.token,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(header_str(&headers, header::CONTENT_TYPE), "image/png");
+    assert_eq!(dimensions(&bytes), (1024, 1024));
+
+    // A Track deliberately inherits its Release override.
+    for path in [
+        format!("/Items/{}/Images/Primary", nf(ids.release)),
+        format!("/Items/{}/Images/Primary/0", nf(ids.release)),
+        format!("/Items/{}/Images/Primary", nf(ids.track)),
+    ] {
+        let (status, headers, bytes) = respond(&fixture.state, get(&path, &fixture.token)).await;
+        assert_eq!(status, StatusCode::OK, "{path}");
+        assert_eq!(header_str(&headers, header::CONTENT_TYPE), "image/jpeg");
+        assert_eq!(dimensions(&bytes), (1024, 1024), "{path}");
+    }
+}
+
+#[tokio::test]
+async fn images_fall_back_to_published_canonical_artwork() {
+    let (db, mut fixture, ids) = seeded_fixture("jf_media_images_canonical_artwork").await;
+    let (work_item_id, target_relative_path): (Uuid, String) = sqlx::query_as(
+        "SELECT plan.work_item_id, plan.target_relative_path
+         FROM release_publication_plans plan
+         JOIN catalog_imports catalog_import ON catalog_import.work_item_id = plan.work_item_id
+         JOIN releases release ON release.id = catalog_import.release_id
+         WHERE release.public_api_id = $1",
+    )
+    .bind(ids.release)
+    .fetch_one(&db.pool)
+    .await
+    .expect("published plan");
+    let artwork = catalog_artwork(ImageFormat::Jpeg, [100, 110, 120, 255]);
+    let canonical_hash = "a".repeat(64);
+    let canonical_path = format!("artwork/{canonical_hash}.jpg");
+
+    // The phase-5 fixture intentionally publishes media-only plans. Add a
+    // pre-existing immutable artwork asset to its isolated plan so this test
+    // exercises the real plan query and no-follow storage read, not a mock.
+    sqlx::query(
+        "UPDATE release_publication_plans
+         SET plan_payload = jsonb_set(
+             plan_payload,
+             '{assets}',
+             (plan_payload->'assets') || jsonb_build_array(jsonb_build_object(
+                 'kind', 'artwork',
+                 'canonical_path', $2,
+                 'size_bytes', $3::bigint,
+                 'byte_hash', $4
+             ))
+         )
+         WHERE work_item_id = $1",
+    )
+    .bind(work_item_id)
+    .bind(&canonical_path)
+    .bind(i64::try_from(artwork.len()).expect("artwork size"))
+    .bind(&canonical_hash)
+    .execute(&db.pool)
+    .await
+    .expect("add canonical artwork fixture");
+    let root = tempfile::tempdir().expect("canonical root");
+    let artwork_path = root
+        .path()
+        .join(&target_relative_path)
+        .join(&canonical_path);
+    std::fs::create_dir_all(artwork_path.parent().expect("artwork parent")).expect("mkdir");
+    std::fs::write(&artwork_path, &artwork).expect("write canonical artwork");
+    fixture.state.direct_play = Some(
+        DirectPlayService::new(
+            CanonicalAssetRoot::open(root.path()).expect("open canonical root"),
+            4,
+        )
+        .expect("direct play"),
+    );
+
+    // There is no override: the Artist, Release, and Track all reach the
+    // immutable source and obey the requested Jellyfin size bucket.
+    for id in [ids.artist, ids.release, ids.track] {
+        let (status, headers, bytes) = respond(
+            &fixture.state,
+            get(
+                &format!("/Items/{}/Images/Primary?maxHeight=300", nf(id)),
+                &fixture.token,
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{id}");
+        assert_eq!(header_str(&headers, header::CONTENT_TYPE), "image/jpeg");
+        assert_eq!(dimensions(&bytes), (300, 300), "{id}");
+    }
 }
 
 // ---------------------------------------------------------------------------

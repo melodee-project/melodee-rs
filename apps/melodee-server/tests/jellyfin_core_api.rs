@@ -10,6 +10,8 @@ use axum::{
     body::Body,
     http::{Request, StatusCode, header},
 };
+use futures_util::future::join_all;
+use hmac::{Hmac, KeyInit, Mac};
 use http_body_util::BodyExt;
 use melodee_auth::PasswordHashAlgorithm;
 use melodee_persistence::{AuthStore, NativeUserImport};
@@ -20,6 +22,8 @@ use uuid::Uuid;
 
 const FIXTURE_PASSWORD: &str = "Mel0deeR0cks!";
 const PEPPER: &[u8] = b"melodee-jellyfin-fixture-pepper-NOT-A-REAL-SECRET-32b!";
+
+type HmacSha256 = Hmac<sha2::Sha256>;
 
 async fn state(db: &common::TestDb) -> JfState {
     let now = OffsetDateTime::now_utc();
@@ -59,7 +63,7 @@ async fn state(db: &common::TestDb) -> JfState {
         server_id: "93cd3cc3a120127ccfda124620290cae".to_string(),
         local_address: "http://melodee.test".to_string(),
         public_origin: "http://melodee.test".to_string(),
-        token_pepper: SecretPepper::new(PEPPER.to_vec()),
+        token_pepper: SecretPepper::new(PEPPER.to_vec()).expect("valid fixture pepper"),
         token_expiry_hours: 168,
         max_active_tokens: 10,
         direct_play: None,
@@ -109,6 +113,33 @@ fn get_with_token(path: &str, token: &str) -> Request<Body> {
         .header("X-Emby-Token", token)
         .body(Body::empty())
         .expect("request")
+}
+
+async fn fixture_user_id(db: &common::TestDb) -> Uuid {
+    sqlx::query_scalar("SELECT id FROM native_users WHERE normalized_username = 'PHASE0-FIXTURE'")
+        .fetch_one(&db.pool)
+        .await
+        .expect("fixture user id")
+}
+
+async fn insert_token(db: &common::TestDb, user_id: Uuid, token: &str, salt: [u8; 16]) {
+    let mut mac = HmacSha256::new_from_slice(PEPPER).expect("fixture HMAC key");
+    mac.update(&salt);
+    mac.update(token.as_bytes());
+    let digest = mac.finalize().into_bytes().to_vec();
+    let issued_at = OffsetDateTime::now_utc();
+    let expires_at = issued_at + time::Duration::hours(1);
+    sqlx::query("INSERT INTO jellyfin_access_tokens (id, user_id, token_prefix, token_digest, token_salt, issued_at, expires_at, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $6, $6)")
+        .bind(Uuid::now_v7())
+        .bind(user_id)
+        .bind(&token[..8])
+        .bind(digest)
+        .bind(salt.as_slice())
+        .bind(issued_at)
+        .bind(expires_at)
+        .execute(&db.pool)
+        .await
+        .expect("insert token");
 }
 
 #[tokio::test]
@@ -223,6 +254,100 @@ async fn token_transports_and_logout_revocation() {
         .expect("request");
     let (status, _) = respond(state.clone(), logout).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
+}
+
+#[tokio::test]
+async fn prefix_collisions_authenticate_independently_and_logout_revokes_only_presented_token() {
+    let db = common::TestDb::create("jf_token_prefix_collision").await;
+    let state = state(&db).await;
+    let user_id = fixture_user_id(&db).await;
+    let first = format!("deadbeef{}", "1".repeat(56));
+    let second = format!("deadbeef{}", "2".repeat(56));
+    insert_token(&db, user_id, &first, [1; 16]).await;
+    insert_token(&db, user_id, &second, [2; 16]).await;
+
+    for token in [&first, &second] {
+        let (status, _) = respond(state.clone(), get_with_token("/Users/Me", token)).await;
+        assert_eq!(
+            status,
+            StatusCode::OK,
+            "valid colliding token must authenticate"
+        );
+    }
+
+    let logout = Request::builder()
+        .method("POST")
+        .uri("/Sessions/Logout")
+        .header("X-Emby-Token", &first)
+        .body(Body::empty())
+        .expect("logout request");
+    let (status, _) = respond(state.clone(), logout).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (status, _) = respond(state.clone(), get_with_token("/Users/Me", &first)).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    let (status, _) = respond(state, get_with_token("/Users/Me", &second)).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "logout must not revoke a sibling token"
+    );
+}
+
+#[tokio::test]
+async fn issued_token_stops_authorizing_when_account_becomes_ineligible() {
+    let db = common::TestDb::create("jf_token_account_state").await;
+    let state = state(&db).await;
+    let user_id = fixture_user_id(&db).await;
+    let body = r#"{"Username":"phase0-fixture","Pw":"Mel0deeR0cks!"}"#;
+
+    for update in [
+        "UPDATE native_users SET enabled = FALSE WHERE id = $1",
+        "UPDATE native_users SET locked = TRUE WHERE id = $1",
+        "UPDATE native_users SET blacklisted = TRUE WHERE id = $1",
+    ] {
+        let (_, bytes) = respond(state.clone(), post_json("/Users/AuthenticateByName", body)).await;
+        let token = json_body(&bytes)["AccessToken"]
+            .as_str()
+            .expect("issued token")
+            .to_string();
+        sqlx::query(update)
+            .bind(user_id)
+            .execute(&db.pool)
+            .await
+            .expect("make account ineligible");
+        let (status, _) = respond(state.clone(), get_with_token("/Users/Me", &token)).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+        sqlx::query("UPDATE native_users SET enabled = TRUE, locked = FALSE, blacklisted = FALSE WHERE id = $1")
+            .bind(user_id)
+            .execute(&db.pool)
+            .await
+            .expect("restore fixture account");
+    }
+}
+
+#[tokio::test]
+async fn concurrent_logins_never_exceed_the_configured_active_token_cap() {
+    let db = common::TestDb::create("jf_token_cap_concurrent").await;
+    let state = state(&db).await;
+    let requests = (0..16).map(|_| {
+        respond(
+            state.clone(),
+            post_json(
+                "/Users/AuthenticateByName",
+                r#"{"Username":"phase0-fixture","Pw":"Mel0deeR0cks!"}"#,
+            ),
+        )
+    });
+    for (status, _) in join_all(requests).await {
+        assert_eq!(status, StatusCode::OK);
+    }
+    let active: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM jellyfin_access_tokens WHERE revoked_at IS NULL AND expires_at > now()",
+    )
+    .fetch_one(&db.pool)
+    .await
+    .expect("active token count");
+    assert_eq!(active, 10);
 }
 
 #[tokio::test]

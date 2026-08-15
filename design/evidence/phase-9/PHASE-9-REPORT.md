@@ -248,8 +248,9 @@ test.
 - `Album.OriginalReleaseDate` column absence: remains a **deferred schema ADR** item from the
   Phase 8 report's known-differences list; owning track is the Phase 11 migration/import work
   (it is migration data, not a parity gap). Recorded here so it is not lost.
-- Durable artwork wiring (`images.rs::resolve_image`, captured 404 classes): owned by the
-  artwork pipeline track; the parity matrix row names it explicitly with Phase 10 UI residue.
+- ~~Durable artwork wiring~~ — completed in Phase 10 under ADR-0143. Native, OpenSubsonic, and
+  Jellyfin now read catalog overrides; Jellyfin additionally reads immutable publication-plan
+  artwork, while their captured no-artwork fallbacks remain intact.
 - Legacy scheduled jobs with no Rust equivalent (recorded in PRD-WORK-001's note):
   `nowPlayingCleanup` (superseded by one-row-per-user upsert/delete),
   `stagingAutoMove`/`stagingAlbumRevalidation` (non-destructive model, by design),

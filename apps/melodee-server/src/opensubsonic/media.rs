@@ -412,7 +412,7 @@ const DEFAULT_COVER_RAW: &[u8] = include_bytes!(
 
 /// Artwork resolution for a `song_`/`album_`/`artist_`/`playlist_` id.
 enum Artwork {
-    /// Stored bytes (playlist images only at this baseline).
+    /// Stored playlist or ADR-0143 catalog-override bytes.
     Stored(Vec<u8>, String),
     /// A known catalog entity without stored artwork: the legacy default
     /// image applies.
@@ -420,9 +420,10 @@ enum Artwork {
 }
 
 /// Resolves artwork for a `song_`/`album_`/`artist_`/`playlist_` id. Playlist
-/// ids serve `native_playlists.image_bytes`; known song/album/artist ids fall
-/// back to the captured default artwork; unknown ids return None (the
-/// captured 200 empty-body shape).
+/// ids serve `native_playlists.image_bytes`; catalog ids first consult the
+/// ADR-0143 Artist/Release override table, then fall back to the captured
+/// default artwork; unknown ids return None (the captured 200 empty-body
+/// shape).
 async fn resolve_artwork(
     pool: &sqlx::PgPool,
     raw_id: &str,
@@ -452,11 +453,53 @@ async fn resolve_artwork(
     {
         return Ok(None);
     }
+    if let Some(entity) = parse_prefixed_id(raw_id)
+        && let Some((bytes, mime_type)) = catalog_artwork_override(pool, entity).await?
+    {
+        return Ok(Some(Artwork::Stored(bytes, mime_type)));
+    }
     Ok(if artwork_id_exists(pool, raw_id).await? {
         Some(Artwork::Default)
     } else {
         None
     })
+}
+
+/// ADR-0143 catalog override lookup. A Song uses its Release's override, the
+/// same relationship exposed by the native image endpoint. This is deliberately
+/// separate from playlist artwork, which remains user-state data.
+async fn catalog_artwork_override(
+    pool: &sqlx::PgPool,
+    entity: EntityRef,
+) -> Result<Option<(Vec<u8>, String)>, sqlx::Error> {
+    let (query, public_id) = match entity {
+        EntityRef::Artist(id) => (
+            "SELECT image.image_bytes, image.image_mime_type
+             FROM catalog_entity_images image
+             JOIN artists artist ON artist.id = image.artist_id
+             WHERE image.entity_type = 'artist' AND artist.public_api_id = $1",
+            id,
+        ),
+        EntityRef::Release(id) => (
+            "SELECT image.image_bytes, image.image_mime_type
+             FROM catalog_entity_images image
+             JOIN releases release ON release.id = image.release_id
+             WHERE image.entity_type = 'release' AND release.public_api_id = $1",
+            id,
+        ),
+        EntityRef::Track(id) => (
+            "SELECT image.image_bytes, image.image_mime_type
+             FROM catalog_entity_images image
+             JOIN releases release ON release.id = image.release_id
+             JOIN tracks track ON track.release_id = release.id
+             WHERE image.entity_type = 'release' AND track.public_api_id = $1",
+            id,
+        ),
+    };
+    sqlx::query_as(query)
+        .bind(public_id)
+        .fetch_optional(pool)
+        .await
 }
 
 /// Whether an album_/song_/artist_ cover-art id names a known entity.

@@ -193,6 +193,18 @@ facts. Every pass is bounded, set-based, and idempotent, so the worker is safe t
 | `MELODEE__NATIVE__AUTH__GOOGLE__JWKS_URL` | Google v3 certificates URL | HTTPS JWKS endpoint. Redirects are rejected and the response/cache are bounded. |
 | `MELODEE__NATIVE__AUTH__GOOGLE__HOSTED_DOMAINS` | empty | Optional comma-separated lowercase hosted-domain allowlist checked after signature, issuer, audience, lifetime, and verified-email validation. |
 
+### Jellyfin-compatible authentication
+
+Jellyfin-compatible access tokens are a separate, stateful authentication surface. They are not
+native-v1 JWTs and are invalidated immediately on Jellyfin logout or when the account is disabled,
+locked, or blacklisted. Every server process that serves the same database must use the same
+pepper; changing it intentionally invalidates all existing Jellyfin access tokens.
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `MELODEE__JELLYFIN__TOKEN_PEPPER` | — (required) | Secret HMAC pepper for stored Jellyfin access-token digests. Supply at least 32 random bytes, for example `openssl rand -base64 48`. The server refuses to start when it is missing or too short; never log, commit, or share it. |
+| `MELODEE__JELLYFIN__TOKEN_EXPIRES_AFTER_HOURS` | `168` | Jellyfin access-token lifetime in hours (`1`–`8760`). At most ten active tokens are retained per user; issuing another revokes the oldest active token. |
+
 ### Email notifications
 
 Melodee sends user-facing email (password resets, share-created and request-fulfilled

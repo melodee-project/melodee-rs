@@ -166,6 +166,27 @@ pub(crate) async fn validate_uploaded_image(
     .map_err(|_| ImageUploadValidationError::Invalid)?
 }
 
+/// Resizes a catalog image through the shared bounded image processor for a
+/// non-native compatibility adapter. The adapter retains ownership of its
+/// wire response and MIME semantics; this function only enforces bounded
+/// decode/encode work and the process-wide image concurrency limit.
+pub(crate) async fn resize_compatibility_image(
+    input: Vec<u8>,
+    requested_size: u32,
+    format: ImageFormat,
+) -> Result<Vec<u8>, ImageUploadValidationError> {
+    let processor =
+        IMAGE_PROCESSOR.get_or_init(|| ImageProcessor::new(IMAGE_PROCESSING_CONCURRENCY));
+    let permit = processor
+        .try_admit()
+        .map_err(|_| ImageUploadValidationError::Busy)?;
+    let (bytes, _permit) = processor
+        .process(input, requested_size, format, permit)
+        .await
+        .map_err(|_| ImageUploadValidationError::Invalid)?;
+    Ok(bytes)
+}
+
 fn process_image(
     input: &[u8],
     requested_size: u32,

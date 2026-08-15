@@ -167,7 +167,7 @@ fn jf_state(db: &common::TestDb) -> JfState {
         server_id: "93cd3cc3a120127ccfda124620290cae".to_string(),
         local_address: "http://melodee.test".to_string(),
         public_origin: "http://melodee.test".to_string(),
-        token_pepper: SecretPepper::new(JF_PEPPER.to_vec()),
+        token_pepper: SecretPepper::new(JF_PEPPER.to_vec()).expect("valid fixture pepper"),
         token_expiry_hours: 168,
         max_active_tokens: 10,
         direct_play: None,

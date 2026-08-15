@@ -40,9 +40,13 @@ Clients can then present the access token through any of these conventions:
 - `X-MediaBrowser-Token` or `X-Emby-Token` headers, or
 - the `api_key` query parameter.
 
-Tokens expire after 168 hours; each user keeps at most 10 active tokens (the oldest is revoked
-when the limit is exceeded). `POST /Sessions/Logout` revokes the presented token immediately and
-always answers `204`.
+Tokens expire after 168 hours by default; administrators can set a bounded lifetime with
+`MELODEE__JELLYFIN__TOKEN_EXPIRES_AFTER_HOURS`. Each user keeps at most 10 active tokens (the
+oldest is revoked when the limit is exceeded). `POST /Sessions/Logout` revokes the presented token
+immediately and always answers `204`. Disabling, locking, or blacklisting an account also
+immediately prevents its existing Jellyfin tokens from authorizing requests. See
+[Configuration](../installation/configuration/#jellyfin-compatible-authentication) for the
+required token pepper and lifetime settings.
 
 `GET /Users/Me` returns the authenticated user; `GET /Users/{id}` returns a user to itself or to
 an administrator; `GET /Users` lists users (administrators see all, others see only themselves);
@@ -102,9 +106,11 @@ Streaming requires the stream permission; downloads require the download permiss
 ## Images
 
 `GET /Items/{id}/Images/{type}`, `GET /Items/{id}/Images/{type}/{index}`, and
-`GET /Artists/{id}/Images/{type}` resolve artist and release artwork. Artwork storage is not yet
-populated by the catalog pipeline, so these routes currently answer `404` for catalog entities;
-they begin serving images automatically once durable artwork storage lands.
+`GET /Artists/{id}/Images/{type}` resolve Artist and Release artwork. An operator-uploaded
+catalog override takes precedence; otherwise the server reads published canonical artwork through
+the same contained storage boundary used for direct play. A Track uses its Release artwork. If no
+override or canonical artwork exists, the captured `404` response remains. Successful image
+responses include an ETag and `Cache-Control: public, max-age=86400`.
 
 ## Sessions
 

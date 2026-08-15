@@ -42,8 +42,17 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
+use thiserror::Error;
 use time::OffsetDateTime;
 use uuid::Uuid;
+
+/// Environment variable holding the HMAC pepper for Jellyfin access tokens.
+pub const ENV_TOKEN_PEPPER: &str = "MELODEE__JELLYFIN__TOKEN_PEPPER";
+/// Environment variable controlling Jellyfin access-token lifetime in hours.
+pub const ENV_TOKEN_EXPIRES_AFTER_HOURS: &str = "MELODEE__JELLYFIN__TOKEN_EXPIRES_AFTER_HOURS";
+/// Captured default access-token lifetime.
+pub const DEFAULT_TOKEN_EXPIRES_AFTER_HOURS: i64 = 168;
+const MAX_TOKEN_EXPIRES_AFTER_HOURS: i64 = 8_760;
 
 /// Shared state for the Jellyfin adapter.
 #[derive(Clone)]
@@ -80,19 +89,60 @@ pub struct JfLibrary {
 #[derive(Clone)]
 pub struct SecretPepper(Arc<Vec<u8>>);
 
+/// Invalid Jellyfin authentication configuration.
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum TokenConfigError {
+    /// The token pepper is mandatory whenever the adapter is mounted.
+    #[error("{ENV_TOKEN_PEPPER} is required when Jellyfin is enabled")]
+    MissingPepper,
+    /// A short pepper weakens a database compromise boundary.
+    #[error("{ENV_TOKEN_PEPPER} must contain at least 32 bytes")]
+    PepperTooShort,
+    /// The configured expiry must fit the accepted operational range.
+    #[error(
+        "{ENV_TOKEN_EXPIRES_AFTER_HOURS} must be an integer between 1 and {MAX_TOKEN_EXPIRES_AFTER_HOURS}"
+    )]
+    InvalidExpiry,
+}
+
 impl SecretPepper {
-    #[must_use]
-    pub fn new(pepper: Vec<u8>) -> Self {
-        assert!(
-            pepper.len() >= 32,
-            "Jellyfin token pepper must be >= 32 bytes"
-        );
-        Self(Arc::new(pepper))
+    /// Creates a pepper after enforcing ADR-0131's minimum entropy boundary.
+    pub fn new(pepper: Vec<u8>) -> Result<Self, TokenConfigError> {
+        if pepper.len() < 32 {
+            return Err(TokenConfigError::PepperTooShort);
+        }
+        Ok(Self(Arc::new(pepper)))
     }
 
     #[must_use]
     pub fn as_bytes(&self) -> &[u8] {
         &self.0
+    }
+}
+
+/// Loads the required Jellyfin token pepper without exposing it in errors.
+pub fn token_pepper_from_env() -> Result<SecretPepper, TokenConfigError> {
+    let pepper = std::env::var(ENV_TOKEN_PEPPER).map_err(|_| TokenConfigError::MissingPepper)?;
+    SecretPepper::new(pepper.into_bytes())
+}
+
+/// Parses the bounded access-token lifetime configured for the Jellyfin adapter.
+pub fn parse_token_expiry_hours(value: &str) -> Result<i64, TokenConfigError> {
+    let hours = value
+        .parse::<i64>()
+        .map_err(|_| TokenConfigError::InvalidExpiry)?;
+    if !(1..=MAX_TOKEN_EXPIRES_AFTER_HOURS).contains(&hours) {
+        return Err(TokenConfigError::InvalidExpiry);
+    }
+    Ok(hours)
+}
+
+/// Loads the configured expiry, retaining ADR-0131's 168-hour default.
+pub fn token_expiry_hours_from_env() -> Result<i64, TokenConfigError> {
+    match std::env::var(ENV_TOKEN_EXPIRES_AFTER_HOURS) {
+        Ok(value) => parse_token_expiry_hours(&value),
+        Err(std::env::VarError::NotPresent) => Ok(DEFAULT_TOKEN_EXPIRES_AFTER_HOURS),
+        Err(std::env::VarError::NotUnicode(_)) => Err(TokenConfigError::InvalidExpiry),
     }
 }
 
@@ -346,4 +396,29 @@ pub fn configured_router(state: JfState) -> Router {
 /// auth (GET and HEAD).
 async fn server_root() -> StatusCode {
     StatusCode::OK
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        DEFAULT_TOKEN_EXPIRES_AFTER_HOURS, SecretPepper, TokenConfigError, parse_token_expiry_hours,
+    };
+
+    #[test]
+    fn token_pepper_rejects_short_values_without_panicking() {
+        assert!(matches!(
+            SecretPepper::new(vec![0; 31]),
+            Err(TokenConfigError::PepperTooShort)
+        ));
+    }
+
+    #[test]
+    fn token_expiry_bounds_match_adr_0131() {
+        assert_eq!(DEFAULT_TOKEN_EXPIRES_AFTER_HOURS, 168);
+        assert_eq!(parse_token_expiry_hours("1"), Ok(1));
+        assert_eq!(parse_token_expiry_hours("8760"), Ok(8760));
+        assert!(parse_token_expiry_hours("0").is_err());
+        assert!(parse_token_expiry_hours("8761").is_err());
+        assert!(parse_token_expiry_hours("not-a-number").is_err());
+    }
 }

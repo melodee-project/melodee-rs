@@ -57,10 +57,12 @@ Per surface (`assertions.json`):
   4. search finds "Solar";
   5. favorite round-trip through `star`/`getStarred2` — the track listed on Favorites.
 
-Non-blocking observations: the client's unauthenticated `<img>` artwork requests 401/404
-(captured 401-without-credentials behavior plus the documented no-durable-artwork gap;
-placeholder art renders), and Feishin logs a client-side "Missing ':genreId' param" console
-error when rendering its Favorites view (client-internal routing quirk; workflow completes).
+Non-blocking observations at the time of this Phase 8 run: the client's unauthenticated `<img>`
+artwork requests received 401/404 (captured 401-without-credentials behavior plus the then-open
+durable-artwork gap; placeholder art rendered), and Feishin logged a client-side "Missing
+':genreId' param" console error when rendering its Favorites view (client-internal routing quirk;
+workflow completed). Phase 10 subsequently closed the artwork-storage gap under ADR-0143; this
+historical client run was not repeated solely for that change.
 
 ## Findings produced by this gate
 
