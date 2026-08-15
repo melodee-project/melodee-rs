@@ -26,6 +26,10 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL: 'http://127.0.0.1:4173/admin/',
+    // Visual fixtures include fixed UTC timestamps. Pin the browser timezone
+    // to the canonical snapshot timezone so host/runner settings cannot move
+    // rendered date-time text.
+    timezoneId: 'America/Chicago',
     trace: 'retain-on-failure',
   },
   expect: {

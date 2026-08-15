@@ -44,7 +44,7 @@ pub const ENV_GOOGLE_HOSTED_DOMAINS: &str = "MELODEE__NATIVE__AUTH__GOOGLE__HOST
 const ACCESS_LIFETIME: Duration = Duration::minutes(15);
 const REFRESH_LIFETIME: Duration = Duration::days(30);
 const COOKIE_LIFETIME: Duration = Duration::days(14);
-const NATIVE_COOKIE_NAME: &str = "melodee_auth";
+pub const NATIVE_COOKIE_NAME: &str = "melodee_auth";
 const DUMMY_BCRYPT: &str = "$2b$12$BP5HSYGph9ZF1C7Jco2fieFhmgb1LzWDjT5V8ZrL4Pk3C9Drn5lDW";
 const MAX_AUTH_BODY_BYTES: usize = 64 * 1024;
 const MAX_SECRET_BYTES: usize = 4096;
@@ -402,7 +402,8 @@ impl NativeAuthService {
         self.validate(token, now)
     }
 
-    fn validate_cookie(&self, value: &str, now: OffsetDateTime) -> Option<NativeCookieClaims> {
+    #[must_use]
+    pub fn validate_cookie(&self, value: &str, now: OffsetDateTime) -> Option<NativeCookieClaims> {
         validate_cookie_session(&self.signing_key, value, now.unix_timestamp()).ok()
     }
 }
@@ -1586,7 +1587,7 @@ fn bearer_token(headers: &axum::http::HeaderMap) -> Option<&str> {
         .strip_prefix("Bearer ")
 }
 
-fn cookie_value(raw: &str) -> Option<&str> {
+pub fn cookie_value(raw: &str) -> Option<&str> {
     raw.split(';').find_map(|part| {
         let (name, value) = part.trim().split_once('=')?;
         (name == NATIVE_COOKIE_NAME && !value.is_empty()).then_some(value)

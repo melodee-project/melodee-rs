@@ -498,3 +498,115 @@ async fn search_status_and_rebuild_honor_disabled_and_conflict_states() {
 
     db.drop().await;
 }
+
+#[tokio::test]
+async fn cookie_session_authenticates_admin_routes() {
+    let db = TestDb::create("admin_system_cookie_auth").await;
+    let fixture = seed_users(&db).await;
+    let app = build_app(db.pool.clone(), None);
+
+    let admin_cookie = mint_cookie(JWT_KEY, fixture.admin_public, 3600);
+    let (status, body) = call_with_cookie(
+        app.clone(),
+        "GET",
+        "/api/admin/v1/system/health",
+        None,
+        Some(&admin_cookie),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["status"], "ok");
+
+    let non_admin_cookie = mint_cookie(JWT_KEY, fixture.plain_public, 3600);
+    let (status, body) = call_with_cookie(
+        app.clone(),
+        "GET",
+        "/api/admin/v1/system/health",
+        None,
+        Some(&non_admin_cookie),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+    assert_eq!(body["code"], "forbidden");
+
+    let expired_cookie = mint_cookie(JWT_KEY, fixture.admin_public, -3600);
+    let (status, body) = call_with_cookie(
+        app.clone(),
+        "GET",
+        "/api/admin/v1/system/health",
+        None,
+        Some(&expired_cookie),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED, "{body}");
+    assert_eq!(body["code"], "unauthenticated");
+
+    let (status, body) = call_with_cookie(
+        app,
+        "GET",
+        "/api/admin/v1/system/health",
+        None,
+        Some("not-a-valid-cookie-token"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED, "{body}");
+    assert_eq!(body["code"], "unauthenticated");
+
+    db.drop().await;
+}
+
+fn mint_cookie(key: &str, user_public_id: Uuid, offset_seconds: i64) -> String {
+    let secret = melodee_auth::SecretString::new(key.to_string());
+    let now = OffsetDateTime::now_utc().unix_timestamp();
+    let (iat, exp) = if offset_seconds < 0 {
+        (now + offset_seconds - 3600, now + offset_seconds)
+    } else {
+        (now - 60, now + offset_seconds)
+    };
+    melodee_auth::issue_cookie_session(
+        &secret,
+        &melodee_auth::NativeCookieClaims {
+            public_api_id: user_public_id,
+            iat,
+            exp,
+        },
+    )
+    .expect("mint cookie")
+}
+
+async fn call_with_cookie(
+    app: axum::Router,
+    method: &str,
+    path: &str,
+    body: Option<Value>,
+    cookie: Option<&str>,
+) -> (StatusCode, Value) {
+    let mut builder = Request::builder().method(method).uri(path);
+    if let Some(cookie_val) = cookie {
+        builder = builder.header(header::COOKIE, format!("melodee_auth={cookie_val}"));
+    }
+    let body = match body {
+        Some(value) => {
+            builder = builder.header(header::CONTENT_TYPE, "application/json");
+            Body::from(serde_json::to_vec(&value).expect("serialize"))
+        }
+        None => Body::empty(),
+    };
+    let response = app
+        .oneshot(builder.body(body).expect("request"))
+        .await
+        .expect("response");
+    let status = response.status();
+    let bytes = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body")
+        .to_bytes();
+    let json = if bytes.is_empty() {
+        Value::Null
+    } else {
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null)
+    };
+    (status, json)
+}

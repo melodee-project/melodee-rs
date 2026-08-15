@@ -15,15 +15,16 @@ eventually curating the catalog. It is **not** a compatibility surface for exist
 ## Authentication and authorization
 
 Every `/api/admin/v1` route requires a valid native access token
-(`Authorization: Bearer …`) for an enabled, unlocked account with administrator rights. Requests
-without a valid token return `401`; authenticated non-administrators receive `403`. Both use the
-stable [error envelope](#error-behavior). The infrastructure probes `/healthz` and `/readyz` are
+(`Authorization: Bearer …`) or valid browser session cookie (`Cookie: melodee_auth=…`) for an
+enabled, unlocked account with administrator rights. Requests without valid credentials return
+`401`; authenticated non-administrators receive `403`. Both use the stable
+[error envelope](#error-behavior). The infrastructure probes `/healthz` and `/readyz` are
 separate routes and remain anonymous.
 
 The admin single-page application (served by the server at `/admin` when the built bundle is
 deployed — see [Configuration](../installation/configuration/)) signs in through the native
-cookie sign-in endpoints and is bound by the same gate; route guards in the UI are a convenience
-only.
+cookie sign-in endpoints (`POST /api/v1/auth/cookie/sign-in`) and is bound by the same gate;
+route guards in the UI are a convenience only.
 
 ## Implemented endpoints
 

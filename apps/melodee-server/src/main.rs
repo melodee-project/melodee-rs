@@ -6,7 +6,7 @@ use melodee_ingestion::{
     IngestionConfig, SchedulerHandle, start_inspection_loop, start_normalization_loop,
     start_publication_loop, start_reconciliation_loop, start_validation_loop,
 };
-use melodee_persistence::{CatalogStore, WorkEngineConfig, migrate};
+use melodee_persistence::{CatalogStore, DatabasePoolConfig, WorkEngineConfig, migrate};
 use melodee_policy::PolicyConfig;
 use melodee_search::{SearchConfig, SearchRoot, start_search_loop};
 use melodee_server::discovery_worker::{DiscoveryWorkerConfig, start_discovery_loop};
@@ -195,7 +195,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     init_tracing()?;
 
     let database_url = database_url();
-    let pool = sqlx::PgPool::connect(&database_url).await?;
+    let db_pool_config = DatabasePoolConfig::from_env()?;
+    let pool = db_pool_config.pool_options().connect(&database_url).await?;
     migrate(&pool).await?;
 
     let ingestion_config = match IngestionConfig::from_env() {

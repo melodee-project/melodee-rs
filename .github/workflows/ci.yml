@@ -48,5 +48,16 @@ jobs:
           cargo --version
           python3 --version
 
+      # The smoke gate runs the media crate's library suite, which creates
+      # fixtures with ffmpeg and inspects them with ffprobe. Keep the runner
+      # environment faithful to that executable contract.
+      - name: Install media inspection tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y ffmpeg libchromaprint-tools
+          ffprobe -version | head -1
+          ffmpeg -version | head -1
+          fpcalc -version
+
       - name: Run smoke gate
         run: ./scripts/check-smoke.sh

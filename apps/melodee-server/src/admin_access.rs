@@ -52,7 +52,8 @@ pub struct AdminPrincipal {
     pub public_api_id: Uuid,
 }
 
-/// Extractor enforcing the native-JWT administrator gate on every route.
+/// Extractor enforcing the administrator gate on every route via native JWT Bearer
+/// token or native-v1 browser session cookie (ADR-0139).
 impl FromRequestParts<AdminAccessState> for AdminPrincipal {
     type Rejection = Response;
 
@@ -60,18 +61,36 @@ impl FromRequestParts<AdminAccessState> for AdminPrincipal {
         parts: &mut Parts,
         state: &AdminAccessState,
     ) -> Result<Self, Self::Rejection> {
-        let token = parts
+        let now = OffsetDateTime::now_utc();
+        let user_public_id = if let Some(token) = parts
             .headers
             .get(header::AUTHORIZATION)
             .and_then(|value| value.to_str().ok())
             .and_then(|value| value.strip_prefix("Bearer "))
-            .ok_or_else(|| admin_error(StatusCode::UNAUTHORIZED, "unauthenticated"))?;
-        let claims = state
-            .auth
-            .validate_access(token, OffsetDateTime::now_utc())
-            .ok_or_else(|| admin_error(StatusCode::UNAUTHORIZED, "unauthenticated"))?;
+        {
+            let claims = state
+                .auth
+                .validate_access(token, now)
+                .ok_or_else(|| admin_error(StatusCode::UNAUTHORIZED, "unauthenticated"))?;
+            claims.sid
+        } else if let Some(cookie_header) = parts
+            .headers
+            .get(header::COOKIE)
+            .and_then(|value| value.to_str().ok())
+        {
+            let cookie_str = crate::native::auth::cookie_value(cookie_header)
+                .ok_or_else(|| admin_error(StatusCode::UNAUTHORIZED, "unauthenticated"))?;
+            let claims = state
+                .auth
+                .validate_cookie(cookie_str, now)
+                .ok_or_else(|| admin_error(StatusCode::UNAUTHORIZED, "unauthenticated"))?;
+            claims.public_api_id
+        } else {
+            return Err(admin_error(StatusCode::UNAUTHORIZED, "unauthenticated"));
+        };
+
         let user = match melodee_persistence::AuthStore::new()
-            .user_by_public_id(&state.pool, claims.sid)
+            .user_by_public_id(&state.pool, user_public_id)
             .await
         {
             Ok(Some(user)) => user,
