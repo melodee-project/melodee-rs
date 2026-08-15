@@ -1,0 +1,139 @@
+/* Melodee typography package
+ * Carbon emits IBM Plex by default when @carbon/styles is compiled.
+ * No font binaries are included in this package.
+ */
+:root {
+  --melodee-font-sans: "IBM Plex Sans", Inter, "Segoe UI", Arial, sans-serif;
+  --melodee-font-mono: "IBM Plex Mono", "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+}
+
+html, body { font-family: var(--melodee-font-sans); }
+code, pre, kbd, samp { font-family: var(--melodee-font-mono); }
+
+.melodee-type-code-01 {
+  font-family: var(--melodee-font-mono);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 400;
+  letter-spacing: 0.32px;
+}
+
+.melodee-type-label-01 {
+  font-family: var(--melodee-font-sans);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 400;
+  letter-spacing: 0.32px;
+}
+
+.melodee-type-helper-text-01 {
+  font-family: var(--melodee-font-sans);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 400;
+  letter-spacing: 0.32px;
+}
+
+.melodee-type-body-compact-01 {
+  font-family: var(--melodee-font-sans);
+  font-size: 14px;
+  line-height: 18px;
+  font-weight: 400;
+  letter-spacing: 0.16px;
+}
+
+.melodee-type-body-01 {
+  font-family: var(--melodee-font-sans);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 400;
+  letter-spacing: 0.16px;
+}
+
+.melodee-type-body-02 {
+  font-family: var(--melodee-font-sans);
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 400;
+  letter-spacing: 0px;
+}
+
+.melodee-type-heading-compact-01 {
+  font-family: var(--melodee-font-sans);
+  font-size: 14px;
+  line-height: 18px;
+  font-weight: 600;
+  letter-spacing: 0.16px;
+}
+
+.melodee-type-heading-compact-02 {
+  font-family: var(--melodee-font-sans);
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 600;
+  letter-spacing: 0px;
+}
+
+.melodee-type-heading-01 {
+  font-family: var(--melodee-font-sans);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+  letter-spacing: 0.16px;
+}
+
+.melodee-type-heading-02 {
+  font-family: var(--melodee-font-sans);
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 600;
+  letter-spacing: 0px;
+}
+
+.melodee-type-heading-03 {
+  font-family: var(--melodee-font-sans);
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 400;
+  letter-spacing: 0px;
+}
+
+.melodee-type-heading-04 {
+  font-family: var(--melodee-font-sans);
+  font-size: 28px;
+  line-height: 36px;
+  font-weight: 400;
+  letter-spacing: 0px;
+}
+
+.melodee-type-heading-05 {
+  font-family: var(--melodee-font-sans);
+  font-size: 42px;
+  line-height: 50px;
+  font-weight: 300;
+  letter-spacing: 0px;
+}
+
+.melodee-type-heading-06 {
+  font-family: var(--melodee-font-sans);
+  font-size: 54px;
+  line-height: 64px;
+  font-weight: 300;
+  letter-spacing: -0.32px;
+}
+
+.melodee-type-display-01 {
+  font-family: var(--melodee-font-sans);
+  font-size: clamp(3rem, 2rem + 4vw, 5rem);
+  line-height: 1.05;
+  font-weight: 300;
+  letter-spacing: -0.02em;
+}
+
+.melodee-type-wordmark {
+  font-family: var(--melodee-font-sans);
+  font-size: clamp(2.5rem, 2rem + 2vw, 4.5rem);
+  line-height: 1;
+  font-weight: 400;
+  letter-spacing: -0.025em;
+}

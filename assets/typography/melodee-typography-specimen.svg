@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="2200" height="1600" viewBox="0 0 2200 1600" role="img" aria-labelledby="title desc">
+  <title id="title">Melodee typography specimen</title>
+  <desc id="desc">Typography hierarchy and font usage for the Melodee Carbon rewrite.</desc>
+  <defs>
+    <linearGradient id="type-spectrum" gradientUnits="userSpaceOnUse" x1="20" y1="0" x2="860" y2="0">
+      <stop offset="0" stop-color="#FF2DBD"/><stop offset=".18" stop-color="#FF4F87"/>
+      <stop offset=".34" stop-color="#FF6A00"/><stop offset=".49" stop-color="#FFD600"/>
+      <stop offset=".65" stop-color="#00E0C6"/><stop offset=".82" stop-color="#4DA7FF"/>
+      <stop offset="1" stop-color="#B14DFF"/>
+    </linearGradient>
+    <linearGradient id="type-shine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".34"/>
+      <stop offset=".22" stop-color="#fff" stop-opacity=".08"/>
+      <stop offset=".65" stop-color="#000" stop-opacity=".03"/>
+      <stop offset="1" stop-color="#000" stop-opacity=".28"/>
+    </linearGradient>
+    <pattern id="type-carbon" width="18" height="18" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="7" height="18" fill="#fff" opacity=".09"/><rect x="9" width="3" height="18" fill="#000" opacity=".15"/>
+    </pattern>
+    
+        <linearGradient id="type-bg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#15232D"/><stop offset=".46" stop-color="#091117"/><stop offset="1" stop-color="#030609"/>
+        </linearGradient>
+        <pattern id="type-bgcarbon" width="18" height="18" patternUnits="userSpaceOnUse">
+          <path d="M0 9L9 0M9 18L18 9" stroke="#fff" stroke-opacity=".025" stroke-width="5"/>
+          <path d="M0 0L18 18M-9 9L9 27" stroke="#000" stroke-opacity=".18" stroke-width="5"/>
+        </pattern>
+        <filter id="type-shadow" x="-30%" y="-30%" width="160%" height="160%">
+          <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#000" flood-opacity=".55"/>
+        </filter>
+        </defs>
+  
+  <rect width="2200" height="1600" fill="url(#type-bg)"/><rect width="2200" height="1600" fill="url(#type-bgcarbon)"/><text x="80" y="96" fill="#F4F7FA" font-family="Inter" font-size="54" font-weight="600">Melodee typography</text><text x="80" y="143" fill="#A7B3BA" font-family="Inter" font-size="24">IBM Plex Sans first; Inter and system sans are fallbacks. Productive type dominates the application.</text><rect x="80" y="182" width="2040" height="12" rx="6" fill="url(#type-spectrum)"/><text x="80" y="285" fill="#7A8992" font-family="Inter" font-size="18" font-weight="600">Display</text><text x="420" y="285" fill="#F4F7FA" font-family="IBM Plex Sans, Inter, Segoe UI, sans-serif" font-size="72" font-weight="300" letter-spacing="-1">Music, organized beautifully.</text><text x="80" y="412" fill="#7A8992" font-family="Inter" font-size="18" font-weight="600">Heading 05</text><text x="420" y="412" fill="#F4F7FA" font-family="IBM Plex Sans, Inter, Segoe UI, sans-serif" font-size="42" font-weight="300" letter-spacing="-1">Your library at a glance</text><text x="80" y="517" fill="#7A8992" font-family="Inter" font-size="18" font-weight="600">Heading 04</text><text x="420" y="517" fill="#F4F7FA" font-family="IBM Plex Sans, Inter, Segoe UI, sans-serif" font-size="28" font-weight="400" letter-spacing="0">Recently added</text><text x="80" y="622" fill="#7A8992" font-family="Inter" font-size="18" font-weight="600">Heading 03</text><text x="420" y="622" fill="#F4F7FA" font-family="IBM Plex Sans, Inter, Segoe UI, sans-serif" font-size="20" font-weight="400" letter-spacing="0">Midnight Signals</text><text x="80" y="727" fill="#7A8992" font-family="Inter" font-size="18" font-weight="600">Heading 02</text><text x="420" y="727" fill="#F4F7FA" font-family="IBM Plex Sans, Inter, Segoe UI, sans-serif" font-size="16" font-weight="600" letter-spacing="0">The Electric Hours</text><text x="80" y="832" fill="#7A8992" font-family="Inter" font-size="18" font-weight="600">Body 02</text><text x="420" y="832" fill="#C6D0D5" font-family="IBM Plex Sans, Inter, Segoe UI, sans-serif" font-size="16" font-weight="400" letter-spacing="0">A relaxed reading size for empty states, onboarding, and expressive product moments.</text><text x="80" y="937" fill="#7A8992" font-family="Inter" font-size="18" font-weight="600">Body 01</text><text x="420" y="937" fill="#C6D0D5" font-family="IBM Plex Sans, Inter, Segoe UI, sans-serif" font-size="14" font-weight="400" letter-spacing="0">Default product copy for forms, tables, dialogs, metadata, and settings.</text><text x="80" y="1042" fill="#7A8992" font-family="Inter" font-size="18" font-weight="600">Label 01</text><text x="420" y="1042" fill="#A7B3BA" font-family="IBM Plex Sans, Inter, Segoe UI, sans-serif" font-size="12" font-weight="400" letter-spacing="0">BITRATE  •  24-BIT / 96 KHZ</text><text x="80" y="1147" fill="#7A8992" font-family="Inter" font-size="18" font-weight="600">Code 01</text><text x="420" y="1147" fill="#78A9FF" font-family="IBM Plex Mono, JetBrains Mono, monospace" font-size="12" font-weight="400" letter-spacing="0">track_id: 01JY8W8A9WQ2G8M3M0V7N4ZK1P</text><rect x="80" y="1215" width="2040" height="290" rx="10" fill="#F4F7FA"/><text x="120" y="1290" fill="#101820" font-family="IBM Plex Sans, Inter, sans-serif" font-size="42" font-weight="300">Light theme specimen</text><text x="120" y="1355" fill="#3E505B" font-family="IBM Plex Sans, Inter, sans-serif" font-size="16">Use productive Carbon type tokens for application work. Reserve expressive scale for welcome, empty, and editorial moments.</text><text x="120" y="1430" fill="#0F62FE" font-family="IBM Plex Sans, Inter, sans-serif" font-size="14" text-decoration="underline">Accessible primary link with persistent affordance</text>
+</svg>
