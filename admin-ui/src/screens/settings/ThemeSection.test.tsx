@@ -108,7 +108,12 @@ describe('ThemeSection', () => {
     expect(
       await screen.findByText('The theme pack could not be applied'),
     ).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: /Melodee default/ })).toBeChecked();
+    // The failure notice and controlled radio-group update are separate React
+    // commits. Assert the eventual fallback state rather than racing the
+    // notification render on a fast CI worker.
+    await waitFor(() => {
+      expect(screen.getByRole('radio', { name: /Melodee default/ })).toBeChecked();
+    });
   });
 
   it('shows a retryable error when the pack list fails to load', async () => {

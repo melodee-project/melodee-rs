@@ -6,18 +6,22 @@ template.
 
 ## Commands and environment
 
-- **Local gate: `./scripts/check.sh`** (also `make check`). Runs, in order: repository/doc
-  validation → requirements index check → Python tests → admin-ui gate (pnpm install
-  --frozen-lockfile, typecheck, lint, i18n check, unit tests, build; skipped locally if pnpm is
-  absent) → `cargo fmt --check` →
-  `clippy -D warnings` → `cargo test --workspace --all-features` → `cargo deny check` (skipped
-  locally if cargo-deny is absent; CI installs it). Run this before considering work done.
+- **Smoke gate: `./scripts/check-smoke.sh`** (also `make smoke`) gives fast broad feedback:
+  repository/doc and requirement-index validation, Rust formatting, workspace Clippy, and Rust
+  library tests. It intentionally excludes PostgreSQL integration, compatibility captures, UI
+  static builds, and dependency auditing.
+- **Full local gate: `./scripts/check.sh`** (also `make check` or `make check-full`). Runs, in
+  order: repository/doc validation → requirements index check → Python tests → admin-ui gate
+  (pnpm install --frozen-lockfile, typecheck, lint, i18n check, unit tests, build; skipped
+  locally if pnpm is absent) → `cargo fmt --check` → `clippy -D warnings` →
+  `cargo test --workspace --all-features` → `cargo deny check` (skipped locally if cargo-deny is
+  absent; full CI installs both pnpm and cargo-deny). Run this before considering work done.
   Admin UI work additionally runs Playwright e2e/visual tests via `cd admin-ui && pnpm test:e2e`
   (CI: `.github/workflows/admin-ui.yml`).
 - **Run `cargo fmt --all` before `check.sh`.** `fmt --check` is a hard gate and fails on
   non-canonical formatting.
-- **Focused runs:** `cargo test -p melodee-domain` for one crate; `make lint`, `make test`,
-  `make docs` (doc validation only), `make deny`.
+- **Focused runs:** `cargo test -p melodee-domain` for one crate; `make test-smoke` (Rust
+  library tests only), `make lint`, `make test`, `make docs` (doc validation only), `make deny`.
 - **Toolchain:** pinned `1.97.1` in `rust-toolchain.toml`. Workspace dependencies use exact `=`
   versions in `Cargo.toml [workspace.dependencies]`; keep versions centralized there.
   `Cargo.lock` is committed — regenerate and commit it with dependency changes.
@@ -210,7 +214,8 @@ sorting/filtering/paging is server-side.
 3. State assumptions in the issue/PR before coding when they affect behavior.
 4. Add or update tests first when practical.
 5. Implement the smallest coherent change.
-6. Run `./scripts/check.sh` (or the documented smallest equivalent).
+6. Run `./scripts/check-smoke.sh` during iteration and `./scripts/check.sh` before merge or
+   release (or the documented smallest equivalent for the change).
 7. Evaluate user-facing documentation impact and update `/docs` in the same change when
    affected; update internal documentation and traceability.
 8. Report: files changed; requirements satisfied; ADRs applied or proposed; tests run and

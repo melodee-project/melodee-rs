@@ -183,10 +183,20 @@ identifier, or authentication behavior.
 
 ## Development workflow
 
-Run the complete local gate before submitting a change:
+Use the smoke gate for ordinary iteration:
 
 ```bash
 cargo fmt --all
+make smoke
+```
+
+It validates repository metadata and requirement traceability, checks Rust formatting and
+Clippy, and runs workspace library tests. It deliberately omits PostgreSQL integration,
+compatibility captures, the Admin UI static gate, and dependency auditing.
+
+Run the complete gate before merge, release, or changes that affect those omitted areas:
+
+```bash
 ./scripts/check.sh
 ```
 
@@ -194,11 +204,16 @@ cargo fmt --all
 UI type/lint/i18n/unit/build gate when pnpm is available, Rust formatting and Clippy, the full
 Rust test suite, and `cargo deny` when installed. CI supplies PostgreSQL and media tools.
 
+GitHub runs the smoke gate for pushes and pull requests. The full validation workflow runs every
+night and can be started manually from the Actions tab before a release.
+
 Useful focused commands:
 
 ```bash
 make postgres-up                         # development PostgreSQL on localhost:5433
 cargo test -p melodee-domain             # one Rust crate
+make test-smoke                          # workspace Rust library tests only
+make check-full                          # complete local release gate
 make lint                                # full workspace Clippy gate
 make docs                                # repository/documentation metadata checks
 (cd docs && pnpm check && pnpm check:links && pnpm build)

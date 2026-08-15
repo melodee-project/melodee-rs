@@ -1086,4 +1086,11 @@ export async function gotoScreen(
   if ((page.viewportSize()?.width ?? 0) >= 1056) {
     await expect(page.locator('.melodee-shell__footer')).toContainText(locale);
   }
+  // Carbon loads IBM Plex with @font-face declarations. A visible layout can
+  // still be using fallback metrics while those faces are in flight, which
+  // makes screenshot assertions depend on runner timing. Wait for the
+  // browser's FontFaceSet so visual baselines observe the final layout.
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+  });
 }

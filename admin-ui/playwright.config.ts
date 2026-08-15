@@ -20,7 +20,10 @@ export default defineConfig({
   // the CI budget while keeping the server stable.
   workers: 4,
   fullyParallel: true,
-  reporter: [['list']],
+  // Keep the concise live output while also producing the report that the CI
+  // workflow uploads on failure. Without the HTML reporter, a passing upload
+  // could contain no report or failed-image attachments for diagnosis.
+  reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL: 'http://127.0.0.1:4173/admin/',
     trace: 'retain-on-failure',

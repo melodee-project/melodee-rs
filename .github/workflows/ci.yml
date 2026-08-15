@@ -1,9 +1,10 @@
-name: CI
+name: CI (smoke)
 
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -11,33 +12,30 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: "1"
+  # Keep the broad compile/lint pass lean. The full workflow uses the same
+  # settings while linking every integration-test binary.
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
 
 jobs:
   validate:
-    name: Validate repository and Rust workspace
+    name: Smoke validation
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-
-    services:
-      # Integration tests (melodee-persistence) run against real PostgreSQL.
-      # Port 5433 matches the documented dev database and the test default.
-      postgres:
-        image: postgres:17
-        env:
-          POSTGRES_USER: melodee
-          POSTGRES_PASSWORD: melodee-dev
-          POSTGRES_DB: postgres
-        ports:
-          - 5433:5432
-        options: >-
-          --health-cmd "pg_isready -U melodee"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
+    timeout-minutes: 15
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
+
+      # Clippy compiles all targets, so release optional hosted-runner tools
+      # before building. Never alter these paths on a self-hosted runner.
+      - name: Free GitHub-hosted runner disk space
+        if: runner.environment == 'github-hosted'
+        run: |
+          df -h /
+          sudo rm -rf -- /usr/local/lib/android /usr/share/dotnet /opt/ghc
+          df -h /
 
       - name: Install pinned Rust toolchain
         run: |
@@ -50,31 +48,5 @@ jobs:
           cargo --version
           python3 --version
 
-      - name: Install media inspection tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends -y ffmpeg libchromaprint-tools
-          ffprobe -version | head -1
-          ffmpeg -version | head -1
-          fpcalc -version
-
-      - name: Validate documentation and repository structure
-        run: |
-          python3 scripts/validate_repository.py
-          python3 scripts/extract_requirements.py --check
-          python3 -m unittest discover -s tests/python -p 'test_*.py' -v
-
-      - name: Check formatting
-        run: cargo fmt --all --check
-
-      - name: Lint
-        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
-
-      - name: Test
-        run: cargo test --workspace --all-features
-
-      - name: Install cargo-deny
-        run: cargo install cargo-deny --version 0.20.2 --locked
-
-      - name: Audit dependencies and licenses
-        run: cargo deny check
+      - name: Run smoke gate
+        run: ./scripts/check-smoke.sh

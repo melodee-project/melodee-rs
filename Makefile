@@ -1,10 +1,16 @@
-.PHONY: bootstrap check fmt lint test docs deny postgres-up postgres-down capture-baseline admin-ui-check
+.PHONY: bootstrap check check-full smoke fmt lint test test-smoke docs deny postgres-up postgres-down capture-baseline admin-ui-check
 
 bootstrap:
 	./scripts/bootstrap.sh
 
 check:
 	./scripts/check.sh
+
+check-full:
+	./scripts/check.sh
+
+smoke:
+	./scripts/check-smoke.sh
 
 fmt:
 	cargo fmt --all
@@ -14,6 +20,9 @@ lint:
 
 test:
 	cargo test --workspace --all-features
+
+test-smoke:
+	cargo test --workspace --all-features --lib
 
 docs:
 	python3 scripts/validate_repository.py
