@@ -39,12 +39,14 @@ appearances according to role.
 
 ## Media assets and manifests
 
-Inbound media is inspected and normalized into attempt-isolated temporary files with a versioned
-manifest describing content hashes, fingerprints, and metadata. Structural validation upgrades an
-accepted result to manifest schema v3, then atomic, retry-safe publication creates an immutable-ID
-canonical Release bundle while retaining the inbound source. The catalog worker builds normalized
-PostgreSQL rows from that ratified manifest and its publication receipt, not from repeated reads of
-audio files.
+A stable inbound candidate is first acquired into durable, Melodee-owned staging with a verified
+handoff (atomic move on one filesystem; streamed hash-verified copy across filesystems), and only
+then is the inbound candidate directory removed. The staged source is inspected and normalized into
+attempt-isolated temporary files with a versioned manifest describing content hashes, fingerprints,
+and metadata. Structural validation upgrades an accepted result to manifest schema v3, then atomic,
+retry-safe publication creates an immutable-ID canonical Release bundle while retaining the durable
+staged source. The catalog worker builds normalized PostgreSQL rows from that ratified manifest and
+its publication receipt, not from repeated reads of audio files.
 
 Published manifest v3 remains immutable. Resolved Artist, contribution, and AudioIdentity facts are
 captured in an immutable semantic-overlay revision in PostgreSQL, so later corrections preserve the

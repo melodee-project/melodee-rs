@@ -6,7 +6,9 @@ sidebar:
 ---
 
 Melodee is deployed from the official OCI image, not from downloaded native binaries. The safest
-first server uses the reference Compose file with PostgreSQL and read-only inbound media.
+first server uses the reference Compose file with PostgreSQL and a writable inbound media mount
+(Melodee never modifies inbound media bytes, but it removes each candidate directory after its
+verified durable staging handoff).
 
 1. Clone the repository only to obtain the reviewed deployment files, then prepare your local
    configuration:

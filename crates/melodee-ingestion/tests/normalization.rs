@@ -521,6 +521,26 @@ async fn two_hundred_releases_reach_published_once_with_zero_loss_and_bounded_co
     scenario.config.ffmpeg_path = wrapper;
     scenario.discover_settle_and_inspect().await;
 
+    // ADR-0145 drain proof at the strongest vertical: every acquired
+    // candidate directory left inbound after its verified staging receipt.
+    let remaining_candidates = fs::read_dir(&scenario.root)
+        .unwrap()
+        .filter(|entry| entry.as_ref().is_ok_and(|entry| entry.path().is_dir()))
+        .count();
+    assert_eq!(0, remaining_candidates, "inbound drained after acquisition");
+    let (receipts, drained): (i64, i64) = sqlx::query_as(
+        "SELECT COUNT(*), COUNT(*) FILTER (WHERE status = 'inbound_removed' AND tree_hash IS NOT NULL)
+         FROM release_work_item_staging_handoffs",
+    )
+    .fetch_one(&scenario.pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        (200, 200),
+        (receipts, drained),
+        "complete acquisition receipts"
+    );
+
     let started = Instant::now();
     let mut normalized = 0_u64;
     let mut expected_failures = 0_u64;
@@ -740,6 +760,26 @@ async fn two_hundred_releases_reach_published_once_with_zero_loss_and_bounded_co
     assert_eq!(200, canonical_manifests);
     assert_eq!(0, paths_with_fragment(&storage_root, ".incoming"));
     assert_eq!(0, paths_with_fragment(&storage_root, ".copying"));
+
+    // Reconciliation after complete processing sees zero historical
+    // candidates: acquired occurrences left inbound and are inactive.
+    let rescan = reconcile_all_sources(
+        &scenario.config,
+        &WorkItemStore,
+        &scenario.pool,
+        OffsetDateTime::now_utc(),
+    )
+    .await
+    .expect("post-publish reconcile");
+    let (rescan_seen, rescan_new): (u64, u64) = rescan
+        .iter()
+        .map(|result| (result.stats.candidates_seen, result.stats.new_work_items))
+        .fold((0, 0), |acc, row| (acc.0 + row.0, acc.1 + row.1));
+    assert_eq!(
+        (0, 0),
+        (rescan_seen, rescan_new),
+        "empty reconciliation after inbound drain and publication"
+    );
     eprintln!(
         "phase3.4-acceptance={{\"total\":200,\"normalized\":{normalized},\"validated\":{validated},\"published\":{published},\"expected_failure\":{},\"unexpected_failure\":{},\"lost\":0,\"duplicate_authoritative_result\":{},\"source_mutations\":0,\"publication_receipts\":{receipts},\"configured_normalization_concurrency\":{},\"measured_normalization_concurrency\":{measured_maximum},\"configured_validation_concurrency\":{},\"configured_publication_concurrency\":{},\"elapsed_ms\":{}}}",
         expected_failures + validation_review + validation_failures + publication_failures,

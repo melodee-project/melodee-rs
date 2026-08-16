@@ -114,6 +114,40 @@ pub enum OnboardingError {
 
 /// Probes whether `directory` is writable by creating and removing a
 /// uniquely named probe file. Never touches existing content.
+/// Readiness verdict for a runtime root the server creates on demand: pass
+/// when the root exists and is writable, or when it is creatable under a
+/// writable existing ancestor. Nothing is created or removed beyond the
+/// write probe itself.
+fn writable_or_creatable(root: &std::path::Path) -> Result<String, String> {
+    if root.is_dir() {
+        return if directory_is_writable(root) {
+            Ok(format!("{} exists and is writable", root.display()))
+        } else {
+            Err(format!("{} is not writable", root.display()))
+        };
+    }
+    let mut ancestor = root.parent();
+    while let Some(candidate) = ancestor {
+        if candidate.is_dir() {
+            return if directory_is_writable(candidate) {
+                Ok(format!(
+                    "{} is creatable under {}",
+                    root.display(),
+                    candidate.display()
+                ))
+            } else {
+                Err(format!(
+                    "{} is not creatable: {} is not writable",
+                    root.display(),
+                    candidate.display()
+                ))
+            };
+        }
+        ancestor = candidate.parent();
+    }
+    Err(format!("{} has no existing ancestor", root.display()))
+}
+
 fn directory_is_writable(directory: &std::path::Path) -> bool {
     let probe = directory.join(format!(
         ".melodee-write-probe-{}",
@@ -195,6 +229,12 @@ pub(crate) fn check_storage_paths() -> PreflightCheck {
             _ => {}
         }
     }
+    // The normalization work area is disposable and created on demand; like
+    // the search root, it passes when it exists and is writable or when it is
+    // creatable under a writable ancestor.
+    if let Err(problem) = writable_or_creatable(&config.work_area_base) {
+        problems.push(format!("normalization work area {problem}"));
+    }
     match &config.storage_root {
         Some(root) if !root.is_dir() => {
             problems.push(format!(
@@ -223,16 +263,26 @@ pub(crate) fn check_storage_paths() -> PreflightCheck {
             "set MELODEE__INGEST__SOURCES_JSON (or MELODEE__INGEST__SOURCE_ROOT), MELODEE__INGEST__STAGING_ROOT, and MELODEE__STORAGE__ROOT",
         );
     }
+    // ADR-0145 diagnostics: report each storage role separately so operators
+    // see the transient inbox, durable staging, disposable work area, and
+    // canonical library as distinct roots.
     PreflightCheck::pass(
         "storage_paths",
         false,
         format!(
-            "{} inbound source(s), staging root {}, storage root {}",
+            "inbound: {} source(s) [{}]; staging: {}; work: {}; canonical: {}",
             config.sources.len(),
+            config
+                .sources
+                .iter()
+                .map(|source| source.root.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", "),
             config
                 .staging_root
                 .as_ref()
                 .map_or("not set".to_string(), |root| root.display().to_string()),
+            config.work_area_base.display(),
             config
                 .storage_root
                 .as_ref()

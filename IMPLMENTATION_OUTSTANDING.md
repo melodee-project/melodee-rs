@@ -121,13 +121,13 @@ rewritten merely to remove phase-oriented language from current product document
 
 ### 3.2 Requirement status snapshot
 
-The generated requirement registry currently contains 239 requirements:
+The generated requirement registry currently contains 239 requirements (after R0 closure):
 
 | Status | Count |
 |---|---:|
-| Tested | 181 |
+| Tested | 182 |
 | Implemented | 9 |
-| In progress | 25 |
+| In progress | 24 |
 | Planned | 17 |
 | Deferred | 6 |
 | Captured | 1 |
@@ -139,18 +139,19 @@ accepted decision, or `superseded` by an identified requirement.
 
 ### 3.3 Known immediate blockers
 
-- ADR-0145 code has landed, but the corrective work does not yet have a fresh, complete release
-  gate and final acceptance report from the current commit.
-- The inspection integration suite has recently exposed stale pre-staging test assumptions:
-  `script_gate_deny_returns_candidate_to_settling_unprocessed` and
-  `source_change_during_inspection_discards_manifest` must assert the owned-staging lifecycle.
-- The source-change-during-inspection fixture must mutate the owned staged source, not an inbound
-  path that correctly disappeared during acquisition. Source mutation during cross-filesystem
-  acquisition belongs in the handoff fault suite.
+- ~~ADR-0145 code has landed, but the corrective work does not yet have a fresh, complete release
+  gate and final acceptance report from the current commit.~~ **Resolved in R0** —
+  `design/evidence/r0/README.md`; full `./scripts/check.sh` green (933 Rust tests, 140 Python
+  tests, admin-ui gate, cargo deny).
+- ~~Stale pre-staging inspection test assumptions.~~ **Resolved in R0** —
+  `script_gate_deny_retains_staged_candidate_for_retry` and
+  `source_change_during_inspection_discards_manifest` assert the owned-staging lifecycle; the
+  mutation fixture writes to the deterministic staged source, and acquisition-time mutation lives
+  in the handoff fault suite (`tests/acquisition.rs`).
 - Scheduled CI previously exposed Last.fm mock endpoint isolation based on shared process-global
-  state. The current commit requires a fresh scheduled/full run; if reproducible, the fixture
-  must use per-test isolation rather than test ordering.
-- `PRD-INGEST-005` and related evidence still describe the ingestion correction as non-terminal.
+  state. The full local gate passes from the R0 commit; a fresh scheduled run and the R2
+  configured-state fixture work (per-test isolation) remain the verification path.
+- ~~`PRD-INGEST-005` non-terminal.~~ **Resolved in R0** — status `tested` with R0 evidence.
 - Public migration documentation correctly states that Phase 11 is not yet supported. It cannot
   be changed to supported until R3 and R4 pass.
 - The workspace version remains pre-1.0 and must not be changed to `1.0.0` until R5 passes.
@@ -162,7 +163,7 @@ phases. They exist to finish the official roadmap without creating a fictitious 
 
 ```mermaid
 flowchart LR
-    H[Historical Phases 0-10\nComplete] --> R0[R0 Corrective baseline\nIn progress]
+    H[Historical Phases 0-10\nComplete] --> R0[R0 Corrective baseline\nComplete]
     R0 --> R1[R1 Requirement and security closure\nNot started]
     R1 --> R2[R2 Mandatory runtime gaps\nNot started]
     R2 --> R3[R3 Official Phase 11 migration tooling\nNot started]
@@ -174,7 +175,7 @@ flowchart LR
 
 | Closure phase | Status | Depends on | Release result |
 |---|---|---|---|
-| R0 — Corrective baseline | In progress | Phases 0–10 | ADR-0145 complete and current baseline green |
+| R0 — Corrective baseline | Complete | Phases 0–10 | ADR-0145 complete and current baseline green |
 | R1 — Requirement and security closure | Not started | R0 | Truthful terminal disposition plan and closed evidence-only gaps |
 | R2 — Mandatory runtime gaps | Not started | R1 | All non-migration runtime requirements implemented |
 | R3 — Official Phase 11 migration tooling | Not started | R2 | Repeatable legacy import and verification tooling |
@@ -190,7 +191,7 @@ complete.
 
 ## 5. R0 — Corrective baseline and durable staging closure
 
-**Status:** In progress  
+**Status:** Complete (2026-08-16) — evidence: `design/evidence/r0/README.md`  
 **Primary authority:** ADR-0145, ADR-0115, ADR-0116, ADR-0105, ADR-0106  
 **Primary requirements:** `PRD-INGEST-005`, `PRD-INGEST-009`, `PRD-STORAGE-004`,
 `PRD-TEST-005`, `PRD-TEST-006`, `PRD-TEST-007`

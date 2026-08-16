@@ -81,6 +81,9 @@ pub struct IngestionConfig {
     #[cfg(feature = "test-support")]
     #[doc(hidden)]
     pub publication_copy_test_barrier: Option<PublicationCopyTestBarrier>,
+    #[cfg(feature = "test-support")]
+    #[doc(hidden)]
+    pub acquisition_test_hook: Option<crate::acquisition::AcquisitionTestHook>,
 }
 
 impl IngestionConfig {
@@ -123,6 +126,8 @@ impl IngestionConfig {
             storage_root: None,
             #[cfg(feature = "test-support")]
             publication_copy_test_barrier: None,
+            #[cfg(feature = "test-support")]
+            acquisition_test_hook: None,
         }
     }
 
@@ -205,6 +210,8 @@ impl IngestionConfig {
             storage_root: env::var_os(ENV_STORAGE_ROOT).map(PathBuf::from),
             #[cfg(feature = "test-support")]
             publication_copy_test_barrier: None,
+            #[cfg(feature = "test-support")]
+            acquisition_test_hook: None,
         })
     }
 

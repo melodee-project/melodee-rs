@@ -24,6 +24,9 @@ pub use acquisition::{
     AcquisitionError, OwnedSource, acquire_owned_source, owned_source_root, source_generation,
     verify_owned_source,
 };
+#[cfg(feature = "test-support")]
+#[doc(hidden)]
+pub use acquisition::{AcquisitionFaultPoint, AcquisitionTestHook};
 pub use config::{
     DEFAULT_READY_MARKER, ENV_FFMPEG_PATH, ENV_FFMPEG_TIMEOUT_SECONDS, ENV_FFPROBE_PATH,
     ENV_FFPROBE_TIMEOUT_SECONDS, ENV_FPCALC_PATH, ENV_FPCALC_TIMEOUT_SECONDS, ENV_INGEST_ENABLED,

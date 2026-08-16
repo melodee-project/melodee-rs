@@ -232,8 +232,10 @@ read-only queue and lease diagnostics.
 
 Set either `MELODEE__INGEST__SOURCE_ROOT` or `MELODEE__INGEST__SOURCES_JSON` in `.env` to an existing
 inbound directory, export the file again, and restart the server. With no configured source, the
-server stays live and ready but does not start ingestion workers. Phase 3 treats inbound trees as
-read-only: do not point temporary work configuration into an inbound tree.
+server stays live and ready but does not start ingestion workers. Inbound media bytes are immutable
+until the verified durable staging handoff, after which the acquired candidate directory is removed
+(ADR-0145): keep inbound writable by the runtime UID, and do not point temporary work configuration
+into an inbound tree.
 
 The inspection and normalization concurrency settings are independent and explicitly bounded.
 `MELODEE__NORMALIZATION__WORK_AREA` is temporary, non-authoritative storage and should have enough

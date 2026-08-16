@@ -364,11 +364,12 @@ GET /api/admin/v1/review/{workItemId}/tracks/{trackIndex}/preview
 
 Streams one track's audio for review **before** publication: the normalized work-area output
 when available, otherwise the observed source file. The file is located exclusively from the
-durable manifest and the configured inbound source roots / work area — paths are canonicalized
-and must remain inside those configured roots, so no client input can steer the read outside
-them. HTTP `Range` is honored (`206` with `Content-Range`) so clients can seek; responses carry
-`Cache-Control: no-store` because pre-publication bytes are not cacheable catalog content.
-When no previewable file exists under the configured roots the route returns
+durable manifest and the configured durable staging root / inbound source roots / work area —
+paths are canonicalized and must remain inside those configured roots, so no client input can
+steer the read outside them. After durable staging acquisition, the observed source file lives
+under the staging root. HTTP `Range` is honored (`206` with `Content-Range`) so clients can seek;
+responses carry `Cache-Control: no-store` because pre-publication bytes are not cacheable catalog
+content. When no previewable file exists under the configured roots the route returns
 `404 preview_unavailable`.
 
 ## Artist identity review

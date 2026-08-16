@@ -11,6 +11,12 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
+#[cfg(feature = "test-support")]
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
+
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 
@@ -61,6 +67,162 @@ fn io_error(path: &Path, source: io::Error) -> AcquisitionError {
     }
 }
 
+/// Crash-boundary injection points for the durable handoff. Each variant names
+/// the exact durable/physical boundary after which a crash is simulated.
+///
+/// This type and the `IngestionConfig::acquisition_test_hook` field are absent
+/// unless the non-default `test-support` feature is explicitly enabled. No
+/// production build can force the copy path or inject handoff faults.
+#[cfg(feature = "test-support")]
+#[doc(hidden)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AcquisitionFaultPoint {
+    /// Before durable handoff intent is persisted.
+    BeforeIntent,
+    /// After durable intent commits, before any filesystem change.
+    AfterIntent,
+    /// Midway through the verified copy (after at least one file).
+    DuringCopy,
+    /// After the copy completes, before post-copy source verification.
+    AfterCopyBeforeVerification,
+    /// After verification passes, before the no-replace finalize.
+    AfterVerificationBeforeFinalization,
+    /// After the final tree exists, before the durable receipt is recorded.
+    AfterFinalizationBeforeReceipt,
+    /// After the durable receipt, before inbound removal starts.
+    AfterReceiptBeforeInboundRemoval,
+    /// After inbound bytes are removed, before the removal is recorded.
+    AfterInboundRemovalBeforeBookkeeping,
+}
+
+/// One-shot fault injection plus copy barrier for deterministic crash, lease
+///-loss, and mutation-during-copy tests. A fault fires at most once per hook
+/// instance: the crashed attempt observes the error and the retried attempt
+/// converges, modeling a process restart that no longer injects the fault.
+#[cfg(feature = "test-support")]
+#[doc(hidden)]
+#[derive(Debug, Clone)]
+pub struct AcquisitionTestHook {
+    force_copy: bool,
+    pause_during_copy: bool,
+    fault: Option<AcquisitionFaultPoint>,
+    state: Arc<AcquisitionTestHookState>,
+}
+
+#[cfg(feature = "test-support")]
+#[derive(Debug)]
+struct AcquisitionTestHookState {
+    fault_fired: AtomicBool,
+    copy_reached: AtomicBool,
+    copy_released: AtomicBool,
+    notify_reached: tokio::sync::Notify,
+    notify_released: tokio::sync::Notify,
+}
+
+#[cfg(feature = "test-support")]
+impl AcquisitionTestHook {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            force_copy: false,
+            pause_during_copy: false,
+            fault: None,
+            state: Arc::new(AcquisitionTestHookState {
+                fault_fired: AtomicBool::new(false),
+                copy_reached: AtomicBool::new(false),
+                copy_released: AtomicBool::new(false),
+                notify_reached: tokio::sync::Notify::new(),
+                notify_released: tokio::sync::Notify::new(),
+            }),
+        }
+    }
+
+    /// Force the verified-copy branch even when rename would succeed. This is
+    /// the R0.4 cross-filesystem substitute for CI hosts with one filesystem.
+    #[must_use]
+    pub fn forcing_copy(mut self) -> Self {
+        self.force_copy = true;
+        self
+    }
+
+    /// Inject a one-shot fault at the given crash boundary.
+    #[must_use]
+    pub fn with_fault(mut self, fault: AcquisitionFaultPoint) -> Self {
+        self.fault = Some(fault);
+        self
+    }
+
+    /// Pause the verified copy after the pre-copy source hash until
+    /// `release_copy` is called, so a test can mutate the source or steal the
+    /// lease at the exact copy window.
+    #[must_use]
+    pub fn pausing_during_copy(mut self) -> Self {
+        self.pause_during_copy = true;
+        self
+    }
+
+    /// Waits until the copy window is entered. Requires `pausing_during_copy`.
+    pub async fn wait_until_copy_started(&self) {
+        loop {
+            if self.state.copy_reached.load(Ordering::SeqCst) {
+                return;
+            }
+            let notified = self.state.notify_reached.notified();
+            if self.state.copy_reached.load(Ordering::SeqCst) {
+                return;
+            }
+            notified.await;
+        }
+    }
+
+    /// Releases a paused copy window.
+    pub fn release_copy(&self) {
+        self.state.copy_released.store(true, Ordering::SeqCst);
+        self.state.notify_released.notify_waiters();
+    }
+
+    fn should_fire(&self, point: AcquisitionFaultPoint) -> bool {
+        self.fault == Some(point) && !self.state.fault_fired.swap(true, Ordering::SeqCst)
+    }
+
+    fn pause_copy_window(&self) {
+        if !self.pause_during_copy {
+            return;
+        }
+        self.state.copy_reached.store(true, Ordering::SeqCst);
+        self.state.notify_reached.notify_waiters();
+        while !self.state.copy_released.load(Ordering::SeqCst) {
+            std::thread::park_timeout(std::time::Duration::from_millis(1));
+        }
+    }
+}
+
+#[cfg(feature = "test-support")]
+impl Default for AcquisitionTestHook {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Injects a one-shot test fault as an I/O-style acquisition error. The error
+/// carries no special variant so production error handling is unchanged.
+#[cfg(feature = "test-support")]
+fn inject_test_fault(
+    hook: Option<&AcquisitionTestHook>,
+    point: AcquisitionFaultPoint,
+    path: &Path,
+) -> Result<(), AcquisitionError> {
+    if let Some(hook) = hook
+        && hook.should_fire(point)
+    {
+        return Err(io_error(
+            path,
+            io::Error::other(format!("injected acquisition fault at {point:?}")),
+        ));
+    }
+    Ok(())
+}
+
 /// Writes durable intent then returns the one owned source root. No media
 /// inspection happens until this succeeds.
 pub async fn acquire_owned_source(
@@ -72,6 +234,8 @@ pub async fn acquire_owned_source(
     expected_snapshot_signature: Option<&str>,
     now: OffsetDateTime,
 ) -> Result<OwnedSource, AcquisitionError> {
+    #[cfg(feature = "test-support")]
+    let test_hook = config.acquisition_test_hook.clone();
     let source = find_source(config, item).ok_or(AcquisitionError::SourceNotConfigured)?;
     let inbound = resolve_candidate(source, &item.source_path)?;
     let staging_root = config.staging_root.as_ref().ok_or_else(|| {
@@ -79,6 +243,12 @@ pub async fn acquire_owned_source(
             "MELODEE__INGEST__STAGING_ROOT is not configured".to_owned(),
         )
     })?;
+    #[cfg(feature = "test-support")]
+    inject_test_fault(
+        test_hook.as_ref(),
+        AcquisitionFaultPoint::BeforeIntent,
+        &inbound,
+    )?;
     let existing_handoff = store.staging_handoff(pool, item.id).await?;
     let generation = match &existing_handoff {
         Some(handoff) => handoff.source_generation.clone(),
@@ -88,6 +258,12 @@ pub async fn acquire_owned_source(
     let handoff = store
         .begin_staging_handoff(pool, item.id, worker, &relative, &generation, now)
         .await?;
+    #[cfg(feature = "test-support")]
+    inject_test_fault(
+        test_hook.as_ref(),
+        AcquisitionFaultPoint::AfterIntent,
+        &inbound,
+    )?;
     let destination = staging_root.join(&handoff.staging_relative_path);
 
     if matches!(
@@ -106,6 +282,8 @@ pub async fn acquire_owned_source(
             &handoff.source_generation,
             &tree_hash,
             now,
+            #[cfg(feature = "test-support")]
+            test_hook.as_ref(),
         )
         .await?;
         return Ok(OwnedSource {
@@ -147,20 +325,38 @@ pub async fn acquire_owned_source(
     let destination_for_task = destination.clone();
     let staging_root_for_task = staging_root.clone();
     let work_item_id = item.id;
+    #[cfg(feature = "test-support")]
+    let hook_for_task = test_hook.clone();
     let staged = tokio::task::spawn_blocking(move || {
         stage_source(
             &inbound_for_task,
             &destination_for_task,
             &staging_root_for_task,
             work_item_id,
+            #[cfg(feature = "test-support")]
+            hook_for_task.as_ref(),
         )
     })
     .await
     .map_err(|error| AcquisitionError::Task(error.to_string()))??;
 
+    // The final staged tree now exists; a crash here is recovered by the
+    // adoption branch above (receipt verified against the on-disk tree).
+    #[cfg(feature = "test-support")]
+    inject_test_fault(
+        test_hook.as_ref(),
+        AcquisitionFaultPoint::AfterFinalizationBeforeReceipt,
+        &destination,
+    )?;
     store
         .record_staging_receipt(pool, item.id, worker, staged.method, &staged.tree_hash, now)
         .await?;
+    #[cfg(feature = "test-support")]
+    inject_test_fault(
+        test_hook.as_ref(),
+        AcquisitionFaultPoint::AfterReceiptBeforeInboundRemoval,
+        &inbound,
+    )?;
     finish_inbound_cleanup(
         store,
         pool,
@@ -171,6 +367,8 @@ pub async fn acquire_owned_source(
         &handoff.source_generation,
         &staged.tree_hash,
         now,
+        #[cfg(feature = "test-support")]
+        test_hook.as_ref(),
     )
     .await?;
     Ok(OwnedSource {
@@ -222,8 +420,14 @@ pub fn verify_owned_source(source: &OwnedSource) -> Result<(), AcquisitionError>
     }
 }
 
-/// Generation evidence for delayed cleanup. Unix directory identity fences a
-/// replaced path; all platforms additionally compare the complete tree hash.
+/// Occurrence identity evidence for delayed cleanup. On Unix the directory's
+/// device+inode identifies the occurrence: removing and recreating the path
+/// yields a different inode, while mutating entries in place does not. This
+/// split is deliberate — in-place mutation is the same occurrence whose
+/// *content* the verified tree hash governs (a mismatch there retains the
+/// bytes), whereas a replaced inode is a new occurrence that a delayed cleanup
+/// must never touch. All platforms additionally compare the complete tree
+/// hash before removal, so the fences are independent and both must pass.
 pub fn source_generation(path: &Path) -> Result<String, AcquisitionError> {
     let metadata = fs::metadata(path).map_err(|error| io_error(path, error))?;
     if !metadata.is_dir() {
@@ -234,13 +438,7 @@ pub fn source_generation(path: &Path) -> Result<String, AcquisitionError> {
     }
     #[cfg(unix)]
     {
-        Ok(format!(
-            "unix:{}:{}:{}:{}",
-            metadata.dev(),
-            metadata.ino(),
-            metadata.ctime(),
-            metadata.ctime_nsec()
-        ))
+        Ok(format!("unix:{}:{}", metadata.dev(), metadata.ino()))
     }
     #[cfg(not(unix))]
     {
@@ -259,6 +457,7 @@ fn stage_source(
     destination: &Path,
     staging_root: &Path,
     work_item_id: uuid::Uuid,
+    #[cfg(feature = "test-support")] test_hook: Option<&AcquisitionTestHook>,
 ) -> Result<StagedTree, AcquisitionError> {
     let parent = destination.parent().ok_or_else(|| {
         AcquisitionError::IncompleteReceipt("staging destination has no parent".to_owned())
@@ -272,7 +471,32 @@ fn stage_source(
         });
     }
 
-    match rename_noreplace(inbound, destination) {
+    // A hidden partial from a crashed copy attempt of this same work item is
+    // attempt scratch: the deterministic name can only belong to this item's
+    // fenced worker, so removing it before a rename retry cannot touch another
+    // acquisition's bytes.
+    let releases = parent.parent().ok_or_else(|| {
+        AcquisitionError::IncompleteReceipt("staging release parent is missing".to_owned())
+    })?;
+    let partial = releases.join(format!(".{work_item_id}.acquiring"));
+    if partial.exists() {
+        remove_partial(&partial, releases)?;
+    }
+
+    #[cfg(feature = "test-support")]
+    let force_copy = test_hook.is_some_and(|hook| hook.force_copy);
+    #[cfg(not(feature = "test-support"))]
+    let force_copy = false;
+
+    let rename_result = if force_copy {
+        // Test-only cross-filesystem forcing: behave exactly as if the kernel
+        // returned EXDEV without exposing any production switch.
+        Err(io::Error::from_raw_os_error(18))
+    } else {
+        rename_noreplace(inbound, destination)
+    };
+
+    match rename_result {
         Ok(()) => {
             sync_directory(parent)?;
             sync_directory(staging_root)?;
@@ -285,22 +509,36 @@ fn stage_source(
             })
         }
         Err(error) if is_cross_device(&error) => {
-            let releases = parent.parent().ok_or_else(|| {
-                AcquisitionError::IncompleteReceipt("staging release parent is missing".to_owned())
-            })?;
-            let partial = releases.join(format!(".{work_item_id}.acquiring"));
-            if partial.exists() {
-                remove_partial(&partial, releases)?;
-            }
             fs::create_dir(&partial).map_err(|error| io_error(&partial, error))?;
             let before_hash = tree_hash(inbound)?;
-            copy_tree(inbound, &partial)?;
+            #[cfg(feature = "test-support")]
+            if let Some(hook) = test_hook {
+                hook.pause_copy_window();
+            }
+            copy_tree(
+                inbound,
+                &partial,
+                #[cfg(feature = "test-support")]
+                test_hook,
+            )?;
+            #[cfg(feature = "test-support")]
+            inject_test_fault(
+                test_hook,
+                AcquisitionFaultPoint::AfterCopyBeforeVerification,
+                inbound,
+            )?;
             let after_hash = tree_hash(inbound)?;
             let copied_hash = tree_hash(&partial)?;
             if before_hash != after_hash || before_hash != copied_hash {
                 remove_partial(&partial, releases)?;
                 return Err(AcquisitionError::SourceChanged);
             }
+            #[cfg(feature = "test-support")]
+            inject_test_fault(
+                test_hook,
+                AcquisitionFaultPoint::AfterVerificationBeforeFinalization,
+                &partial,
+            )?;
             sync_directory(&partial)?;
             rename_noreplace(&partial, destination)
                 .map_err(|error| io_error(destination, error))?;
@@ -326,11 +564,14 @@ async fn finish_inbound_cleanup(
     expected_generation: &str,
     expected_tree_hash: &str,
     now: OffsetDateTime,
+    #[cfg(feature = "test-support")] test_hook: Option<&AcquisitionTestHook>,
 ) -> Result<(), AcquisitionError> {
     let inbound = inbound.to_path_buf();
     let inbound_root = inbound_root.to_path_buf();
     let expected_generation = expected_generation.to_owned();
     let expected_tree_hash = expected_tree_hash.to_owned();
+    #[cfg(feature = "test-support")]
+    let fault_path = inbound.clone();
     let result = tokio::task::spawn_blocking(move || {
         cleanup_inbound(
             &inbound,
@@ -341,6 +582,15 @@ async fn finish_inbound_cleanup(
     })
     .await
     .map_err(|error| AcquisitionError::Task(error.to_string()))??;
+    // A crash here has already physically drained the matching occurrence;
+    // recovery re-enters cleanup, observes AlreadyAbsent/Replaced, and records
+    // the same bookkeeping idempotently.
+    #[cfg(feature = "test-support")]
+    inject_test_fault(
+        test_hook,
+        AcquisitionFaultPoint::AfterInboundRemovalBeforeBookkeeping,
+        fault_path.as_path(),
+    )?;
     match result {
         CleanupResult::Removed | CleanupResult::AlreadyAbsent => {
             store
@@ -407,7 +657,11 @@ fn verify_existing_receipt(
     Ok(actual)
 }
 
-fn copy_tree(source: &Path, destination: &Path) -> Result<(), AcquisitionError> {
+fn copy_tree(
+    source: &Path,
+    destination: &Path,
+    #[cfg(feature = "test-support")] test_hook: Option<&AcquisitionTestHook>,
+) -> Result<(), AcquisitionError> {
     let mut queue = vec![(source.to_path_buf(), destination.to_path_buf())];
     while let Some((current_source, current_destination)) = queue.pop() {
         let mut entries = fs::read_dir(&current_source)
@@ -426,6 +680,8 @@ fn copy_tree(source: &Path, destination: &Path) -> Result<(), AcquisitionError> 
                 queue.push((source_path, destination_path));
             } else if metadata.is_file() {
                 copy_regular_file(&source_path, &destination_path)?;
+                #[cfg(feature = "test-support")]
+                inject_test_fault(test_hook, AcquisitionFaultPoint::DuringCopy, &source_path)?;
             } else {
                 // Symlinks and other special files are not durable original
                 // source bytes and are never followed (a symlink could escape
@@ -604,7 +860,15 @@ mod tests {
         let staging = root.join("staging");
         let destination = staging.join("releases/test/source");
 
-        let staged = stage_source(&inbound, &destination, &staging, uuid::Uuid::now_v7()).unwrap();
+        let staged = stage_source(
+            &inbound,
+            &destination,
+            &staging,
+            uuid::Uuid::now_v7(),
+            #[cfg(feature = "test-support")]
+            None,
+        )
+        .unwrap();
 
         assert_eq!(staged.method, StagingHandoffMethod::Rename);
         assert_eq!(staged.tree_hash, expected);
@@ -627,7 +891,13 @@ mod tests {
         fs::create_dir_all(&destination).unwrap();
         let expected = tree_hash(&source).unwrap();
 
-        copy_tree(&source, &destination).unwrap();
+        copy_tree(
+            &source,
+            &destination,
+            #[cfg(feature = "test-support")]
+            None,
+        )
+        .unwrap();
 
         assert_eq!(tree_hash(&destination).unwrap(), expected);
         fs::remove_dir_all(root).unwrap();
@@ -683,7 +953,13 @@ mod tests {
 
         let destination = root.join("destination");
         fs::create_dir_all(&destination).unwrap();
-        copy_tree(&source, &destination).unwrap();
+        copy_tree(
+            &source,
+            &destination,
+            #[cfg(feature = "test-support")]
+            None,
+        )
+        .unwrap();
         assert!(destination.join("track.flac").is_file());
         assert!(!destination.join("link.flac").exists());
         assert!(!destination.join("escape").exists());

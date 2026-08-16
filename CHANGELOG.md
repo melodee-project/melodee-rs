@@ -25,7 +25,8 @@ by an accepted ADR and release gate.
   sidecar parsing, Chromaprint observations, and the leased `Normalizing` to `Validating` handoff.
 - Phase 3.3/3.4 structural validation and manifest v3, durable publication authorization/plan/
   journal/receipt evidence, immutable UUIDv7 Release IDs, exact hash-derived canonical layout,
-  verified no-clobber atomic publication, exact-final retry adoption, and retained inbound sources.
+  verified no-clobber atomic publication, exact-final retry adoption, and retained durable staged
+  sources (ADR-0145: inbound candidates are drained after their verified staging receipts).
 - Independently bounded validation/publication workers, canonical-publication CLI diagnostics, and
   an additive PostgreSQL-backed `/readyz` readiness probe.
 - Additive canonical-publication migration `0006` and the ADR-0116 `rustix` dependency decision for

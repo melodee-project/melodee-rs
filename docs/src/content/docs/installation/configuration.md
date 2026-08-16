@@ -255,8 +255,12 @@ secret are classified secret and are redacted from every API, export, and log. S
 - `MELODEE__STORAGE__ROOT`, every inbound root, and the normalization work area must be separate,
   non-overlapping locations. Symlink roots are rejected. The server does not publish canonical
   media unless the storage root is explicitly configured.
-- Inspection, normalization, validation, and publication do not move, rename, rewrite, or delete
-  inbound files. Successful publication records the source disposition as `retained`.
+- Inbound media bytes are never moved, renamed, rewritten, or deleted while a candidate settles
+  and is acquired. After the verified durable staging handoff, acquisition removes the acquired
+  candidate directory from inbound (see
+  [Storage](./storage/)); inspection, normalization, validation, and publication then operate on
+  the durable staged source. Successful publication records the source disposition as `retained`,
+  meaning the durable staged source is retained.
 - Catalog import reads the durable manifest-v3, publication-plan, and receipt records from
   PostgreSQL. It does not reopen source or canonical media. Catalog concurrency and claim size are
   independent of the ingestion-stage concurrency settings. The effective claim size is the lower

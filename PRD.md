@@ -528,10 +528,12 @@ must create a new acquisition, not resurrect historic work.
 
 ### PRD-INGEST-006 — Safe staging/publishing
 
-Normalization shall write to a work directory such as:
+Normalization shall write to an attempt-isolated work directory under the independently configured
+work-area root (`MELODEE__NORMALIZATION__WORK_AREA`; ADR-0145 made the work area disjoint from
+durable staging):
 
 ```text
-staging/.work/{ingestion-id}/
+<work-area>/{ingestion-id}/
 ```
 
 After successful validation, the Release is atomically renamed when the filesystem supports it.
@@ -2445,10 +2447,11 @@ Reference self-hosted deployment should work with FOSS Docker Engine/Moby + Dock
 Persist and document volumes/directories for:
 
 - PostgreSQL.
-- Inbound.
-- Staging/work/quarantine.
+- Inbound (transient inbox mount; not durable authority, but writable for candidate rename/removal).
+- Durable staging (Melodee-owned original source; review/quarantine retention).
+- Normalization work area (disposable attempt scratch).
 - Canonical media.
-- Search index.
+- Search index (rebuildable projection).
 - Logs if file logs enabled.
 - Podcasts.
 - Templates.
@@ -2694,7 +2697,9 @@ The Rust server is **not a production replacement** until all mandatory gates pa
 - Repeated kill/restart passes.
 - No lost work.
 - No duplicate catalog inserts from retry.
-- No source deletion before verified publish.
+- No inbound candidate removal before its verified durable staging receipt (ADR-0145).
+- No deletion of durable staged or canonical source without the separately authorized decision,
+  audit, and operator confirmation required by the durability contract.
 
 ### Gate C — Native API/client
 
@@ -2816,7 +2821,7 @@ A query for all Tracks Colin Hay is on returns:
 | Rewrite misses obscure current features | High | Living parity matrix + route/page/code inventory + release gate |
 | API response subtly changes | High | Golden/differential tests + real clients |
 | Public IDs change | High | Explicit migration mapping and compatibility tests |
-| Ingestion rewrite creates data loss | Critical | Source read-only until verified publish; idempotent operations; fault injection |
+| Ingestion rewrite creates data loss | Critical | Inbound bytes immutable until a verified durable staging receipt (ADR-0145); staged/canonical source deletion separately authorized; idempotent operations; fault injection |
 | False Artist merge corrupts catalog | High | Evidence model; manual locks; bias toward provisional duplicate |
 | Destructive policy deletes valuable Release | Critical | Confidence/evidence; uncertainty → review; durable pre-delete audit |
 | Search index becomes another source of truth | High | Rebuildability requirement and outbox projection |

@@ -11,13 +11,24 @@ configuration, hardware/environment, exact command, result, limitations, and rel
 
 - [Phase 0](phase-0/PHASE-0-REPORT.md)
 - [Phase 1](phase-1/PHASE-1-REPORT.md)
-- [Phase 2](phase-2/PHASE-2-REPORT.md)
-- [Phase 3](phase-3/PHASE-3-REPORT.md)
+- [Phase 2](phase-2/PHASE-2-REPORT.md) — complete; ADR-0145 corrective closure in R0
+- [Phase 3](phase-3/PHASE-3-REPORT.md) — complete; ADR-0145 corrective closure in R0
 - [Phase 4](phase-4/PHASE-4-REPORT.md)
-- [Phase 5](phase-5/PHASE-5-REPORT.md)
+- [Phase 5](phase-5/PHASE-5-REPORT.md) — complete; ADR-0145 corrective note recorded
 - [Phase 6](phase-6/PHASE-6-REPORT.md)
 - [Phase 7](phase-7/PHASE-7-REPORT.md) — Final, independently reviewed and accepted;
   [compatibility acceptance map](phase-7/COMPATIBILITY-ACCEPTANCE-MAP.md),
   [real-client acceptance](phase-7/REAL-CLIENT-ACCEPTANCE.md)
-- [Phase 8](phase-8/PHASE-8-REPORT.md) — In progress: both adapter route matrices implemented and
-  differentially evidenced; real-client differential runs remain
+- [Phase 8](phase-8/PHASE-8-REPORT.md) — Final: 81/81 OpenSubsonic endpoints, 60/60 Jellyfin
+  routes, zero-diff replay, Feishin real-client acceptance
+- [Phase 9](phase-9/PHASE-9-REPORT.md) — Final: all twelve parity domains green or waived by
+  accepted ADR
+- [Phase 10](phase-10/PHASE-10-REPORT.md) — Final: Carbon admin SPA complete with all canonical
+  screens evidenced
+- [Release distribution](release-distribution/container-validation.md) — container/release-process
+  evidence (ADR-0144)
+
+## Release-closure reports (1.0.0)
+
+- [R0 — Corrective baseline and durable staging closure](r0/README.md) — ADR-0145 acceptance:
+  crash matrix, 200-Release drain acceptance, adversarial suite, four-role diagnostics

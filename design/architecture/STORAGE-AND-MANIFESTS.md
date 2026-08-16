@@ -46,8 +46,10 @@ incoming directory, fsyncs it, and exposes the complete Release with a kernel-en
 rename. Only after final verification may PostgreSQL store the receipt and enter `Published`.
 
 Retries resume a matching partial incoming directory or adopt an exact final. A different final is
-a durable target conflict and is never removed or overwritten. The inbound source is always
-retained; move/delete requires a later, separate policy decision and audit.
+a durable target conflict and is never removed or overwritten. The durable staged source is
+retained; its move/delete requires a later, separate policy decision and audit. Under ADR-0145 the
+inbound occurrence is drained after its verified durable staging receipt — inbound is a transient
+mailbox, not retention storage.
 
-See ADR-0106, ADR-0108, ADR-0115, ADR-0116, and
+See ADR-0106, ADR-0108, ADR-0115, ADR-0116, ADR-0145, and
 [Phase 3 canonical-publication evidence](../evidence/phase-3/canonical-publication/README.md).

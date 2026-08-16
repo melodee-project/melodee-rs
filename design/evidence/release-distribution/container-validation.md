@@ -44,12 +44,19 @@ Against an ephemeral PostgreSQL 18.4 container, the production image:
 4. exited successfully on Docker `SIGTERM`; and
 5. rejected writes through a read-only inbound bind mount.
 
+> Historical evidence note: item 5 and the compose observation below predate
+> the ADR-0145 durable-staging lifecycle. Inbound must now be writable by the
+> runtime UID so acquired candidate directories can be renamed/removed after
+> their verified staging receipts; the current `compose.yml` mounts the
+> inbound bind with `read_only: false` for exactly that reason. Media bytes
+> remain unmodified before the verified handoff.
+
 The official `compose.yml` was also started with the same image retagged only
 for local use. Its PostgreSQL, storage-initialization, and Melodee services
-became ready; the inbound bind was read-only; and a marker in the named work
-volume persisted after recreating the Melodee service. All temporary
-containers, networks, volumes, and bind directories were removed after the
-test.
+became ready; the inbound bind was read-only (superseded: see the ADR-0145
+note above); and a marker in the named work volume persisted after recreating
+the Melodee service. All temporary containers, networks, volumes, and bind
+directories were removed after the test.
 
 The documented PostgreSQL backup validation was also exercised against the
 Compose PostgreSQL service: `pg_dump --format=custom` produced an archive and

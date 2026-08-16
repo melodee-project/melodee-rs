@@ -16,6 +16,12 @@ This is deliberately narrower than Phase 5 policy. The only authorization emitte
 `phase3.structural-publication` version 1, and the inbound source disposition is always
 `retained`. Phase 3 never moves, renames, rewrites, or deletes inbound media.
 
+> Historical evidence note: ADR-0145 (accepted 2026-08-15) supersedes the inbound-retention
+> interpretation recorded here. Under the accepted durable-staging lifecycle, canonical
+> publication records source disposition `retained` for the *staged* source, and an acquired
+> inbound candidate directory is removed after its verified durable staging receipt. Phase 3's
+> no-move/no-rename/no-rewrite guarantees apply to inbound bytes before that verified handoff.
+
 ## Manifest v3 and validation boundary
 
 `crates/melodee-domain/src/manifest.rs` keeps inspection v1 and normalization v2 readable and adds
@@ -128,7 +134,7 @@ TOCTOU alternative are recorded in ADR-0116.
 | Conflicting final through worker/DB | `conflicting_final_is_not_overwritten_and_remains_directly_reclaimable` | Conflict bytes remain unchanged, the immutable plan remains visible, and a later worker may re-evaluate it. |
 | Durable review | `missing_presentation_is_durably_routed_to_needs_review_before_canonical_io` | Ambiguous presentation persists findings and stops before canonical I/O. |
 | Database completion evidence | `authorization_stage_publish_is_fenced_and_durable` | A receipt cannot commit without exact asset, sealed-bundle, and final journal evidence. |
-| Source disposition | the success, tamper, symlink, cancellation, crash-recovery, pathology, and 200-Release tests compare source snapshots | Every Phase 3 outcome retains the inbound tree byte-for-byte. |
+| Source disposition | the success, tamper, symlink, cancellation, crash-recovery, pathology, and 200-Release tests compare source snapshots | Every Phase 3 outcome retains the source tree byte-for-byte. (ADR-0145: the retained tree is the durable staged source; the acquired inbound candidate is drained after its verified receipt.) |
 
 All successful publication paths execute file/directory fsyncs, and unsupported directory fsync is
 handled only for the platform's explicit `InvalidInput`/`Unsupported` result. Deterministic fault

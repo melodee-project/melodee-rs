@@ -30,6 +30,13 @@ until an explicit administrator authorization and a separate, matching completio
 Phase 5 contains no media-removal implementation. `Accept`, `Ignore`, and `Quarantine` are
 non-destructive state outcomes.
 
+> Corrective follow-up (ADR-0145, accepted 2026-08-15): the durable staging lifecycle refined the
+> source-custody model this report's retention language relied on. NeedsReview, Quarantined,
+> Failed, and Published work retains the durable *staged* source; an acquired inbound candidate is
+> drained after its verified staging receipt. The corrective closure evidence, including
+> review/quarantine retention-across-restart proofs, lives in
+> [R0 — corrective baseline and durable staging closure](../r0/README.md).
+
 Independent persistence review found no residual P0/P1 after verifying existing-disposition
 matching, symmetric alternate-recording reachability, independently asserted catalog-context
 evidence, canonical decision summaries, and default-Accept dry-run persistence without a synthetic
