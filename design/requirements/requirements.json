@@ -5,13 +5,17 @@
     "phase": "all",
     "source": "PRD.md",
     "line": 27,
-    "status": "in-progress",
+    "status": "tested",
     "implementation": [
       "design/agents/PHASE-4-WORK-PACKAGE.md (requirements-first catalog implementation boundary)",
-      "crates/melodee-domain/ and crates/melodee-persistence/src/catalog*.rs (ground-up Rust domain/catalog design rather than C# service translation)"
+      "crates/melodee-domain/ and crates/melodee-persistence/src/catalog*.rs (ground-up Rust domain/catalog design rather than C# service translation)",
+      "design/requirements/FEATURE-PARITY-MATRIX.md (R1 reconciliation 2026-08-16: every row Complete, Waived by accepted ADR, or an explicit 1.0 exclusion)",
+      "design/evidence/r1/README.md (residual-risk disposition: no unapproved parity gap remains)"
     ],
     "tests": [
-      "crates/melodee-persistence/tests/catalog_legacy.rs (legacy facts mapped through the new domain model)"
+      "crates/melodee-persistence/tests/catalog_legacy.rs (legacy facts mapped through the new domain model)",
+      "tests/python/ capture replay and scripts/run_phase8_differential.py (behavioral equivalence proven against the C# baseline, not implementation similarity)",
+      "design/agents/PHASE-7-ROUTE-MATRIX.json (202/202 behavioral dispositions)"
     ]
   },
   {
@@ -20,14 +24,17 @@
     "phase": "all",
     "source": "PRD.md",
     "line": 37,
-    "status": "in-progress",
+    "status": "tested",
     "implementation": [
       "crates/melodee-persistence/migrations/0007_phase4_catalog.sql (separate immutable public compatibility IDs)",
-      "compatibility/ (frozen external contract evidence remains unchanged)"
+      "compatibility/melodee-api-v1/, compatibility/opensubsonic/, compatibility/jellyfin/ (frozen contracts and golden corpora as committed product artifacts)",
+      "apps/melodee-server/src/native/, src/opensubsonic/, src/jellyfin/ (three shipped contract surfaces)",
+      "SPEC.md section 19; design/adr/ADR-0102 (contracts governed as first-class product features)"
     ],
     "tests": [
-      "crates/melodee-persistence/tests/catalog_legacy.rs",
-      "tests/python/test_native_v1_capture.py, test_opensubsonic_capture.py, and test_jellyfin_capture.py"
+      "tests/python/test_native_v1_capture.py, test_opensubsonic_capture.py, and test_jellyfin_capture.py (287 golden scenarios)",
+      "Per-surface route matrices: 202/202 native, 81/81 OpenSubsonic, 60/60 Jellyfin",
+      "Real-client acceptance: Android 1.8.0 + MeloAmp (Phase 7), Feishin v1.15.1 (Phase 8)"
     ]
   },
   {
@@ -36,9 +43,17 @@
     "phase": "all",
     "source": "PRD.md",
     "line": 51,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "apps/melodee-server/src/native/ (full native Melodee API v1 surface)",
+      "design/agents/PHASE-7-ROUTE-MATRIX.json (202/202 routes dispositioned: 150 exact, 17 approved normalizations, 35 preserved absences)",
+      "compatibility/melodee-api-v1/contracts/ (frozen route inventory and golden corpus)"
+    ],
+    "tests": [
+      "apps/melodee-server/tests/native_*.rs (route, auth, ACL, and golden suites)",
+      "design/evidence/phase-7/REAL-CLIENT-ACCEPTANCE.md (Android 1.8.0 and MeloAmp acceptance)",
+      "design/evidence/phase-7/PHASE-7-REPORT.md (accepted 2026-08-12)"
+    ]
   },
   {
     "id": "PRD-PRINCIPLE-004",
@@ -46,9 +61,15 @@
     "phase": "all",
     "source": "PRD.md",
     "line": 57,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "apps/melodee-server/src/native/, src/opensubsonic/, src/jellyfin/ (three independent adapter trees with independent wire DTOs)",
+      "SPEC.md section 19 and design/adr/ADR-0102 (frozen per-surface contracts; no shared wire DTOs)"
+    ],
+    "tests": [
+      "design/agents/PHASE-7-ROUTE-MATRIX.json, PHASE-8-OPENSUBSONIC-ROUTE-MATRIX.json, compatibility/jellyfin/contracts/phase8-route-evidence.json (per-surface route disposition matrices)",
+      "tests/python/test_opensubsonic_capture.py, test_jellyfin_capture.py, native golden suites (287 golden scenarios replayed per surface)"
+    ]
   },
   {
     "id": "PRD-PRINCIPLE-005",
@@ -90,9 +111,16 @@
     "phase": "all",
     "source": "PRD.md",
     "line": 74,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "deny.toml (FOSS license allow-list and dependency bans)",
+      "Cargo.toml [workspace.dependencies] (exact = version pinning) and committed Cargo.lock",
+      "design/requirements/TECHNOLOGY-BASELINE.md and design/adr/ADR-0103 (FOSS gate)"
+    ],
+    "tests": [
+      "cargo deny check via scripts/check.sh and CI (advisories, bans, licenses, sources)",
+      ".github/workflows/release-container.yml (SBOM and provenance attestation for release images)"
+    ]
   },
   {
     "id": "PRD-PRINCIPLE-008",
@@ -169,14 +197,15 @@
     "phase": "1",
     "source": "PRD.md",
     "line": 283,
-    "status": "in-progress",
+    "status": "tested",
     "implementation": [
       "Cargo.toml (single Rust workspace with one primary server executable and capability crates)",
       "apps/melodee-server/src/main.rs (modular-monolith composition root)",
       "design/adr/ADR-0104-start-as-a-modular-monolith.md"
     ],
     "tests": [
-      "scripts/check.sh (workspace-wide compile, lint, and test gate)"
+      "scripts/check.sh (workspace-wide compile, lint, and test gate)",
+      "crates/melodee-domain/tests/dependency_boundary.rs (pinned dependency allow-list; no web/SQL/framework crates; no sibling path dependencies)"
     ]
   },
   {
@@ -201,16 +230,18 @@
     "phase": "1",
     "source": "PRD.md",
     "line": 336,
-    "status": "in-progress",
+    "status": "tested",
     "implementation": [
       "design/adr/ADR-0105-postgresql-is-authoritative-state-store.md",
       "crates/melodee-persistence/migrations/ (durable ingestion state, leases, history, manifests, and provenance)",
       "crates/melodee-persistence/src/work_items.rs (transactional authoritative work state)",
       "crates/melodee-persistence/migrations/0007_phase4_catalog.sql and src/catalog*.rs (authoritative catalog, identity, audit, and projection-outbox state)",
-      "crates/melodee-persistence/migrations/0009_phase6_search.sql and src/search.rs (authoritative projection leases, generation lifecycle, active pointer, and failure evidence)"
+      "crates/melodee-persistence/migrations/0009_phase6_search.sql and src/search.rs (authoritative projection leases, generation lifecycle, active pointer, and failure evidence)",
+      "crates/melodee-persistence/migrations/0010..0028 (auth/users, shares, podcasts, discovery, settings, notifications, providers, scripts, device profiles)"
     ],
     "tests": [
-      "crates/melodee-persistence/tests/ (migration, claiming, recovery, history, manifest, catalog, policy, and Phase 6 projection lifecycle tests against PostgreSQL)"
+      "crates/melodee-persistence/tests/ (migration, claiming, recovery, history, manifest, catalog, policy, auth, settings, notification, and Phase 6 projection lifecycle tests against PostgreSQL)",
+      "crates/melodee-search/tests/ and Phase 6 rebuild evidence (Tantivy projection rebuildable from authoritative state)"
     ]
   },
   {
@@ -564,14 +595,18 @@
     "phase": "3",
     "source": "PRD.md",
     "line": 603,
-    "status": "in-progress",
+    "status": "tested",
     "implementation": [
       "crates/melodee-media/src/normalize.rs (extract and normalize embedded and external artwork via FFmpeg to JPEG, bounded by max_artwork_bytes, max dimension 1600px)",
-      "crates/melodee-media/src/normalize.rs (strict non-empty JPEG/hash/dimension verification and bounded source preflight)"
+      "crates/melodee-media/src/normalize.rs (strict non-empty JPEG/hash/dimension verification and bounded source preflight)",
+      "crates/melodee-persistence/migrations/ (catalog_entity_images operator overrides, ADR-0143)",
+      "apps/melodee-server/src/admin/ artwork upload/remove endpoints with frozen image-endpoint precedence (no-override behavior byte-identical)",
+      "admin-ui artwork management (Phase 10)"
     ],
     "tests": [
       "crates/melodee-media/tests/normalization_real.rs (embedded/external JPEG and PNG, malformed/absurd artwork, multiple entries)",
-      "crates/melodee-media/src/normalize.rs (path containment and resource-bound tests)"
+      "apps/melodee-server/tests/admin_artwork_api.rs (override lifecycle and precedence)",
+      "native/OpenSubsonic/Jellyfin image golden suites (captured fallback preserved)"
     ]
   },
   {
@@ -1305,7 +1340,7 @@
     "phase": "2,3,11",
     "source": "PRD.md",
     "line": 1100,
-    "status": "planned",
+    "status": "deferred",
     "implementation": [],
     "tests": []
   },
@@ -1631,9 +1666,16 @@
     "phase": "7",
     "source": "PRD.md",
     "line": 1260,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "SPEC.md section 19 (versioning and evolution invariants for all public surfaces)",
+      "design/adr/ADR-0102 (compatibility layers as separate products with frozen contracts)",
+      "compatibility/ capture trees (frozen v1 contracts the evolution rules protect)"
+    ],
+    "tests": [
+      "tests/python/ capture replay (golden drift gates fail CI on any contract change)",
+      "scripts/validate_repository.py (contract and evidence integrity checks)"
+    ]
   },
   {
     "id": "PRD-STREAM-001",
@@ -3346,13 +3388,17 @@
     "phase": "1,2",
     "source": "PRD.md",
     "line": 2107,
-    "status": "in-progress",
+    "status": "tested",
     "implementation": [
       "apps/melodee-cli/src/main.rs (search status JSON with backlog, lease, active generation, latest rebuild, and failure evidence)",
+      "apps/melodee-server/src/onboarding.rs (ADR-0145 four-role storage diagnostics: inbound, staging, work, canonical reported separately)",
+      "admin-ui/src/screens/system/ (Phase 10 System/Workers/Diagnostics/Storage screens over the diagnostics APIs)",
       "docs/src/content/docs/admin/system-diagnostics.md and troubleshooting/index.md"
     ],
     "tests": [
-      "crates/melodee-persistence/tests/search_phase6.rs and apps/melodee-server/tests/system_api.rs"
+      "crates/melodee-persistence/tests/search_phase6.rs and apps/melodee-server/tests/system_api.rs",
+      "apps/melodee-server/src/onboarding.rs (storage role label, creatable work area, missing staging, unreadable source, unconfigured guidance unit tests)",
+      "admin-ui/src/screens/system/StorageScreen.test.tsx and admin-ui/e2e/system-screens.spec.ts (per-role rendering assertions)"
     ]
   },
   {
@@ -3645,9 +3691,15 @@
     "phase": "0,all",
     "source": "PRD.md",
     "line": 2255,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "compatibility/melodee-api-v1/, compatibility/opensubsonic/, compatibility/jellyfin/ (canonical request/response fixtures and edge-case captures)",
+      "compatibility/COVERAGE-MATRIX.md (documented deviation and edge-case ledger)"
+    ],
+    "tests": [
+      "tests/python/test_opensubsonic_capture.py, test_jellyfin_capture.py, test_melodee_api_v1_capture.py (140 Python capture tests; 287 golden scenarios)",
+      "scripts/run_phase8_differential.py (zero-diff replay against the frozen C# baseline)"
+    ]
   },
   {
     "id": "PRD-TEST-004",
@@ -3655,9 +3707,16 @@
     "phase": "0,all",
     "source": "PRD.md",
     "line": 2259,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "design/evidence/phase-7/REAL-CLIENT-ACCEPTANCE.md (release-gate real-client acceptance)",
+      "design/evidence/phase-8/PHASE-8-REPORT.md (Feishin v1.15.1 acceptance, 12/12)"
+    ],
+    "tests": [
+      "Android 1.8.0 player on emulator including the committed Android Auto-mode probe harness (Phase 7)",
+      "MeloAmp desktop client acceptance (Phase 7)",
+      "Feishin v1.15.1 as the representative OpenSubsonic and Jellyfin client (Phase 8)"
+    ]
   },
   {
     "id": "PRD-TEST-005",

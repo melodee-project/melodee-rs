@@ -1,16 +1,17 @@
 {
  "comment": "Status/evidence overrides merged by scripts/extract_requirements.py. The requirements index is generated; record implementation/test evidence here. Controlled status vocabulary: planned, in-progress, captured, implemented, tested, deferred, superseded. 'captured' means Phase 0 behavioral evidence exists; it does not mean the Rust implementation exists.",
  "PRD-ARCH-001": {
-  "status": "in-progress",
+  "status": "tested",
   "implementation": [
    "Cargo.toml (single Rust workspace with one primary server executable and capability crates)",
    "apps/melodee-server/src/main.rs (modular-monolith composition root)",
    "design/adr/ADR-0104-start-as-a-modular-monolith.md"
   ],
   "tests": [
-   "scripts/check.sh (workspace-wide compile, lint, and test gate)"
+   "scripts/check.sh (workspace-wide compile, lint, and test gate)",
+   "crates/melodee-domain/tests/dependency_boundary.rs (pinned dependency allow-list; no web/SQL/framework crates; no sibling path dependencies)"
   ],
-  "note": "The one-server/one-PostgreSQL modular monolith now composes ingestion, catalog, policy, and the local rebuildable search projection. Later compatibility/API capabilities keep the cross-product requirement in progress."
+  "note": "The one-server/one-PostgreSQL modular monolith composes ingestion, catalog, policy, search, and all three compatibility adapters. Boundaries are enforced by the compile-time dependency graph and an executable domain-crate boundary test, per ADR-0104."
  },
  "PRD-ARCH-002": {
   "status": "implemented",
@@ -25,18 +26,20 @@
   "note": "Capability boundaries are Rust crates within one deployable server; no deployable microservice boundary has been introduced."
  },
  "PRD-ARCH-003": {
-  "status": "in-progress",
+  "status": "tested",
   "implementation": [
    "design/adr/ADR-0105-postgresql-is-authoritative-state-store.md",
    "crates/melodee-persistence/migrations/ (durable ingestion state, leases, history, manifests, and provenance)",
    "crates/melodee-persistence/src/work_items.rs (transactional authoritative work state)",
    "crates/melodee-persistence/migrations/0007_phase4_catalog.sql and src/catalog*.rs (authoritative catalog, identity, audit, and projection-outbox state)",
-   "crates/melodee-persistence/migrations/0009_phase6_search.sql and src/search.rs (authoritative projection leases, generation lifecycle, active pointer, and failure evidence)"
+   "crates/melodee-persistence/migrations/0009_phase6_search.sql and src/search.rs (authoritative projection leases, generation lifecycle, active pointer, and failure evidence)",
+   "crates/melodee-persistence/migrations/0010..0028 (auth/users, shares, podcasts, discovery, settings, notifications, providers, scripts, device profiles)"
   ],
   "tests": [
-   "crates/melodee-persistence/tests/ (migration, claiming, recovery, history, manifest, catalog, policy, and Phase 6 projection lifecycle tests against PostgreSQL)"
+   "crates/melodee-persistence/tests/ (migration, claiming, recovery, history, manifest, catalog, policy, auth, settings, notification, and Phase 6 projection lifecycle tests against PostgreSQL)",
+   "crates/melodee-search/tests/ and Phase 6 rebuild evidence (Tantivy projection rebuildable from authoritative state)"
   ],
-  "note": "PostgreSQL is authoritative for implemented ingestion, catalog, identity, policy, audit, projection-outbox, and search-generation lifecycle state. User and later product state remain future phases, so the cross-product requirement remains in progress."
+  "note": "PostgreSQL is authoritative for all shipped state: ingestion, catalog, identity, audit, users/auth, configuration, notifications, providers, and search-generation lifecycle. Tantivy remains a disposable projection, proven rebuildable, and never rereads media."
  },
  "PRD-ARCH-004": {
   "status": "tested",
@@ -164,6 +167,19 @@
    "scripts/build_phase7_route_matrix.py --check"
   ],
   "note": "The Phase 7 matrix is complete with no pending or deferred native-v1 route."
+ },
+ "PRD-API-M1-007": {
+  "status": "tested",
+  "implementation": [
+   "SPEC.md section 19 (versioning and evolution invariants for all public surfaces)",
+   "design/adr/ADR-0102 (compatibility layers as separate products with frozen contracts)",
+   "compatibility/ capture trees (frozen v1 contracts the evolution rules protect)"
+  ],
+  "tests": [
+   "tests/python/ capture replay (golden drift gates fail CI on any contract change)",
+   "scripts/validate_repository.py (contract and evidence integrity checks)"
+  ],
+  "note": "API evolution is governed by frozen per-surface contracts plus the four-rule compatibility process (compat test, product decision, accepted ADR, migration/client plan). The shipped v1 surfaces are final; evolution lands as new versioned surfaces."
  },
  "PRD-STREAM-001": {
   "status": "tested",
@@ -1243,15 +1259,19 @@
   "note": "PostgreSQL and enabled-search readiness are implemented. Media-tool/provider/API-adapter health remains later-phase work, so the aggregate requirement remains in progress."
  },
  "PRD-OBS-003": {
-  "status": "in-progress",
+  "status": "tested",
   "implementation": [
    "apps/melodee-cli/src/main.rs (search status JSON with backlog, lease, active generation, latest rebuild, and failure evidence)",
+   "apps/melodee-server/src/onboarding.rs (ADR-0145 four-role storage diagnostics: inbound, staging, work, canonical reported separately)",
+   "admin-ui/src/screens/system/ (Phase 10 System/Workers/Diagnostics/Storage screens over the diagnostics APIs)",
    "docs/src/content/docs/admin/system-diagnostics.md and troubleshooting/index.md"
   ],
   "tests": [
-   "crates/melodee-persistence/tests/search_phase6.rs and apps/melodee-server/tests/system_api.rs"
+   "crates/melodee-persistence/tests/search_phase6.rs and apps/melodee-server/tests/system_api.rs",
+   "apps/melodee-server/src/onboarding.rs (storage role label, creatable work area, missing staging, unreadable source, unconfigured guidance unit tests)",
+   "admin-ui/src/screens/system/StorageScreen.test.tsx and admin-ui/e2e/system-screens.spec.ts (per-role rendering assertions)"
   ],
-  "note": "Search failures are actionable through disjoint pending/leased counts, bounded-attempt permanent evidence, live-vs-sealed generation counts, the operator CLI, and public runbook. The graphical Diagnostics screen is assigned to Phase 10, so the requirement remains in progress."
+  "note": "Operators see actionable per-role storage status and search failure evidence through the CLI, the diagnostics APIs, and the Phase 10 admin UI; the R0 durable-staging roles are surfaced end to end."
  },
  "PRD-OBS-005": {
   "status": "implemented",
@@ -1313,16 +1333,20 @@
   "note": "Observed tags are preserved; canonical identity resolution is not part of media inspection."
  },
  "PRD-MEDIA-005": {
-  "status": "in-progress",
+  "status": "tested",
   "implementation": [
    "crates/melodee-media/src/normalize.rs (extract and normalize embedded and external artwork via FFmpeg to JPEG, bounded by max_artwork_bytes, max dimension 1600px)",
-   "crates/melodee-media/src/normalize.rs (strict non-empty JPEG/hash/dimension verification and bounded source preflight)"
+   "crates/melodee-media/src/normalize.rs (strict non-empty JPEG/hash/dimension verification and bounded source preflight)",
+   "crates/melodee-persistence/migrations/ (catalog_entity_images operator overrides, ADR-0143)",
+   "apps/melodee-server/src/admin/ artwork upload/remove endpoints with frozen image-endpoint precedence (no-override behavior byte-identical)",
+   "admin-ui artwork management (Phase 10)"
   ],
   "tests": [
    "crates/melodee-media/tests/normalization_real.rs (embedded/external JPEG and PNG, malformed/absurd artwork, multiple entries)",
-   "crates/melodee-media/src/normalize.rs (path containment and resource-bound tests)"
+   "apps/melodee-server/tests/admin_artwork_api.rs (override lifecycle and precedence)",
+   "native/OpenSubsonic/Jellyfin image golden suites (captured fallback preserved)"
   ],
-  "note": "Phase 3.2 extraction, validation, and 1600x1600 JPEG normalization are tested. Replacement, upload, thumbnail serving, and the rest of the full PRD-MEDIA-005 surface remain later work, so the overall requirement is not complete."
+  "note": "Full artwork surface closed: Phase 3 extraction/validation/normalization plus Phase 10 operator replacement, upload, removal, and thumbnail serving under ADR-0143 with evidenced frozen-endpoint precedence."
  },
  "PRD-MEDIA-006": {
   "status": "in-progress",
@@ -1504,6 +1528,10 @@
    "crates/melodee-media/tests/normalization_real.rs (valid existing VBR/CBR MP3 bytes retained exactly)"
   ],
   "note": "New ingestion avoids unnecessary re-encoding of valid MP3. Phase 11 registration of an existing canonical library without forced relocation or re-encoding is not implemented, so the broad migration requirement remains in progress."
+ },
+ "PRD-STORAGE-003": {
+  "status": "deferred",
+  "note": "Optional generated/symlinked filesystem views (views/by-artist and similar) are an explicit release-1.0 exclusion: the PRD marks them optional ('may'), the legacy server shipped no such surface to preserve, and canonical path layout is governed by ADR-0106. Any future implementation requires its own ADR covering rebuildability and projection guarantees. Recorded in the R1 requirement reconciliation (design/evidence/r1/README.md)."
  },
  "PRD-ARTIST-001": {
   "status": "tested",
@@ -1890,27 +1918,34 @@
   ]
  },
  "PRD-PRINCIPLE-001": {
-  "status": "in-progress",
+  "status": "tested",
   "implementation": [
    "design/agents/PHASE-4-WORK-PACKAGE.md (requirements-first catalog implementation boundary)",
-   "crates/melodee-domain/ and crates/melodee-persistence/src/catalog*.rs (ground-up Rust domain/catalog design rather than C# service translation)"
+   "crates/melodee-domain/ and crates/melodee-persistence/src/catalog*.rs (ground-up Rust domain/catalog design rather than C# service translation)",
+   "design/requirements/FEATURE-PARITY-MATRIX.md (R1 reconciliation 2026-08-16: every row Complete, Waived by accepted ADR, or an explicit 1.0 exclusion)",
+   "design/evidence/r1/README.md (residual-risk disposition: no unapproved parity gap remains)"
   ],
   "tests": [
-   "crates/melodee-persistence/tests/catalog_legacy.rs (legacy facts mapped through the new domain model)"
+   "crates/melodee-persistence/tests/catalog_legacy.rs (legacy facts mapped through the new domain model)",
+   "tests/python/ capture replay and scripts/run_phase8_differential.py (behavioral equivalence proven against the C# baseline, not implementation similarity)",
+   "design/agents/PHASE-7-ROUTE-MATRIX.json (202/202 behavioral dispositions)"
   ],
-  "note": "Phase 4 preserves required identity/public-ID behavior without copying legacy architecture. Full behavioral parity remains a multi-phase requirement."
+  "note": "Behavioral compatibility is proven per surface by golden and differential evidence while the Rust internals (durable staging, PostgreSQL catalog, Tantivy projection, Carbon SPA) diverge freely from the C# implementation. The R1 reconciliation closed every stale parity label; remaining absences are ADR-waived or explicit 1.0 exclusions."
  },
  "PRD-PRINCIPLE-002": {
-  "status": "in-progress",
+  "status": "tested",
   "implementation": [
    "crates/melodee-persistence/migrations/0007_phase4_catalog.sql (separate immutable public compatibility IDs)",
-   "compatibility/ (frozen external contract evidence remains unchanged)"
+   "compatibility/melodee-api-v1/, compatibility/opensubsonic/, compatibility/jellyfin/ (frozen contracts and golden corpora as committed product artifacts)",
+   "apps/melodee-server/src/native/, src/opensubsonic/, src/jellyfin/ (three shipped contract surfaces)",
+   "SPEC.md section 19; design/adr/ADR-0102 (contracts governed as first-class product features)"
   ],
   "tests": [
-   "crates/melodee-persistence/tests/catalog_legacy.rs",
-   "tests/python/test_native_v1_capture.py, test_opensubsonic_capture.py, and test_jellyfin_capture.py"
+   "tests/python/test_native_v1_capture.py, test_opensubsonic_capture.py, and test_jellyfin_capture.py (287 golden scenarios)",
+   "Per-surface route matrices: 202/202 native, 81/81 OpenSubsonic, 60/60 Jellyfin",
+   "Real-client acceptance: Android 1.8.0 + MeloAmp (Phase 7), Feishin v1.15.1 (Phase 8)"
   ],
-  "note": "Phase 4 preserves public-ID mapping and changes no compatibility route. Adapter implementation and real-client gates remain later phases."
+  "note": "Native Melodee API v1, OpenSubsonic, and Jellyfin behavior are shipped, frozen, continuously tested product features; the R1 reconciliation verified no contract row lacks Complete evidence or an accepted waiver."
  },
  "PRD-PRINCIPLE-005": {
   "status": "tested",
@@ -1949,6 +1984,45 @@
   "tests": [
    "python3 scripts/validate_repository.py (ADR status/link validation)"
   ]
+ },
+ "PRD-PRINCIPLE-003": {
+  "status": "tested",
+  "implementation": [
+   "apps/melodee-server/src/native/ (full native Melodee API v1 surface)",
+   "design/agents/PHASE-7-ROUTE-MATRIX.json (202/202 routes dispositioned: 150 exact, 17 approved normalizations, 35 preserved absences)",
+   "compatibility/melodee-api-v1/contracts/ (frozen route inventory and golden corpus)"
+  ],
+  "tests": [
+   "apps/melodee-server/tests/native_*.rs (route, auth, ACL, and golden suites)",
+   "design/evidence/phase-7/REAL-CLIENT-ACCEPTANCE.md (Android 1.8.0 and MeloAmp acceptance)",
+   "design/evidence/phase-7/PHASE-7-REPORT.md (accepted 2026-08-12)"
+  ],
+  "note": "The native Melodee API v1 shipped as a first-class product surface with all routes dispositioned and real-client acceptance passed. It remains a separate product contract from OpenSubsonic and Jellyfin per ADR-0102."
+ },
+ "PRD-PRINCIPLE-004": {
+  "status": "tested",
+  "implementation": [
+   "apps/melodee-server/src/native/, src/opensubsonic/, src/jellyfin/ (three independent adapter trees with independent wire DTOs)",
+   "SPEC.md section 19 and design/adr/ADR-0102 (frozen per-surface contracts; no shared wire DTOs)"
+  ],
+  "tests": [
+   "design/agents/PHASE-7-ROUTE-MATRIX.json, PHASE-8-OPENSUBSONIC-ROUTE-MATRIX.json, compatibility/jellyfin/contracts/phase8-route-evidence.json (per-surface route disposition matrices)",
+   "tests/python/test_opensubsonic_capture.py, test_jellyfin_capture.py, native golden suites (287 golden scenarios replayed per surface)"
+  ],
+  "note": "Each compatibility layer is shipped and evidenced as a separate product surface: overlapping underlying data never merged wire DTOs, and every surface carries its own frozen contract, golden corpus, and differential replay."
+ },
+ "PRD-PRINCIPLE-007": {
+  "status": "tested",
+  "implementation": [
+   "deny.toml (FOSS license allow-list and dependency bans)",
+   "Cargo.toml [workspace.dependencies] (exact = version pinning) and committed Cargo.lock",
+   "design/requirements/TECHNOLOGY-BASELINE.md and design/adr/ADR-0103 (FOSS gate)"
+  ],
+  "tests": [
+   "cargo deny check via scripts/check.sh and CI (advisories, bans, licenses, sources)",
+   ".github/workflows/release-container.yml (SBOM and provenance attestation for release images)"
+  ],
+  "note": "Every production dependency passes the FOSS gate; no proprietary SDKs, hosted-only services, or Pro UI features exist in the stack. The benign license-not-encountered warning is documented in AGENTS.md."
  },
  "PRD-SCALE-001": {
   "status": "in-progress",
@@ -2766,5 +2840,30 @@
   "tests": [
    "design/evidence/phase-10/accessibility-visual-report.md; .github/workflows/admin-ui.yml (CI)"
   ]
+ },
+ "PRD-TEST-003": {
+  "status": "tested",
+  "implementation": [
+   "compatibility/melodee-api-v1/, compatibility/opensubsonic/, compatibility/jellyfin/ (canonical request/response fixtures and edge-case captures)",
+   "compatibility/COVERAGE-MATRIX.md (documented deviation and edge-case ledger)"
+  ],
+  "tests": [
+   "tests/python/test_opensubsonic_capture.py, test_jellyfin_capture.py, test_melodee_api_v1_capture.py (140 Python capture tests; 287 golden scenarios)",
+   "scripts/run_phase8_differential.py (zero-diff replay against the frozen C# baseline)"
+  ],
+  "note": "Golden contracts are committed for all three compatibility APIs, including error shapes, intentional 410/501 behavior, and edge cases; drift fails CI. The published OpenAPI snapshot covers 146 of 176 native paths with the remainder route-matrix dispositioned."
+ },
+ "PRD-TEST-004": {
+  "status": "tested",
+  "implementation": [
+   "design/evidence/phase-7/REAL-CLIENT-ACCEPTANCE.md (release-gate real-client acceptance)",
+   "design/evidence/phase-8/PHASE-8-REPORT.md (Feishin v1.15.1 acceptance, 12/12)"
+  ],
+  "tests": [
+   "Android 1.8.0 player on emulator including the committed Android Auto-mode probe harness (Phase 7)",
+   "MeloAmp desktop client acceptance (Phase 7)",
+   "Feishin v1.15.1 as the representative OpenSubsonic and Jellyfin client (Phase 8)"
+  ],
+  "note": "All four named client classes passed release-gate smoke/integration acceptance. Limitation recorded for the R4/R5 gates: the Android Auto leg ran through the committed probe harness on an emulator; a physical head-unit pass remains a hardening acceptance task."
  }
 }

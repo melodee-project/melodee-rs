@@ -6,10 +6,14 @@
 //!
 //! 1. `database` (**required**) — PostgreSQL is reachable and compiled
 //!    migrations are fully applied with no recorded failure.
-//! 2. `storage_paths` — configured inbound source roots exist and are
-//!    readable, and the canonical storage root (when set) is writable. An
-//!    unconfigured server fails this check with configuration guidance;
-//!    advisory, because media paths can also be configured after first run.
+//! 2. `storage_paths` — the four ADR-0145 storage roles are probed and
+//!    reported separately: inbound source roots exist and are readable, the
+//!    durable staging root is set and writable while inbound ingestion is
+//!    enabled, the disposable normalization work area is writable or
+//!    creatable under a writable ancestor, and the canonical storage root
+//!    (when set) is writable. An unconfigured server fails this check with
+//!    configuration guidance; advisory, because media paths can also be
+//!    configured after first run.
 //! 3. `media_tools` — the configured `ffprobe`/`ffmpeg` executables answer
 //!    `-version`. Advisory (conversion/normalization degrade, browsing does
 //!    not).
@@ -204,6 +208,13 @@ pub(crate) fn check_storage_paths() -> PreflightCheck {
             );
         }
     };
+    storage_paths_check(&config)
+}
+
+/// Role-labeled evaluation of the configured storage roots, separated from
+/// environment loading so tests can exercise every verdict branch without
+/// mutating process-wide environment state.
+fn storage_paths_check(config: &IngestionConfig) -> PreflightCheck {
     let mut problems = Vec::new();
     for source in &config.sources {
         if std::fs::read_dir(&source.root).is_err() {
@@ -564,4 +575,138 @@ pub async fn complete_onboarding(
         .complete(pool, completed_by, evidence, OffsetDateTime::now_utc())
         .await?;
     Ok(state)
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::expect_used, clippy::panic)]
+
+    use super::*;
+    use melodee_ingestion::{InboundSource, IngestionConfig};
+
+    fn test_config(root: &std::path::Path) -> IngestionConfig {
+        // Built on `with_sources` so test-support-gated fields stay
+        // constructor-owned under `--all-features` builds.
+        let mut config = IngestionConfig::with_sources(vec![
+            InboundSource {
+                id: None,
+                root: root.join("incoming-a"),
+                name: "incoming-a".to_owned(),
+            },
+            InboundSource {
+                id: None,
+                root: root.join("incoming-b"),
+                name: "incoming-b".to_owned(),
+            },
+        ]);
+        config.staging_root = Some(root.join("staging"));
+        config.work_area_base = root.join("work");
+        config.storage_root = Some(root.join("library"));
+        config
+    }
+
+    /// Creates the four storage roles as real directories (work area left
+    /// absent: creatable under a writable ancestor) and returns the root.
+    fn provisioned_root(tag: &str) -> tempfile::TempDir {
+        let root = tempfile::tempdir().unwrap_or_else(|error| panic!("{tag}: {error}"));
+        for role in ["incoming-a", "incoming-b", "staging", "library"] {
+            std::fs::create_dir_all(root.path().join(role))
+                .unwrap_or_else(|error| panic!("{tag} {role}: {error}"));
+        }
+        root
+    }
+
+    #[test]
+    fn pass_detail_labels_all_four_storage_roles() {
+        let root = provisioned_root("roles");
+        let config = test_config(root.path());
+        let check = storage_paths_check(&config);
+        assert!(check.passed, "provisioned roles must pass: {check:?}");
+        let detail = &check.detail;
+        assert!(
+            detail.contains("inbound: 2 source(s)"),
+            "inbound role labeled: {detail}"
+        );
+        for role in ["incoming-a", "incoming-b"] {
+            assert!(detail.contains(role), "source listed: {detail}");
+        }
+        assert!(
+            detail.contains(&format!(
+                "staging: {}",
+                root.path().join("staging").display()
+            )),
+            "staging role labeled: {detail}"
+        );
+        assert!(
+            detail.contains(&format!("work: {}", root.path().join("work").display())),
+            "work role labeled: {detail}"
+        );
+        assert!(
+            detail.contains(&format!(
+                "canonical: {}",
+                root.path().join("library").display()
+            )),
+            "canonical role labeled: {detail}"
+        );
+    }
+
+    #[test]
+    fn work_area_passes_when_creatable_under_writable_ancestor() {
+        let root = provisioned_root("creatable");
+        let config = test_config(root.path());
+        // The work directory was deliberately not created by the fixture.
+        assert!(!config.work_area_base.is_dir());
+        let check = storage_paths_check(&config);
+        assert!(check.passed, "creatable work area must pass: {check:?}");
+    }
+
+    #[test]
+    fn enabled_ingestion_without_staging_root_fails_with_guidance() {
+        let root = provisioned_root("no-staging");
+        let mut config = test_config(root.path());
+        config.staging_root = None;
+        let check = storage_paths_check(&config);
+        assert!(!check.passed, "missing staging root must fail");
+        assert!(
+            check.detail.contains("MELODEE__INGEST__STAGING_ROOT"),
+            "remediation names the setting: {}",
+            check.detail
+        );
+    }
+
+    #[test]
+    fn unreadable_inbound_source_is_named_in_the_failure() {
+        let root = provisioned_root("bad-source");
+        let mut config = test_config(root.path());
+        config.sources[0].root = root.path().join("does-not-exist");
+        let check = storage_paths_check(&config);
+        assert!(!check.passed, "unreadable source must fail");
+        assert!(
+            check.detail.contains("inbound source")
+                && check.detail.contains("does-not-exist")
+                && check.detail.contains("does not exist or is not readable"),
+            "failing source identified: {}",
+            check.detail
+        );
+    }
+
+    #[test]
+    fn unconfigured_server_fails_with_configuration_guidance() {
+        let root = tempfile::tempdir().expect("root");
+        let mut config = test_config(root.path());
+        config.enabled = false;
+        config.sources = Vec::new();
+        config.staging_root = None;
+        config.storage_root = None;
+        let check = storage_paths_check(&config);
+        assert!(!check.passed, "nothing configured must fail");
+        assert!(
+            check
+                .detail
+                .contains("no inbound source or storage root configured"),
+            "guidance detail: {}",
+            check.detail
+        );
+        assert!(check.remediation.is_some(), "remediation hint present");
+    }
 }

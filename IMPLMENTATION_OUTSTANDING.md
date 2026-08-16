@@ -176,7 +176,7 @@ flowchart LR
 | Closure phase | Status | Depends on | Release result |
 |---|---|---|---|
 | R0 — Corrective baseline | Complete | Phases 0–10 | ADR-0145 complete and current baseline green |
-| R1 — Requirement and security closure | Not started | R0 | Truthful terminal disposition plan and closed evidence-only gaps |
+| R1 — Requirement and security closure | Complete | R0 | Truthful terminal disposition plan and closed evidence-only gaps |
 | R2 — Mandatory runtime gaps | Not started | R1 | All non-migration runtime requirements implemented |
 | R3 — Official Phase 11 migration tooling | Not started | R2 | Repeatable legacy import and verification tooling |
 | R4 — Production rehearsal, dual run, and cutover | Not started | R3 | Migration and rollback proven on production-shaped data |
@@ -336,7 +336,7 @@ staging. Crash recovery, path reuse, delayed cleanup, and stale leases must be s
 
 ## 6. R1 — Requirement, parity, security, and evidence closure
 
-**Status:** Not started  
+**Status:** Complete (2026-08-16; evidence: design/evidence/r1/README.md)  
 **Depends on:** R0  
 **Primary authority:** Requirement index, feature-parity matrix, phase reports, Gates G and I
 

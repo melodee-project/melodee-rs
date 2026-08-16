@@ -32,3 +32,6 @@ configuration, hardware/environment, exact command, result, limitations, and rel
 
 - [R0 — Corrective baseline and durable staging closure](r0/README.md) — ADR-0145 acceptance:
   crash matrix, 200-Release drain acceptance, adversarial suite, four-role diagnostics
+- [R1 — Requirement reconciliation and release truthfulness](r1/README.md) — 12 requirement
+  closures, parity-matrix re-reconciliation, security baseline inventory, residual-risk
+  disposition
