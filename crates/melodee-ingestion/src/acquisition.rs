@@ -427,10 +427,12 @@ fn copy_tree(source: &Path, destination: &Path) -> Result<(), AcquisitionError> 
             } else if metadata.is_file() {
                 copy_regular_file(&source_path, &destination_path)?;
             } else {
-                return Err(AcquisitionError::InvalidSourcePath(format!(
-                    "unsupported source entry {}",
-                    source_path.display()
-                )));
+                // Symlinks and other special files are not durable original
+                // source bytes and are never followed (a symlink could escape
+                // the inbound root). Skip them here; the inspection layer
+                // likewise ignores symlinks (see melodee-media lib.rs), so the
+                // staged tree and the manifest stay consistent.
+                continue;
             }
         }
     }
@@ -486,10 +488,11 @@ fn tree_hash(root: &Path) -> Result<String, AcquisitionError> {
             let path = entry.path();
             let next_relative = relative.join(entry.file_name());
             let metadata = fs::symlink_metadata(&path).map_err(|error| io_error(&path, error))?;
-            hash_path(&mut hasher, &next_relative, &metadata);
             if metadata.is_dir() {
+                hash_path(&mut hasher, &next_relative, &metadata);
                 queue.push((path, next_relative));
             } else if metadata.is_file() {
+                hash_path(&mut hasher, &next_relative, &metadata);
                 let file = File::open(&path).map_err(|error| io_error(&path, error))?;
                 let mut reader = BufReader::with_capacity(COPY_BUFFER_BYTES, file);
                 let mut buffer = vec![0_u8; COPY_BUFFER_BYTES];
@@ -503,10 +506,11 @@ fn tree_hash(root: &Path) -> Result<String, AcquisitionError> {
                     hasher.update(&buffer[..read]);
                 }
             } else {
-                return Err(AcquisitionError::InvalidSourcePath(format!(
-                    "unsupported source entry {}",
-                    path.display()
-                )));
+                // Symlinks and other special files contribute no durable bytes
+                // and are never followed; skipping keeps the verification hash
+                // stable across same- and cross-filesystem acquisition and
+                // matches the inspection layer's symlink handling.
+                continue;
             }
         }
     }
@@ -651,6 +655,40 @@ mod tests {
             fs::read(candidate.join("track.flac")).unwrap(),
             b"occurrence-b"
         );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn tree_hash_and_copy_tree_skip_symlinks_and_special_files() {
+        use std::os::unix::fs::symlink;
+
+        let root = temporary_root("symlinks");
+        let source = root.join("source");
+        fs::create_dir_all(&source).unwrap();
+        fs::write(source.join("track.flac"), b"audio").unwrap();
+        // An internal symlink and a dangling escape symlink must not be
+        // followed, copied, or hashed.
+        symlink(source.join("track.flac"), source.join("link.flac")).unwrap();
+        symlink(root.join("outside"), source.join("escape")).unwrap();
+
+        let expected = {
+            let bare = root.join("bare");
+            fs::create_dir_all(&bare).unwrap();
+            fs::write(bare.join("track.flac"), b"audio").unwrap();
+            tree_hash(&bare).unwrap()
+        };
+
+        assert_eq!(tree_hash(&source).unwrap(), expected);
+
+        let destination = root.join("destination");
+        fs::create_dir_all(&destination).unwrap();
+        copy_tree(&source, &destination).unwrap();
+        assert!(destination.join("track.flac").is_file());
+        assert!(!destination.join("link.flac").exists());
+        assert!(!destination.join("escape").exists());
+        assert_eq!(tree_hash(&destination).unwrap(), expected);
+
         fs::remove_dir_all(root).unwrap();
     }
 }

@@ -18,8 +18,8 @@ use melodee_domain::{IngestionState, PublicationJournalStep, ReleaseManifest, Wo
 use melodee_ingestion::PublicationCopyTestBarrier;
 use melodee_ingestion::{
     InboundSource, IngestionConfig, PublicationBundle, PublicationOutcome, inspect_ready_once,
-    normalize_once, publish_canonical_bundle, publish_once, reconcile_all_sources,
-    start_normalization_loop, validate_once,
+    normalize_once, owned_source_root, publish_canonical_bundle, publish_once,
+    reconcile_all_sources, start_normalization_loop, validate_once,
 };
 use melodee_persistence::{WorkEngineConfig, WorkItemStore, WorkerId};
 use time::{Duration, OffsetDateTime};
@@ -312,6 +312,40 @@ fn source_hashes(root: &Path) -> BTreeMap<PathBuf, String> {
     hashes
 }
 
+/// ADR-0145 drains each acquired Release out of inbound into durable staging
+/// at `<staging-root>/releases/<work-item-id>/source`, so the inbound tree is
+/// empty after inspection. This mirrors `source_hashes` over the staged source
+/// of every work item (keyed by the original `source_path/<file>`) so a test
+/// can still assert the source bytes survive the pipeline unchanged.
+async fn staged_source_hashes(
+    config: &IngestionConfig,
+    pool: &sqlx::PgPool,
+) -> BTreeMap<PathBuf, String> {
+    let mut hashes = BTreeMap::new();
+    let items = WorkItemStore
+        .list(pool, None, 1000, 0)
+        .await
+        .expect("list work items");
+    for item in items {
+        let owned = owned_source_root(config, &WorkItemStore, pool, &item)
+            .await
+            .expect("staged source");
+        for file in fs::read_dir(&owned.root).expect("staged dir") {
+            let file = file.expect("dir entry").path();
+            if file.is_file() {
+                let rel = file.strip_prefix(&owned.root).expect("strip prefix");
+                hashes.insert(
+                    Path::new(&item.source_path).join(rel),
+                    blake3::hash(&fs::read(&file).expect("read file"))
+                        .to_hex()
+                        .to_string(),
+                );
+            }
+        }
+    }
+    hashes
+}
+
 fn regular_files_named(root: &Path, name: &str) -> usize {
     fn walk(current: &Path, name: &str, count: &mut usize) {
         for entry in fs::read_dir(current).unwrap() {
@@ -533,7 +567,10 @@ async fn two_hundred_releases_reach_published_once_with_zero_loss_and_bounded_co
     assert_eq!(200, normalized);
     assert_eq!(0, expected_failures);
     assert_eq!(0, unexpected_failures);
-    assert_eq!(source_before, source_hashes(&scenario.root));
+    assert_eq!(
+        source_before,
+        staged_source_hashes(&scenario.config, &scenario.pool).await
+    );
 
     let final_states: Vec<(String, i64)> = sqlx::query_as(
         "SELECT state, COUNT(*) FROM release_work_items GROUP BY state ORDER BY state",
@@ -645,7 +682,10 @@ async fn two_hundred_releases_reach_published_once_with_zero_loss_and_bounded_co
     assert_eq!(0, adopted);
     assert_eq!(0, publication_failures);
     assert_eq!(0, publication_errors);
-    assert_eq!(source_before, source_hashes(&scenario.root));
+    assert_eq!(
+        source_before,
+        staged_source_hashes(&scenario.config, &scenario.pool).await
+    );
 
     let no_more = publish_once(
         &scenario.config,
@@ -896,7 +936,15 @@ async fn one_fingerprint_failure_does_not_stop_sibling_release() {
     for name in ["good", "bad"] {
         let release = scenario.root.join(name);
         fs::create_dir(&release).unwrap();
-        generate_wav(&release.join("track.wav"));
+        // ADR-0145 renames each Release into staging during inspection, so the
+        // inbound directory name is no longer in the fpcalc input path. Mark
+        // the failing sibling by its audio filename instead.
+        let audio = if name == "bad" {
+            "track-fail.wav"
+        } else {
+            "track.wav"
+        };
+        generate_wav(&release.join(audio));
     }
     scenario.discover_settle_and_inspect().await;
     let real_fpcalc = tool_path("fpcalc");
@@ -904,7 +952,7 @@ async fn one_fingerprint_failure_does_not_stop_sibling_release() {
     write_script(
         &wrapper,
         &format!(
-            "if [ \"$1\" = '-version' ]; then exec '{}' \"$@\"; fi\ncase \"$5\" in *'/bad/'*) printf 'synthetic failure' >&2; exit 17;; esac\nexec '{}' \"$@\"",
+            "if [ \"$1\" = '-version' ]; then exec '{}' \"$@\"; fi\ncase \"$5\" in *track-fail*) printf 'synthetic failure' >&2; exit 17;; esac\nexec '{}' \"$@\"",
             real_fpcalc.display(),
             real_fpcalc.display()
         ),
@@ -1001,6 +1049,25 @@ async fn source_tree_change_during_normalization_discards_result() {
     fs::create_dir(&release).unwrap();
     generate_wav(&release.join("track.wav"));
     scenario.discover_settle_and_inspect().await;
+    // ADR-0145 moves the Release into staging during inspection, so the inbound
+    // `release` directory is gone; the source-change must target the durable
+    // staged tree that normalization actually reads and re-verifies.
+    let change_item = WorkItemStore
+        .list(&scenario.pool, None, 10, 0)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|candidate| candidate.source_path == "release")
+        .unwrap();
+    let staged_root = owned_source_root(
+        &scenario.config,
+        &WorkItemStore,
+        &scenario.pool,
+        &change_item,
+    )
+    .await
+    .unwrap()
+    .root;
 
     let wrapper = scenario.root.join("source-change-ffmpeg");
     let real_ffmpeg = tool_path("ffmpeg");
@@ -1027,7 +1094,7 @@ async fn source_tree_change_during_normalization_discards_result() {
         .await
     });
     tokio::time::sleep(std::time::Duration::from_millis(250)).await;
-    fs::write(release.join("late.nfo"), b"late change").unwrap();
+    fs::write(staged_root.join("late.nfo"), b"late change").unwrap();
     let stats = task.await.unwrap().unwrap();
     assert_eq!(1, stats.claimed);
     assert_eq!(0, stats.completed);
@@ -1209,7 +1276,10 @@ async fn final_rename_before_database_completion_is_reclaimed_and_adopted_once()
         })
         .count();
     assert_eq!(1, published_events);
-    assert_eq!(source_before, source_hashes(&scenario.root));
+    assert_eq!(
+        source_before,
+        staged_source_hashes(&scenario.config, &scenario.pool).await
+    );
     scenario.finish().await;
 }
 
@@ -1368,7 +1438,10 @@ async fn publication_lease_theft_cancels_stale_copy_and_direct_retry_converges()
     assert!(!final_path.exists());
     assert_eq!(1, paths_with_fragment(&storage_root, ".incoming"));
     assert_eq!(1, paths_with_fragment(&storage_root, ".copying"));
-    assert_eq!(source_before, source_hashes(&scenario.root));
+    assert_eq!(
+        source_before,
+        staged_source_hashes(&scenario.config, &scenario.pool).await
+    );
 
     let expired = sqlx::query(
         "UPDATE release_work_items
@@ -1432,7 +1505,10 @@ async fn publication_lease_theft_cancels_stale_copy_and_direct_retry_converges()
         .await
         .unwrap()
     );
-    assert_eq!(source_before, source_hashes(&scenario.root));
+    assert_eq!(
+        source_before,
+        staged_source_hashes(&scenario.config, &scenario.pool).await
+    );
     scenario.finish().await;
 }
 
@@ -1566,7 +1642,10 @@ async fn conflicting_final_is_not_overwritten_and_remains_directly_reclaimable()
     assert_eq!(staged.id, reclaimed[0].id);
     assert_eq!(IngestionState::Publishing, reclaimed[0].state);
     assert_eq!(attempt_count_before, reclaimed[0].attempt_count);
-    assert_eq!(source_before, source_hashes(&scenario.root));
+    assert_eq!(
+        source_before,
+        staged_source_hashes(&scenario.config, &scenario.pool).await
+    );
     scenario.finish().await;
 }
 
@@ -1657,7 +1736,10 @@ async fn concurrent_validation_and_publication_are_lease_fenced_to_one_result() 
     .await
     .unwrap();
     assert_eq!((1, 1, 1, 1), (published, receipts, authorizations, plans));
-    assert_eq!(source_before, source_hashes(&scenario.root));
+    assert_eq!(
+        source_before,
+        staged_source_hashes(&scenario.config, &scenario.pool).await
+    );
     scenario.finish().await;
 }
 
@@ -1722,7 +1804,10 @@ async fn missing_presentation_is_durably_routed_to_needs_review_before_canonical
             .is_none()
     );
     assert!(fs::read_dir(storage_root).unwrap().next().is_none());
-    assert_eq!(source_before, source_hashes(&scenario.root));
+    assert_eq!(
+        source_before,
+        staged_source_hashes(&scenario.config, &scenario.pool).await
+    );
     scenario.finish().await;
 }
 
@@ -1882,7 +1967,10 @@ async fn real_mp3_flac_ogg_wav_unicode_artwork_and_sidecars_reach_published() {
     assert_eq!(4, regular_files_named(&storage_root, "manifest.json"));
     assert_eq!(0, paths_with_fragment(&storage_root, ".incoming"));
     assert_eq!(0, paths_with_fragment(&storage_root, ".copying"));
-    assert_eq!(source_before, source_hashes(&scenario.root));
+    assert_eq!(
+        source_before,
+        staged_source_hashes(&scenario.config, &scenario.pool).await
+    );
     assert_eq!(
         b"outside source sentinel",
         fs::read(&outside).unwrap().as_slice()
