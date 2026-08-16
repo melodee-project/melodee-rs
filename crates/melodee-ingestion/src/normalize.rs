@@ -13,7 +13,6 @@
 //! bounded by a heartbeat that renews the lease while work is in progress.
 
 use std::{
-    path::{Component, Path, PathBuf},
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -33,10 +32,12 @@ use tokio::{
 use tracing::{error, info, warn};
 
 use crate::{
-    InboundSource, IngestionConfig, ReconcileResult, ReconcileStats,
+    IngestionConfig, ReconcileResult, ReconcileStats,
     error::{IngestionError, Result},
+    owned_source_root,
     scheduler::StopToken,
     snapshot::snapshot_release_directory,
+    verify_owned_source,
 };
 use melodee_persistence::WorkStoreError;
 
@@ -155,24 +156,8 @@ async fn normalize_one(
     work_config: &WorkEngineConfig,
     shutdown: Arc<AtomicBool>,
 ) -> Result<NormalizationOutcome> {
-    let source = find_source(ingestion, &item);
-    let Some(source) = source else {
-        return record_normalization_failure(
-            store,
-            pool,
-            worker,
-            item.id,
-            work_config,
-            "normalization.source_not_found",
-            "source library not configured for work item",
-            FailureClass::Permanent,
-            OffsetDateTime::now_utc(),
-        )
-        .await
-        .map(|_| NormalizationOutcome::Failed);
-    };
-    let source_root = match resolve_candidate(source, &item.source_path) {
-        Ok(root) => root,
+    let owned = match owned_source_root(ingestion, store, pool, &item).await {
+        Ok(owned) => owned,
         Err(error) => {
             return record_normalization_failure(
                 store,
@@ -180,8 +165,8 @@ async fn normalize_one(
                 worker,
                 item.id,
                 work_config,
-                "normalization.source_unresolvable",
-                &error,
+                "normalization.staged_source_missing",
+                &error.to_string(),
                 FailureClass::Permanent,
                 OffsetDateTime::now_utc(),
             )
@@ -189,6 +174,22 @@ async fn normalize_one(
             .map(|_| NormalizationOutcome::Failed);
         }
     };
+    if let Err(error) = verify_owned_source(&owned) {
+        return record_normalization_failure(
+            store,
+            pool,
+            worker,
+            item.id,
+            work_config,
+            "normalization.staged_source_integrity",
+            &error.to_string(),
+            FailureClass::Permanent,
+            OffsetDateTime::now_utc(),
+        )
+        .await
+        .map(|_| NormalizationOutcome::Failed);
+    }
+    let source_root = owned.root.clone();
 
     let stored = store.get_manifest(pool, item.id).await?;
     let Some(manifest_row) = stored else {
@@ -210,7 +211,6 @@ async fn normalize_one(
         serde_json::from_value(manifest_row.payload).map_err(|e| {
             IngestionError::Inspection(melodee_media::InspectionError::Serialization(e))
         })?;
-    let expected_signature = manifest.inspection.source_signature.clone();
     let before_snapshot =
         match snapshot_release_directory(&source_root, &ingestion.ready_marker_name) {
             Ok(snapshot) => snapshot,
@@ -230,25 +230,6 @@ async fn normalize_one(
                 .map(|_| NormalizationOutcome::Failed);
             }
         };
-    if expected_signature
-        .as_ref()
-        .is_none_or(|expected| expected != &before_snapshot.signature)
-    {
-        return record_normalization_failure(
-            store,
-            pool,
-            worker,
-            item.id,
-            work_config,
-            "normalization.source_changed",
-            "source snapshot no longer matches the inspected manifest",
-            FailureClass::Retryable,
-            OffsetDateTime::now_utc(),
-        )
-        .await
-        .map(|_| NormalizationOutcome::Failed);
-    }
-
     let cancellation = Arc::new(AtomicBool::new(false));
     let cancellation_for_task = cancellation.clone();
     let options = NormalizationOptions {
@@ -380,10 +361,7 @@ async fn normalize_one(
                 .map(|_| NormalizationOutcome::Failed);
             }
         };
-    if after_snapshot.signature != before_snapshot.signature
-        || expected_signature
-            .as_ref()
-            .is_none_or(|expected| expected != &after_snapshot.signature)
+    if after_snapshot.signature != before_snapshot.signature || verify_owned_source(&owned).is_err()
     {
         return record_normalization_failure(
             store,
@@ -505,45 +483,6 @@ async fn record_normalization_failure(
     Ok(())
 }
 
-fn find_source<'a>(
-    config: &'a IngestionConfig,
-    item: &melodee_domain::ReleaseWorkItem,
-) -> Option<&'a InboundSource> {
-    config.sources.iter().find(|source| {
-        source.id == item.source_library_id
-            || (source.id.is_none() && item.source_library_id.is_none())
-    })
-}
-
-fn resolve_candidate(
-    source: &InboundSource,
-    source_path: &str,
-) -> std::result::Result<PathBuf, String> {
-    let relative = Path::new(source_path);
-    if relative.is_absolute()
-        || relative
-            .components()
-            .any(|component| matches!(component, Component::ParentDir | Component::RootDir))
-    {
-        return Err("source path is not a safe relative path".to_owned());
-    }
-    let root = source
-        .root
-        .canonicalize()
-        .map_err(|error| format!("source root is unreadable: {error}"))?;
-    let candidate = root.join(relative);
-    let canonical = candidate
-        .canonicalize()
-        .map_err(|error| format!("source candidate is unreadable: {error}"))?;
-    if canonical.strip_prefix(&root).is_err() {
-        return Err("source candidate escapes configured inbound root".to_owned());
-    }
-    if !canonical.is_dir() {
-        return Err("source candidate is not a directory".to_owned());
-    }
-    Ok(canonical)
-}
-
 /// Starts a graceful periodic normalization worker.
 pub fn start_normalization_loop(
     ingestion: IngestionConfig,
@@ -611,6 +550,8 @@ pub fn start_normalization_loop(
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]
+
+    use std::path::PathBuf;
 
     use super::*;
 

@@ -93,9 +93,10 @@ constraint makes publication idempotent.
 
 ### Source protection
 
-Inbound media is read-only until the durable policy decision and successful publication are
-recorded (SPEC 11.7). Directory renaming or tag rewriting in the inbound tree is prohibited
-(`crates/melodee-ingestion/src/reconcile.rs`, `source.rs`).
+Historical evidence note: ADR-0145 refines this completed Phase 2 interpretation. Inbound bytes
+remain immutable while settling and acquisition occur, but a successfully verified durable staging
+handoff drains the candidate directory from inbound. Directory renaming or tag rewriting for
+normalization remains prohibited.
 
 ## Discovery and settling (sub-slice 2.2)
 

@@ -22,9 +22,10 @@ services:
   initialize-storage:
     image: alpine:3.22
     user: "0:0"
-    command: ["sh", "-ec", "chown 10001:10001 /library /work /search"]
+    command: ["sh", "-ec", "chown 10001:10001 /library /staging /work /search"]
     volumes:
       - melodee_library:/library
+      - melodee_staging:/staging
       - melodee_work:/work
       - melodee_search:/search
     restart: "no"
@@ -46,6 +47,7 @@ services:
       MELODEE__JELLYFIN__TOKEN_PEPPER: ${MELODEE_JELLYFIN_TOKEN_PEPPER:?Set MELODEE_JELLYFIN_TOKEN_PEPPER in .env}
       MELODEE__INGEST__SOURCE_ROOT: /mnt/inbound
       MELODEE__INGEST__SOURCE_LIBRARY_NAME: main
+      MELODEE__INGEST__STAGING_ROOT: /var/lib/melodee/staging
       MELODEE__NORMALIZATION__WORK_AREA: /var/lib/melodee/work
       MELODEE__STORAGE__ROOT: /var/lib/melodee/library
       MELODEE__SEARCH__ENABLED: "true"
@@ -57,15 +59,17 @@ services:
       - "${MELODEE_BIND_ADDRESS:-127.0.0.1}:8080:8080"
     volumes:
       - melodee_library:/var/lib/melodee/library
+      - melodee_staging:/var/lib/melodee/staging
       - melodee_work:/var/lib/melodee/work
       - melodee_search:/var/lib/melodee/search
       - type: bind
         source: ${MELODEE_INBOUND_PATH:?Set MELODEE_INBOUND_PATH in .env}
         target: /mnt/inbound
-        read_only: true
+        read_only: false
 
 volumes:
   melodee_postgres:
   melodee_library:
+  melodee_staging:
   melodee_work:
   melodee_search:

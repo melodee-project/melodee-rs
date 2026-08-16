@@ -23,7 +23,8 @@ current architecture and implementation.
 
 ## Highlights
 
-- **Safe, durable ingestion.** Inbound media is treated as read-only. PostgreSQL-backed,
+- **Safe, durable ingestion.** Inbound is a transient mailbox: bytes remain immutable while
+  evaluated, then a verified handoff drains the candidate into durable Melodee-owned staging. PostgreSQL-backed,
   lease-based Release work items drive discovery, inspection, normalization, validation, and
   publication, so a failure in one Release does not block the rest of the library.
 - **Canonical media without filename identity.** Canonical bundles use immutable Release IDs,
@@ -48,10 +49,10 @@ current architecture and implementation.
 ## Architecture at a glance
 
 ```text
-read-only inbound media
+transient inbound mailbox
         │
         ▼
-durable Release work items ──► inspection / normalization / validation
+durable staging source ──► inspection / normalization / validation
         │                                      │
         │                                      ▼
         │                           immutable canonical media bundles
@@ -87,15 +88,15 @@ The primary deployment path is the committed reference Compose file:
 git clone https://github.com/melodee-project/melodee-rs.git
 cd melodee-rs
 cp compose.env.example .env
-# Set unique secrets, a public HTTPS origin, and an absolute inbound-media path.
+# Set unique secrets, a public HTTPS origin, and an absolute writable inbound-media path.
 docker compose pull
 docker compose up -d
 curl --fail http://127.0.0.1:8080/readyz
 ```
 
 The Compose file pulls `ghcr.io/melodee-project/melodee:${MELODEE_IMAGE_TAG:-latest}`, persists
-PostgreSQL, canonical media, normalization work, and Tantivy separately, and mounts inbound media
-read-only. For a reproducible production deployment, set `MELODEE_IMAGE_TAG` to an exact `X.Y.Z`
+PostgreSQL, staging, canonical media, normalization work, and Tantivy separately. Inbound is
+writable only for candidate-directory rename/removal after verified acquisition. For a reproducible production deployment, set `MELODEE_IMAGE_TAG` to an exact `X.Y.Z`
 release (or a digest), not `latest`. See the [container deployment guide](docs/src/content/docs/installation/docker.md)
 for required configuration, image tags, upgrades, backups, attestation verification, and first-time
 GHCR package visibility.
@@ -130,7 +131,7 @@ corepack enable
 ```
 
 Copy [`.env.example`](.env.example) to `.env`, replace both authentication-secret placeholders,
-and set the inbound, work, canonical-storage, and (when enabled) search roots to distinct absolute
+and set the inbound, staging, work, canonical-storage, and (when enabled) search roots to distinct absolute
 paths. The example is deliberately local-development-only; it must not contain real credentials.
 
 ```bash

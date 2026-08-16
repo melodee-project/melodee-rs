@@ -179,6 +179,22 @@ pub(crate) fn check_storage_paths() -> PreflightCheck {
             ));
         }
     }
+    if config.enabled() {
+        match &config.staging_root {
+            Some(root) if !root.is_dir() => problems.push(format!(
+                "staging root {} is not a directory",
+                root.display()
+            )),
+            Some(root) if !directory_is_writable(root) => {
+                problems.push(format!("staging root {} is not writable", root.display()))
+            }
+            None => problems.push(
+                "MELODEE__INGEST__STAGING_ROOT is required while inbound ingestion is enabled"
+                    .to_owned(),
+            ),
+            _ => {}
+        }
+    }
     match &config.storage_root {
         Some(root) if !root.is_dir() => {
             problems.push(format!(
@@ -196,7 +212,7 @@ pub(crate) fn check_storage_paths() -> PreflightCheck {
             "storage_paths",
             false,
             problems.join("; "),
-            "create the directories with read (sources) / write (storage) permissions for the server user",
+            "create the directories with read/write/rename permission for inbound and write permission for staging, work, and storage",
         );
     }
     if config.sources.is_empty() && config.storage_root.is_none() {
@@ -204,15 +220,19 @@ pub(crate) fn check_storage_paths() -> PreflightCheck {
             "storage_paths",
             false,
             "no inbound source or storage root configured",
-            "set MELODEE__INGEST__SOURCES_JSON (or MELODEE__INGEST__SOURCE_ROOT) and MELODEE__STORAGE__ROOT",
+            "set MELODEE__INGEST__SOURCES_JSON (or MELODEE__INGEST__SOURCE_ROOT), MELODEE__INGEST__STAGING_ROOT, and MELODEE__STORAGE__ROOT",
         );
     }
     PreflightCheck::pass(
         "storage_paths",
         false,
         format!(
-            "{} inbound source(s), storage root {}",
+            "{} inbound source(s), staging root {}, storage root {}",
             config.sources.len(),
+            config
+                .staging_root
+                .as_ref()
+                .map_or("not set".to_string(), |root| root.display().to_string()),
             config
                 .storage_root
                 .as_ref()

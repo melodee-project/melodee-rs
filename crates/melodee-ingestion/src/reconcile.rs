@@ -11,6 +11,7 @@ use tracing::{debug, instrument, warn};
 use uuid::Uuid;
 
 use crate::{
+    acquisition::source_generation,
     candidate_relative_path,
     config::InboundSource,
     config::IngestionConfig,
@@ -122,6 +123,27 @@ pub async fn reconcile_inbound_source(
         let relative = candidate_relative_path(&candidate.relative_path);
         observed.insert(relative.clone());
         stats.candidates_seen += 1;
+
+        let generation = match source_generation(&candidate.absolute_path) {
+            Ok(generation) => generation,
+            Err(error) => {
+                stats.errors += 1;
+                warn!(source = %source.name, source_path = %relative, %error, "unable to identify inbound occurrence");
+                continue;
+            }
+        };
+        match store
+            .inbound_occurrence_is_acquired(pool, source.id, &relative, &generation, now)
+            .await
+        {
+            Ok(true) => continue,
+            Ok(false) => {}
+            Err(error) => {
+                stats.errors += 1;
+                warn!(source = %source.name, source_path = %relative, %error, "unable to resolve inbound occurrence");
+                continue;
+            }
+        }
 
         let mut item = match get_or_create_work_item(store, pool, source.id, &relative, now).await {
             Ok((item, created)) => {

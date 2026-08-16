@@ -639,15 +639,19 @@ async fn review_reprocess_moves_failed_to_ready_only() {
 }
 
 #[tokio::test]
-async fn track_preview_streams_from_source_root_with_range_and_no_store() {
+async fn track_preview_streams_from_staging_with_range_and_no_store() {
     let db = TestDb::create("wp12_review_preview").await;
     let fixture = seed_users(&db).await;
     let admin = token_for(fixture.admin_public, "wp12-admin");
     let review = seed_pending_review(&db, 6).await;
 
-    // Materialize the observed source file under a configured inbound root.
-    let source_root = tempfile::tempdir().expect("source root");
-    let release_dir = source_root.path().join("phase4/source/release-0006");
+    // Materialize the observed source file under its deterministic staging root.
+    let source_root = tempfile::tempdir().expect("staging root");
+    let release_dir = source_root
+        .path()
+        .join("releases")
+        .join(review.work_item_id().to_string())
+        .join("source");
     std::fs::create_dir_all(release_dir.join("disc-01")).expect("release dir");
     let track_path = release_dir.join("disc-01/06 - Preview Track.flac");
     let bytes = b"fLaC-fixture-preview-bytes-0123456789".to_vec();

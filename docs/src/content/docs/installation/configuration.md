@@ -80,6 +80,7 @@ redacted export can never overwrite a stored secret. The admin API equivalent is
 | `MELODEE__INGEST__ENABLED` | `true` | Whether inbound discovery/scheduler is enabled. |
 | `MELODEE__INGEST__SOURCES_JSON` | — | JSON array of inbound sources (`id?`, `root`, `name?`). Supports multiple source roots. |
 | `MELODEE__INGEST__SOURCE_ROOT` | — | Single inbound root (legacy compatibility path when JSON is not set). |
+| `MELODEE__INGEST__STAGING_ROOT` | — (required with inbound sources) | Absolute, durable Melodee-owned original-source root. It must be writable and disjoint from inbound, work, and canonical storage. |
 | `MELODEE__INGEST__SOURCE_LIBRARY_ID` | — | Optional library id for the single-root mode. |
 | `MELODEE__INGEST__SOURCE_LIBRARY_NAME` | — | Optional source name for the single-root mode. |
 | `MELODEE__INGEST__RECONCILIATION_INTERVAL_SECONDS` | `30` | Period between periodic scans. |
@@ -104,7 +105,7 @@ redacted export can never overwrite a stored secret. The admin API equivalent is
 | `MELODEE__NORMALIZATION__FFMPEG_TIMEOUT_SECONDS` | `300` | Maximum time for one FFmpeg encode, decode verification, or artwork operation. |
 | `MELODEE__NORMALIZATION__FPCALC_PATH` | `fpcalc` | Explicit Chromaprint `fpcalc` executable path. |
 | `MELODEE__NORMALIZATION__FPCALC_TIMEOUT_SECONDS` | `60` | Maximum time for one fingerprint operation. |
-| `MELODEE__NORMALIZATION__WORK_AREA` | `/tmp/melodee-work` | Temporary, non-authoritative root for attempt-isolated normalized output. |
+| `MELODEE__NORMALIZATION__WORK_AREA` | `/tmp/melodee-work` | Temporary, non-authoritative root for attempt-isolated normalized output. It is never used as durable staging. |
 
 ### Validation and canonical publication
 
@@ -112,7 +113,7 @@ redacted export can never overwrite a stored secret. The admin API equivalent is
 | --- | --- | --- |
 | `MELODEE__VALIDATION__CONCURRENCY` | `2` | Maximum normalized Releases structurally validated simultaneously by one process. |
 | `MELODEE__PUBLICATION__CONCURRENCY` | `2` | Maximum complete Release bundles copied and finalized simultaneously by one process. |
-| `MELODEE__STORAGE__ROOT` | — (publication disabled) | Dedicated canonical-library root. Setting it enables validation/publication workers. |
+| `MELODEE__STORAGE__ROOT` | — (publication disabled) | Dedicated canonical-library root. Setting it enables validation/publication workers. It is distinct from staging. |
 
 ### Catalog import
 
@@ -142,7 +143,7 @@ redacted export can never overwrite a stored secret. The admin API equivalent is
 | Key | Default | Effect |
 | --- | --- | --- |
 | `MELODEE__SEARCH__ENABLED` | `false` | Starts the PostgreSQL outbox/rebuild worker. Enabling requires an explicit search root. |
-| `MELODEE__SEARCH__ROOT` | — when enabled | Absolute, dedicated root for owned Tantivy generations. It must not overlap inbound, work, or canonical storage roots. |
+| `MELODEE__SEARCH__ROOT` | — when enabled | Absolute, dedicated root for owned Tantivy generations. It must not overlap inbound, staging, work, or canonical storage roots. |
 | `MELODEE__SEARCH__LEASE_SECONDS` | `60` | PostgreSQL writer/rebuild lease duration. |
 | `MELODEE__SEARCH__BATCH_SIZE` | `256` | Outbox/catch-up rows per bounded pass (maximum `512`). |
 | `MELODEE__SEARCH__MAX_OUTBOX_ATTEMPTS` | `5` | Failed attempts before a retryable outbox row becomes a permanent, operator-visible failure (maximum `100`). |
@@ -158,7 +159,7 @@ redacted export can never overwrite a stored secret. The admin API equivalent is
 | `MELODEE__PODCAST__ENABLED` | `true` | Enables role-gated native-v1 podcast routes. `false`, `0`, or `no` makes the surface return `404`. |
 | `MELODEE__PODCAST__DISCOVERY_ENDPOINT` | `https://itunes.apple.com/` | Base URL for podcast search, trending, and lookup. Production endpoints must use HTTPS; loopback HTTP is accepted only by deterministic tests. |
 | `MELODEE__PODCAST__WORKER__ENABLED` | `false` | Enables bounded feed refresh, download, retention, and orphan-recovery passes while podcasts are enabled. Enabling requires an owned storage root. |
-| `MELODEE__PODCAST__STORAGE_ROOT` | — when worker enabled | Dedicated absolute root for podcast downloads. It must not overlap inbound, work, canonical-media, or search roots. |
+| `MELODEE__PODCAST__STORAGE_ROOT` | — when worker enabled | Dedicated absolute root for podcast downloads. It must not overlap inbound, staging, work, canonical-media, or search roots. |
 | `MELODEE__PODCAST__WORKER__POLL_INTERVAL_SECONDS` | `30` | Delay between worker passes (`1`–`86400`). |
 | `MELODEE__PODCAST__WORKER__BATCH_SIZE` | `4` | Maximum downloads claimed per pass (`1`–`32`). |
 | `MELODEE__PODCAST__WORKER__LEASE_SECONDS` | `300` | Cross-process download lease (`60`–`3600` seconds). |

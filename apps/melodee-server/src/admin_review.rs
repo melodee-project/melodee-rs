@@ -13,7 +13,7 @@
 //! execution evidence) and is never performed by this surface.
 //!
 //! The preview endpoint never trusts client-supplied paths: the track file
-//! is located from the durable manifest and the configured inbound/work
+//! is located from the durable manifest and the configured staging/work
 //! roots, canonicalized, containment-checked, and opened with the no-follow
 //! `CanonicalAssetRoot` used by native streaming.
 
@@ -57,7 +57,8 @@ const REVIEW_STATES: [IngestionState; 3] = [
     IngestionState::Quarantined,
 ];
 
-/// One configured inbound source root eligible to back a preview.
+/// One configured durable staging root eligible to back a preview. The name
+/// remains compatible with the Phase 10 review test harness.
 #[derive(Debug, Clone)]
 pub struct PreviewSourceRoot {
     pub id: Option<Uuid>,
@@ -69,7 +70,7 @@ pub struct PreviewSourceRoot {
 /// canonicalized and must remain inside the canonicalized configured root.
 #[derive(Debug)]
 pub struct ReviewPreview {
-    source_roots: Vec<PreviewSourceRoot>,
+    staging_root: Option<PathBuf>,
     work_area_base: PathBuf,
 }
 
@@ -77,7 +78,7 @@ impl ReviewPreview {
     #[must_use]
     pub fn new(source_roots: Vec<PreviewSourceRoot>, work_area_base: PathBuf) -> Self {
         Self {
-            source_roots,
+            staging_root: source_roots.into_iter().next().map(|root| root.root),
             work_area_base,
         }
     }
@@ -891,7 +892,7 @@ async fn track_preview(
         return preview_not_found();
     };
 
-    let candidates = preview_candidates(&manifest, &item.source_path, track, &state.preview);
+    let candidates = preview_candidates(&manifest, item.id, track, &state.preview);
     let range_header = headers
         .get(header::RANGE)
         .and_then(|value| value.to_str().ok());
@@ -966,12 +967,12 @@ struct PreviewCandidate {
 }
 
 /// Locates preview candidates in preference order: the normalized work-area
-/// output first (that is what would be published), then the observed source
-/// file under a matching inbound source root. Nothing here trusts client
+/// output first (that is what would be published), then the immutable staged
+/// source. Nothing here trusts client
 /// input; every path comes from the durable manifest or server config.
 fn preview_candidates(
     manifest: &ReleaseManifest,
-    item_source_path: &str,
+    work_item_id: Uuid,
     track: &melodee_domain::ObservedTrack,
     preview: &ReviewPreview,
 ) -> Vec<PreviewCandidate> {
@@ -990,15 +991,7 @@ fn preview_candidates(
             mime_type: mime_for_container(&output.container),
         });
     }
-    let source_library_id = manifest.inspection.source_library_id;
-    for source in &preview.source_roots {
-        // A recorded source-library id pins the root; without one, every
-        // configured root is tried in order (containment still enforced).
-        if let Some(required) = source_library_id
-            && source.id != Some(required)
-        {
-            continue;
-        }
+    if let Some(staging_root) = &preview.staging_root {
         let mime_type = manifest
             .files
             .iter()
@@ -1006,8 +999,11 @@ fn preview_candidates(
             .and_then(|file| file.mime_type.clone())
             .unwrap_or_else(|| "application/octet-stream".to_string());
         candidates.push(PreviewCandidate {
-            base: source.root.join(item_source_path),
-            contained_under: source.root.clone(),
+            base: staging_root
+                .join("releases")
+                .join(work_item_id.to_string())
+                .join("source"),
+            contained_under: staging_root.clone(),
             relative_path: track.file_path.clone(),
             mime_type,
         });

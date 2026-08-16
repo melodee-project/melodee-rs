@@ -83,7 +83,9 @@ without a proprietary registry or long-lived publishing secret.
 - The release workflow validates the same production image form it publishes.
 - Image labels, SBOM, vulnerability scanning, and provenance are associated with the deployable
   artifact rather than a detached native archive.
-- Inbound media can be mounted read-only while PostgreSQL, canonical storage, work, and search
+- Historical note: ADR-0145 later changes inbound mount permission. Inbound media bytes remain
+  immutable, but the runtime must be able to remove successfully acquired candidate directories;
+  PostgreSQL, staging, canonical storage, work, and search
   remain explicit persistent paths.
 
 ### Negative / trade-offs
@@ -105,7 +107,8 @@ without a proprietary registry or long-lived publishing secret.
 ## Validation
 
 - `Dockerfile` builds server/CLI/admin assets in separate build stages and runs as UID 10001.
-- `compose.yml` uses `ghcr.io/melodee-project/melodee`, mounts inbound media read-only, and makes
+- `compose.yml` uses `ghcr.io/melodee-project/melodee`, mounts inbound media writable only for
+  verified candidate handoff cleanup under ADR-0145, and makes
   owned persistent paths explicit.
 - `.github/workflows/release-container.yml` is release-published-only, validates SemVer/Cargo
   versions, runs `./scripts/check.sh`, smoke-tests a PostgreSQL-backed image, scans it, builds a

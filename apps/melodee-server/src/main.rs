@@ -213,6 +213,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let policy_config = PolicyConfig::from_env()?;
     let policy_worker_config = PolicyWorkerConfig::from_env()?;
     let discovery_worker_config = DiscoveryWorkerConfig::from_env()?;
+    // Validate all configured storage roles even when canonical publication is
+    // disabled. Inbound is an inbox and must never overlap staging, work, or
+    // canonical roots.
+    let storage_roots = ingestion_config.storage_roots()?;
     let publication_roots = ingestion_config.publication_roots()?;
     let mut search_config = SearchConfig::from_env()
         .map_err(|error| format!("invalid search configuration: {error}"))?;
@@ -222,6 +226,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             .iter()
             .map(|source| source.root.clone())
             .collect::<Vec<_>>();
+        if let Some(staging_root) = &storage_roots.staging_root {
+            other_roots.push(staging_root.clone());
+        }
         if let Some(roots) = &publication_roots {
             other_roots.push(roots.storage_root.clone());
             other_roots.push(roots.work_area_base.clone());
@@ -236,6 +243,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             .iter()
             .map(|source| source.root.clone())
             .collect::<Vec<_>>();
+        if let Some(staging_root) = &storage_roots.staging_root {
+            other_roots.push(staging_root.clone());
+        }
         other_roots.push(ingestion_config.work_area_base.clone());
         if let Some(roots) = &publication_roots {
             other_roots.push(roots.storage_root.clone());
@@ -461,20 +471,15 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         notifications: notifications.clone(),
         scripting: scripting.clone(),
     };
-    // WP-12 review preview path-safety context: the configured inbound source
-    // roots plus the normalization work area are the only directories a
-    // pre-publication preview may stream from (containment is re-validated
-    // per request against canonicalized paths).
+    // WP-12 review previews use Melodee-owned staging, never the transient
+    // inbox. Containment is re-validated per request.
     let admin_review_state = melodee_server::admin_review::AdminReviewState::new(
         admin_access_state.clone(),
-        ingestion_config
-            .sources
-            .iter()
-            .map(|source| melodee_server::admin_review::PreviewSourceRoot {
-                id: source.id,
-                root: source.root.clone(),
-            })
-            .collect(),
+        storage_roots
+            .staging_root
+            .clone()
+            .map(|root| vec![melodee_server::admin_review::PreviewSourceRoot { id: None, root }])
+            .unwrap_or_default(),
         ingestion_config.work_area_base.clone(),
     );
     // WP-14/WP-17 dashboard + system/workers/search surface: the configured

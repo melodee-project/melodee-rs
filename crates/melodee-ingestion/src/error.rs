@@ -4,9 +4,9 @@ use thiserror::Error;
 
 use melodee_persistence::WorkStoreError;
 
-use crate::config::IngestionSourceParseError;
 use crate::snapshot::SnapshotCaptureError;
 use crate::source::SourceDiscoveryError;
+use crate::{acquisition::AcquisitionError, config::IngestionSourceParseError};
 use melodee_media::InspectionError;
 
 use crate::{PublicationError, StructuralValidationError};
@@ -21,6 +21,9 @@ pub enum IngestionError {
 
     #[error("snapshot capture failed: {0}")]
     Snapshot(#[from] SnapshotCaptureError),
+
+    #[error("durable staging acquisition failed: {0}")]
+    Acquisition(#[from] AcquisitionError),
 
     #[error("persistence failed: {0}")]
     Persistence(#[from] WorkStoreError),

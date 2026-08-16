@@ -796,13 +796,15 @@
   "note": "Settling evidence is persisted in PostgreSQL and drives durable readiness transitions."
  },
  "PRD-INGEST-005": {
-  "status": "tested",
+  "status": "in-progress",
   "implementation": [
-   "crates/melodee-ingestion/src/config.rs (inbound roots canonicalized, write-paths never touched)",
+   "crates/melodee-ingestion/src/config.rs (inbound/staging/work/canonical roots are disjoint and staging is required)",
+   "crates/melodee-ingestion/src/acquisition.rs (leased rename or verified copy-and-remove handoff)",
    "crates/melodee-ingestion/src/reconcile.rs (no source moves/renames/deletions during discovery)",
    "crates/melodee-ingestion/src/source.rs (safe symlink and path traversal filtering)",
-   "crates/melodee-ingestion/src/validate.rs and publication.rs (read-only work/source validation and retained source disposition)",
-   "design/adr/ADR-0116-use-immutable-release-ids-and-convergent-canonical-publication.md"
+   "crates/melodee-ingestion/src/normalize.rs (staged-source-only downstream reads)",
+   "crates/melodee-persistence/migrations/0031_durable_inbound_staging_handoff.sql",
+   "design/adr/ADR-0145-drain-inbound-into-durable-staging-before-ingestion.md"
   ],
   "tests": [
    "crates/melodee-ingestion/tests/reconciliation.rs (missing_candidate_is_not_deleted)",
@@ -810,9 +812,10 @@
    "crates/melodee-ingestion/tests/reconciliation.rs (symlink_candidates_are_safe)",
    "crates/melodee-ingestion/tests/reconciliation.rs (directory_discovery_ignores_non_directories_and_invalid_candidates)",
    "crates/melodee-ingestion/tests/publication.rs (source snapshots unchanged across success, tamper, symlink, cancellation, and conflicts)",
-   "crates/melodee-ingestion/tests/normalization.rs (source unchanged across real pathology, crash recovery, fencing, and 200-Release publication)"
+   "crates/melodee-ingestion/tests/normalization.rs (source unchanged across real pathology, crash recovery, fencing, and 200-Release publication)",
+   "crates/melodee-ingestion/src/acquisition.rs (same-filesystem move, streamed-copy tree equality, and delayed-cleanup replacement guard)"
   ],
-  "note": "Inbound trees remain read-only throughout Phase 3. Canonical publication always records source disposition retained; move/delete requires a later, separate durable policy decision."
+  "note": "Corrective ADR-0145 work is in progress. Inbound bytes remain immutable before acquisition, but a verified durable staging receipt drains the candidate. Canonical publication retains staged source by default."
  },
  "PRD-INGEST-006": {
   "status": "tested",
@@ -2711,7 +2714,7 @@
  "PRD-DEPLOY-003": {
   "status": "tested",
   "implementation": [
-   "compose.yml (explicit PostgreSQL, canonical, work, search, and read-only inbound mounts)",
+   "compose.yml (explicit PostgreSQL, staging, canonical, work, search, and writable inbound mounts)",
    "docs/src/content/docs/installation/docker.md (persistent-state table and optional podcast-root guidance)"
   ],
   "tests": [

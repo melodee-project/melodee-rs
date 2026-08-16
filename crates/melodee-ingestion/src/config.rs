@@ -24,6 +24,9 @@ pub const ENV_SOURCES_JSON: &str = "MELODEE__INGEST__SOURCES_JSON";
 pub const ENV_SOURCE_ROOT: &str = "MELODEE__INGEST__SOURCE_ROOT";
 pub const ENV_SOURCE_LIBRARY_ID: &str = "MELODEE__INGEST__SOURCE_LIBRARY_ID";
 pub const ENV_SOURCE_LIBRARY_NAME: &str = "MELODEE__INGEST__SOURCE_LIBRARY_NAME";
+/// Durable Melodee-owned source storage. This is not normalization scratch:
+/// it retains original source bytes for retry, review, and quarantine.
+pub const ENV_STAGING_ROOT: &str = "MELODEE__INGEST__STAGING_ROOT";
 pub const ENV_INSPECTION_CONCURRENCY: &str = "MELODEE__INSPECTION__CONCURRENCY";
 pub const ENV_FFPROBE_PATH: &str = "MELODEE__INSPECTION__FFPROBE_PATH";
 pub const ENV_FFPROBE_TIMEOUT_SECONDS: &str = "MELODEE__INSPECTION__FFPROBE_TIMEOUT_SECONDS";
@@ -67,6 +70,8 @@ pub struct IngestionConfig {
     pub ffmpeg_timeout: Duration,
     pub fpcalc_path: PathBuf,
     pub fpcalc_timeout: Duration,
+    /// Required durable source storage whenever inbound ingestion is enabled.
+    pub staging_root: Option<PathBuf>,
     pub work_area_base: PathBuf,
     pub validation_concurrency: u32,
     pub publication_concurrency: u32,
@@ -92,6 +97,10 @@ impl IngestionConfig {
 
     #[must_use]
     pub fn with_sources(sources: Vec<InboundSource>) -> Self {
+        let staging_root = sources
+            .first()
+            .and_then(|source| source.root.parent())
+            .map(|parent| parent.join(".melodee-staging-test"));
         Self {
             enabled: true,
             sources,
@@ -107,6 +116,7 @@ impl IngestionConfig {
             ffmpeg_timeout: Duration::seconds(DEFAULT_FFMPEG_TIMEOUT_SECONDS),
             fpcalc_path: PathBuf::from("fpcalc"),
             fpcalc_timeout: Duration::seconds(DEFAULT_FPCALC_TIMEOUT_SECONDS),
+            staging_root,
             work_area_base: PathBuf::from(DEFAULT_WORK_AREA_BASE),
             validation_concurrency: DEFAULT_VALIDATION_CONCURRENCY,
             publication_concurrency: DEFAULT_PUBLICATION_CONCURRENCY,
@@ -124,8 +134,18 @@ impl IngestionConfig {
             .map(|value| parse_bool(ENV_INGEST_ENABLED, &value))
             .transpose()?;
 
+        let enabled = enabled.unwrap_or(true);
+        let staging_root = env::var_os(ENV_STAGING_ROOT).map(PathBuf::from);
+        if enabled && !sources.is_empty() && staging_root.is_none() {
+            return Err(IngestionSourceParseError {
+                detail: format!(
+                    "{ENV_STAGING_ROOT} is required when inbound ingestion has configured source roots; inbound is a transient inbox, not processing storage"
+                ),
+            });
+        }
+
         Ok(Self {
-            enabled: enabled.unwrap_or(true),
+            enabled,
             sources,
             reconciliation_interval: parse_positive_duration_seconds(
                 ENV_RECONCILIATION_INTERVAL_SECONDS,
@@ -170,6 +190,7 @@ impl IngestionConfig {
                 ENV_FPCALC_TIMEOUT_SECONDS,
                 DEFAULT_FPCALC_TIMEOUT_SECONDS,
             )?,
+            staging_root,
             work_area_base: env::var(ENV_WORK_AREA_BASE)
                 .map(PathBuf::from)
                 .unwrap_or_else(|_| PathBuf::from(DEFAULT_WORK_AREA_BASE)),
@@ -192,41 +213,74 @@ impl IngestionConfig {
     /// All roots must be disjoint. This prevents canonical writes from ever
     /// landing in the read-only inbound tree or normalization work area.
     pub fn publication_roots(&self) -> Result<Option<PublicationRoots>, IngestionSourceParseError> {
-        let Some(storage_root) = &self.storage_root else {
+        let roots = self.storage_roots()?;
+        let Some(storage_root) = roots.storage_root else {
             return Ok(None);
         };
-        let storage_root = resolve_configured_root(storage_root, "canonical storage root")?;
-        let work_area_base =
-            resolve_configured_root(&self.work_area_base, "normalization work-area root")?;
+        Ok(Some(PublicationRoots {
+            storage_root,
+            work_area_base: roots.work_area_base,
+            source_roots: roots.source_roots,
+        }))
+    }
+
+    /// Resolves every configured media/data root and proves inbound is
+    /// disjoint from every writable destination. Physical staging is distinct
+    /// from the existing logical ingestion state `Staged`.
+    pub fn storage_roots(&self) -> Result<StorageRoots, IngestionSourceParseError> {
         let source_roots = self
             .sources
             .iter()
             .map(|source| resolve_configured_root(&source.root, "inbound source root"))
             .collect::<Result<Vec<_>, _>>()?;
+        let work_area_base =
+            resolve_configured_root(&self.work_area_base, "normalization work-area root")?;
+        let staging_root = match &self.staging_root {
+            Some(root) => Some(resolve_configured_root(root, "durable staging root")?),
+            None if self.enabled() => {
+                return Err(IngestionSourceParseError {
+                    detail: format!(
+                        "{ENV_STAGING_ROOT} is required when inbound ingestion is enabled"
+                    ),
+                });
+            }
+            None => None,
+        };
+        let storage_root = self
+            .storage_root
+            .as_ref()
+            .map(|root| resolve_configured_root(root, "canonical storage root"))
+            .transpose()?;
 
-        let mut named_roots = Vec::with_capacity(source_roots.len() + 2);
-        named_roots.push(("canonical storage root", storage_root.as_path()));
-        named_roots.push(("normalization work-area root", work_area_base.as_path()));
+        let mut named_roots = Vec::with_capacity(source_roots.len() + 3);
         for source_root in &source_roots {
             named_roots.push(("inbound source root", source_root.as_path()));
+        }
+        if let Some(root) = &staging_root {
+            named_roots.push(("durable staging root", root.as_path()));
+        }
+        named_roots.push(("normalization work-area root", work_area_base.as_path()));
+        if let Some(root) = &storage_root {
+            named_roots.push(("canonical storage root", root.as_path()));
         }
         for (index, (left_name, left)) in named_roots.iter().enumerate() {
             for (right_name, right) in named_roots.iter().skip(index + 1) {
                 if paths_overlap(left, right) {
                     return Err(IngestionSourceParseError {
                         detail: format!(
-                            "{left_name} {left:?} overlaps {right_name} {right:?}; publication roots must be disjoint"
+                            "{left_name} {left:?} overlaps {right_name} {right:?}; configured storage roots must be disjoint"
                         ),
                     });
                 }
             }
         }
 
-        Ok(Some(PublicationRoots {
-            storage_root,
+        Ok(StorageRoots {
+            staging_root,
             work_area_base,
+            storage_root,
             source_roots,
-        }))
+        })
     }
 }
 
@@ -235,6 +289,16 @@ impl IngestionConfig {
 pub struct PublicationRoots {
     pub storage_root: PathBuf,
     pub work_area_base: PathBuf,
+    pub source_roots: Vec<PathBuf>,
+}
+
+/// Absolute, symlink-free storage roots. Staging is absent only when inbound
+/// ingestion is disabled or has no configured source roots.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StorageRoots {
+    pub staging_root: Option<PathBuf>,
+    pub work_area_base: PathBuf,
+    pub storage_root: Option<PathBuf>,
     pub source_roots: Vec<PathBuf>,
 }
 
@@ -406,15 +470,12 @@ fn canonicalize_root(root: PathBuf) -> Result<PathBuf, IngestionSourceParseError
 }
 
 fn resolve_configured_root(root: &Path, label: &str) -> Result<PathBuf, IngestionSourceParseError> {
-    let absolute = if root.is_absolute() {
-        root.to_path_buf()
-    } else {
-        env::current_dir()
-            .map_err(|error| IngestionSourceParseError {
-                detail: format!("failed to resolve {label}: {error}"),
-            })?
-            .join(root)
-    };
+    if !root.is_absolute() {
+        return Err(IngestionSourceParseError {
+            detail: format!("{label} must be an absolute path: {root:?}"),
+        });
+    }
+    let absolute = root.to_path_buf();
     let normalized = normalize_absolute(&absolute).ok_or_else(|| IngestionSourceParseError {
         detail: format!("{label} is not a valid absolute path: {absolute:?}"),
     })?;

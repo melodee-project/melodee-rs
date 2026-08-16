@@ -389,8 +389,9 @@ source removal.
 
 ### 11.7 Source protection
 
-Inbound media is read-only until the durable policy decision and successful publication are recorded.
-Directory renaming or tag rewriting in the inbound tree is prohibited.
+Inbound media bytes are immutable until durable staging acquisition. Tag rewriting or partial
+mutation in the inbound tree is prohibited. After a verified staging receipt, the acquired
+candidate directory is removed from inbound; downstream stages use the durable staged source.
 
 ## 12. Structural validity, enrichment, and curation
 
@@ -506,8 +507,9 @@ disposable.
 Merge/split/rename operations must not require moving media merely because identity metadata changed.
 Publication persists immutable authorization/plan intent before filesystem I/O, seals and fsyncs a
 hidden incoming bundle, uses a no-replace directory rename, and records the receipt only after final
-verification. Retry adopts an exact final and fails closed on a conflict. Phase 3 always retains the
-inbound source. See ADR-0106 and ADR-0116 for the binding layout/publication decision.
+verification. Retry adopts an exact final and fails closed on a conflict. Canonical publication
+retains staged source by default; inbound is drained after ADR-0145 staging acquisition. See
+ADR-0106, ADR-0116, and ADR-0145 for the binding layout/publication decision.
 
 ## 17. Catalog persistence
 

@@ -4,7 +4,7 @@
 - **Status:** Accepted
 - **Decision owners:** User-directed Phase 3.3 implementation work
 - **Supersedes:** None
-- **Superseded by:** None
+- **Superseded by:** ADR-0145 (inbound source-disposition/retention clause only)
 - **Related requirements:** PRD-INGEST-005, PRD-INGEST-006, PRD-INGEST-007,
   PRD-INGEST-008, PRD-INGEST-009, PRD-INGEST-010, PRD-STORAGE-001,
   PRD-STORAGE-002, PRD-STORAGE-004
@@ -38,6 +38,10 @@ section 11.7 forbids source mutation before a durable decision and successful pu
 - Publication always records the inbound source disposition as `retained`. Moving or deleting inbound
   media requires a later, separate durable decision. Delete additionally requires the complete
   PRD-POLICY-007 audit.
+
+  **Superseded in part by ADR-0145:** `retained` continues to describe canonical publication and
+  staged-source retention, but is no longer permission to retain an acquired candidate in inbound.
+  Inbound is drained only after a verified durable staging handoff.
 
 ### Canonical layout v1
 

@@ -5,6 +5,7 @@
 
 #![forbid(unsafe_code)]
 
+mod acquisition;
 mod config;
 mod error;
 mod gate;
@@ -19,14 +20,18 @@ mod snapshot;
 mod source;
 mod validate;
 
+pub use acquisition::{
+    AcquisitionError, OwnedSource, acquire_owned_source, owned_source_root, source_generation,
+    verify_owned_source,
+};
 pub use config::{
     DEFAULT_READY_MARKER, ENV_FFMPEG_PATH, ENV_FFMPEG_TIMEOUT_SECONDS, ENV_FFPROBE_PATH,
     ENV_FFPROBE_TIMEOUT_SECONDS, ENV_FPCALC_PATH, ENV_FPCALC_TIMEOUT_SECONDS, ENV_INGEST_ENABLED,
     ENV_INSPECTION_CONCURRENCY, ENV_NORMALIZATION_CONCURRENCY, ENV_PUBLICATION_CONCURRENCY,
     ENV_READY_MARKER_NAME, ENV_READY_MARKER_SHORTCUT_SECONDS, ENV_RECONCILIATION_INTERVAL_SECONDS,
     ENV_SETTLING_QUIET_SECONDS, ENV_SOURCE_LIBRARY_ID, ENV_SOURCE_LIBRARY_NAME, ENV_SOURCE_ROOT,
-    ENV_SOURCES_JSON, ENV_STORAGE_ROOT, ENV_VALIDATION_CONCURRENCY, ENV_WORK_AREA_BASE,
-    IngestionConfig, IngestionSourceParseError, PublicationRoots,
+    ENV_SOURCES_JSON, ENV_STAGING_ROOT, ENV_STORAGE_ROOT, ENV_VALIDATION_CONCURRENCY,
+    ENV_WORK_AREA_BASE, IngestionConfig, IngestionSourceParseError, PublicationRoots, StorageRoots,
 };
 
 pub use error::{IngestionError, Result};

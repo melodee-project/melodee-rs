@@ -20,7 +20,9 @@ Ready -> Inspecting -> Normalizing -> Validating -> Staged -> Publishing -> Publ
 The result is a complete canonical MP3/artwork bundle plus Release manifest v3. Every Published item
 has one immutable UUIDv7 Release ID, a durable structural-publication authorization, an immutable
 publication plan, a portable Release-relative target/manifest path, append-only journal evidence,
-one completion receipt, and source disposition `retained`. Artist/catalog identity, classification,
+one completion receipt, and source disposition `retained`. ADR-0145 later supersedes only the
+historical inbound-retention interpretation: staged source is retained, while acquired inbound
+candidates are drained. Artist/catalog identity, classification,
 novelty policy, source deletion, and catalog insertion remain explicitly outside Phase 3.
 
 ## Sub-slice decision
@@ -152,7 +154,7 @@ not compatibility adapters. No legacy C# service/class boundary was copied.
 
 | Requirement | Closure status | Reason |
 | --- | --- | --- |
-| PRD-INGEST-005 | tested | Every Phase 3 stage treats inbound content as read-only; publication records `retained`. |
+| PRD-INGEST-005 | superseded in part | ADR-0145 preserves byte immutability before acquisition and replaces inbound retention with durable staging handoff/drain. |
 | PRD-INGEST-006 | tested | Copy/verify/fsync/no-replace finalize, exact-final adoption, conflict protection, and idempotent durable completion are implemented and tested. |
 | PRD-INGEST-007 | in-progress | Manifest v3 satisfies the Phase 3 handoff, but the Phase 4 catalog consumer has not yet proved full end-to-end completeness. |
 | PRD-INGEST-008 | tested | Structural/media validity is independent of external enrichment and unresolved catalog identity. |

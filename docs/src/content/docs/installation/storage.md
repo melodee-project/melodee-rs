@@ -5,20 +5,34 @@ sidebar:
   order: 3
 ---
 
-Melodee separates **inbound** media from **library** storage:
+## Storage lifecycle
 
-- **Inbound** is where new data is staged. This path is discovered, snapshotted, inspected, and
-  normalized read-only; it is not deleted, renamed, or rewritten by those stages.
-- **Normalization work area** holds attempt-isolated temporary output. It is non-authoritative and
-  must not be treated as the library.
-- **Library storage** holds verified canonical Release bundles. It is enabled only when
-  `MELODEE__STORAGE__ROOT` is explicitly configured.
+Melodee uses four separate storage roles. They are not interchangeable.
 
-Important rules for current inbound processing:
+| Role | Configuration | Lifecycle | Permission |
+| --- | --- | --- | --- |
+| Inbound | `MELODEE__INGEST__SOURCE_ROOT` / `MELODEE__INGEST__SOURCES_JSON` | External transient mailbox; drained after verified acquisition. | Read plus rename/remove of acquired candidate directories; never rewrite media bytes. |
+| Staging | `MELODEE__INGEST__STAGING_ROOT` | Durable Melodee-owned original source for processing, review, quarantine, and failed recovery. | Writable and persistent. |
+| Work area | `MELODEE__NORMALIZATION__WORK_AREA` | Disposable attempt-isolated generated output. | Writable; never staging. |
+| Canonical library | `MELODEE__STORAGE__ROOT` | Long-term immutable published Release bundles. | Writable for publication. |
+
+The staging root is required whenever inbound ingestion is configured. All four paths must be
+absolute, symlink-safe, and non-overlapping. `Staged` remains an ingestion state-machine name; it
+does not name this filesystem root.
+
+When inbound and staging are on one filesystem, Melodee uses an atomic no-replace directory move.
+Across filesystems it copies under a hidden staging directory, verifies streamed BLAKE3 hashes,
+fsyncs, finalizes without replacement, records the receipt, then removes the matching inbound
+candidate. A crash converges from that receipt without reopening historical inbound paths.
+
+Important rules:
 
 - Filesystem paths never determine semantic identity.
-- Inbound media remains read-only through discovery, settling, inspection, normalization,
-  validation, and publication. Phase 3 always records its disposition as `retained`.
+- Inbound bytes remain immutable through discovery, settling, and acquisition. After verified
+  staging finalization and durable receipt, the acquired directory leaves inbound.
+- Inspection, normalization, validation, review, and quarantine read staged source; the work area
+  contains only generated output. Staged source remains after publication unless a future explicit
+  retention policy authorizes cleanup.
 - Watchers (if enabled in later phases) are accelerators only; reconciliation scans and durable work items are
   the source of truth.
 
@@ -27,7 +41,7 @@ Important rules for current inbound processing:
 - Candidate roots are canonicalized and path containment is enforced against each inbound root.
 - Symlink targets that escape an inbound root are ignored.
 - Discovery uses sorted, bounded reads to avoid loading the entire disk tree into memory for large libraries.
-- Inbound, normalization-work, and canonical-storage roots cannot overlap, and configured roots
+- Inbound, staging, normalization-work, and canonical-storage roots cannot overlap, and configured roots
   cannot be symlinks.
 
 ## Canonical Release layout

@@ -517,9 +517,14 @@ Suggested algorithm:
 
 An optional explicit `.melodee-ready` marker may allow immediate readiness.
 
-### PRD-INGEST-005 — Source safety
+### PRD-INGEST-005 — Source safety and durable inbox acquisition
 
-Inbound content must be treated as read-only until commit/disposition. Do not rename source directories merely because they contain punctuation or unexpected naming.
+Inbound is a transient externally supplied mailbox, not long-term storage. Content bytes must be
+treated as immutable while Melodee settles and acquires a Release: do not rewrite audio, tags,
+artwork, sidecars, or partially mutate a candidate tree. After a durable verified staging handoff,
+Melodee must remove the acquired candidate directory from inbound. Do not rename source directories
+merely because they contain punctuation or unexpected naming. Reuse of the same inbound path later
+must create a new acquisition, not resurrect historic work.
 
 ### PRD-INGEST-006 — Safe staging/publishing
 

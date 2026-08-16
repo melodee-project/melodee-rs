@@ -155,8 +155,8 @@ pub use user_admin::{
 };
 pub use work_items::{
     ActiveLease, HourlyCompletionCount, PublicationJournalEntry, SettlingSnapshot,
-    SettlingSnapshotFile, StateCount, StoredManifest, StoredPublication, WorkItemSort,
-    WorkItemStore, WorkItemWindowCounts,
+    SettlingSnapshotFile, StagingHandoff, StagingHandoffMethod, StagingHandoffStatus, StateCount,
+    StoredManifest, StoredPublication, WorkItemSort, WorkItemStore, WorkItemWindowCounts,
 };
 pub use worker::WorkerId;
 pub use worker_pool::{

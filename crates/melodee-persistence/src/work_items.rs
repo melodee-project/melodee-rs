@@ -126,6 +126,101 @@ pub struct ActiveLease {
     pub last_activity_at: OffsetDateTime,
 }
 
+/// Durable inbound-to-staging ownership evidence. This is separate from the
+/// logical ingestion state `Staged`: it records filesystem custody only.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StagingHandoff {
+    pub work_item_id: Uuid,
+    pub staging_relative_path: String,
+    pub source_generation: String,
+    pub status: StagingHandoffStatus,
+    pub method: Option<StagingHandoffMethod>,
+    pub tree_hash: Option<String>,
+    pub intended_at: OffsetDateTime,
+    pub staged_at: Option<OffsetDateTime>,
+    pub inbound_removed_at: Option<OffsetDateTime>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StagingHandoffStatus {
+    Intent,
+    Staged,
+    InboundRemoved,
+}
+
+impl StagingHandoffStatus {
+    fn parse(value: &str) -> Result<Self, WorkStoreError> {
+        match value {
+            "intent" => Ok(Self::Intent),
+            "staged" => Ok(Self::Staged),
+            "inbound_removed" => Ok(Self::InboundRemoved),
+            _ => Err(WorkStoreError::CorruptState(format!(
+                "invalid staging handoff status {value}"
+            ))),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StagingHandoffMethod {
+    Rename,
+    VerifiedCopy,
+}
+
+impl StagingHandoffMethod {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Rename => "rename",
+            Self::VerifiedCopy => "verified_copy",
+        }
+    }
+
+    fn parse(value: &str) -> Result<Self, WorkStoreError> {
+        match value {
+            "rename" => Ok(Self::Rename),
+            "verified_copy" => Ok(Self::VerifiedCopy),
+            _ => Err(WorkStoreError::CorruptState(format!(
+                "invalid staging handoff method {value}"
+            ))),
+        }
+    }
+}
+
+#[derive(Debug, FromRow)]
+struct StagingHandoffRow {
+    work_item_id: Uuid,
+    staging_relative_path: String,
+    source_generation: String,
+    status: String,
+    method: Option<String>,
+    tree_hash: Option<String>,
+    intended_at: OffsetDateTime,
+    staged_at: Option<OffsetDateTime>,
+    inbound_removed_at: Option<OffsetDateTime>,
+}
+
+impl TryFrom<StagingHandoffRow> for StagingHandoff {
+    type Error = WorkStoreError;
+
+    fn try_from(row: StagingHandoffRow) -> Result<Self, Self::Error> {
+        Ok(Self {
+            work_item_id: row.work_item_id,
+            staging_relative_path: row.staging_relative_path,
+            source_generation: row.source_generation,
+            status: StagingHandoffStatus::parse(&row.status)?,
+            method: row
+                .method
+                .as_deref()
+                .map(StagingHandoffMethod::parse)
+                .transpose()?,
+            tree_hash: row.tree_hash,
+            intended_at: row.intended_at,
+            staged_at: row.staged_at,
+            inbound_removed_at: row.inbound_removed_at,
+        })
+    }
+}
+
 #[derive(Debug, FromRow)]
 pub(crate) struct WorkItemRow {
     id: Uuid,
@@ -498,10 +593,8 @@ impl WorkItemStore {
         Ok(())
     }
 
-    /// Creates the work item if absent by stable identity and returns the row plus a
-    /// `created` flag. `created == true` means this invocation inserted the row.
-    /// Stable identity is `(source_library_id, source_path)` with NULL libraries
-    /// grouped under a deterministic default identity.
+    /// Creates the work item if no active inbound occurrence owns this path.
+    /// A successful handoff releases the path for a later inbox arrival.
     #[instrument(
         skip_all,
         fields(work_item_id = %item.id, source_path = %item.source_path)
@@ -524,8 +617,7 @@ impl WorkItemStore {
             ) VALUES (
                 $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28
             )
-            ON CONFLICT ((COALESCE(source_library_id::text, '__default__') || '|' || source_path))
-            DO NOTHING
+            ON CONFLICT DO NOTHING
             RETURNING *",
         )
         .bind(item.id)
@@ -585,7 +677,9 @@ impl WorkItemStore {
             None => {
                 let row = sqlx::query_as::<_, WorkItemRow>(
                     "SELECT * FROM release_work_items
-                     WHERE source_library_id IS NOT DISTINCT FROM $1 AND source_path = $2",
+                     WHERE source_library_id IS NOT DISTINCT FROM $1
+                       AND source_path = $2 AND inbound_active
+                     ORDER BY created_at DESC, id DESC LIMIT 1",
                 )
                 .bind(item.source_library_id)
                 .bind(&item.source_path)
@@ -607,7 +701,9 @@ impl WorkItemStore {
         source_path: &str,
     ) -> Result<Option<ReleaseWorkItem>, WorkStoreError> {
         let row = sqlx::query_as::<_, WorkItemRow>(
-            "SELECT * FROM release_work_items WHERE source_library_id IS NOT DISTINCT FROM $1 AND source_path = $2",
+            "SELECT * FROM release_work_items
+             WHERE source_library_id IS NOT DISTINCT FROM $1 AND source_path = $2
+             ORDER BY created_at DESC, id DESC LIMIT 1",
         )
         .bind(source_library_id)
         .bind(source_path)
@@ -624,12 +720,204 @@ impl WorkItemStore {
     ) -> Result<Vec<ReleaseWorkItem>, WorkStoreError> {
         let rows = sqlx::query_as::<_, WorkItemRow>(
             "SELECT * FROM release_work_items
-             WHERE state IN ('discovered', 'settling', 'ready')
+             WHERE inbound_active AND state IN ('discovered', 'settling', 'ready')
              ORDER BY updated_at DESC",
         )
         .fetch_all(pool)
         .await?;
         rows.into_iter().map(ReleaseWorkItem::try_from).collect()
+    }
+
+    /// Persists handoff intent before any filesystem operation. A live lease
+    /// is required for each later receipt or cleanup mutation.
+    pub async fn begin_staging_handoff(
+        &self,
+        pool: &PgPool,
+        id: Uuid,
+        worker: &WorkerId,
+        staging_relative_path: &str,
+        source_generation: &str,
+        now: OffsetDateTime,
+    ) -> Result<StagingHandoff, WorkStoreError> {
+        let mut tx = pool.begin().await?;
+        let item = lock_for_update(&mut tx, id).await?;
+        ensure_active_lease(&item, worker, now)?;
+        let inserted = sqlx::query_as::<_, StagingHandoffRow>(
+            "INSERT INTO release_work_item_staging_handoffs (
+                work_item_id, staging_relative_path, source_generation, status, intended_at
+             ) VALUES ($1,$2,$3,'intent',$4)
+             ON CONFLICT (work_item_id) DO NOTHING
+             RETURNING *",
+        )
+        .bind(id)
+        .bind(staging_relative_path)
+        .bind(source_generation)
+        .bind(now)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let row = match inserted {
+            Some(row) => row,
+            None => sqlx::query_as::<_, StagingHandoffRow>(
+                "SELECT * FROM release_work_item_staging_handoffs WHERE work_item_id = $1 FOR UPDATE",
+            )
+            .bind(id)
+            .fetch_one(&mut *tx)
+            .await?,
+        };
+        if row.staging_relative_path != staging_relative_path {
+            return Err(WorkStoreError::CorruptState(format!(
+                "staging path mismatch for work item {id}"
+            )));
+        }
+        tx.commit().await?;
+        StagingHandoff::try_from(row)
+    }
+
+    pub async fn staging_handoff(
+        &self,
+        pool: &PgPool,
+        id: Uuid,
+    ) -> Result<Option<StagingHandoff>, WorkStoreError> {
+        sqlx::query_as::<_, StagingHandoffRow>(
+            "SELECT * FROM release_work_item_staging_handoffs WHERE work_item_id = $1",
+        )
+        .bind(id)
+        .fetch_optional(pool)
+        .await?
+        .map(StagingHandoff::try_from)
+        .transpose()
+    }
+
+    /// Records a verified final staging tree. The inbound path remains active
+    /// until it is removed or proven to have been replaced by a new arrival.
+    pub async fn record_staging_receipt(
+        &self,
+        pool: &PgPool,
+        id: Uuid,
+        worker: &WorkerId,
+        method: StagingHandoffMethod,
+        tree_hash: &str,
+        now: OffsetDateTime,
+    ) -> Result<StagingHandoff, WorkStoreError> {
+        let mut tx = pool.begin().await?;
+        let item = lock_for_update(&mut tx, id).await?;
+        ensure_active_lease(&item, worker, now)?;
+        let row = sqlx::query_as::<_, StagingHandoffRow>(
+            "UPDATE release_work_item_staging_handoffs
+             SET status = 'staged', method = $2, tree_hash = $3,
+                 staged_at = COALESCE(staged_at, $4)
+             WHERE work_item_id = $1
+             RETURNING *",
+        )
+        .bind(id)
+        .bind(method.as_str())
+        .bind(tree_hash)
+        .bind(now)
+        .fetch_one(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        StagingHandoff::try_from(row)
+    }
+
+    pub async fn record_inbound_removed(
+        &self,
+        pool: &PgPool,
+        id: Uuid,
+        worker: &WorkerId,
+        now: OffsetDateTime,
+    ) -> Result<(), WorkStoreError> {
+        self.finish_inbound_claim(pool, id, worker, now, "inbound_removed")
+            .await
+    }
+
+    pub async fn record_inbound_replaced(
+        &self,
+        pool: &PgPool,
+        id: Uuid,
+        worker: &WorkerId,
+        now: OffsetDateTime,
+    ) -> Result<(), WorkStoreError> {
+        self.finish_inbound_claim(pool, id, worker, now, "staged")
+            .await
+    }
+
+    async fn finish_inbound_claim(
+        &self,
+        pool: &PgPool,
+        id: Uuid,
+        worker: &WorkerId,
+        now: OffsetDateTime,
+        status: &str,
+    ) -> Result<(), WorkStoreError> {
+        let mut tx = pool.begin().await?;
+        let item = lock_for_update(&mut tx, id).await?;
+        ensure_active_lease(&item, worker, now)?;
+        sqlx::query(
+            "UPDATE release_work_item_staging_handoffs
+             SET status = $2,
+                 inbound_removed_at = CASE WHEN $2 = 'inbound_removed'
+                     THEN COALESCE(inbound_removed_at, $3) ELSE inbound_removed_at END
+             WHERE work_item_id = $1",
+        )
+        .bind(id)
+        .bind(status)
+        .bind(now)
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query(
+            "UPDATE release_work_items SET inbound_active = false, updated_at = $2 WHERE id = $1",
+        )
+        .bind(id)
+        .bind(now)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    /// Suppresses only the still-present acquired directory while cleanup is
+    /// pending. A different generation releases the historic path for a new
+    /// work item without letting the old cleanup delete it.
+    pub async fn inbound_occurrence_is_acquired(
+        &self,
+        pool: &PgPool,
+        source_library_id: Option<Uuid>,
+        source_path: &str,
+        source_generation: &str,
+        now: OffsetDateTime,
+    ) -> Result<bool, WorkStoreError> {
+        let mut tx = pool.begin().await?;
+        let row = sqlx::query_as::<_, (Uuid, String)>(
+            "SELECT w.id, h.source_generation
+             FROM release_work_items w
+             JOIN release_work_item_staging_handoffs h ON h.work_item_id = w.id
+             WHERE w.inbound_active
+               AND w.source_library_id IS NOT DISTINCT FROM $1
+               AND w.source_path = $2
+               AND h.status IN ('staged', 'inbound_removed')
+             ORDER BY w.created_at DESC, w.id DESC LIMIT 1 FOR UPDATE",
+        )
+        .bind(source_library_id)
+        .bind(source_path)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let Some((id, recorded_generation)) = row else {
+            tx.commit().await?;
+            return Ok(false);
+        };
+        if recorded_generation == source_generation {
+            tx.commit().await?;
+            return Ok(true);
+        }
+        sqlx::query(
+            "UPDATE release_work_items SET inbound_active = false, updated_at = $2 WHERE id = $1",
+        )
+        .bind(id)
+        .bind(now)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(false)
     }
 
     /// Inserts a new snapshot for a work item and returns the new snapshot id.

@@ -20,8 +20,8 @@ need a host-native executable.
 ## Quick deployment with Compose
 
 The repository's [`compose.yml`](../../../../../compose.yml) is the reference deployment. It uses
-the released GHCR image, PostgreSQL 18, named volumes for Melodee-owned state, and a read-only bind
-mount for inbound media.
+the released GHCR image, PostgreSQL 18, named volumes for Melodee-owned state, and an inbound bind
+mount that permits only candidate-directory rename/removal after verified acquisition.
 
 ```bash
 git clone https://github.com/melodee-project/melodee-rs.git
@@ -72,17 +72,19 @@ The example declares these paths intentionally:
 | State | Compose location | Notes |
 | --- | --- | --- |
 | PostgreSQL | `melodee_postgres` | Authoritative catalog, identity, users, settings, templates, themes, user images, and audit state. |
-| Inbound media | `${MELODEE_INBOUND_PATH}` → `/mnt/inbound:ro` | User-owned source library; Melodee treats it as read-only. |
+| Inbound media | `${MELODEE_INBOUND_PATH}` → `/mnt/inbound` | External mailbox. Media bytes are immutable; the runtime must be able to rename/remove a successfully acquired candidate directory. |
+| Durable staging | `melodee_staging` → `/var/lib/melodee/staging` | Persistent Melodee-owned original source for processing, review, quarantine, and recovery. |
 | Canonical media | `melodee_library` → `/var/lib/melodee/library` | Verified immutable Release bundles. |
 | Normalization work and retained attempt evidence | `melodee_work` → `/var/lib/melodee/work` | Non-authoritative, separate from inbound and canonical storage. |
 | Tantivy | `melodee_search` → `/var/lib/melodee/search` | Rebuildable projection, but persist it to avoid unnecessary rebuilds. |
 | Logs | container stdout/stderr | Collect with your container runtime; no file-log volume is required. |
 
-The `initialize-storage` service changes ownership of only the three new named-volume roots to the
+The `initialize-storage` service changes ownership of only the named-volume owned roots to the
 image's non-root UID `10001`. It does not recursively modify your media. If you replace named
 volumes with host binds, create the directories yourself and grant that UID write access only to
-Melodee-owned roots. Keep inbound mounted read-only and never overlap it with work, canonical, or
-search roots. Mounted/NAS paths are valid when they provide the filesystem semantics required by
+Melodee-owned roots. Inbound must allow the runtime UID to rename/remove a successfully acquired
+candidate directory, while its media bytes remain immutable. Never overlap inbound with staging,
+work, canonical, or search roots. Mounted/NAS paths are valid when they provide the filesystem semantics required by
 the [storage model](./storage/).
 
 Podcast downloads are disabled in the example. If you enable the podcast worker, add a separate,

@@ -62,6 +62,16 @@ impl Scenario {
             .find(|item| item.source_path == name)
             .expect("ready item")
     }
+
+    fn staged_source_root(&self, item_id: Uuid) -> PathBuf {
+        self.config
+            .staging_root
+            .as_ref()
+            .expect("test staging root")
+            .join("releases")
+            .join(item_id.to_string())
+            .join("source")
+    }
 }
 
 #[tokio::test]
@@ -132,8 +142,8 @@ async fn source_change_before_inspection_returns_to_settling_without_manifest() 
 }
 
 /// WP-11 stub gate: the scripting service implements this trait in the
-/// server; here a stub proves the pipeline wiring (deny → return to
-/// settling unprocessed, no manifest; allow → normal inspection).
+/// server; here a stub proves the pipeline wiring (deny → durable staged
+/// retryable failure with no manifest; allow → normal inspection).
 struct StubGate(melodee_ingestion::DirectoryGateOutcome);
 
 impl melodee_ingestion::DirectoryProcessingGate for StubGate {
@@ -151,7 +161,7 @@ impl melodee_ingestion::DirectoryProcessingGate for StubGate {
 }
 
 #[tokio::test]
-async fn script_gate_deny_returns_candidate_to_settling_unprocessed() {
+async fn script_gate_deny_retains_staged_candidate_for_retry() {
     let scenario = Scenario::new("inspection-script-deny").await;
     let item = scenario.settle("denied").await;
     assert_eq!(IngestionState::Ready, item.state);
@@ -177,9 +187,9 @@ async fn script_gate_deny_returns_candidate_to_settling_unprocessed() {
         .await
         .expect("item");
     assert_eq!(
-        IngestionState::Settling,
+        IngestionState::Failed,
         item.state,
-        "skip leaves the directory unprocessed this pass"
+        "a denied candidate remains staged for retry rather than returning to inbound"
     );
     assert!(
         WorkItemStore
@@ -189,41 +199,14 @@ async fn script_gate_deny_returns_candidate_to_settling_unprocessed() {
             .is_none(),
         "a skipped candidate is never inspected"
     );
-
-    // A later pass re-settles and re-promotes the candidate (the settling
-    // quiet period is zero in this fixture), and an allowing gate then
-    // processes it — skip is not a terminal parking.
-    reconcile_all_sources(
-        &scenario.config,
-        &WorkItemStore,
-        &scenario.pool,
-        common::T0 + Duration::seconds(3),
-    )
-    .await
-    .expect("re-reconcile");
-    let item = WorkItemStore
-        .get(&scenario.pool, item.id)
-        .await
-        .expect("item");
-    assert_eq!(IngestionState::Ready, item.state);
-
-    let gate = StubGate(melodee_ingestion::DirectoryGateOutcome::Allow);
-    let stats = inspect_ready_once(
-        &scenario.config,
-        &WorkItemStore,
-        &scenario.pool,
-        &WorkEngineConfig::default(),
-        common::T0 + Duration::seconds(4),
-        Some(&gate),
-    )
-    .await
-    .expect("inspect");
-    assert_eq!(1, stats.completed);
-    let item = WorkItemStore
-        .get(&scenario.pool, item.id)
-        .await
-        .expect("item");
-    assert_eq!(IngestionState::Normalizing, item.state);
+    assert!(
+        scenario.staged_source_root(item.id).is_dir(),
+        "denied source remains available in durable staging"
+    );
+    assert!(
+        !scenario.root.join("denied").exists(),
+        "a safely acquired candidate no longer remains in inbound"
+    );
 
     scenario.database.drop().await;
 }
@@ -235,6 +218,8 @@ async fn source_change_during_inspection_discards_manifest() {
 
     let mut scenario = Scenario::new("inspection-during-change").await;
     let item = scenario.settle("during").await;
+    let staged_source = scenario.staged_source_root(item.id);
+    let ffprobe_started = scenario.root.join("ffprobe-started");
     let ffprobe = Command::new("sh")
         .arg("-c")
         .arg("command -v ffprobe")
@@ -247,7 +232,10 @@ async fn source_change_during_inspection_discards_manifest() {
     let wrapper = scenario.root.join("slow-ffprobe.sh");
     fs::write(
         &wrapper,
-        format!("#!/bin/sh\nsleep 1\nexec {ffprobe_path} \"$@\"\n"),
+        format!(
+            "#!/bin/sh\ntouch \"{}\"\nsleep 1\nexec {ffprobe_path} \"$@\"\n",
+            ffprobe_started.display()
+        ),
     )
     .expect("wrapper");
     fs::set_permissions(&wrapper, fs::Permissions::from_mode(0o755)).expect("permissions");
@@ -266,8 +254,14 @@ async fn source_change_during_inspection_discards_manifest() {
         )
         .await
     });
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-    fs::write(scenario.root.join("during").join("late.nfo"), b"late").expect("late file");
+    for _ in 0..100 {
+        if ffprobe_started.is_file() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    assert!(ffprobe_started.is_file(), "ffprobe entered inspection");
+    fs::write(staged_source.join("late.nfo"), b"late").expect("late file");
     let stats = inspection
         .await
         .expect("inspection task")
@@ -277,7 +271,7 @@ async fn source_change_during_inspection_discards_manifest() {
         .get(&scenario.pool, item.id)
         .await
         .expect("item");
-    assert_eq!(IngestionState::Settling, item.state);
+    assert_eq!(IngestionState::Failed, item.state);
     assert!(
         WorkItemStore
             .get_manifest(&scenario.pool, item.id)

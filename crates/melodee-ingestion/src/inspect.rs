@@ -1,9 +1,6 @@
 //! Leased Release inspection and durable manifest handoff.
 
-use std::{
-    path::{Component, Path, PathBuf},
-    time::Instant,
-};
+use std::time::Instant;
 
 use ::time::OffsetDateTime;
 use melodee_domain::{FailureClass, IngestionState, WorkErrorCode};
@@ -14,10 +11,11 @@ use tokio::time::{self, Duration as TokioDuration};
 use tracing::{error, info, warn};
 
 use crate::{
-    InboundSource, IngestionConfig,
+    AcquisitionError, IngestionConfig, acquire_owned_source,
     error::{IngestionError, Result},
     gate::{DirectoryGateOutcome, DirectoryProcessingGate},
     snapshot::snapshot_release_directory,
+    verify_owned_source,
 };
 
 #[derive(Debug, Clone, Default)]
@@ -29,8 +27,9 @@ pub struct InspectionStats {
     pub failed: u64,
     pub errors: u64,
     pub duration_ms: i64,
-    /// Candidates returned to settling unprocessed because the
-    /// `directoryProcessingStart` script hook denied them (WP-11).
+    /// Candidates denied by the `directoryProcessingStart` script hook
+    /// (WP-11). Acquisition has already made staging authoritative, so a
+    /// denied candidate remains staged as a retryable failed work item.
     pub script_skipped: u64,
 }
 
@@ -124,75 +123,83 @@ async fn inspect_one(
         )
         .await?;
 
-    let source = match find_source(ingestion, &item) {
-        Some(source) => source,
-        None => {
-            return record_inspection_failure(
-                store,
-                pool,
-                worker,
-                item.id,
-                work_config,
-                "inspection.source_not_configured",
-                "the work item source is no longer configured",
-                FailureClass::Permanent,
-                now,
-            )
-            .await
-            .map(|_| InspectionOutcome::Failed);
-        }
-    };
-    let root = match resolve_candidate(source, &item.source_path) {
-        Ok(path) => path,
-        Err(message) => {
-            return record_inspection_failure(
-                store,
-                pool,
-                worker,
-                item.id,
-                work_config,
-                "inspection.source_path_invalid",
-                &message,
-                FailureClass::Permanent,
-                now,
-            )
-            .await
-            .map(|_| InspectionOutcome::Failed);
-        }
-    };
-
     let expected = store.latest_snapshot(pool, item.id).await?;
-    let before = match snapshot_release_directory(&root, &ingestion.ready_marker_name) {
-        Ok(snapshot) => snapshot,
-        Err(error) => {
+    let owned = match acquire_owned_source(
+        ingestion,
+        store,
+        pool,
+        worker,
+        &item,
+        expected
+            .as_ref()
+            .map(|snapshot| snapshot.signature.as_str()),
+        now,
+    )
+    .await
+    {
+        Ok(owned) => owned,
+        Err(AcquisitionError::SourceChanged) => {
             return return_to_settling(
                 store,
                 pool,
                 worker,
                 item.id,
-                &format!("source-unreadable: {error}"),
+                "source-changed-during-staging-acquisition",
+                now,
+            )
+            .await
+            .map(|_| InspectionOutcome::SourceChanged);
+        }
+        Err(error) => {
+            return record_inspection_failure(
+                store,
+                pool,
+                worker,
+                item.id,
+                work_config,
+                "inspection.staging_handoff_failed",
+                &error.to_string(),
+                FailureClass::Retryable,
+                now,
+            )
+            .await
+            .map(|_| InspectionOutcome::Failed);
+        }
+    };
+    if let Err(error) = verify_owned_source(&owned) {
+        return record_inspection_failure(
+            store,
+            pool,
+            worker,
+            item.id,
+            work_config,
+            "inspection.staged_source_integrity",
+            &error.to_string(),
+            FailureClass::Permanent,
+            now,
+        )
+        .await
+        .map(|_| InspectionOutcome::Failed);
+    }
+    let root = owned.root.clone();
+    let before = match snapshot_release_directory(&root, &ingestion.ready_marker_name) {
+        Ok(snapshot) => snapshot,
+        Err(error) => {
+            return record_inspection_failure(
+                store,
+                pool,
+                worker,
+                item.id,
+                work_config,
+                "inspection.staged_source_unreadable",
+                &error.to_string(),
+                FailureClass::Permanent,
                 now,
             )
             .await
             .map(|_| InspectionOutcome::SourceChanged);
         }
     };
-    if expected
-        .as_ref()
-        .is_some_and(|snapshot| snapshot.signature != before.signature)
-    {
-        return return_to_settling(
-            store,
-            pool,
-            worker,
-            item.id,
-            "source-changed-before-inspection",
-            now,
-        )
-        .await
-        .map(|_| InspectionOutcome::SourceChanged);
-    }
-
     // Extend the lease immediately before entering the blocking media/tool
     // boundary. Publication also re-checks ownership, so an inspection that
     // outlives its lease can never publish stale authoritative state.
@@ -204,11 +211,11 @@ async fn inspect_one(
     // snapshot signature was just re-verified) and about to enter media
     // inspection — the Rust pipeline point equivalent to the legacy
     // pre-plugin-processing gate. The boundary is infallible by contract
-    // (fail-degraded allow; ADR-0135 §4). Deny resolves to skip: the item
-    // returns to settling unprocessed and is re-evaluated on a later pass,
-    // matching legacy `onDeny: skip`. Physical quarantine moves are deferred
+    // (fail-degraded allow; ADR-0135 §4). Deny is a retryable failure after
+    // durable acquisition: the source remains in staging and is never moved
+    // back into the inbound inbox. Physical quarantine moves are deferred
     // (durable Phase 5 decision contract); legacy `delete` stays rewritten
-    // to skip.
+    // to deny.
     if let Some(gate) = gate {
         match gate.evaluate(&root, &before).await {
             DirectoryGateOutcome::Allow => {}
@@ -219,9 +226,19 @@ async fn inspect_one(
                     %reason,
                     "directory processing skipped by directoryProcessingStart hook"
                 );
-                return return_to_settling(store, pool, worker, item.id, "script-denied-skip", now)
-                    .await
-                    .map(|_| InspectionOutcome::ScriptSkipped);
+                return record_inspection_failure(
+                    store,
+                    pool,
+                    worker,
+                    item.id,
+                    work_config,
+                    "inspection.script_denied",
+                    &reason,
+                    FailureClass::Retryable,
+                    now,
+                )
+                .await
+                .map(|_| InspectionOutcome::ScriptSkipped);
             }
         }
     }
@@ -258,12 +275,15 @@ async fn inspect_one(
         Err(
             error @ (InspectionError::SourceMissing(_) | InspectionError::SourceUnreadable { .. }),
         ) => {
-            return return_to_settling(
+            return record_inspection_failure(
                 store,
                 pool,
                 worker,
                 item.id,
-                &format!("source-disappeared-during-inspection: {error}"),
+                work_config,
+                "inspection.staged_source_changed",
+                &error.to_string(),
+                FailureClass::Permanent,
                 now,
             )
             .await
@@ -289,30 +309,32 @@ async fn inspect_one(
     let after = match snapshot_release_directory(&root, &ingestion.ready_marker_name) {
         Ok(snapshot) => snapshot,
         Err(error) => {
-            return return_to_settling(
+            return record_inspection_failure(
                 store,
                 pool,
                 worker,
                 item.id,
-                &format!("source-changed-after-inspection: {error}"),
+                work_config,
+                "inspection.staged_source_unreadable",
+                &error.to_string(),
+                FailureClass::Permanent,
                 now,
             )
             .await
             .map(|_| InspectionOutcome::SourceChanged);
         }
     };
-    if after.signature != before.signature
-        || expected
-            .as_ref()
-            .is_some_and(|snapshot| snapshot.signature != after.signature)
-    {
+    if after.signature != before.signature || verify_owned_source(&owned).is_err() {
         warn!(work_item_id = %item.id, "source changed during inspection; manifest discarded");
-        return return_to_settling(
+        return record_inspection_failure(
             store,
             pool,
             worker,
             item.id,
-            "source-changed-during-inspection",
+            work_config,
+            "inspection.staged_source_changed",
+            "staged source changed during inspection",
+            FailureClass::Permanent,
             now,
         )
         .await
@@ -419,45 +441,6 @@ async fn return_to_settling(
         .await?;
     store.release_lease(pool, id, worker, now).await?;
     Ok(())
-}
-
-fn find_source<'a>(
-    config: &'a IngestionConfig,
-    item: &melodee_domain::ReleaseWorkItem,
-) -> Option<&'a InboundSource> {
-    config.sources.iter().find(|source| {
-        source.id == item.source_library_id
-            || (source.id.is_none() && item.source_library_id.is_none())
-    })
-}
-
-fn resolve_candidate(
-    source: &InboundSource,
-    source_path: &str,
-) -> std::result::Result<PathBuf, String> {
-    let relative = Path::new(source_path);
-    if relative.is_absolute()
-        || relative
-            .components()
-            .any(|component| matches!(component, Component::ParentDir | Component::RootDir))
-    {
-        return Err("source path is not a safe relative path".to_owned());
-    }
-    let root = source
-        .root
-        .canonicalize()
-        .map_err(|error| format!("source root is unreadable: {error}"))?;
-    let candidate = root.join(relative);
-    let canonical = candidate
-        .canonicalize()
-        .map_err(|error| format!("source candidate is unreadable: {error}"))?;
-    if canonical.strip_prefix(&root).is_err() {
-        return Err("source candidate escapes configured inbound root".to_owned());
-    }
-    if !canonical.is_dir() {
-        return Err("source candidate is not a directory".to_owned());
-    }
-    Ok(canonical)
 }
 
 /// Starts a graceful periodic inspection worker. Reconciliation and this loop

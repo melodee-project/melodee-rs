@@ -29,5 +29,6 @@ Dependencies point inward. Domain code never imports transport, persistence, or 
 For Phase 3 publication, PostgreSQL holds durable work state, immutable authorization/plan, journal,
 and receipt evidence. Canonical storage holds the verified finalized media bytes and manifest v3.
 The two authorities converge through a no-clobber incoming-directory protocol rather than a
-fictional cross-resource transaction. Inbound media is a read-only source and is not shown as an
+fictional cross-resource transaction. Inbound media bytes are immutable while Melodee settles and
+acquires them; after verified durable staging handoff the candidate directory is removed and is not shown as an
 authoritative identity store.

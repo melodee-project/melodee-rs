@@ -12,19 +12,22 @@ Inbound processing discovers candidate Releases from inbound roots and creates o
 2. **Settling** — candidate contents are snapshotted deterministically and compared across passes.
 3. **Ready** — once stable for the configured quiet period (or marker-shortcut period) the candidate is
    promoted to `Ready`.
-4. **Inspection** — a leased worker reads native tags with Lofty, obtains technical facts from ffprobe,
+4. **Durable staging acquisition** — a leased worker records intent and moves the Release into
+   Melodee-owned staging (or verifies a streamed cross-filesystem copy) before removing the inbound
+   candidate.
+5. **Inspection** — a leased worker reads staged native tags with Lofty, obtains technical facts from ffprobe,
    inventories artwork and sidecars, and streams a BLAKE3 byte hash for audio files.
-5. **Normalization and fingerprinting** — a bounded leased worker produces verified MP3 work-area
+6. **Normalization and fingerprinting** — a bounded leased worker produces verified MP3 work-area
    output, normalizes usable artwork, parses supported sidecars, and fingerprints source audio with
    Chromaprint. Successful work publishes manifest schema v2 and advances to `Validating`.
-6. **Structural validation** — another fenced lease verifies required local metadata, every planned
+7. **Structural validation** — another fenced lease verifies required local metadata, every planned
    work-area file, path containment, size, and BLAKE3 hash. Passing work receives one immutable
    Release ID and a durable, non-destructive publication authorization; uncertainty goes to
    `NeedsReview` instead of being guessed.
-7. **Canonical publication** — Melodee copies a complete schema-v3 Release bundle into a hidden
+8. **Canonical publication** — Melodee copies a complete schema-v3 Release bundle into a hidden
    target-filesystem directory, verifies and flushes it, then atomically finalizes it without
    replacing an existing target. A crash retry adopts an identical completed bundle.
-8. **Catalog import** — an independently bounded worker consumes the PostgreSQL manifest-v3,
+9. **Catalog import** — an independently bounded worker consumes the PostgreSQL manifest-v3,
    publication plan, and receipt without reopening media. One transaction creates the Release,
    Tracks, MediaAssets, provisional local Artist and AudioIdentity records, semantic overlay,
    aggregates, audit evidence, and future-projection outbox records.
@@ -75,9 +78,10 @@ extensions or names as identity by themselves.
 
 ## Safety constraints
 
-- Inbound source locations are treated as read-only by discovery/settling.
-- Inspection and normalization are observationally read-only with respect to inbound files. They
-  never rewrite tags, extract artwork into the source, rename files, or delete candidates.
+- Inbound is an external mailbox. Discovery and settling read it without mutating bytes; after a
+  durable verified staging receipt, Melodee removes the acquired candidate directory.
+- Inspection and normalization read only the staged source. They never rewrite tags, artwork, or
+  sidecars in inbound or staging.
 - Each normalization execution owns a distinct temporary attempt directory. A stale worker cannot
   remove or overwrite a retry's files, and lease loss cancels and reaps active FFmpeg or `fpcalc`
   processes before results are discarded.
@@ -86,8 +90,9 @@ extensions or names as identity by themselves.
   operator review.
 - Canonical publication reads only planned regular, non-symlink work-area assets. Traversal,
   symlink, size, or hash mismatches fail before a partial final Release can become visible.
-- A successful Phase 3 publication retains the inbound tree byte-for-byte. It is never authority to
-  move or delete the source.
+- A successful acquisition drains inbound. Staged original source remains available for retry,
+  `NeedsReview`, `Quarantined`, and `Failed` work; this document defines no automatic
+  post-publication staging cleanup policy.
 - Catalog import does not read source media, canonical media, or the canonical `manifest.json`.
   Artist identity correction changes PostgreSQL relationships and overlay history, never media.
 
