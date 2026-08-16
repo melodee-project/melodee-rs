@@ -524,7 +524,19 @@ async fn canonical_artwork_bytes(
     else {
         return Ok(None);
     };
-    let _source_hash: String = row.try_get(2)?;
+    // Integrity fence: the recorded publication hash must match the bytes on
+    // disk, so swapped or corrupted storage is treated as absent artwork
+    // (the captured 404 fallback) rather than served. BLAKE3 over the
+    // already-bounded in-memory bytes.
+    let source_hash: String = row.try_get(2)?;
+    if blake3::hash(&bytes).to_hex().as_str() != source_hash {
+        tracing::warn!(
+            release = %release_id,
+            path = %asset.canonical_relative_path,
+            "canonical artwork byte-hash mismatch; serving captured no-artwork fallback"
+        );
+        return Ok(None);
+    }
     Ok(Some(bytes))
 }
 

@@ -784,6 +784,24 @@ pub(crate) fn run_ffprobe(path: &Path, options: &InspectionOptions) -> Result<Pr
     run_ffprobe_cancellable(path, options, &cancellation, None)
 }
 
+/// ffprobe argument vector for probing one media path. The `--` separator
+/// guarantees the path is parsed as an operand even if a future caller ever
+/// relaxes the absolute-path invariant (defense in depth; all current paths
+/// are absolute).
+fn ffprobe_args(path: &Path) -> Vec<std::ffi::OsString> {
+    [
+        std::ffi::OsString::from("-v"),
+        std::ffi::OsString::from("error"),
+        std::ffi::OsString::from("-print_format"),
+        std::ffi::OsString::from("json"),
+        std::ffi::OsString::from("-show_format"),
+        std::ffi::OsString::from("-show_streams"),
+        std::ffi::OsString::from("--"),
+        path.as_os_str().to_owned(),
+    ]
+    .to_vec()
+}
+
 pub(crate) fn run_ffprobe_cancellable(
     path: &Path,
     options: &InspectionOptions,
@@ -791,15 +809,7 @@ pub(crate) fn run_ffprobe_cancellable(
     shutdown: Option<&AtomicBool>,
 ) -> Result<ProbeResult, String> {
     let mut child = Command::new(&options.ffprobe_path)
-        .args([
-            "-v",
-            "error",
-            "-print_format",
-            "json",
-            "-show_format",
-            "-show_streams",
-        ])
-        .arg(path)
+        .args(ffprobe_args(path))
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -1063,6 +1073,21 @@ mod tests {
         config::WriteOptions,
         tag::{Tag, TagExt, TagType},
     };
+
+    #[test]
+    fn ffprobe_argv_separates_options_from_the_media_path() {
+        let args = ffprobe_args(Path::new("relative/-leading-dash.flac"));
+        let separator = args.iter().position(|arg| arg == "--").expect("separator");
+        assert_eq!(
+            separator,
+            args.len() - 2,
+            "the path must be the sole operand after `--`: {args:?}"
+        );
+        assert_eq!(
+            args.last().expect("path operand"),
+            "relative/-leading-dash.flac"
+        );
+    }
     use std::fs;
 
     fn temp_dir(name: &str) -> PathBuf {

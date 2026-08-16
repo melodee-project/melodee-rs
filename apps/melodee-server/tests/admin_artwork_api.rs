@@ -589,3 +589,93 @@ async fn invalid_truncated_and_oversized_uploads_are_400() {
 
     db.drop().await;
 }
+
+#[tokio::test]
+async fn canonical_artwork_with_corrupted_storage_falls_back_to_the_captured_placeholder() {
+    let db = TestDb::create("wp_art_hash_fence").await;
+    let (catalog, release_public, _artist_public, _track_public) = seed_catalog(&db, 11).await;
+
+    // The phase-5 fixture publishes a media-only plan; append an immutable
+    // artwork asset carrying the REAL blake3 hash of its bytes (the same
+    // hash the publication pipeline records).
+    let artwork = {
+        let image = image::DynamicImage::ImageRgba8(image::RgbaImage::from_fn(512, 512, |x, y| {
+            image::Rgba([(x % 253) as u8, (y % 239) as u8, 42, 255])
+        }));
+        let mut encoded = Cursor::new(Vec::new());
+        image
+            .write_to(&mut encoded, image::ImageFormat::Jpeg)
+            .expect("encode canonical artwork");
+        encoded.into_inner()
+    };
+    let canonical_hash = blake3::hash(&artwork).to_hex().to_string();
+    let canonical_path = format!("artwork/{canonical_hash}.jpg");
+    sqlx::query(
+        "UPDATE release_publication_plans
+         SET plan_payload = jsonb_set(
+             plan_payload,
+             '{assets}',
+             (plan_payload->'assets') || jsonb_build_array(jsonb_build_object(
+                 'kind', 'artwork',
+                 'canonical_path', $2,
+                 'size_bytes', $3::bigint,
+                 'byte_hash', $4
+             ))
+         )
+         WHERE work_item_id = $1",
+    )
+    .bind(catalog.published.work_item_id)
+    .bind(&canonical_path)
+    .bind(i64::try_from(artwork.len()).expect("artwork size"))
+    .bind(&canonical_hash)
+    .execute(&db.pool)
+    .await
+    .expect("add canonical artwork fixture");
+
+    let root = tempfile::tempdir().expect("canonical root");
+    let on_disk = root
+        .path()
+        .join(&catalog.published.plan.target_relative_path)
+        .join(&canonical_path);
+    std::fs::create_dir_all(on_disk.parent().expect("artwork parent")).expect("mkdir");
+    std::fs::write(&on_disk, &artwork).expect("write canonical artwork");
+
+    let mut state = native_state(db.pool.clone());
+    state.direct_play = Some(
+        melodee_server::native_stream::DirectPlayService::new(
+            melodee_server::native_stream::CanonicalAssetRoot::open(root.path())
+                .expect("open canonical root"),
+            4,
+        )
+        .expect("direct play"),
+    );
+    let images = melodee_server::native::images::router().with_state(state);
+
+    // Intact storage: the canonical artwork is served (processed to size).
+    let album_path = format!("/images/album_{release_public}/80");
+    let (status, headers, bytes) =
+        call(images.clone(), "GET", &album_path, None, vec![], None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        headers
+            .get(header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok()),
+        Some("image/jpeg")
+    );
+    assert_eq!(jpeg_dimensions(&bytes), (80, 80));
+    assert_ne!(bytes, PLACEHOLDER_ALBUM, "canonical artwork must serve");
+
+    // Same-length corruption: the recorded-size check alone would pass, so
+    // only the publication hash fence can catch the swapped bytes. The
+    // captured contract answer for unavailable artwork is the placeholder.
+    let corrupted: Vec<u8> = artwork.iter().map(|byte| byte ^ 0x5A).collect();
+    std::fs::write(&on_disk, &corrupted).expect("corrupt canonical artwork");
+    let (status, _headers, bytes) = call(images, "GET", &album_path, None, vec![], None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        bytes, PLACEHOLDER_ALBUM,
+        "hash-mismatched storage must fall back to the captured placeholder"
+    );
+
+    db.drop().await;
+}

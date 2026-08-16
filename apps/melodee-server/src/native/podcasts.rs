@@ -3,7 +3,7 @@
 use axum::{
     Json, Router,
     body::Bytes,
-    extract::{Path, Query, State},
+    extract::{DefaultBodyLimit, Path, Query, State},
     http::{StatusCode, header},
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -413,7 +413,13 @@ pub fn router() -> Router<NativeState> {
         )
         .route("/api/v1/podcasts/episodes/{id}/history", get(play_history))
         .route("/api/v1/podcasts/opml/export", get(export_opml))
-        .route("/api/v1/podcasts/opml/import", post(import_opml))
+        // The explicit limit pins the effective bound to the documented
+        // contract value; without it the route silently inherits axum's
+        // implicit 2 MiB default, which today coincides with MAX_OPML_BYTES.
+        .route(
+            "/api/v1/podcasts/opml/import",
+            post(import_opml).layer(DefaultBodyLimit::max(MAX_OPML_BYTES)),
+        )
         .route("/api/v1/podcasts/discover/search", get(discover_search))
         .route("/api/v1/podcasts/discover/trending", get(discover_trending))
         .route(

@@ -24,6 +24,7 @@ use axum::{
     body::Body,
     extract::Query,
     http::{Request, StatusCode},
+    response::IntoResponse,
     routing::get,
 };
 use catalog_common::CatalogFixturePresentation;
@@ -94,14 +95,29 @@ async fn mock() -> &'static MockHandle {
                                 .find(|(k, _)| k == "token")
                                 .map(|(_, v)| v.as_str());
                             if token == Some("valid-token") {
-                                serde_json::json!({
+                                return serde_json::json!({
                                     "session": {"key": SESSION_KEY, "name": "mocklastfmuser", "subscriber": 0}
                                 })
                                 .to_string()
-                            } else {
-                                serde_json::json!({"error": 14, "message": "Unauthorized Token"})
-                                    .to_string()
+                                .into_response();
                             }
+                            if token == Some("oversized-token") {
+                                // Chunked body with no Content-Length that
+                                // exceeds the client's 256 KiB response cap:
+                                // the cap must trip while streaming, not
+                                // after a full in-memory read.
+                                let chunks: Vec<Result<axum::body::Bytes, std::convert::Infallible>> =
+                                    (0..40)
+                                        .map(|_| {
+                                            Ok(axum::body::Bytes::from(vec![b'x'; 8192]))
+                                        })
+                                        .collect();
+                                return Body::from_stream(futures_util::stream::iter(chunks))
+                                    .into_response();
+                            }
+                            serde_json::json!({"error": 14, "message": "Unauthorized Token"})
+                                .to_string()
+                                .into_response()
                         }
                     }
                 })
@@ -517,6 +533,42 @@ async fn session_exchange_failure_keeps_the_captured_400_shape() {
         captured_requests(mock)
             .iter()
             .any(|request| request.query.contains("token=unauthorized-token"))
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn oversized_chunked_response_is_capped_while_streaming() {
+    let mock = mock().await;
+    let db = common::TestDb::create("lastfm_response_cap").await;
+    configure_lastfm(&db).await;
+    let user = seed_user(&db, "lastfm-response-cap").await;
+    let state = native_state(&db);
+
+    // The mock answers with a 320 KiB chunked body and no Content-Length.
+    // The client's 256 KiB streaming cap must reject it as malformed and the
+    // route must keep the captured failure shape — no hang, no unbounded
+    // allocation, no link created.
+    let (status, body) = native_request(
+        state,
+        principal(&user),
+        "POST",
+        "/api/v1/scrobble/lastfm/session",
+        serde_json::json!({"token": "oversized-token"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["message"], "Unable to exchange Last.fm session key");
+    assert!(
+        !LastfmLinkStore::new()
+            .exists(&db.pool, user.id)
+            .await
+            .expect("exists")
+    );
+    assert!(
+        captured_requests(mock)
+            .iter()
+            .any(|request| request.query.contains("token=oversized-token"))
     );
     db.drop().await;
 }

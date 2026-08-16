@@ -454,6 +454,24 @@ async fn all_native_podcast_routes_are_tenant_scoped_bounded_and_authorized() {
             "{uri}"
         );
     }
+    // The OPML import route carries an explicit body limit at the documented
+    // 2 MiB contract bound: an oversized body is rejected by the limiter
+    // (413), never buffered for the handler.
+    let oversized_opml = vec![b' '; 2 * 1024 * 1024 + 1];
+    let oversized = call(
+        state.clone(),
+        Some(p),
+        Method::POST,
+        "/api/v1/podcasts/opml/import",
+        oversized_opml,
+        "application/xml",
+    )
+    .await;
+    assert_eq!(
+        oversized.0,
+        StatusCode::PAYLOAD_TOO_LARGE,
+        "opml import enforces its explicit 2 MiB body limit"
+    );
     let empty_episodes = call(
         state.clone(),
         Some(p),

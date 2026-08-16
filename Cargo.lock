@@ -2140,6 +2140,7 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "bcrypt",
+ "blake3",
  "boa_engine",
  "dotenvy",
  "futures-util",

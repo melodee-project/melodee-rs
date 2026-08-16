@@ -298,11 +298,25 @@ impl LastfmClient {
     }
 
     /// Reads a bounded response body and extracts the Last.fm `error` code
-    /// when present (Last.fm returns error JSON on both 2xx and 4xx).
+    /// when present (Last.fm returns error JSON on both 2xx and 4xx). The
+    /// cap is enforced while streaming so a hostile or proxied endpoint
+    /// cannot force an unbounded allocation before the limit is checked.
     async fn parse_response(response: reqwest::Response) -> Result<serde_json::Value, LastfmError> {
-        let body = response.bytes().await.map_err(|_| LastfmError::Transport)?;
-        if body.len() > MAX_RESPONSE_BYTES {
+        use futures_util::StreamExt;
+        if response
+            .content_length()
+            .is_some_and(|length| length > MAX_RESPONSE_BYTES as u64)
+        {
             return Err(LastfmError::MalformedResponse);
+        }
+        let mut body = Vec::new();
+        let mut stream = response.bytes_stream();
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|_| LastfmError::Transport)?;
+            if body.len().saturating_add(chunk.len()) > MAX_RESPONSE_BYTES {
+                return Err(LastfmError::MalformedResponse);
+            }
+            body.extend_from_slice(&chunk);
         }
         let value: serde_json::Value =
             serde_json::from_slice(&body).map_err(|_| LastfmError::MalformedResponse)?;

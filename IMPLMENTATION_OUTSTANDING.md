@@ -164,8 +164,8 @@ phases. They exist to finish the official roadmap without creating a fictitious 
 ```mermaid
 flowchart LR
     H[Historical Phases 0-10\nComplete] --> R0[R0 Corrective baseline\nComplete]
-    R0 --> R1[R1 Requirement and security closure\nNot started]
-    R1 --> R2[R2 Mandatory runtime gaps\nNot started]
+    R0 --> R1[R1 Requirement and security closure\nComplete]
+    R1 --> R2[R2 Mandatory runtime gaps\nIn progress]
     R2 --> R3[R3 Official Phase 11 migration tooling\nNot started]
     R3 --> R4[R4 Rehearsal, dual run, cutover\nNot started]
     R4 --> R5[R5 Release-candidate hardening\nNot started]
@@ -177,7 +177,7 @@ flowchart LR
 |---|---|---|---|
 | R0 — Corrective baseline | Complete | Phases 0–10 | ADR-0145 complete and current baseline green |
 | R1 — Requirement and security closure | Complete | R0 | Truthful terminal disposition plan and closed evidence-only gaps |
-| R2 — Mandatory runtime gaps | Not started | R1 | All non-migration runtime requirements implemented |
+| R2 — Mandatory runtime gaps | In progress | R1 | All non-migration runtime requirements implemented |
 | R3 — Official Phase 11 migration tooling | Not started | R2 | Repeatable legacy import and verification tooling |
 | R4 — Production rehearsal, dual run, and cutover | Not started | R3 | Migration and rollback proven on production-shaped data |
 | R5 — Release-candidate hardening | Not started | R4 | All Gates A–I green from a release candidate |
@@ -435,7 +435,7 @@ proves it wrong, but must record the evidence and may not silently reduce scope.
 
 ## 7. R2 — Mandatory runtime implementation gaps
 
-**Status:** Not started  
+**Status:** In progress (R2-SEC-1..5 dispositions landed; see `design/evidence/r2/README.md`)  
 **Depends on:** R1  
 **Primary requirements:** `PRD-INGEST-009`, `PRD-MEDIA-001`, `PRD-MEDIA-006`,
 `PRD-STREAM-002`, `PRD-OBS-001`, `PRD-OBS-002`, `PRD-PERF-003`, `PRD-PERF-004`,

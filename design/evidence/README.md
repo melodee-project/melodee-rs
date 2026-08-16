@@ -35,3 +35,6 @@ configuration, hardware/environment, exact command, result, limitations, and rel
 - [R1 — Requirement reconciliation and release truthfulness](r1/README.md) — 12 requirement
   closures, parity-matrix re-reconciliation, security baseline inventory, residual-risk
   disposition
+- [R2 — Mandatory runtime implementation gaps](r2/README.md) — in progress: R2-SEC-1..5
+  bounded-input dispositions landed; media matrix, CUE/sidecar, transcoding, resource bounds,
+  observability, and performance/fault work packages open
