@@ -740,6 +740,7 @@ async fn track_detail_payload_and_not_found() {
 /// service over a temporary canonical root holding the fixture's bytes.
 fn native_streaming_state(pool: &sqlx::PgPool, root: &std::path::Path) -> NativeState {
     NativeState {
+        lastfm_api_base_url: None,
         pool: pool.clone(),
         notifications: Arc::new(melodee_server::notifications::NotificationService::noop(
             pool.clone(),

@@ -485,6 +485,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         ),
         search: search_config.enabled.then_some(search_config.clone()),
         libraries: jellyfin_libraries(&ingestion_config),
+        lastfm_api_base_url: None,
     };
     let jellyfin_app = jellyfin::configured_router(jellyfin_state);
     let native_state = native::NativeState {
@@ -504,6 +505,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         direct_play,
         client_addresses: native_stream::ClientAddressResolver::new(trusted_proxies.clone()),
         auth: native_auth.clone(),
+        lastfm_api_base_url: None,
     };
     let native_app = native::configured_router(native_state).layer(native_cors);
     let podcast_handle = podcast_worker::start_podcast_loop(pool.clone(), podcast_config);

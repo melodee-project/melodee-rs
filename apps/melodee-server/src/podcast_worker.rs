@@ -479,7 +479,11 @@ async fn fetch_bounded(
     allow_loopback_http: bool,
 ) -> Result<Vec<u8>, PodcastWorkerError> {
     let response = outbound_get(url, allow_loopback_http).await?;
+    // Fail closed on 206: the worker never sends `Range`, so a partial
+    // response is by definition not the complete feed and must not be
+    // parsed as one.
     if !response.status().is_success()
+        || response.status() == reqwest::StatusCode::PARTIAL_CONTENT
         || response
             .content_length()
             .is_some_and(|length| length > maximum as u64)
@@ -747,7 +751,10 @@ async fn download_one(
     }
     remove_owned_file(root, &temporary).await?;
     let response = outbound_get(&claim.enclosure_url, config.allow_loopback_http).await?;
+    // Fail closed on 206: without a sent `Range` a partial enclosure is not
+    // authoritative bytes and must never be published as complete media.
     if !response.status().is_success()
+        || response.status() == reqwest::StatusCode::PARTIAL_CONTENT
         || response
             .content_length()
             .is_some_and(|length| length > config.max_download_bytes)

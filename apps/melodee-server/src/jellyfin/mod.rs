@@ -78,6 +78,10 @@ pub struct JfState {
     /// no library table (unlike the legacy fixture), so libraries are server
     /// configuration — the same pattern as OpenSubsonic music folders.
     pub libraries: Vec<Arc<JfLibrary>>,
+    /// Optional Last.fm API base URL for per-test mock servers (R2.6).
+    /// Production wiring leaves this `None`; it is never an operator setting.
+    #[doc(hidden)]
+    pub lastfm_api_base_url: Option<String>,
 }
 
 /// One unlocked Storage library exposed as a Jellyfin `UserView`.

@@ -68,6 +68,10 @@ pub struct OsState {
     pub transcoding: Option<crate::transcode::TranscodingService>,
     pub client_addresses: crate::native_stream::ClientAddressResolver,
     pub search: Option<melodee_search::SearchConfig>,
+    /// Optional Last.fm API base URL for per-test mock servers (R2.6).
+    /// Production wiring leaves this `None`; it is never an operator setting.
+    #[doc(hidden)]
+    pub lastfm_api_base_url: Option<String>,
 }
 
 const ENV_BASE_URL_HOST: &str = "MELODEE__OPENSUBSONIC__BASE_URL_HOST";
@@ -147,6 +151,7 @@ impl OsState {
             transcoding,
             client_addresses,
             search,
+            lastfm_api_base_url: None,
         })
     }
 }

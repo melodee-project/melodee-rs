@@ -240,6 +240,7 @@ async fn serve_native_phase7_real_client_fixture() {
 
     let root = CanonicalAssetRoot::open(canonical_root.path()).expect("canonical root handle");
     let state = NativeState {
+        lastfm_api_base_url: None,
         pool: db.pool.clone(),
         notifications: std::sync::Arc::new(
             melodee_server::notifications::NotificationService::noop(db.pool.clone()),

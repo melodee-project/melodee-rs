@@ -75,6 +75,7 @@ async fn import_user(db: &common::TestDb, username: &str) -> StoredNativeUser {
 
 fn state(db: &common::TestDb) -> NativeState {
     NativeState {
+        lastfm_api_base_url: None,
         pool: db.pool.clone(),
         // Disabled transport: dispatches record an honest `skipped` row.
         notifications: std::sync::Arc::new(

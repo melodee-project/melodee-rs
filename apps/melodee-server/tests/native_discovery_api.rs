@@ -257,6 +257,7 @@ async fn native_discovery_routes_use_durable_bounded_facts_and_preserve_wire_sha
     .expect("artist identity");
 
     let state = NativeState {
+        lastfm_api_base_url: None,
         pool: db.pool.clone(),
         notifications: std::sync::Arc::new(
             melodee_server::notifications::NotificationService::noop(db.pool.clone()),

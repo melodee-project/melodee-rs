@@ -114,6 +114,7 @@ async fn native_test_state(db: &common::TestDb, username: &str) -> (NativeState,
         is_editor: false,
     };
     let state = NativeState {
+        lastfm_api_base_url: None,
         pool: db.pool.clone(),
         notifications: std::sync::Arc::new(
             melodee_server::notifications::NotificationService::noop(db.pool.clone()),
@@ -325,6 +326,7 @@ async fn native_catalog_browse_detail_and_search_preserve_public_ids_and_user_st
         is_editor: true,
     };
     let state = NativeState {
+        lastfm_api_base_url: None,
         pool: db.pool.clone(),
         notifications: std::sync::Arc::new(
             melodee_server::notifications::NotificationService::noop(db.pool.clone()),
@@ -1232,6 +1234,7 @@ async fn native_library_acl_prevents_cross_library_browse_search_mutation_and_sc
         is_editor: false,
     };
     let state = NativeState {
+        lastfm_api_base_url: None,
         pool: db.pool.clone(),
         notifications: std::sync::Arc::new(
             melodee_server::notifications::NotificationService::noop(db.pool.clone()),

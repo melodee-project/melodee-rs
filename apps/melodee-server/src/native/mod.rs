@@ -325,6 +325,10 @@ pub struct NativeState {
     pub direct_play: Option<crate::native_stream::DirectPlayService>,
     pub client_addresses: crate::native_stream::ClientAddressResolver,
     pub auth: Arc<auth::NativeAuthService>,
+    /// Optional Last.fm API base URL for per-test mock servers (R2.6).
+    /// Production wiring leaves this `None`; it is never an operator setting.
+    #[doc(hidden)]
+    pub lastfm_api_base_url: Option<String>,
 }
 
 /// Extractor that fails with the captured empty 401 if authentication did not
@@ -506,6 +510,7 @@ mod tests {
 
     fn test_state() -> NativeState {
         NativeState {
+            lastfm_api_base_url: None,
             pool: sqlx::PgPool::connect_lazy("postgres://melodee:secret@127.0.0.1:9/test")
                 .expect("valid test database URL"),
             notifications: Arc::new(crate::notifications::NotificationService::noop(

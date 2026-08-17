@@ -57,6 +57,7 @@ async fn state(db: &common::TestDb) -> JfState {
         .await
         .expect("import user");
     JfState {
+        lastfm_api_base_url: None,
         pool: db.pool.clone(),
         server_name: "Melodee".to_string(),
         server_version: "0.0.0-test".to_string(),

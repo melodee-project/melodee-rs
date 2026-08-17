@@ -35,5 +35,9 @@ body sizes, and no-replace publication. Expired leases are recoverable without a
 worker to remove its successor's temporary file;
 retention excludes bookmarked episodes; cleanup removes only verified direct children of the owned
 podcast root in bounded, set-based batches. Feed and enclosure requests reject redirects and
-non-public IPv4/IPv6 destinations, including translated or embedded private addresses. The root must
+non-public IPv4/IPv6 destinations, including translated or embedded private addresses. Responses
+that do not carry the complete body are rejected rather than stored: error statuses fail the
+refresh or download, and partial (`206`) answers — which the worker never requests — are treated
+as failures. Interrupted enclosure transfers are retried with backoff up to the attempt limit and
+never publish partial bytes. The root must
 not overlap inbound, normalization, canonical-media, or search storage.

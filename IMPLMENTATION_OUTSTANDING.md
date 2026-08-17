@@ -435,7 +435,7 @@ proves it wrong, but must record the evidence and may not silently reduce scope.
 
 ## 7. R2 — Mandatory runtime implementation gaps
 
-**Status:** In progress (R2-SEC-1..5 dispositions, R2.1 media matrix, R2.2 CUE/sidecar closure, R2.3 configured transcoding under ADR-0147, R2.4 bounded-resource enumeration/instrumentation, and the R2.5 correlation/health/CLI-retry increments landed; see `design/evidence/r2/README.md`)  
+**Status:** In progress (R2-SEC-1..5 dispositions, R2.1 media matrix, R2.2 CUE/sidecar closure, R2.3 configured transcoding under ADR-0147, R2.4 bounded-resource enumeration/instrumentation, the R2.5 correlation/health/CLI-retry increments, and R2.6 scheduled/provider behavior — Last.fm per-test isolation, SMTP disposable-server success, podcast HTTP fixtures — landed; see `design/evidence/r2/README.md`)  
 **Depends on:** R1  
 **Primary requirements:** `PRD-INGEST-009`, `PRD-MEDIA-001`, `PRD-MEDIA-006`,
 `PRD-STREAM-002`, `PRD-OBS-001`, `PRD-OBS-002`, `PRD-PERF-003`, `PRD-PERF-004`,

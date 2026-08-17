@@ -282,6 +282,7 @@ async fn state(db: &common::TestDb) -> (NativeState, NativePrincipal) {
         is_editor: false,
     };
     let state = NativeState {
+        lastfm_api_base_url: None,
         pool: db.pool.clone(),
         notifications: std::sync::Arc::new(
             melodee_server::notifications::NotificationService::noop(db.pool.clone()),

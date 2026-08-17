@@ -96,6 +96,7 @@ async fn state(db: &common::TestDb) -> OsState {
         .await
         .expect("seed secret");
     OsState {
+        lastfm_api_base_url: None,
         pool: db.pool.clone(),
         server_version: SERVER_VERSION.to_string(),
         public_origin: "http://melodee.test".to_string(),

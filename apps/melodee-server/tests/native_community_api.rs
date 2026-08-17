@@ -84,6 +84,7 @@ fn principal(user: &StoredNativeUser) -> NativePrincipal {
 
 fn state(db: &common::TestDb) -> NativeState {
     NativeState {
+        lastfm_api_base_url: None,
         pool: db.pool.clone(),
         notifications: std::sync::Arc::new(
             melodee_server::notifications::NotificationService::noop(db.pool.clone()),

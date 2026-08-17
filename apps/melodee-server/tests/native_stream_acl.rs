@@ -138,6 +138,7 @@ async fn valid_hmac_for_a_restricted_library_returns_uniform_unauthorized_withou
         1,
     );
     let state = NativeState {
+        lastfm_api_base_url: None,
         pool: db.pool.clone(),
         notifications: std::sync::Arc::new(
             melodee_server::notifications::NotificationService::noop(db.pool.clone()),

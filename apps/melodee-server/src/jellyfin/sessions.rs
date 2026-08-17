@@ -109,8 +109,11 @@ async fn playback_start(
         Ok(_) => {
             // WP-07: fire-and-record Last.fm dispatch; never blocks or fails
             // the write path (legacy ADR-0004 silent no-op when unlinked).
-            crate::lastfm::LastfmDispatch::new(state.pool.clone())
-                .spawn_now_playing(principal.user_id, track_public_id);
+            crate::lastfm::LastfmDispatch::new(
+                state.pool.clone(),
+                state.lastfm_api_base_url.as_deref(),
+            )
+            .spawn_now_playing(principal.user_id, track_public_id);
         }
         Err(melodee_persistence::NativeUserStateStoreError::NotFound) => {}
         Err(error) => {
@@ -153,8 +156,11 @@ async fn playback_progress(
     )
     .await;
     if now_playing.is_ok() {
-        crate::lastfm::LastfmDispatch::new(state.pool.clone())
-            .spawn_now_playing(principal.user_id, track_public_id);
+        crate::lastfm::LastfmDispatch::new(
+            state.pool.clone(),
+            state.lastfm_api_base_url.as_deref(),
+        )
+        .spawn_now_playing(principal.user_id, track_public_id);
     }
     StatusCode::NO_CONTENT.into_response()
 }
@@ -201,8 +207,11 @@ async fn playback_stopped(
         scrobble,
         Ok(melodee_persistence::NativeScrobbleResult::Applied)
     ) {
-        crate::lastfm::LastfmDispatch::new(state.pool.clone())
-            .spawn_scrobble(principal.user_id, track_public_id);
+        crate::lastfm::LastfmDispatch::new(
+            state.pool.clone(),
+            state.lastfm_api_base_url.as_deref(),
+        )
+        .spawn_scrobble(principal.user_id, track_public_id);
     }
     StatusCode::NO_CONTENT.into_response()
 }

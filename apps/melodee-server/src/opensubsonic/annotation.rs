@@ -354,8 +354,11 @@ pub async fn scrobble(
                     // WP-07: fire-and-record Last.fm dispatch; never blocks
                     // or fails the write path, and an adopted idempotent
                     // replay must not double-scrobble Last.fm.
-                    crate::lastfm::LastfmDispatch::new(state.pool.clone())
-                        .spawn_scrobble(user.user_id, track_public_id);
+                    crate::lastfm::LastfmDispatch::new(
+                        state.pool.clone(),
+                        state.lastfm_api_base_url.as_deref(),
+                    )
+                    .spawn_scrobble(user.user_id, track_public_id);
                     Ok(())
                 }
                 Ok(NativeScrobbleResult::Adopted) => Ok(()),
@@ -372,8 +375,11 @@ pub async fn scrobble(
             )
             .await;
             if result.is_ok() {
-                crate::lastfm::LastfmDispatch::new(state.pool.clone())
-                    .spawn_now_playing(user.user_id, track_public_id);
+                crate::lastfm::LastfmDispatch::new(
+                    state.pool.clone(),
+                    state.lastfm_api_base_url.as_deref(),
+                )
+                .spawn_now_playing(user.user_id, track_public_id);
             }
             result
         };

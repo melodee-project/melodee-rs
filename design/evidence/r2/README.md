@@ -609,3 +609,130 @@ admin surface:
 - Full repository gate (`./scripts/check.sh`) passes after the increment: Rust workspace
   (unit + integration), 140 Python capture tests, admin-ui gate, and `cargo deny` all green.
 
+
+## 9. R2.6 — Remaining scheduled and provider behavior
+
+Scope per `IMPLMENTATION_OUTSTANDING.md` §7.7: chart/aggregate reconciliation against Phase 9
+evidence, Last.fm in both unconfigured and configured states with per-test isolated endpoints,
+SMTP success against a disposable server, and podcast ingestion against deterministic HTTP
+fixtures. No non-Last.fm provider work (ADR-0136), no legacy scheduled job revived by class
+name.
+
+### 9.1 Chart/aggregate refresh reconciliation
+
+No code change, per the reconciliation mandate. All chart/aggregate requirements are terminal in
+Phase 9 (twelve per-domain parity checklists green; the chart domain rows carry linked test
+evidence). The runtime surface is the on-demand native `/api/v1/charts/{id}` read over the
+`native_charts` projection plus the `DiscoveryWorker` periodic aggregate refresh
+(`crates/melodee-persistence/src/discovery.rs::refresh_discovery_aggregates`,
+`apps/melodee-server/src/discovery_worker.rs`), already bounded, lease-safe, and gated. No
+non-terminal requirement asks for additional scheduled chart behavior, so nothing was added.
+
+### 9.2 Last.fm per-test endpoint isolation and contract coverage
+
+The scheduled-CI flake source (IMPLMENTATION_OUTSTANDING §3.3) is removed: the process-global
+`API_BASE_URL_OVERRIDE` `OnceLock` is gone from `apps/melodee-server/src/lastfm.rs`.
+`LastfmClient::new` / `LastfmDispatch::new` take `api_base_url: Option<&str>`; `None` selects
+the production endpoint (`main.rs` passes `None`). Route-level tests thread the per-test
+endpoint through `#[doc(hidden)]` state fields (`NativeState`, `OsState`, `JfState`
+`lastfm_api_base_url: Option<String>`) consumed by all eight handler call sites
+(`native/catalog.rs` ×3, `opensubsonic/annotation.rs` ×2, `jellyfin/sessions.rs` ×3), so every
+test owns its endpoint and no shared process state survives between tests.
+
+`tests/lastfm_scrobble.rs` replaces the shared mock with a per-test raw-TCP server (ephemeral
+port, abort-on-drop) keyed by session-key marker, and adds the missing configured/unconfigured
+contract rows:
+
+- HTTP 429 with API error 29 — single attempt, dropped, link kept (no retry storm; the
+  authoritative play is durable in PostgreSQL).
+- `accepted=0, ignored=1` — dropped, link kept (an ignored scrobble is not an invalid session).
+- API errors 4 and 10 — link cleared and scrobble dropped, completing the ADR-0004
+  clear-on-invalid-session set alongside error 9.
+- Transport failure (refused connection) — dropped, link kept.
+- Configured-state end-to-end: `/api/v1/scrobble` with the seam state dispatches the signed
+  `track.scrobble` form (track, sk, api_sig) to the per-test mock; unconfigured golden and
+  silent no-op dispatch coverage retained.
+- Sealed session-key handling is exercised through `store_linked_session`/clear paths; no
+  plaintext key reaches persistence or logs.
+
+`cargo test -p melodee-server --test lastfm_scrobble`: 15/15 pass. The Phase 9 configured-state
+*golden-capture* limitation (`design/evidence/phase-9/lastfm-provider-evidence.md`) is
+unchanged — it records the absence of a real Last.fm application/account, which only R4.6
+production validation can supply; R2.6 closes the runtime isolation and contract side.
+
+### 9.3 SMTP disposable-server success
+
+`tests/notification_smtp.rs` (2 tests) adds a minimal RFC 5321 listener (banner, EHLO, MAIL
+FROM, RCPT TO, DATA, QUIT; no AUTH/STARTTLS advertised) bound to an ephemeral loopback port per
+test, with enabled plaintext `EmailSettings` built via the public fields (the password field
+stays private/default; the fake requires no credentials).
+
+- Success: `NotificationService::send_templated` records `DeliveryStatus::Sent` with no error,
+  and the wire capture asserts the envelope (`MAIL FROM`/`RCPT TO`) plus the rendered
+  `{{placeholder}}` subject and plain/HTML bodies byte-content — the first proof that the whole
+  path (template render → lettre message build → SMTP conversation → audit row) delivers.
+- Wire-level rejection (550 5.1.1 on RCPT): records `DeliveryStatus::Failed` with the server
+  response as the stored reason and never raises to the caller — delivery outcome is data in
+  the audit row.
+
+Existing failure-path and SMTP-password redaction suites are unchanged and green.
+
+### 9.4 Podcast deterministic HTTP fixtures
+
+One production tightening, found while designing the fixtures: feed fetch and enclosure
+download now fail closed on HTTP 206. The worker never sends `Range`, so a partial body is by
+definition not authoritative; previously `StatusCode::is_success()` admitted 206 and a partial
+enclosure could be published as complete media. Both paths keep rejecting non-success statuses
+and over-bound Content-Length; no other behavior changed
+(`apps/melodee-server/src/podcast_worker.rs::fetch_bounded`, `download_one`).
+
+`tests/podcast_http_fixtures.rs` (11 tests) stands up a raw-TCP HTTP/1.1 fixture per test with
+per-path, per-request-ordinal scripts (so a retry sees a different answer than the first
+attempt) and `Connection: close` isolation:
+
+- Feed leg: 301 redirect fails closed (redirect policy `none`; no cross-origin follow;
+  `last_sync_at` is not stamped); 404/500 fail closed; 304 fails closed (the worker sends no
+  conditional headers, so 304 is a protocol anomaly surfaced honestly rather than treated as
+  silent stale success); 206 fails closed (new check); malformed matrix — crossed close tags,
+  unterminated attribute, item without title — fails the refresh with zero episode rows
+  written; a syntactically readable but content-free document (e.g. captive-portal HTML) is
+  pinned as a non-destructive no-op (no rows, stored title survives) so any future strictness
+  change is deliberate and evidenced; an item without an enclosure stays `NotDownloaded` even
+  with auto-download enabled.
+- Enclosure leg: 302/404/500 record the failure (attempts increment, error string persisted,
+  `Queued` with backoff below `max_attempts`, no bytes published, no `.tmp` leak); 206 fails
+  closed; mid-body interruption (connection drop after a quarter of the declared
+  Content-Length) records the failure, orphan reconciliation removes the temporary file, and
+  the retry publishes byte-identical payload in exactly two wire attempts with the error
+  cleared; `max_attempts=1` lands terminal `Failed` with its diagnosis and produces no further
+  wire traffic on later passes.
+
+`cargo test -p melodee-server --test podcast_http_fixtures`: 11/11 pass.
+
+### 9.5 Scope discipline and contract impact
+
+No external contract changed: native/Jellyfin/OpenSubsonic wire DTOs, routes, and error shapes
+are untouched; the Last.fm seam and SMTP/podcast fixtures are server-internal. No non-Last.fm
+provider was implemented (ADR-0136 deferred rows untouched) and no legacy scheduled job was
+revived by class name. Compatibility impact: none — the only behavior change is an internal
+fail-closed tightening (206 rejection) on outbound podcast fetch paths with no captured
+contract.
+
+### 9.6 Tests and gate (R2.6 increment)
+
+- Focused suites: `lastfm_scrobble` 15/15, `notification_smtp` 2/2, `podcast_http_fixtures`
+  11/11; the `podcast_worker` unit suite and all other server suites unchanged and green.
+- Full repository gate `./scripts/check.sh` passes from the working tree: repository/document
+  validation, requirements index, Python capture tests, admin-ui gate (frozen install,
+  typecheck, lint, i18n, unit, build), `cargo fmt --check`, workspace clippy `-D warnings`,
+  `cargo test --workspace --all-features` (147 test binaries, 1312 tests passed, zero
+  failures), and `cargo deny check` (advisories/bans/licenses/sources ok; the unmatched
+  PostgreSQL license allowance remains the documented-benign warning).
+
+### 9.7 Documentation impact
+
+- Updated — `docs/src/content/docs/features/podcasts.md`: records that incomplete bodies,
+  including unsolicited partial (206) responses, are rejected rather than stored, alongside
+  the already-documented redirect and non-public-address rejections.
+- Last.fm and SMTP changes are test-infrastructure and internal constructor seams; no
+  user-visible behavior changed, so no other public documentation moved.

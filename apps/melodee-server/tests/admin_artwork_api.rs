@@ -117,6 +117,7 @@ fn token_for(public_api_id: Uuid, username: &str) -> String {
 
 fn native_state(pool: sqlx::PgPool) -> NativeState {
     NativeState {
+        lastfm_api_base_url: None,
         notifications: Arc::new(melodee_server::notifications::NotificationService::noop(
             pool.clone(),
         )),

@@ -84,6 +84,7 @@ async fn state(db: &common::TestDb) -> NativeState {
         .await
         .expect("import user");
     NativeState {
+        lastfm_api_base_url: None,
         pool: db.pool.clone(),
         notifications: std::sync::Arc::new(
             melodee_server::notifications::NotificationService::noop(db.pool.clone()),

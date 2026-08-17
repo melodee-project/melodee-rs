@@ -73,24 +73,14 @@ const MAX_RESPONSE_BYTES: usize = 256 * 1024;
 /// matching the JWT signing-key floor.
 const MIN_SERVER_SECRET_BYTES: usize = 32;
 
-/// Optional process-wide Last.fm API base URL used by route wiring when
-/// building clients. Production servers never install an override; test
-/// harnesses install a local mock server URL once per process (environment
-/// mutation is `unsafe` under edition 2024 and the adapter state structs are
-/// deliberately untouched by this seam).
-static API_BASE_URL_OVERRIDE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-
-/// Installs the route-wiring API base URL override. Returns `false` when an
-/// override was already installed (set at most once per process).
-#[doc(hidden)]
-pub fn install_api_base_url_for_testing(url: &str) -> bool {
-    API_BASE_URL_OVERRIDE.set(url.to_string()).is_ok()
-}
-
-fn route_api_base_url() -> String {
-    API_BASE_URL_OVERRIDE
-        .get()
-        .cloned()
+/// Resolves the endpoint for route wiring: `Some` selects an explicit base
+/// URL (per-test mock servers, carried on the adapter state); `None` selects
+/// the production endpoint. There is deliberately no process-global override:
+/// parallel tests must never share Last.fm mock state (R2.6).
+fn resolve_api_base_url(api_base_url: Option<&str>) -> String {
+    api_base_url
+        .map(|url| url.trim().trim_end_matches('/').to_string())
+        .filter(|url| !url.is_empty())
         .unwrap_or_else(|| LASTFM_API_BASE_URL.to_string())
 }
 
@@ -275,14 +265,18 @@ pub struct LastfmClient {
 }
 
 impl LastfmClient {
-    /// Client for the endpoint route wiring uses (the production endpoint,
-    /// or the installed test override) with the legacy 10 s timeout.
-    pub fn new(api_key: String, shared_secret: SecretString) -> Result<Self, LastfmError> {
-        Self::with_api_base_url(api_key, shared_secret, &route_api_base_url())
+    /// Client for the endpoint route wiring carries on the adapter state
+    /// (`None` selects the production endpoint) with the legacy 10 s timeout.
+    pub fn new(
+        api_key: String,
+        shared_secret: SecretString,
+        api_base_url: Option<&str>,
+    ) -> Result<Self, LastfmError> {
+        Self::with_api_base_url(api_key, shared_secret, &resolve_api_base_url(api_base_url))
     }
 
-    /// Client against an explicit base URL (the test seam for local mock
-    /// servers; production wiring uses [`LastfmClient::new`]).
+    /// Client against an explicit base URL (the per-test seam for local mock
+    /// servers; production wiring uses [`LastfmClient::new`] with `None`).
     pub fn with_api_base_url(
         api_key: String,
         shared_secret: SecretString,
@@ -590,20 +584,22 @@ fn dispatch_gauge() -> Option<Arc<crate::resource_bounds::ResourceGauge>> {
 }
 
 impl LastfmDispatch {
-    /// Production dispatch against the real Last.fm endpoint.
-    pub fn new(pool: PgPool) -> Self {
+    /// Dispatch against the endpoint route wiring carries on the adapter
+    /// state (`None` selects the production Last.fm endpoint).
+    pub fn new(pool: PgPool, api_base_url: Option<&str>) -> Self {
         Self {
             pool,
-            api_base_url: LASTFM_API_BASE_URL.to_string(),
+            api_base_url: resolve_api_base_url(api_base_url),
         }
     }
 
-    /// Dispatch against an explicit base URL (the test seam for local mock
-    /// servers).
+    /// Dispatch against an explicit base URL (the per-test seam for local
+    /// mock servers; production wiring uses [`LastfmDispatch::new`] with
+    /// `None`).
     pub fn with_api_base_url(pool: PgPool, api_base_url: &str) -> Self {
         Self {
             pool,
-            api_base_url: api_base_url.to_string(),
+            api_base_url: api_base_url.trim_end_matches('/').to_string(),
         }
     }
 

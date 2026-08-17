@@ -495,8 +495,11 @@ pub async fn scrobble(
             // WP-07: fire-and-record Last.fm dispatch. Never blocks or fails
             // the write path; a no-op unless scrobbling.lastFm is enabled and
             // the user linked (legacy ADR-0004).
-            crate::lastfm::LastfmDispatch::new(state.pool.clone())
-                .spawn_now_playing(principal.user_id, request.song_id);
+            crate::lastfm::LastfmDispatch::new(
+                state.pool.clone(),
+                state.lastfm_api_base_url.as_deref(),
+            )
+            .spawn_now_playing(principal.user_id, request.song_id);
         }
         "played" => {
             let duration = request
@@ -521,8 +524,11 @@ pub async fn scrobble(
             // Dispatch only on a freshly applied play: an adopted idempotent
             // replay must not double-scrobble Last.fm.
             if result == melodee_persistence::NativeScrobbleResult::Applied {
-                crate::lastfm::LastfmDispatch::new(state.pool.clone())
-                    .spawn_scrobble(principal.user_id, request.song_id);
+                crate::lastfm::LastfmDispatch::new(
+                    state.pool.clone(),
+                    state.lastfm_api_base_url.as_deref(),
+                )
+                .spawn_scrobble(principal.user_id, request.song_id);
             }
         }
         _ => return Err(NativeApiError::BadRequest),
@@ -582,7 +588,12 @@ pub async fn lastfm_session(
             "Unable to exchange Last.fm session key",
         ));
     };
-    let client = crate::lastfm::LastfmClient::new(api_key, shared_secret).map_err(|error| {
+    let client = crate::lastfm::LastfmClient::new(
+        api_key,
+        shared_secret,
+        state.lastfm_api_base_url.as_deref(),
+    )
+    .map_err(|error| {
         tracing::warn!(%error, "last.fm client construction failed");
         NativeApiError::CapturedBadRequest("Unable to exchange Last.fm session key")
     })?;

@@ -1,12 +1,18 @@
 //! Phase 9 WP-07 Last.fm integration acceptance (PRD-EXT-001..004,
-//! PRD-AUTH-002; legacy ADR-0003/0004; ADR-0134 §7 amended) against a local
-//! mock Last.fm Web Services server — no real network. Covers the session
+//! PRD-AUTH-002; legacy ADR-0003/0004; ADR-0134 §7 amended) against local
+//! mock Last.fm Web Services servers — no real network. Covers the session
 //! exchange success/failure contract, the exact scrobble/now-playing
 //! parameter mapping (including the processing-time timestamp and
 //! `trackNumber ?? 0` quirks), the invalid-session link clearing (API errors
 //! 4/9/10), the unconfigured/unlinked silent no-ops, disconnect idempotency,
 //! the at-rest secret invariant, and the PRD-EXT-002 no-provider-required
 //! catalog-entry invariant.
+//!
+//! R2.6: every test binds its own mock server on an ephemeral port and
+//! threads its base URL through the adapter state's `lastfm_api_base_url`
+//! (route-level tests) or `LastfmDispatch::with_api_base_url` (dispatch-level
+//! tests). There is no process-global endpoint override, so parallel tests
+//! never share mock state.
 
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
@@ -35,8 +41,7 @@ use melodee_auth::{
 };
 use melodee_persistence::{AuthStore, LastfmLinkStore, NativeUserImport, SettingsStore};
 use melodee_server::lastfm::{
-    DispatchOutcome, LastfmDispatch, LastfmSession, install_api_base_url_for_testing,
-    store_linked_session,
+    DispatchOutcome, LastfmDispatch, LastfmSession, store_linked_session,
 };
 use melodee_server::native::{
     NativeClientBinding, NativeFuture, NativePrincipal, NativeState, NativeStreamUrlSigner,
@@ -51,6 +56,10 @@ const SHARED_SECRET: &str = "test-lastfm-shared-secret";
 const SERVER_SECRET: &str = "test-only-server-secret-0123456789abcdef";
 const SESSION_KEY: &str = "mock-session-key-valid";
 const STALE_SESSION_KEY: &str = "mock-session-key-stale";
+const SESSION_KEY_FORBIDDEN: &str = "mock-session-key-forbidden";
+const SESSION_KEY_BADKEY: &str = "mock-session-key-badkey";
+const SESSION_KEY_IGNORED: &str = "mock-session-key-ignored";
+const SESSION_KEY_RATELIMITED: &str = "mock-session-key-ratelimited";
 
 #[derive(Debug, Clone)]
 struct Captured {
@@ -62,111 +71,139 @@ struct Captured {
 struct MockHandle {
     base_url: String,
     captured: Arc<Mutex<Vec<Captured>>>,
+    server: tokio::task::AbortHandle,
 }
 
-/// The process-wide mock Last.fm server. Behavior is keyed off request
-/// content so parallel tests share one server: the session exchange accepts
-/// only `token=valid-token`; scrobbles signed with the stale session key get
-/// API error 9 (invalid session), every other scrobble is accepted.
-async fn mock() -> &'static MockHandle {
-    static MOCK: tokio::sync::OnceCell<MockHandle> = tokio::sync::OnceCell::const_new();
-    MOCK.get_or_init(|| async {
-        let captured: Arc<Mutex<Vec<Captured>>> = Arc::new(Mutex::new(Vec::new()));
-        let app = Router::new()
-            .route(
-                "/2.0/",
-                get({
+impl Drop for MockHandle {
+    fn drop(&mut self) {
+        self.server.abort();
+    }
+}
+
+/// A per-test mock Last.fm server (R2.6): each call binds a new ephemeral
+/// port so parallel tests never share captured traffic. Behavior is keyed off
+/// request content: the session exchange accepts only `token=valid-token`;
+/// scrobbles signed with the stale/forbidden/bad session keys get API errors
+/// 9/4/10 (invalid session), the ignored key gets `accepted=0`, the
+/// rate-limited key gets HTTP 429 with API error 29, and every other
+/// scrobble is accepted.
+async fn start_mock() -> MockHandle {
+    let captured: Arc<Mutex<Vec<Captured>>> = Arc::new(Mutex::new(Vec::new()));
+    let app = Router::new()
+        .route(
+            "/2.0/",
+            get({
+                let captured = captured.clone();
+                move |Query(params): Query<Vec<(String, String)>>| {
                     let captured = captured.clone();
-                    move |Query(params): Query<Vec<(String, String)>>| {
-                        let captured = captured.clone();
-                        async move {
-                            let query = params
-                                .iter()
-                                .map(|(k, v)| format!("{k}={v}"))
-                                .collect::<Vec<_>>()
-                                .join("&");
-                            captured.lock().expect("captured").push(Captured {
-                                method: "GET".to_string(),
-                                query: query.clone(),
-                                body: String::new(),
-                            });
-                            let token = params
-                                .iter()
-                                .find(|(k, _)| k == "token")
-                                .map(|(_, v)| v.as_str());
-                            if token == Some("valid-token") {
-                                return serde_json::json!({
-                                    "session": {"key": SESSION_KEY, "name": "mocklastfmuser", "subscriber": 0}
-                                })
-                                .to_string()
+                    async move {
+                        let query = params
+                            .iter()
+                            .map(|(k, v)| format!("{k}={v}"))
+                            .collect::<Vec<_>>()
+                            .join("&");
+                        captured.lock().expect("captured").push(Captured {
+                            method: "GET".to_string(),
+                            query: query.clone(),
+                            body: String::new(),
+                        });
+                        let token = params
+                            .iter()
+                            .find(|(k, _)| k == "token")
+                            .map(|(_, v)| v.as_str());
+                        if token == Some("valid-token") {
+                            return serde_json::json!({
+                                "session": {"key": SESSION_KEY, "name": "mocklastfmuser", "subscriber": 0}
+                            })
+                            .to_string()
+                            .into_response();
+                        }
+                        if token == Some("oversized-token") {
+                            // Chunked body with no Content-Length that
+                            // exceeds the client's 256 KiB response cap:
+                            // the cap must trip while streaming, not
+                            // after a full in-memory read.
+                            let chunks: Vec<Result<axum::body::Bytes, std::convert::Infallible>> =
+                                (0..40)
+                                    .map(|_| Ok(axum::body::Bytes::from(vec![b'x'; 8192])))
+                                    .collect();
+                            return Body::from_stream(futures_util::stream::iter(chunks))
                                 .into_response();
-                            }
-                            if token == Some("oversized-token") {
-                                // Chunked body with no Content-Length that
-                                // exceeds the client's 256 KiB response cap:
-                                // the cap must trip while streaming, not
-                                // after a full in-memory read.
-                                let chunks: Vec<Result<axum::body::Bytes, std::convert::Infallible>> =
-                                    (0..40)
-                                        .map(|_| {
-                                            Ok(axum::body::Bytes::from(vec![b'x'; 8192]))
-                                        })
-                                        .collect();
-                                return Body::from_stream(futures_util::stream::iter(chunks))
-                                    .into_response();
-                            }
-                            serde_json::json!({"error": 14, "message": "Unauthorized Token"})
-                                .to_string()
-                                .into_response()
                         }
+                        serde_json::json!({"error": 14, "message": "Unauthorized Token"})
+                            .to_string()
+                            .into_response()
                     }
-                })
-                .post({
+                }
+            })
+            .post({
+                let captured = captured.clone();
+                move |body: String| {
                     let captured = captured.clone();
-                    move |body: String| {
-                        let captured = captured.clone();
-                        async move {
-                            captured.lock().expect("captured").push(Captured {
-                                method: "POST".to_string(),
-                                query: String::new(),
-                                body: body.clone(),
-                            });
-                            let params = form_decode(&body);
-                            let method = param(&params, "method").unwrap_or_default();
-                            let sk = param(&params, "sk").unwrap_or_default();
-                            match (method.as_str(), sk.as_str()) {
-                                ("track.scrobble", STALE_SESSION_KEY) => {
-                                    serde_json::json!({"error": 9, "message": "Invalid session key"})
-                                        .to_string()
-                                }
-                                ("track.scrobble", _) => serde_json::json!({
-                                    "scrobbles": {"@attr": {"accepted": 1, "ignored": 0}, "scrobble": {}}
-                                })
-                                .to_string(),
-                                ("track.updateNowPlaying", _) => {
-                                    serde_json::json!({"nowplaying": {}}).to_string()
-                                }
-                                _ => serde_json::json!({"error": 6, "message": "Invalid parameters"})
-                                    .to_string(),
+                    async move {
+                        captured.lock().expect("captured").push(Captured {
+                            method: "POST".to_string(),
+                            query: String::new(),
+                            body: body.clone(),
+                        });
+                        let params = form_decode(&body);
+                        let method = param(&params, "method").unwrap_or_default();
+                        let sk = param(&params, "sk").unwrap_or_default();
+                        match (method.as_str(), sk.as_str()) {
+                            ("track.scrobble", STALE_SESSION_KEY) => {
+                                serde_json::json!({"error": 9, "message": "Invalid session key"})
+                                    .to_string()
+                                    .into_response()
                             }
+                            ("track.scrobble", SESSION_KEY_FORBIDDEN) => {
+                                serde_json::json!({"error": 4, "message": "Authentication failed"})
+                                    .to_string()
+                                    .into_response()
+                            }
+                            ("track.scrobble", SESSION_KEY_BADKEY) => {
+                                serde_json::json!({"error": 10, "message": "Invalid API key"})
+                                    .to_string()
+                                    .into_response()
+                            }
+                            ("track.scrobble", SESSION_KEY_IGNORED) => serde_json::json!({
+                                "scrobbles": {"@attr": {"accepted": 0, "ignored": 1}, "scrobble": {}}
+                            })
+                            .to_string()
+                            .into_response(),
+                            ("track.scrobble", SESSION_KEY_RATELIMITED) => (
+                                StatusCode::TOO_MANY_REQUESTS,
+                                serde_json::json!({"error": 29, "message": "Rate Limit Exceeded"}).to_string(),
+                            )
+                                .into_response(),
+                            ("track.scrobble", _) => serde_json::json!({
+                                "scrobbles": {"@attr": {"accepted": 1, "ignored": 0}, "scrobble": {}}
+                            })
+                            .to_string()
+                            .into_response(),
+                            ("track.updateNowPlaying", _) => {
+                                serde_json::json!({"nowplaying": {}}).to_string().into_response()
+                            }
+                            _ => serde_json::json!({"error": 6, "message": "Invalid parameters"})
+                                .to_string()
+                                .into_response(),
                         }
                     }
-                }),
-            );
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-            .await
-            .expect("mock listener");
-        let address = listener.local_addr().expect("mock address");
-        let base_url = format!("http://{address}");
-        tokio::spawn(async move {
-            axum::serve(listener, app).await.expect("mock server");
-        });
-        // Route wiring builds clients against this override (production
-        // servers never install one).
-        assert!(install_api_base_url_for_testing(&base_url));
-        MockHandle { base_url, captured }
-    })
-    .await
+                }
+            }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("mock listener");
+    let address = listener.local_addr().expect("mock address");
+    let base_url = format!("http://{address}");
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app).await.expect("mock server");
+    });
+    MockHandle {
+        base_url,
+        captured,
+        server: server.abort_handle(),
+    }
 }
 
 fn form_decode(body: &str) -> Vec<(String, String)> {
@@ -274,6 +311,7 @@ async fn seed_user(db: &common::TestDb, username: &str) -> melodee_persistence::
 
 fn native_state(db: &common::TestDb) -> NativeState {
     NativeState {
+        lastfm_api_base_url: None,
         pool: db.pool.clone(),
         notifications: Arc::new(melodee_server::notifications::NotificationService::noop(
             db.pool.clone(),
@@ -436,11 +474,12 @@ async fn auth_url_configured_returns_url_shape_and_unconfigured_keeps_golden() {
 
 #[tokio::test]
 async fn session_exchange_success_links_account_and_never_persists_plaintext() {
-    let mock = mock().await;
+    let mock = start_mock().await;
     let db = common::TestDb::create("lastfm_session_ok").await;
     configure_lastfm(&db).await;
     let user = seed_user(&db, "lastfm-session-ok").await;
-    let state = native_state(&db);
+    let mut state = native_state(&db);
+    state.lastfm_api_base_url = Some(mock.base_url.clone());
 
     let (status, body) = native_request(
         state,
@@ -455,7 +494,7 @@ async fn session_exchange_success_links_account_and_never_persists_plaintext() {
 
     // The exchange request hit the mock with the signed legacy parameter
     // set (evidence doc §3).
-    let exchange = captured_requests(mock)
+    let exchange = captured_requests(&mock)
         .into_iter()
         .find(|request| {
             request.method == "GET"
@@ -506,11 +545,12 @@ async fn session_exchange_success_links_account_and_never_persists_plaintext() {
 
 #[tokio::test]
 async fn session_exchange_failure_keeps_the_captured_400_shape() {
-    let mock = mock().await;
+    let mock = start_mock().await;
     let db = common::TestDb::create("lastfm_session_fail").await;
     configure_lastfm(&db).await;
     let user = seed_user(&db, "lastfm-session-fail").await;
-    let state = native_state(&db);
+    let mut state = native_state(&db);
+    state.lastfm_api_base_url = Some(mock.base_url.clone());
 
     let (status, body) = native_request(
         state,
@@ -530,7 +570,7 @@ async fn session_exchange_failure_keeps_the_captured_400_shape() {
             .expect("exists")
     );
     assert!(
-        captured_requests(mock)
+        captured_requests(&mock)
             .iter()
             .any(|request| request.query.contains("token=unauthorized-token"))
     );
@@ -539,11 +579,12 @@ async fn session_exchange_failure_keeps_the_captured_400_shape() {
 
 #[tokio::test]
 async fn oversized_chunked_response_is_capped_while_streaming() {
-    let mock = mock().await;
+    let mock = start_mock().await;
     let db = common::TestDb::create("lastfm_response_cap").await;
     configure_lastfm(&db).await;
     let user = seed_user(&db, "lastfm-response-cap").await;
-    let state = native_state(&db);
+    let mut state = native_state(&db);
+    state.lastfm_api_base_url = Some(mock.base_url.clone());
 
     // The mock answers with a 320 KiB chunked body and no Content-Length.
     // The client's 256 KiB streaming cap must reject it as malformed and the
@@ -566,7 +607,7 @@ async fn oversized_chunked_response_is_capped_while_streaming() {
             .expect("exists")
     );
     assert!(
-        captured_requests(mock)
+        captured_requests(&mock)
             .iter()
             .any(|request| request.query.contains("token=oversized-token"))
     );
@@ -575,7 +616,7 @@ async fn oversized_chunked_response_is_capped_while_streaming() {
 
 #[tokio::test]
 async fn scrobble_dispatch_maps_the_legacy_parameters_exactly() {
-    let mock = mock().await;
+    let mock = start_mock().await;
     let db = common::TestDb::create("lastfm_scrobble_map").await;
     configure_lastfm(&db).await;
     let user = seed_user(&db, "lastfm-scrobble-map").await;
@@ -626,7 +667,7 @@ async fn scrobble_dispatch_maps_the_legacy_parameters_exactly() {
     let after = OffsetDateTime::now_utc().unix_timestamp();
     assert_eq!(outcome, DispatchOutcome::Submitted);
 
-    let request = captured_requests(mock)
+    let request = captured_requests(&mock)
         .into_iter()
         .find(|request| {
             request.method == "POST"
@@ -686,7 +727,7 @@ async fn scrobble_dispatch_maps_the_legacy_parameters_exactly() {
 
 #[tokio::test]
 async fn now_playing_dispatch_sends_the_legacy_parameter_set() {
-    let mock = mock().await;
+    let mock = start_mock().await;
     let db = common::TestDb::create("lastfm_now_playing").await;
     configure_lastfm(&db).await;
     let user = seed_user(&db, "lastfm-now-playing").await;
@@ -723,7 +764,7 @@ async fn now_playing_dispatch_sends_the_legacy_parameter_set() {
     let outcome = dispatch.submit_now_playing(user.id, track_public_id).await;
     assert_eq!(outcome, DispatchOutcome::Submitted);
 
-    let request = captured_requests(mock)
+    let request = captured_requests(&mock)
         .into_iter()
         .find(|request| {
             request.body.contains("track.updateNowPlaying")
@@ -758,7 +799,7 @@ async fn now_playing_dispatch_sends_the_legacy_parameter_set() {
 
 #[tokio::test]
 async fn invalid_session_error_clears_the_link_and_drops_the_scrobble() {
-    let mock = mock().await;
+    let mock = start_mock().await;
     let db = common::TestDb::create("lastfm_invalid_session").await;
     configure_lastfm(&db).await;
     let user = seed_user(&db, "lastfm-invalid-session").await;
@@ -804,11 +845,11 @@ async fn invalid_session_error_clears_the_link_and_drops_the_scrobble() {
 
 #[tokio::test]
 async fn unconfigured_and_unlinked_dispatches_are_silent_no_ops() {
-    let mock = mock().await;
+    let mock = start_mock().await;
     let db = common::TestDb::create("lastfm_noops").await;
     let user = seed_user(&db, "lastfm-noop").await;
-    // A unique track title is the per-test marker in the shared mock's
-    // captured traffic (tests run in parallel against one server).
+    // The per-test mock captures only this test's traffic; the unique
+    // track title additionally marks this test's requests.
     let fixture = phase5_common::seed_cataloged_release(
         &db,
         7304,
@@ -837,7 +878,7 @@ async fn unconfigured_and_unlinked_dispatches_are_silent_no_ops() {
         dispatch.submit_scrobble(user.id, track_public_id).await,
         DispatchOutcome::NotConfigured
     );
-    assert!(no_traffic(mock));
+    assert!(no_traffic(&mock));
 
     // Enabled but the user has no link: the ADR-0004 silent no-op.
     configure_lastfm(&db).await;
@@ -849,7 +890,7 @@ async fn unconfigured_and_unlinked_dispatches_are_silent_no_ops() {
         dispatch.submit_now_playing(user.id, track_public_id).await,
         DispatchOutcome::NotLinked
     );
-    assert!(no_traffic(mock));
+    assert!(no_traffic(&mock));
 
     // Enabled and linked but the server secret is gone: fail-degraded, no
     // traffic, and the link is left intact for a later, fixed deployment.
@@ -871,7 +912,7 @@ async fn unconfigured_and_unlinked_dispatches_are_silent_no_ops() {
         dispatch.submit_scrobble(user.id, track_public_id).await,
         DispatchOutcome::Dropped
     );
-    assert!(no_traffic(mock));
+    assert!(no_traffic(&mock));
     assert!(
         LastfmLinkStore::new()
             .exists(&db.pool, user.id)
@@ -883,7 +924,6 @@ async fn unconfigured_and_unlinked_dispatches_are_silent_no_ops() {
 
 #[tokio::test]
 async fn disconnect_is_idempotent_and_clears_the_link() {
-    mock().await;
     let db = common::TestDb::create("lastfm_disconnect").await;
     configure_lastfm(&db).await;
     let user = seed_user(&db, "lastfm-disconnect").await;
@@ -959,5 +999,189 @@ async fn catalog_entry_never_requires_a_provider() {
         .await
         .expect("cache count");
     assert_eq!(cache_rows, 0, "catalog entry never touches providers");
+    db.drop().await;
+}
+
+/// Seeds a cataloged release and returns its track's public API id, plus the
+/// percent-encoded track title used as the per-test traffic marker.
+async fn seed_track(db: &common::TestDb, seed: u32, track_title: &str) -> (Uuid, String) {
+    let fixture = phase5_common::seed_cataloged_release(
+        db,
+        seed,
+        CatalogFixturePresentation {
+            track_title,
+            ..CatalogFixturePresentation::default()
+        },
+    )
+    .await;
+    let track_public_id: Uuid =
+        sqlx::query_scalar("SELECT public_api_id FROM tracks WHERE release_id = $1")
+            .bind(fixture.release_id().into_uuid())
+            .fetch_one(&db.pool)
+            .await
+            .expect("track");
+    (track_public_id, track_title.replace(' ', "%20"))
+}
+
+async fn link(db: &common::TestDb, user_id: Uuid, session_key: &str) {
+    store_linked_session(
+        &db.pool,
+        user_id,
+        &LastfmSession {
+            key: SecretString::new(session_key.to_string()),
+            username: None,
+        },
+    )
+    .await
+    .expect("link");
+}
+
+async fn linked(db: &common::TestDb, user_id: Uuid) -> bool {
+    LastfmLinkStore::new()
+        .exists(&db.pool, user_id)
+        .await
+        .expect("exists")
+}
+
+#[tokio::test]
+async fn rate_limit_response_is_dropped_without_retry_and_keeps_the_link() {
+    let mock = start_mock().await;
+    let db = common::TestDb::create("lastfm_ratelimit").await;
+    configure_lastfm(&db).await;
+    let user = seed_user(&db, "lastfm-ratelimit").await;
+    let (track_public_id, _) = seed_track(&db, 7306, "Rate Limited Track").await;
+    link(&db, user.id, SESSION_KEY_RATELIMITED).await;
+
+    let dispatch = LastfmDispatch::with_api_base_url(db.pool.clone(), &mock.base_url);
+    // Single-attempt contract (evidence doc §5): HTTP 429 with API error 29
+    // drops the scrobble without a retry and without clearing the link —
+    // the authoritative play is already durable in PostgreSQL.
+    let outcome = dispatch.submit_scrobble(user.id, track_public_id).await;
+    assert_eq!(outcome, DispatchOutcome::Dropped);
+    let posts = captured_requests(&mock)
+        .iter()
+        .filter(|request| request.method == "POST" && request.body.contains("track.scrobble"))
+        .count();
+    assert_eq!(
+        posts, 1,
+        "a rate-limited scrobble is attempted exactly once"
+    );
+    assert!(linked(&db, user.id).await, "429 must not clear the link");
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn ignored_scrobble_is_dropped_but_the_link_survives() {
+    let mock = start_mock().await;
+    let db = common::TestDb::create("lastfm_ignored").await;
+    configure_lastfm(&db).await;
+    let user = seed_user(&db, "lastfm-ignored").await;
+    let (track_public_id, _) = seed_track(&db, 7307, "Ignored Track").await;
+    link(&db, user.id, SESSION_KEY_IGNORED).await;
+
+    let dispatch = LastfmDispatch::with_api_base_url(db.pool.clone(), &mock.base_url);
+    // Last.fm accepted the call but ignored the scrobble (accepted = 0):
+    // the legacy client reports false and drops it; the session stays valid.
+    let outcome = dispatch.submit_scrobble(user.id, track_public_id).await;
+    assert_eq!(outcome, DispatchOutcome::Dropped);
+    assert!(
+        linked(&db, user.id).await,
+        "an ignored scrobble is not an invalid session"
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn invalid_session_codes_4_and_10_clear_the_link() {
+    let mock = start_mock().await;
+    let db = common::TestDb::create("lastfm_invalid_codes").await;
+    configure_lastfm(&db).await;
+    let user = seed_user(&db, "lastfm-invalid-codes").await;
+    let (track_public_id, _) = seed_track(&db, 7308, "Invalid Codes Track").await;
+    let dispatch = LastfmDispatch::with_api_base_url(db.pool.clone(), &mock.base_url);
+
+    // ADR-0004 clear-on-invalid-session covers 4 (authentication failed)
+    // and 10 (invalid API key) as well as 9 (covered by the stale-key test).
+    for session_key in [SESSION_KEY_FORBIDDEN, SESSION_KEY_BADKEY] {
+        link(&db, user.id, session_key).await;
+        let outcome = dispatch.submit_scrobble(user.id, track_public_id).await;
+        assert_eq!(outcome, DispatchOutcome::Dropped, "key {session_key}");
+        assert!(
+            !linked(&db, user.id).await,
+            "invalid-session response for {session_key} must clear the link"
+        );
+    }
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn transport_failure_drops_without_clearing_the_link() {
+    let db = common::TestDb::create("lastfm_transport").await;
+    configure_lastfm(&db).await;
+    let user = seed_user(&db, "lastfm-transport").await;
+    let (track_public_id, _) = seed_track(&db, 7309, "Transport Failure Track").await;
+    link(&db, user.id, SESSION_KEY).await;
+
+    // A bound-then-dropped listener guarantees a refused connection without
+    // depending on a reserved port number.
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+    let address = listener.local_addr().expect("addr");
+    drop(listener);
+    let dispatch = LastfmDispatch::with_api_base_url(db.pool.clone(), &format!("http://{address}"));
+    let outcome = dispatch.submit_scrobble(user.id, track_public_id).await;
+    assert_eq!(outcome, DispatchOutcome::Dropped);
+    assert!(
+        linked(&db, user.id).await,
+        "a transport failure is not an invalid session"
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn configured_state_scrobble_route_dispatches_to_the_mock() {
+    let mock = start_mock().await;
+    let db = common::TestDb::create("lastfm_route_dispatch").await;
+    configure_lastfm(&db).await;
+    let user = seed_user(&db, "lastfm-route-dispatch").await;
+    let (track_public_id, marker) = seed_track(&db, 7310, "Route Dispatch Track").await;
+    link(&db, user.id, SESSION_KEY).await;
+    // The route path reads the endpoint from adapter state — the per-test
+    // isolation seam replacing the retired process-global override.
+    let mut state = native_state(&db);
+    state.lastfm_api_base_url = Some(mock.base_url.clone());
+
+    let (status, _body) = native_request(
+        state,
+        principal(&user),
+        "POST",
+        "/api/v1/scrobble",
+        serde_json::json!({
+            "songId": track_public_id,
+            "playerName": "route-test-player",
+            "scrobbleType": "played",
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    // The dispatch is spawned fire-and-record: poll the mock until the
+    // signed scrobble for this test's track arrives (bounded wait).
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        let submitted = captured_requests(&mock).iter().any(|request| {
+            request.method == "POST"
+                && request.body.contains("track.scrobble")
+                && request.body.contains(&format!("track={marker}"))
+                && request.body.contains(&format!("sk={SESSION_KEY}"))
+        });
+        if submitted {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the scrobble write path never dispatched to the mock"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
     db.drop().await;
 }

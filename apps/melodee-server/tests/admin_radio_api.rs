@@ -250,6 +250,7 @@ async fn call_with_cookie(
 
 fn os_state(pool: sqlx::PgPool) -> OsState {
     OsState {
+        lastfm_api_base_url: None,
         pool,
         server_version: "0.0.0-test".to_string(),
         public_origin: "http://melodee.test".to_string(),

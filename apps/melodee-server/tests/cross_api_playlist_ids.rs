@@ -117,6 +117,7 @@ async fn import_user(db: &common::TestDb) -> StoredNativeUser {
 
 fn native_state(db: &common::TestDb) -> NativeState {
     NativeState {
+        lastfm_api_base_url: None,
         pool: db.pool.clone(),
         notifications: std::sync::Arc::new(
             melodee_server::notifications::NotificationService::noop(db.pool.clone()),
@@ -142,6 +143,7 @@ fn native_state(db: &common::TestDb) -> NativeState {
 
 fn os_state(db: &common::TestDb) -> OsState {
     OsState {
+        lastfm_api_base_url: None,
         pool: db.pool.clone(),
         server_version: "0.0.0-test".to_string(),
         public_origin: "http://melodee.test".to_string(),
@@ -162,6 +164,7 @@ fn os_state(db: &common::TestDb) -> OsState {
 
 fn jf_state(db: &common::TestDb) -> JfState {
     JfState {
+        lastfm_api_base_url: None,
         pool: db.pool.clone(),
         server_name: "Melodee".to_string(),
         server_version: "0.0.0-test".to_string(),

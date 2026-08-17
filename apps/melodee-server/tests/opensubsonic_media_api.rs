@@ -135,6 +135,7 @@ async fn fixture_public_api_id(db: &common::TestDb) -> Uuid {
 async fn state(db: &common::TestDb) -> OsState {
     seed_fixture_user(db).await;
     OsState {
+        lastfm_api_base_url: None,
         pool: db.pool.clone(),
         server_version: SERVER_VERSION.to_string(),
         public_origin: PUBLIC_ORIGIN.to_string(),
