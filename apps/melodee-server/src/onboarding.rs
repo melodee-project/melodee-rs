@@ -152,7 +152,7 @@ fn writable_or_creatable(root: &std::path::Path) -> Result<String, String> {
     Err(format!("{} has no existing ancestor", root.display()))
 }
 
-fn directory_is_writable(directory: &std::path::Path) -> bool {
+pub(crate) fn directory_is_writable(directory: &std::path::Path) -> bool {
     let probe = directory.join(format!(
         ".melodee-write-probe-{}",
         uuid::Uuid::now_v7().simple()
@@ -337,14 +337,16 @@ pub(crate) async fn check_media_tools() -> PreflightCheck {
     };
     let ffprobe = probe_tool(&config.ffprobe_path).await;
     let ffmpeg = probe_tool(&config.ffmpeg_path).await;
-    if ffprobe && ffmpeg {
+    let fpcalc = probe_tool(&config.fpcalc_path).await;
+    if ffprobe && ffmpeg && fpcalc {
         PreflightCheck::pass(
             "media_tools",
             false,
             format!(
-                "ffprobe ({}) and ffmpeg ({}) available",
+                "ffprobe ({}), ffmpeg ({}), and fpcalc ({}) available",
                 config.ffprobe_path.display(),
-                config.ffmpeg_path.display()
+                config.ffmpeg_path.display(),
+                config.fpcalc_path.display()
             ),
         )
     } else {
@@ -352,11 +354,12 @@ pub(crate) async fn check_media_tools() -> PreflightCheck {
             "media_tools",
             false,
             format!(
-                "ffprobe: {}, ffmpeg: {}",
+                "ffprobe: {}, ffmpeg: {}, fpcalc: {}",
                 if ffprobe { "ok" } else { "missing" },
-                if ffmpeg { "ok" } else { "missing" }
+                if ffmpeg { "ok" } else { "missing" },
+                if fpcalc { "ok" } else { "missing" }
             ),
-            "install ffmpeg/ffprobe or set MELODEE__INSPECTION__FFPROBE_PATH / MELODEE__NORMALIZATION__FFMPEG_PATH",
+            "install ffmpeg/ffprobe/fpcalc or set MELODEE__INSPECTION__FFPROBE_PATH / MELODEE__NORMALIZATION__FFMPEG_PATH / MELODEE__NORMALIZATION__FPCALC_PATH",
         )
     }
 }

@@ -21,10 +21,14 @@ const HEALTH: SystemHealth = {
   tantivy: { status: 'ok', detail: 'active search generation validated' },
   storage: { status: 'ok', detail: 'storage paths writable' },
   ffmpeg: { status: 'ok', detail: 'ffmpeg 8.1' },
+  podcastStorage: { status: 'disabled', detail: 'podcast worker disabled' },
+  disk: { status: 'ok', detail: 'tightest of 2 root(s): storage has 512000 MiB free (50%)' },
+  workers: { status: 'ok', detail: 'no stale leases; oldest ready item 0s; 0 ready / 0 claimed' },
   apiSurfaces: [
     { surface: 'native', status: 'serving' },
     { surface: 'admin', status: 'serving' },
   ],
+  resourceBounds: [],
 };
 
 const LEASE: Lease = {

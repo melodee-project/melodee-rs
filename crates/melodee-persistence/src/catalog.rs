@@ -790,10 +790,14 @@ impl PreparedImport {
         let release_display_artist =
             (release_artists.len() == 1).then(|| release_artists[0].clone());
 
+        // ADR-0146: join on the logical track key so CUE-governed segment
+        // outputs (`<source>#cue-track-NN`) match their Tracks and canonical
+        // asset `source_path` values; whole-file outputs keep the plain
+        // source path as their key.
         let outputs = normalization
             .outputs
             .iter()
-            .map(|output| (output.source_file.as_str(), output))
+            .map(|output| (output.track_key(), output))
             .collect::<BTreeMap<_, _>>();
         let mut source_assets = BTreeMap::new();
         let mut prepared_assets = BTreeMap::<String, PreparedAsset>::new();

@@ -64,7 +64,7 @@ fn admin_error(status: StatusCode, code: &'static str) -> Response {
         Json(AdminRadioErrorBody {
             code,
             message: code.to_string(),
-            correlation_id: Uuid::now_v7(),
+            correlation_id: crate::correlation::envelope_id(),
         }),
     )
         .into_response()
@@ -87,7 +87,7 @@ fn store_error(error: RadioStoreError) -> Response {
             code,
             // Validation messages are static, operator-safe constraint labels.
             message: error.to_string(),
-            correlation_id: Uuid::now_v7(),
+            correlation_id: crate::correlation::envelope_id(),
         }),
     )
         .into_response()

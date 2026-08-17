@@ -37,6 +37,10 @@ const STATE_BY_STATUS = {
   ok: "online",
   degraded: "degraded",
   disabled: "disabled",
+  unavailable: "offline",
+  readOnly: "degraded",
+  misconfigured: "degraded",
+  capacityExhausted: "degraded",
 } as const;
 
 function toApiError(cause: unknown): ApiError {

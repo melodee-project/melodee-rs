@@ -26,6 +26,12 @@ credentials.
 - The endpoint matrix, extension support, and intentionally absent endpoints follow the captured
   compatibility contracts. Unsupported endpoints intentionally return documented `410`/`501`
   behavior where the contract requires it.
+- Streaming honors the standard transcoding parameters: `format=mp3|aac|opus` transcodes the
+  track with the administrator's configured FFmpeg templates, and a `maxBitRate` below the
+  source bitrate transcodes to MP3 at the requested cap. `format=raw` (or no parameters) keeps
+  direct play of the original file. Unsupported formats, malformed templates, and a saturated or
+  disabled transcoder return the standard error envelope with code `0`. See
+  [Configuration — Transcoding](../installation/configuration/#transcoding).
 - The shipping Feishin client completes the documented smoke workflows (connect, browse,
   playback, search, favorites) against this surface; acceptance evidence lives in
   `design/evidence/phase-8/` in the repository.

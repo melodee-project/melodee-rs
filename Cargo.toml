@@ -61,6 +61,11 @@ serde = { version = "=1.0.229", features = ["derive"] }
 # JSONP bodies serialize byte-compatibly with the frozen captures.
 serde_json = { version = "=1.0.150", features = ["preserve_order"] }
 sha2 = "=0.11.0"
+# ADR-0147 decision 2: splits configured FFmpeg command templates into argv
+# arrays under shell-words rules without invoking a shell. Already present in
+# the lockfile as a build-only transitive dependency (jobserver); promoting it
+# to a direct dependency of melodee-server adds no new crate to the tree.
+shlex = "=2.0.1"
 # ADR-0123: bounded native image compatibility. Enable only codecs accepted
 # by the native upload/capture contract; no AVIF, BMP, DDS, EXR, HDR, ICO,
 # PNM, QOI, TIFF, or TGA decoder is linked.
@@ -87,7 +92,7 @@ sqlx = { version = "=0.9.0", default-features = false, features = [
 tantivy = "=0.26.1"
 thiserror = "=2.0.19"
 time = { version = "=0.3.55", features = ["formatting", "serde"] }
-tokio = { version = "=1.52.3", features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "signal"] }
+tokio = { version = "=1.52.3", features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "signal"] }
 tower = { version = "=0.5.3", features = ["util"] }
 tower-http = { version = "=0.7.0", features = ["cors", "fs", "trace"] }
 tracing = "=0.1.44"

@@ -94,20 +94,39 @@ impl ImageKind {
 #[derive(Debug, Clone)]
 struct ImageProcessor {
     permits: Arc<Semaphore>,
+    gauge: Option<Arc<crate::resource_bounds::ResourceGauge>>,
 }
 
 impl ImageProcessor {
     fn new(max_concurrency: usize) -> Self {
+        let max = max_concurrency.max(1);
         Self {
-            permits: Arc::new(Semaphore::new(max_concurrency.max(1))),
+            permits: Arc::new(Semaphore::new(max)),
+            // R2.4: image processing reports utilization and non-blocking
+            // rejections through the process resource-bounds registry when
+            // startup installed one.
+            gauge: crate::resource_bounds::ResourceBounds::global()
+                .map(|registry| registry.register("images.processing", max)),
         }
     }
 
-    fn try_admit(&self) -> Result<OwnedSemaphorePermit, ImageProcessingError> {
-        self.permits
-            .clone()
-            .try_acquire_owned()
-            .map_err(|_| ImageProcessingError)
+    fn try_admit(&self) -> Result<ImageAdmission, ImageProcessingError> {
+        match self.permits.clone().try_acquire_owned() {
+            Ok(permit) => Ok(ImageAdmission {
+                _semaphore: permit,
+                _gauge: self
+                    .gauge
+                    .as_ref()
+                    .map(crate::resource_bounds::ResourceGauge::admit_immediate),
+            }),
+            Err(error) => {
+                if let Some(gauge) = &self.gauge {
+                    gauge.reject();
+                }
+                let _ = error;
+                Err(ImageProcessingError)
+            }
+        }
     }
 
     async fn process(
@@ -115,26 +134,36 @@ impl ImageProcessor {
         input: Vec<u8>,
         requested_size: u32,
         format: ImageFormat,
-        permit: OwnedSemaphorePermit,
-    ) -> Result<(Vec<u8>, OwnedSemaphorePermit), ImageProcessingError> {
+        admission: ImageAdmission,
+    ) -> Result<(Vec<u8>, ImageAdmission), ImageProcessingError> {
         if input.is_empty()
             || u64::try_from(input.len()).unwrap_or(u64::MAX) > MAX_IMAGE_INPUT_BYTES
         {
             return Err(ImageProcessingError);
         }
-        let (result, permit) = tokio::task::spawn_blocking(move || {
+        let (result, admission) = tokio::task::spawn_blocking(move || {
             let result = process_image(&input, requested_size, format);
-            (result, permit)
+            (result, admission)
         })
         .await
         .map_err(|_| ImageProcessingError)?;
-        result.map(|bytes| (bytes, permit))
+        result.map(|bytes| (bytes, admission))
     }
 }
 
 #[derive(Debug, Clone, Copy, thiserror::Error)]
 #[error("image cannot be processed within compatibility bounds")]
 struct ImageProcessingError;
+
+/// RAII admission token for the bounded image pipeline: bundles the
+/// concurrency semaphore permit with the optional R2.4 resource-bounds gauge
+/// permit so both release together on drop, including client disconnect while
+/// the response body is still in flight.
+#[derive(Debug)]
+struct ImageAdmission {
+    _semaphore: OwnedSemaphorePermit,
+    _gauge: Option<crate::resource_bounds::GaugePermit>,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ImageUploadValidationError {
@@ -337,7 +366,7 @@ async fn load_image(
     public_id: Uuid,
     size: u32,
     headers: &HeaderMap,
-    permit: OwnedSemaphorePermit,
+    admission: ImageAdmission,
 ) -> Result<Option<Response<Body>>, sqlx::Error> {
     match kind {
         ImageKind::Playlist => {
@@ -349,13 +378,13 @@ async fn load_image(
             .await?;
             match image {
                 Some((_, Some(bytes))) => Ok(Some(
-                    processed_response(kind, bytes, size, headers, permit).await?,
+                    processed_response(kind, bytes, size, headers, admission).await?,
                 )),
                 Some((_, None)) => Ok(Some(byte_response(
                     kind.fallback().to_vec(),
                     kind.content_type(),
                     headers,
-                    Some(permit),
+                    Some(admission),
                 ))),
                 None => Ok(None),
             }
@@ -374,13 +403,13 @@ async fn load_image(
             .await?;
             match image {
                 Some((_, Some(bytes))) => Ok(Some(
-                    processed_response(kind, bytes, size, headers, permit).await?,
+                    processed_response(kind, bytes, size, headers, admission).await?,
                 )),
                 Some((_, None)) => Ok(Some(byte_response(
                     kind.fallback().to_vec(),
                     kind.content_type(),
                     headers,
-                    Some(permit),
+                    Some(admission),
                 ))),
                 None => Ok(None),
             }
@@ -392,7 +421,7 @@ async fn load_image(
             // artwork, then placeholder).
             if let Some(bytes) = artwork_override_bytes(&state.pool, kind, public_id).await? {
                 return Ok(Some(
-                    processed_response(kind, bytes, size, headers, permit).await?,
+                    processed_response(kind, bytes, size, headers, admission).await?,
                 ));
             }
             let release = resolve_release(&state.pool, kind, public_id).await?;
@@ -401,14 +430,14 @@ async fn load_image(
             };
             if let Some(bytes) = canonical_artwork_bytes(state, release_id).await? {
                 return Ok(Some(
-                    processed_response(kind, bytes, size, headers, permit).await?,
+                    processed_response(kind, bytes, size, headers, admission).await?,
                 ));
             }
             Ok(Some(byte_response(
                 kind.fallback().to_vec(),
                 kind.content_type(),
                 headers,
-                Some(permit),
+                Some(admission),
             )))
         }
     }
@@ -545,14 +574,16 @@ async fn processed_response(
     bytes: Vec<u8>,
     size: u32,
     headers: &HeaderMap,
-    permit: OwnedSemaphorePermit,
+    admission: ImageAdmission,
 ) -> Result<Response<Body>, sqlx::Error> {
     let processor =
         IMAGE_PROCESSOR.get_or_init(|| ImageProcessor::new(IMAGE_PROCESSING_CONCURRENCY));
     processor
-        .process(bytes, size, kind.output_format(), permit)
+        .process(bytes, size, kind.output_format(), admission)
         .await
-        .map(|(bytes, permit)| byte_response(bytes, kind.content_type(), headers, Some(permit)))
+        .map(|(bytes, admission)| {
+            byte_response(bytes, kind.content_type(), headers, Some(admission))
+        })
         .map_err(|_| {
             sqlx::Error::Protocol("image processing failed within compatibility bounds".to_string())
         })
@@ -562,17 +593,17 @@ fn byte_response(
     bytes: Vec<u8>,
     content_type: &'static str,
     request_headers: &HeaderMap,
-    permit: Option<OwnedSemaphorePermit>,
+    admission: Option<ImageAdmission>,
 ) -> Response<Body> {
     let etag = hex_digest(&bytes);
     if not_modified(request_headers, &etag) {
         return not_modified_response(&etag);
     }
     let length = bytes.len();
-    let body = match permit {
-        Some(permit) => Body::from(Bytes::from_owner(PermittedBytes {
+    let body = match admission {
+        Some(admission) => Body::from(Bytes::from_owner(PermittedBytes {
             bytes,
-            _permit: permit,
+            _admission: admission,
         })),
         None => Body::from(bytes),
     };
@@ -592,7 +623,7 @@ fn byte_response(
 
 struct PermittedBytes {
     bytes: Vec<u8>,
-    _permit: OwnedSemaphorePermit,
+    _admission: ImageAdmission,
 }
 
 impl AsRef<[u8]> for PermittedBytes {
@@ -701,10 +732,10 @@ mod tests {
     #[test]
     fn anonymous_image_processing_concurrency_is_explicitly_bounded() {
         let processor = ImageProcessor::new(1);
-        let permit = processor.try_admit().expect("first permit");
+        let admission = processor.try_admit().expect("first permit");
         let admitted = Bytes::from_owner(PermittedBytes {
             bytes: vec![1, 2, 3],
-            _permit: permit,
+            _admission: admission,
         });
         let in_flight = admitted.clone();
         assert!(processor.try_admit().is_err());

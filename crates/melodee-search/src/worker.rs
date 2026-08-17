@@ -14,7 +14,7 @@ use sqlx::PgPool;
 use time::OffsetDateTime;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
-use tracing::{error, info, warn};
+use tracing::{Instrument as _, error, info, warn};
 use uuid::Uuid;
 
 use crate::config::SearchConfig;
@@ -332,6 +332,14 @@ async fn apply_outbox_once_with_cancel(
     let _ = root.read_manifest(active.generation_id)?;
     let worker = format!("search-{}", Uuid::now_v7());
     let now = OffsetDateTime::now_utc();
+    // R2.5: one span per claimed outbox pass; every nested load/apply/failure
+    // event inherits the worker and generation identity.
+    let pass_span = tracing::info_span!(
+        "search_outbox_pass",
+        %worker,
+        generation_id = %active.generation_id,
+        claimed = tracing::field::Empty,
+    );
     let items = SearchProjectionStore::claim_outbox(
         pool,
         SEARCH_PROJECTION_NAME,
@@ -340,7 +348,9 @@ async fn apply_outbox_once_with_cancel(
         Duration::from_secs(config.lease_seconds),
         now,
     )
+    .instrument(pass_span.clone())
     .await?;
+    pass_span.record("claimed", items.len() as u64);
     if items.is_empty() {
         return Ok(SearchPassStats::default());
     }
@@ -387,7 +397,7 @@ async fn apply_outbox_once_with_cancel(
             )
             .await
             {
-                warn!(%release_error, outbox_id = outbox_id, "search catalog-read failure evidence could not be recorded");
+                warn!(%release_error, %worker, generation_id = %active.generation_id, outbox_id = outbox_id, "search catalog-read failure evidence could not be recorded");
                 return Err(release_error.into());
             }
         }
@@ -516,7 +526,7 @@ async fn apply_outbox_once_with_cancel(
                 )
                 .await
                 {
-                    warn!(%failure_error, outbox_id = outbox_id, "search catalog-read failure evidence could not be recorded");
+                    warn!(%failure_error, %worker, generation_id = %generation_id, outbox_id = outbox_id, "search catalog-read failure evidence could not be recorded");
                     if let Err(lease_error) = SearchProjectionStore::release_outbox_lease(
                         pool,
                         SEARCH_PROJECTION_NAME,

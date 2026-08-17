@@ -35,7 +35,10 @@
 //! `{"message":"Last.fm linked"}`) are source-evidenced only — the
 //! configured-state golden capture gap is recorded in the evidence doc.
 
+use std::sync::Arc;
 use std::time::Duration;
+
+use crate::resource_bounds::ResourceGauge;
 
 use md5::{Digest as _, Md5};
 use melodee_auth::{
@@ -47,6 +50,7 @@ use serde::Deserialize;
 use sqlx::PgPool;
 use thiserror::Error;
 use time::OffsetDateTime;
+use tracing::Instrument as _;
 use uuid::Uuid;
 
 // Setting keys use the exact legacy spellings, including the capital-E
@@ -553,6 +557,38 @@ pub struct LastfmDispatch {
     api_base_url: String,
 }
 
+/// Process-global bound on concurrent outbound Last.fm calls (R2.4,
+/// PRD-INGEST-009). Dispatches are spawned from every scrobble/now-playing
+/// write path across all three adapters and each call site builds its own
+/// `LastfmDispatch`, so the bound cannot live on the struct: it must be
+/// process state shared by every construction. Saturation queues the spawned
+/// task on the semaphore instead of rejecting — the authoritative scrobble
+/// is already durable in PostgreSQL, so the provider forward waits rather
+/// than being dropped.
+const LASTFM_DISPATCH_CONCURRENCY: usize = 4;
+
+static DISPATCH_PERMITS: std::sync::OnceLock<Arc<tokio::sync::Semaphore>> =
+    std::sync::OnceLock::new();
+static DISPATCH_GAUGE: std::sync::OnceLock<Option<Arc<crate::resource_bounds::ResourceGauge>>> =
+    std::sync::OnceLock::new();
+
+fn dispatch_permits() -> Arc<tokio::sync::Semaphore> {
+    Arc::clone(
+        DISPATCH_PERMITS
+            .get_or_init(|| Arc::new(tokio::sync::Semaphore::new(LASTFM_DISPATCH_CONCURRENCY))),
+    )
+}
+
+fn dispatch_gauge() -> Option<Arc<crate::resource_bounds::ResourceGauge>> {
+    DISPATCH_GAUGE
+        .get_or_init(|| {
+            crate::resource_bounds::ResourceBounds::global().map(|registry| {
+                registry.register("provider.lastfm.dispatch", LASTFM_DISPATCH_CONCURRENCY)
+            })
+        })
+        .clone()
+}
+
 impl LastfmDispatch {
     /// Production dispatch against the real Last.fm endpoint.
     pub fn new(pool: PgPool) -> Self {
@@ -572,26 +608,83 @@ impl LastfmDispatch {
     }
 
     /// Spawns a scrobble dispatch; the playback/scrobble write path never
-    /// waits on Last.fm.
+    /// waits on Last.fm. The in-flight request's correlation id (R2.5) is
+    /// captured here — task-locals do not cross `tokio::spawn` — and carried
+    /// on the dispatch span.
     pub fn spawn_scrobble(&self, user_id: Uuid, track_public_id: Uuid) {
         let dispatch = self.clone();
-        tokio::spawn(async move {
-            let outcome = dispatch.submit_scrobble(user_id, track_public_id).await;
-            if outcome != DispatchOutcome::Submitted {
-                tracing::debug!(?outcome, "last.fm scrobble dispatch did not submit");
+        let correlation_id = crate::correlation::current();
+        let span = tracing::info_span!(
+            "lastfm_scrobble",
+            %user_id,
+            %track_public_id,
+            correlation_id = tracing::field::Empty,
+        );
+        if let Some(id) = correlation_id {
+            span.record("correlation_id", tracing::field::display(id));
+        }
+        tokio::spawn(
+            async move {
+                let _admission = dispatch.acquire_dispatch_permit().await;
+                let outcome = dispatch.submit_scrobble(user_id, track_public_id).await;
+                if outcome != DispatchOutcome::Submitted {
+                    tracing::debug!(?outcome, "last.fm scrobble dispatch did not submit");
+                }
             }
-        });
+            .instrument(span),
+        );
     }
 
     /// Spawns a now-playing dispatch; the write path never waits on Last.fm.
     pub fn spawn_now_playing(&self, user_id: Uuid, track_public_id: Uuid) {
         let dispatch = self.clone();
-        tokio::spawn(async move {
-            let outcome = dispatch.submit_now_playing(user_id, track_public_id).await;
-            if outcome != DispatchOutcome::Submitted {
-                tracing::debug!(?outcome, "last.fm now-playing dispatch did not submit");
+        let correlation_id = crate::correlation::current();
+        let span = tracing::info_span!(
+            "lastfm_now_playing",
+            %user_id,
+            %track_public_id,
+            correlation_id = tracing::field::Empty,
+        );
+        if let Some(id) = correlation_id {
+            span.record("correlation_id", tracing::field::display(id));
+        }
+        tokio::spawn(
+            async move {
+                let _admission = dispatch.acquire_dispatch_permit().await;
+                let outcome = dispatch.submit_now_playing(user_id, track_public_id).await;
+                if outcome != DispatchOutcome::Submitted {
+                    tracing::debug!(?outcome, "last.fm now-playing dispatch did not submit");
+                }
             }
-        });
+            .instrument(span),
+        );
+    }
+
+    /// Waits for a process-global dispatch slot. Dropping the returned future
+    /// (task cancellation/shutdown) never admits, so cancelled waiters cannot
+    /// consume a permit; a closed semaphore is unrecoverable process state and
+    /// simply skips the provider forward, which is best-effort by contract.
+    async fn acquire_dispatch_permit(
+        &self,
+    ) -> Option<(
+        tokio::sync::OwnedSemaphorePermit,
+        Option<crate::resource_bounds::GaugePermit>,
+    )> {
+        let permits = dispatch_permits();
+        let gauge = dispatch_gauge();
+        if let Some(gauge) = &gauge {
+            gauge.begin_wait();
+        }
+        match permits.acquire_owned().await {
+            Ok(permit) => Some((permit, gauge.as_ref().map(ResourceGauge::admit))),
+            Err(error) => {
+                if let Some(gauge) = &gauge {
+                    gauge.wait_failed();
+                }
+                let _ = error;
+                None
+            }
+        }
     }
 
     /// One scrobble submission, gated on `scrobbling.lastFm.Enabled` and a

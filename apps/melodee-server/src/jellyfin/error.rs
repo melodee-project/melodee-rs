@@ -112,6 +112,22 @@ pub fn internal_server_error() -> Response {
     problem.into_json_response(StatusCode::INTERNAL_SERVER_ERROR)
 }
 
+/// 503 ProblemDetails for configured-transcoding unavailability: capacity
+/// exhausted, template missing/unparseable, or the FFmpeg tool failed to
+/// start (ADR-0147 decisions 4/5 — a new failure class; the retired 400
+/// transcode rejection is not reused).
+pub fn service_unavailable(detail: &str) -> Response {
+    let problem = JellyfinProblemDetails {
+        r#type: "about:blank".to_string(),
+        title: "Service Unavailable".to_string(),
+        status: 503,
+        detail: detail.to_string(),
+        trace_id: Uuid::now_v7(),
+        error_code: None,
+    };
+    problem.into_json_response(StatusCode::SERVICE_UNAVAILABLE)
+}
+
 /// 416 ProblemDetails for unsatisfiable byte ranges (captured Jellyfin
 /// behavior, distinct from OpenSubsonic's 404 and native's 400).
 pub fn range_not_satisfiable(detail: &str) -> Response {

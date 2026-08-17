@@ -196,6 +196,61 @@ async fn seed_failed_item(db: &TestDb, source_path: &str) -> Uuid {
 }
 
 #[tokio::test]
+async fn error_envelope_sources_the_request_correlation_header() {
+    // R2.5: the documented admin contract — envelope `correlationId` is the
+    // `x-request-id` value when present, otherwise generated. The middleware
+    // is layered exactly as `main.rs` does (inside the TraceLayer span).
+    let db = TestDb::create("wp17_correlation").await;
+    let app = build_app(db.pool.clone(), None).layer(axum::middleware::from_fn(
+        melodee_server::correlation::middleware,
+    ));
+
+    let known = Uuid::now_v7();
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/admin/v1/system/health")
+                .header("x-request-id", known.to_string())
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let bytes = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body")
+        .to_bytes();
+    let json: Value = serde_json::from_slice(&bytes).expect("envelope json");
+    assert_eq!(json["correlationId"], known.to_string());
+
+    // Without the header the envelope id is a fresh parseable UUID.
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/admin/v1/system/health")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let bytes = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body")
+        .to_bytes();
+    let json: Value = serde_json::from_slice(&bytes).expect("envelope json");
+    let generated = json["correlationId"].as_str().expect("uuid string");
+    assert!(Uuid::parse_str(generated).is_ok());
+    assert_ne!(generated, known.to_string());
+}
+
+#[tokio::test]
 async fn system_routes_require_administrator() {
     let db = TestDb::create("wp17_system_gate").await;
     let fixture = seed_users(&db).await;
@@ -609,4 +664,129 @@ async fn call_with_cookie(
         serde_json::from_slice(&bytes).unwrap_or(Value::Null)
     };
     (status, json)
+}
+
+#[tokio::test]
+async fn system_health_exposes_registered_resource_bounds() {
+    let db = TestDb::create("wp17_resource_bounds").await;
+    let fixture = seed_users(&db).await;
+    let admin = token_for(fixture.admin_public, "wp17-admin");
+
+    let registry = melodee_server::resource_bounds::ResourceBounds::new();
+    let gauge = registry.register("streams.transcoding", 4);
+    let permit = gauge.admit_immediate();
+
+    let admin_state = AdminAccessState {
+        notifications: Arc::new(melodee_server::notifications::NotificationService::noop(
+            db.pool.clone(),
+        )),
+        scripting: Arc::new(melodee_server::scripting::ScriptingService::new(
+            db.pool.clone(),
+        )),
+        pool: db.pool.clone(),
+        auth: Arc::new(
+            melodee_server::native::auth::NativeAuthService::new(JWT_KEY.to_string(), 90)
+                .expect("auth config"),
+        ),
+    };
+    let app = melodee_server::admin_system::router()
+        .with_state(AdminSystemState::new(admin_state, None).with_resource_bounds(registry));
+
+    let (status, body) = call(
+        app,
+        "GET",
+        "/api/admin/v1/system/health",
+        None,
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let bounds = body["resourceBounds"]
+        .as_array()
+        .expect("resourceBounds array");
+    let transcoding = bounds
+        .iter()
+        .find(|row| row["class"] == "streams.transcoding")
+        .expect("transcoding class listed");
+    assert_eq!(transcoding["max"], 4);
+    assert_eq!(transcoding["inFlight"], 1);
+    assert_eq!(transcoding["admittedTotal"], 1);
+    assert_eq!(transcoding["waiting"], 0);
+    assert_eq!(transcoding["saturated"], false);
+    drop(permit);
+
+    // Without an installed registry the additive field is an empty array.
+    let app = build_app(db.pool.clone(), None);
+    let (status, body) = call(
+        app,
+        "GET",
+        "/api/admin/v1/system/health",
+        None,
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        body["resourceBounds"]
+            .as_array()
+            .expect("resourceBounds array")
+            .len(),
+        0
+    );
+
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn system_health_reports_stale_leases_and_queue_age() {
+    // R2.5: with no leased work the workers subsystem is ok; a lease expired
+    // past the grace window (a worker that died mid-claim without recovery)
+    // degrades it with operator-readable counts.
+    let db = TestDb::create("wp17_workers_health").await;
+    let fixture = seed_users(&db).await;
+    let admin = token_for(fixture.admin_public, "wp17-admin");
+    let app = build_app(db.pool.clone(), None);
+
+    let (status, body) = call(
+        app.clone(),
+        "GET",
+        "/api/admin/v1/system/health",
+        None,
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["workers"]["status"], "ok", "{body}");
+
+    // Seed one claimed work item and age its lease past the grace window.
+    let store = WorkItemStore;
+    let config = test_config();
+    let id = seed_ready_item(&store, &db.pool, "r2-5/stale-lease").await;
+    let worker = WorkerId::new();
+    let claimed = store
+        .claim(&db.pool, &worker, &config, OffsetDateTime::now_utc())
+        .await
+        .expect("claim stale-lease fixture");
+    assert!(claimed.iter().any(|item| item.id == id));
+    sqlx::query("UPDATE release_work_items SET lease_expires_at = $1 WHERE id = $2")
+        .bind(OffsetDateTime::now_utc() - time::Duration::hours(2))
+        .bind(id)
+        .execute(&db.pool)
+        .await
+        .expect("age the lease");
+
+    let (status, body) = call(
+        app,
+        "GET",
+        "/api/admin/v1/system/health",
+        None,
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["workers"]["status"], "degraded", "{body}");
+    let detail = body["workers"]["detail"].as_str().expect("detail");
+    assert!(detail.contains("1 stale lease"), "{detail}");
+
+    db.drop().await;
 }

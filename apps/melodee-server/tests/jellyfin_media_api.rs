@@ -91,6 +91,7 @@ fn base_state(db: &common::TestDb) -> JfState {
         token_expiry_hours: 168,
         max_active_tokens: 10,
         direct_play: None,
+        transcoding: None,
         client_addresses: ClientAddressResolver::default(),
         search: None,
         libraries: Vec::new(),
@@ -1580,6 +1581,155 @@ async fn audio_fixture(name: &str) -> AudioFixture {
     }
 }
 
+/// Builds a real PCM WAV body (mono 8-bit 44.1 kHz) for transcode fixtures;
+/// the file is stored as `song.mp3` so direct-play content-type derivation
+/// is unchanged while FFmpeg probes the real content from stdin.
+fn wav_bytes(data_size: usize) -> Vec<u8> {
+    let data_size_u32 = u32::try_from(data_size).expect("wav data fits u32");
+    let mut bytes = Vec::with_capacity(44 + data_size);
+    bytes.extend_from_slice(b"RIFF");
+    bytes.extend_from_slice(&(36u32 + data_size_u32).to_le_bytes());
+    bytes.extend_from_slice(b"WAVEfmt ");
+    bytes.extend_from_slice(&16u32.to_le_bytes());
+    bytes.extend_from_slice(&1u16.to_le_bytes());
+    bytes.extend_from_slice(&1u16.to_le_bytes());
+    bytes.extend_from_slice(&44_100u32.to_le_bytes());
+    bytes.extend_from_slice(&44_100u32.to_le_bytes());
+    bytes.extend_from_slice(&1u16.to_le_bytes());
+    bytes.extend_from_slice(&8u16.to_le_bytes());
+    bytes.extend_from_slice(b"data");
+    bytes.extend_from_slice(&data_size_u32.to_le_bytes());
+    let pattern: Vec<u8> = (0u8..=255).collect();
+    for index in 0..data_size {
+        bytes.push(pattern[index % 256]);
+    }
+    bytes
+}
+
+/// Fixture variant with a real WAV payload and the shared transcoding
+/// service attached (ADR-0147).
+async fn audio_transcode_fixture(name: &str) -> AudioFixture {
+    let audio = audio_fixture(name).await;
+    let wav = wav_bytes(220_500);
+    std::fs::write(audio._temp.path().join("jf-audio/song.mp3"), &wav).expect("write wav payload");
+    let byte_size = i64::try_from(wav.len()).expect("wav size fits i64");
+    sqlx::query(
+        "UPDATE media_assets SET byte_size = $2 \
+          WHERE id = (SELECT playable_media_asset_id FROM tracks WHERE public_api_id = $1)",
+    )
+    .bind(audio.ids.track)
+    .bind(byte_size)
+    .execute(&audio._db.pool)
+    .await
+    .expect("sync asset byte size");
+    let root = CanonicalAssetRoot::open(audio._temp.path()).expect("open root");
+    let mut fixture = audio.fixture;
+    fixture.state.transcoding = Some(
+        melodee_server::transcode::TranscodingService::new(root, fixture.state.pool.clone(), 2)
+            .expect("transcoding service"),
+    );
+    AudioFixture {
+        _temp: audio._temp,
+        fixture,
+        ids: audio.ids,
+        _db: audio._db,
+    }
+}
+
+#[tokio::test]
+async fn audio_stream_transcoding_configured() {
+    let audio = audio_transcode_fixture("jf_media_audio_transcode").await;
+    let track = nf(audio.ids.track);
+
+    // stream.mp3 without static -> configured mp3 transcode (ADR-0147).
+    let (status, headers, bytes) = respond(
+        &audio.fixture.state,
+        get(&format!("/Audio/{track}/stream.mp3"), &audio.fixture.token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        headers
+            .get(header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok()),
+        Some("audio/mpeg")
+    );
+    assert!(!headers.contains_key(header::CONTENT_LENGTH));
+    assert!(!headers.contains_key(header::ACCEPT_RANGES));
+    assert!(
+        bytes.starts_with(b"ID3")
+            || (bytes.len() > 2 && bytes[0] == 0xFF && bytes[1] & 0xE0 == 0xE0),
+        "mp3 frame sync or ID3 tag"
+    );
+
+    // stream.aac -> ADTS output at audio/aac.
+    let (status, headers, bytes) = respond(
+        &audio.fixture.state,
+        get(&format!("/Audio/{track}/stream.aac"), &audio.fixture.token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        headers
+            .get(header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok()),
+        Some("audio/aac")
+    );
+    assert!(!bytes.is_empty());
+    assert_eq!(bytes[0], 0xFF);
+    assert_eq!(bytes[1] & 0xF6, 0xF0, "ADTS sync word");
+
+    // stream.opus -> Ogg/Opus output at audio/ogg.
+    let (status, headers, bytes) = respond(
+        &audio.fixture.state,
+        get(&format!("/Audio/{track}/stream.opus"), &audio.fixture.token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        headers
+            .get(header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok()),
+        Some("audio/ogg")
+    );
+    assert!(bytes.starts_with(b"OggS"), "Ogg container magic");
+
+    // audioBitRate (bits per second) without a container defaults to mp3.
+    let (status, headers, _) = respond(
+        &audio.fixture.state,
+        get(
+            &format!("/Audio/{track}/stream?audioBitRate=64000"),
+            &audio.fixture.token,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        headers
+            .get(header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok()),
+        Some("audio/mpeg")
+    );
+
+    // HEAD on a transcode request answers headers only and spawns no FFmpeg
+    // process (ADR-0147 decision 4).
+    let request = Request::builder()
+        .method("HEAD")
+        .uri(format!("/Audio/{track}/stream.mp3"))
+        .header("X-Emby-Token", &audio.fixture.token)
+        .body(Body::empty())
+        .expect("request");
+    let (status, headers, bytes) = respond(&audio.fixture.state, request).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        headers
+            .get(header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok()),
+        Some("audio/mpeg")
+    );
+    assert!(bytes.is_empty());
+}
+
 #[tokio::test]
 async fn audio_stream_full_range_and_416_nuances() {
     let audio = audio_fixture("jf_media_audio_stream").await;
@@ -1687,16 +1837,25 @@ async fn audio_stream_full_range_and_416_nuances() {
     .await;
     assert_eq!(status, StatusCode::OK);
 
-    // Transcoding request -> captured 400.
+    // ADR-0147 retires the captured 400 rejection: with transcoding disabled
+    // (no service) a transcode request fails closed with 503, and an
+    // unsupported container answers 400 before any service lookup.
     let (status, _, bytes) = respond(
         &audio.fixture.state,
         get(&format!("/Audio/{track}/stream.mp3"), &audio.fixture.token),
     )
     .await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(json_body(&bytes)["detail"], "Transcoding is not available.");
+    let (status, _, bytes) = respond(
+        &audio.fixture.state,
+        get(&format!("/Audio/{track}/stream.flac"), &audio.fixture.token),
+    )
+    .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(
         json_body(&bytes)["detail"],
-        "Transcoding is not supported. Use static=true for direct streaming."
+        "Unsupported transcoding container."
     );
 
     // Unknown song -> captured 404 classes.

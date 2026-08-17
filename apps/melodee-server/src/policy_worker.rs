@@ -326,6 +326,7 @@ pub async fn run_policy_once_with_cancellation(
         let span = info_span!(
             "policy_evaluation",
             work_item_id = %claim.item.id,
+            correlation_id = %claim.item.correlation_id,
             release_id = %claim.release_id,
             worker_id = %worker,
         );

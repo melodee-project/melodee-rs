@@ -377,10 +377,20 @@ pub static KNOWN_SETTINGS: &[KnownSetting] = &[
     KnownSetting { key: "theme.enforceContrastValidation", kind: SettingKind::Bool, secret: false, default: Some("false"), env: None },
     KnownSetting { key: "theme.libraryPath", kind: SettingKind::Text, secret: false, default: None, env: None },
     KnownSetting { key: "theme.maxUploadSizeMb", kind: SettingKind::Int { min: 1, max: None }, secret: false, default: Some("50"), env: None },
-    KnownSetting { key: "transcoding.command.aac", kind: SettingKind::Text, secret: false, default: Some("{ 'format': 'Aac', 'bitrate: 256, 'command': 'ffmpeg -i %s -ss %t -map 0:a:0 -b:a %bk -v 0 -c:a aac -f adts -' }"), env: None },
-    KnownSetting { key: "transcoding.command.mp3", kind: SettingKind::Text, secret: false, default: Some("{ 'format': 'Mp3', 'bitrate: 192, 'command': 'ffmpeg -i %s -ss %t -map 0:a:0 -b:a %bk -v 0 -f mp3 -' }"), env: None },
-    KnownSetting { key: "transcoding.command.opus", kind: SettingKind::Text, secret: false, default: Some("{ 'format': 'Opus', 'bitrate: 128, 'command': 'ffmpeg -i %s -ss %t -map 0:a:0 -b:a %bk -v 0 -c:a libopus -f opus -' }"), env: None },
+    // ADR-0147: the legacy seed literals were malformed (unbalanced quotes,
+    // single-quoted "JSON") and unconsumed by any legacy code path
+    // (ADR-0108 Phase 0 ratification). The corrected defaults below are
+    // parseable JSON template objects consumed by the streaming transcoding
+    // service; placeholders %s (source path), %t (start offset seconds), and
+    // %bk (target bitrate kbps) are substituted at launch.
+    KnownSetting { key: "transcoding.command.aac", kind: SettingKind::Text, secret: false, default: Some("{\"format\":\"Aac\",\"bitrate\":256,\"command\":\"ffmpeg -i %s -ss %t -map 0:a:0 -b:a %bk -v 0 -c:a aac -f adts -\"}"), env: None },
+    KnownSetting { key: "transcoding.command.mp3", kind: SettingKind::Text, secret: false, default: Some("{\"format\":\"Mp3\",\"bitrate\":192,\"command\":\"ffmpeg -i %s -ss %t -map 0:a:0 -b:a %bk -v 0 -f mp3 -\"}"), env: None },
+    KnownSetting { key: "transcoding.command.opus", kind: SettingKind::Text, secret: false, default: Some("{\"format\":\"Opus\",\"bitrate\":128,\"command\":\"ffmpeg -i %s -ss %t -map 0:a:0 -b:a %bk -v 0 -c:a libopus -f opus -\"}"), env: None },
     KnownSetting { key: "transcoding.default", kind: SettingKind::Enum(&["raw", "aac", "mp3", "opus"]), secret: false, default: Some("raw"), env: None },
+    // ADR-0147 decision 5: transcoding capacity is bounded independently of
+    // direct-play streaming.maxConcurrentStreams.*; 0 disables transcoding
+    // (transcode requests fail closed; direct play is unaffected).
+    KnownSetting { key: "transcoding.maxConcurrent", kind: SettingKind::Int { min: 0, max: None }, secret: false, default: Some("4"), env: None },
     KnownSetting { key: "userDeviceProfile.enabled", kind: SettingKind::Bool, secret: false, default: Some("true"), env: None },
     KnownSetting { key: "userinterface.toastAutoCloseTime", kind: SettingKind::Int { min: 0, max: None }, secret: false, default: Some("2000"), env: None },
     KnownSetting { key: "validation.maximumAlbumYear", kind: SettingKind::Int { min: 1, max: None }, secret: false, default: Some("2150"), env: None },
@@ -1273,7 +1283,13 @@ mod tests {
 
     #[test]
     fn known_settings_table_is_sorted_complete_and_consistent() {
-        assert_eq!(KNOWN_SETTINGS.len(), 190, "190-key legacy inventory");
+        // 190-key legacy inventory + `transcoding.maxConcurrent`, the first
+        // non-legacy operator setting, added under ADR-0147 decision 5.
+        assert_eq!(
+            KNOWN_SETTINGS.len(),
+            191,
+            "190-key legacy inventory + ADR-0147"
+        );
         for pair in KNOWN_SETTINGS.windows(2) {
             assert!(
                 pair[0].key < pair[1].key,

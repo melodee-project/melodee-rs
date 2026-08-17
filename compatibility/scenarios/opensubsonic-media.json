@@ -204,7 +204,7 @@
         "last-modified"
       ]
     },
-    "notes": "No transcoding is implemented at this commit: maxBitRate is silently ignored — response is the full original WAV at 200."
+    "notes": "RETIRED CONTRACT (ADR-0147, supersedes ADR-0130 decision 2 silent-ignore clause): the capture records the frozen C# behavior (maxBitRate silently ignored, full WAV at 200). The current Rust server transcodes to mp3 at the requested cap; the divergence is whitelisted in the differential known-differences registry and this golden is retained as historical evidence."
   },
   {
     "schemaVersion": 2,

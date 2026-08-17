@@ -22,8 +22,13 @@ Non-music Jellyfin behavior is intentionally out of scope.
 ## Verified behaviors
 
 - Direct-play streaming of the original audio file, including HTTP range requests (seeking).
-  Transcoding is not available; clients configured to force transcoding should be switched to
-  direct play/original quality.
+- On-demand transcoding to MP3, AAC, or Opus: requests to `stream.mp3`, `stream.aac`, or
+  `stream.opus` (or with an `audioBitRate` cap) return transcoded audio; `static=true` and
+  universal-stream requests keep direct play of the original file. Transcoding follows the
+  administrator's configured templates and concurrency limit — see
+  [Configuration — Transcoding](../installation/configuration/#transcoding). When transcoding is
+  disabled or every transcode slot is busy, the request fails with `503`; an unsupported
+  container extension fails with `400`.
 - Timed lyrics from `.lrc` sidecar files.
 - Playlist creation, editing, reordering, and deletion from the client.
 - Favorite and played-state toggles.
@@ -31,7 +36,8 @@ Non-music Jellyfin behavior is intentionally out of scope.
 
 ## Known limitations
 
-- No transcoding (direct play only).
+- Transcoding covers audio-only MP3/AAC/Opus output governed by the configured templates; video,
+  HLS, and subtitle transcoding endpoints are not present.
 - Artist and Release images use an administrator's catalog artwork override when present, then
   published canonical artwork. Clients show their own placeholder art only when neither source
   exists.

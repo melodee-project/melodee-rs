@@ -38,6 +38,51 @@ const DEFAULT_MAX_TOOL_OUTPUT: usize = 1_048_576;
 const DEFAULT_MAX_ARTWORK_BYTES: usize = 16 * 1024 * 1024;
 const HASH_BUFFER_SIZE: usize = 128 * 1024;
 
+/// R2.5 media-tool invocation telemetry. One debug event at start and one at
+/// drop (covering every early-return path) with the tool name, the file
+/// **name only** — absolute source roots stay out of operator logs — and the
+/// elapsed duration and outcome. `tokio::task::spawn_blocking` propagates the
+/// caller's tracing span, so these events inherit the enclosing work-item
+/// span's `work_item_id`/`correlation_id` fields.
+pub(crate) struct ToolInvocation {
+    tool: &'static str,
+    file_name: String,
+    started: Instant,
+    outcome: Option<&'static str>,
+}
+
+impl ToolInvocation {
+    pub(crate) fn start(tool: &'static str, path: &Path) -> Self {
+        let file_name = path
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "<unknown>".to_owned());
+        tracing::debug!(tool, file = %file_name, "media tool invocation started");
+        Self {
+            tool,
+            file_name,
+            started: Instant::now(),
+            outcome: None,
+        }
+    }
+
+    pub(crate) fn set_outcome(&mut self, outcome: &'static str) {
+        self.outcome = Some(outcome);
+    }
+}
+
+impl Drop for ToolInvocation {
+    fn drop(&mut self) {
+        tracing::debug!(
+            tool = self.tool,
+            file = %self.file_name,
+            duration_ms = self.started.elapsed().as_millis() as u64,
+            outcome = self.outcome.unwrap_or("interrupted"),
+            "media tool invocation finished"
+        );
+    }
+}
+
 mod normalize;
 
 pub use normalize::{
@@ -434,6 +479,19 @@ fn inspect_file(
     };
 
     if kind == ObservedFileKind::Audio {
+        // A zero-byte file can never carry media, but ffprobe still answers
+        // for some raw demuxers (an empty `.flac` probes as a 0-channel
+        // stream). Flag the emptiness explicitly so the failure is
+        // actionable at inspection instead of only surfacing downstream.
+        if file.size_bytes == 0 {
+            file.findings.push(Finding {
+                code: "media.empty_file".to_owned(),
+                message: "audio file is zero bytes; no media content can be observed".to_owned(),
+                severity: FindingSeverity::Error,
+                file: Some(relative_path.to_owned()),
+                evidence: serde_json::json!({ "size_bytes": 0 }),
+            });
+        }
         match hash_file(path) {
             Ok((hash, bytes)) => {
                 file.content_hash = Some(hash);
@@ -483,10 +541,32 @@ fn inspect_file(
         *ffprobe_invocations = ffprobe_invocations.saturating_add(1);
         match run_ffprobe(path, options) {
             Ok(probe) => {
-                file.audio = Some(probe.audio);
-                if file.mime_type.is_none() {
-                    file.mime_type = probe.mime_type;
+                // R2.1: media is detected from probed content, not trusted
+                // from the filename extension alone. A probed container MIME
+                // overrides the extension-derived guess and the disagreement
+                // is recorded as an actionable finding.
+                if let Some(probed_mime) = probe.mime_type {
+                    if let Some(declared) = &file.mime_type
+                        && *declared != probed_mime
+                    {
+                        file.findings.push(Finding {
+                            code: "media.extension_mismatch".to_owned(),
+                            message: format!(
+                                "filename extension suggests {declared} but probed content is {probed_mime}"
+                            ),
+                            severity: FindingSeverity::Warning,
+                            file: Some(relative_path.to_owned()),
+                            evidence: serde_json::json!({
+                                "extension_mime_type": declared,
+                                "probed_mime_type": probed_mime,
+                                "container": probe.audio.container,
+                                "codec": probe.audio.codec,
+                            }),
+                        });
+                    }
+                    file.mime_type = Some(probed_mime);
                 }
+                file.audio = Some(probe.audio);
             }
             Err(error) => {
                 file.findings.push(Finding {
@@ -641,6 +721,29 @@ fn mime_for_path(path: &str) -> Option<String> {
         _ => return None,
     };
     Some(mime.to_owned())
+}
+
+/// MIME type for a probed ffprobe container (`format_name`), restricted to
+/// the vocabulary `mime_for_path` already establishes. Content-based
+/// detection (R2.1) must not invent new MIME values: containers without an
+/// established equivalent (ape, wv, ...) yield `None` and leave any
+/// extension-derived value in place.
+fn mime_for_container(format_name: Option<&str>) -> Option<String> {
+    for name in format_name?.split(',') {
+        let mime = match name {
+            "mp3" => "audio/mpeg",
+            "flac" => "audio/flac",
+            "ogg" => "audio/ogg",
+            "aac" => "audio/aac",
+            "ac3" => "audio/ac3",
+            "wav" => "audio/wav",
+            "asf" => "audio/x-ms-wma",
+            "mov" | "mp4" | "m4a" => "audio/mp4",
+            _ => continue,
+        };
+        return Some(mime.to_owned());
+    }
+    None
 }
 
 pub(crate) fn hash_file(path: &Path) -> io::Result<(String, u64)> {
@@ -808,6 +911,7 @@ pub(crate) fn run_ffprobe_cancellable(
     cancellation: &AtomicBool,
     shutdown: Option<&AtomicBool>,
 ) -> Result<ProbeResult, String> {
+    let mut invocation = ToolInvocation::start("ffprobe", path);
     let mut child = Command::new(&options.ffprobe_path)
         .args(ffprobe_args(path))
         .stdin(Stdio::null())
@@ -862,12 +966,14 @@ pub(crate) fn run_ffprobe_cancellable(
         .map_err(|error| format!("unable to read ffprobe stderr: {error}"))?;
     let status = status?;
     if !status.success() {
+        invocation.set_outcome("exit_failure");
         return Err(format!(
             "ffprobe exited with {}: {}",
             status,
             truncate_bytes(&stderr)
         ));
     }
+    invocation.set_outcome("ok");
     let document = serde_json::from_slice::<ProbeDocument>(&stdout)
         .map_err(|error| format!("invalid ffprobe JSON: {error}"))?;
     let stream = document
@@ -890,6 +996,7 @@ pub(crate) fn run_ffprobe_cancellable(
         .iter()
         .filter(|candidate| candidate.codec_type.as_deref() == Some("audio"))
         .count();
+    let mime_type = mime_for_container(document.format.format_name.as_deref());
     Ok(ProbeResult {
         audio: AudioTechnicalObservation {
             container: document.format.format_name,
@@ -903,7 +1010,7 @@ pub(crate) fn run_ffprobe_cancellable(
             duration_ms: duration,
             stream_index: stream.index,
         },
-        mime_type: None,
+        mime_type,
         audio_stream_count: u32::try_from(audio_stream_count).unwrap_or(u32::MAX),
     })
 }
@@ -1107,6 +1214,32 @@ mod tests {
     }
 
     #[test]
+    fn probed_container_maps_to_the_established_mime_vocabulary() {
+        let cases = [
+            ("mp3", Some("audio/mpeg")),
+            ("flac", Some("audio/flac")),
+            ("ogg", Some("audio/ogg")),
+            ("aac", Some("audio/aac")),
+            ("ac3", Some("audio/ac3")),
+            ("wav", Some("audio/wav")),
+            ("asf", Some("audio/x-ms-wma")),
+            ("mov,mp4,m4a,3gp,3g2,mj2", Some("audio/mp4")),
+            // Containers without an established equivalent stay unmapped so
+            // content detection never invents new MIME values.
+            ("ape", None),
+            ("wv", None),
+        ];
+        for (format_name, expected) in cases {
+            assert_eq!(
+                mime_for_container(Some(format_name)).as_deref(),
+                expected,
+                "container {format_name}"
+            );
+        }
+        assert_eq!(mime_for_container(None), None);
+    }
+
+    #[test]
     fn byte_hash_distinguishes_same_size_content() {
         let root = temp_dir("hash");
         let left = root.join("left.bin");
@@ -1114,6 +1247,35 @@ mod tests {
         fs::write(&left, b"abcd").expect("left");
         fs::write(&right, b"abce").expect("right");
         assert_ne!(hash_file(&left).unwrap().0, hash_file(&right).unwrap().0);
+    }
+
+    /// R2.1 large-file rule: media hashing streams through a bounded buffer.
+    /// A sparse 256 MiB file (2048x the 128 KiB chunk) hashes identically to a
+    /// streamed reference, proving multi-chunk operation without materializing
+    /// the file — the same code path bounds arbitrarily large media.
+    #[test]
+    fn hashing_streams_large_files_in_bounded_chunks() {
+        const FILE_LEN: u64 = 256 * 1024 * 1024;
+        assert!(
+            FILE_LEN >= 2048 * HASH_BUFFER_SIZE as u64,
+            "fixture must span many hash chunks"
+        );
+        let root = temp_dir("streaming-hash");
+        let path = root.join("large.bin");
+        let file = fs::File::create(&path).expect("create sparse file");
+        file.set_len(FILE_LEN).expect("extend sparse file");
+        drop(file);
+
+        let (hash, bytes) = hash_file(&path).expect("hash sparse file");
+        assert_eq!(bytes, FILE_LEN);
+
+        let zero_chunk = vec![0_u8; HASH_BUFFER_SIZE];
+        let chunks = usize::try_from(FILE_LEN).expect("fixture length") / HASH_BUFFER_SIZE;
+        let mut reference = Hasher::new();
+        for _ in 0..chunks {
+            reference.update(&zero_chunk);
+        }
+        assert_eq!(hash, reference.finalize().to_hex().to_string());
     }
 
     #[test]
@@ -1299,19 +1461,20 @@ mod tests {
     }
 
     #[test]
-    fn ffprobe_format_matrix_covers_mp3_flac_ogg_and_m4a() {
+    fn ffprobe_format_matrix_covers_the_required_format_vocabulary() {
         let root = temp_dir("format-matrix");
         let cases = [
-            ("mp3", "libmp3lame", "audio/mpeg"),
-            ("flac", "flac", "audio/flac"),
-            ("ogg", "libvorbis", "audio/ogg"),
-            ("m4a", "aac", "audio/mp4"),
-            ("opus", "libopus", "audio/ogg"),
-            ("aac", "aac", "audio/aac"),
-            ("ac3", "ac3", "audio/ac3"),
-            ("wma", "wmav2", "audio/x-ms-wma"),
+            ("mp3", "libmp3lame", "mp3", "audio/mpeg"),
+            ("flac", "flac", "flac", "audio/flac"),
+            ("ogg", "libvorbis", "vorbis", "audio/ogg"),
+            ("m4a", "aac", "aac", "audio/mp4"),
+            ("opus", "libopus", "opus", "audio/ogg"),
+            ("aac", "aac", "aac", "audio/aac"),
+            ("ac3", "ac3", "ac3", "audio/ac3"),
+            ("wma", "wmav2", "wmav2", "audio/x-ms-wma"),
+            ("wav", "pcm_s16le", "pcm_s16le", "audio/wav"),
         ];
-        for (extension, codec, expected_mime) in cases {
+        for (extension, encoder, expected_codec, expected_mime) in cases {
             let case_root = root.join(extension);
             fs::create_dir_all(&case_root).expect("case root");
             let mut command = std::process::Command::new("ffmpeg");
@@ -1324,7 +1487,7 @@ mod tests {
                 "-i",
                 "sine=frequency=440:duration=0.2:sample_rate=8000",
                 "-c:a",
-                codec,
+                encoder,
             ]);
             if extension == "aac" {
                 command.args(["-f", "adts"]);
@@ -1363,7 +1526,23 @@ mod tests {
                 Some(expected_mime.to_owned()),
                 report.manifest.files[0].mime_type
             );
-            assert!(report.manifest.files[0].audio.is_some());
+            let audio = report.manifest.files[0]
+                .audio
+                .as_ref()
+                .unwrap_or_else(|| panic!("probed audio observation for {extension}"));
+            assert_eq!(
+                audio.codec.as_deref(),
+                Some(expected_codec),
+                "probed codec for {extension}"
+            );
+            let duration_ms = audio
+                .duration_ms
+                .unwrap_or_else(|| panic!("duration observed for {extension}"));
+            assert!(
+                (50..=2_000).contains(&duration_ms),
+                "duration {duration_ms} ms implausible for the 0.2 s {extension} fixture"
+            );
+            assert_eq!(audio.stream_count, Some(1), "stream count for {extension}");
             if extension == "mp3" {
                 let metadata = report.manifest.files[0]
                     .metadata

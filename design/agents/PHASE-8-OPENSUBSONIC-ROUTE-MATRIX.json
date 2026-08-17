@@ -2959,7 +2959,14 @@
           "apps/melodee-server/tests/opensubsonic_media_api.rs::stream_invalid_range_returns_404_error_70",
           "apps/melodee-server/tests/opensubsonic_media_api.rs::stream_unsatisfiable_range_returns_404_error_70",
           "apps/melodee-server/tests/opensubsonic_media_api.rs::stream_time_offset_returns_404_error_70",
-          "apps/melodee-server/tests/opensubsonic_media_api.rs::stream_max_bitrate_and_format_are_ignored",
+          "apps/melodee-server/tests/opensubsonic_media_api.rs::stream_format_raw_and_high_max_bitrate_stays_direct_play",
+          "apps/melodee-server/tests/opensubsonic_media_api.rs::stream_format_mp3_transcodes_with_configured_template",
+          "apps/melodee-server/tests/opensubsonic_media_api.rs::stream_max_bitrate_below_source_transcodes_mp3_at_cap",
+          "apps/melodee-server/tests/opensubsonic_media_api.rs::stream_range_header_is_ignored_on_transcoded_requests",
+          "apps/melodee-server/tests/opensubsonic_media_api.rs::stream_unsupported_format_returns_error0_envelope",
+          "apps/melodee-server/tests/opensubsonic_media_api.rs::stream_transcode_rejected_when_transcoding_disabled",
+          "apps/melodee-server/tests/opensubsonic_media_api.rs::stream_malformed_template_fails_closed",
+          "apps/melodee-server/tests/opensubsonic_media_api.rs::download_format_aac_transcodes_and_swaps_attachment_extension",
           "apps/melodee-server/tests/opensubsonic_media_api.rs::stream_unknown_song_redirects_credential_free_302"
         ]
       }

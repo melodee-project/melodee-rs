@@ -67,6 +67,7 @@ async fn state(db: &common::TestDb) -> JfState {
         token_expiry_hours: 168,
         max_active_tokens: 10,
         direct_play: None,
+        transcoding: None,
         client_addresses: melodee_server::native_stream::ClientAddressResolver::default(),
         search: None,
         libraries: Vec::new(),

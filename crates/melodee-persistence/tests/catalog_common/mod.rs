@@ -295,6 +295,7 @@ async fn seed_published_release_with_options_full(
             bitrate_bps: Some(192_000),
             duration_ms: 180_000,
             retained: false,
+            segment: None,
             findings: Vec::new(),
         }],
         fingerprints: vec![FingerprintObservation {

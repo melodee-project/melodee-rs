@@ -20,6 +20,8 @@
 
 use std::{future::Future, pin::Pin, sync::Arc};
 
+use crate::resource_bounds::ResourceGauge;
+
 use lettre::{
     AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor,
     message::{Mailbox, MultiPart, SinglePart},
@@ -32,6 +34,7 @@ use melodee_persistence::{
 use sqlx::PgPool;
 use thiserror::Error;
 use time::OffsetDateTime;
+use tracing::Instrument as _;
 
 /// Environment keys (the complete email set this module honors), mirroring
 /// the legacy `email.*` group in
@@ -467,7 +470,19 @@ impl NotificationTransport for NoopTransport {
 pub struct NotificationService {
     pool: PgPool,
     transport: Arc<dyn NotificationTransport>,
+    /// Process bound on concurrent SMTP round-trips (R2.4, PRD-INGEST-009).
+    /// Dispatches queue on this semaphore instead of spawning an unbounded
+    /// number of outbound deliveries; the durable audit row is written by
+    /// `send_templated` after the send attempt, so a queued dispatch is never
+    /// lost work — the send still runs once admitted.
+    permits: Arc<tokio::sync::Semaphore>,
+    gauge: Option<Arc<crate::resource_bounds::ResourceGauge>>,
 }
+
+/// Fixed dispatch capacity for outbound email (R2.4). Four concurrent SMTP
+/// round-trips (each bounded by `SMTP_TIMEOUT`) cap relay load while keeping
+/// password-reset latency negligible at any realistic dispatch rate.
+const NOTIFICATION_DISPATCH_CONCURRENCY: usize = 4;
 
 impl std::fmt::Debug for NotificationService {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -486,6 +501,12 @@ impl NotificationService {
             Ok(Self {
                 pool,
                 transport: Arc::new(SmtpTransport::new(settings)?),
+                permits: Arc::new(tokio::sync::Semaphore::new(
+                    NOTIFICATION_DISPATCH_CONCURRENCY,
+                )),
+                gauge: crate::resource_bounds::ResourceBounds::global().map(|registry| {
+                    registry.register("notifications.dispatch", NOTIFICATION_DISPATCH_CONCURRENCY)
+                }),
             })
         } else {
             Ok(Self::noop(pool))
@@ -498,6 +519,12 @@ impl NotificationService {
         Self {
             pool,
             transport: Arc::new(NoopTransport),
+            permits: Arc::new(tokio::sync::Semaphore::new(
+                NOTIFICATION_DISPATCH_CONCURRENCY,
+            )),
+            gauge: crate::resource_bounds::ResourceBounds::global().map(|registry| {
+                registry.register("notifications.dispatch", NOTIFICATION_DISPATCH_CONCURRENCY)
+            }),
         }
     }
 
@@ -599,27 +626,58 @@ impl NotificationService {
         placeholders: Vec<(String, String)>,
     ) {
         let service = Arc::clone(self);
-        tokio::spawn(async move {
-            match service
-                .send_templated(template_key, DEFAULT_LOCALE, &recipient, &placeholders)
-                .await
-            {
-                Ok(delivery) => match delivery.status.as_str() {
-                    // A skip with delivery disabled is the expected steady
-                    // state on unconfigured servers, not an alarm.
-                    status if status == DeliveryStatus::Skipped.as_str() => {
-                        tracing::info!(template_key, "notification delivery skipped");
+        // R2.5: capture the in-flight request's correlation id before the
+        // spawn crosses the task boundary; never log the recipient's address
+        // or template content beyond the stable key.
+        let correlation_id = crate::correlation::current();
+        let span = tracing::info_span!(
+            "notification_dispatch",
+            template_key,
+            correlation_id = tracing::field::Empty,
+        );
+        if let Some(id) = correlation_id {
+            span.record("correlation_id", tracing::field::display(id));
+        }
+        tokio::spawn(
+            async move {
+                // Queue on the process dispatch bound before touching the relay:
+                // cancellation of this task while waiting simply never admits.
+                if let Some(gauge) = &service.gauge {
+                    gauge.begin_wait();
+                }
+                let admission = service.permits.clone().acquire_owned().await;
+                let _admission = match admission {
+                    Ok(permit) => Some((permit, service.gauge.as_ref().map(ResourceGauge::admit))),
+                    Err(error) => {
+                        if let Some(gauge) = &service.gauge {
+                            gauge.wait_failed();
+                        }
+                        let _ = error;
+                        None
                     }
-                    status if status == DeliveryStatus::Failed.as_str() => {
-                        tracing::warn!(template_key, "notification delivery failed");
+                };
+                match service
+                    .send_templated(template_key, DEFAULT_LOCALE, &recipient, &placeholders)
+                    .await
+                {
+                    Ok(delivery) => match delivery.status.as_str() {
+                        // A skip with delivery disabled is the expected steady
+                        // state on unconfigured servers, not an alarm.
+                        status if status == DeliveryStatus::Skipped.as_str() => {
+                            tracing::info!(template_key, "notification delivery skipped");
+                        }
+                        status if status == DeliveryStatus::Failed.as_str() => {
+                            tracing::warn!(template_key, "notification delivery failed");
+                        }
+                        _ => {}
+                    },
+                    Err(error) => {
+                        tracing::warn!(%error, template_key, "notification delivery audit failed");
                     }
-                    _ => {}
-                },
-                Err(error) => {
-                    tracing::warn!(%error, template_key, "notification delivery audit failed");
                 }
             }
-        });
+            .instrument(span),
+        );
     }
 }
 
@@ -732,5 +790,68 @@ mod tests {
         let rendered = format!("{settings:?}");
         assert!(!rendered.contains("super-secret-password"));
         assert!(rendered.contains("<redacted>"));
+    }
+
+    /// R2.5 redaction audit: a failing delivery must never write the SMTP
+    /// password into the log stream, regardless of the transport error text.
+    #[tokio::test]
+    async fn delivery_failure_logs_never_contain_the_smtp_password() {
+        use std::sync::Mutex;
+
+        #[derive(Clone, Default)]
+        struct Capture(Arc<Mutex<Vec<u8>>>);
+        impl std::io::Write for Capture {
+            fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+                self.0
+                    .lock()
+                    .expect("capture lock")
+                    .extend_from_slice(bytes);
+                Ok(bytes.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        struct MakeCapture(Capture);
+        impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for MakeCapture {
+            type Writer = Capture;
+            fn make_writer(&self) -> Self::Writer {
+                self.0.clone()
+            }
+        }
+
+        let capture = Capture::default();
+        let subscriber = tracing_subscriber::fmt()
+            .with_writer(MakeCapture(capture.clone()))
+            .with_ansi(false)
+            .with_max_level(tracing::Level::TRACE)
+            .finish();
+        let _guard = tracing::subscriber::set_default(subscriber);
+
+        const SECRET: &str = "r2-5-redaction-sentinel-password";
+        let settings = EmailSettings {
+            smtp_host: "127.0.0.1".to_string(),
+            smtp_port: 1,
+            smtp_username: "operator".to_string(),
+            smtp_password: SECRET.to_string(),
+            from_email: "melodee@example.test".to_string(),
+            ..EmailSettings::default()
+        };
+        let transport = SmtpTransport::new(&settings).expect("transport builds");
+        let message = OutgoingMessage {
+            to: "user@example.test".to_string(),
+            subject: "subject".to_string(),
+            body_text: Some("body".to_string()),
+            body_html: None,
+        };
+        let outcome = NotificationTransport::send(&transport, &message).await;
+        assert!(outcome.is_err(), "port 1 must refuse the connection");
+
+        let logged =
+            String::from_utf8(capture.0.lock().expect("capture lock").clone()).expect("utf8 logs");
+        assert!(
+            !logged.contains(SECRET),
+            "log stream leaked the SMTP password: {logged}"
+        );
     }
 }

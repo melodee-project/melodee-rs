@@ -195,6 +195,13 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let _ = dotenvy::dotenv();
     init_tracing()?;
 
+    // R2.4: install the process bounded-resource registry before any
+    // instrumented service is constructed (several resolve the global
+    // registry at construction). Purely observational; admission behavior
+    // is unchanged.
+    let resource_bounds = melodee_server::resource_bounds::ResourceBounds::new();
+    melodee_server::resource_bounds::ResourceBounds::install_global(resource_bounds.clone());
+
     let database_url = database_url();
     let db_pool_config = DatabasePoolConfig::from_env()?;
     let pool = db_pool_config.pool_options().connect(&database_url).await?;
@@ -408,13 +415,49 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .as_ref()
         .map(|roots| native_stream::CanonicalAssetRoot::open(&roots.storage_root))
         .transpose()?
-        .and_then(|root| native_stream::DirectPlayService::new(root, stream_concurrency));
+        .and_then(|root| native_stream::DirectPlayService::new(root, stream_concurrency))
+        .map(|service| {
+            service.with_gauge(
+                resource_bounds.register("streams.direct_play", stream_concurrency.max(1)),
+            )
+        });
+    // ADR-0147 decision 5: transcoding capacity is bounded independently of
+    // direct-play concurrency; 0 disables transcoding (fail closed on
+    // transcode requests, direct play unaffected).
+    let transcode_concurrency = {
+        let resolved = settings_resolver
+            .resolve("transcoding.maxConcurrent")
+            .await
+            .map_err(|error| format!("invalid transcoding configuration: {error}"))?;
+        match resolved.value.as_ref().and_then(serde_json::Value::as_u64) {
+            Some(value) => usize::try_from(value)
+                .map_err(|_| "transcoding.maxConcurrent exceeds platform usize")?,
+            None => 4,
+        }
+    };
+    let transcoding = publication_roots
+        .as_ref()
+        .map(|roots| native_stream::CanonicalAssetRoot::open(&roots.storage_root))
+        .transpose()?
+        .and_then(|root| {
+            melodee_server::transcode::TranscodingService::new(
+                root,
+                pool.clone(),
+                transcode_concurrency,
+            )
+        })
+        .map(|service| {
+            service.with_gauge(
+                resource_bounds.register("streams.transcoding", transcode_concurrency.max(1)),
+            )
+        });
     let opensubsonic_state = opensubsonic::OsState::from_env(
         pool.clone(),
         public_origin.clone(),
         &ingestion_config,
         podcast_config.enabled,
         direct_play.clone(),
+        transcoding.clone(),
         native_stream::ClientAddressResolver::new(trusted_proxies.clone()),
         search_config.enabled.then_some(search_config.clone()),
     )?;
@@ -430,6 +473,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         token_expiry_hours: jellyfin::token_expiry_hours_from_env()?,
         max_active_tokens: 10,
         direct_play: direct_play.clone(),
+        transcoding: transcoding.clone(),
         client_addresses: native_stream::ClientAddressResolver::new(
             env::var("MELODEE__NATIVE__TRUSTED_PROXIES")
                 .unwrap_or_default()
@@ -489,7 +533,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let admin_system_state = melodee_server::admin_system::AdminSystemState::new(
         admin_access_state.clone(),
         search_config.enabled.then_some(search_config.clone()),
-    );
+    )
+    .with_resource_bounds(resource_bounds.clone());
     // WP-15 catalog surface: the shared read-only signer issues admin
     // preview URLs on the frozen native stream route (PRD-UI-007); the
     // resolver mirrors the native trusted-proxy rules so issued tokens
@@ -535,6 +580,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         // bare-root probe), so it is an outer layer, matching the captured
         // ASP.NET pipeline placement (ADR-0131).
         .layer(axum::middleware::from_fn(jellyfin::routing_middleware))
+        // R2.5 correlation sourcing runs inside the TraceLayer span (added
+        // first, so the layer wraps it) so the span recording lands.
+        .layer(axum::middleware::from_fn(melodee_server::correlation::middleware))
         .layer(TraceLayer::new_for_http().make_span_with(melodee_server::make_http_span));
 
     // Case-insensitive Jellyfin route matching (legacy ASP.NET matched route

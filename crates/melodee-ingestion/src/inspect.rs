@@ -8,7 +8,7 @@ use melodee_media::{InspectionError, InspectionOptions, inspect_release};
 use melodee_persistence::{WorkEngineConfig, WorkItemStore, WorkerId};
 use sqlx::PgPool;
 use tokio::time::{self, Duration as TokioDuration};
-use tracing::{error, info, warn};
+use tracing::{Instrument as _, error, info, warn};
 
 use crate::{
     AcquisitionError, IngestionConfig, acquire_owned_source,
@@ -55,6 +55,13 @@ pub async fn inspect_ready_once(
     };
 
     for item in items {
+        // R2.5: every event inside the item boundary inherits both the
+        // work-item id and the durable correlation id from this span.
+        let span = tracing::info_span!(
+            "inspect_work_item",
+            work_item_id = %item.id,
+            correlation_id = %item.correlation_id,
+        );
         match inspect_one(
             ingestion,
             store,
@@ -65,6 +72,7 @@ pub async fn inspect_ready_once(
             now,
             gate,
         )
+        .instrument(span)
         .await
         {
             Ok(InspectionOutcome::Published) => stats.completed += 1,

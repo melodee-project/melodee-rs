@@ -166,6 +166,17 @@ pub struct ManifestInspectionContext {
 ///
 /// All paths are relative to the work-area staging directory; they are NOT
 /// canonical storage paths (Phase 3.3 publishes canonical paths).
+/// Identity of one CUE-defined segment of a governed source audio file
+/// (ADR-0146). The segment is generated into the attempt-isolated work area;
+/// the staged original is never modified.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CueSegmentIdentity {
+    /// Source-relative path of the governing CUE sidecar.
+    pub cue: String,
+    /// CUE TRACK number as authored (not re-sequenced).
+    pub track: u32,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct NormalizedOutput {
     /// Source-relative path of the original audio file.
@@ -184,7 +195,25 @@ pub struct NormalizedOutput {
     pub duration_ms: u64,
     /// True when the source was already canonical MP3 and was copied, not re-encoded.
     pub retained: bool,
+    /// CUE segment identity when this output is one track of a CUE-governed
+    /// source (ADR-0146); absent for whole-file outputs.
+    pub segment: Option<CueSegmentIdentity>,
     pub findings: Vec<Finding>,
+}
+
+impl NormalizedOutput {
+    /// Logical Track key joining normalized outputs, manifest Tracks, and
+    /// canonical assets: the source path for whole-file outputs, or the
+    /// deterministic segment pseudo-path `<source>#cue-track-NN` for CUE
+    /// segments (ADR-0146). The pseudo-path is logical identity evidence,
+    /// never a filesystem location.
+    #[must_use]
+    pub fn track_key(&self) -> String {
+        match &self.segment {
+            Some(segment) => format!("{}#cue-track-{:02}", self.source_file, segment.track),
+            None => self.source_file.clone(),
+        }
+    }
 }
 
 /// Acoustic fingerprint observation for one audio file (PRD-FP-003).

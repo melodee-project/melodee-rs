@@ -16,8 +16,14 @@
 //!   headers no body. Single-pass ranges return 206 with correct bytes and
 //!   correct `Content-Range: bytes start-end/{full_size}` total. Invalid/
 //!   unsatisfiable ranges and `timeOffset` → 404 + error 70 JSON (the legacy
-//!   416 path is unreachable). `maxBitRate`/`format` silently ignored. Unknown
-//!   song id → 302 credential-free class.
+//!   416 path is unreachable). Unknown song id → 302 credential-free class.
+//!   `maxBitRate`/`format` honor configured transcoding (ADR-0147, which
+//!   supersedes the ADR-0130 silent-ignore clause): absent/`raw` without a
+//!   bitrate trigger keeps byte-identical direct play; a supported format or
+//!   bitrate trigger streams FFmpeg output (200, format Content-Type, no
+//!   Content-Length/ETag/Content-Range; Range ignored); unsupported formats
+//!   and template/capacity failures answer the generic error-0 envelope at
+//!   HTTP 200.
 //! - **download:** gated by `state.downloads_enabled`; 200 with
 //!   `Content-Disposition: attachment; filename=...`; unknown → 302
 //!   credential-free.
@@ -49,6 +55,7 @@ use super::{
     params::Params,
 };
 use crate::native_stream::{PlayableAsset, StreamError};
+use crate::transcode::{OutputFormat, TranscodeError, TranscodeTemplate};
 
 fn format_of(params: &Option<Extension<Params>>) -> Format {
     params
@@ -128,6 +135,155 @@ async fn resolve_playable(
 fn content_duration_header(duration_ms: i64) -> String {
     let seconds = (duration_ms as f64) / 1000.0;
     format!("{seconds:.1}")
+}
+
+/// ADR-0147 decision 3 stream/download plan.
+enum OsStreamPlan {
+    /// No transcode requested (or the bitrate cap already covers the source):
+    /// the captured direct-play path runs byte-identically.
+    Direct,
+    /// Fail closed: unsupported format value, missing/unparseable template,
+    /// or transcoding disabled. Rendered as the generic error-0 envelope at
+    /// HTTP 200 — a new failure class recorded by ADR-0147.
+    Reject(&'static str),
+    /// Configured transcode: FFmpeg output at `bitrate_kbps`.
+    Transcode {
+        format: OutputFormat,
+        template: TranscodeTemplate,
+        bitrate_kbps: u32,
+    },
+}
+
+/// Effective source bitrate in kbps derived from catalog size/duration
+/// (`bytes * 8 / ms` ≡ kbit/s). `None` when duration is unknown, which the
+/// bitrate-cap rule treats as lossless (ADR-0147 decision 3).
+fn source_bitrate_kbps(byte_size: u64, duration_ms: i64) -> Option<u32> {
+    if duration_ms <= 0 {
+        return None;
+    }
+    let kbps = byte_size.saturating_mul(8) / u64::try_from(duration_ms).ok()?;
+    Some(u32::try_from(kbps).unwrap_or(u32::MAX))
+}
+
+/// Resolves the ADR-0147 decision 3 plan from `format`/`maxBitRate`.
+/// `format` absent or `raw` with no bitrate trigger → direct play; a
+/// supported format transcodes at `min(maxBitRate, template bitrate)` when
+/// `maxBitRate > 0`, else at the template bitrate; `maxBitRate` alone
+/// transcodes with the mp3 template at the cap only when the source bitrate
+/// is unknown or exceeds it.
+async fn resolve_stream_plan(state: &OsState, params: &Params, row: &PlayableRow) -> OsStreamPlan {
+    let max_bit_rate = params
+        .get("maxBitRate")
+        .and_then(|value| value.parse::<u32>().ok())
+        .filter(|rate| *rate > 0);
+    let requested = match params.get("format") {
+        None => None,
+        Some(tag) if tag.trim().eq_ignore_ascii_case("raw") => None,
+        Some(tag) => match OutputFormat::parse_tag(tag) {
+            Some(format) => Some(format),
+            None => return OsStreamPlan::Reject("Unsupported format."),
+        },
+    };
+    match (requested, max_bit_rate) {
+        // Explicit format: a requested cap is bounded by the template default.
+        (Some(format), cap) => transcode_plan(state, format, cap, true).await,
+        (None, None) => OsStreamPlan::Direct,
+        (None, Some(cap)) => {
+            match source_bitrate_kbps(row.asset.byte_size, row.duration_ms) {
+                Some(kbps) if kbps <= cap => OsStreamPlan::Direct,
+                // Unknown (lossless) or above the cap: mp3 template at exactly
+                // the requested cap.
+                _ => transcode_plan(state, OutputFormat::Mp3, Some(cap), false).await,
+            }
+        }
+    }
+}
+
+async fn transcode_plan(
+    state: &OsState,
+    format: OutputFormat,
+    requested_bitrate: Option<u32>,
+    cap_to_template: bool,
+) -> OsStreamPlan {
+    let Some(service) = &state.transcoding else {
+        return OsStreamPlan::Reject("Transcoding is not available.");
+    };
+    match service.template(format).await {
+        Ok(template) => {
+            let bitrate_kbps = match (requested_bitrate, cap_to_template) {
+                (Some(requested), true) => requested.min(template.bitrate_kbps),
+                (Some(requested), false) => requested,
+                (None, _) => template.bitrate_kbps,
+            };
+            OsStreamPlan::Transcode {
+                format,
+                template,
+                bitrate_kbps,
+            }
+        }
+        Err(error) => {
+            tracing::warn!(%error, ?format, "opensubsonic transcode template unavailable");
+            OsStreamPlan::Reject("Transcoding is not available.")
+        }
+    }
+}
+
+/// ADR-0147 decision 3: transcode request failures use the generic error-0
+/// envelope at HTTP 200 (a new failure class; no captured contract exists).
+fn stream_error(state: &OsState, params: &Option<Extension<Params>>, message: &str) -> Response {
+    OsReply::error(0, message).respond(&format_of(params), &state.server_version, StatusCode::OK)
+}
+
+/// Streams a configured transcode (shared by stream.view/download.view).
+/// HTTP 200 with the format's Content-Type; no Content-Length, ETag, or
+/// Content-Range (the output length is unknowable and Range headers are
+/// ignored on transcoded requests); the direct-play no-store/CORS/
+/// Content-Duration headers are preserved.
+async fn transcode_response(
+    state: &OsState,
+    params: &Option<Extension<Params>>,
+    row: &PlayableRow,
+    format: OutputFormat,
+    template: &TranscodeTemplate,
+    bitrate_kbps: u32,
+) -> Response {
+    let Some(service) = &state.transcoding else {
+        return stream_error(state, params, "Transcoding is not available.");
+    };
+    match service
+        .stream(&row.asset, format, template, bitrate_kbps)
+        .await
+    {
+        Ok(body) => {
+            let mut response = (StatusCode::OK, body).into_response();
+            if let Ok(value) = HeaderValue::from_str(format.content_type()) {
+                response.headers_mut().insert(header::CONTENT_TYPE, value);
+            }
+            let headers = response.headers_mut();
+            headers.insert(
+                header::CACHE_CONTROL,
+                HeaderValue::from_static("no-store, must-revalidate, no-cache, max-age=0"),
+            );
+            headers.insert(
+                header::EXPIRES,
+                HeaderValue::from_static("Mon, 01 Jan 1990 00:00:00 GMT"),
+            );
+            headers.insert(
+                header::ACCESS_CONTROL_ALLOW_ORIGIN,
+                HeaderValue::from_static("*"),
+            );
+            if let Ok(value) = HeaderValue::from_str(&content_duration_header(row.duration_ms)) {
+                headers.insert(header::HeaderName::from_static("content-duration"), value);
+            }
+            response
+        }
+        // Missing/invalid asset keeps the captured 404 + error 70 class.
+        Err(TranscodeError::AssetUnavailable) => stream_not_found(state, params),
+        Err(error) => {
+            tracing::warn!(%error, ?format, "opensubsonic transcode stream failed");
+            stream_error(state, params, "Transcoding failed.")
+        }
+    }
 }
 
 /// Builds the captured stream/download response headers shared by GET and
@@ -240,7 +396,6 @@ async fn stream_impl(
     let Some(EntityRef::Track(track_public_id)) = parse_prefixed_id(raw_id) else {
         return stream_not_found(state, params);
     };
-    // `maxBitRate`/`format` are silently ignored (no transcoding exists).
     let row = match resolve_playable(&state.pool, track_public_id).await {
         Ok(row) => row,
         Err(error) => {
@@ -251,6 +406,18 @@ async fn stream_impl(
     let Some(row) = row else {
         return redirect_to_error(state);
     };
+    // ADR-0147 decision 3: honor `format`/`maxBitRate` when present.
+    match resolve_stream_plan(state, params_ref, &row).await {
+        OsStreamPlan::Direct => {}
+        OsStreamPlan::Reject(message) => return stream_error(state, params, message),
+        OsStreamPlan::Transcode {
+            format,
+            template,
+            bitrate_kbps,
+        } => {
+            return transcode_response(state, params, &row, format, &template, bitrate_kbps).await;
+        }
+    }
     let Some(direct_play) = &state.direct_play else {
         tracing::error!("opensubsonic stream requested but direct_play is unconfigured");
         return stream_not_found(state, params);
@@ -351,6 +518,35 @@ async fn download_impl(
     let Some(row) = row else {
         return redirect_to_error(state);
     };
+    // ADR-0147 decision 3: honor `format`/`maxBitRate` when present.
+    match resolve_stream_plan(state, params_ref, &row).await {
+        OsStreamPlan::Direct => {}
+        OsStreamPlan::Reject(message) => return stream_error(state, params, message),
+        OsStreamPlan::Transcode {
+            format,
+            template,
+            bitrate_kbps,
+        } => {
+            let mut response =
+                transcode_response(state, params, &row, format, &template, bitrate_kbps).await;
+            if response.status() == StatusCode::OK {
+                // Transcoded downloads keep `Content-Disposition: attachment`
+                // with the basename's extension replaced by the target
+                // format's (ADR-0147 decision 3).
+                let basename = download_basename(row.source_path.as_deref());
+                let stem = basename
+                    .rsplit_once('.')
+                    .map_or(basename.as_str(), |(stem, _)| stem);
+                if let Some(value) = content_disposition(&format!("{stem}.{}", format.extension()))
+                {
+                    response
+                        .headers_mut()
+                        .insert(header::CONTENT_DISPOSITION, value);
+                }
+            }
+            return response;
+        }
+    }
     let Some(direct_play) = &state.direct_play else {
         tracing::error!("opensubsonic download requested but direct_play is unconfigured");
         return stream_not_found(state, params);

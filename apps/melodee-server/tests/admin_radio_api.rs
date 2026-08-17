@@ -262,6 +262,7 @@ fn os_state(pool: sqlx::PgPool) -> OsState {
         downloads_enabled: true,
         jukebox_enabled: false,
         direct_play: None,
+        transcoding: None,
         client_addresses: melodee_server::native_stream::ClientAddressResolver::default(),
         search: None,
     }

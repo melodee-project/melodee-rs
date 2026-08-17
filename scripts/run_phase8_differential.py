@@ -106,6 +106,13 @@ SCENARIO_GROUPS = {
 # (scenario name prefix, difference field substring, justification). Anything
 # not matching an entry fails the run.
 KNOWN_DIFFERENCES: list[tuple[str, str, str]] = [
+    # ADR-0147 supersedes the ADR-0130 silent-ignore clause (decision 2) and
+    # the Jellyfin 400 transcode rejection (decision 4): both frozen goldens
+    # are retained as historical evidence while the current server honors
+    # configured transcoding (200 FFmpeg output / error-0 envelope).
+    ("os-stream-maxbitrate-ignored", "", "ADR-0147: maxBitRate=64 on a 705 kbps WAV source now transcodes to mp3 at the cap; frozen silent-ignore golden is historical"),
+    ("jf-playback/stream-extension-no-static", "", "ADR-0147: stream.{container} without static=true now honors configured transcoding; frozen 400 rejection golden is historical"),
+
     # The Rust catalog has no durable artwork storage yet; catalog entities
     # serve the captured no-artwork 404 classes. The 200/304 image paths the
     # legacy fixture produced are the documented Phase 8 evidence gap

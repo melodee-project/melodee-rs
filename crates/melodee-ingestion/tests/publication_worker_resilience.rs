@@ -187,6 +187,7 @@ async fn seed_validating_item(database: &common::TestDb, roots: &FixtureRoots) -
             bitrate_bps: Some(192_000),
             duration_ms: 1_000,
             retained: false,
+            segment: None,
             findings: Vec::new(),
         }],
         fingerprints: vec![FingerprintObservation {

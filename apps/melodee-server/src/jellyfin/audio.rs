@@ -6,9 +6,10 @@
 //!
 //! - Streaming requires `HasStreamRole` (403 "Streaming permission required.");
 //!   download requires `HasDownloadRole` (403 "Download permission required.").
-//! - Transcoding requests are rejected: `static != true` with a container or
-//!   bitrate parameter → 400 "Transcoding is not supported. Use static=true
-//!   for direct streaming."; `/universal` forces `static=true`.
+//! - Transcoding requests are honored (ADR-0147, superseding the captured
+//!   400 rejection): `static != true` with a container or bitrate parameter
+//!   streams configured FFmpeg output; `/universal` forces `static=true`
+//!   (unchanged captured direct play).
 //! - Range handling is the captured manual parser: 206 with
 //!   `Content-Range: bytes start-end/len`; 416 with the ProblemDetails body;
 //!   `Content-Range: bytes */len` is only attached for out-of-range starts
@@ -33,9 +34,12 @@ use uuid::Uuid;
 use super::JfState;
 use super::auth::resolve_token;
 use super::browse::{db_failure, has_role, json_response, load_song, raw_query};
-use super::error::{bad_request, not_found, range_not_satisfiable, unauthorized};
+use super::error::{
+    bad_request, not_found, range_not_satisfiable, service_unavailable, unauthorized,
+};
 use super::model;
 use crate::native_stream::PlayableAsset;
+use crate::transcode::{OutputFormat, TranscodeError};
 
 const MAX_LYRIC_BYTES: u64 = 2 * 1024 * 1024;
 
@@ -258,15 +262,25 @@ async fn stream(
         return not_found("Audio file not found.");
     }
 
-    // Captured transcode rejection: container/bitrate without static=true.
-    if !request.static_flag
-        && (request.audio_bit_rate.is_some()
-            || request
-                .container
-                .as_deref()
-                .is_some_and(|container| !container.trim().is_empty()))
-    {
-        return bad_request("Transcoding is not supported. Use static=true for direct streaming.");
+    // ADR-0147 decision 4: container/bitrate without static=true transcodes
+    // (the captured 400 rejection is retired). static=true and /universal
+    // keep the captured direct-play path byte-identical.
+    if !request.static_flag {
+        let container = request
+            .container
+            .as_deref()
+            .map(str::trim)
+            .filter(|container| !container.is_empty());
+        if request.audio_bit_rate.is_some() || container.is_some() {
+            return transcode_stream(
+                &state,
+                &asset,
+                container,
+                request.audio_bit_rate.as_deref(),
+                &method,
+            )
+            .await;
+        }
     }
 
     let content_type = content_type_for_path(&asset.canonical_relative_path);
@@ -329,6 +343,67 @@ async fn stream(
     );
     append_header(&mut response, header::ACCEPT_RANGES, "bytes");
     response
+}
+
+/// ADR-0147 decision 4 transcoding path. `container` (route extension or
+/// query) maps mp3/aac/opus to the configured template and defaults to mp3
+/// when absent; an unsupported container answers 400 "Unsupported
+/// transcoding container." (the retired rejection message is not reused).
+/// `audioBitRate` is bits per second (Jellyfin convention) and overrides the
+/// template bitrate as `audioBitRate / 1000` kbps. HEAD answers headers only
+/// and spawns no FFmpeg process. Transcoded responses carry the target
+/// Content-Type with no Content-Length/Accept-Ranges (unseekable output).
+async fn transcode_stream(
+    state: &JfState,
+    asset: &PlayableAsset,
+    container: Option<&str>,
+    audio_bit_rate: Option<&str>,
+    method: &axum::http::Method,
+) -> Response {
+    let format = match container {
+        None => OutputFormat::Mp3,
+        Some(tag) => match OutputFormat::parse_tag(tag) {
+            Some(format) => format,
+            None => return bad_request("Unsupported transcoding container."),
+        },
+    };
+    let Some(service) = &state.transcoding else {
+        return service_unavailable("Transcoding is not available.");
+    };
+    let template = match service.template(format).await {
+        Ok(template) => template,
+        Err(error) => {
+            tracing::warn!(%error, ?format, "jellyfin transcode template unavailable");
+            return service_unavailable("Transcoding is not available.");
+        }
+    };
+    let bitrate_kbps = audio_bit_rate
+        .and_then(|raw| raw.parse::<u64>().ok())
+        .map(|bits_per_second| bits_per_second / 1000)
+        .filter(|kbps| *kbps > 0)
+        .and_then(|kbps| u32::try_from(kbps).ok())
+        .unwrap_or(template.bitrate_kbps);
+    if method == axum::http::Method::HEAD {
+        let mut response = StatusCode::OK.into_response();
+        append_header(&mut response, header::CONTENT_TYPE, format.content_type());
+        return response;
+    }
+    match service.stream(asset, format, &template, bitrate_kbps).await {
+        Ok(body) => {
+            let mut response = (StatusCode::OK, body).into_response();
+            append_header(&mut response, header::CONTENT_TYPE, format.content_type());
+            response
+        }
+        // Missing/invalid asset keeps the captured missing-file 404 class.
+        Err(TranscodeError::AssetUnavailable) => not_found("Audio file not found."),
+        Err(TranscodeError::CapacityExhausted) => {
+            service_unavailable("Transcoding capacity exhausted.")
+        }
+        Err(error) => {
+            tracing::warn!(%error, ?format, "jellyfin transcode stream failed");
+            service_unavailable("Transcoding failed.")
+        }
+    }
 }
 
 /// Parses one LRC line with the captured regex semantics

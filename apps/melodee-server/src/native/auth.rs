@@ -606,7 +606,7 @@ fn auth_error(code: &'static str, message: &'static str) -> Response {
         Json(AuthErrorBody {
             code,
             message,
-            correlation_id: Uuid::now_v7(),
+            correlation_id: crate::correlation::envelope_id(),
         }),
     )
         .into_response()
@@ -618,7 +618,7 @@ fn bad_request(code: &'static str, message: &'static str) -> Response {
         Json(AuthErrorBody {
             code,
             message,
-            correlation_id: Uuid::now_v7(),
+            correlation_id: crate::correlation::envelope_id(),
         }),
     )
         .into_response()
@@ -640,7 +640,7 @@ fn account_unavailable(user: &StoredNativeUser) -> Option<Response> {
             Json(AuthErrorBody {
                 code,
                 message,
-                correlation_id: Uuid::now_v7(),
+                correlation_id: crate::correlation::envelope_id(),
             }),
         )
             .into_response(),
@@ -686,7 +686,7 @@ async fn enforce_auth_rate(
                 Json(AuthErrorBody {
                     code: "TOO_MANY_REQUESTS",
                     message: "Rate limit exceeded. Please try again later.",
-                    correlation_id: Uuid::now_v7(),
+                    correlation_id: crate::correlation::envelope_id(),
                 }),
             )
                 .into_response();
@@ -830,7 +830,7 @@ async fn link_google(
                 Json(AuthErrorBody {
                     code: "google_already_linked",
                     message: "Google account is already linked",
-                    correlation_id: Uuid::now_v7(),
+                    correlation_id: crate::correlation::envelope_id(),
                 }),
             )
                 .into_response();
@@ -870,7 +870,7 @@ async fn link_google(
                 Json(AuthErrorBody {
                     code: "google_already_linked",
                     message: "Google account is already linked",
-                    correlation_id: Uuid::now_v7(),
+                    correlation_id: crate::correlation::envelope_id(),
                 }),
             )
                 .into_response()
@@ -898,7 +898,7 @@ async fn unlink_google(
                 // Frozen native-v1 concatenated the resource label with its
                 // generic not-found suffix. Preserve the client-visible bug.
                 message: "Google account is not linked not found",
-                correlation_id: Uuid::now_v7(),
+                correlation_id: crate::correlation::envelope_id(),
             }),
         )
             .into_response(),
@@ -1147,7 +1147,7 @@ async fn verified_google_user(
             Json(AuthErrorBody {
                 code: "google_account_not_linked",
                 message: "Google account is not linked. Please log in with password and link your Google account.",
-                correlation_id: Uuid::now_v7(),
+                correlation_id: crate::correlation::envelope_id(),
             }),
         )
             .into_response()),

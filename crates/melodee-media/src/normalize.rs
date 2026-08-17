@@ -6,7 +6,7 @@
 //! to the work-area directory to prevent path traversal.
 
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fs::{self, File},
     path::{Component, Path, PathBuf},
     process::{Command, Stdio},
@@ -17,10 +17,11 @@ use std::{
 };
 
 use melodee_domain::{
-    CANONICAL_MP3_PROFILE_VERSION, CURRENT_MANIFEST_VERSION, Finding, FindingSeverity,
-    FingerprintObservation, INSPECTION_MANIFEST_VERSION, NormalizationExecutionProvenance,
-    NormalizationObservations, NormalizedArtwork, NormalizedOutput, ObservedArtwork, ObservedFile,
-    ObservedFileKind, ParsedSidecar, ReleaseManifest,
+    CANONICAL_MP3_PROFILE_VERSION, CURRENT_MANIFEST_VERSION, CueSegmentIdentity, Finding,
+    FindingSeverity, FingerprintObservation, INSPECTION_MANIFEST_VERSION,
+    NormalizationExecutionProvenance, NormalizationObservations, NormalizedArtwork,
+    NormalizedOutput, ObservedArtwork, ObservedFile, ObservedFileKind, ObservedMetadata,
+    ObservedTrack, ParsedSidecar, ReleaseManifest,
 };
 use serde::Deserialize;
 use thiserror::Error;
@@ -196,6 +197,46 @@ pub fn normalize_release(
     let mut bytes_processed: u64 = 0;
     let mut artwork_paths = HashSet::new();
 
+    // Pass 1: parse sidecars and plan CUE governance (ADR-0146). Sidecar
+    // observations are appended in manifest file order, matching the order
+    // the previous interleaved loop produced.
+    let mut cue_models: Vec<(String, CueModel)> = Vec::new();
+    for file in &manifest.files {
+        if is_canceled(options) {
+            return Err(NormalizationError::Canceled);
+        }
+        if let Some(sidecar_kind) = parse_sidecar_for_file(file) {
+            let source = resolve_source_file(source_root, &file.relative_path)?;
+            match parse_sidecar_content(file, &source, sidecar_kind) {
+                Ok(outcome) => {
+                    findings.extend(outcome.record.findings.clone());
+                    if let Some(model) = outcome.cue_model {
+                        cue_models.push((file.relative_path.clone(), model));
+                    }
+                    parsed_sidecars.push(outcome.record);
+                }
+                Err(error) => findings.push(Finding {
+                    code: "sidecar.parse_failed".to_owned(),
+                    message: truncate_message(&error.to_string()),
+                    severity: FindingSeverity::Warning,
+                    file: Some(file.relative_path.clone()),
+                    evidence: serde_json::json!({ "error": error.to_string() }),
+                }),
+            }
+        }
+    }
+
+    // A CUE governs at most one source; each source has at most one
+    // governing CUE. Plans are keyed by the source's relative path.
+    let mut governance: HashMap<String, CueGovernance> = HashMap::new();
+    for (cue_path, model) in &cue_models {
+        if let Some(plan) =
+            plan_cue_governance(cue_path, model, &manifest.files, source_root, &mut findings)
+        {
+            governance.insert(plan.source_relative.clone(), plan);
+        }
+    }
+
     for file in &manifest.files {
         if is_canceled(options) {
             return Err(NormalizationError::Canceled);
@@ -203,12 +244,22 @@ pub fn normalize_release(
         match file.kind {
             ObservedFileKind::Audio => {
                 let source = resolve_source_file(source_root, &file.relative_path)?;
-                let result = process_audio_file(file, &source, &work_dir, options)?;
-                outputs.push(result.output);
-                if let Some(fp) = result.fingerprint {
-                    fingerprints.push(fp);
+                if let Some(plan) = governance.get(&file.relative_path) {
+                    let result =
+                        process_cue_governed_source(file, &source, plan, &work_dir, options)?;
+                    outputs.extend(result.outputs);
+                    if let Some(fp) = result.fingerprint {
+                        fingerprints.push(fp);
+                    }
+                    bytes_processed = bytes_processed.saturating_add(result.bytes);
+                } else {
+                    let result = process_audio_file(file, &source, &work_dir, options)?;
+                    outputs.push(result.output);
+                    if let Some(fp) = result.fingerprint {
+                        fingerprints.push(fp);
+                    }
+                    bytes_processed = bytes_processed.saturating_add(result.bytes);
                 }
-                bytes_processed = bytes_processed.saturating_add(result.bytes);
             }
             ObservedFileKind::Artwork => {
                 let source = resolve_source_file(source_root, &file.relative_path)?;
@@ -256,25 +307,75 @@ pub fn normalize_release(
             let source = resolve_source_file(source_root, &file.relative_path)?;
             verify_observed_source(file, &source)?;
         }
+    }
 
-        if let Some(sidecar_kind) = parse_sidecar_for_file(file) {
-            if is_canceled(options) {
-                return Err(NormalizationError::Canceled);
+    if !governance.is_empty() {
+        // ADR-0146: a governed source's playable Tracks are the CUE segments,
+        // not the whole file. Replace the inspection-time whole-file Track
+        // entries and fill Release observation gaps from the governing sheet
+        // (legacy: the album exists only through the sidecar path).
+        let mut plans: Vec<&CueGovernance> = governance.values().collect();
+        plans.sort_by(|left, right| left.source_relative.cmp(&right.source_relative));
+        for plan in &plans {
+            manifest
+                .tracks
+                .retain(|track| track.file_path != plan.source_relative);
+            for segment in &plan.segments {
+                let Some(output) = outputs.iter().find(|output| {
+                    output.segment.as_ref().is_some_and(|identity| {
+                        identity.cue == plan.cue_path && identity.track == segment.number
+                    })
+                }) else {
+                    return Err(NormalizationError::Verification(format!(
+                        "planned CUE segment {} track {} has no normalized output",
+                        plan.cue_path, segment.number
+                    )));
+                };
+                manifest.tracks.push(ObservedTrack {
+                    file_path: output.track_key(),
+                    track_number: Some(segment.number),
+                    track_title: segment.title.clone(),
+                    media_number: None,
+                    sort_order: Some(segment.number),
+                    byte_hash: Some(output.byte_hash.clone()),
+                    duration_ms: Some(output.duration_ms),
+                    observed_metadata: Some(ObservedMetadata {
+                        album: plan.album_title.clone(),
+                        album_artist: plan.album_performer.clone(),
+                        track_title: segment.title.clone(),
+                        artist: segment.performer.clone(),
+                        track_number: Some(segment.number),
+                        track_total: Some(u32::try_from(plan.segments.len()).unwrap_or(u32::MAX)),
+                        disc_number: None,
+                        disc_total: None,
+                        year: None,
+                        date: None,
+                        genre: None,
+                        raw: serde_json::json!({
+                            "source": "cue",
+                            "cue": plan.cue_path,
+                            "track": segment.number,
+                        }),
+                    }),
+                });
             }
-            let source = resolve_source_file(source_root, &file.relative_path)?;
-            match parse_sidecar_content(file, &source, sidecar_kind) {
-                Ok(parsed) => {
-                    findings.extend(parsed.findings.clone());
-                    parsed_sidecars.push(parsed);
-                }
-                Err(error) => findings.push(Finding {
-                    code: "sidecar.parse_failed".to_owned(),
-                    message: truncate_message(&error.to_string()),
-                    severity: FindingSeverity::Warning,
-                    file: Some(file.relative_path.clone()),
-                    evidence: serde_json::json!({ "error": error.to_string() }),
-                }),
-            }
+        }
+        manifest
+            .tracks
+            .sort_unstable_by(|left, right| left.file_path.cmp(&right.file_path));
+        let observation = &mut manifest.release_observation;
+        if observation
+            .title
+            .as_deref()
+            .is_none_or(|title| title.trim().is_empty())
+            && let Some(title) = plans.iter().find_map(|plan| plan.album_title.clone())
+        {
+            observation.title = Some(title);
+        }
+        if observation.artists.is_empty()
+            && let Some(performer) = plans.iter().find_map(|plan| plan.album_performer.clone())
+        {
+            observation.artists.push(performer);
         }
     }
 
@@ -377,6 +478,449 @@ struct AudioProcessResult {
     bytes: u64,
 }
 
+/// Segmentation plan for one governing CUE sheet (ADR-0146).
+#[derive(Debug)]
+pub(crate) struct CueGovernance {
+    cue_path: String,
+    source_relative: String,
+    album_title: Option<String>,
+    album_performer: Option<String>,
+    segments: Vec<CueSegmentPlan>,
+}
+
+#[derive(Debug)]
+pub(crate) struct CueSegmentPlan {
+    number: u32,
+    title: Option<String>,
+    performer: Option<String>,
+    start_ms: u64,
+    /// End of the segment; `None` runs to end of stream (the last track).
+    end_ms: Option<u64>,
+}
+
+/// Decide whether a parsed CUE sheet governs a staged source audio file, and
+/// if so compute segment boundaries at full frame precision. Governance
+/// requires: exactly one FILE reference (legacy parity: multi-FILE sheets are
+/// rejected), the reference resolving inside the staged tree to a classified
+/// audio file, at least one track, a first-index offset for every track,
+/// strictly increasing boundaries, and a known probed source duration with
+/// every start in range. Failures record actionable findings on the CUE and
+/// govern nothing — the referenced audio then normalizes whole-file.
+pub(crate) fn plan_cue_governance(
+    cue_path: &str,
+    model: &CueModel,
+    files: &[ObservedFile],
+    source_root: &Path,
+    findings: &mut Vec<Finding>,
+) -> Option<CueGovernance> {
+    let mut reject = |code: &str, message: String, evidence: serde_json::Value| {
+        findings.push(Finding {
+            code: code.to_owned(),
+            message,
+            severity: FindingSeverity::Warning,
+            file: Some(cue_path.to_owned()),
+            evidence,
+        });
+    };
+
+    if model.files.len() > 1 {
+        reject(
+            "sidecar.cue.multiple_files",
+            format!(
+                "CUE sheet declares {} FILE references; exactly one is supported",
+                model.files.len()
+            ),
+            serde_json::json!({ "files": model.files }),
+        );
+        return None;
+    }
+    let Some(reference) = model.files.first() else {
+        reject(
+            "sidecar.cue.missing_source",
+            "CUE sheet declares no FILE reference".to_owned(),
+            serde_json::json!({}),
+        );
+        return None;
+    };
+    let reference_path = Path::new(reference);
+    if reference_path.is_absolute()
+        || reference_path.components().any(|component| {
+            matches!(
+                component,
+                Component::ParentDir | Component::RootDir | Component::Prefix(_)
+            )
+        })
+    {
+        reject(
+            "sidecar.cue.unsafe_file",
+            format!("CUE FILE reference {reference:?} escapes the staged source tree"),
+            serde_json::json!({ "reference": reference }),
+        );
+        return None;
+    }
+    if resolve_source_file(source_root, reference).is_err() {
+        reject(
+            "sidecar.cue.missing_source",
+            format!("CUE FILE reference {reference:?} does not resolve inside the staged source"),
+            serde_json::json!({ "reference": reference }),
+        );
+        return None;
+    }
+    let observed = files.iter().find(|file| file.relative_path == *reference);
+    let Some(observed) = observed.filter(|file| file.kind == ObservedFileKind::Audio) else {
+        reject(
+            "sidecar.cue.missing_source",
+            format!("CUE FILE reference {reference:?} is not a classified audio file"),
+            serde_json::json!({ "reference": reference }),
+        );
+        return None;
+    };
+    if model.tracks.is_empty() {
+        // parse_cue already recorded sidecar.cue.no_tracks.
+        return None;
+    }
+    let Some(source_duration_ms) = observed.audio.as_ref().and_then(|audio| audio.duration_ms)
+    else {
+        reject(
+            "sidecar.cue.invalid_boundaries",
+            format!("probed duration of CUE source {reference:?} is unknown"),
+            serde_json::json!({ "reference": reference }),
+        );
+        return None;
+    };
+
+    let mut segments: Vec<CueSegmentPlan> = Vec::with_capacity(model.tracks.len());
+    for track in &model.tracks {
+        let Some(start_ms) = track.first_index_ms else {
+            reject(
+                "sidecar.cue.invalid_boundaries",
+                format!("CUE TRACK {:02} has no valid INDEX timestamp", track.number),
+                serde_json::json!({ "track": track.number }),
+            );
+            return None;
+        };
+        if let Some(previous) = segments.last()
+            && start_ms <= previous.start_ms
+        {
+            reject(
+                "sidecar.cue.invalid_boundaries",
+                "CUE INDEX boundaries are not strictly increasing".to_owned(),
+                serde_json::json!({ "track": track.number, "start_ms": start_ms }),
+            );
+            return None;
+        }
+        if start_ms >= source_duration_ms {
+            reject(
+                "sidecar.cue.invalid_boundaries",
+                format!(
+                    "CUE TRACK {:02} starts at {start_ms} ms, beyond the source duration {source_duration_ms} ms",
+                    track.number
+                ),
+                serde_json::json!({ "track": track.number, "start_ms": start_ms }),
+            );
+            return None;
+        }
+        segments.push(CueSegmentPlan {
+            number: track.number,
+            title: track.title.clone(),
+            performer: track.performer.clone(),
+            start_ms,
+            end_ms: None,
+        });
+    }
+    for index in 0..segments.len().saturating_sub(1) {
+        segments[index].end_ms = Some(segments[index + 1].start_ms);
+    }
+    Some(CueGovernance {
+        cue_path: cue_path.to_owned(),
+        source_relative: reference.clone(),
+        album_title: model.album_title.clone(),
+        album_performer: model.album_performer.clone(),
+        segments,
+    })
+}
+
+/// Process one CUE-governed source: generate, verify, and fingerprint per
+/// ADR-0146. The source-safety spine (hash before/after, probe, fingerprint,
+/// cancellation) mirrors `process_audio_file`; the staged original is never
+/// modified and segment bytes exist only in the attempt work area.
+fn process_cue_governed_source(
+    file: &ObservedFile,
+    source: &Path,
+    plan: &CueGovernance,
+    work_dir: &Path,
+    options: &NormalizationOptions,
+) -> Result<CueSourceResult, NormalizationError> {
+    let relative = &file.relative_path;
+    let (source_hash_before, source_bytes) = hash_source(source)?;
+    if file
+        .content_hash
+        .as_deref()
+        .is_none_or(|expected| expected != source_hash_before)
+    {
+        return Err(NormalizationError::SourceChanged(relative.clone()));
+    }
+
+    let source_probe = run_ffprobe_safe(source, options)?;
+    if source_probe.audio_stream_count != 1 {
+        return Err(NormalizationError::Verification(format!(
+            "CUE source {relative} contains {} audio streams; exactly one is required",
+            source_probe.audio_stream_count
+        )));
+    }
+    let source_duration = source_probe
+        .audio
+        .duration_ms
+        .ok_or(NormalizationError::MissingField("CUE source duration"))?;
+    let source_channels = source_probe
+        .audio
+        .channels
+        .ok_or(NormalizationError::MissingField("CUE source channels"))?;
+
+    let mut outputs = Vec::with_capacity(plan.segments.len());
+    for segment in &plan.segments {
+        if is_canceled(options) {
+            return Err(NormalizationError::Canceled);
+        }
+        let segment_relative = format!("{}.track-{:02}", plan.cue_path, segment.number);
+        let output_path = output_path_for(work_dir, "audio", &segment_relative, "mp3")?;
+        run_ffmpeg_segment(
+            source,
+            &output_path,
+            segment.start_ms,
+            segment.end_ms,
+            segment,
+            plan,
+            options,
+        )?;
+        let (byte_hash, output_bytes) = hash_file(&output_path).map_err(|error| {
+            NormalizationError::Verification(format!(
+                "CUE segment {segment_relative} could not be hashed: {error}"
+            ))
+        })?;
+        if output_bytes == 0 {
+            return Err(NormalizationError::Verification(format!(
+                "CUE segment {segment_relative} is empty"
+            )));
+        }
+        let probe = run_ffprobe_safe(&output_path, options)?;
+        let expected_duration = segment
+            .end_ms
+            .map_or(source_duration.saturating_sub(segment.start_ms), |end_ms| {
+                end_ms.saturating_sub(segment.start_ms)
+            });
+        verify_segment_audio(
+            &segment_relative,
+            &probe,
+            source_channels,
+            expected_duration,
+        )?;
+        let output_relative =
+            path_to_posix(output_path.strip_prefix(work_dir).unwrap_or(&output_path));
+        outputs.push(NormalizedOutput {
+            source_file: relative.clone(),
+            output_path: output_relative,
+            byte_hash,
+            container: probe
+                .audio
+                .container
+                .clone()
+                .ok_or(NormalizationError::MissingField("segment container"))?,
+            codec: probe
+                .audio
+                .codec
+                .clone()
+                .ok_or(NormalizationError::MissingField("segment codec"))?,
+            sample_rate_hz: probe
+                .audio
+                .sample_rate_hz
+                .ok_or(NormalizationError::MissingField("segment sample rate"))?,
+            channels: probe
+                .audio
+                .channels
+                .ok_or(NormalizationError::MissingField("segment channels"))?,
+            bitrate_bps: probe.audio.bitrate_bps,
+            duration_ms: probe
+                .audio
+                .duration_ms
+                .ok_or(NormalizationError::MissingField("segment duration"))?,
+            retained: false,
+            segment: Some(CueSegmentIdentity {
+                cue: plan.cue_path.clone(),
+                track: segment.number,
+            }),
+            findings: Vec::new(),
+        });
+    }
+
+    // One acoustic fingerprint per source file (ADR-0146): the whole source
+    // remains the fingerprinted evidence; segments are not re-fingerprinted.
+    let fingerprint = if !is_canceled(options) {
+        Some(fingerprint_file(source, relative, options)?)
+    } else {
+        return Err(NormalizationError::Canceled);
+    };
+
+    let (source_hash_after, _) = hash_source(source)?;
+    if source_hash_after != source_hash_before {
+        return Err(NormalizationError::SourceChanged(relative.clone()));
+    }
+
+    Ok(CueSourceResult {
+        outputs,
+        fingerprint,
+        bytes: source_bytes,
+    })
+}
+
+struct CueSourceResult {
+    outputs: Vec<NormalizedOutput>,
+    fingerprint: Option<FingerprintObservation>,
+    bytes: u64,
+}
+
+/// Encode one CUE segment with the canonical MP3 profile. Seek and duration
+/// are passed at full millisecond precision (`-ss` before `-i`, frame-accurate
+/// when re-encoding); the last track omits `-t` and runs to end of stream.
+/// CUE title/performer/album observations are written as output tags —
+/// generated segment bytes, never the staged original (ADR-0146).
+fn run_ffmpeg_segment(
+    input: &Path,
+    output: &Path,
+    start_ms: u64,
+    end_ms: Option<u64>,
+    segment: &CueSegmentPlan,
+    plan: &CueGovernance,
+    options: &NormalizationOptions,
+) -> Result<(), NormalizationError> {
+    let timestamp = |ms: u64| format!("{}.{:03}", ms / 1000, ms % 1000);
+    let mut args: Vec<String> = vec![
+        "-y".to_owned(),
+        "-v".to_owned(),
+        "error".to_owned(),
+        "-xerror".to_owned(),
+        "-ss".to_owned(),
+        timestamp(start_ms),
+        "-i".to_owned(),
+        input.to_string_lossy().to_string(),
+    ];
+    if let Some(end_ms) = end_ms {
+        args.push("-t".to_owned());
+        args.push(timestamp(end_ms.saturating_sub(start_ms)));
+    }
+    args.extend([
+        "-vn".to_owned(),
+        "-map".to_owned(),
+        "0:a:0".to_owned(),
+        "-c:a".to_owned(),
+        "libmp3lame".to_owned(),
+        "-q:a".to_owned(),
+        "4".to_owned(),
+        "-b:a".to_owned(),
+        "384k".to_owned(),
+        "-ar".to_owned(),
+        "48000".to_owned(),
+        "-map_metadata".to_owned(),
+        "0".to_owned(),
+    ]);
+    if let Some(title) = &segment.title {
+        args.push("-metadata".to_owned());
+        args.push(format!("title={title}"));
+    }
+    if let Some(performer) = &segment.performer {
+        args.push("-metadata".to_owned());
+        args.push(format!("artist={performer}"));
+    }
+    if let Some(album) = &plan.album_title {
+        args.push("-metadata".to_owned());
+        args.push(format!("album={album}"));
+    }
+    if let Some(performer) = &plan.album_performer {
+        args.push("-metadata".to_owned());
+        args.push(format!("album_artist={performer}"));
+    }
+    args.push("-metadata".to_owned());
+    args.push(format!("track={}", segment.number));
+    args.push(output.to_string_lossy().to_string());
+
+    let (exit_code, stderr) = run_ffmpeg_process(
+        &options.ffmpeg_path,
+        &args,
+        options.ffmpeg_timeout,
+        options.max_tool_output_bytes,
+        &options.cancellation,
+        options.shutdown.as_deref(),
+    )?;
+    if exit_code != 0 {
+        return Err(NormalizationError::Ffmpeg(format!(
+            "ffmpeg CUE segment encoding failed (exit {exit_code}): {stderr}"
+        )));
+    }
+    Ok(())
+}
+
+/// Verify one encoded CUE segment against the canonical profile and its
+/// declared boundary span.
+fn verify_segment_audio(
+    relative: &str,
+    output: &ProbeResult,
+    source_channels: u32,
+    expected_duration_ms: u64,
+) -> Result<(), NormalizationError> {
+    if output.audio_stream_count != 1 {
+        return Err(NormalizationError::Verification(format!(
+            "CUE segment {relative} contains {} audio streams",
+            output.audio_stream_count
+        )));
+    }
+    if output.audio.codec.as_deref() != Some("mp3") {
+        return Err(NormalizationError::Verification(format!(
+            "CUE segment {relative} is not MP3"
+        )));
+    }
+    let container_is_mp3 = output
+        .audio
+        .container
+        .as_deref()
+        .is_some_and(|container| container.split(',').any(|name| name == "mp3"));
+    if !container_is_mp3 {
+        return Err(NormalizationError::Verification(format!(
+            "CUE segment {relative} is not in an MP3 container"
+        )));
+    }
+    let output_rate = output
+        .audio
+        .sample_rate_hz
+        .ok_or(NormalizationError::MissingField("segment sample rate"))?;
+    if output_rate != CANONICAL_SAMPLE_RATE_HZ {
+        return Err(NormalizationError::Verification(format!(
+            "CUE segment {relative} has sample rate {output_rate}, expected {CANONICAL_SAMPLE_RATE_HZ}"
+        )));
+    }
+    let output_channels = output
+        .audio
+        .channels
+        .ok_or(NormalizationError::MissingField("segment channels"))?;
+    let expected_channels = source_channels.min(2);
+    if output_channels != expected_channels {
+        return Err(NormalizationError::Verification(format!(
+            "CUE segment {relative} has {output_channels} channels, expected {expected_channels}"
+        )));
+    }
+    let output_duration = output
+        .audio
+        .duration_ms
+        .ok_or(NormalizationError::MissingField("segment duration"))?;
+    let tolerance = OUTPUT_DURATION_TOLERANCE_MS.max(expected_duration_ms / 50);
+    if expected_duration_ms.abs_diff(output_duration) > tolerance {
+        return Err(NormalizationError::Verification(format!(
+            "CUE segment {relative} duration differs by {} ms (allowed {tolerance} ms)",
+            expected_duration_ms.abs_diff(output_duration)
+        )));
+    }
+    Ok(())
+}
+
 fn process_audio_file(
     file: &ObservedFile,
     source: &Path,
@@ -467,6 +1011,7 @@ fn process_audio_file(
             .duration_ms
             .ok_or(NormalizationError::MissingField("output duration"))?,
         retained,
+        segment: None,
         findings: Vec::new(),
     };
 
@@ -827,6 +1372,7 @@ fn run_ffmpeg_encode(
     output: &Path,
     options: &NormalizationOptions,
 ) -> Result<(), NormalizationError> {
+    let mut invocation = crate::ToolInvocation::start("ffmpeg", input);
     let args: Vec<String> = vec![
         "-y".to_string(),
         "-v".to_string(),
@@ -860,10 +1406,12 @@ fn run_ffmpeg_encode(
     )?;
 
     if exit_code != 0 {
+        invocation.set_outcome("exit_failure");
         return Err(NormalizationError::Ffmpeg(format!(
             "ffmpeg encoding failed (exit {exit_code}): {stderr}"
         )));
     }
+    invocation.set_outcome("ok");
     Ok(())
 }
 
@@ -934,6 +1482,7 @@ fn run_child_wait_ffmpeg(
 }
 
 fn run_fpcalc(input: &Path, options: &NormalizationOptions) -> Result<String, NormalizationError> {
+    let mut invocation = crate::ToolInvocation::start("fpcalc", input);
     let mut command = Command::new(&options.fpcalc_path);
     command
         .arg("-json")
@@ -977,6 +1526,7 @@ fn run_fpcalc(input: &Path, options: &NormalizationOptions) -> Result<String, No
         .unwrap_or_default();
 
     if !status.success() {
+        invocation.set_outcome("exit_failure");
         return Err(NormalizationError::Fpcalc(format!(
             "fpcalc exited with {}: {}",
             status, stderr_output
@@ -984,11 +1534,13 @@ fn run_fpcalc(input: &Path, options: &NormalizationOptions) -> Result<String, No
     }
 
     if stdout_output.trim().is_empty() {
+        invocation.set_outcome("empty_output");
         return Err(NormalizationError::Fpcalc(
             "fpcalc produced no output".to_owned(),
         ));
     }
 
+    invocation.set_outcome("ok");
     Ok(stdout_output)
 }
 
@@ -1347,11 +1899,19 @@ fn parse_sidecar_for_file(file: &ObservedFile) -> Option<ObservedFileKind> {
     }
 }
 
+/// Sidecar parse outcome: the domain observation plus the typed CUE model
+/// when the sidecar is a CUE sheet (needed for segmentation planning,
+/// ADR-0146).
+pub(crate) struct ParsedSidecarOutcome {
+    record: ParsedSidecar,
+    cue_model: Option<CueModel>,
+}
+
 fn parse_sidecar_content(
     file: &ObservedFile,
     source: &Path,
     kind: ObservedFileKind,
-) -> Result<ParsedSidecar, NormalizationError> {
+) -> Result<ParsedSidecarOutcome, NormalizationError> {
     let sidecar_type = match kind {
         ObservedFileKind::CueSheet => "cue",
         ObservedFileKind::Playlist => "m3u",
@@ -1394,8 +1954,13 @@ fn parse_sidecar_content(
     }
     let (content, mut findings) = decode_sidecar(&bytes, &file.relative_path);
 
+    let mut cue_model = None;
     let (parsed, parser_findings) = match sidecar_type {
-        "cue" => parse_cue(&content),
+        "cue" => {
+            let (parsed, parser_findings, model) = parse_cue(&content);
+            cue_model = Some(model);
+            (parsed, parser_findings)
+        }
         "m3u" => parse_m3u(&content),
         "sfv" => parse_sfv(&content),
         "nfo" => parse_nfo(&content),
@@ -1407,11 +1972,14 @@ fn parse_sidecar_content(
         finding
     }));
 
-    Ok(ParsedSidecar {
-        sidecar_type: sidecar_type.to_owned(),
-        relative_path: file.relative_path.clone(),
-        parsed,
-        findings,
+    Ok(ParsedSidecarOutcome {
+        record: ParsedSidecar {
+            sidecar_type: sidecar_type.to_owned(),
+            relative_path: file.relative_path.clone(),
+            parsed,
+            findings,
+        },
+        cue_model,
     })
 }
 
@@ -1481,12 +2049,72 @@ fn strip_quotes(s: &str) -> &str {
     s
 }
 
-fn parse_cue(content: &str) -> (serde_json::Value, Vec<Finding>) {
+/// Typed CUE sheet model used for segmentation planning (ADR-0146). The
+/// observation JSON emitted alongside it retains raw timestamp strings; the
+/// model carries parsed millisecond offsets at full 75-fps frame precision.
+#[derive(Debug, Default)]
+pub(crate) struct CueModel {
+    album_title: Option<String>,
+    album_performer: Option<String>,
+    /// Every FILE reference in authored order; exactly one is required for
+    /// the sheet to govern (legacy parity: multi-FILE sheets are rejected).
+    files: Vec<String>,
+    tracks: Vec<CueTrackModel>,
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct CueTrackModel {
+    number: u32,
+    title: Option<String>,
+    performer: Option<String>,
+    /// First INDEX offset (any index number — an INDEX 00 pregap start is
+    /// the split point when present, matching the legacy first-index rule).
+    first_index_ms: Option<u64>,
+    /// PREGAP/POSTGAP are observed but never applied to boundaries
+    /// (ADR-0146, legacy parity).
+    pregap_ms: Option<u64>,
+    postgap_ms: Option<u64>,
+}
+
+/// Parse a CUE `MM:SS:FF` timestamp to milliseconds (75 frames per second).
+fn parse_cue_timestamp_ms(value: &str) -> Option<u64> {
+    let (minutes, rest) = value.split_once(':')?;
+    let (seconds, frames) = rest.split_once(':')?;
+    let minutes: u64 = minutes.trim().parse().ok()?;
+    let seconds: u64 = seconds.trim().parse().ok()?;
+    let frames: u64 = frames.trim().parse().ok()?;
+    if seconds >= 60 || frames >= 75 {
+        return None;
+    }
+    let total_frames = (minutes * 60 + seconds)
+        .checked_mul(75)?
+        .checked_add(frames)?;
+    Some(total_frames * 1000 / 75)
+}
+
+fn parse_cue(content: &str) -> (serde_json::Value, Vec<Finding>, CueModel) {
     let mut tracks = Vec::new();
     let mut current: Option<serde_json::Map<String, serde_json::Value>> = None;
+    let mut current_model: Option<CueTrackModel> = None;
     let mut current_file: Option<String> = None;
     let mut album = serde_json::Map::new();
+    let mut model = CueModel::default();
     let mut findings = Vec::new();
+
+    fn flush_track(
+        tracks: &mut Vec<serde_json::Map<String, serde_json::Value>>,
+        model_tracks: &mut Vec<CueTrackModel>,
+        current: Option<serde_json::Map<String, serde_json::Value>>,
+        current_model: Option<CueTrackModel>,
+    ) {
+        if let Some(prev) = current {
+            tracks.push(prev);
+        }
+        if let Some(prev) = current_model {
+            model_tracks.push(prev);
+        }
+    }
+
     for (line_index, line) in content.lines().enumerate() {
         let trimmed = line.trim();
         if trimmed.is_empty() || trimmed.starts_with("REM ") {
@@ -1497,16 +2125,22 @@ fn parse_cue(content: &str) -> (serde_json::Value, Vec<Finding>) {
             .map_or((trimmed, ""), |(command, value)| (command, value.trim()));
         match command.to_ascii_uppercase().as_str() {
             "FILE" => match parse_cue_file(value) {
-                Some(file_name) => current_file = Some(file_name),
+                Some(file_name) => {
+                    model.files.push(file_name.clone());
+                    current_file = Some(file_name);
+                }
                 None => findings.push(parser_finding(
                     "sidecar.cue.invalid_file",
                     format!("invalid CUE FILE declaration on line {}", line_index + 1),
                 )),
             },
             "TRACK" => {
-                if let Some(prev) = current.take() {
-                    tracks.push(prev);
-                }
+                flush_track(
+                    &mut tracks,
+                    &mut model.tracks,
+                    current.take(),
+                    current_model.take(),
+                );
                 let mut fields = value.split_whitespace();
                 let number = fields.next().and_then(|part| part.parse::<u32>().ok());
                 let track_type = fields.next();
@@ -1521,14 +2155,37 @@ fn parse_cue(content: &str) -> (serde_json::Value, Vec<Finding>) {
                 track.insert("type".to_owned(), serde_json::json!(track_type));
                 track.insert("file".to_owned(), serde_json::json!(current_file));
                 current = Some(track);
+                current_model = Some(CueTrackModel {
+                    number: number.unwrap_or(0),
+                    ..CueTrackModel::default()
+                });
             }
             "TITLE" | "PERFORMER" => {
                 let key = command.to_ascii_lowercase();
-                let parsed = serde_json::json!(strip_quotes(value));
+                let parsed_text = strip_quotes(value);
+                let parsed = serde_json::json!(parsed_text);
                 if let Some(track) = current.as_mut() {
                     track.insert(key, parsed);
                 } else {
                     album.insert(key, parsed);
+                }
+                let owned = (!parsed_text.is_empty()).then(|| parsed_text.to_owned());
+                match (command.to_ascii_uppercase().as_str(), owned) {
+                    ("TITLE", Some(text)) => {
+                        if let Some(track) = current_model.as_mut() {
+                            track.title.get_or_insert(text);
+                        } else {
+                            model.album_title.get_or_insert(text);
+                        }
+                    }
+                    ("PERFORMER", Some(text)) => {
+                        if let Some(track) = current_model.as_mut() {
+                            track.performer.get_or_insert(text);
+                        } else {
+                            model.album_performer.get_or_insert(text);
+                        }
+                    }
+                    _ => {}
                 }
             }
             "INDEX" => {
@@ -1547,6 +2204,21 @@ fn parse_cue(content: &str) -> (serde_json::Value, Vec<Finding>) {
                             "time": timestamp,
                         }));
                     }
+                    match parse_cue_timestamp_ms(timestamp) {
+                        Some(offset_ms) => {
+                            if let Some(track_model) = current_model.as_mut() {
+                                // First INDEX wins (ADR-0146 legacy parity).
+                                track_model.first_index_ms.get_or_insert(offset_ms);
+                            }
+                        }
+                        None => findings.push(parser_finding(
+                            "sidecar.cue.invalid_timestamp",
+                            format!(
+                                "malformed CUE INDEX timestamp {timestamp:?} on line {}",
+                                line_index + 1
+                            ),
+                        )),
+                    }
                 } else {
                     findings.push(parser_finding(
                         "sidecar.cue.invalid_index",
@@ -1554,12 +2226,20 @@ fn parse_cue(content: &str) -> (serde_json::Value, Vec<Finding>) {
                     ));
                 }
             }
+            "PREGAP" | "POSTGAP" => {
+                let offset = parse_cue_timestamp_ms(value);
+                if let Some(track_model) = current_model.as_mut() {
+                    if command.eq_ignore_ascii_case("PREGAP") {
+                        track_model.pregap_ms = offset;
+                    } else {
+                        track_model.postgap_ms = offset;
+                    }
+                }
+            }
             _ => {}
         }
     }
-    if let Some(prev) = current {
-        tracks.push(prev);
-    }
+    flush_track(&mut tracks, &mut model.tracks, current, current_model);
     if tracks.is_empty() {
         findings.push(parser_finding(
             "sidecar.cue.no_tracks",
@@ -1569,6 +2249,7 @@ fn parse_cue(content: &str) -> (serde_json::Value, Vec<Finding>) {
     (
         serde_json::json!({ "album": album, "tracks": tracks }),
         findings,
+        model,
     )
 }
 
@@ -1834,6 +2515,22 @@ mod tests {
         assert!(!is_retainable_mp3(&multiple));
     }
 
+    /// R2.1 missing-duration row: the bundled toolchain cannot be made to
+    /// report no duration for an on-disk file deterministically, so the
+    /// failure mode is pinned here — a source without an observed duration
+    /// must fail verification with a typed, actionable error instead of
+    /// publishing unverified output.
+    #[test]
+    fn missing_source_duration_is_a_typed_verification_failure() {
+        let mut source = probe("flac", "flac", 48_000, 2);
+        source.audio.duration_ms = None;
+        let output = probe("mp3", "mp3", 48_000, 2);
+        assert!(matches!(
+            verify_normalized_audio("track.flac", &source, &output, false),
+            Err(NormalizationError::MissingField("source duration"))
+        ));
+    }
+
     #[test]
     fn output_paths_preserve_directories_and_prevent_collisions() {
         let temp = test_temp_dir();
@@ -1897,7 +2594,7 @@ mod tests {
     #[test]
     fn parse_cue_retains_file_context_and_track_numbers() {
         let content = "PERFORMER \"Artist\"\nTITLE \"Album\"\nFILE \"track1.wav\" WAVE\n  TRACK 01 AUDIO\n    TITLE \"Song\"\n    PERFORMER \"Artist\"\n";
-        let (result, findings) = parse_cue(content);
+        let (result, findings, model) = parse_cue(content);
         assert!(findings.is_empty());
         let tracks = result["tracks"].as_array().expect("tracks array");
         assert_eq!(tracks.len(), 1);
@@ -1905,6 +2602,175 @@ mod tests {
         assert_eq!(tracks[0]["file"], "track1.wav");
         assert_eq!(tracks[0]["title"], "Song");
         assert_eq!(result["album"]["title"], "Album");
+        assert_eq!(model.album_title.as_deref(), Some("Album"));
+        assert_eq!(model.album_performer.as_deref(), Some("Artist"));
+        assert_eq!(model.files, ["track1.wav".to_owned()]);
+        assert_eq!(model.tracks[0].title.as_deref(), Some("Song"));
+    }
+
+    #[test]
+    fn cue_timestamps_parse_at_full_frame_precision() {
+        assert_eq!(parse_cue_timestamp_ms("00:00:00"), Some(0));
+        assert_eq!(parse_cue_timestamp_ms("00:02:00"), Some(2_000));
+        // 12 frames at 75 fps = 160 ms exactly; legacy dropped this component.
+        assert_eq!(parse_cue_timestamp_ms("01:02:12"), Some(62_160));
+        assert_eq!(parse_cue_timestamp_ms("00:00:74"), Some(986));
+        assert_eq!(parse_cue_timestamp_ms("00:00:75"), None);
+        assert_eq!(parse_cue_timestamp_ms("00:60:00"), None);
+        assert_eq!(parse_cue_timestamp_ms("not-a-time"), None);
+        assert_eq!(parse_cue_timestamp_ms("01:02"), None);
+    }
+
+    #[test]
+    fn cue_model_first_index_wins_and_pregaps_are_unapplied() {
+        let content = "FILE \"album.wav\" WAVE\n  TRACK 01 AUDIO\n    TITLE \"One\"\n    PREGAP 00:01:00\n    INDEX 00 00:01:00\n    INDEX 01 00:02:00\n  TRACK 02 AUDIO\n    POSTGAP 00:00:10\n    INDEX 01 00:04:00\n";
+        let (_, findings, model) = parse_cue(content);
+        assert!(findings.is_empty());
+        // First INDEX (number 00, the pregap start) is the split point.
+        assert_eq!(model.tracks[0].first_index_ms, Some(1_000));
+        assert_eq!(model.tracks[0].pregap_ms, Some(1_000));
+        assert_eq!(model.tracks[1].first_index_ms, Some(4_000));
+        // 10 frames at 75 fps = 133 ms.
+        assert_eq!(model.tracks[1].postgap_ms, Some(133));
+    }
+
+    #[test]
+    fn cue_model_collects_every_file_reference() {
+        let content = "FILE \"a.wav\" WAVE\n  TRACK 01 AUDIO\n    INDEX 01 00:00:00\nFILE \"b.wav\" WAVE\n  TRACK 02 AUDIO\n    INDEX 01 00:00:00\n";
+        let (_, findings, model) = parse_cue(content);
+        assert!(findings.is_empty());
+        assert_eq!(model.files, ["a.wav".to_owned(), "b.wav".to_owned()]);
+    }
+
+    #[test]
+    fn cue_governance_rejects_multi_file_traversal_and_missing_sources() {
+        let root = test_temp_dir();
+        let audio = root.join("album.wav");
+        fs::write(&audio, b"not really wav").expect("audio");
+        let observed = ObservedFile {
+            relative_path: "album.wav".to_owned(),
+            kind: ObservedFileKind::Audio,
+            size_bytes: 13,
+            modified_at: None,
+            content_hash: None,
+            mime_type: None,
+            kind_code: None,
+            metadata: None,
+            audio: Some(melodee_domain::AudioTechnicalObservation {
+                container: Some("wav".to_owned()),
+                codec: Some("pcm_s16le".to_owned()),
+                sample_rate_hz: Some(44_100),
+                channels: Some(2),
+                channel_layout: None,
+                bit_depth: None,
+                bitrate_bps: None,
+                stream_count: Some(1),
+                duration_ms: Some(6_000),
+                stream_index: Some(0),
+            }),
+            findings: Vec::new(),
+            embedded_artwork: Vec::new(),
+            sidecar_type: None,
+            bytes_read_errors: false,
+        };
+        let files = vec![observed];
+
+        let multi =
+            "FILE \"a.wav\" WAVE\nFILE \"b.wav\" WAVE\n  TRACK 01 AUDIO\n    INDEX 01 00:00:00\n";
+        let (_, _, model) = parse_cue(multi);
+        let mut findings = Vec::new();
+        assert!(plan_cue_governance("album.cue", &model, &files, &root, &mut findings).is_none());
+        assert!(
+            findings
+                .iter()
+                .any(|f| f.code == "sidecar.cue.multiple_files")
+        );
+
+        let traversal = "FILE \"../outside.wav\" WAVE\n  TRACK 01 AUDIO\n    INDEX 01 00:00:00\n";
+        let (_, _, model) = parse_cue(traversal);
+        findings.clear();
+        assert!(plan_cue_governance("album.cue", &model, &files, &root, &mut findings).is_none());
+        assert!(findings.iter().any(|f| f.code == "sidecar.cue.unsafe_file"));
+
+        let missing = "FILE \"absent.wav\" WAVE\n  TRACK 01 AUDIO\n    INDEX 01 00:00:00\n";
+        let (_, _, model) = parse_cue(missing);
+        findings.clear();
+        assert!(plan_cue_governance("album.cue", &model, &files, &root, &mut findings).is_none());
+        assert!(
+            findings
+                .iter()
+                .any(|f| f.code == "sidecar.cue.missing_source")
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn cue_governance_rejects_unordered_and_out_of_range_boundaries() {
+        let root = test_temp_dir();
+        fs::write(root.join("album.wav"), b"not really wav").expect("audio");
+        let files = vec![ObservedFile {
+            relative_path: "album.wav".to_owned(),
+            kind: ObservedFileKind::Audio,
+            size_bytes: 13,
+            modified_at: None,
+            content_hash: None,
+            mime_type: None,
+            kind_code: None,
+            metadata: None,
+            audio: Some(melodee_domain::AudioTechnicalObservation {
+                container: Some("wav".to_owned()),
+                codec: Some("pcm_s16le".to_owned()),
+                sample_rate_hz: Some(44_100),
+                channels: Some(2),
+                channel_layout: None,
+                bit_depth: None,
+                bitrate_bps: None,
+                stream_count: Some(1),
+                duration_ms: Some(6_000),
+                stream_index: Some(0),
+            }),
+            findings: Vec::new(),
+            embedded_artwork: Vec::new(),
+            sidecar_type: None,
+            bytes_read_errors: false,
+        }];
+
+        let unordered = "FILE \"album.wav\" WAVE\n  TRACK 01 AUDIO\n    INDEX 01 00:02:00\n  TRACK 02 AUDIO\n    INDEX 01 00:01:00\n";
+        let (_, _, model) = parse_cue(unordered);
+        let mut findings = Vec::new();
+        assert!(plan_cue_governance("album.cue", &model, &files, &root, &mut findings).is_none());
+        assert!(
+            findings
+                .iter()
+                .any(|f| f.code == "sidecar.cue.invalid_boundaries")
+        );
+
+        let out_of_range = "FILE \"album.wav\" WAVE\n  TRACK 01 AUDIO\n    INDEX 01 00:09:00\n";
+        let (_, _, model) = parse_cue(out_of_range);
+        findings.clear();
+        assert!(plan_cue_governance("album.cue", &model, &files, &root, &mut findings).is_none());
+        assert!(
+            findings
+                .iter()
+                .any(|f| f.code == "sidecar.cue.invalid_boundaries")
+        );
+
+        let valid = "FILE \"album.wav\" WAVE\n  TRACK 01 AUDIO\n    INDEX 01 00:00:00\n  TRACK 02 AUDIO\n    INDEX 01 00:02:00\n";
+        let (_, _, model) = parse_cue(valid);
+        findings.clear();
+        let plan = plan_cue_governance("album.cue", &model, &files, &root, &mut findings)
+            .expect("valid sheet governs");
+        assert_eq!(plan.source_relative, "album.wav");
+        assert_eq!(plan.segments.len(), 2);
+        assert_eq!(
+            (plan.segments[0].start_ms, plan.segments[0].end_ms),
+            (0, Some(2_000))
+        );
+        assert_eq!(
+            (plan.segments[1].start_ms, plan.segments[1].end_ms),
+            (2_000, None)
+        );
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

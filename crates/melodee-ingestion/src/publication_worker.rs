@@ -20,7 +20,7 @@ use tokio::{
     task::JoinSet,
     time::{self, Duration as TokioDuration, MissedTickBehavior},
 };
-use tracing::{error, info};
+use tracing::{Instrument as _, error, info};
 
 use crate::{
     IngestionConfig, PublicationBundle, PublicationError, PublicationMilestone, PublicationOutcome,
@@ -106,19 +106,27 @@ async fn validate_once_with_shutdown(
         let task_worker = worker.clone();
         let task_config = *work_config;
         let task_shutdown = shutdown.clone();
-        tasks.spawn(async move {
-            let result = validate_one(
-                &task_ingestion,
-                &task_store,
-                &task_pool,
-                &task_worker,
-                item,
-                &task_config,
-                task_shutdown,
-            )
-            .await;
-            (item_id, result)
-        });
+        let span = tracing::info_span!(
+            "validate_work_item",
+            work_item_id = %item.id,
+            correlation_id = %item.correlation_id,
+        );
+        tasks.spawn(
+            async move {
+                let result = validate_one(
+                    &task_ingestion,
+                    &task_store,
+                    &task_pool,
+                    &task_worker,
+                    item,
+                    &task_config,
+                    task_shutdown,
+                )
+                .await;
+                (item_id, result)
+            }
+            .instrument(span),
+        );
     }
     while let Some(result) = tasks.join_next().await {
         match result {
@@ -345,20 +353,28 @@ async fn publish_once_with_shutdown(
         let task_config = *work_config;
         let task_shutdown = shutdown.clone();
         let storage_root = roots.storage_root.clone();
-        tasks.spawn(async move {
-            let result = publish_one(
-                &task_ingestion,
-                &task_store,
-                &task_pool,
-                &task_worker,
-                item,
-                &task_config,
-                &storage_root,
-                task_shutdown,
-            )
-            .await;
-            (item_id, result)
-        });
+        let span = tracing::info_span!(
+            "publish_work_item",
+            work_item_id = %item.id,
+            correlation_id = %item.correlation_id,
+        );
+        tasks.spawn(
+            async move {
+                let result = publish_one(
+                    &task_ingestion,
+                    &task_store,
+                    &task_pool,
+                    &task_worker,
+                    item,
+                    &task_config,
+                    &storage_root,
+                    task_shutdown,
+                )
+                .await;
+                (item_id, result)
+            }
+            .instrument(span),
+        );
     }
     while let Some(result) = tasks.join_next().await {
         match result {

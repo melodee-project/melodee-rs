@@ -52,7 +52,7 @@ fn admin_error(status: StatusCode, code: &'static str) -> Response {
         Json(AdminNotificationErrorBody {
             code,
             message: code.to_string(),
-            correlation_id: Uuid::now_v7(),
+            correlation_id: crate::correlation::envelope_id(),
         }),
     )
         .into_response()
@@ -75,7 +75,7 @@ fn store_error(error: NotificationStoreError) -> Response {
             // Validation messages are static, operator-safe constraint
             // labels — never echoed values.
             message: error.to_string(),
-            correlation_id: Uuid::now_v7(),
+            correlation_id: crate::correlation::envelope_id(),
         }),
     )
         .into_response()

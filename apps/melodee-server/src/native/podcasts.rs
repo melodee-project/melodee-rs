@@ -31,6 +31,7 @@ pub struct PodcastDiscoveryClient {
     client: reqwest::Client,
     endpoint: reqwest::Url,
     permits: std::sync::Arc<tokio::sync::Semaphore>,
+    gauge: Option<std::sync::Arc<crate::resource_bounds::ResourceGauge>>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -87,6 +88,12 @@ impl PodcastDiscoveryClient {
             client,
             endpoint,
             permits: std::sync::Arc::new(tokio::sync::Semaphore::new(MAX_DISCOVERY_CONCURRENCY)),
+            // R2.4: the iTunes-discovery class reports utilization and
+            // wait-timeouts through the process resource-bounds registry when
+            // startup installed one.
+            gauge: crate::resource_bounds::ResourceBounds::global().map(|registry| {
+                registry.register("podcast.discovery.http", MAX_DISCOVERY_CONCURRENCY)
+            }),
         })
     }
 
@@ -99,11 +106,26 @@ impl PodcastDiscoveryClient {
         resource: &str,
         query: &[(&str, String)],
     ) -> Result<ItunesResponse, NativeApiError> {
-        let _permit =
-            tokio::time::timeout(std::time::Duration::from_secs(8), self.permits.acquire())
-                .await
-                .map_err(|_| NativeApiError::CapturedInternal("An unexpected error occurred"))?
-                .map_err(|_| NativeApiError::CapturedInternal("An unexpected error occurred"))?;
+        if let Some(gauge) = &self.gauge {
+            gauge.begin_wait();
+        }
+        let acquisition =
+            tokio::time::timeout(std::time::Duration::from_secs(8), self.permits.acquire()).await;
+        let _permit = match acquisition {
+            Ok(Ok(permit)) => permit,
+            Ok(Err(_)) | Err(_) => {
+                if let Some(gauge) = &self.gauge {
+                    gauge.wait_failed();
+                }
+                return Err(NativeApiError::CapturedInternal(
+                    "An unexpected error occurred",
+                ));
+            }
+        };
+        let _guard = self
+            .gauge
+            .as_ref()
+            .map(crate::resource_bounds::ResourceGauge::admit);
         let url = self
             .endpoint
             .join(resource)

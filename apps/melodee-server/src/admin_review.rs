@@ -127,7 +127,7 @@ fn review_error(status: StatusCode, code: &'static str, message: impl Into<Strin
         Json(AdminAccessErrorBody {
             code,
             message: message.into(),
-            correlation_id: Uuid::now_v7(),
+            correlation_id: crate::correlation::envelope_id(),
         }),
     )
         .into_response()

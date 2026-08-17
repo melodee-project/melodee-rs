@@ -69,6 +69,9 @@ pub struct JfState {
     pub token_expiry_hours: i64,
     pub max_active_tokens: i32,
     pub direct_play: Option<crate::native_stream::DirectPlayService>,
+    /// Shared configured-transcoding service (ADR-0147); `None` disables
+    /// transcoding (transcode requests fail closed, direct play unaffected).
+    pub transcoding: Option<crate::transcode::TranscodingService>,
     pub client_addresses: crate::native_stream::ClientAddressResolver,
     pub search: Option<melodee_search::SearchConfig>,
     /// Unlocked Storage libraries exposed as UserViews. The Rust catalog has

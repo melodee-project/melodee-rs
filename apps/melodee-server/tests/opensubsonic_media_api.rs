@@ -9,8 +9,11 @@
 //! - **stream** full GET/HEAD headers + body, single-pass ranges (including the
 //!   D2 regression `bytes=100000-101023` → 206 with the correct bytes, NOT the
 //!   legacy 416/one-byte corruption), invalid/unsatisfiable range + timeOffset
-//!   → 404 + error 70, unknown song id → credential-free 302, maxBitRate/format
-//!   ignored.
+//!   → 404 + error 70, unknown song id → credential-free 302. Configured
+//!   transcoding honors `format`/`maxBitRate` per ADR-0147 (superseding the
+//!   frozen silent-ignore clause): supported formats stream FFmpeg output,
+//!   unsupported/disabled/unavailable templates answer the error-0 envelope,
+//!   and non-triggered requests keep byte-identical direct play.
 //! - **download** 200 + `Content-Disposition: attachment`, gated by
 //!   `downloads_enabled`; unknown → credential-free 302.
 //! - **getCoverArt** catalog overrides → stored artwork (a Song uses its
@@ -141,6 +144,7 @@ async fn state(db: &common::TestDb) -> OsState {
         downloads_enabled: true,
         jukebox_enabled: false,
         direct_play: None,
+        transcoding: None,
         client_addresses: melodee_server::native_stream::ClientAddressResolver::default(),
         search: None,
     }
@@ -486,11 +490,13 @@ async fn stream_unknown_song_redirects_credential_free_302() {
 }
 
 #[tokio::test]
-async fn stream_max_bitrate_and_format_are_ignored() {
+async fn stream_format_raw_and_high_max_bitrate_stays_direct_play() {
     let db = common::TestDb::create("os_media_stream_maxbitrate").await;
     let (state, _temp, wav, track) = setup_media(&db, 9009, "Solar Wind").await;
+    // format=raw with a bitrate cap above the source (705 kbps) keeps the
+    // captured direct-play response byte-identical (ADR-0147 decision 3).
     let path = format!(
-        "/rest/stream.view?f=json&v=1.16.1&c=phase0&id=song_{track}&maxBitRate=64&format=mp3"
+        "/rest/stream.view?f=json&v=1.16.1&c=phase0&id=song_{track}&maxBitRate=5000&format=raw"
     );
     let (status, headers, body) = respond(state.clone(), get(&authed(&path))).await;
     assert_eq!(status, StatusCode::OK);
@@ -501,6 +507,152 @@ async fn stream_max_bitrate_and_format_are_ignored() {
     );
     assert_header(&headers, header::CONTENT_TYPE, "audio/wav");
     assert_eq!(body, wav);
+}
+
+/// Attaches the shared transcoding service to a media fixture state.
+fn attach_transcoding(state: &mut OsState, temp: &TempDir, db: &common::TestDb, max: usize) {
+    let root = CanonicalAssetRoot::open(temp.path()).expect("canonical asset root");
+    state.transcoding = Some(
+        melodee_server::transcode::TranscodingService::new(root, db.pool.clone(), max)
+            .expect("transcoding service"),
+    );
+}
+
+/// Asserts the ADR-0147 error-0 envelope (HTTP 200, captured `status:
+/// "error"` serialization with `error.code == 0`).
+fn assert_error0_envelope(body: &[u8]) {
+    let json: serde_json::Value = serde_json::from_slice(body).expect("json envelope");
+    assert_eq!(json["subsonic-response"]["status"], "error");
+    assert_eq!(json["subsonic-response"]["error"]["code"], 0);
+}
+
+fn assert_mp3_bytes(body: &[u8]) {
+    assert!(!body.is_empty(), "transcoded body is non-empty");
+    assert!(
+        body.starts_with(b"ID3") || (body.len() > 2 && body[0] == 0xFF && body[1] & 0xE0 == 0xE0),
+        "body starts with an ID3 tag or MP3 frame sync"
+    );
+}
+
+#[tokio::test]
+async fn stream_format_mp3_transcodes_with_configured_template() {
+    let db = common::TestDb::create("os_media_stream_transcode_mp3").await;
+    let (mut state, temp, wav, track) = setup_media(&db, 9020, "Solar Wind").await;
+    attach_transcoding(&mut state, &temp, &db, 2);
+    let path = format!("/rest/stream.view?f=json&v=1.16.1&c=phase0&id=song_{track}&format=mp3");
+    let (status, headers, body) = respond(state.clone(), get(&authed(&path))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_header(&headers, header::CONTENT_TYPE, "audio/mpeg");
+    // ADR-0147: no Content-Length/ETag on transcoded responses; the direct
+    // play no-store/CORS/Content-Duration headers are preserved.
+    assert!(!headers.contains_key(header::CONTENT_LENGTH));
+    assert!(!headers.contains_key(header::ETAG));
+    assert_header(
+        &headers,
+        header::CACHE_CONTROL,
+        "no-store, must-revalidate, no-cache, max-age=0",
+    );
+    assert!(headers.contains_key(HeaderName::from_static("content-duration")));
+    assert_mp3_bytes(&body);
+    assert_ne!(body, wav);
+}
+
+#[tokio::test]
+async fn stream_max_bitrate_below_source_transcodes_mp3_at_cap() {
+    let db = common::TestDb::create("os_media_stream_bitrate_cap").await;
+    let (mut state, temp, _wav, track) = setup_media(&db, 9021, "Solar Wind").await;
+    attach_transcoding(&mut state, &temp, &db, 2);
+    // maxBitRate alone (64 kbps) below the 705 kbps source → mp3 transcode.
+    let path = format!("/rest/stream.view?f=json&v=1.16.1&c=phase0&id=song_{track}&maxBitRate=64");
+    let (status, headers, body) = respond(state.clone(), get(&authed(&path))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_header(&headers, header::CONTENT_TYPE, "audio/mpeg");
+    assert_mp3_bytes(&body);
+}
+
+#[tokio::test]
+async fn stream_range_header_is_ignored_on_transcoded_requests() {
+    let db = common::TestDb::create("os_media_stream_transcode_range").await;
+    let (mut state, temp, _wav, track) = setup_media(&db, 9022, "Solar Wind").await;
+    attach_transcoding(&mut state, &temp, &db, 2);
+    let path = format!("/rest/stream.view?f=json&v=1.16.1&c=phase0&id=song_{track}&format=mp3");
+    let request = Request::builder()
+        .method("GET")
+        .uri(authed(&path))
+        .header(header::RANGE, "bytes=0-99")
+        .body(Body::empty())
+        .expect("request");
+    let (status, headers, body) = respond(state.clone(), request).await;
+    // Range is ignored: 200 (never 206), no Content-Range, full transcode.
+    assert_eq!(status, StatusCode::OK);
+    assert!(!headers.contains_key(header::CONTENT_RANGE));
+    assert_mp3_bytes(&body);
+}
+
+#[tokio::test]
+async fn stream_unsupported_format_returns_error0_envelope() {
+    let db = common::TestDb::create("os_media_stream_bad_format").await;
+    let (state, _temp, _wav, track) = setup_media(&db, 9023, "Solar Wind").await;
+    let path = format!("/rest/stream.view?f=json&v=1.16.1&c=phase0&id=song_{track}&format=flac");
+    let (status, _headers, body) = respond(state.clone(), get(&authed(&path))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_error0_envelope(&body);
+}
+
+#[tokio::test]
+async fn stream_transcode_rejected_when_transcoding_disabled() {
+    let db = common::TestDb::create("os_media_stream_transcode_off").await;
+    // Plain fixture state has no transcoding service (maxConcurrent=0 shape).
+    let (state, _temp, _wav, track) = setup_media(&db, 9024, "Solar Wind").await;
+    let path = format!("/rest/stream.view?f=json&v=1.16.1&c=phase0&id=song_{track}&format=mp3");
+    let (status, _headers, body) = respond(state.clone(), get(&authed(&path))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_error0_envelope(&body);
+}
+
+#[tokio::test]
+async fn stream_malformed_template_fails_closed() {
+    let db = common::TestDb::create("os_media_stream_bad_template").await;
+    let (mut state, temp, _wav, track) = setup_media(&db, 9025, "Solar Wind").await;
+    attach_transcoding(&mut state, &temp, &db, 2);
+    // The malformed legacy seed shape (ADR-0108/ADR-0147): unparseable
+    // template must fail closed with the error-0 envelope.
+    melodee_persistence::SettingsStore::new()
+        .set(
+            &db.pool,
+            "transcoding.command.mp3",
+            &serde_json::Value::String(
+                "{ 'format': 'Mp3', 'bitrate: 192, 'command': 'ffmpeg -i %s -f mp3 -' }"
+                    .to_string(),
+            ),
+            None,
+            OffsetDateTime::now_utc(),
+        )
+        .await
+        .expect("malformed override");
+    let path = format!("/rest/stream.view?f=json&v=1.16.1&c=phase0&id=song_{track}&format=mp3");
+    let (status, _headers, body) = respond(state.clone(), get(&authed(&path))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_error0_envelope(&body);
+}
+
+#[tokio::test]
+async fn download_format_aac_transcodes_and_swaps_attachment_extension() {
+    let db = common::TestDb::create("os_media_download_transcode").await;
+    let (mut state, temp, _wav, track) = setup_media(&db, 9026, "Solar Wind").await;
+    attach_transcoding(&mut state, &temp, &db, 2);
+    let path = format!("/rest/download.view?f=json&v=1.16.1&c=phase0&id=song_{track}&format=aac");
+    let (status, headers, body) = respond(state.clone(), get(&authed(&path))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_header(&headers, header::CONTENT_TYPE, "audio/aac");
+    assert_eq!(
+        header_str(&headers, header::CONTENT_DISPOSITION),
+        "attachment; filename=\"01 - Solar Wind.aac\"; filename*=UTF-8''01%20-%20Solar%20Wind.aac"
+    );
+    // ADTS frames carry the 0xFFF sync word.
+    assert!(!body.is_empty());
+    assert_eq!(body[0], 0xFF);
+    assert_eq!(body[1] & 0xF6, 0xF0, "ADTS sync word");
 }
 
 #[tokio::test]

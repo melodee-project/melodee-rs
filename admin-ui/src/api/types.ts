@@ -613,8 +613,18 @@ export interface SplitArtistResult {
 // Shapes mirror apps/melodee-server/src/admin_system.rs (camelCase serde).
 
 /** One subsystem's health verdict (SubsystemHealthDto). `disabled` is a
- *  deliberately unconfigured optional subsystem, never a failure. */
-export type SubsystemHealthStatus = 'ok' | 'degraded' | 'disabled';
+ *  deliberately unconfigured optional subsystem, never a failure. R2.5 adds
+ *  `unavailable` (a required dependency cannot be reached), `readOnly`,
+ *  `misconfigured`, and `capacityExhausted` so operators can distinguish
+ *  failure modes without reading detail strings. */
+export type SubsystemHealthStatus =
+  | 'ok'
+  | 'degraded'
+  | 'disabled'
+  | 'unavailable'
+  | 'readOnly'
+  | 'misconfigured'
+  | 'capacityExhausted';
 
 export interface SubsystemHealth {
   status: SubsystemHealthStatus;
@@ -627,14 +637,39 @@ export interface ApiSurfaceStatus {
   status: string;
 }
 
-/** Aggregated subsystem health (HealthDto, SPEC §22 panel content). */
+/** Point-in-time utilization of one semaphore-bounded resource class
+ *  (ResourceBoundSnapshot, R2.4). Purely observational. */
+export interface ResourceBoundSnapshot {
+  class: string;
+  max: number;
+  inFlight: number;
+  waiting: number;
+  oldestWaitMs: number;
+  admittedTotal: number;
+  rejectedTotal: number;
+  saturated: boolean;
+}
+
+/** Aggregated subsystem health (HealthDto, SPEC §22 panel content). The
+ *  top-level `status` is `ok` when PostgreSQL is reachable and Tantivy is
+ *  healthy-or-disabled; R2.5 subsystems report their own statuses without
+ *  flipping the top-level indicator. */
 export interface SystemHealth {
   status: 'ok' | 'degraded';
   postgresql: SubsystemHealth;
   tantivy: SubsystemHealth;
   storage: SubsystemHealth;
   ffmpeg: SubsystemHealth;
+  /** R2.5: podcast storage-root writability (disabled when the podcast
+   *  worker is unconfigured). */
+  podcastStorage: SubsystemHealth;
+  /** R2.5: free space across storage/work-area/podcast roots. */
+  disk: SubsystemHealth;
+  /** R2.5: stale leases and queue depth across the durable worker pools. */
+  workers: SubsystemHealth;
   apiSurfaces: ApiSurfaceStatus[];
+  /** R2.4 bounded-resource classes registered at startup (empty in tests). */
+  resourceBounds: ResourceBoundSnapshot[];
 }
 
 export interface DashboardCatalog {

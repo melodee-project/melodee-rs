@@ -97,6 +97,37 @@ pub struct WorkerPoolMetrics {
 pub struct WorkerPoolStore;
 
 impl WorkerPoolStore {
+    /// R2.5 lease-health probe: leases that expired more than `grace` ago on
+    /// claimed queue rows. An expired lease is normally reclaimed on the next
+    /// claim pass, so a count that survives past the grace window is evidence
+    /// of a dead or stalled worker, not ordinary poll lag. Bounded aggregate
+    /// over the two durable queue tables (work items and podcast episodes).
+    pub async fn stale_lease_count(
+        &self,
+        pool: &PgPool,
+        now: OffsetDateTime,
+        grace: time::Duration,
+    ) -> Result<i64, WorkerPoolStoreError> {
+        let cutoff = now - grace;
+        let work_items: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*)::bigint FROM release_work_items
+             WHERE lease_expires_at IS NOT NULL AND lease_expires_at < $1",
+        )
+        .bind(cutoff)
+        .fetch_one(pool)
+        .await?;
+        let episodes: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*)::bigint FROM native_podcast_episodes
+             WHERE soft_deleted_at IS NULL
+               AND download_lease_expires_at IS NOT NULL
+               AND download_lease_expires_at < $1",
+        )
+        .bind(cutoff)
+        .fetch_one(pool)
+        .await?;
+        Ok(work_items.0 + episodes.0)
+    }
+
     #[must_use]
     pub const fn new() -> Self {
         Self

@@ -122,6 +122,9 @@ owner process is currently alive.
 - `melodee-cli doctor` checks whether `ffmpeg`, `ffprobe`, and `fpcalc` are executable and whether the
   database URL variable is present. It does not connect to PostgreSQL.
 - `melodee-cli work list` and `melodee-cli work show <id>` inspect durable queue state and event history.
+- `melodee-cli work retry <id> [--reason ...]` requeues a failed or quarantined work item
+  through the same audited operator transition the Release Review reprocess action uses
+  (`failed`/`quarantined` → `ready`); items in any other state are refused.
 - `melodee ingest status` prints a concise ingestion queue summary.
 - `melodee-cli catalog status` prints bounded catalog entity/outbox counts and the effective worker
   limits.

@@ -6,16 +6,22 @@ import { HealthIndicator, type HealthState } from './HealthIndicator';
 
 /**
  * Aggregated subsystem health panel (SPEC §22): PostgreSQL, Tantivy search
- * index, storage, FFmpeg, and the mounted API surfaces. Every verdict is
- * label + icon + detail (never color-only, UI-SPEC §5); `disabled` means a
- * deliberately unconfigured optional subsystem and renders neutral, never as
- * a failure.
+ * index, storage, FFmpeg, podcast storage, disk free space, background
+ * workers, and the mounted API surfaces. Every verdict is label + icon +
+ * detail (never color-only, UI-SPEC §5); `disabled` means a deliberately
+ * unconfigured optional subsystem and renders neutral, never as a failure.
+ * The R2.5 states (`unavailable`, `readOnly`, `misconfigured`,
+ * `capacityExhausted`) distinguish failure modes for operators.
  */
 
 const STATE_BY_STATUS: Record<SubsystemHealthStatus, HealthState> = {
   ok: 'online',
   degraded: 'degraded',
   disabled: 'disabled',
+  unavailable: 'offline',
+  readOnly: 'degraded',
+  misconfigured: 'degraded',
+  capacityExhausted: 'degraded',
 };
 
 function SubsystemRow({ name, subsystem }: { name: string; subsystem: SubsystemHealth }) {
@@ -54,6 +60,9 @@ export function SystemHealthPanel({
         <SubsystemRow name={t('system.health.tantivy')} subsystem={health.tantivy} />
         <SubsystemRow name={t('system.health.storage')} subsystem={health.storage} />
         <SubsystemRow name={t('system.health.ffmpeg')} subsystem={health.ffmpeg} />
+        <SubsystemRow name={t('system.health.podcastStorage')} subsystem={health.podcastStorage} />
+        <SubsystemRow name={t('system.health.disk')} subsystem={health.disk} />
+        <SubsystemRow name={t('system.health.workers')} subsystem={health.workers} />
         <li className="melodee-health-row">
           <span className="melodee-health-row__name">{t('system.health.apiSurfaces')}</span>
           <span className="melodee-health-row__status">

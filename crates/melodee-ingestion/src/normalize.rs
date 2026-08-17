@@ -29,7 +29,7 @@ use tokio::{
     task::JoinSet,
     time::{self, Duration as TokioDuration, MissedTickBehavior},
 };
-use tracing::{error, info, warn};
+use tracing::{Instrument as _, error, info, warn};
 
 use crate::{
     IngestionConfig, ReconcileResult, ReconcileStats,
@@ -104,18 +104,29 @@ async fn normalize_once_with_shutdown(
         let task_worker = worker.clone();
         let task_work_config = *work_config;
         let task_shutdown = shutdown.clone();
-        tasks.spawn(async move {
-            normalize_one(
-                &task_ingestion,
-                &task_store,
-                &task_pool,
-                &task_worker,
-                item,
-                &task_work_config,
-                task_shutdown,
-            )
-            .await
-        });
+        // R2.5: the spawned task crosses the join-set boundary; the span
+        // carries the durable ids explicitly so every nested event
+        // (including media-tool invocations) inherits them.
+        let span = tracing::info_span!(
+            "normalize_work_item",
+            work_item_id = %item.id,
+            correlation_id = %item.correlation_id,
+        );
+        tasks.spawn(
+            async move {
+                normalize_one(
+                    &task_ingestion,
+                    &task_store,
+                    &task_pool,
+                    &task_worker,
+                    item,
+                    &task_work_config,
+                    task_shutdown,
+                )
+                .await
+            }
+            .instrument(span),
+        );
     }
     while let Some(result) = tasks.join_next().await {
         match result {

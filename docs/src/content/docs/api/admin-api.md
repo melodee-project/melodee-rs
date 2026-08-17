@@ -746,10 +746,35 @@ GET /api/admin/v1/system/health
 
 Aggregated subsystem health: `postgresql` (bounded probe, as in `readyz`), `tantivy` (active
 search-generation diagnostic, or `disabled` when the search worker is off), `storage` and
-`ffmpeg` (the onboarding preflight checks), and `apiSurfaces` (the process-local API surfaces,
-`serving`). Each subsystem reports `status` (`ok`, `degraded`, or `disabled`) and an
-operator-safe `detail`; the top-level `status` is `ok` when PostgreSQL is reachable and Tantivy
-is healthy or disabled, otherwise `degraded`.
+`ffmpeg` (the onboarding preflight checks), `podcastStorage` (podcast storage-root
+writability, or `disabled` when the podcast worker is unconfigured), `disk` (free space across
+the storage, work-area, and podcast roots), `workers` (stale work-item leases and durable
+queue depth), and `apiSurfaces` (the process-local API surfaces, `serving`). Each subsystem
+reports `status` and an operator-safe `detail`. The subsystem status vocabulary is:
+
+- `ok` — healthy;
+- `degraded` — impaired but the process keeps serving;
+- `disabled` — a deliberately unconfigured optional subsystem, never a failure;
+- `unavailable` — a required dependency cannot be reached;
+- `readOnly` — the root exists but is not writable;
+- `misconfigured` — required configuration is absent or invalid;
+- `capacityExhausted` — a bounded resource is at its floor (for `disk`: under 1 GiB free or
+  under 5% free on any checked root).
+
+The top-level `status` is `ok` when PostgreSQL is reachable and Tantivy is healthy or
+disabled, otherwise `degraded`; the `workers` subsystem degrades on stale leases (expired
+beyond the one-hour grace) or a durable queue whose oldest ready item is more than 24 hours
+old.
+
+The payload also carries a `resourceBounds` array: a point-in-time snapshot of every
+semaphore-bounded request-path resource class (`streams.direct_play`, `streams.transcoding`,
+`images.processing`, `podcast.discovery.http`, `notifications.dispatch`,
+`provider.lastfm.dispatch`). Each entry reports `class`, `max` (the class capacity),
+`inFlight`, `waiting`, `oldestWaitMs` (age of the oldest queued waiter, `0` when idle),
+`admittedTotal`, `rejectedTotal` (non-blocking admissions refused at capacity), and
+`saturated` (`true` when the class is at capacity or has queued waiters). These counters are
+observational only — they never change admission decisions. Background worker classes are
+bounded separately and reported through the durable queue metrics on the workers surface.
 
 ## Error behavior
 

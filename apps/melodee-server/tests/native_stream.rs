@@ -557,3 +557,43 @@ fn zero_concurrency_is_rejected() {
 // Keep the Axum body type part of this slice's compile contract. The native
 // route wrapper can return it without buffering a complete media asset.
 fn _assert_body_type(_: Body) {}
+
+#[tokio::test]
+async fn direct_play_gauge_reports_in_flight_waiters_and_release() {
+    let registry = melodee_server::resource_bounds::ResourceBounds::new();
+    let gauge = registry.register("streams.direct_play", 1);
+    let fixture = Fixture::new(1);
+    let service = fixture.service.with_gauge(gauge.clone());
+
+    let first = service
+        .response(&fixture.asset, None, false)
+        .await
+        .expect("first stream admitted");
+    let snapshot = gauge.snapshot();
+    assert_eq!(snapshot.in_flight, 1);
+    assert!(snapshot.saturated);
+
+    // A second request queues on the semaphore: the waiter is visible while
+    // blocked, then admitted once the first response body drops.
+    let queued = {
+        let service = service.clone();
+        let asset = fixture.asset.clone();
+        tokio::spawn(async move { service.response(&asset, None, false).await })
+    };
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    let snapshot = gauge.snapshot();
+    assert_eq!(snapshot.waiting, 1);
+    assert!(snapshot.oldest_wait_ms > 0);
+
+    drop(first);
+    let second = queued
+        .await
+        .expect("queued task joins")
+        .expect("queued stream admitted after release");
+    let snapshot = gauge.snapshot();
+    assert_eq!(snapshot.in_flight, 1);
+    assert_eq!(snapshot.waiting, 0);
+    assert_eq!(snapshot.admitted_total, 2);
+    drop(second);
+    assert_eq!(gauge.snapshot().in_flight, 0);
+}

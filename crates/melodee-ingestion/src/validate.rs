@@ -20,8 +20,10 @@ use thiserror::Error;
 
 /// Stable structural-validation profile recorded in manifest v3.
 pub const STRUCTURAL_VALIDATION_PROFILE: &str = "phase3.structural-validation";
-/// Current structural-validation profile version.
-pub const STRUCTURAL_VALIDATION_PROFILE_VERSION: u16 = 1;
+/// Current structural-validation profile version. Version 2 adds the ADR-0146
+/// segment-aware inventory rules for CUE-governed sources; ungoverned releases
+/// validate under the unchanged version-1 rules.
+pub const STRUCTURAL_VALIDATION_PROFILE_VERSION: u16 = 2;
 
 /// A normalized bundle whose complete asset inventory is safe to plan.
 #[derive(Debug, Clone)]
@@ -143,10 +145,45 @@ pub(crate) fn validate_normalized_manifest_with_cancellation(
         .filter(|file| file.kind == ObservedFileKind::Audio)
         .map(|file| file.relative_path.as_str())
         .collect::<BTreeSet<_>>();
-    let track_sources = manifest
+
+    // ADR-0146: Tracks and outputs of a CUE-governed source are keyed by the
+    // deterministic segment identity `<source>#cue-track-NN`, not the plain
+    // source path. Join Tracks to outputs on the logical track key first,
+    // then compare the governing source inventory against observed audio.
+    let mut output_by_key = BTreeMap::new();
+    for output in &normalization.outputs {
+        if output_by_key.insert(output.track_key(), output).is_some() {
+            return Err(StructuralValidationError::IncompleteManifest(
+                "normalized output track identities are not unique".to_owned(),
+            ));
+        }
+    }
+    let output_keys = output_by_key
+        .keys()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
+    let track_keys = manifest
         .tracks
         .iter()
         .map(|track| track.file_path.as_str())
+        .collect::<BTreeSet<_>>();
+    if track_keys.len() != manifest.tracks.len() {
+        return Err(StructuralValidationError::IncompleteManifest(
+            "manifest Track identities are not unique".to_owned(),
+        ));
+    }
+    if track_keys != output_keys {
+        return Err(StructuralValidationError::IncompleteManifest(
+            "manifest Track and normalized output inventories do not match".to_owned(),
+        ));
+    }
+    let track_sources = track_keys
+        .iter()
+        .map(|key| {
+            output_by_key
+                .get(*key)
+                .map_or(*key, |output| output.source_file.as_str())
+        })
         .collect::<BTreeSet<_>>();
     if audio_sources.is_empty() || audio_sources != track_sources {
         return Err(StructuralValidationError::IncompleteManifest(
@@ -186,6 +223,11 @@ pub(crate) fn validate_normalized_manifest_with_cancellation(
         Vec::with_capacity(normalization.outputs.len() + normalization.normalized_artwork.len());
     let mut normalized_paths = BTreeSet::new();
     let mut output_sources = BTreeSet::new();
+    // Per-source governance shape: ungoverned sources have exactly one
+    // whole-file output; ADR-0146 governed sources have only segment outputs
+    // whose identities are keyed by `<source>#cue-track-NN`. Whole-file and
+    // segment outputs must never mix for one source (whole-file suppression).
+    let mut source_governance = BTreeMap::<&str, (usize, usize)>::new();
     for output in &normalization.outputs {
         validate_relative_path(&output.source_file)?;
         validate_relative_path(&output.output_path)?;
@@ -195,11 +237,29 @@ pub(crate) fn validate_normalized_manifest_with_cancellation(
                 output.source_file
             )));
         }
-        if !output_sources.insert(output.source_file.as_str()) {
-            return Err(StructuralValidationError::IncompleteManifest(format!(
-                "audio source {:?} has multiple normalized outputs",
-                output.source_file
-            )));
+        output_sources.insert(output.source_file.as_str());
+        let entry = source_governance
+            .entry(output.source_file.as_str())
+            .or_insert((0, 0));
+        entry.0 += 1;
+        if let Some(segment) = &output.segment {
+            entry.1 += 1;
+            validate_relative_path(&segment.cue)?;
+            let cue_parsed = normalization.parsed_sidecars.iter().any(|sidecar| {
+                sidecar.sidecar_type == "cue" && sidecar.relative_path == segment.cue
+            });
+            if !cue_parsed {
+                return Err(StructuralValidationError::IncompleteManifest(format!(
+                    "CUE segment output {:?} has no parsed CUE sidecar observation for {:?}",
+                    output.output_path, segment.cue
+                )));
+            }
+            if segment.track == 0 {
+                return Err(StructuralValidationError::IncompleteManifest(format!(
+                    "CUE segment output {:?} has an invalid track number",
+                    output.output_path
+                )));
+            }
         }
         if !normalized_paths.insert(output.output_path.as_str()) {
             return Err(StructuralValidationError::IncompleteManifest(format!(
@@ -226,16 +286,27 @@ pub(crate) fn validate_normalized_manifest_with_cancellation(
         )?;
         assets.push(CanonicalAsset {
             kind: CanonicalAssetKind::Media,
-            source_path: output.source_file.clone(),
+            // ADR-0146: the logical track key, not the raw source path, joins
+            // canonical media assets to Tracks; segment keys keep segment
+            // assets distinct for one governed source.
+            source_path: output.track_key(),
             normalized_path: output.output_path.clone(),
             canonical_path: format!("media/{}.mp3", output.byte_hash),
             size_bytes,
             byte_hash: output.byte_hash.clone(),
         });
     }
+    for (source, (total, segmented)) in &source_governance {
+        let governed = *segmented > 0;
+        if (governed && segmented != total) || (!governed && *total != 1) {
+            return Err(StructuralValidationError::IncompleteManifest(format!(
+                "audio source {source:?} mixes whole-file and CUE segment outputs or has duplicate whole-file outputs"
+            )));
+        }
+    }
     if output_sources != audio_sources {
         return Err(StructuralValidationError::IncompleteManifest(
-            "not every observed audio file has exactly one normalized output".to_owned(),
+            "not every observed audio file has a normalized output".to_owned(),
         ));
     }
 

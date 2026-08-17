@@ -121,7 +121,7 @@ async fn complete_onboarding(
             Json(OnboardingErrorBody {
                 code: "onboarding_checks_failed",
                 message: "required preflight checks are failing".to_string(),
-                correlation_id: Uuid::now_v7(),
+                correlation_id: crate::correlation::envelope_id(),
                 checks: report.checks.iter().map(PreflightCheckDto::from).collect(),
             }),
         )
@@ -133,7 +133,7 @@ async fn complete_onboarding(
                 Json(OnboardingErrorBody {
                     code: "store_error",
                     message: "store_error".to_string(),
-                    correlation_id: Uuid::now_v7(),
+                    correlation_id: crate::correlation::envelope_id(),
                     checks: Vec::new(),
                 }),
             )

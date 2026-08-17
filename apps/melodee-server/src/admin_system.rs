@@ -58,12 +58,31 @@ const DASHBOARD_WINDOW: time::Duration = time::Duration::hours(24);
 pub struct AdminSystemState {
     pub admin: AdminAccessState,
     pub search: Option<SearchConfig>,
+    /// R2.4 bounded-resource registry snapshotted into health. Optional so
+    /// tests that construct the state directly stay ungauged.
+    pub resource_bounds: Option<std::sync::Arc<crate::resource_bounds::ResourceBounds>>,
 }
 
 impl AdminSystemState {
     #[must_use]
     pub fn new(admin: AdminAccessState, search: Option<SearchConfig>) -> Self {
-        Self { admin, search }
+        Self {
+            admin,
+            search,
+            resource_bounds: None,
+        }
+    }
+
+    /// Attaches the process bounded-resource registry (R2.4) so
+    /// `/system/health` reports per-class utilization, queue age, and
+    /// saturation. Purely observational; admission behavior is unchanged.
+    #[must_use]
+    pub fn with_resource_bounds(
+        mut self,
+        resource_bounds: std::sync::Arc<crate::resource_bounds::ResourceBounds>,
+    ) -> Self {
+        self.resource_bounds = Some(resource_bounds);
+        self
     }
 }
 
@@ -87,7 +106,7 @@ fn system_error(status: StatusCode, code: &'static str, message: impl Into<Strin
         Json(AdminAccessErrorBody {
             code,
             message: message.into(),
-            correlation_id: Uuid::now_v7(),
+            correlation_id: crate::correlation::envelope_id(),
         }),
     )
         .into_response()
@@ -102,8 +121,14 @@ fn store_failure(context: &'static str, error: &impl std::fmt::Display) -> Respo
 // Health aggregation (dashboard + /system/health)
 // ---------------------------------------------------------------------------
 
-/// One subsystem's health verdict. `status` is `ok`, `degraded`, or
-/// `disabled` (a deliberately unconfigured optional subsystem).
+/// One subsystem's health verdict. `status` is one of:
+/// - `ok` — the subsystem is healthy;
+/// - `degraded` — operating but impaired;
+/// - `disabled` — a deliberately unconfigured optional subsystem;
+/// - `unavailable` — a dependency probe failed or timed out (R2.5);
+/// - `readOnly` — the root exists but is not writable (R2.5);
+/// - `misconfigured` — required configuration is invalid or absent (R2.5);
+/// - `capacityExhausted` — a fixed capacity threshold was crossed (R2.5).
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubsystemHealthDto {
@@ -132,6 +157,40 @@ impl SubsystemHealthDto {
             detail: detail.into(),
         }
     }
+
+    fn unavailable(detail: impl Into<String>) -> Self {
+        Self {
+            status: "unavailable",
+            detail: detail.into(),
+        }
+    }
+
+    fn read_only(detail: impl Into<String>) -> Self {
+        Self {
+            status: "readOnly",
+            detail: detail.into(),
+        }
+    }
+
+    fn misconfigured(detail: impl Into<String>) -> Self {
+        Self {
+            status: "misconfigured",
+            detail: detail.into(),
+        }
+    }
+
+    fn capacity_exhausted(detail: impl Into<String>) -> Self {
+        Self {
+            status: "capacityExhausted",
+            detail: detail.into(),
+        }
+    }
+
+    /// Whether the subsystem contributes to the degraded top-level verdict.
+    /// `disabled` never does.
+    fn impairs(&self) -> bool {
+        !matches!(self.status, "ok" | "disabled")
+    }
 }
 
 fn preflight_health(check: &PreflightCheck) -> SubsystemHealthDto {
@@ -155,22 +214,216 @@ pub struct ApiSurfaceDto {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HealthDto {
-    /// `ok` when PostgreSQL is reachable and Tantivy is healthy or disabled.
+    /// `ok` when PostgreSQL is reachable and Tantivy is healthy or disabled
+    /// (the Phase-10 top-level rule, unchanged). R2.5 subsystems report
+    /// their own statuses without flipping the top-level indicator.
     pub status: &'static str,
     pub postgresql: SubsystemHealthDto,
     pub tantivy: SubsystemHealthDto,
     pub storage: SubsystemHealthDto,
     pub ffmpeg: SubsystemHealthDto,
+    /// R2.5: podcast download storage root (disabled when the podcast worker
+    /// is off).
+    pub podcast_storage: SubsystemHealthDto,
+    /// R2.5: free-disk headroom across the configured writable roots.
+    pub disk: SubsystemHealthDto,
+    /// R2.5: lease health (stale expired leases) and durable queue age.
+    pub workers: SubsystemHealthDto,
     pub api_surfaces: Vec<ApiSurfaceDto>,
+    /// R2.4: point-in-time utilization/saturation of every semaphore-bounded
+    /// resource class registered at startup; empty when the process installed
+    /// no registry (unit tests).
+    pub resource_bounds: Vec<crate::resource_bounds::ResourceBoundSnapshot>,
 }
+
+/// R2.5 fixed capacity thresholds — no new operator settings.
+const DISK_FREE_WARN_BYTES: u64 = 1 << 30; // 1 GiB
+const DISK_FREE_WARN_PERCENT: u64 = 5;
+/// An expired lease surviving past this window is a dead/stalled worker,
+/// not ordinary poll lag.
+const STALE_LEASE_GRACE: time::Duration = time::Duration::hours(1);
+/// A durable queue with work untouched this long indicates a stalled pool.
+const QUEUE_AGE_WARN: time::Duration = time::Duration::hours(24);
 
 async fn postgresql_health(pool: &sqlx::PgPool) -> SubsystemHealthDto {
     let probe = sqlx::query_scalar::<_, i32>("SELECT 1").fetch_one(pool);
     match tokio::time::timeout(HEALTH_PROBE_TIMEOUT, probe).await {
         Ok(Ok(1)) => SubsystemHealthDto::ok("postgresql answered a bounded probe"),
         Ok(Ok(_)) | Ok(Err(_)) | Err(_) => {
-            SubsystemHealthDto::degraded("postgresql probe failed or timed out")
+            SubsystemHealthDto::unavailable("postgresql probe failed or timed out")
         }
+    }
+}
+
+/// R2.5: podcast download storage root health. Disabled when the podcast
+/// worker is off; `misconfigured` when a required root is absent or invalid.
+fn podcast_storage_health() -> SubsystemHealthDto {
+    match crate::podcast_worker::PodcastConfig::from_env() {
+        Ok(config) if !config.enabled || !config.worker_enabled => {
+            SubsystemHealthDto::disabled("podcast worker disabled")
+        }
+        Ok(config) => match &config.storage_root {
+            Some(root) if root.is_dir() => {
+                if crate::onboarding::directory_is_writable(root) {
+                    SubsystemHealthDto::ok("podcast storage root is writable")
+                } else {
+                    SubsystemHealthDto::read_only("podcast storage root is not writable")
+                }
+            }
+            _ => SubsystemHealthDto::misconfigured(
+                "podcast storage root is not an existing directory",
+            ),
+        },
+        Err(error) => {
+            SubsystemHealthDto::misconfigured(format!("invalid podcast configuration: {error}"))
+        }
+    }
+}
+
+/// One writable root the disk check watches, with its operator-facing label.
+type DiskRoot = (&'static str, std::path::PathBuf);
+
+/// Collects the configured writable roots from the ingestion and podcast
+/// configuration. Roots that do not exist yet are skipped here — the
+/// storage/podcastStorage subsystems already report that — so this check
+/// measures real mounted filesystems only.
+fn disk_roots() -> Result<Vec<DiskRoot>, SubsystemHealthDto> {
+    let mut roots: Vec<DiskRoot> = Vec::new();
+    match melodee_ingestion::IngestionConfig::from_env() {
+        Ok(config) => {
+            if config.enabled()
+                && let Some(staging) = &config.staging_root
+            {
+                roots.push(("staging", staging.clone()));
+            }
+            if let Some(storage) = &config.storage_root {
+                roots.push(("canonical storage", storage.clone()));
+            }
+            roots.push(("work area", config.work_area_base.clone()));
+        }
+        Err(error) => {
+            return Err(SubsystemHealthDto::misconfigured(format!(
+                "invalid ingestion configuration: {error}"
+            )));
+        }
+    }
+    if let Ok(config) = crate::podcast_worker::PodcastConfig::from_env()
+        && config.enabled
+        && config.worker_enabled
+        && let Some(root) = &config.storage_root
+    {
+        roots.push(("podcast storage", root.clone()));
+    }
+    roots.retain(|(_, path)| path.is_dir());
+    Ok(roots)
+}
+
+/// Free-space reader seam: production uses `statvfs`; tests inject values.
+fn disk_health_with<F>(roots: &[DiskRoot], statfs: F) -> SubsystemHealthDto
+where
+    F: Fn(&std::path::Path) -> Option<(u64, u64)>,
+{
+    let mut worst: Option<(&'static str, u64, u64)> = None;
+    let mut stat_errors = Vec::new();
+    for (label, path) in roots {
+        match statfs(path) {
+            Some((free, total)) => {
+                let worse = worst
+                    .as_ref()
+                    .is_none_or(|(_, worst_free, _)| free < *worst_free);
+                if worse {
+                    worst = Some((*label, free, total));
+                }
+            }
+            None => stat_errors.push(label.to_string()),
+        }
+    }
+    if !stat_errors.is_empty() {
+        return SubsystemHealthDto::degraded(format!(
+            "free space unreadable for: {}",
+            stat_errors.join(", ")
+        ));
+    }
+    let Some((worst_label, free, total)) = worst else {
+        return SubsystemHealthDto::disabled("no writable roots configured");
+    };
+    let percent_free = free.saturating_mul(100).checked_div(total).unwrap_or(0);
+    let detail = format!(
+        "tightest of {} root(s): {worst_label} has {} MiB free ({percent_free}%)",
+        roots.len(),
+        free / (1024 * 1024),
+    );
+    if free < DISK_FREE_WARN_BYTES || percent_free < DISK_FREE_WARN_PERCENT {
+        SubsystemHealthDto::capacity_exhausted(detail)
+    } else {
+        SubsystemHealthDto::ok(detail)
+    }
+}
+
+/// Production `statvfs` reader: available blocks × fragment size against the
+/// block total. Unreadable filesystems return `None` (reported as degraded).
+fn statvfs_free(path: &std::path::Path) -> Option<(u64, u64)> {
+    let stats = rustix::fs::statvfs(path).ok()?;
+    Some((
+        stats.f_bavail * stats.f_frsize,
+        stats.f_blocks * stats.f_frsize,
+    ))
+}
+
+fn disk_health() -> SubsystemHealthDto {
+    match disk_roots() {
+        Ok(roots) => disk_health_with(&roots, statvfs_free),
+        Err(verdict) => verdict,
+    }
+}
+
+/// R2.5: lease health and durable queue age across the pools with queue
+/// tables. Degraded when stale (long-expired, unrecovered) leases exist or
+/// the oldest queued work exceeds the fixed 24h window.
+async fn workers_health(pool: &sqlx::PgPool, now: OffsetDateTime) -> SubsystemHealthDto {
+    let stale = match WorkerPoolStore
+        .stale_lease_count(pool, now, STALE_LEASE_GRACE)
+        .await
+    {
+        Ok(count) => count,
+        Err(error) => {
+            return SubsystemHealthDto::unavailable(format!("lease-health probe failed: {error}"));
+        }
+    };
+    let pools = match WorkerPoolStore.list(pool).await {
+        Ok(pools) => pools,
+        Err(error) => {
+            return SubsystemHealthDto::unavailable(format!("worker pool listing failed: {error}"));
+        }
+    };
+    let mut oldest_queue_age: Option<time::Duration> = None;
+    for pool_state in &pools {
+        let metrics = match WorkerPoolStore.metrics(pool, &pool_state.pool, now).await {
+            Ok(metrics) => metrics,
+            Err(error) => {
+                return SubsystemHealthDto::unavailable(format!(
+                    "worker pool metrics failed: {error}"
+                ));
+            }
+        };
+        if let Some(metrics) = metrics
+            && let Some(oldest) = metrics.oldest_queued_at
+        {
+            let age = now - oldest;
+            if oldest_queue_age.is_none_or(|current| age > current) {
+                oldest_queue_age = Some(age);
+            }
+        }
+    }
+    let queue_age_seconds = oldest_queue_age.map_or(0, time::Duration::whole_seconds);
+    let detail = format!(
+        "{stale} stale lease(s); oldest durable queue age {queue_age_seconds}s across {} pool(s)",
+        pools.len()
+    );
+    if stale > 0 || oldest_queue_age.is_some_and(|age| age > QUEUE_AGE_WARN) {
+        SubsystemHealthDto::degraded(detail)
+    } else {
+        SubsystemHealthDto::ok(detail)
     }
 }
 
@@ -199,7 +452,11 @@ async fn tantivy_health(pool: &sqlx::PgPool, search: &Option<SearchConfig>) -> S
     }
 }
 
-async fn aggregate_health(pool: &sqlx::PgPool, search: &Option<SearchConfig>) -> HealthDto {
+async fn aggregate_health(
+    pool: &sqlx::PgPool,
+    search: &Option<SearchConfig>,
+    resource_bounds: &Option<std::sync::Arc<crate::resource_bounds::ResourceBounds>>,
+) -> HealthDto {
     let postgresql = postgresql_health(pool).await;
     let tantivy = tantivy_health(pool, search).await;
     // The onboarding preflight checks are configuration/filesystem reads
@@ -207,7 +464,15 @@ async fn aggregate_health(pool: &sqlx::PgPool, search: &Option<SearchConfig>) ->
     // already runs, nothing more.
     let storage = preflight_health(&crate::onboarding::check_storage_paths());
     let ffmpeg = preflight_health(&crate::onboarding::check_media_tools().await);
-    let status = if postgresql.status == "ok" && tantivy.status != "degraded" {
+    let podcast_storage = podcast_storage_health();
+    let disk = disk_health();
+    let workers = workers_health(pool, OffsetDateTime::now_utc()).await;
+    // Top-level rule unchanged from Phase 10: PostgreSQL reachable and
+    // Tantivy healthy-or-disabled. The R2.5 subsystems (podcastStorage, disk,
+    // workers) and the pre-existing storage/ffmpeg preflights report their
+    // own statuses without flipping the top-level indicator — operators read
+    // them individually on the diagnostics surface.
+    let status = if postgresql.status == "ok" && !tantivy.impairs() {
         "ok"
     } else {
         "degraded"
@@ -218,6 +483,9 @@ async fn aggregate_health(pool: &sqlx::PgPool, search: &Option<SearchConfig>) ->
         tantivy,
         storage,
         ffmpeg,
+        podcast_storage,
+        disk,
+        workers,
         api_surfaces: vec![
             ApiSurfaceDto {
                 surface: "native",
@@ -236,6 +504,10 @@ async fn aggregate_health(pool: &sqlx::PgPool, search: &Option<SearchConfig>) ->
                 status: "serving",
             },
         ],
+        resource_bounds: resource_bounds
+            .as_ref()
+            .map(|registry| registry.snapshot())
+            .unwrap_or_default(),
     }
 }
 
@@ -454,7 +726,7 @@ async fn dashboard(State(state): State<AdminSystemState>, _admin: AdminPrincipal
         .iter()
         .find(|count| count.state == IngestionState::Quarantined)
         .map_or(0, |count| count.count);
-    let health = aggregate_health(pool, &state.search).await;
+    let health = aggregate_health(pool, &state.search, &state.resource_bounds).await;
     Json(DashboardDto {
         generated_at: now,
         catalog: DashboardCatalogDto {
@@ -753,5 +1025,68 @@ async fn search_rebuild(State(state): State<AdminSystemState>, admin: AdminPrinc
 
 /// GET /api/admin/v1/system/health — aggregated subsystem health.
 async fn system_health(State(state): State<AdminSystemState>, _admin: AdminPrincipal) -> Response {
-    Json(aggregate_health(&state.admin.pool, &state.search).await).into_response()
+    Json(aggregate_health(&state.admin.pool, &state.search, &state.resource_bounds).await)
+        .into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn root(label: &'static str) -> DiskRoot {
+        (label, PathBuf::from("/test"))
+    }
+
+    #[test]
+    fn disk_health_reports_capacity_exhausted_below_the_thresholds() {
+        // 512 MiB free on a 1 TiB volume: under the 1 GiB absolute floor.
+        let verdict = disk_health_with(&[root("storage")], |_| Some((512 << 20, 1 << 40)));
+        assert_eq!(verdict.status, "capacityExhausted");
+        assert!(verdict.detail.contains("512 MiB free"));
+
+        // 200 GiB free on a 10 TiB volume: over the absolute floor but under
+        // the 5% ratio floor.
+        let verdict = disk_health_with(&[root("storage")], |_| Some((200 << 30, 10 << 40)));
+        assert_eq!(verdict.status, "capacityExhausted");
+    }
+
+    #[test]
+    fn disk_health_reports_ok_above_the_thresholds() {
+        // 50 GiB free on a 100 GiB volume: 50% free, well over both floors.
+        let verdict = disk_health_with(&[root("storage")], |_| Some((50 << 30, 100 << 30)));
+        assert_eq!(verdict.status, "ok");
+    }
+
+    #[test]
+    fn disk_health_degrades_when_the_filesystem_is_unreadable() {
+        let verdict = disk_health_with(&[root("work area")], |_| None);
+        assert_eq!(verdict.status, "degraded");
+        assert!(verdict.detail.contains("work area"));
+    }
+
+    #[test]
+    fn disk_health_is_disabled_without_roots() {
+        let verdict = disk_health_with(&[], |_| None);
+        assert_eq!(verdict.status, "disabled");
+    }
+
+    #[test]
+    fn disk_health_surfaces_the_tightest_root() {
+        // Two healthy roots; the tighter one names the detail.
+        let roots = [
+            ("storage", PathBuf::from("/a")),
+            ("work area", PathBuf::from("/b")),
+        ];
+        let verdict = disk_health_with(&roots, |path| {
+            if path.ends_with("a") {
+                // 6 GiB free of 100 GiB: over both the 1 GiB and 5% floors.
+                Some((6 << 30, 100 << 30))
+            } else {
+                Some((40 << 30, 100 << 30))
+            }
+        });
+        assert_eq!(verdict.status, "ok");
+        assert!(verdict.detail.contains("storage"));
+    }
 }

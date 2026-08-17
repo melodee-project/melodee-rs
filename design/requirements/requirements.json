@@ -485,14 +485,20 @@
       "crates/melodee-ingestion/src/publication_worker.rs (independently bounded validation/publication JoinSet workers with lease heartbeat and cancellation)",
       "crates/melodee-media/src/lib.rs (streaming hashes and bounded tool output/artwork limits)",
       "crates/melodee-catalog/src/config.rs and importer.rs (independent bounded catalog-write claim/concurrency, renewal, and cancellation)",
-      "crates/melodee-search/src/config.rs and worker.rs (independently bounded search outbox claims, finite retry attempts, lease heartbeat, cancellation, and polling)"
+      "crates/melodee-search/src/config.rs and worker.rs (independently bounded search outbox claims, finite retry attempts, lease heartbeat, cancellation, and polling)",
+      "apps/melodee-server/src/resource_bounds.rs (R2.4 process-local gauge registry: per-class utilization, queue age, saturation; RAII release on disconnect/cancellation)",
+      "apps/melodee-server/src/main.rs (registry installed at startup; direct-play and transcoding gauges attached; image/podcast/notification/lastfm classes self-register)",
+      "apps/melodee-server/src/admin_system.rs (additive resourceBounds snapshot on /api/admin/v1/system/health)"
     ],
     "tests": [
       "crates/melodee-ingestion/tests/inspection.rs",
       "crates/melodee-ingestion/tests/normalization.rs (measured normalization concurrency reaches 8 and never exceeds 8; validation/publication claim pools configured independently to 8; 200 Releases reach Published)",
       "crates/melodee-persistence/tests/catalog_performance.rs (catalog concurrency reaches and never exceeds four for 200 manifests)",
       "crates/melodee-persistence/tests/search_phase6.rs (bounded exclusive claims, lease expiry/reclaim, max-attempt escalation, and checkpoint fencing)",
-      "crates/melodee-search/tests/rebuild_integration.rs (lease theft cancels before commit and the scheduler next pass converges; long idle polling stops promptly)"
+      "crates/melodee-search/tests/rebuild_integration.rs (lease theft cancels before commit and the scheduler next pass converges; long idle polling stops promptly)",
+      "apps/melodee-server/tests/transcode_service.rs (gauge saturation rejection and release accounting)",
+      "apps/melodee-server/tests/native_stream.rs (direct-play gauge waiter visibility and release)",
+      "apps/melodee-server/tests/admin_system_api.rs (health exposes registered resource bounds; empty without a registry)"
     ]
   },
   {
@@ -615,15 +621,18 @@
     "phase": "3",
     "source": "PRD.md",
     "line": 607,
-    "status": "in-progress",
+    "status": "tested",
     "implementation": [
-      "crates/melodee-media/src/normalize.rs (CUE FILE/TRACK/INDEX, M3U EXTINF, SFV paths, NFO type, LRC multi-timestamp semantics with structured findings)",
-      "crates/melodee-media/src/normalize.rs (ParsedSidecar domain type with findings)",
-      "crates/melodee-domain/src/manifest.rs (ParsedSidecar domain type)"
+      "crates/melodee-media/src/normalize.rs (CUE FILE/TRACK/INDEX, M3U EXTINF, SFV paths, NFO type, LRC multi-timestamp semantics with structured findings; windows-1252 legacy-encoding fallback)",
+      "crates/melodee-media/src/normalize.rs (ADR-0146 two-pass normalization: CUE governance plans, per-track MP3 segment encoding with sheet metadata, whole-file suppression for governed sources, manifest Track replacement on deterministic segment pseudo-paths, validation profile 2)",
+      "crates/melodee-domain/src/manifest.rs (ParsedSidecar, CueSegmentIdentity, CueSegmentPlan, OutputCueSegment domain types)",
+      "crates/melodee-ingestion/src/validate.rs (catalog joins governed outputs on track_key; open migration catalogues pre-existing legacy split rows with per-run findings)"
     ],
     "tests": [
-      "crates/melodee-media/src/normalize.rs (sidecar semantic and malformed-input unit tests)",
-      "crates/melodee-media/tests/normalization_real.rs (five-type real-file sidecar matrix and two-run determinism)"
+      "crates/melodee-media/tests/normalization_real.rs::cue_governed_source_splits_into_verified_per_track_segments (end-to-end ADR-0146 proof against frozen capture compatibility/media/cases/cue-split.json: 1 WAV + 3-track CUE -> 3 verified MP3 segments with sheet tags, deterministic identity across attempts, source tree byte-identical)",
+      "crates/melodee-media/tests/normalization_real.rs (five-type real-file sidecar matrix and two-run determinism)",
+      "crates/melodee-media/src/normalize.rs (sidecar semantic, malformed-input, CUE governance, and windows-1252 fallback unit tests)",
+      "design/evidence/r2/README.md section 5 (R2.2 CUE/sidecar behavioral closure)"
     ]
   },
   {
@@ -1702,14 +1711,23 @@
     "phase": "7,8",
     "source": "PRD.md",
     "line": 1274,
-    "status": "in-progress",
+    "status": "tested",
     "implementation": [
       "compatibility/melodee-api-v1/golden/native-stream/ (direct play, ranges, content type/length)",
-      "apps/melodee-server/src/native_stream.rs (direct play, HEAD/range, disconnect capacity release and bounded concurrency)"
+      "apps/melodee-server/src/native_stream.rs (direct play, HEAD/range, disconnect capacity release and bounded concurrency)",
+      "apps/melodee-server/src/transcode.rs (ADR-0147 shared TranscodingService: template parse from transcoding.command.{aac,mp3,opus} with %s/%t/%bk substitution, argv-only FFmpeg spawn, no-shell guarantee, no-follow stdin handoff of the validated asset, kill_on_drop cancellation, bounded stderr capture, non-blocking semaphore)",
+      "apps/melodee-server/src/opensubsonic/media.rs (ADR-0147 decision 3: format/maxBitRate plan resolution, error-0 envelope failures, transcoded response headers without Content-Length/ETag, download attachment extension swap)",
+      "apps/melodee-server/src/jellyfin/audio.rs (ADR-0147 decision 4: container/audioBitRate plan, default mp3, HEAD headers-only, 400 unsupported container, 503 template/capacity failures; static=true/universal direct play unchanged)",
+      "crates/melodee-persistence/src/settings.rs (corrected parseable transcoding.command.{aac,mp3,opus} seeds; transcoding.maxConcurrent bound, default 4, 0 disables)"
     ],
     "tests": [
       "tests/python/test_native_v1_capture.py",
-      "apps/melodee-server/tests/native_stream.rs (captured ranges, full/HEAD, capacity and disconnect release)"
+      "apps/melodee-server/tests/native_stream.rs (captured ranges, full/HEAD, capacity and disconnect release)",
+      "apps/melodee-server/src/transcode.rs unit tests (template parse/render, malformed legacy seed fail-closed, missing %s rejection, format tags)",
+      "apps/melodee-server/tests/transcode_service.rs (semaphore saturation + recovery, client-disconnect permit release and child kill, spawn failure mapping, DB override layering + malformed template fail-closed, real FFmpeg WAV->MP3 with ffprobe re-parse)",
+      "apps/melodee-server/tests/opensubsonic_media_api.rs (mp3/aac transcodes, maxBitRate cap trigger and below-cap direct play, raw+high-cap direct play, unsupported format error-0, disabled-transcoding error-0, malformed template error-0, Range ignored on transcode, download extension swap)",
+      "apps/melodee-server/tests/jellyfin_media_api.rs (stream.mp3/aac/opus transcodes with real FFmpeg, audioBitRate default-mp3, HEAD headers-only, 503 when disabled, 400 unsupported container)",
+      "scripts/run_phase8_differential.py (known-differences registry entries for the retired frozen silent-ignore and 400-rejection goldens)"
     ]
   },
   {
@@ -3328,9 +3346,10 @@
     "line": 2077,
     "status": "tested",
     "implementation": [
-      "apps/melodee-cli/src/main.rs — delivered command groups covering the required minimum set: doctor (prerequisite/health inspection), config list/validate/export/import (config health), ingest reconcile/status (library reconciliation trigger and diagnostics), work list/show/seed-test/claim-test (ingestion item inspect), catalog import/status/inspect, policy config/rules/test (diagnostics/report output), search status/rebuild/query, migrate (database migration/status), users bootstrap-admin and operator recovery (user/admin bootstrap and recovery), groups, charts, podcasts stuck/recover (stuck-download recovery), notifications templates/test-send, scripts list/test, worker-pools list/pause/resume, plan"
+      "apps/melodee-cli/src/main.rs — delivered command groups covering the required minimum set: doctor (prerequisite/health inspection), config list/validate/export/import (config health), ingest reconcile/status (library reconciliation trigger and diagnostics), work list/show/retry/seed-test/claim-test (ingestion item inspect and audited retry/reprocess), catalog import/status/inspect, policy config/rules/test (diagnostics/report output), search status/rebuild/query, migrate (database migration/status), users bootstrap-admin and operator recovery (user/admin bootstrap and recovery), groups, charts, podcasts stuck/recover (stuck-download recovery), notifications templates/test-send, scripts list/test, worker-pools list/pause/resume, plan"
     ],
     "tests": [
+      "apps/melodee-cli/tests/work_retry.rs (work retry requeues failed/quarantined through the operator state-machine arm, refuses other states, fails on unknown ids)",
       "apps/melodee-cli/tests/plan.rs, config.rs, policy.rs, search.rs, users_groups.rs, podcasts.rs, notifications.rs, scripts.rs, and worker_pools.rs (command suites against real PostgreSQL)",
       "apps/melodee-cli/src/main.rs unit tests (clap parse matrix for every command group, incl. fail-closed argument validation)"
     ]
@@ -3345,12 +3364,14 @@
     "implementation": [
       "apps/melodee-cli/src/main.rs (all mutating commands connect via MELODEE__DATABASE__URL and operate through the same melodee-persistence stores as the server: WorkItemStore, SettingsStore, OnboardingStore, worker_pool rows, podcast lease predicates, notification template/delivery stores, script registry)",
       "apps/melodee-cli/src/main.rs (users/groups/notifications/scripts commands documented as mirroring the admin API semantics exactly; no HTTP/JWT bypass invented)",
-      "apps/melodee-cli/src/main.rs (podcasts recover reuses the worker's lease predicates and owned-file reconciliation; worker-pools pause/resume writes the same audited durable rows the workers poll)"
+      "apps/melodee-cli/src/main.rs (podcasts recover reuses the worker's lease predicates and owned-file reconciliation; worker-pools pause/resume writes the same audited durable rows the workers poll)",
+      "apps/melodee-cli/src/main.rs (work retry reuses WorkItemStore::transition with TransitionKind::Operator — the identical audited arm as the Admin UI reprocess endpoint)"
     ],
     "tests": [
       "apps/melodee-cli/tests/worker_pools.rs (CLI pause/resume is durable, audited, and observed by server workers)",
       "apps/melodee-cli/tests/podcasts.rs (recovery requeues only expired leases and removes only orphans)",
-      "apps/melodee-cli/tests/config.rs, notifications.rs, scripts.rs, users_groups.rs (DB-direct coordination through shared stores; secret redaction preserved)"
+      "apps/melodee-cli/tests/config.rs, notifications.rs, scripts.rs, users_groups.rs (DB-direct coordination through shared stores; secret redaction preserved)",
+      "apps/melodee-cli/tests/work_retry.rs (retry goes through the durable state machine with an audited operator reason; non-failed/quarantined items are refused)"
     ]
   },
   {
@@ -3359,13 +3380,21 @@
     "phase": "1,2",
     "source": "PRD.md",
     "line": 2089,
-    "status": "in-progress",
+    "status": "tested",
     "implementation": [
       "crates/melodee-persistence/src/work_items.rs (tracing events with work_item_id/worker_id/correlation_id/lease fields)",
       "crates/melodee-catalog/src/importer.rs (structured catalog-import spans, identity/count/result/failure evidence)",
-      "crates/melodee-search/src/worker.rs and rebuild.rs (structured generation/job/outbox/error lifecycle events)"
+      "crates/melodee-search/src/worker.rs and rebuild.rs (structured generation/job/outbox/error lifecycle events)",
+      "apps/melodee-server/src/correlation.rs (R2.5 HTTP correlation middleware: x-request-id parsed when present, generated otherwise; request-span field plus task-local scoping)",
+      "apps/melodee-server/src/admin.rs and native adapters (error-envelope correlationId sourced from the request task-local across all 16 envelope sites)",
+      "apps/melodee-server/src/scrobbler.rs and notifications.rs (spawned provider/notification dispatches capture the in-flight request correlation id and instrument the spawned future)",
+      "apps/melodee-server/src/workers (per-item ingestion/normalize/publication/policy spans carry work_item_id and the durable correlation_id; search outbox pass-level span)",
+      "crates/melodee-media/src/lib.rs (ToolInvocation drop-guard logs tool, outcome, and duration with file-name-only arguments for ffmpeg/ffprobe/fpcalc)"
     ],
-    "tests": []
+    "tests": [
+      "apps/melodee-server/tests/admin_system_api.rs (error envelope sources the request correlation header; captured traffic without the header stays byte-identical)",
+      "apps/melodee-server/src/notifications.rs (redaction audit: delivery-failure logs never contain the SMTP password)"
+    ]
   },
   {
     "id": "PRD-OBS-002",
@@ -3373,13 +3402,18 @@
     "phase": "1,2",
     "source": "PRD.md",
     "line": 2093,
-    "status": "in-progress",
+    "status": "tested",
     "implementation": [
       "apps/melodee-server/src/system.rs (bounded PostgreSQL readiness plus active search generation/schema/count validation; liveness remains separate)",
-      "crates/melodee-search/src/service.rs (active-generation manifest/index diagnostic)"
+      "crates/melodee-search/src/service.rs (active-generation manifest/index diagnostic)",
+      "apps/melodee-server/src/admin_system.rs (R2.5 /system/health extension: podcastStorage root writability, disk free-space across storage/work-area/podcast roots via statvfs, workers stale-lease count and durable queue age; subsystem vocabulary extended with unavailable/readOnly/misconfigured/capacityExhausted)",
+      "apps/melodee-server/src/onboarding.rs (media-tools preflight now probes fpcalc alongside ffmpeg/ffprobe)",
+      "admin-ui/src/components/SystemHealthPanel.tsx (all seven subsystems rendered with the extended status vocabulary)"
     ],
     "tests": [
-      "apps/melodee-server/tests/system_api.rs (disabled/healthy/corrupt-generation readiness)"
+      "apps/melodee-server/tests/system_api.rs (disabled/healthy/corrupt-generation readiness)",
+      "apps/melodee-server/tests/admin_system_api.rs (workers subsystem reports stale leases with operator-readable detail)",
+      "apps/melodee-server/src/admin_system.rs unit tests (disk capacityExhausted/degraded/disabled/tightest-root through the injected statfs seam)"
     ]
   },
   {

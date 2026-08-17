@@ -5,7 +5,9 @@
 - **Decision owners:** Phase 8 OpenSubsonic adapter work package (explicitly authorized by the
   assigning session prompt to resolve the open Phase 8 product decisions)
 - **Supersedes:** None
-- **Superseded by:** None
+- **Superseded by:** ADR-0147 (partially — only the "transcode parameters remain silently
+  ignored" clause of decision 2 and the "There is no transcoding" sentence of decision 4; all
+  other decisions stand)
 - **Related requirements:** PRD-API-OS-001 through PRD-API-OS-007, PRD-STREAM-002, PRD-SEC-001,
   PRD-TEST-001/002; ADR-0102 (separate adapters), ADR-0113 (no unsigned JWT),
   ADR-0123 (scope-overlap governance), ADR-0124 (native auth precedent)
@@ -47,10 +49,13 @@ recoverable per-user secret. The legacy server stored the secret reversibly encr
    and no legacy client could have depended on signed-JWT verification the legacy server never
    performed.
 2. **The extension advertisement list is preserved byte-for-byte**, including the false
-   `apiKeyAuthentication[1]` and `transcodeOffset[1]` claims and the malformed XML serialization
-   quirk (attributes with no element name). The `apiKey` parameter remains unconsulted (captured:
-   error 40) and transcode parameters remain silently ignored (captured: full original bytes at
-   200). Changing a frozen, client-visible advertisement is itself a compatibility event; no
+    `apiKeyAuthentication[1]` and `transcodeOffset[1]` claims and the malformed XML serialization
+    quirk (attributes with no element name). The `apiKey` parameter remains unconsulted (captured:
+    error 40) and transcode parameters remain silently ignored (captured: full original bytes at
+    200). *(2026-08-16: the silent-ignore clause is superseded by ADR-0147 — `format`/`maxBitRate`
+    now invoke configured transcoding; the frozen advertisement including `transcodeOffset[1]`,
+    the unconsulted `apiKey`, and the `timeOffset` 404 + error 70 rejection are unchanged.)*
+    Changing a frozen, client-visible advertisement is itself a compatibility event; no
    inventoried client can be using apiKey against Melodee because the legacy server never honored
    it, so preserving the captured behavior carries no real client risk. This is the explicit
    product decision resolving discrepancy D8: the advertisement is inherited for parity, and the
@@ -61,9 +66,10 @@ recoverable per-user secret. The legacy server stored the secret reversibly encr
 4. **OpenSubsonic streaming implements correct single-pass range handling** (resolving D2):
    206 responses carry the true total size in `Content-Range`, nonzero-offset seeks return the
    requested bytes, unsatisfiable/invalid ranges and `timeOffset` return the captured
-   404 + error 70 JSON envelope. The legacy double-range-processing bug is explicitly not
-   preserved. There is no transcoding: `maxBitRate`/`format` are silently ignored, matching the
-   captured baseline.
+    404 + error 70 JSON envelope. The legacy double-range-processing bug is explicitly not
+    preserved. ~~There is no transcoding: `maxBitRate`/`format` are silently ignored, matching the
+    captured baseline.~~ *(2026-08-16: superseded by ADR-0147 — configured transcoding replaces
+    silent-ignoring; the range-handling and `timeOffset` clauses of this decision stand.)*
 5. **All adapter list responses use deterministic tiebreaks** (resolving D10 for this surface):
    every sorted list appends a stable secondary key (public id) so equal primary keys order
    deterministically. This is a recorded do-not-preserve normalization.

@@ -11,7 +11,11 @@ function makeHealth(overrides: Partial<SystemHealth> = {}): SystemHealth {
     tantivy: { status: 'disabled', detail: 'search worker disabled' },
     storage: { status: 'degraded', detail: 'inbound path not writable' },
     ffmpeg: { status: 'ok', detail: 'ffmpeg 8.1' },
+    podcastStorage: { status: 'disabled', detail: 'podcast worker disabled' },
+    disk: { status: 'ok', detail: 'tightest of 2 root(s): storage has 512000 MiB free (50%)' },
+    workers: { status: 'ok', detail: 'no stale leases; oldest ready item 0s; 0 ready / 0 claimed' },
     apiSurfaces: [{ surface: 'native', status: 'serving' }],
+    resourceBounds: [],
     ...overrides,
   };
 }
@@ -23,9 +27,13 @@ describe('SystemHealthPanel', () => {
     expect(screen.getByText('Tantivy search index')).toBeInTheDocument();
     expect(screen.getByText('Storage')).toBeInTheDocument();
     expect(screen.getByText('FFmpeg')).toBeInTheDocument();
+    expect(screen.getByText('Podcast storage')).toBeInTheDocument();
+    expect(screen.getByText('Disk free space')).toBeInTheDocument();
+    expect(screen.getByText('Background workers')).toBeInTheDocument();
     // Degraded and disabled are distinct, textual verdicts.
     expect(screen.getByText('Degraded')).toBeInTheDocument();
-    expect(screen.getByText('Disabled')).toBeInTheDocument();
+    // Tantivy and podcast storage are both disabled in this fixture.
+    expect(screen.getAllByText('Disabled')).toHaveLength(2);
     expect(screen.getByText('inbound path not writable')).toBeInTheDocument();
     expect(screen.getByText('search worker disabled')).toBeInTheDocument();
   });

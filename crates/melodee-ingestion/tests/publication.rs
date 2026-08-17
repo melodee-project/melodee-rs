@@ -9,10 +9,10 @@ use std::{
 };
 
 use melodee_domain::{
-    CURRENT_MANIFEST_VERSION, FingerprintObservation, ManifestReleaseObservation,
-    NormalizationExecutionProvenance, NormalizationObservations, NormalizedOutput, ObservedFile,
-    ObservedFileKind, ObservedTrack, PUBLICATION_MANIFEST_VERSION, PublicationAuthorization,
-    ReleaseId, ReleaseManifest, ValidationOutcome,
+    CURRENT_MANIFEST_VERSION, CueSegmentIdentity, FingerprintObservation,
+    ManifestReleaseObservation, NormalizationExecutionProvenance, NormalizationObservations,
+    NormalizedOutput, ObservedFile, ObservedFileKind, ObservedTrack, PUBLICATION_MANIFEST_VERSION,
+    ParsedSidecar, PublicationAuthorization, ReleaseId, ReleaseManifest, ValidationOutcome,
 };
 use melodee_ingestion::{
     PublicationBundle, PublicationError, PublicationOutcome, StructuralValidationError,
@@ -111,6 +111,7 @@ impl Fixture {
                 bitrate_bps: Some(192_000),
                 duration_ms: 1_000,
                 retained: false,
+                segment: None,
                 findings: Vec::new(),
             }],
             fingerprints: vec![FingerprintObservation {
@@ -329,6 +330,147 @@ fn fingerprint_and_output_inventories_fail_closed_when_missing_duplicate_or_inco
     incomplete_output.normalization.as_mut().unwrap().outputs[0].sample_rate_hz = 0;
     assert!(matches!(
         validate_normalized_manifest(&incomplete_output, &fixture.work_area),
+        Err(StructuralValidationError::IncompleteManifest(_))
+    ));
+}
+
+const SEG1_PATH: &str = "audio/Disc Ω/-leading track.flac.01.mp3";
+const SEG2_PATH: &str = "audio/Disc Ω/-leading track.flac.02.mp3";
+const SEG1_BYTES: &[u8] = b"synthetic cue segment one mp3 bytes\0\x03";
+const SEG2_BYTES: &[u8] = b"synthetic cue segment two mp3 bytes, distinct\0\x04";
+const CUE_PATH: &str = "Disc Ω/album.cue";
+
+fn segment_output(track: u32, output_path: &str, bytes: &[u8]) -> NormalizedOutput {
+    NormalizedOutput {
+        source_file: SOURCE_PATH.to_owned(),
+        output_path: output_path.to_owned(),
+        byte_hash: blake3::hash(bytes).to_hex().to_string(),
+        container: "mp3".to_owned(),
+        codec: "mp3".to_owned(),
+        sample_rate_hz: 48_000,
+        channels: 2,
+        bitrate_bps: Some(192_000),
+        duration_ms: 1_000,
+        retained: false,
+        segment: Some(CueSegmentIdentity {
+            cue: CUE_PATH.to_owned(),
+            track,
+        }),
+        findings: Vec::new(),
+    }
+}
+
+fn segment_track(track: u32, bytes: &[u8]) -> ObservedTrack {
+    ObservedTrack {
+        file_path: format!("{SOURCE_PATH}#cue-track-{track:02}"),
+        track_number: Some(track),
+        track_title: Some(format!("Segment Track {track}")),
+        media_number: Some(1),
+        sort_order: Some(track),
+        byte_hash: Some(blake3::hash(bytes).to_hex().to_string()),
+        duration_ms: Some(1_000),
+        observed_metadata: None,
+    }
+}
+
+/// ADR-0146: one CUE-governed source with two segment outputs, keyed by the
+/// deterministic `<source>#cue-track-NN` pseudo-paths throughout.
+fn cue_governed_manifest(fixture: &Fixture) -> ReleaseManifest {
+    fs::write(fixture.work_root.join(SEG1_PATH), SEG1_BYTES).expect("segment 1 output");
+    fs::write(fixture.work_root.join(SEG2_PATH), SEG2_BYTES).expect("segment 2 output");
+
+    let mut manifest = fixture.manifest.clone();
+    manifest.tracks = vec![segment_track(1, SEG1_BYTES), segment_track(2, SEG2_BYTES)];
+    let normalization = manifest.normalization.as_mut().unwrap();
+    normalization.outputs = vec![
+        segment_output(1, SEG1_PATH, SEG1_BYTES),
+        segment_output(2, SEG2_PATH, SEG2_BYTES),
+    ];
+    normalization.parsed_sidecars.push(ParsedSidecar {
+        sidecar_type: "cue".to_owned(),
+        relative_path: CUE_PATH.to_owned(),
+        parsed: serde_json::json!({"tracks": 2}),
+        findings: Vec::new(),
+    });
+    manifest
+}
+
+#[test]
+fn cue_segment_outputs_validate_and_join_by_track_key() {
+    let fixture = Fixture::new("cue-segments");
+    let manifest = cue_governed_manifest(&fixture);
+
+    let validated = validate_normalized_manifest(&manifest, &fixture.work_area)
+        .expect("CUE-governed manifest validates");
+    let media_keys = validated
+        .assets
+        .iter()
+        .filter(|asset| asset.kind == melodee_domain::CanonicalAssetKind::Media)
+        .map(|asset| asset.source_path.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        media_keys,
+        vec![
+            format!("{SOURCE_PATH}#cue-track-01"),
+            format!("{SOURCE_PATH}#cue-track-02"),
+        ]
+    );
+
+    let input_hash = melodee_media::hash_manifest(&manifest).expect("semantic hash");
+    build_publication_bundle(
+        &manifest,
+        &input_hash,
+        ReleaseId::new(),
+        PublicationAuthorization::phase3_structural(),
+        validated,
+    )
+    .expect("CUE-governed bundle builds");
+}
+
+#[test]
+fn cue_segment_identity_pathologies_fail_closed() {
+    let fixture = Fixture::new("cue-segment-pathologies");
+
+    // Duplicate segment identities for one source.
+    let mut duplicate = cue_governed_manifest(&fixture);
+    duplicate.normalization.as_mut().unwrap().outputs[1] = segment_output(1, SEG2_PATH, SEG2_BYTES);
+    assert!(matches!(
+        validate_normalized_manifest(&duplicate, &fixture.work_area),
+        Err(StructuralValidationError::IncompleteManifest(_))
+    ));
+
+    // Track number zero is not a valid CUE TRACK identity.
+    let mut zero = cue_governed_manifest(&fixture);
+    zero.normalization.as_mut().unwrap().outputs[1] = segment_output(0, SEG2_PATH, SEG2_BYTES);
+    zero.tracks[1] = segment_track(0, SEG2_BYTES);
+    assert!(matches!(
+        validate_normalized_manifest(&zero, &fixture.work_area),
+        Err(StructuralValidationError::IncompleteManifest(_))
+    ));
+
+    // A segment identity must cite a CUE sidecar that was actually parsed.
+    let mut unparsed = cue_governed_manifest(&fixture);
+    unparsed
+        .normalization
+        .as_mut()
+        .unwrap()
+        .parsed_sidecars
+        .clear();
+    assert!(matches!(
+        validate_normalized_manifest(&unparsed, &fixture.work_area),
+        Err(StructuralValidationError::IncompleteManifest(_))
+    ));
+
+    // Whole-file and segment outputs must never mix for one governed source.
+    let mut mixed = cue_governed_manifest(&fixture);
+    let normalization = mixed.normalization.as_mut().unwrap();
+    normalization.outputs[0] = NormalizedOutput {
+        segment: None,
+        ..segment_output(1, SEG1_PATH, SEG1_BYTES)
+    };
+    mixed.tracks[0].file_path = SOURCE_PATH.to_owned();
+    assert!(matches!(
+        validate_normalized_manifest(&mixed, &fixture.work_area),
         Err(StructuralValidationError::IncompleteManifest(_))
     ));
 }

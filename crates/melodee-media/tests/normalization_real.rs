@@ -8,6 +8,7 @@ use std::{
     time::Duration,
 };
 
+use melodee_domain::ObservedFileKind;
 use melodee_media::{
     InspectionOptions, NormalizationError, NormalizationOptions, inspect_release, normalize_release,
 };
@@ -363,6 +364,474 @@ fn real_format_matrix_is_verified_source_safe_and_deterministic() {
     );
 }
 
+/// R2.1 content-based detection, mirroring legacy compatibility case
+/// `not-mp3-named-mp3` (compatibility/media/cases/not-mp3-named-mp3.json):
+/// WAV content wearing `.mp3` filenames must be detected from probed streams
+/// (not the extension) and converted to MP3 — the captured expectation
+/// `conversion: mp3 despite extension`.
+#[test]
+fn wav_content_in_mp3_named_files_is_detected_from_content_and_converted() {
+    if !tools_available() {
+        eprintln!("skipping real content-detection test: ffmpeg, ffprobe, or fpcalc unavailable");
+        return;
+    }
+
+    let temp = TestDirectory::new();
+    let source = temp.path().join("source");
+    fs::create_dir(&source).unwrap();
+    for (name, frequency) in [
+        ("01 First Light.mp3", 440),
+        ("02 Second Wave.mp3", 550),
+        ("03 Third Echo.mp3", 660),
+    ] {
+        let output = Command::new("ffmpeg")
+            .args(["-y", "-v", "error", "-f", "lavfi", "-i"])
+            .arg(format!("sine=frequency={frequency}:duration=5"))
+            .args(["-c:a", "pcm_s16le", "-f", "wav"])
+            .arg(source.join(name))
+            .output()
+            .expect("generate WAV content in an .mp3 filename");
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    let inspected = inspect_release(
+        Uuid::now_v7(),
+        None,
+        "not-mp3",
+        &source,
+        None,
+        Some("stable"),
+        &InspectionOptions::default(),
+    )
+    .expect("inspect misnamed release");
+    assert_eq!(inspected.manifest.files.len(), 3);
+    for file in &inspected.manifest.files {
+        assert_eq!(file.kind, ObservedFileKind::Audio);
+        let audio = file.audio.as_ref().expect("probed audio observation");
+        assert_eq!(audio.container.as_deref(), Some("wav"));
+        assert_eq!(audio.codec.as_deref(), Some("pcm_s16le"));
+        assert_eq!(
+            file.mime_type.as_deref(),
+            Some("audio/wav"),
+            "probed content must override the extension-derived MIME for {file:?}"
+        );
+        assert!(
+            file.findings
+                .iter()
+                .any(|finding| finding.code == "media.extension_mismatch"),
+            "mismatch finding recorded for {file:?}"
+        );
+    }
+
+    let source_before = file_hashes(&source);
+    let mut manifest = inspected.manifest;
+    let report = normalize_release(
+        &mut manifest,
+        &source,
+        &normalization_options(&temp.path().join("work"), Uuid::now_v7()),
+    )
+    .expect("normalize misnamed release");
+    assert_eq!(report.outputs_produced, 3);
+    let normalization = report.manifest.normalization.as_ref().unwrap();
+    let attempt_root = PathBuf::from(
+        normalization
+            .provenance
+            .work_area
+            .as_deref()
+            .expect("attempt work area"),
+    );
+    for output in &normalization.outputs {
+        assert!(
+            !output.retained,
+            "WAV content must convert despite the .mp3 name"
+        );
+        assert_eq!(output.codec, "mp3");
+        let document = probe(&attempt_root.join(&output.output_path));
+        let audio = document["streams"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|stream| stream["codec_type"] == "audio")
+            .unwrap();
+        assert_eq!(audio["codec_name"], "mp3");
+        assert_eq!(audio["sample_rate"], "48000");
+    }
+    assert_eq!(source_before, file_hashes(&source), "source media changed");
+}
+
+/// R2.1 zero-length fixture: inspection must record an actionable finding
+/// and normalization must refuse to publish unverified output.
+#[test]
+fn zero_length_audio_is_an_actionable_finding_and_blocks_normalization() {
+    if !tools_available() {
+        eprintln!("skipping real zero-length test: media tools unavailable");
+        return;
+    }
+    let temp = TestDirectory::new();
+    let source = temp.path().join("source");
+    fs::create_dir(&source).unwrap();
+    fs::write(source.join("empty.flac"), b"").unwrap();
+
+    let inspected = inspect_release(
+        Uuid::now_v7(),
+        None,
+        "zero-length",
+        &source,
+        None,
+        Some("stable"),
+        &InspectionOptions::default(),
+    )
+    .expect("inspect zero-length release");
+    let file = &inspected.manifest.files[0];
+    assert_eq!(file.kind, ObservedFileKind::Audio);
+    assert!(
+        file.findings
+            .iter()
+            .any(|finding| finding.code == "media.empty_file"),
+        "zero-length audio is an actionable inspection finding"
+    );
+    // ffprobe's raw-FLAC demuxer still answers for an empty file; the
+    // observation records that degenerate truth (no duration) rather than
+    // hiding it.
+    let audio = file.audio.as_ref().expect("degenerate probe observation");
+    assert!(audio.duration_ms.is_none());
+
+    let mut manifest = inspected.manifest;
+    let error = normalize_release(
+        &mut manifest,
+        &source,
+        &normalization_options(&temp.path().join("work"), Uuid::now_v7()),
+    )
+    .unwrap_err();
+    assert!(
+        matches!(error, NormalizationError::Ffmpeg(_)),
+        "ffmpeg refuses empty input, got {error:?}"
+    );
+    assert!(manifest.normalization.is_none());
+}
+
+/// R2.1 truncated fixture: a FLAC cut mid-stream still probes (STREAMINFO
+/// carries the full duration) but must fail normalization actionably — the
+/// encode either errors or decodes short and trips output duration
+/// verification — and nothing is published.
+#[test]
+fn truncated_audio_fails_normalization_without_publishing() {
+    if !tools_available() {
+        eprintln!("skipping real truncation test: media tools unavailable");
+        return;
+    }
+    let temp = TestDirectory::new();
+    let source = temp.path().join("source");
+    fs::create_dir(&source).unwrap();
+    let truncated = source.join("truncated.flac");
+    generate_audio(&truncated, &["-c:a", "flac"], 440);
+    let bytes = fs::read(&truncated).unwrap();
+    fs::write(&truncated, &bytes[..bytes.len() * 2 / 5]).unwrap();
+
+    let inspected = inspect_release(
+        Uuid::now_v7(),
+        None,
+        "truncated",
+        &source,
+        None,
+        Some("stable"),
+        &InspectionOptions::default(),
+    )
+    .expect("inspect truncated release");
+    let file = &inspected.manifest.files[0];
+    let audio = file.audio.as_ref().expect("STREAMINFO still probes");
+    assert_eq!(audio.codec.as_deref(), Some("flac"));
+    assert!(
+        audio.duration_ms.is_some_and(|duration| duration > 4_000),
+        "STREAMINFO reports the full 5 s duration"
+    );
+
+    let source_before = file_hashes(&source);
+    let mut manifest = inspected.manifest;
+    let error = normalize_release(
+        &mut manifest,
+        &source,
+        &normalization_options(&temp.path().join("work"), Uuid::now_v7()),
+    )
+    .unwrap_err();
+    assert!(
+        matches!(
+            error,
+            NormalizationError::Verification(_) | NormalizationError::Ffmpeg(_)
+        ),
+        "typed actionable failure, got {error:?}"
+    );
+    assert!(manifest.normalization.is_none());
+    assert_eq!(source_before, file_hashes(&source), "source media changed");
+}
+
+/// R2.1 multi-stream fixture: a container with more than one audio stream is
+/// observed with its true stream count and rejected actionably — Melodee
+/// never guesses which stream is the music.
+#[test]
+fn multi_stream_audio_is_observed_and_rejected_actionably() {
+    if !tools_available() {
+        eprintln!("skipping real multi-stream test: media tools unavailable");
+        return;
+    }
+    let temp = TestDirectory::new();
+    let source = temp.path().join("source");
+    fs::create_dir(&source).unwrap();
+    let mut command = Command::new("ffmpeg");
+    command
+        .args(["-y", "-v", "error"])
+        .args(["-f", "lavfi", "-i", "sine=frequency=440:duration=2"])
+        .args(["-f", "lavfi", "-i", "sine=frequency=550:duration=2"])
+        .args(["-map", "0:a:0", "-map", "1:a:0", "-c:a", "aac"])
+        .arg(source.join("two-streams.m4a"));
+    run(&mut command);
+
+    let inspected = inspect_release(
+        Uuid::now_v7(),
+        None,
+        "multi-stream",
+        &source,
+        None,
+        Some("stable"),
+        &InspectionOptions::default(),
+    )
+    .expect("inspect multi-stream release");
+    let file = &inspected.manifest.files[0];
+    assert_eq!(file.audio.as_ref().unwrap().stream_count, Some(2));
+
+    let mut manifest = inspected.manifest;
+    let error = normalize_release(
+        &mut manifest,
+        &source,
+        &normalization_options(&temp.path().join("work"), Uuid::now_v7()),
+    )
+    .unwrap_err();
+    assert!(matches!(error, NormalizationError::Verification(_)));
+    assert!(manifest.normalization.is_none());
+}
+
+/// R2.1 oversized-tag fixture: embedded artwork beyond the configured
+/// observation bound is skipped with a structured finding; audio observation
+/// and normalization are unaffected.
+#[test]
+fn oversized_embedded_artwork_is_bounded_and_recorded() {
+    if !tools_available() {
+        eprintln!("skipping real oversized-tag test: media tools unavailable");
+        return;
+    }
+    let temp = TestDirectory::new();
+    let source = temp.path().join("source");
+    fs::create_dir(&source).unwrap();
+    let audio = source.join("base.flac");
+    generate_audio(&audio, &["-c:a", "flac"], 440);
+    // Random-noise PNG compresses to roughly raw size, reliably exceeding
+    // the 16 MiB observation bound at 4096x4096 RGB.
+    let oversized = source.join("oversized.png");
+    let mut command = Command::new("ffmpeg");
+    command
+        .args(["-y", "-v", "error", "-f", "lavfi", "-i"])
+        .arg("nullsrc=s=4096x4096,noise=alls=100:allf=u")
+        .args(["-frames:v", "1"])
+        .arg(&oversized);
+    run(&mut command);
+    assert!(
+        fs::metadata(&oversized).unwrap().len() > 16 * 1024 * 1024,
+        "noise fixture must exceed the observation bound"
+    );
+
+    let mut command = Command::new("ffmpeg");
+    command
+        .args(["-y", "-v", "error", "-i"])
+        .arg(&audio)
+        .arg("-i")
+        .arg(&oversized)
+        .args([
+            "-map",
+            "0:a:0",
+            "-map",
+            "1:v:0",
+            "-c:a",
+            "libmp3lame",
+            "-q:a",
+            "4",
+            "-c:v",
+            "copy",
+            "-disposition:v:0",
+            "attached_pic",
+            "-id3v2_version",
+            "3",
+        ])
+        .arg(source.join("oversized-tag.mp3"));
+    run(&mut command);
+    fs::remove_file(&audio).unwrap();
+    fs::remove_file(&oversized).unwrap();
+
+    let inspected = inspect_release(
+        Uuid::now_v7(),
+        None,
+        "oversized-tag",
+        &source,
+        None,
+        Some("stable"),
+        &InspectionOptions::default(),
+    )
+    .expect("inspect oversized-tag release");
+    let file = &inspected.manifest.files[0];
+    assert!(
+        file.findings
+            .iter()
+            .any(|finding| finding.code == "artwork.embedded_oversized"),
+        "oversized artwork finding recorded"
+    );
+    assert!(
+        file.embedded_artwork.is_empty(),
+        "oversized artwork is skipped, not observed"
+    );
+    assert!(file.audio.is_some(), "audio observation unaffected");
+
+    let mut manifest = inspected.manifest;
+    let report = normalize_release(
+        &mut manifest,
+        &source,
+        &normalization_options(&temp.path().join("work"), Uuid::now_v7()),
+    )
+    .expect("audio still normalizes");
+    assert_eq!(report.outputs_produced, 1);
+    assert_eq!(report.artwork_produced, 0);
+}
+
+/// R2.1 unsupported-content fixture: an extension in the audio vocabulary
+/// whose probed content carries no audio stream is recorded as unsupported
+/// with an actionable finding and rejected by normalization.
+#[test]
+fn video_only_container_is_recorded_unsupported_and_rejected() {
+    if !tools_available() {
+        eprintln!("skipping real video-only test: media tools unavailable");
+        return;
+    }
+    let temp = TestDirectory::new();
+    let source = temp.path().join("source");
+    fs::create_dir(&source).unwrap();
+    let mut command = Command::new("ffmpeg");
+    command
+        .args(["-y", "-v", "error", "-f", "lavfi", "-i"])
+        .arg("testsrc=duration=1:size=320x240:rate=10")
+        .args(["-c:v", "mpeg4"])
+        .arg(source.join("video-only.mp4"));
+    run(&mut command);
+
+    let inspected = inspect_release(
+        Uuid::now_v7(),
+        None,
+        "video-only",
+        &source,
+        None,
+        Some("stable"),
+        &InspectionOptions::default(),
+    )
+    .expect("inspect video-only release");
+    let file = &inspected.manifest.files[0];
+    assert!(file.audio.is_none(), "no audio stream observed");
+    assert_eq!(
+        file.kind_code.as_deref(),
+        Some("unsupported_or_corrupt_audio")
+    );
+    assert!(
+        file.findings
+            .iter()
+            .any(|finding| finding.code == "media.ffprobe_failed")
+    );
+
+    let mut manifest = inspected.manifest;
+    let error = normalize_release(
+        &mut manifest,
+        &source,
+        &normalization_options(&temp.path().join("work"), Uuid::now_v7()),
+    )
+    .unwrap_err();
+    assert!(matches!(error, NormalizationError::Verification(_)));
+    assert!(manifest.normalization.is_none());
+}
+
+/// R2.1 per-format normalization-input rows for the remaining matrix
+/// vocabulary: AAC (ADTS), AC-3, WMA, and Opus sources must be observed from
+/// probed content and converted to verified canonical MP3, with the source
+/// tree byte-identical afterwards.
+#[test]
+fn aac_ac3_wma_and_opus_inputs_normalize_to_verified_mp3() {
+    if !tools_available() {
+        eprintln!("skipping real format-conversion test: media tools unavailable");
+        return;
+    }
+    let temp = TestDirectory::new();
+    let source = temp.path().join("source");
+    fs::create_dir(&source).unwrap();
+    let cases: [(&str, &[&str]); 4] = [
+        ("aac", &["-c:a", "aac", "-f", "adts"]),
+        ("ac3", &["-c:a", "ac3", "-f", "ac3"]),
+        ("wma", &["-c:a", "wmav2"]),
+        ("opus", &["-c:a", "libopus"]),
+    ];
+    for (extension, codec_args) in cases {
+        generate_audio(&source.join(format!("track.{extension}")), codec_args, 440);
+    }
+
+    let inspected = inspect_release(
+        Uuid::now_v7(),
+        None,
+        "format-conversion",
+        &source,
+        None,
+        Some("stable"),
+        &InspectionOptions::default(),
+    )
+    .expect("inspect conversion formats");
+    assert_eq!(inspected.manifest.files.len(), 4);
+    for file in &inspected.manifest.files {
+        assert!(
+            file.audio.is_some(),
+            "probed observation for {}",
+            file.relative_path
+        );
+    }
+
+    let source_before = file_hashes(&source);
+    let mut manifest = inspected.manifest;
+    let report = normalize_release(
+        &mut manifest,
+        &source,
+        &normalization_options(&temp.path().join("work"), Uuid::now_v7()),
+    )
+    .expect("normalize conversion formats");
+    assert_eq!(report.outputs_produced, 4);
+    let normalization = report.manifest.normalization.as_ref().unwrap();
+    let attempt_root = PathBuf::from(
+        normalization
+            .provenance
+            .work_area
+            .as_deref()
+            .expect("attempt work area"),
+    );
+    for output in &normalization.outputs {
+        assert!(!output.retained, "{} must convert", output.source_file);
+        assert_eq!(output.codec, "mp3");
+        assert_eq!(output.sample_rate_hz, 48_000);
+        let document = probe(&attempt_root.join(&output.output_path));
+        let audio = document["streams"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|stream| stream["codec_type"] == "audio")
+            .unwrap();
+        assert_eq!(audio["codec_name"], "mp3", "{}", output.source_file);
+    }
+    assert_eq!(source_before, file_hashes(&source), "source media changed");
+}
+
 #[test]
 fn real_embedded_jpeg_and_png_are_normalized_to_verified_jpeg() {
     if !tools_available() {
@@ -556,4 +1025,228 @@ fn corrupt_audio_is_rejected_by_normalization() {
     .unwrap_err();
     assert!(matches!(error, NormalizationError::Verification(_)));
     assert!(manifest.normalization.is_none());
+}
+
+/// R2.2 / ADR-0146 end-to-end proof, mirroring the frozen legacy capture
+/// `compatibility/media/cases/cue-split.json` (one WAV + one CUE sheet → one
+/// album of per-track MP3 segments): a CUE-governed source produces one
+/// verified MP3 segment per CUE track, the whole-file output is suppressed,
+/// manifest Tracks join on the deterministic segment pseudo-path, metadata
+/// observations come from the sheet, and the staged source is never modified.
+#[test]
+fn cue_governed_source_splits_into_verified_per_track_segments() {
+    if !tools_available() {
+        eprintln!("skipping real CUE segmentation test: ffmpeg, ffprobe, or fpcalc unavailable");
+        return;
+    }
+
+    let temp = TestDirectory::new();
+    let source = temp.path().join("source");
+    fs::create_dir(&source).unwrap();
+    // Six seconds so three two-second segments stay well inside the output
+    // duration verification tolerance.
+    let output = Command::new("ffmpeg")
+        .args(["-y", "-v", "error", "-f", "lavfi", "-i"])
+        .arg("sine=frequency=440:duration=6")
+        .args(["-c:a", "pcm_s16le"])
+        .arg(source.join("album.wav"))
+        .output()
+        .expect("generate CUE source WAV");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    // Quoted FILE, spaces, and a Unicode title cover the sheet-lexing
+    // dimensions of the R2.2 fixture list in the end-to-end path.
+    fs::write(
+        source.join("album.cue"),
+        "PERFORMER \"Cue Artist\"\n\
+         TITLE \"Cue Path\"\n\
+         FILE \"album.wav\" WAVE\n\
+         \x20 TRACK 01 AUDIO\n\
+         \x20   TITLE \"First Light\"\n\
+         \x20   INDEX 01 00:00:00\n\
+         \x20 TRACK 02 AUDIO\n\
+         \x20   TITLE \"Second Wave Ω\"\n\
+         \x20   PERFORMER \"Guest Artist\"\n\
+         \x20   INDEX 01 00:02:00\n\
+         \x20 TRACK 03 AUDIO\n\
+         \x20   TITLE \"Third Echo\"\n\
+         \x20   INDEX 01 00:04:00\n",
+    )
+    .unwrap();
+
+    let inspected = inspect_release(
+        Uuid::now_v7(),
+        None,
+        "cue-split",
+        &source,
+        None,
+        Some("stable"),
+        &InspectionOptions::default(),
+    )
+    .expect("inspect CUE release");
+    assert_eq!(inspected.manifest.files.len(), 2);
+    assert!(
+        inspected.manifest.files.iter().any(
+            |file| file.kind == ObservedFileKind::CueSheet && file.relative_path == "album.cue"
+        ),
+        "the sheet is observed as a CUE sidecar"
+    );
+
+    let source_before = file_hashes(&source);
+    let mut manifest = inspected.manifest;
+    let report = normalize_release(
+        &mut manifest,
+        &source,
+        &normalization_options(&temp.path().join("work"), Uuid::now_v7()),
+    )
+    .expect("normalize CUE-governed release");
+    assert_eq!(report.outputs_produced, 3);
+    let normalization = report.manifest.normalization.as_ref().unwrap();
+    let attempt_root = PathBuf::from(
+        normalization
+            .provenance
+            .work_area
+            .as_deref()
+            .expect("attempt work area"),
+    );
+
+    // Exactly the three planned segment outputs exist; the governed source's
+    // whole-file output is suppressed.
+    assert_eq!(normalization.outputs.len(), 3);
+    for output in &normalization.outputs {
+        assert_eq!(output.source_file, "album.wav");
+        assert!(
+            !output.retained,
+            "segments are encoded, never byte-retained from the source"
+        );
+        assert_eq!(output.codec, "mp3");
+        let segment = output.segment.as_ref().expect("CUE segment identity");
+        assert_eq!(segment.cue, "album.cue");
+        assert_eq!(
+            output.track_key(),
+            format!("album.wav#cue-track-{:02}", segment.track),
+            "deterministic segment pseudo-path"
+        );
+        let document = probe(&attempt_root.join(&output.output_path));
+        let audio = document["streams"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|stream| stream["codec_type"] == "audio")
+            .unwrap();
+        assert_eq!(audio["codec_name"], "mp3");
+        assert_eq!(audio["sample_rate"], "48000");
+        let duration_ms = (document["format"]["duration"]
+            .as_str()
+            .unwrap()
+            .parse::<f64>()
+            .unwrap()
+            * 1_000.0) as u64;
+        assert!(
+            duration_ms.abs_diff(2_000) <= 300,
+            "segment {} duration {duration_ms} ms strays from the two-second boundary",
+            segment.track
+        );
+    }
+    let mut track_numbers: Vec<u32> = normalization
+        .outputs
+        .iter()
+        .map(|output| output.segment.as_ref().unwrap().track)
+        .collect();
+    track_numbers.sort_unstable();
+    assert_eq!(track_numbers, [1, 2, 3]);
+
+    // The segment carries the sheet's metadata observations (track 2 has a
+    // track-level performer override and a Unicode title).
+    let second = normalization
+        .outputs
+        .iter()
+        .find(|output| output.segment.as_ref().unwrap().track == 2)
+        .unwrap();
+    let tags = probe(&attempt_root.join(&second.output_path));
+    assert_eq!(tags["format"]["tags"]["title"], "Second Wave Ω");
+    assert_eq!(tags["format"]["tags"]["artist"], "Guest Artist");
+    assert_eq!(tags["format"]["tags"]["album"], "Cue Path");
+    assert_eq!(tags["format"]["tags"]["album_artist"], "Cue Artist");
+    assert_eq!(tags["format"]["tags"]["track"], "2");
+
+    // The inspection-time whole-file Track is replaced by one Track per CUE
+    // segment, joined on the segment pseudo-path, with release observations
+    // filled from the sheet.
+    assert_eq!(report.manifest.tracks.len(), 3);
+    let expected_titles = ["First Light", "Second Wave Ω", "Third Echo"];
+    for (index, track) in report.manifest.tracks.iter().enumerate() {
+        let number = u32::try_from(index + 1).unwrap();
+        assert_eq!(track.file_path, format!("album.wav#cue-track-{number:02}"));
+        assert_eq!(track.track_number, Some(number));
+        assert_eq!(track.sort_order, Some(number));
+        assert_eq!(track.track_title.as_deref(), Some(expected_titles[index]));
+        let metadata = track.observed_metadata.as_ref().expect("CUE metadata");
+        assert_eq!(metadata.album.as_deref(), Some("Cue Path"));
+        assert_eq!(metadata.album_artist.as_deref(), Some("Cue Artist"));
+        assert_eq!(metadata.track_total, Some(3));
+    }
+    assert_eq!(
+        report.manifest.tracks[1]
+            .observed_metadata
+            .as_ref()
+            .unwrap()
+            .artist
+            .as_deref(),
+        Some("Guest Artist")
+    );
+
+    // The sheet remains a parsed sidecar observation.
+    assert!(
+        normalization
+            .parsed_sidecars
+            .iter()
+            .any(|sidecar| sidecar.sidecar_type == "cue" && sidecar.relative_path == "album.cue"),
+        "the governing sheet stays on the record as a parsed sidecar"
+    );
+
+    // The staged source is never rewritten, retagged, split in place, or
+    // deleted; segment bytes exist only in the attempt work area.
+    assert_eq!(source_before, file_hashes(&source), "source media changed");
+
+    // Segment identity is deterministic for retries: a fresh attempt produces
+    // identical work-area-relative output paths and byte hashes.
+    let reinspected = inspect_release(
+        Uuid::now_v7(),
+        None,
+        "cue-split",
+        &source,
+        None,
+        Some("stable"),
+        &InspectionOptions::default(),
+    )
+    .expect("re-inspect CUE release");
+    let mut second_manifest = reinspected.manifest;
+    let second_report = normalize_release(
+        &mut second_manifest,
+        &source,
+        &normalization_options(&temp.path().join("work-retry"), Uuid::now_v7()),
+    )
+    .expect("retry normalization");
+    let first_identity: Vec<(String, String)> = normalization
+        .outputs
+        .iter()
+        .map(|output| (output.output_path.clone(), output.byte_hash.clone()))
+        .collect();
+    let mut second_identity: Vec<(String, String)> = second_report
+        .manifest
+        .normalization
+        .as_ref()
+        .unwrap()
+        .outputs
+        .iter()
+        .map(|output| (output.output_path.clone(), output.byte_hash.clone()))
+        .collect();
+    second_identity.sort();
+    let mut first_sorted = first_identity;
+    first_sorted.sort();
+    assert_eq!(first_sorted, second_identity);
 }

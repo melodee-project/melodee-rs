@@ -198,6 +198,42 @@ facts. Every pass is bounded, set-based, and idempotent, so the worker is safe t
 | `MELODEE__NATIVE__AUTH__GOOGLE__JWKS_URL` | Google v3 certificates URL | HTTPS JWKS endpoint. Redirects are rejected and the response/cache are bounded. |
 | `MELODEE__NATIVE__AUTH__GOOGLE__HOSTED_DOMAINS` | empty | Optional comma-separated lowercase hosted-domain allowlist checked after signature, issuer, audience, lifetime, and verified-email validation. |
 
+### Transcoding
+
+Melodee can transcode audio on demand for OpenSubsonic and Jellyfin-compatible clients.
+Transcoding is configured entirely through database-backed settings (change them with
+`melodee-cli config import` or the Admin API); there are no environment overlays. Native Melodee
+clients always receive direct play and expose no transcoding parameters.
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `transcoding.command.aac` | AAC template | JSON object `{"format": "Aac", "bitrate": 256, "command": "ffmpeg ..."}` — the FFmpeg command line used for AAC (ADTS) output. |
+| `transcoding.command.mp3` | MP3 template | Same shape for MP3 output (requires an FFmpeg build with `libmp3lame`). |
+| `transcoding.command.opus` | Opus template | Same shape for Opus-in-Ogg output (requires `libopus`). |
+| `transcoding.default` | `raw` | Fallback format (`raw`, `aac`, `mp3`, or `opus`) when a client request does not name one. `raw` keeps direct play. |
+| `transcoding.maxConcurrent` | `4` | Maximum simultaneous FFmpeg transcode processes across all clients, independent of the direct-play stream limit. `0` disables transcoding: transcode requests fail closed while direct play is unaffected. |
+
+Template commands are parsed as argument arrays and executed directly — no shell is involved —
+and must contain these placeholders:
+
+- `%s` — the source input. Melodee substitutes `pipe:0` and feeds the validated, containment-checked
+  media file to FFmpeg's standard input. A template without `%s` is rejected and transcode requests
+  fail closed.
+- `%t` — the requested start time in seconds (currently always `0`; seek-before-transcode is not
+  supported).
+- `%bk` — the target bitrate in kilobits per second, rendered with FFmpeg's `k` suffix (for example
+  `128k`). A client-requested bitrate below the template's default lowers it; higher requests are
+  clamped to the template bitrate.
+
+Malformed templates fail closed: the request is rejected and the event is logged. Direct play
+(content type, range/seek, ETag, and caching behavior) is unchanged whenever no transcode is
+requested. Transcoded responses are chunked (no `Content-Length` or `ETag`), ignore `Range`
+headers, and are cancelled — killing the FFmpeg process — when the client disconnects.
+
+When transcoding is disabled or saturated, OpenSubsonic clients receive the standard error
+envelope with code `0` (HTTP 200, per the Subsonic generic-error convention) and Jellyfin clients
+receive `503`. Jellyfin requests for an unsupported container receive `400`.
+
 ### Jellyfin-compatible authentication
 
 Jellyfin-compatible access tokens are a separate, stateful authentication surface. They are not

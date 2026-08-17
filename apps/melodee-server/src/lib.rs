@@ -16,6 +16,7 @@ pub mod admin_review;
 pub mod admin_scripts;
 pub mod admin_system;
 pub mod admin_ui;
+pub mod correlation;
 pub mod discovery_worker;
 pub mod jellyfin;
 pub mod lastfm;
@@ -26,8 +27,10 @@ pub mod onboarding;
 pub mod opensubsonic;
 pub mod podcast_worker;
 pub mod policy_worker;
+pub mod resource_bounds;
 pub mod scripting;
 pub mod system;
+pub mod transcode;
 
 /// Builds the request span without recording the raw URI.
 ///
@@ -45,7 +48,8 @@ pub fn make_http_span<B>(request: &axum::http::Request<B>) -> tracing::Span {
         "http_request",
         method = %request.method(),
         route,
-        version = ?request.version()
+        version = ?request.version(),
+        correlation_id = tracing::field::Empty,
     )
 }
 

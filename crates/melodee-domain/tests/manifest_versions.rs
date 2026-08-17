@@ -36,6 +36,7 @@ fn phase_3_2_v2_manifest_round_trips_and_provenance_is_not_semantic() {
             bitrate_bps: Some(192_000),
             duration_ms: 10_000,
             retained: false,
+            segment: None,
             findings: Vec::new(),
         }],
         fingerprints: vec![FingerprintObservation {

@@ -401,7 +401,7 @@ impl AdminApiError {
         Self {
             kind,
             message,
-            correlation_id: Uuid::now_v7(),
+            correlation_id: crate::correlation::envelope_id(),
         }
     }
 
@@ -410,7 +410,7 @@ impl AdminApiError {
             melodee_persistence::WorkStoreError::NotFound(id) => Self {
                 kind: AdminApiErrorKind::NotFound,
                 message: format!("work item not found: {id}"),
-                correlation_id: Uuid::now_v7(),
+                correlation_id: crate::correlation::envelope_id(),
             },
             other => Self::new(AdminApiErrorKind::StoreError, other.to_string()),
         }

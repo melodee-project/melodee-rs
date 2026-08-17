@@ -389,6 +389,16 @@ enum WorkCommands {
         /// Work item id or api key (UUID).
         id: Uuid,
     },
+    /// Requeue a failed or quarantined work item for processing. Uses the
+    /// identical operator state-machine arm as the Admin UI reprocess
+    /// endpoint (`failed|quarantined -> ready`, audited).
+    Retry {
+        /// Work item id (UUID).
+        id: Uuid,
+        /// Audited operator reason (defaults to "operator reprocess").
+        #[arg(long)]
+        reason: Option<String>,
+    },
     /// Development only: seed N synthetic ready work items. Requires
     /// --i-know-what-im-doing because it writes test data.
     SeedTest {
@@ -691,6 +701,54 @@ async fn main() {
                         std::process::exit(1);
                     }
                 },
+                WorkCommands::Retry { id, reason } => {
+                    let item = match store.get(&pool, id).await {
+                        Ok(item) => item,
+                        Err(e) => {
+                            eprintln!("error: {e}");
+                            std::process::exit(1);
+                        }
+                    };
+                    if !matches!(
+                        item.state,
+                        IngestionState::Failed | IngestionState::Quarantined
+                    ) {
+                        eprintln!(
+                            "error: work item is '{}'; only failed or quarantined items can be reprocessed",
+                            item.state.as_str()
+                        );
+                        std::process::exit(2);
+                    }
+                    let reason = reason
+                        .map(|reason| reason.trim().to_string())
+                        .filter(|reason| !reason.is_empty());
+                    let now = OffsetDateTime::now_utc();
+                    match store
+                        .transition(
+                            &pool,
+                            item.id,
+                            None,
+                            melodee_domain::TransitionKind::Operator,
+                            IngestionState::Ready,
+                            Some(reason.as_deref().unwrap_or("operator reprocess")),
+                            now,
+                        )
+                        .await
+                    {
+                        Ok(updated) => {
+                            println!(
+                                "requeued {} ({} -> ready): {}",
+                                updated.id,
+                                item.state.as_str(),
+                                updated.source_path
+                            );
+                        }
+                        Err(e) => {
+                            eprintln!("error: {e}");
+                            std::process::exit(1);
+                        }
+                    }
+                }
                 WorkCommands::SeedTest {
                     count,
                     i_know_what_im_doing,
@@ -2853,6 +2911,37 @@ mod tests {
         for command in ["parse", "explain"] {
             assert!(Cli::try_parse_from(["melodee", "search", command, "year:1990..1999"]).is_ok());
         }
+    }
+
+    #[test]
+    fn work_retry_parses_id_and_optional_reason() {
+        let id = Uuid::now_v7();
+        assert!(matches!(
+            Cli::try_parse_from(["melodee", "work", "retry", &id.to_string()])
+                .expect("retry without reason")
+                .command,
+            Commands::Work {
+                command: WorkCommands::Retry { id: parsed, reason: None }
+            } if parsed == id
+        ));
+        assert!(matches!(
+            Cli::try_parse_from([
+                "melodee",
+                "work",
+                "retry",
+                &id.to_string(),
+                "--reason",
+                "tags refreshed after rescan"
+            ])
+            .expect("retry with reason")
+            .command,
+            Commands::Work {
+                command: WorkCommands::Retry {
+                    id: parsed,
+                    reason: Some(reason)
+                }
+            } if parsed == id && reason == "tags refreshed after rescan"
+        ));
     }
 
     #[test]

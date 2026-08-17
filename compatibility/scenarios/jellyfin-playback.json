@@ -169,7 +169,7 @@
             "$.traceId"
           ]
         },
-        "notes": "TRANSCODE REJECTION: stream.{container} without static=true -> 400 'Transcoding is not supported. Use static=true for direct streaming.'",
+        "notes": "RETIRED CONTRACT (ADR-0147, supersedes ADR-0130 decision 4): the capture records the frozen C# 400 transcode rejection. The current Rust server honors configured transcoding (200 FFmpeg mp3 output); the divergence is whitelisted in the differential known-differences registry and this golden is retained as historical evidence.",
         "expectStatus": 400
       },
       {

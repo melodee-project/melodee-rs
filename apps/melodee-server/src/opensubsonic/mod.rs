@@ -63,6 +63,9 @@ pub struct OsState {
     pub downloads_enabled: bool,
     pub jukebox_enabled: bool,
     pub direct_play: Option<crate::native_stream::DirectPlayService>,
+    /// Shared configured-transcoding service (ADR-0147); `None` disables
+    /// transcoding (transcode requests fail closed, direct play unaffected).
+    pub transcoding: Option<crate::transcode::TranscodingService>,
     pub client_addresses: crate::native_stream::ClientAddressResolver,
     pub search: Option<melodee_search::SearchConfig>,
 }
@@ -88,12 +91,14 @@ impl OsState {
     /// Builds adapter state from the composition-root environment. Music
     /// folders are the configured ingestion sources plus the canonical
     /// storage root, mirroring the legacy Libraries rows.
+    #[allow(clippy::too_many_arguments)]
     pub fn from_env(
         pool: sqlx::PgPool,
         public_origin: String,
         ingestion: &melodee_ingestion::IngestionConfig,
         podcast_default_enabled: bool,
         direct_play: Option<crate::native_stream::DirectPlayService>,
+        transcoding: Option<crate::transcode::TranscodingService>,
         client_addresses: crate::native_stream::ClientAddressResolver,
         search: Option<melodee_search::SearchConfig>,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
@@ -139,6 +144,7 @@ impl OsState {
             jukebox_enabled: env_flag(ENV_JUKEBOX_ENABLED, false)
                 .map_err(|_| "MELODEE__OPENSUBSONIC__JUKEBOX_ENABLED must be a boolean")?,
             direct_play,
+            transcoding,
             client_addresses,
             search,
         })

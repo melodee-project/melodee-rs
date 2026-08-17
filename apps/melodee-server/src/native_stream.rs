@@ -23,6 +23,8 @@ use futures_util::stream;
 use hmac::{Hmac, KeyInit, Mac};
 use sha2::Sha256;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
+
+use crate::resource_bounds::ResourceGauge;
 use uuid::Uuid;
 
 /// Upper bound for one filesystem read before yielding back to the HTTP body.
@@ -521,6 +523,16 @@ fn validate_relative_asset_path(path: &Path) -> Result<(), StreamError> {
 pub struct DirectPlayService {
     root: CanonicalAssetRoot,
     permits: Arc<Semaphore>,
+    gauge: Option<Arc<crate::resource_bounds::ResourceGauge>>,
+}
+
+/// A held direct-play admission: the semaphore permit plus the optional
+/// resource gauge guard, released together when the response body (or a
+/// cancelled handler) drops.
+#[derive(Debug)]
+struct Admission {
+    _semaphore: OwnedSemaphorePermit,
+    _gauge: Option<crate::resource_bounds::GaugePermit>,
 }
 
 impl DirectPlayService {
@@ -529,6 +541,39 @@ impl DirectPlayService {
         (max_concurrent_streams > 0).then(|| Self {
             root,
             permits: Arc::new(Semaphore::new(max_concurrent_streams)),
+            gauge: None,
+        })
+    }
+
+    /// Attaches the process resource-bounds gauge for the direct-play class
+    /// (R2.4): records queued waiters, in-flight utilization, and saturation
+    /// on the admin health surface. Admission behavior is unchanged.
+    #[must_use]
+    pub fn with_gauge(mut self, gauge: Arc<crate::resource_bounds::ResourceGauge>) -> Self {
+        self.gauge = Some(gauge);
+        self
+    }
+
+    /// Blocking acquisition with gauge instrumentation: waiters are visible
+    /// while queued and cancellation of the future simply never admits.
+    async fn acquire(&self) -> Result<Admission, StreamError> {
+        if let Some(gauge) = &self.gauge {
+            gauge.begin_wait();
+        }
+        let permit = match self.permits.clone().acquire_owned().await {
+            Ok(permit) => permit,
+            Err(error) => {
+                if let Some(gauge) = &self.gauge {
+                    gauge.wait_failed();
+                }
+                let _ = error;
+                return Err(StreamError::CapacityClosed);
+            }
+        };
+        let gauge = self.gauge.as_ref().map(ResourceGauge::admit);
+        Ok(Admission {
+            _semaphore: permit,
+            _gauge: gauge,
         })
     }
 
@@ -551,12 +596,7 @@ impl DirectPlayService {
         });
         let content_type = HeaderValue::from_str(&asset.mime_type)
             .map_err(|_| StreamError::InvalidAssetMetadata)?;
-        let permit = self
-            .permits
-            .clone()
-            .acquire_owned()
-            .await
-            .map_err(|_| StreamError::CapacityClosed)?;
+        let permit = self.acquire().await?;
         let file = self.root.open_asset(asset)?;
 
         let status = if range.is_some() {
@@ -602,12 +642,7 @@ impl DirectPlayService {
         if asset.byte_size == 0 || asset.byte_size > max_bytes {
             return Err(StreamError::AssetUnavailable);
         }
-        let permit = self
-            .permits
-            .clone()
-            .acquire_owned()
-            .await
-            .map_err(|_| StreamError::CapacityClosed)?;
+        let permit = self.acquire().await?;
         let mut file = self.root.open_asset(asset)?;
         let capacity =
             usize::try_from(asset.byte_size).map_err(|_| StreamError::AssetUnavailable)?;
@@ -638,12 +673,7 @@ impl DirectPlayService {
         if asset.byte_size == 0 || end_inclusive < start || end_inclusive >= asset.byte_size {
             return Err(StreamError::InvalidRange);
         }
-        let permit = self
-            .permits
-            .clone()
-            .acquire_owned()
-            .await
-            .map_err(|_| StreamError::CapacityClosed)?;
+        let permit = self.acquire().await?;
         let file = self.root.open_asset(asset)?;
         stream_file(
             file,
@@ -688,12 +718,7 @@ impl DirectPlayService {
         if byte_len == 0 || byte_len > max_bytes {
             return Err(StreamError::AssetUnavailable);
         }
-        let permit = self
-            .permits
-            .clone()
-            .acquire_owned()
-            .await
-            .map_err(|_| StreamError::CapacityClosed)?;
+        let permit = self.acquire().await?;
         let mut file = self.root.open_relative_file(canonical_relative_path)?;
         let capacity = usize::try_from(byte_len).map_err(|_| StreamError::AssetUnavailable)?;
         tokio::task::spawn_blocking(move || {
@@ -720,7 +745,7 @@ fn header_value_u64(value: u64) -> Result<HeaderValue, StreamError> {
 async fn stream_file(
     mut file: File,
     range: ByteRange,
-    permit: OwnedSemaphorePermit,
+    permit: Admission,
 ) -> Result<Body, StreamError> {
     file.seek(SeekFrom::Start(range.start))
         .map_err(|_| StreamError::AssetUnavailable)?;
@@ -761,7 +786,7 @@ async fn stream_file(
 struct FileStreamState {
     file: File,
     remaining: u64,
-    _permit: OwnedSemaphorePermit,
+    _permit: Admission,
 }
 
 #[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]

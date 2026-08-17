@@ -54,14 +54,14 @@ pub use ingestion::{
 };
 pub use manifest::{
     AudioTechnicalObservation, CANONICAL_LAYOUT_VERSION, CANONICAL_MP3_PROFILE_VERSION,
-    CURRENT_MANIFEST_VERSION, CanonicalAsset, CanonicalAssetKind, Finding, FindingSeverity,
-    FingerprintObservation, INSPECTION_MANIFEST_VERSION, ManifestInspectionContext,
-    ManifestPublication, ManifestReleaseObservation, NORMALIZATION_MANIFEST_VERSION,
-    NormalizationExecutionProvenance, NormalizationObservations, NormalizedArtwork,
-    NormalizedOutput, ObservedArtwork, ObservedFile, ObservedFileKind, ObservedMetadata,
-    ObservedTrack, PUBLICATION_MANIFEST_VERSION, ParsedSidecar, PublicationAuthorization,
-    PublicationInvariantError, PublicationJournalStep, PublicationPlan, ReleaseManifest,
-    SourceDisposition, StructuralValidation, ValidationOutcome,
+    CURRENT_MANIFEST_VERSION, CanonicalAsset, CanonicalAssetKind, CueSegmentIdentity, Finding,
+    FindingSeverity, FingerprintObservation, INSPECTION_MANIFEST_VERSION,
+    ManifestInspectionContext, ManifestPublication, ManifestReleaseObservation,
+    NORMALIZATION_MANIFEST_VERSION, NormalizationExecutionProvenance, NormalizationObservations,
+    NormalizedArtwork, NormalizedOutput, ObservedArtwork, ObservedFile, ObservedFileKind,
+    ObservedMetadata, ObservedTrack, PUBLICATION_MANIFEST_VERSION, ParsedSidecar,
+    PublicationAuthorization, PublicationInvariantError, PublicationJournalStep, PublicationPlan,
+    ReleaseManifest, SourceDisposition, StructuralValidation, ValidationOutcome,
 };
 pub use novelty::{NoveltyEvaluation, NoveltyEvidenceKind, TrackNovelty, TrackNoveltyCategory};
 pub use overlay::{
