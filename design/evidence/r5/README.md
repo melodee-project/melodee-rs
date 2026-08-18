@@ -180,11 +180,16 @@ required for an efficient reproducible two-architecture release build.
 The full local gate completed without failures, including the long-running 200-release,
 restart/recovery, production-shaped catalog-query, media normalization, publication, search,
 native, OpenSubsonic, Jellyfin, and Admin API suites. No correctness test was changed to ignored
-or bypassed as part of this work. The current native differential replay is documented in the R4
-report with 257 classified and 213 unclassified differences; the unclassified set still requires
-external compatibility classification or implementation fixes and is not silently waived. The
-earlier OpenSubsonic replay recorded 389 differences. Proposed ADR-0150 records the remaining
-legacy media metadata boundary.
+or bypassed as part of this work. The local 12,000-Track R4 rehearsal now has two clean runs with
+zero verification gaps, zero duplicate public IDs, matching catalog counts, successful restore,
+freeze/delta, rollback retention, and unchanged canonical media; this is still synthetic
+production-shaped evidence, not the required real-library rehearsal. The current native
+differential replay is documented in the R4 report with 258 classified and 204 unclassified
+differences; the replay closed the captured native search-suggest, login-version, and
+cookie-cache mismatches, while the remaining
+unclassified set still requires external compatibility classification or implementation fixes and
+is not silently waived. The earlier OpenSubsonic replay recorded 389 differences. Proposed
+ADR-0150 records the remaining legacy media metadata boundary.
 
 The generated requirement registry remains truthful rather than being forced terminal: the
 remaining statuses cover external migration scale, physical-client, final oracle/differential,

@@ -424,6 +424,14 @@ async fn browser_cookie_is_separate_from_bearer_and_cleared_on_sign_out() {
     )
     .await;
     assert_eq!(login.status(), StatusCode::OK);
+    assert_eq!(
+        login.headers().get(header::CACHE_CONTROL),
+        Some(&HeaderValue::from_static("no-cache,no-store"))
+    );
+    assert_eq!(
+        login.headers().get(header::EXPIRES),
+        Some(&HeaderValue::from_static("Thu, 01 Jan 1970 00:00:00 GMT"))
+    );
     let set_cookie = login
         .headers()
         .get(header::SET_COOKIE)
@@ -1271,6 +1279,7 @@ async fn login_rotation_replay_and_logout_match_the_captured_lifecycle() {
     assert_eq!(status, StatusCode::OK);
     let access = login["token"].as_str().expect("access token");
     let refresh = login["refreshToken"].as_str().expect("refresh token");
+    assert_eq!(login["serverVersion"], "2.2.0.0");
     assert_eq!(refresh.len(), 88);
     assert_eq!(login["user"]["id"], "f78448cc-82ec-5864-877c-6c6163b00065");
 

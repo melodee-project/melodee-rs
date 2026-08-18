@@ -2085,13 +2085,20 @@ pub async fn search_suggest(
             playlists: Vec::new(),
         }));
     };
-    let query = format!("{}%", escaped_like_value(query)?);
+    // The legacy SearchService applies a normalized CONTAINS filter to each
+    // category before the suggestion projection.  Keep the same wildcard
+    // semantics here rather than turning autocomplete into a prefix-only
+    // search; e.g. `Ne` must find both `Dune` and `Sandstone`.
+    let query = format!("%{}%", escaped_like_value(query)?);
     let artist_rows = sqlx::query_as::<_, (Uuid, String)>(
-        "SELECT public_api_id, canonical_name FROM artists
+        "SELECT artist.public_api_id, artist.canonical_name FROM artists artist
          WHERE status NOT IN ('merged', 'deprecated')
-           AND canonical_name ILIKE $1 ESCAPE E'\\\\'
-           AND native_user_can_access_artist($3, id)
-         ORDER BY sort_name, public_api_id LIMIT $2",
+           AND (normalized_name ILIKE $1 ESCAPE E'\\\\'
+             OR EXISTS (SELECT 1 FROM artist_aliases alias
+                        WHERE alias.artist_id = artist.id
+                          AND alias.normalized_alias ILIKE $1 ESCAPE E'\\\\'))
+           AND native_user_can_access_artist($3, artist.id)
+         ORDER BY canonical_name, public_api_id LIMIT $2",
     )
     .bind(&query)
     .bind(i64::from(limit))
@@ -2107,9 +2114,10 @@ pub async fn search_suggest(
            WHERE billing.release_id = release.id AND billing.role = 'primary'
            ORDER BY billing.presentation_order, billing.id LIMIT 1
          ) artist ON true
-         WHERE release.status = 'active' AND release.title ILIKE $1 ESCAPE E'\\\\'
+         WHERE release.status = 'active'
+           AND release.normalized_title ILIKE $1 ESCAPE E'\\\\'
            AND native_user_can_access_release($3, release.id)
-         ORDER BY release.sort_title, release.public_api_id LIMIT $2",
+         ORDER BY release.title, release.public_api_id LIMIT $2",
     )
     .bind(&query)
     .bind(i64::from(limit))
@@ -2121,28 +2129,19 @@ pub async fn search_suggest(
          FROM tracks track
          JOIN releases release ON release.id = track.release_id
          JOIN LATERAL (
-           SELECT artist.canonical_name FROM track_artists billing
+           SELECT artist.canonical_name FROM release_artists billing
            JOIN artists artist ON artist.id = billing.artist_id
-           WHERE billing.track_id = track.id AND billing.role = 'primary'
+           WHERE billing.release_id = release.id AND billing.role = 'primary'
            ORDER BY billing.presentation_order, billing.id LIMIT 1
          ) artist ON true
          WHERE release.status='active'
-           AND track.title ILIKE $1 ESCAPE E'\\\\'
+           AND track.normalized_title ILIKE $1 ESCAPE E'\\\\'
            AND native_user_can_access_release($3, release.id)
-         ORDER BY track.sort_title, track.public_api_id LIMIT $2",
+         ORDER BY artist.canonical_name, release.title, track.public_api_id LIMIT $2",
     )
     .bind(&query)
     .bind(i64::from(limit))
     .bind(principal.user_id)
-    .fetch_all(&state.pool)
-    .await?;
-    let playlist_rows = sqlx::query_as::<_, (Uuid, String)>(
-        "SELECT public_api_id, name FROM native_playlists
-         WHERE name ILIKE $1 ESCAPE E'\\\\' AND is_public
-         ORDER BY lower(name), public_api_id LIMIT $2",
-    )
-    .bind(&query)
-    .bind(i64::from(limit))
     .fetch_all(&state.pool)
     .await?;
     Ok(Json(SearchSuggestResponse {
@@ -2173,15 +2172,10 @@ pub async fn search_suggest(
                 thumbnail_url: image_url(&state.public_origin, "song", id, 80),
             })
             .collect(),
-        playlists: playlist_rows
-            .into_iter()
-            .map(|(id, name)| SearchSuggestionDto {
-                id,
-                name,
-                r#type: "playlist".to_string(),
-                thumbnail_url: image_url(&state.public_origin, "playlist", id, 80),
-            })
-            .collect(),
+        // The frozen legacy SearchService never populated its playlist
+        // collection, so this compatibility route intentionally remains
+        // empty even when native playlists exist.
+        playlists: Vec::new(),
     }))
 }
 

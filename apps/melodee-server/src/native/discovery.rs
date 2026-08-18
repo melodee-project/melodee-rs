@@ -798,7 +798,11 @@ async fn chart_record(
     id: &str,
 ) -> Result<ChartList, NativeApiError> {
     sqlx::query_as::<_,ChartList>("SELECT chart.legacy_numeric_id AS id,chart.public_api_id AS api_key,chart.slug,chart.title,chart.source_name,chart.source_url,chart.chart_year AS year,chart.description,NULLIF(chart.tags,'{}') AS tags,(SELECT count(*)::integer FROM native_chart_items item WHERE item.chart_id=chart.id) AS item_count,chart.is_generated_playlist_enabled,CASE WHEN chart.is_generated_playlist_enabled THEN 'chart:'||chart.legacy_numeric_id::text END AS playlist_id,$1||'/api/v1/charts/'||chart.public_api_id::text||'/image' AS image_url FROM native_charts chart WHERE chart.is_visible AND (chart.slug=$2 OR chart.public_api_id::text=$2 OR chart.legacy_numeric_id::text=$2)")
-        .bind(origin).bind(id).fetch_optional(pool).await?.ok_or(NativeApiError::NotFound)
+        .bind(origin)
+        .bind(id)
+        .fetch_optional(pool)
+        .await?
+        .ok_or(NativeApiError::CapturedNotFound("Chart not found"))
 }
 
 #[derive(Debug, Serialize, FromRow)]

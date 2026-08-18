@@ -641,6 +641,18 @@ async fn native_catalog_browse_detail_and_search_preserve_public_ids_and_user_st
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(suggested["artists"][0]["id"], artist_public_id.to_string());
+    let (status, playlist_suggestions) = response_json(
+        state.clone(),
+        principal,
+        "/api/v1/search/suggest?q=Image&limit=5",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        playlist_suggestions["playlists"],
+        serde_json::json!([]),
+        "legacy SearchService does not populate playlist suggestions"
+    );
 
     let (status, advanced) = response_json_body(
         state.clone(),
@@ -949,6 +961,97 @@ async fn native_catalog_browse_detail_and_search_preserve_public_ids_and_user_st
     assert_eq!(status, StatusCode::OK);
     assert_eq!(random["count"], 1);
     assert_eq!(random["data"].as_array().unwrap().len(), 1);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn native_search_suggest_preserves_legacy_contains_matching_and_order() {
+    let db = common::TestDb::create("server_native_search_suggest").await;
+    phase5_common::seed_cataloged_release(
+        &db,
+        7_301,
+        CatalogFixturePresentation {
+            release_title: "Desert Rock Radio",
+            release_artist: "Dune",
+            track_title: "Sandstone",
+            track_artist: "Session Band A",
+            release_date: "2026-08-12",
+        },
+    )
+    .await;
+    phase5_common::seed_cataloged_release(
+        &db,
+        7_302,
+        CatalogFixturePresentation {
+            release_title: "Unicode Release",
+            release_artist: "Sæglópur 日本",
+            track_title: "Neon 東京",
+            track_artist: "Session Band B",
+            release_date: "2026-08-12",
+        },
+    )
+    .await;
+    phase5_common::seed_cataloged_release(
+        &db,
+        7_303,
+        CatalogFixturePresentation {
+            release_title: "Phase Zero Compilation",
+            release_artist: "Various Artists",
+            track_title: "Saxophone in the Rain",
+            track_artist: "Session Band C",
+            release_date: "2026-08-12",
+        },
+    )
+    .await;
+    phase5_common::seed_cataloged_release(
+        &db,
+        7_304,
+        CatalogFixturePresentation {
+            release_title: "Dusk",
+            release_artist: "Düné",
+            track_title: "Coda",
+            track_artist: "Session Band D",
+            release_date: "2026-08-12",
+        },
+    )
+    .await;
+
+    // The frozen legacy database stores both Dune spellings under the same
+    // accent-folded NameNormalized value. Mirror that imported fact so this
+    // fixture exercises the compatibility query rather than the new-catalog
+    // identity normalizer.
+    sqlx::query("UPDATE artists SET normalized_name = 'dune' WHERE canonical_name = 'Düné'")
+        .execute(&db.pool)
+        .await
+        .expect("accent-folded imported Artist search value");
+
+    let (state, principal) = native_test_state(&db, "native-search-suggest-user").await;
+    let (status, suggestions) =
+        response_json(state, principal, "/api/v1/search/suggest?q=Ne&limit=5").await;
+    assert_eq!(status, StatusCode::OK, "{suggestions}");
+    let artist_names = suggestions["artists"]
+        .as_array()
+        .expect("artist suggestions")
+        .iter()
+        .map(|value| value["name"].as_str().expect("artist name"))
+        .collect::<Vec<_>>();
+    assert_eq!(artist_names, ["Dune", "Düné"]);
+    assert_eq!(suggestions["albums"], serde_json::json!([]));
+    let song_names = suggestions["songs"]
+        .as_array()
+        .expect("song suggestions")
+        .iter()
+        .map(|value| value["name"].as_str().expect("song name"))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        song_names,
+        [
+            "Sandstone - Dune",
+            "Neon 東京 - Sæglópur 日本",
+            "Saxophone in the Rain - Various Artists",
+        ]
+    );
+    assert_eq!(suggestions["playlists"], serde_json::json!([]));
     db.drop().await;
 }
 

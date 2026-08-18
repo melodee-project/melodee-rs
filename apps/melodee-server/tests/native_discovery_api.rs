@@ -419,6 +419,16 @@ async fn native_discovery_routes_use_durable_bounded_facts_and_preserve_wire_sha
         format!("http://melodee.test/images/album_{release_public_id}/80")
     );
 
+    for path in ["/api/v1/charts/missing", "/api/v1/charts/missing/playlist"] {
+        let (status, bytes) =
+            request(state.clone(), Some(principal), "GET", path, Body::empty()).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        let error: serde_json::Value = serde_json::from_slice(&bytes).expect("chart error");
+        assert_eq!(error["code"], "NOT_FOUND");
+        assert_eq!(error["message"], "Chart not found");
+        assert!(error["correlationId"].is_string());
+    }
+
     let oversized_chart_id = Uuid::now_v7();
     sqlx::query(
         "INSERT INTO native_charts

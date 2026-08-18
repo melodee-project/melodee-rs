@@ -1099,13 +1099,24 @@ fn issue_cookie_response(state: &NativeState, user: &StoredNativeUser) -> Respon
         Err(_) => return unavailable(),
     };
     let cookie = format!("{NATIVE_COOKIE_NAME}={value}; Path=/; Secure; SameSite=Strict; HttpOnly");
-    response_with_cookie(
+    let mut response = response_with_cookie(
         Json(MessageBody {
             message: "Signed in",
         })
         .into_response(),
         &cookie,
-    )
+    );
+    // The captured browser-login contract prevents an authenticated response
+    // from being retained by an intermediary or browser cache.
+    response.headers_mut().insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("no-cache,no-store"),
+    );
+    response.headers_mut().insert(
+        header::EXPIRES,
+        HeaderValue::from_static("Thu, 01 Jan 1970 00:00:00 GMT"),
+    );
+    response
 }
 
 async fn cookie_sign_out() -> Response {
@@ -1511,7 +1522,10 @@ async fn auth_response(
     let token = issue_access_token(&state.auth.signing_key, &claims).map_err(|_| ())?;
     Ok(AuthenticationResponse {
         user: user_dto(state, user, EMPTY_NATIVE_USER_COUNTS)?,
-        server_version: "2.2.0",
+        // The login payload is the native client's pre-login compatibility
+        // gate. Its captured value is distinct from /system/info's version
+        // representation, which intentionally remains "2.2.0".
+        server_version: "2.2.0.0",
         token,
         expires_at: format_time(expires)?,
         refresh_token: refresh.map(|secret| secret.expose_secret().to_string()),

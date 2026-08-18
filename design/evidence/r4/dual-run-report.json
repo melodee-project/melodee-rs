@@ -127,6 +127,11 @@
       "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
     },
     {
+      "scenario": "auth-cookie-sign-in",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
       "scenario": "auth-google-disabled",
       "field": "response.headers",
       "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
@@ -1304,19 +1309,6 @@
   ],
   "unexpected": [
     {
-      "scenario": "auth-cookie-sign-in",
-      "field": "response.headers",
-      "expected": {
-        "content-type": "application/json; charset=utf-8",
-        "cache-control": "no-cache,no-store",
-        "expires": "Thu, 01 Jan 1970 00:00:00 GMT"
-      },
-      "actual": {
-        "content-type": "application/json; charset=utf-8",
-        "content-length": "23"
-      }
-    },
-    {
       "scenario": "catalog-images/image-album-large",
       "field": "response.headers",
       "expected": {
@@ -2321,24 +2313,6 @@
       "actual": "100 bytes sha256=d981647844801a43d6982619d5caa576fb40d052b0746dce9cef725e1c3e96d3"
     },
     {
-      "scenario": "native-discovery/charts-detail",
-      "field": "response.body$.message",
-      "expected": "\"Chart not found\"",
-      "actual": "\"Resource not found\""
-    },
-    {
-      "scenario": "native-discovery/charts-playlist",
-      "field": "response.body$.message",
-      "expected": "\"Chart not found\"",
-      "actual": "\"Resource not found\""
-    },
-    {
-      "scenario": "native-discovery/login",
-      "field": "response.body$.serverVersion",
-      "expected": "\"2.2.0.0\"",
-      "actual": "\"2.2.0\""
-    },
-    {
       "scenario": "native-discovery/themes-file",
       "field": "response.headers",
       "expected": {
@@ -2450,7 +2424,7 @@
       "scenario": "podcasts-surface/opml-export",
       "field": "response.body",
       "expected": "309 bytes sha256=4bf0ebe6dc81c3d9e9be5055d4a9556235d23ff754608ca1cfb96c873c10cc77",
-      "actual": "311 bytes sha256=f966da22cd19104b4624ca97e0c8fbec2c828e80670a44e3c0e19d2dd56bdfe5"
+      "actual": "311 bytes sha256=6f5495949944df1b232bcc630882afd1b7ebf9fae5aa47923d280dab77da752d"
     },
     {
       "scenario": "stream/album-songs-for-stream-url",
@@ -2480,7 +2454,7 @@
       "scenario": "native-user-extra/admin-users",
       "field": "response.body$[0].lastLoginAt",
       "expected": "\"2026-08-12T13:30:01.4578900Z\"",
-      "actual": "\"2026-08-18T19:43:18.010489Z\""
+      "actual": "\"2026-08-18T22:05:00.273459Z\""
     },
     {
       "scenario": "native-user-extra/genre-hate",
@@ -2503,7 +2477,7 @@
       "scenario": "native-user-extra/genre-hate",
       "field": "response.body",
       "expected": "0 bytes sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "actual": "120 bytes sha256=80b8fd4a78994699dd2e770e88c50092833c7ca332ff898767fa80b0b1a79590"
+      "actual": "120 bytes sha256=fdbcb38b61c945ce64c10bb17b14e5f3ec9bfdfeaccb8bce758b4d89567f352f"
     },
     {
       "scenario": "native-user-extra/genre-songs",
@@ -2545,7 +2519,7 @@
       "scenario": "native-user-extra/genre-songs",
       "field": "response.body$.correlationId",
       "expected": "\"<omitted>\"",
-      "actual": "\"01a01666-4c26-7423-881a-5cf8eabbf450\""
+      "actual": "\"01a016e8-084e-74d2-a321-9f3516977659\""
     },
     {
       "scenario": "native-user-extra/genre-songs",
@@ -2574,7 +2548,7 @@
       "scenario": "native-user-extra/genre-star",
       "field": "response.body",
       "expected": "0 bytes sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "actual": "120 bytes sha256=d9c5717f31663f9962697d63a851ebf5b7c3861c57ac5f6124625d17b4eb991c"
+      "actual": "120 bytes sha256=0faf166447b9b50d2db9feb826c979e113bead90c9ef2b193d0c8f8371c617d6"
     },
     {
       "scenario": "native-user-extra/genres-hated",
@@ -2593,36 +2567,6 @@
       "field": "response.body$.similar.length",
       "expected": "3",
       "actual": "0"
-    },
-    {
-      "scenario": "native-user-extra/search-suggest",
-      "field": "response.body$.artists.length",
-      "expected": "2",
-      "actual": "0"
-    },
-    {
-      "scenario": "native-user-extra/search-suggest",
-      "field": "response.body$.songs.length",
-      "expected": "3",
-      "actual": "1"
-    },
-    {
-      "scenario": "native-user-extra/search-suggest",
-      "field": "response.body$.songs[0].id",
-      "expected": "\"c418d383-13f5-598d-94a8-c15e5d2df348\"",
-      "actual": "\"b3297a8f-5e2b-5ade-98ea-f899d38059e0\""
-    },
-    {
-      "scenario": "native-user-extra/search-suggest",
-      "field": "response.body$.songs[0].name",
-      "expected": "\"Sandstone - Dune\"",
-      "actual": "\"Neon \u6771\u4eac - S\u00e6gl\u00f3pur \u65e5\u672c\""
-    },
-    {
-      "scenario": "native-user-extra/search-suggest",
-      "field": "response.body$.songs[0].thumbnailUrl",
-      "expected": "\"{melodee-origin}/images/song_c418d383-13f5-598d-94a8-c15e5d2df348/80\"",
-      "actual": "\"{melodee-origin}/images/song_b3297a8f-5e2b-5ade-98ea-f899d38059e0/80\""
     },
     {
       "scenario": "native-user-extra/user-artists-liked",
