@@ -21,7 +21,11 @@
     "sha256": "a51c6ef4e90d421b0a443125b5458ea38e62384ae7d42a1e33cd2dde4e1d4e72",
     "bytes": 2229
   },
-  "normalize": {},
+  "normalize": {
+    "maskJsonPaths": [
+      "$.data[*].date"
+    ]
+  },
   "structureChecks": null,
   "error": null,
   "allowFailure": true

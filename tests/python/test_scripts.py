@@ -281,6 +281,9 @@ class CompareCapturesTests(unittest.TestCase):
         differences = self.compare_dirs({"count": "3"}, {"count": 3})
         self.assertEqual(len(differences), 1)
 
+    def test_json_integral_and_fractional_numbers_are_wire_equivalent(self) -> None:
+        self.assertEqual(self.compare_dirs({"count": 0}, {"count": 0.0}), [])
+
     def test_request_method_and_url_are_contract(self) -> None:
         expected = {
             "method": "GET",
@@ -300,6 +303,21 @@ class CompareCapturesTests(unittest.TestCase):
         self.assertEqual(
             {difference.field for difference in differences},
             {"request.method", "request.url"},
+        )
+
+    def test_declared_request_variables_are_normalized_but_route_text_is_not(self) -> None:
+        template = "/api/v1/requests/{{requestId}}/seen"
+        self.assertEqual(
+            self.module.normalize_request_url(
+                "{melodee-origin}/api/v1/requests/old-id/seen", template
+            ),
+            "{melodee-origin}/api/v1/requests/<scenario-variable>/seen",
+        )
+        self.assertEqual(
+            self.module.normalize_request_url(
+                "{melodee-origin}/api/v1/requests/old-id/complete", template
+            ),
+            "{melodee-origin}/api/v1/requests/old-id/complete",
         )
 
     def test_actual_capture_cannot_widen_baseline_normalization(self) -> None:
@@ -322,6 +340,20 @@ class CompareCapturesTests(unittest.TestCase):
             right_checks={"$.token": {"valid": False}},
         )
         self.assertEqual([difference.field for difference in differences], ["structureChecks"])
+
+    def test_stream_structure_expiry_instant_is_replay_volatile(self) -> None:
+        checks = {
+            "$.streamUrl": {
+                "type": "streamAuthToken",
+                "valid": True,
+                "expiresAt": "2026-08-16T19:54:25Z",
+                "expiresInFuture": True,
+                "expiresInDays": 7,
+                "hmacShape": "base64-sha256",
+            }
+        }
+        replayed = {**checks, "$.streamUrl": {**checks["$.streamUrl"], "expiresAt": "2026-08-25T19:33:13Z"}}
+        self.assertEqual(self.compare_dirs({"stream": "a"}, {"stream": "a"}, left_checks=checks, right_checks=replayed), [])
 
     def test_binary_difference_reports_hashes_even_when_length_matches(self) -> None:
         differences = self.compare_dirs(b"abc", b"abd")

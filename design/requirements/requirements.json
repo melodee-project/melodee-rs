@@ -539,15 +539,19 @@
     "phase": "3",
     "source": "PRD.md",
     "line": 583,
-    "status": "captured",
+    "status": "tested",
     "implementation": [
       "compatibility/media/baseline.json + cases/ (31 synthetic cases: formats, metadata, conversion, artwork, validation, classification, failures)",
       "scripts/generate_media_corpus.py",
       "scripts/capture_media_baseline.py",
-      "design/evidence/phase-0/media-baseline.md"
+      "design/evidence/phase-0/media-baseline.md",
+      "crates/melodee-media/src/lib.rs and normalize.rs (content/stream-based detection, bounded probing/hashing/artwork, and actionable failure findings)",
+      "design/evidence/r2/README.md §3 (executable practical-format matrix and pathology closure)"
     ],
     "tests": [
-      "tests/python/test_media_baseline.py"
+      "tests/python/test_media_baseline.py",
+      "crates/melodee-media/tests/normalization_real.rs",
+      "crates/melodee-media/src/lib.rs tests (format detection, malformed/truncated/zero-length/unsupported/multi-stream/oversized inputs)"
     ]
   },
   {
@@ -3724,9 +3728,18 @@
     "phase": "11",
     "source": "PRD.md",
     "line": 2203,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "in-progress",
+    "implementation": [
+      "apps/melodee-cli/src/legacy/freeze.rs and import.rs (acknowledged freeze, final delta, cutover-ready state, and source-read-only migration contract)",
+      "scripts/legacy_rehearsal.py (isolated backup/restore, freeze, failed-target retention, and rollback drill)",
+      "design/evidence/r4/README.md and design/evidence/r4/rehearsal-drill-12000.json (production-shaped local rollback evidence)",
+      "design/adr/ADR-0149-phase-11-rehearsal-freeze-cutover-and-rollback-procedures.md (proposed operator procedure)"
+    ],
+    "tests": [
+      "apps/melodee-cli/tests/legacy_freeze.rs (freeze acknowledgement, source-write abort, and immutable baseline)",
+      "apps/melodee-cli/tests/legacy.rs (source read-only, canonical media preservation, and repeatable migration)",
+      "scripts/legacy_rehearsal.py drill --songs 12000 (isolated backup/restore, final delta, freeze, and retained failed target)"
+    ]
   },
   {
     "id": "PRD-TEST-001",
@@ -3903,9 +3916,20 @@
     "phase": "all",
     "source": "PRD.md",
     "line": 2326,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "crates/melodee-ingestion/src/acquisition.rs and crates/melodee-ingestion/src/publication.rs (root containment, symlink/special-file rejection, generation/tree fences, no-clobber finalization, and lease-fenced cleanup)",
+      "crates/melodee-search/src/generation.rs (descriptor-relative, no-follow search-generation retirement)",
+      "apps/melodee-server/src/native_stream.rs and src/native/images.rs (validated media/artwork resolution and byte-hash verification)",
+      "apps/melodee-cli/src/legacy/map.rs and import_tracks.rs (read-only canonical-root containment and symlink checks)"
+    ],
+    "tests": [
+      "crates/melodee-ingestion/tests/acquisition.rs (traversal, source mutation, lease loss, path reuse, delayed cleanup, and concurrent claim safety)",
+      "crates/melodee-ingestion/tests/publication.rs (traversal, symlinked roots/assets, no-clobber conflicts, and tamper rejection)",
+      "crates/melodee-ingestion/tests/reconciliation.rs and inspection.rs (safe symlink candidates and source-change handling)",
+      "crates/melodee-search/tests/search_tests.rs (symlink/root-overlap and post-open leaf replacement rejection)",
+      "apps/melodee-cli/tests/legacy.rs (canonical media containment, symlink escape, and byte-preserving adoption)"
+    ]
   },
   {
     "id": "PRD-SEC-002",
@@ -3913,9 +3937,17 @@
     "phase": "all",
     "source": "PRD.md",
     "line": 2330,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "crates/melodee-policy/src/engine.rs and apps/melodee-server/src/policy_worker.rs (uncertainty routes to Review/Quarantine and never authorizes deletion)",
+      "crates/melodee-ingestion/src/acquisition.rs and reconciliation.rs (source-generation uncertainty retains bytes and emits actionable evidence)",
+      "apps/melodee-cli/src/legacy/import_tracks.rs (migration never deletes or rewrites canonical media)"
+    ],
+    "tests": [
+      "crates/melodee-policy/tests/policy_acceptance.rs and phase5_compatibility.rs (safe disposition ordering and destructive-action guard)",
+      "crates/melodee-ingestion/tests/reconciliation.rs, acquisition.rs, and environment_faults.rs (missing/changed/failed sources retain recoverable data)",
+      "apps/melodee-cli/tests/legacy.rs (source and canonical media remain byte-identical through migration)"
+    ]
   },
   {
     "id": "PRD-SEC-003",
@@ -3923,9 +3955,20 @@
     "phase": "all",
     "source": "PRD.md",
     "line": 2334,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "apps/melodee-server/src/native/images.rs and admin_catalog.rs (bounded magic-byte, declared-type, dimension, decode, and storage validation)",
+      "apps/melodee-server/src/native/avatars.rs and playlists.rs (bounded image upload validation)",
+      "apps/melodee-server/src/native/discovery.rs (bounded theme-pack archive import/export with safe entry paths)",
+      "apps/melodee-server/src/admin_config.rs and crates/melodee-persistence/src/settings.rs (bounded config import, key count, redaction, and safe-path policy)",
+      "apps/melodee-server/src/scripting.rs (bounded context/result and wall-clock script execution)"
+    ],
+    "tests": [
+      "apps/melodee-server/tests/admin_artwork_api.rs, native_avatar_api.rs, and native_playlists.rs (invalid, mismatched, oversized, malformed, and round-trip upload cases)",
+      "apps/melodee-server/tests/native_discovery_api.rs (theme archive bounds, traversal rejection, and safe export)",
+      "apps/melodee-server/tests/admin_config_api.rs and crates/melodee-persistence tests (config bounds and secret redaction)",
+      "apps/melodee-server/tests/scripting_service.rs (script capability, timeout, context, and return bounds)"
+    ]
   },
   {
     "id": "PRD-SEC-004",
@@ -3951,9 +3994,14 @@
     "phase": "all",
     "source": "PRD.md",
     "line": 2342,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "apps/melodee-server/src/security_headers.rs (scoped Admin API/SPA CSP, nosniff, frame, referrer, and permissions policy; compatibility surfaces excluded)",
+      "docs/src/content/docs/api/admin-api.md (operator-facing header and TLS-termination boundary)"
+    ],
+    "tests": [
+      "apps/melodee-server/src/security_headers.rs unit tests (policy values, Admin path scope, actual middleware response, and unchanged compatibility response)"
+    ]
   },
   {
     "id": "PRD-SEC-006",
@@ -3961,9 +4009,20 @@
     "phase": "all",
     "source": "PRD.md",
     "line": 2346,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "deny.toml and scripts/check.sh (RustSec advisory, license, ban, and source policy)",
+      ".github/workflows/admin-ui.yml and .github/workflows/docs.yml (production pnpm audits)",
+      ".github/workflows/security.yml (fail-closed Gitleaks secret scan)",
+      ".github/workflows/codeql.yml (Rust, TypeScript/JavaScript, and Python SAST)",
+      ".github/dependabot.yml (Cargo, pnpm, and GitHub Actions maintenance automation)",
+      ".github/workflows/release-container.yml (release-image Trivy, SBOM, and provenance gates)"
+    ],
+    "tests": [
+      "cargo deny check",
+      "clean repository archive scanned with Gitleaks 8.30.0 and exact synthetic-fixture allowlist",
+      "Admin UI and docs pnpm audit workflow definitions"
+    ]
   },
   {
     "id": "PRD-SEC-007",
@@ -3971,9 +4030,16 @@
     "phase": "all",
     "source": "PRD.md",
     "line": 2350,
-    "status": "planned",
-    "implementation": [],
-    "tests": []
+    "status": "tested",
+    "implementation": [
+      "Cargo.lock, deny.toml, .github/workflows/security.yml, .github/workflows/codeql.yml, and .github/workflows/release-container.yml (FOSS scanner/tooling policy)",
+      "design/evidence/r5/README.md (scanner provenance and release-only image-scan boundary)"
+    ],
+    "tests": [
+      "cargo deny check",
+      "clean repository archive Gitleaks scan",
+      "release workflow Trivy/SBOM/provenance definitions"
+    ]
   },
   {
     "id": "PRD-DEPLOY-001",

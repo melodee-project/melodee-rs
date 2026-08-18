@@ -484,7 +484,21 @@ async fn validate_token(state: &JfState, token: &str) -> Option<JfPrincipal> {
         let is_admin: bool = row.try_get("is_admin").ok()?;
         let is_editor: bool = row.try_get("is_editor").ok()?;
         let roles: Vec<String> = sqlx::query_scalar(
-            "SELECT role FROM native_user_roles WHERE user_id = $1 ORDER BY role",
+            "SELECT role FROM native_user_roles WHERE user_id = $1
+             ORDER BY CASE role
+               WHEN 'HasSettingsRole' THEN 0
+               WHEN 'HasDownloadRole' THEN 1
+               WHEN 'HasUploadRole' THEN 2
+               WHEN 'HasPlaylistRole' THEN 3
+               WHEN 'HasCoverArtRole' THEN 4
+               WHEN 'HasCommentRole' THEN 5
+               WHEN 'HasPodcastRole' THEN 6
+               WHEN 'HasStreamRole' THEN 7
+               WHEN 'HasJukeboxRole' THEN 8
+               WHEN 'HasShareRole' THEN 9
+               WHEN 'Administrator' THEN 10
+               ELSE 11
+             END, role",
         )
         .bind(user_id)
         .fetch_all(&state.pool)

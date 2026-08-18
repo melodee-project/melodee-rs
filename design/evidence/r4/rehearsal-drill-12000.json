@@ -1,0 +1,324 @@
+{
+  "drill": "legacy_rehearsal",
+  "songs_requested": 12000,
+  "started_at": "2026-08-18T17:08:44Z",
+  "steps": {
+    "create_target": {
+      "wall_s": 1.23
+    },
+    "plan": {
+      "run_id": "01a015d8-cfc8-77e0-921d-136465fe13ae",
+      "wall_s": 0.3
+    },
+    "import": {
+      "wall_s": 177.24,
+      "peak_rss_bytes": 31588352
+    },
+    "verify": {
+      "wall_s": 2.16,
+      "peak_rss_bytes": 26169344,
+      "total_mismatch_gaps": 0,
+      "duplicate_public_ids": 0
+    },
+    "search_rebuild": {
+      "wall_s": 5.68,
+      "peak_rss_bytes": 160940032,
+      "output": "rebuild requested: 01a015db-8eb8-7ee0-9611-1f2d0de1e835\nrebuild activated: 01a015db-8eb8-7ee0-9611-1f2d0de1e835"
+    },
+    "backup_restore": {
+      "wall_s": 4.65,
+      "dump_bytes": 7364899,
+      "restored_tracks": 12000,
+      "restore_matches": true
+    },
+    "freeze": {
+      "wall_s": 3.77,
+      "state": "cutover-ready",
+      "freeze_window_ms": 3553,
+      "pre_marker_write_imported": true
+    },
+    "rollback": {
+      "source_counts_after": {
+        "artists": 501,
+        "songs": 12000
+      },
+      "media_tree_after": 16,
+      "media_tree_bytes_after": 16000000,
+      "failed_target_preserved": true,
+      "canonical_tree_unchanged": true
+    }
+  },
+  "baseline": {
+    "captured_at": "2026-08-18 17:08:45.961051141 +00:00:00",
+    "source_identity": "pg:7671348264268230695@172.21.0.2:5432 db:legacy_rehearsal_source server:18.4 schema:20260714155936_AddDeleteSourceResidueAfterIngestSetting",
+    "schema_fingerprint": "20260714155936_AddDeleteSourceResidueAfterIngestSetting",
+    "table_count": 52,
+    "snapshot_marker": "rows:13650 updated:1787072923973248000",
+    "domains": [
+      {
+        "domain": "users",
+        "rows": 50,
+        "min_pk": 1,
+        "max_pk": 50
+      },
+      {
+        "domain": "libraries",
+        "rows": 1,
+        "min_pk": 1,
+        "max_pk": 1
+      },
+      {
+        "domain": "artists",
+        "rows": 500,
+        "min_pk": 1,
+        "max_pk": 500
+      },
+      {
+        "domain": "releases",
+        "rows": 1000,
+        "min_pk": 1,
+        "max_pk": 1000
+      },
+      {
+        "domain": "tracks",
+        "rows": 12000,
+        "min_pk": 1,
+        "max_pk": 12000
+      },
+      {
+        "domain": "contributions",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "playlists",
+        "rows": 100,
+        "min_pk": 1,
+        "max_pk": 100
+      },
+      {
+        "domain": "playlist_items",
+        "rows": 2400,
+        "min_pk": 1000001,
+        "max_pk": 100000024
+      },
+      {
+        "domain": "shares",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "bookmarks",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "user_track_states",
+        "rows": 6000,
+        "min_pk": 1,
+        "max_pk": 6000
+      },
+      {
+        "domain": "user_release_states",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "user_artist_states",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "track_plays",
+        "rows": 12000,
+        "min_pk": 1,
+        "max_pk": 12000
+      },
+      {
+        "domain": "podcast_channels",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "podcast_episodes",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "podcast_episode_bookmarks",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "podcast_play_history",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "radio_stations",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "settings",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "smart_playlists",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "user_groups",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "user_group_members",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "playback_settings",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "equalizer_presets",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "social_logins",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "user_pins",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "device_profiles",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "requests",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "request_comments",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "request_seen",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "party_sessions_excluded",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "play_queues_excluded",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      }
+    ],
+    "anomalies": [],
+    "media": {
+      "file_count": 12000,
+      "total_bytes": 12000000000
+    },
+    "configuration_fingerprint": {
+      "settings_keys": [],
+      "library_root_count": 1
+    }
+  },
+  "target_counts": {
+    "artists": 500,
+    "releases": 1000,
+    "tracks": 12000,
+    "users": 50
+  },
+  "target_db_bytes": 98932415,
+  "search_index_bytes": 7178032,
+  "search_validation": {
+    "queries": [
+      {
+        "expression": "artist:\"Rehearsal Artist 1\"",
+        "hit_count": 27,
+        "wall_s": 0.1,
+        "peak_rss_bytes": 25432064
+      },
+      {
+        "expression": "artist:rehearsal",
+        "hit_count": 100,
+        "wall_s": 0.35,
+        "peak_rss_bytes": 44474368
+      },
+      {
+        "expression": "release:rehearsal",
+        "hit_count": 100,
+        "wall_s": 0.1,
+        "peak_rss_bytes": 25751552
+      },
+      {
+        "expression": "track:rehearsal",
+        "hit_count": 100,
+        "wall_s": 0.15,
+        "peak_rss_bytes": 36839424
+      },
+      {
+        "expression": "artist:rehearsal AND year>=1990",
+        "hit_count": 100,
+        "wall_s": 0.35,
+        "peak_rss_bytes": 44273664
+      }
+    ],
+    "p50_ms": 150.0,
+    "p95_ms": 350.0
+  },
+  "canonical_media": {
+    "files": 16,
+    "bytes": 16000000,
+    "before_after_match": true
+  },
+  "finished_at": "2026-08-18T17:12:01Z",
+  "result": "pass",
+  "source_counts": {
+    "artists": 500,
+    "albums": 1000,
+    "songs": 12000,
+    "users": 50
+  }
+}

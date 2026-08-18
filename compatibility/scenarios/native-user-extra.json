@@ -24,7 +24,7 @@
       {"name":"search-advanced","method":"POST","path":"/api/v1/search/advanced","auth":"bearer-var:accessToken","json":{"query":"Neon","types":["song"],"page":1,"limit":10},"allowFailure":true,"normalize":{"maskBaseUrl":true,"maskUrlAuthTokenPaths":["$.results.songs[*].streamUrl"]}},
       {"name":"search-similar","method":"GET","path":"/api/v1/search/similar/{{similarId}}/{{similarType}}?limit=10","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true}},
       {"name":"songs-recent","method":"GET","path":"/api/v1/songs/recent?limit=10","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true,"maskUrlAuthTokenPaths":["$.data[*].streamUrl"]}},
-      {"name":"songs-random","method":"GET","path":"/api/v1/songs/random?count=5","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true,"maskUrlAuthTokenPaths":["$[*].streamUrl"]}},
+      {"name":"songs-random","method":"GET","path":"/api/v1/songs/random?count=5","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true,"maskJsonPaths":["$.data"],"maskUrlAuthTokenPaths":["$.data[*].streamUrl"]}},
       {"name":"song-lyrics","method":"GET","path":"/api/v1/songs/ea26fc59-a545-51c2-94c4-702e1f97b80a/lyrics","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskJsonPaths":["$.correlationId"]}},
       {"name":"user-artists-liked","method":"GET","path":"/api/v1/user/artists/liked?page=1&limit=50","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true}},
       {"name":"user-artists-disliked","method":"GET","path":"/api/v1/user/artists/disliked?page=1&limit=50","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskBaseUrl":true}},
@@ -45,7 +45,7 @@
       {"name":"user-stats","method":"GET","path":"/api/v1/user/stats?days=30","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{}},
       {"name":"user-stats-top-songs","method":"GET","path":"/api/v1/user/stats/top-songs?days=30&limit=10","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{}},
       {"name":"user-stats-top-genres","method":"GET","path":"/api/v1/user/stats/top-genres?days=30&limit=10","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{}},
-      {"name":"user-stats-per-day","method":"GET","path":"/api/v1/user/stats/plays-per-day?days=30","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{}},
+      {"name":"user-stats-per-day","method":"GET","path":"/api/v1/user/stats/plays-per-day?days=30","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{"maskJsonPaths":["$.data[*].date"]}},
       {"name":"user-stats-history","method":"GET","path":"/api/v1/user/stats/history?limit=10","auth":"bearer-var:accessToken","allowFailure":true,"normalize":{}}
     ]
   }

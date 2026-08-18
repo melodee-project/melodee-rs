@@ -30,7 +30,9 @@ pub async fn import_artists(
         if rows.is_empty() {
             break;
         }
-        let last_pk = rows.last().map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
+        let last_pk = rows
+            .last()
+            .map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
         let count = i64::try_from(rows.len()).unwrap_or(0);
 
         let mut tx = target.begin().await.map_err(|e| e.to_string())?;
@@ -134,7 +136,9 @@ pub async fn import_releases(
         if rows.is_empty() {
             break;
         }
-        let last_pk = rows.last().map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
+        let last_pk = rows
+            .last()
+            .map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
         let count = i64::try_from(rows.len()).unwrap_or(0);
 
         let mut tx = target.begin().await.map_err(|e| e.to_string())?;

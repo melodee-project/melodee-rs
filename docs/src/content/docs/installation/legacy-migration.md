@@ -111,8 +111,22 @@ melodee-cli legacy import \
 
 Users whose legacy password hash is not portable bcrypt are imported with an unguessable
 placeholder credential and a `credential.unsupported` issue; they must complete a password
-reset before cutover. Legacy settings are recorded as `settings.reference_only` informational
-issues because the Rust runtime owns its configuration.
+reset before cutover. Legacy role flags are preserved as the native `Has*Role` vocabulary;
+administrators also retain the effective Editor capability. Legacy settings are recorded as
+`settings.reference_only` informational issues because the Rust runtime owns its configuration.
+
+Share bearers that contain at least 128 bits of verified unpredictable material retain their
+existing URLs. Weaker legacy bearers are rotated during import, the old URLs stop working, and a
+warning issue identifies the affected share so its owner can distribute the replacement URL.
+
+Legacy audio bitrate and BPM are preserved in the existing Rust media/audio-feature fields. The
+importer recognizes the frozen legacy bitrate units (ordinary small values are historical kbps;
+already-large values are treated as bits per second). Legacy genres, moods, bit depth, VBR flags,
+free-form track metadata, and aggregate play counters currently have no authoritative Rust
+representation. Non-empty or present values are retained as `metadata.reference_only` warning
+issues with field names, rather than being copied into unrelated catalog fields or converted into
+synthetic play events. Review those issues before cutover; final 1.0 disposition is tracked by
+proposed ADR-0150.
 
 ### `legacy verify`
 

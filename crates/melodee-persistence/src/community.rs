@@ -66,13 +66,29 @@ impl NativeShareStore {
         pool: &PgPool,
         request: &NativeShareImport<'_>,
     ) -> Result<NativeShareImportResult, NativeShareStoreError> {
-        validate_import(request)?;
         let mut tx = pool.begin().await?;
-        if let Some(result) = replay_result(&mut tx, request).await? {
-            tx.commit().await?;
+        let result = self.import_share_in_transaction(&mut tx, request).await?;
+        tx.commit().await?;
+        Ok(result)
+    }
+
+    /// Imports a share into a caller-owned transaction.
+    ///
+    /// Migration batches need to validate a share against catalog rows written
+    /// earlier in the same transaction. Keeping this operation on the same
+    /// transaction preserves the target-authorization and identity-binding
+    /// invariants without opening a second connection that cannot observe
+    /// those uncommitted rows.
+    pub async fn import_share_in_transaction(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        request: &NativeShareImport<'_>,
+    ) -> Result<NativeShareImportResult, NativeShareStoreError> {
+        validate_import(request)?;
+        if let Some(result) = replay_result(tx, request).await? {
             return Ok(result);
         }
-        validate_target(&mut tx, request).await?;
+        validate_target(tx, request).await?;
         let preserve = request.legacy_token_is_secure && secure_token(request.legacy_token);
         for _ in 0..MAX_TOKEN_ATTEMPTS {
             let active_token = if preserve {
@@ -98,11 +114,10 @@ impl NativeShareStore {
             .bind(request.expires_at)
             .bind(request.created_at)
             .bind(request.updated_at)
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await?;
             if inserted.rows_affected() == 0 {
                 if preserve {
-                    tx.rollback().await?;
                     return Err(NativeShareStoreError::ImportConflict);
                 }
                 continue;
@@ -116,9 +131,8 @@ impl NativeShareStore {
             .bind(request.internal_id)
             .bind(request.public_api_id)
             .bind(request.updated_at)
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await?;
-            tx.commit().await?;
             return Ok(NativeShareImportResult {
                 public_api_id: request.public_api_id,
                 active_token,
@@ -126,7 +140,6 @@ impl NativeShareStore {
                 rotated_legacy_source_key: (!preserve).then(|| request.source_key.to_owned()),
             });
         }
-        tx.rollback().await?;
         Err(NativeShareStoreError::ImportConflict)
     }
 }

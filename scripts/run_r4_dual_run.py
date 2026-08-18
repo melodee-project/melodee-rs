@@ -77,6 +77,18 @@ SURFACE_GOLDENS = {
 SCENARIO_FILES = oracle.SCENARIO_FILES
 
 
+def request_templates() -> dict[str, str]:
+    """Load the flow URL templates used to normalize replay-created values."""
+    templates: dict[str, str] = {}
+    for filename in SCENARIO_FILES:
+        scenarios = json.loads((ROOT / "compatibility" / "scenarios" / filename).read_text())
+        for scenario in scenarios:
+            for step_name, step in capture_baseline.iter_steps(scenario):
+                if "path" in step:
+                    templates[step_name] = str(step["path"])
+    return templates
+
+
 def scenario_surface(name: str) -> str:
     if name.startswith("jellyfin-"):
         return "jellyfin"
@@ -129,7 +141,53 @@ def snapshot_legacy_source(keep_dump: Path) -> None:
     )
 
 
-def migrate_fresh(source_url: str, target_url: str, library_path: str, canonical_root: Path) -> None:
+def reseed_legacy_oracle() -> None:
+    """Restore the frozen oracle fixture state used by the goldens.
+
+    Capture files are deliberately reseeded one file at a time because many
+    scenarios mutate stars, plays, credentials, or refresh-token families.
+    The dual run must take the same clean source snapshot before each file;
+    cloning the oracle only once would compare later files against mutated
+    state and manufacture migration differences.
+    """
+    subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "legacy_oracle.py"), "seed"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    # The frozen capture pipeline restarts the C# server after every seed so
+    # its startup reconciliation and caches settle before capture. Snapshot
+    # after the same lifecycle; taking the dump immediately after SQL seeding
+    # compares Rust with a pre-startup legacy state that never produced the
+    # committed goldens.
+    subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "legacy_oracle.py"), "stop"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "legacy_oracle.py"), "start"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+def migrate_fresh(
+    source_url: str,
+    target_url: str,
+    library_path: str,
+    canonical_root: Path,
+    public_origin: str,
+    inbound_root: Path,
+    search_root: Path,
+    library_name: str,
+) -> None:
     """Create a fresh migrated target: schema, then the accepted import
     sequence. One migration run per replay seed mirrors the oracle reseed."""
     psql(f'DROP DATABASE IF EXISTS "{TARGET_DB}" WITH (FORCE);')
@@ -152,6 +210,44 @@ def migrate_fresh(source_url: str, target_url: str, library_path: str, canonical
                             "--library-path-map", f"{library_path}=",
                             "--canonical-root", str(canonical_root),
                             "--legacy-secret-key", oracle.FIXTURE_SECURITY_KEY])
+    # The legacy fixture contains its capture-time base URL and the import
+    # copies that setting. A replay server uses a per-run port, so replace it
+    # after import; otherwise generated image and stream URLs point at the
+    # stale fixture port.
+    psql(
+        "INSERT INTO server_settings (key, value, is_secret, updated_at) "
+        f"VALUES ('system.baseUrl', '{json.dumps(public_origin)}'::jsonb, false, now()) "
+        "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, "
+        "is_secret = EXCLUDED.is_secret, updated_at = EXCLUDED.updated_at",
+        database=TARGET_DB,
+    )
+    # Rebuild the active projection from this migrated target before replay.
+    # R4.3 requires search-dependent compatibility routes to exercise a fresh
+    # generation, and the CLI applies the same root-overlap checks as the
+    # server when given the matching deployment roots.
+    search_root.mkdir(parents=True, exist_ok=True)
+    work_area = search_root.parent / "work"
+    work_area.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [str(CLI), "search", "rebuild", "--actor", "r4-dual-run"],
+        check=True,
+        capture_output=True,
+        text=True,
+        env={
+            **os.environ,
+            "MELODEE__DATABASE__URL": target_url,
+            "MELODEE__SEARCH__ENABLED": "true",
+            "MELODEE__SEARCH__ROOT": str(search_root),
+            "MELODEE__INGEST__ENABLED": "false",
+            "MELODEE__INGEST__WORK_AREA_BASE": str(work_area),
+            "MELODEE__STORAGE__ROOT": str(canonical_root),
+            "MELODEE__INGEST__SOURCES_JSON": json.dumps(
+                [{"id": str(harness.FIXTURE_LIBRARY_ID), "root": str(inbound_root),
+                  "name": library_name}]
+            ),
+        },
+        cwd=ROOT,
+    )
 
 
 def main() -> None:
@@ -172,7 +268,10 @@ def main() -> None:
     inbound_root = work_dir / "inbound"
     storage_root.mkdir(exist_ok=True)
     inbound_root.mkdir(exist_ok=True)
+    search_root = work_dir / "search"
+    search_root.mkdir(exist_ok=True)
     captures_dir = work_dir / "captures"
+    flow_request_templates = request_templates()
     captures_dir.mkdir(exist_ok=True)
 
     port = args.port or random.randint(20000, 45000)
@@ -183,7 +282,8 @@ def main() -> None:
     catalog = json.loads(harness.CATALOG_PATH.read_text(encoding="utf-8"))
     harness.generate_media(catalog, storage_root)
 
-    print("snapshotting legacy fixture database ...")
+    print("reseed and snapshot legacy fixture database ...")
+    reseed_legacy_oracle()
     snapshot_legacy_source(work_dir)
     source_url = harness.DB_ADMIN_URL.rsplit("/", 1)[0] + "/" + SOURCE_DB
     target_url = harness.DB_ADMIN_URL.rsplit("/", 1)[0] + "/" + TARGET_DB
@@ -201,6 +301,10 @@ def main() -> None:
             "MELODEE__SERVER__BIND": f"127.0.0.1:{port}",
             "MELODEE__STORAGE__ROOT": str(storage_root),
             "MELODEE__INGEST__ENABLED": "false",
+            "MELODEE__INGEST__WORK_AREA_BASE": str(work_dir / "work"),
+            "MELODEE__SEARCH__ENABLED": "true",
+            "MELODEE__SEARCH__ROOT": str(search_root),
+            "MELODEE__NATIVE__PUBLIC_ORIGIN": base_url,
             "MELODEE__INGEST__SOURCES_JSON": json.dumps(
                 [{"id": harness.FIXTURE_LIBRARY_ID, "root": str(inbound_root),
                   "name": catalog["library"]["name"]}]
@@ -216,7 +320,9 @@ def main() -> None:
         log_path = work_dir / log_name
         process = subprocess.Popen(
             [str(ROOT / "target" / "debug" / "melodee-server")],
-            cwd=ROOT,
+            # Keep the server out of the repository root so dotenvy cannot
+            # re-load the developer .env and overwrite replay-only origins.
+            cwd=work_dir,
             env=server_env(podcasts_enabled),
             stdout=log_path.open("w"),
             stderr=subprocess.STDOUT,
@@ -234,11 +340,22 @@ def main() -> None:
     unexpected: list[tuple[str, str, object, object]] = []
     known: list[tuple[str, str, str]] = []
     replayed_groups: set[str] = set()
+    capture_environment = harness.capture_env()
+    expired_jwt = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "gen_fixture_tokens.py"), "expired-jwt"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    capture_environment["LEGACY_MELODEE_EXPIRED_JWT"] = expired_jwt
 
     def compare_group(golden_dir: Path, surface: str) -> None:
         names = set(compare_captures.metadata_by_name(golden_dir))
         output_dir = captures_dir / "all"
-        differences = compare_captures.compare(golden_dir, output_dir, names)
+        differences = compare_captures.compare(
+            golden_dir, output_dir, names, flow_request_templates
+        )
         for difference in differences:
             reason = harness.is_known_difference(
                 difference.scenario, difference.field, difference.expected, difference.actual
@@ -258,7 +375,10 @@ def main() -> None:
     try:
         # The server boots against an already-migrated target; verify the
         # first migration once so the replay baseline is proven clean.
-        migrate_fresh(source_url, target_url, library_path, storage_root)
+        migrate_fresh(
+            source_url, target_url, library_path, storage_root, base_url,
+            inbound_root, search_root, catalog["library"]["name"],
+        )
         out = cli_legacy(target_url, ["inventory", "--source-db", source_url, "--json"])
         inventory = json.loads(out)
         # `import` records its own plan internally; verify the import run.
@@ -278,7 +398,6 @@ def main() -> None:
               f"{inventory['media']['file_count']} files")
         migrated_once = True
 
-        servers.append(start_server(True, "server-enabled.log"))
         for scenario_file in files:
             if scenario_file == "opensubsonic-conditional-off.json":
                 continue
@@ -288,12 +407,21 @@ def main() -> None:
                 continue
             # Migrate a fresh target per file: the dual-run equivalent of the
             # oracle's between-file reseed.
-            migrate_fresh(source_url, target_url, library_path, storage_root)
+            for process in servers:
+                stop_server(process)
+            servers.clear()
+            reseed_legacy_oracle()
+            snapshot_legacy_source(work_dir)
+            migrate_fresh(
+                source_url, target_url, library_path, storage_root, base_url,
+                inbound_root, search_root, catalog["library"]["name"],
+            )
+            servers.append(start_server(True, f"server-enabled-{scenario_file}.log"))
             migrated_once = True
             scenarios = json.loads(scenario_path.read_text(encoding="utf-8"))
             output_dir = captures_dir / "all"
             output_dir.mkdir(parents=True, exist_ok=True)
-            for key, value in harness.capture_env().items():
+            for key, value in capture_environment.items():
                 if key.startswith(("PHASE0_", "LEGACY_")):
                     os.environ[key] = value
             print(f"replay {scenario_file}")
@@ -315,9 +443,16 @@ def main() -> None:
                     )
                     print(f"  {result['name']}: {status}")
         if any(f == "opensubsonic-conditional-off.json" for f in files):
-            stop_server(servers.pop())
+            for process in servers:
+                stop_server(process)
+            servers.clear()
+            reseed_legacy_oracle()
+            snapshot_legacy_source(work_dir)
+            migrate_fresh(
+                source_url, target_url, library_path, storage_root, base_url,
+                inbound_root, search_root, catalog["library"]["name"],
+            )
             servers.append(start_server(False, "server-disabled.log"))
-            migrate_fresh(source_url, target_url, library_path, storage_root)
             scenarios = json.loads(
                 (ROOT / "compatibility" / "scenarios" / "opensubsonic-conditional-off.json").read_text()
             )

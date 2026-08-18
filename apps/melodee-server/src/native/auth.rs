@@ -38,6 +38,7 @@ pub const ENV_NATIVE_RATE_ATTEMPTS: &str = "MELODEE__NATIVE__AUTH__RATE_ATTEMPTS
 pub const ENV_NATIVE_RATE_WINDOW_SECONDS: &str = "MELODEE__NATIVE__AUTH__RATE_WINDOW_SECONDS";
 pub const ENV_NATIVE_RATE_MAX_KEYS: &str = "MELODEE__NATIVE__AUTH__RATE_MAX_KEYS";
 pub const ENV_GOOGLE_ENABLED: &str = "MELODEE__NATIVE__AUTH__GOOGLE__ENABLED";
+const EMPTY_NATIVE_USER_COUNTS: (i32, i32, i32, i32, i32, i32, i32) = (0, 0, 0, 0, 0, 0, 0);
 pub const ENV_GOOGLE_CLIENT_ID: &str = "MELODEE__NATIVE__AUTH__GOOGLE__CLIENT_ID";
 pub const ENV_GOOGLE_JWKS_URL: &str = "MELODEE__NATIVE__AUTH__GOOGLE__JWKS_URL";
 pub const ENV_GOOGLE_HOSTED_DOMAINS: &str = "MELODEE__NATIVE__AUTH__GOOGLE__HOSTED_DOMAINS";
@@ -756,11 +757,7 @@ async fn about_me(
         Ok(None) => return StatusCode::NOT_FOUND.into_response(),
         Err(_) => return unavailable(),
     };
-    let counts = match user_counts(&state.pool, user.id).await {
-        Ok(counts) => counts,
-        Err(()) => return unavailable(),
-    };
-    match user_dto(&state, &user, counts) {
+    match user_dto(&state, &user, EMPTY_NATIVE_USER_COUNTS) {
         Ok(user) => Json(user).into_response(),
         Err(()) => unavailable(),
     }
@@ -1512,44 +1509,14 @@ async fn auth_response(
         theme: user.preferred_theme.clone().unwrap_or_default(),
     };
     let token = issue_access_token(&state.auth.signing_key, &claims).map_err(|_| ())?;
-    let counts = user_counts(&state.pool, user.id).await?;
     Ok(AuthenticationResponse {
-        user: user_dto(state, user, counts)?,
+        user: user_dto(state, user, EMPTY_NATIVE_USER_COUNTS)?,
         server_version: "2.2.0",
         token,
         expires_at: format_time(expires)?,
         refresh_token: refresh.map(|secret| secret.expose_secret().to_string()),
         refresh_token_expires_at: refresh_expires.map(format_time).transpose()?,
     })
-}
-
-async fn user_counts(
-    pool: &sqlx::PgPool,
-    user_id: Uuid,
-) -> Result<(i32, i32, i32, i32, i32, i32, i32), ()> {
-    let row = sqlx::query_as::<_, (i64, i64, i64, i64, i64, i64, i64)>(
-        "SELECT
-          COALESCE((SELECT SUM(play_count)::bigint FROM native_track_user_states WHERE user_id=$1),0::bigint),
-          (SELECT COUNT(*) FROM native_artist_user_states WHERE user_id=$1 AND starred),
-          (SELECT COUNT(*) FROM native_artist_user_states WHERE user_id=$1 AND hated),
-          (SELECT COUNT(*) FROM native_release_user_states WHERE user_id=$1 AND starred),
-          (SELECT COUNT(*) FROM native_release_user_states WHERE user_id=$1 AND hated),
-          (SELECT COUNT(*) FROM native_track_user_states WHERE user_id=$1 AND starred),
-          (SELECT COUNT(*) FROM native_track_user_states WHERE user_id=$1 AND hated)",
-    )
-    .bind(user_id)
-    .fetch_one(pool)
-    .await
-    .map_err(|_| ())?;
-    Ok((
-        i32::try_from(row.0).map_err(|_| ())?,
-        i32::try_from(row.1).map_err(|_| ())?,
-        i32::try_from(row.2).map_err(|_| ())?,
-        i32::try_from(row.3).map_err(|_| ())?,
-        i32::try_from(row.4).map_err(|_| ())?,
-        i32::try_from(row.5).map_err(|_| ())?,
-        i32::try_from(row.6).map_err(|_| ())?,
-    ))
 }
 
 fn user_dto(

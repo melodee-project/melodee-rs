@@ -79,7 +79,7 @@ async fn legacy_user_import_preserves_public_id_hash_roles_and_stream_secret() {
         .await
         .expect("exact replay");
     assert_eq!(replayed.public_api_id, public_api_id);
-    assert_eq!(replayed.roles, vec!["Administrator", "HasStreamRole"]);
+    assert_eq!(replayed.roles, vec!["HasStreamRole", "Administrator"]);
 
     let auth = store
         .user_for_auth(&db.pool, AuthLookup::Username("PHASE0-FIXTURE"))

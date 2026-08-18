@@ -9,6 +9,30 @@ use thiserror::Error;
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
+/// Native-v1 exposes the legacy role flags in this order. Keep the ordering
+/// at the persistence boundary so authentication, admin responses, and
+/// compatibility DTOs cannot drift based on PostgreSQL's collation.
+const NATIVE_ROLE_ORDER: [&str; 11] = [
+    "HasSettingsRole",
+    "HasDownloadRole",
+    "HasUploadRole",
+    "HasPlaylistRole",
+    "HasCoverArtRole",
+    "HasCommentRole",
+    "HasPodcastRole",
+    "HasStreamRole",
+    "HasJukeboxRole",
+    "HasShareRole",
+    "Administrator",
+];
+
+fn native_role_sort_key(role: &str) -> usize {
+    NATIVE_ROLE_ORDER
+        .iter()
+        .position(|known| *known == role)
+        .unwrap_or(NATIVE_ROLE_ORDER.len())
+}
+
 /// A migrated native user without authentication secrets.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StoredNativeUser {
@@ -342,7 +366,11 @@ impl AuthStore {
         }
 
         let mut requested_roles = imported.roles.to_vec();
-        requested_roles.sort_unstable();
+        requested_roles.sort_by(|left, right| {
+            native_role_sort_key(left)
+                .cmp(&native_role_sort_key(right))
+                .then_with(|| left.cmp(right))
+        });
         requested_roles.dedup();
         if requested_roles.iter().any(|role| role.trim().is_empty()) {
             return Err(AuthStoreError::ImportConflict);
@@ -1192,7 +1220,21 @@ fn password_algorithm_tag(algorithm: PasswordHashAlgorithm) -> &'static str {
 
 async fn roles_for_pool(pool: &PgPool, user_id: Uuid) -> Result<Vec<String>, AuthStoreError> {
     Ok(sqlx::query_scalar::<_, String>(
-        "SELECT role FROM native_user_roles WHERE user_id=$1 ORDER BY role",
+        "SELECT role FROM native_user_roles WHERE user_id=$1
+         ORDER BY CASE role
+           WHEN 'HasSettingsRole' THEN 0
+           WHEN 'HasDownloadRole' THEN 1
+           WHEN 'HasUploadRole' THEN 2
+           WHEN 'HasPlaylistRole' THEN 3
+           WHEN 'HasCoverArtRole' THEN 4
+           WHEN 'HasCommentRole' THEN 5
+           WHEN 'HasPodcastRole' THEN 6
+           WHEN 'HasStreamRole' THEN 7
+           WHEN 'HasJukeboxRole' THEN 8
+           WHEN 'HasShareRole' THEN 9
+           WHEN 'Administrator' THEN 10
+           ELSE 11
+         END, role",
     )
     .bind(user_id)
     .fetch_all(pool)
@@ -1204,7 +1246,21 @@ async fn roles_for_user(
     user_id: Uuid,
 ) -> Result<Vec<String>, AuthStoreError> {
     Ok(sqlx::query_scalar::<_, String>(
-        "SELECT role FROM native_user_roles WHERE user_id=$1 ORDER BY role",
+        "SELECT role FROM native_user_roles WHERE user_id=$1
+         ORDER BY CASE role
+           WHEN 'HasSettingsRole' THEN 0
+           WHEN 'HasDownloadRole' THEN 1
+           WHEN 'HasUploadRole' THEN 2
+           WHEN 'HasPlaylistRole' THEN 3
+           WHEN 'HasCoverArtRole' THEN 4
+           WHEN 'HasCommentRole' THEN 5
+           WHEN 'HasPodcastRole' THEN 6
+           WHEN 'HasStreamRole' THEN 7
+           WHEN 'HasJukeboxRole' THEN 8
+           WHEN 'HasShareRole' THEN 9
+           WHEN 'Administrator' THEN 10
+           ELSE 11
+         END, role",
     )
     .bind(user_id)
     .fetch_all(&mut **tx)

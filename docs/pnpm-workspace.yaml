@@ -1,6 +1,8 @@
-# pnpm settings for the Melodee documentation site (pnpm 11 reads settings here,
-# not from package.json). esbuild and sharp ship platform binaries installed by
-# their build scripts; everything else runs without install scripts.
+# pnpm settings for the Melodee documentation site. The documentation build
+# needs platform binaries from these two FOSS packages; all other dependency
+# install scripts remain disabled.
 allowBuilds:
   esbuild: true
   sharp: true
+overrides:
+  nanoid: 3.3.18

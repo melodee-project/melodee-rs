@@ -101,8 +101,9 @@ async fn list_playlists(State(state): State<JfState>, headers: HeaderMap, uri: U
         }
     }
     // Captured handler pages in memory after fetching take+skip rows. The
-    // frozen baseline orders ascending by creation time
-    // (`jf-playlists/playlists-list`), unlike the native-v1 newest-first list.
+    // Jellyfin's captured `/Playlists` contract orders ascending by creation
+    // time (`jf-playlists/playlists-list`); native-v1 has a separate
+    // name-ascending list contract.
     let page_size = (take + skip).clamp(1, 1000) as u16;
     let (total, playlists) = match NativeUserStateStore::playlists_oldest_first(
         &state.pool,

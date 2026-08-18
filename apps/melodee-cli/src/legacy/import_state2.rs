@@ -77,7 +77,9 @@ pub async fn import_user_states(
             if rows.is_empty() {
                 break;
             }
-            let last_pk = rows.last().map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
+            let last_pk = rows
+                .last()
+                .map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
             let count = i64::try_from(rows.len()).unwrap_or(0);
 
             let mut tx = target.begin().await.map_err(|e| e.to_string())?;
@@ -190,7 +192,9 @@ pub async fn import_track_plays(
         if rows.is_empty() {
             break;
         }
-        let last_pk = rows.last().map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
+        let last_pk = rows
+            .last()
+            .map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
         let count = i64::try_from(rows.len()).unwrap_or(0);
 
         let mut tx = target.begin().await.map_err(|e| e.to_string())?;
@@ -310,7 +314,9 @@ pub async fn import_podcasts(
         if rows.is_empty() {
             break;
         }
-        let last_pk = rows.last().map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
+        let last_pk = rows
+            .last()
+            .map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
         let count = i64::try_from(rows.len()).unwrap_or(0);
 
         let mut tx = target.begin().await.map_err(|e| e.to_string())?;
@@ -470,7 +476,9 @@ pub async fn import_radio(
         if rows.is_empty() {
             break;
         }
-        let last_pk = rows.last().map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
+        let last_pk = rows
+            .last()
+            .map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
         let count = i64::try_from(rows.len()).unwrap_or(0);
 
         let mut tx = target.begin().await.map_err(|e| e.to_string())?;
@@ -528,7 +536,11 @@ pub async fn import_radio(
             .rows_affected();
             if written == 0 {
                 runs::record_issue(
-                    &mut tx, run_id, "radio_stations", Some(source_pk), "error",
+                    &mut tx,
+                    run_id,
+                    "radio_stations",
+                    Some(source_pk),
+                    "error",
                     "target.public_id_conflict",
                     "public ApiKey already exists in the target outside this run",
                     None,
@@ -594,7 +606,9 @@ pub async fn import_settings(
         if rows.is_empty() {
             break;
         }
-        let last_pk = rows.last().map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
+        let last_pk = rows
+            .last()
+            .map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
         let count = i64::try_from(rows.len()).unwrap_or(0);
 
         let mut tx = target.begin().await.map_err(|e| e.to_string())?;

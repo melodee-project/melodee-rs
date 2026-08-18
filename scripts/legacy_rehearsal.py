@@ -52,6 +52,67 @@ TARGET_DB = "legacy_rehearsal_target"
 RESTORE_DB = "legacy_rehearsal_restore"
 
 
+def _process_memory_kib(pid: int) -> int:
+    """Return the best available resident high-water size for a child.
+
+    The rehearsal is an operator/Linux tool, and sampling ``/proc`` keeps the
+    measurement dependency-free. A missing status file is normal during
+    process exit and is represented as zero so the final sample remains
+    best-effort rather than making a successful migration look failed.
+    """
+    try:
+        status = Path(f"/proc/{pid}/status").read_text()
+    except (FileNotFoundError, PermissionError, OSError):
+        return 0
+    high_water_kib = 0
+    resident_kib = 0
+    for line in status.splitlines():
+        fields = line.split()
+        if len(fields) < 2 or not fields[1].isdigit():
+            continue
+        if fields[0] == "VmHWM:":
+            high_water_kib = int(fields[1])
+        elif fields[0] == "VmRSS:":
+            resident_kib = int(fields[1])
+    return max(high_water_kib, resident_kib)
+
+
+def _run_cli_process(command: list[str], env: dict[str, str]) -> tuple[str, dict]:
+    """Run a CLI command while capturing wall time and peak RSS."""
+    started = time.monotonic()
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=env,
+        cwd=ROOT,
+    )
+    peak_rss_kib = 0
+    while process.poll() is None:
+        peak_rss_kib = max(peak_rss_kib, _process_memory_kib(process.pid))
+        time.sleep(0.05)
+    stdout, stderr = process.communicate()
+    if process.returncode:
+        raise subprocess.CalledProcessError(
+            process.returncode,
+            command,
+            output=stdout,
+            stderr=stderr,
+        )
+    return stdout, {
+        "wall_s": round(time.monotonic() - started, 2),
+        "peak_rss_bytes": peak_rss_kib * 1024,
+    }
+
+
+def _percentile(values: list[float], percentile: int) -> float:
+    """Return a nearest-rank percentile for a non-empty sample."""
+    ordered = sorted(values)
+    rank = max(1, (len(ordered) * percentile + 99) // 100)
+    return ordered[rank - 1]
+
+
 def psql(sql: str, db: str = "postgres") -> str:
     result = subprocess.run(
         ["psql", DB_ADMIN_URL.rsplit("/", 1)[0] + "/" + db, "-At", "-c", sql],
@@ -88,15 +149,9 @@ def cli(target: str, args: list[str], extra_env: dict[str, str] | None = None) -
     env["MELODEE__DATABASE__URL"] = db_url(target)
     if extra_env:
         env.update(extra_env)
-    result = subprocess.run(
-        [str(CLI), "legacy", *args],
-        check=True,
-        capture_output=True,
-        text=True,
-        env=env,
-        cwd=ROOT,
-    )
-    return result.stdout
+    stdout, metrics = _run_cli_process([str(CLI), "legacy", *args], env)
+    cli.last_metrics = metrics
+    return stdout
 
 
 def cli_plain(target: str, args: list[str], extra_env: dict[str, str] | None = None) -> str:
@@ -104,10 +159,13 @@ def cli_plain(target: str, args: list[str], extra_env: dict[str, str] | None = N
     env["MELODEE__DATABASE__URL"] = db_url(target)
     if extra_env:
         env.update(extra_env)
-    result = subprocess.run(
-        [str(CLI), *args], check=True, capture_output=True, text=True, env=env, cwd=ROOT
-    )
-    return result.stdout
+    stdout, metrics = _run_cli_process([str(CLI), *args], env)
+    cli_plain.last_metrics = metrics
+    return stdout
+
+
+cli.last_metrics = {}
+cli_plain.last_metrics = {}
 
 
 def seed_source(songs: int) -> dict:
@@ -117,41 +175,44 @@ def seed_source(songs: int) -> dict:
     create_db(SOURCE_DB)
     ddl = LEGACY_DDL.read_text()
     psql_file(SOURCE_DB, ddl)
+    users = max(10, artists // 10)
+    playlists = max(20, artists // 5)
+    user_songs = max(500, songs // 2)
     seed = f"""
-INSERT INTO "Artists" ("Id","ApiKey","Name","AlbumCount","CalculatedRating","IsLocked","LibraryId","MetaDataStatus","PlayedCount","SongCount","SortOrder","CreatedAt","LastUpdatedAt")
-SELECT g, gen_random_uuid(), 'Rehearsal Artist ' || g, 0, 0, false, 1, 0, 0, 0, 0, now(), now()
+INSERT INTO "Libraries" ("Id","Name","ArtistCount","AlbumCount","SongCount","Path","Type","IsLocked","SortOrder","ApiKey","CreatedAt","LastUpdatedAt")
+VALUES (1, 'Rehearsal Library', {artists}, {albums}, {songs}, '/music', 0, false, 0, gen_random_uuid(), now(), now());
+INSERT INTO "Artists" ("Id","ApiKey","Name","NameNormalized","SortName","Directory","AlbumCount","CalculatedRating","IsLocked","LibraryId","MetaDataStatus","PlayedCount","SongCount","SortOrder","CreatedAt","LastUpdatedAt")
+SELECT g, gen_random_uuid(), 'Rehearsal Artist ' || g, lower('rehearsal artist ' || g), 'Rehearsal Artist ' || g,
+       'artist' || g, 0, 0, false, 1, 0, 0, 0, 0, now(), now()
 FROM generate_series(1, {artists}) g;
-INSERT INTO "Albums" ("Id","ApiKey","ArtistId","Name","AlbumStatus","AlbumType","CalculatedRating","Duration","IsCompilation","IsLocked","MetaDataStatus","PlayedCount","SortOrder","ReleaseDate","OriginalReleaseDate","Directory","CreatedAt","LastUpdatedAt")
-SELECT g, gen_random_uuid(), ((g - 1) % {artists}) + 1, 'Rehearsal Release ' || g, 1, 1, 0, 2400,
+INSERT INTO "Albums" ("Id","ApiKey","ArtistId","Name","NameNormalized","AlbumStatus","AlbumType","CalculatedRating","Duration","IsCompilation","IsLocked","MetaDataStatus","PlayedCount","SortOrder","ReleaseDate","OriginalReleaseDate","Directory","CreatedAt","LastUpdatedAt")
+SELECT g, gen_random_uuid(), ((g - 1) % {artists}) + 1, 'Rehearsal Release ' || g, lower('rehearsal release ' || g), 1, 1, 0, 2400,
        false, false, 0, 0, 0, DATE '1990-01-01', DATE '1959-08-17',
-       'artist' || ((g - 1) % {artists}) || '/release' || g, now(), now()
+       'artist' || (((g - 1) % {artists}) + 1) || '/release' || g, now(), now()
 FROM generate_series(1, {albums}) g;
-INSERT INTO "Songs" ("Id","ApiKey","AlbumId","Title","SongNumber","Duration","FileName","FileSize","BPM","BitDepth","BitRate","SamplingRate","CalculatedRating","IsLocked","IsVbr","PlayedCount","SortOrder","CreatedAt","LastUpdatedAt")
-SELECT g, gen_random_uuid(), ((g - 1) % {albums}) + 1, 'Rehearsal Track ' || g,
-       ((g - 1) % 12) + 1, 200.0, 'track' || g || '.flac', 1000000, 0, 24, 900000, 44100,
-       0, false, false, 0, 0, now(), now()
+INSERT INTO "Songs" ("Id","ApiKey","AlbumId","Title","TitleNormalized","SongNumber","Duration","FileName","FileSize","FileHash","ContentType","BPM","BitDepth","BitRate","SamplingRate","CalculatedRating","IsLocked","IsVbr","PlayedCount","SortOrder","CreatedAt","LastUpdatedAt")
+SELECT g, gen_random_uuid(), ((g - 1) % {albums}) + 1, 'Rehearsal Track ' || g, lower('rehearsal track ' || g),
+       ((g - 1) % 12) + 1, 200.0, 'track' || g || '.flac', 1000000,
+       repeat('0', 64), 'audio/flac', 0, 24, 900000, 44100, 0, false, false, 0, 0, now(), now()
 FROM generate_series(1, {songs}) g;
-INSERT INTO "Users" ("Id","ApiKey","UserName","PasswordHash","PasswordHashAlgorithm","IsAdmin","IsEditor","IsLocked","IsScrobblingEnabled","HasStreamRole","HasDownloadRole","HasUploadRole","HasPlaylistRole","HasShareRole","HasCoverArtRole","HasCommentRole","HasPodcastRole","HasSettingsRole","HasJukeboxRole","SortOrder","CreatedAt","LastUpdatedAt")
-SELECT g, gen_random_uuid(), 'user' || g,
-       '$2a$10$abcdefghijklmnopqrstuuV5k7oW1O0Z1m8H0S1m8H0S1m8H0S1m8H0S', 'bcrypt',
-       false, false, false, false, true, false, false, true, false, false, false, false, false,
-       false, 0, now(), now()
-FROM generate_series(1, greatest(10, {artists} / 10)) g;
-INSERT INTO "Playlists" ("Id","ApiKey","Name","IsPublic","UserId","Duration","IsLocked","SortOrder","CreatedAt","LastUpdatedAt")
-SELECT g, gen_random_uuid(), 'Playlist ' || g, true, ((g - 1) % greatest(10, {artists} / 10)) + 1,
-       0, false, 0, now(), now()
-FROM generate_series(1, greatest(20, {artists} / 5)) g;
-INSERT INTO "PlaylistSong" ("Id","PlaylistId","SongId","PlaylistOrder","SongApiKey")
-SELECT g, ((g - 1) % greatest(20, {artists} / 5)) + 1, ((g - 1) % {songs}) + 1,
-       ((g - 1) / greatest(20, {artists} / 5)) % 20 + 1,
+INSERT INTO "Users" ("Id","ApiKey","UserName","UserNameNormalized","Email","EmailNormalized","PasswordHash","PasswordHashAlgorithm","PublicKey","PasswordEncrypted","TimeZoneId","IsAdmin","IsEditor","IsLocked","IsScrobblingEnabled","HasStreamRole","HasDownloadRole","HasUploadRole","HasPlaylistRole","HasShareRole","HasCoverArtRole","HasCommentRole","HasPodcastRole","HasSettingsRole","HasJukeboxRole","SortOrder","CreatedAt","LastUpdatedAt")
+SELECT g, gen_random_uuid(), 'user' || g, lower('user' || g), 'user' || g || '@example.test', lower('user' || g || '@example.test'),
+       '$2a$10$abcdefghijklmnopqrstuuV5k7oW1O0Z1m8H0S1m8H0S1m8H0S1m8H0S', 'bcrypt', '', '', 'UTC',
+       false, false, false, false, true, false, false, true, false, false, false, false, false, false, 0, now(), now()
+FROM generate_series(1, {users}) g;
+INSERT INTO "Playlists" ("Id","Name","UserId","IsPublic","Duration","IsLocked","SortOrder","ApiKey","CreatedAt","LastUpdatedAt")
+SELECT g, 'Playlist ' || g, ((g - 1) % {users}) + 1, true, 0, false, 0, gen_random_uuid(), now(), now()
+FROM generate_series(1, {playlists}) g;
+INSERT INTO "PlaylistSong" ("PlaylistId","SongId","PlaylistOrder","SongApiKey")
+SELECT ((g - 1) % {playlists}) + 1, ((g - 1) % {songs}) + 1, ((g - 1) / {playlists}) + 1,
        (SELECT "ApiKey" FROM "Songs" WHERE "Id" = ((g - 1) % {songs}) + 1)
 FROM generate_series(1, greatest(200, {songs} / 5)) g;
 INSERT INTO "UserSongs" ("Id","ApiKey","UserId","SongId","IsStarred","IsHated","Rating","PlayedCount","IsLocked","SortOrder","CreatedAt","LastUpdatedAt")
-SELECT g, gen_random_uuid(), ((g - 1) % greatest(10, {artists} / 10)) + 1,
-       ((g - 1) % {songs}) + 1, (g % 2) = 0, false, (g % 5) + 1, g, false, 0, now(), now()
-FROM generate_series(1, greatest(500, {songs} / 2)) g;
+SELECT g, gen_random_uuid(), ((g - 1) % {users}) + 1, ((g - 1) % {songs}) + 1,
+       (g % 2) = 0, false, (g % 5) + 1, g, false, 0, now(), now()
+FROM generate_series(1, {user_songs}) g;
 INSERT INTO "UserSongPlayHistories" ("Id","UserId","SongId","PlayedAt","SecondsPlayed","Client","IsNowPlaying","Source")
-SELECT g, ((g - 1) % greatest(10, {artists} / 10)) + 1, ((g - 1) % {songs}) + 1,
+SELECT g, ((g - 1) % {users}) + 1, ((g - 1) % {songs}) + 1,
        now() - (g || ' minutes')::interval, 200, 'rehearsal', false, 0
 FROM generate_series(1, greatest(1000, {songs})) g;
 """
@@ -170,27 +231,37 @@ def psql_file(db: str, sql: str) -> None:
         handle.write(sql)
         path = handle.name
     try:
-        subprocess.run(
-            ["psql", db_url(db), "-q", "-f", path],
-            check=True,
+        result = subprocess.run(
+            ["psql", db_url(db), "-v", "ON_ERROR_STOP=1", "-f", path],
             capture_output=True,
             text=True,
         )
+        if result.returncode:
+            raise RuntimeError(
+                f"seed SQL failed for {db}:\n{result.stdout}\n{result.stderr}"
+            )
     finally:
         Path(path).unlink(missing_ok=True)
 
 
 def make_canonical_root(workdir: Path, songs: int) -> Path:
-    """Builds a synthetic canonical tree: one small real file per release
-    directory for a bounded sample, the rest adopted at metadata level
-    (import without --canonical-root validates nothing; the drill validates
-    the sample with a second verification pass scoped to the sample).
+    """Builds a bounded, pre-existing canonical tree for the no-write proof.
 
-    To keep the drill fast and bounded, only the first `sample` songs get
-    real sparse files under their adopted paths.
+    The migration is intentionally run without ``--canonical-root`` here: the
+    full CLI validator has separate missing-file acceptance tests, while this
+    production-shaped drill needs to prove that migration never mutates an
+    existing canonical library. Sixteen sparse files are enough to make that
+    assertion non-vacuous without allocating a production-sized media tree.
     """
     root = workdir / "canonical"
-    (root / "library").mkdir(parents=True, exist_ok=True)
+    sample = min(songs, 16)
+    for track in range(1, sample + 1):
+        artist = ((track - 1) % max(50, songs // 24)) + 1
+        release = ((track - 1) % max(100, songs // 12)) + 1
+        path = root / "library" / f"artist{artist}" / f"release{release}" / f"track{track}.flac"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("wb") as handle:
+            handle.truncate(1_000_000)
     return root
 
 
@@ -216,6 +287,7 @@ def drill(songs: int) -> dict:
     }
     workdir = Path(tempfile.mkdtemp(prefix="melodee-r4-rehearsal-"))
     canonical = make_canonical_root(workdir, songs)
+    canonical_before = tree_fingerprint(canonical)
     search_root = workdir / "search"
     search_root.mkdir(parents=True, exist_ok=True)
     search_env = {
@@ -242,14 +314,18 @@ def drill(songs: int) -> dict:
 
         # --- R4.2: import + verify --------------------------------------
         step = time.monotonic()
-        cli(TARGET_DB, ["import", "--source-db", db_url(SOURCE_DB),
+        cli(TARGET_DB, ["import", "--run", run_id, "--source-db", db_url(SOURCE_DB),
                         "--library-path-map", "/music=library", "--batch-size", "2500"])
-        evidence["steps"]["import"] = {"wall_s": round(time.monotonic() - step, 2)}
+        evidence["steps"]["import"] = {
+            **cli.last_metrics,
+            "wall_s": round(time.monotonic() - step, 2),
+        }
 
         step = time.monotonic()
         out = cli(TARGET_DB, ["verify", "--run", run_id, "--source-db", db_url(SOURCE_DB), "--json"])
         verify_report = json.loads(out)
         evidence["steps"]["verify"] = {
+            **cli.last_metrics,
             "wall_s": round(time.monotonic() - step, 2),
             "total_mismatch_gaps": verify_report["total_mismatch_gaps"],
             "duplicate_public_ids": verify_report["duplicate_public_ids"],
@@ -272,11 +348,41 @@ def drill(songs: int) -> dict:
         step = time.monotonic()
         out = cli_plain(TARGET_DB, ["search", "rebuild", "--actor", "r4-rehearsal"], search_env)
         evidence["steps"]["search_rebuild"] = {
+            **cli_plain.last_metrics,
             "wall_s": round(time.monotonic() - step, 2),
             "output": out.strip(),
         }
         index_bytes = sum(f.stat().st_size for f in search_root.rglob("*") if f.is_file())
         evidence["search_index_bytes"] = index_bytes
+
+        query_expressions = [
+            'artist:"Rehearsal Artist 1"',
+            "artist:rehearsal",
+            "release:rehearsal",
+            "track:rehearsal",
+            "artist:rehearsal AND year>=1990",
+        ]
+        query_evidence = []
+        query_wall_ms = []
+        for expression in query_expressions:
+            out = cli_plain(
+                TARGET_DB,
+                ["search", "query", expression, "--limit", "100"],
+                search_env,
+            )
+            query_evidence.append(
+                {
+                    "expression": expression,
+                    "hit_count": len([line for line in out.splitlines() if line]),
+                    **cli_plain.last_metrics,
+                }
+            )
+            query_wall_ms.append(cli_plain.last_metrics["wall_s"] * 1000)
+        evidence["search_validation"] = {
+            "queries": query_evidence,
+            "p50_ms": round(_percentile(query_wall_ms, 50), 2),
+            "p95_ms": round(_percentile(query_wall_ms, 95), 2),
+        }
 
         # --- R4.8: backup + restore-verify -------------------------------
         step = time.monotonic()
@@ -308,8 +414,8 @@ def drill(songs: int) -> dict:
         # One write lands before the marker; it must be imported by the
         # freeze's final delta.
         psql(
-            'INSERT INTO "Artists" ("Id","ApiKey","Name","AlbumCount","CalculatedRating","IsLocked","LibraryId","MetaDataStatus","PlayedCount","SongCount","SortOrder","CreatedAt","LastUpdatedAt") '
-            "VALUES (900000001, gen_random_uuid(), 'Pre-Freeze Late Arrival', 0, 0, false, 1, 0, 0, 0, 0, now(), now())",
+            'INSERT INTO "Artists" ("Id","ApiKey","Name","NameNormalized","SortName","Directory","AlbumCount","CalculatedRating","IsLocked","LibraryId","MetaDataStatus","PlayedCount","SongCount","SortOrder","CreatedAt","LastUpdatedAt") '
+            "VALUES (900000001, gen_random_uuid(), 'Pre-Freeze Late Arrival', 'pre-freeze late arrival', 'Pre-Freeze Late Arrival', 'late-arrival', 0, 0, false, 1, 0, 0, 0, 0, now(), now())",
             SOURCE_DB,
         )
         step = time.monotonic()
@@ -349,6 +455,16 @@ def drill(songs: int) -> dict:
             )
             == 1,
         }
+        canonical_after = tree_fingerprint(canonical)
+        evidence["steps"]["rollback"]["canonical_tree_unchanged"] = (
+            canonical_after == canonical_before
+        )
+        evidence["canonical_media"] = {
+            "files": canonical_before["files"],
+            "bytes": canonical_before["bytes"],
+            "before_after_match": canonical_after == canonical_before,
+        }
+        assert canonical_after == canonical_before
 
         evidence["finished_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         evidence["result"] = "pass"
@@ -365,6 +481,11 @@ def main() -> None:
     drill_cmd = sub.add_parser("drill")
     drill_cmd.add_argument("--songs", type=int, default=12000)
     drill_cmd.add_argument("--keep", action="store_true")
+    drill_cmd.add_argument(
+        "--output",
+        type=Path,
+        help="write the JSON evidence to this path instead of the default report",
+    )
     sub.add_parser("clean")
     args = parser.parse_args()
 
@@ -385,7 +506,8 @@ def main() -> None:
     evidence = drill(args.songs)
     evidence["source_counts"] = counts
     EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
-    out_path = EVIDENCE_DIR / f"rehearsal-drill-{args.songs}.json"
+    out_path = args.output or EVIDENCE_DIR / f"rehearsal-drill-{args.songs}.json"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(evidence, indent=2) + "\n")
     print(f"evidence: {out_path}")
     print(json.dumps({k: v for k, v in evidence.items() if k in ("result", "steps")}, indent=2))

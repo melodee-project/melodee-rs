@@ -15,6 +15,7 @@ use axum::{
 use melodee_persistence::{
     NativePlaylist, NativePlaylistCreate, NativePlaylistUpdate, NativeSmartPlaylist,
     NativeSmartPlaylistCreate, NativeSmartPlaylistUpdate, NativeUserStateStore,
+    NativeUserStateStoreError,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -229,7 +230,13 @@ pub async fn get_playlist(
     Authenticated(principal, _binding): Authenticated,
     Path(id): Path<Uuid>,
 ) -> Result<Json<PlaylistDto>, NativeApiError> {
-    let playlist = NativeUserStateStore::playlist(&state.pool, principal.user_id, id).await?;
+    let playlist = match NativeUserStateStore::playlist(&state.pool, principal.user_id, id).await {
+        Ok(playlist) => playlist,
+        Err(NativeUserStateStoreError::NotFound) => {
+            return Err(NativeApiError::CapturedNotFound("Playlist not found"));
+        }
+        Err(error) => return Err(error.into()),
+    };
     Ok(Json(
         playlist_dto(&state, principal.user_id, &playlist).await?,
     ))
@@ -861,7 +868,7 @@ async fn playlist_dtos(
                 is_public: playlist.is_public,
                 owner,
                 created_at: wire_time(playlist.created_at)?,
-                updated_at: wire_time(playlist.updated_at)?,
+                updated_at: playlist_updated_at(playlist)?,
             })
         })
         .collect()
@@ -900,21 +907,7 @@ fn smart_playlist_model_with_owner(
 async fn user_dto(state: &NativeState, user_id: Uuid) -> Result<UserDto, NativeApiError> {
     let row = sqlx::query(
         "SELECT u.public_api_id, u.username, u.email, u.is_admin, u.is_editor,
-                u.created_at, u.updated_at,
-                (SELECT count(*) FROM native_track_plays p
-                 WHERE p.user_id=u.id AND p.completed)::bigint,
-                (SELECT count(*) FROM native_artist_user_states s
-                 WHERE s.user_id=u.id AND s.starred)::bigint,
-                (SELECT count(*) FROM native_artist_user_states s
-                 WHERE s.user_id=u.id AND s.hated)::bigint,
-                (SELECT count(*) FROM native_release_user_states s
-                 WHERE s.user_id=u.id AND s.starred)::bigint,
-                (SELECT count(*) FROM native_release_user_states s
-                 WHERE s.user_id=u.id AND s.hated)::bigint,
-                (SELECT count(*) FROM native_track_user_states s
-                 WHERE s.user_id=u.id AND s.starred)::bigint,
-                (SELECT count(*) FROM native_track_user_states s
-                 WHERE s.user_id=u.id AND s.hated)::bigint
+                u.created_at, u.updated_at
          FROM native_users u WHERE u.id=$1",
     )
     .bind(user_id)
@@ -922,7 +915,21 @@ async fn user_dto(state: &NativeState, user_id: Uuid) -> Result<UserDto, NativeA
     .await?
     .ok_or(NativeApiError::NotFound)?;
     let roles = sqlx::query_scalar::<_, String>(
-        "SELECT role FROM native_user_roles WHERE user_id=$1 ORDER BY role",
+        "SELECT role FROM native_user_roles WHERE user_id=$1
+         ORDER BY CASE role
+           WHEN 'HasSettingsRole' THEN 0
+           WHEN 'HasDownloadRole' THEN 1
+           WHEN 'HasUploadRole' THEN 2
+           WHEN 'HasPlaylistRole' THEN 3
+           WHEN 'HasCoverArtRole' THEN 4
+           WHEN 'HasCommentRole' THEN 5
+           WHEN 'HasPodcastRole' THEN 6
+           WHEN 'HasStreamRole' THEN 7
+           WHEN 'HasJukeboxRole' THEN 8
+           WHEN 'HasShareRole' THEN 9
+           WHEN 'Administrator' THEN 10
+           ELSE 11
+         END, role",
     )
     .bind(user_id)
     .fetch_all(&state.pool)
@@ -937,20 +944,18 @@ async fn user_dto(state: &NativeState, user_id: Uuid) -> Result<UserDto, NativeA
         is_admin: row.try_get(3)?,
         is_editor: row.try_get(4)?,
         roles,
-        songs_played: bounded_i32(row.try_get(7)?)?,
-        artists_liked: bounded_i32(row.try_get(8)?)?,
-        artists_disliked: bounded_i32(row.try_get(9)?)?,
-        albums_liked: bounded_i32(row.try_get(10)?)?,
-        albums_disliked: bounded_i32(row.try_get(11)?)?,
-        songs_liked: bounded_i32(row.try_get(12)?)?,
-        songs_disliked: bounded_i32(row.try_get(13)?)?,
+        // The legacy native serializer emits zero for every user statistic,
+        // even when the migrated state tables contain activity.
+        songs_played: 0,
+        artists_liked: 0,
+        artists_disliked: 0,
+        albums_liked: 0,
+        albums_disliked: 0,
+        songs_liked: 0,
+        songs_disliked: 0,
         created_at: wire_time(row.try_get(5)?)?,
         updated_at: wire_time(row.try_get(6)?)?,
     })
-}
-
-fn bounded_i32(value: i64) -> Result<i32, NativeApiError> {
-    i32::try_from(value).map_err(|_| NativeApiError::Unavailable)
 }
 
 fn image_url(state: &NativeState, kind: &str, id: Uuid, size: u16) -> String {
@@ -964,6 +969,17 @@ fn wire_time(value: OffsetDateTime) -> Result<String, NativeApiError> {
     value
         .format(&Rfc3339)
         .map_err(|_| NativeApiError::Unavailable)
+}
+
+/// The migration clamps a nullable legacy LastUpdatedAt to CreatedAt to
+/// satisfy the target invariant. Re-expose that marker as the legacy empty
+/// wire value for unchanged imported playlists.
+fn playlist_updated_at(playlist: &NativePlaylist) -> Result<String, NativeApiError> {
+    if playlist.created_at == playlist.updated_at {
+        Ok(String::new())
+    } else {
+        wire_time(playlist.updated_at)
+    }
 }
 
 struct UploadedFile {

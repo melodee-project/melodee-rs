@@ -103,6 +103,17 @@ async fn annotations_playlists_and_scrobbles_are_bounded_atomic_and_idempotent()
     .await
     .expect("star Artist");
     assert!(artist_state.starred);
+    let artist_state = NativeUserStateStore::mutate_artist(
+        &db.pool,
+        user_id,
+        artist_public_id,
+        NativeUserStateMutation::Hated(true),
+        now,
+    )
+    .await
+    .expect("hate Artist");
+    assert!(artist_state.hated);
+    assert!(!artist_state.starred);
     let release_state = NativeUserStateStore::mutate_release(
         &db.pool,
         user_id,
@@ -113,6 +124,27 @@ async fn annotations_playlists_and_scrobbles_are_bounded_atomic_and_idempotent()
     .await
     .expect("rate Release");
     assert_eq!(release_state.rating, 5);
+    let release_state = NativeUserStateStore::mutate_release(
+        &db.pool,
+        user_id,
+        first.release_id().into_uuid(),
+        NativeUserStateMutation::Starred(true),
+        now,
+    )
+    .await
+    .expect("star Release");
+    assert!(release_state.starred);
+    let release_state = NativeUserStateStore::mutate_release(
+        &db.pool,
+        user_id,
+        first.release_id().into_uuid(),
+        NativeUserStateMutation::Hated(true),
+        now,
+    )
+    .await
+    .expect("hate Release");
+    assert!(release_state.hated);
+    assert!(!release_state.starred);
     let track_state = NativeUserStateStore::mutate_track(
         &db.pool,
         user_id,
@@ -123,6 +155,17 @@ async fn annotations_playlists_and_scrobbles_are_bounded_atomic_and_idempotent()
     .await
     .expect("hate Track");
     assert!(track_state.hated);
+    let track_state = NativeUserStateStore::mutate_track(
+        &db.pool,
+        user_id,
+        track_public_id,
+        NativeUserStateMutation::Starred(true),
+        now,
+    )
+    .await
+    .expect("star Track");
+    assert!(track_state.starred);
+    assert!(!track_state.hated);
     assert!(matches!(
         NativeUserStateStore::mutate_track(
             &db.pool,
@@ -162,11 +205,11 @@ async fn annotations_playlists_and_scrobbles_are_bounded_atomic_and_idempotent()
         &db.pool,
         user_id,
         playlist.public_api_id,
-        &[track_public_id, track_public_id, second_track_public_id],
+        &[second_track_public_id, track_public_id],
         now,
     )
     .await
-    .expect("set-based duplicate-aware reorder");
+    .expect("set-based partial reorder");
     let items = NativeUserStateStore::playlist_items(&db.pool, user_id, playlist.public_api_id)
         .await
         .expect("list playlist items");
@@ -175,7 +218,7 @@ async fn annotations_playlists_and_scrobbles_are_bounded_atomic_and_idempotent()
             .iter()
             .map(|item| item.track_public_id)
             .collect::<Vec<_>>(),
-        vec![track_public_id, track_public_id, second_track_public_id]
+        vec![second_track_public_id, track_public_id]
     );
 
     let played_at = now - time::Duration::seconds(30);

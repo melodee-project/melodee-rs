@@ -29,13 +29,12 @@ pub async fn capture(
     .map_err(|e| format!("settings fingerprint failed: {e}"))?;
     settings_keys.retain(|k| !k.trim().is_empty());
 
-    let library_roots: i64 = sqlx::query(
-        r#"SELECT COUNT(*) FROM "Libraries" WHERE "Path" IS NOT NULL"#,
-    )
-    .fetch_one(source.pool())
-    .await
-    .map(|r| r.get::<i64, _>(0))
-    .map_err(|e| format!("library root count failed: {e}"))?;
+    let library_roots: i64 =
+        sqlx::query(r#"SELECT COUNT(*) FROM "Libraries" WHERE "Path" IS NOT NULL"#)
+            .fetch_one(source.pool())
+            .await
+            .map(|r| r.get::<i64, _>(0))
+            .map_err(|e| format!("library root count failed: {e}"))?;
 
     Ok(serde_json::json!({
         "captured_at": time::OffsetDateTime::now_utc().to_string(),

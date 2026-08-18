@@ -585,6 +585,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         // R2.5 correlation sourcing runs inside the TraceLayer span (added
         // first, so the layer wraps it) so the span recording lands.
         .layer(axum::middleware::from_fn(melodee_server::correlation::middleware))
+        .layer(axum::middleware::from_fn(
+            melodee_server::security_headers::middleware,
+        ))
         .layer(TraceLayer::new_for_http().make_span_with(melodee_server::make_http_span));
 
     // Case-insensitive Jellyfin route matching (legacy ASP.NET matched route

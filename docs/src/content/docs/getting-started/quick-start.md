@@ -49,7 +49,7 @@ backups, upgrade steps, and attestation verification, continue to
 [Container deployment](../installation/docker/).
 
 Migrating an existing C# production installation uses the
-[legacy migration tooling](../../installation/legacy-migration/) — a rehearsal-ready command
+[legacy migration tooling](../installation/legacy-migration/) — a rehearsal-ready command
 group whose production cutover/rollback proof is the remaining release gate. It is separate
 from starting a new Rust deployment.
 

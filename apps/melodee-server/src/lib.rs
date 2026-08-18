@@ -29,6 +29,7 @@ pub mod podcast_worker;
 pub mod policy_worker;
 pub mod resource_bounds;
 pub mod scripting;
+pub mod security_headers;
 pub mod system;
 pub mod transcode;
 

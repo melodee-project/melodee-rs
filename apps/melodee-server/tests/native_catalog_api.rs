@@ -895,7 +895,9 @@ async fn native_catalog_browse_detail_and_search_preserve_public_ids_and_user_st
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(per_day["data"][0]["plays"], 1);
+    let per_day_rows = per_day["data"].as_array().expect("daily stats data");
+    assert_eq!(per_day_rows.len(), 31);
+    assert!(per_day_rows.iter().any(|row| row["plays"] == 1));
     let (status, history) = response_json(
         state.clone(),
         principal,
@@ -945,7 +947,8 @@ async fn native_catalog_browse_detail_and_search_preserve_public_ids_and_user_st
     assert_eq!(literal_wildcard["meta"]["totalCount"], 0);
     let (status, random) = response_json(state, principal, "/api/v1/songs/random?count=1").await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(random.as_array().unwrap().len(), 1);
+    assert_eq!(random["count"], 1);
+    assert_eq!(random["data"].as_array().unwrap().len(), 1);
     db.drop().await;
 }
 
@@ -1015,7 +1018,7 @@ async fn deprecated_releases_disappear_from_every_native_track_read_surface() {
     let (status, random) =
         response_json(state.clone(), principal, "/api/v1/songs/random?count=50").await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(random, serde_json::json!([]));
+    assert_eq!(random, serde_json::json!({"count": 0, "data": []}));
 
     let (status, suggestions) = response_json(
         state.clone(),
@@ -1156,7 +1159,7 @@ async fn native_random_songs_samples_beyond_the_first_ten_thousand_tracks() {
             .collect::<HashSet<_>>();
     let (status, body) = response_json(state, principal, "/api/v1/songs/random?count=500").await;
     assert_eq!(status, StatusCode::OK);
-    let sampled = body.as_array().expect("random songs");
+    let sampled = body["data"].as_array().expect("random songs");
     assert_eq!(sampled.len(), 500);
     assert!(
         sampled.iter().any(|song| {
@@ -1375,7 +1378,8 @@ async fn native_library_acl_prevents_cross_library_browse_search_mutation_and_sc
     let (status, random) =
         response_json(state.clone(), principal, "/api/v1/songs/random?count=50").await;
     assert_eq!(status, StatusCode::OK);
-    assert!(random.as_array().is_some_and(Vec::is_empty));
+    assert_eq!(random["count"], 0);
+    assert!(random["data"].as_array().is_some_and(Vec::is_empty));
 
     // One Artist spans both libraries. The durable catalog aggregate is
     // deliberately global; the native DTO must recompute counts within the

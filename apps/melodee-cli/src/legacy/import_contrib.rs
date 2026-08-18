@@ -32,7 +32,9 @@ pub async fn import_contributions(
         if rows.is_empty() {
             break;
         }
-        let last_pk = rows.last().map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
+        let last_pk = rows
+            .last()
+            .map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
         let count = i64::try_from(rows.len()).unwrap_or(0);
 
         let mut tx = target.begin().await.map_err(|e| e.to_string())?;
@@ -59,8 +61,7 @@ pub async fn import_contributions(
                 Some(pk) => map::catalog_mapping(&mut tx, run_id, "artist", pk).await?,
                 None => None,
             };
-            let (Some(release_target), Some(artist_target)) = (release_target, artist_target)
-            else {
+            let Some(release_target) = release_target else {
                 runs::record_issue(
                     &mut tx,
                     run_id,
@@ -87,6 +88,122 @@ pub async fn import_contributions(
             let role_detail: Option<String> = row.get("SubRole");
             let display_value: Option<String> = row.get("ContributorName");
             let created: time::OffsetDateTime = row.get("CreatedAt");
+
+            // A legacy contributor without ArtistId is still user-visible
+            // credit data. Preserve it as an unresolved Artist observation;
+            // creating a pseudo-Artist would violate the domain rule that a
+            // string is never an Artist identity. The OpenSubsonic adapter
+            // already renders these observations as name-only contributors.
+            if artist_target.is_none() {
+                let Some(display_value) = display_value
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                else {
+                    runs::record_issue(
+                        &mut tx,
+                        run_id,
+                        "contributions",
+                        Some(source_pk),
+                        "error",
+                        "catalog.orphan_contribution",
+                        "contributor has no Artist identity or display observation; skipped",
+                        None,
+                    )
+                    .await?;
+                    issues += 1;
+                    continue;
+                };
+                let Some(track_target) = track_target else {
+                    runs::record_issue(
+                        &mut tx,
+                        run_id,
+                        "contributions",
+                        Some(source_pk),
+                        "error",
+                        "catalog.orphan_contribution",
+                        "name-only contributor has no mapped release track; skipped",
+                        None,
+                    )
+                    .await?;
+                    issues += 1;
+                    continue;
+                };
+                let observed_id = Uuid::now_v7();
+                let normalized = display_value.to_lowercase();
+                let source_pointer = format!("legacy-contributor:{source_pk}");
+                let source_payload = serde_json::json!({
+                    "role": role,
+                    "subRole": role_detail,
+                    "contributorType": row.get::<i32, _>("ContributorType"),
+                    "legacyId": source_pk,
+                });
+                let observed_id = sqlx::query_scalar::<_, Uuid>(
+                    "INSERT INTO observed_artists (
+                        id, release_id, track_id, scope, source_ordinal,
+                        raw_value, normalized_value, display_value, source_pointer,
+                        source_payload, created_at
+                     ) VALUES ($1,$2,$3,'track',$4,$5,$6,$7,$8,$9,$10)
+                     ON CONFLICT (release_id, scope, source_pointer, source_ordinal)
+                     DO NOTHING
+                     RETURNING id",
+                )
+                .bind(observed_id)
+                .bind(release_target)
+                .bind(track_target)
+                .bind(source_pk as i32)
+                .bind(display_value)
+                .bind(&normalized)
+                .bind(display_value)
+                .bind(&source_pointer)
+                .bind(source_payload)
+                .bind(created)
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(|e| format!("contributor observation {source_pk} insert failed: {e}"))?
+                .unwrap_or(
+                    sqlx::query_scalar(
+                        "SELECT id FROM observed_artists
+                          WHERE release_id=$1 AND scope='track'
+                            AND source_pointer=$2 AND source_ordinal=$3",
+                    )
+                    .bind(release_target)
+                    .bind(&source_pointer)
+                    .bind(source_pk as i32)
+                    .fetch_one(&mut *tx)
+                    .await
+                    .map_err(|e| {
+                        format!("contributor observation {source_pk} lookup failed: {e}")
+                    })?,
+                );
+                map::insert_mapping(
+                    &mut tx,
+                    run_id,
+                    "contributions",
+                    source_pk,
+                    row.get::<Option<Uuid>, _>("ApiKey"),
+                    observed_id,
+                    map::clamp_updated(created, row.get("LastUpdatedAt")),
+                )
+                .await?;
+                runs::record_issue(
+                    &mut tx,
+                    run_id,
+                    "contributions",
+                    Some(source_pk),
+                    "warning",
+                    "catalog.unresolved_contribution",
+                    "name-only contributor preserved as an unresolved Artist observation",
+                    Some(serde_json::json!({ "display_value": display_value })),
+                )
+                .await?;
+                inserted += 1;
+                issues += 1;
+                continue;
+            }
+            let Some(artist_target) = artist_target else {
+                continue;
+            };
 
             let target_id = Uuid::now_v7();
             sqlx::query(

@@ -106,6 +106,28 @@ SCENARIO_GROUPS = {
 # (scenario name prefix, difference field substring, justification). Anything
 # not matching an entry fails the run.
 KNOWN_DIFFERENCES: list[tuple[str, str, str]] = [
+    # Native-v1 approved normalizations from ADR-0128/0125. The frozen
+    # captures remain in the corpus; these entries classify only the exact
+    # defect cases whose Rust behavior is covered by route tests.
+    ("catalog/artist-detail-unknown", "", "ADR-0128: unknown Artist IDs use the typed 404 envelope instead of the captured legacy 500"),
+    ("catalog/song-detail-unknown", "", "ADR-0128: unknown Track IDs use the typed 404 envelope instead of the captured legacy 500"),
+    ("catalog-playlist-crud/add-songs", "", "ADR-0128: playlist add-item bodies never reproduce the captured legacy null-navigation failure"),
+    ("catalog-playlist-crud/add-songs-meloamp-shape", "", "ADR-0128: playlist add-item bodies are handled by the accepted atomic native contract"),
+    ("catalog-playlist-crud/songs-after-reorder", "response.body$.data.length", "ADR-0128: the accepted atomic add-item contract leaves the newly accepted Track in the playlist"),
+    ("catalog-playlist-crud/songs-after-reorder", "response.body$.meta.totalCount", "ADR-0128: the accepted atomic add-item contract leaves the newly accepted Track in the playlist"),
+    ("catalog-scrobble/scrobble-unknown-song", "", "ADR-0128: unknown scrobble Track IDs use the typed not-found result"),
+    ("catalog-scrobble/song-detail-after-scrobble", "playCount", "ADR-0128: scrobble and derived user/Track counters are committed transactionally"),
+    ("catalog-smart-playlists/", "", "ADR-0128: durable smart-playlist routes replace the captured missing-table 500 lifecycle"),
+    ("native-discovery/recommendations", "", "ADR-0128: recommendations derive from bounded committed catalog facts instead of the captured placeholder empty result"),
+    ("native-discovery/endpoints-list", "", "ADR-0128: endpoint registry authorization uses the validated native principal"),
+    ("native-discovery/endpoints-attach", "", "ADR-0128: endpoint registry authorization uses the validated native principal"),
+    ("native-discovery/endpoints-detach", "", "ADR-0128: endpoint registry authorization uses the validated native principal"),
+    ("native-discovery/endpoints-for-session", "", "ADR-0128: endpoint registry authorization uses the validated native principal"),
+    ("community-lifecycle/share-public", "", "ADR-0129: weak migrated public-share bearers are rotated and old weak URLs fail closed"),
+    ("stream/get-empty-guid-user", "", "ADR-0125: malformed stream credentials use the non-enumerating typed 401 result"),
+    ("stream/get-tampered-token", "", "ADR-0125: tampered stream credentials use the non-enumerating typed 401 result"),
+    ("auth-refresh-expired-token", "response.body$.message", "ADR-0148 amendment: refresh-session artifacts are not migrated, so the legacy expired token is invalid in the fresh target"),
+
     # ADR-0147 supersedes the ADR-0130 silent-ignore clause (decision 2) and
     # the Jellyfin 400 transcode rejection (decision 4): both frozen goldens
     # are retained as historical evidence while the current server honors

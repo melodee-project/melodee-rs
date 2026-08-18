@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import numbers
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -42,6 +43,7 @@ def metadata_by_name(directory: Path) -> dict[str, dict[str, Any]]:
 
 
 _SEGMENT_RE = re.compile(r"\.([^\.\[\]]+)|\[(\*|\d+)\]")
+_REQUEST_VARIABLE_RE = re.compile(r"\{\{[^{}]+\}\}")
 
 
 def parse_json_path(path: str) -> list[str | int]:
@@ -93,15 +95,69 @@ def normalize_json(document: Any, mask_paths: list[str]) -> Any:
     return document
 
 
+def normalize_request_url(url: str, template: str | None) -> str:
+    """Replace only scenario-declared request variables with one marker.
+
+    Flow-created IDs and signed stream URLs are intentionally different on
+    every isolated replay. The scenario template is the authority for which
+    URL portions are variable; static route text remains compared exactly.
+    """
+    if not template or not _REQUEST_VARIABLE_RE.search(template):
+        return url
+    pieces = _REQUEST_VARIABLE_RE.split(template)
+    has_masked_origin = template.startswith("/")
+    pattern = "^(?P<prefix>.*?)" if has_masked_origin else "^"
+    for index, piece in enumerate(pieces):
+        pattern += re.escape(piece)
+        if index < len(pieces) - 1:
+            pattern += ".*?"
+    pattern += "$"
+    if re.fullmatch(pattern, url, flags=re.DOTALL) is None:
+        return url
+    normalized = _REQUEST_VARIABLE_RE.sub("<scenario-variable>", template)
+    if has_masked_origin:
+        match = re.fullmatch(pattern, url, flags=re.DOTALL)
+        assert match is not None
+        return f"{match.group('prefix')}{normalized}"
+    return normalized
+
+
 def _short(value: Any) -> str:
     text = json.dumps(value, ensure_ascii=False)
     return text if len(text) <= 120 else text[:117] + "..."
+
+
+def normalize_structure_checks(checks: Any) -> Any:
+    """Remove replay-time expiry instants from transport-shape evidence.
+
+    A stream token's signed expiry is intentionally minted at capture time;
+    the structural validator still compares its validity, binding, HMAC
+    shape, and relative lifetime. The absolute instant is not a wire field
+    and differs whenever the two servers are replayed at different times.
+    """
+    if not isinstance(checks, dict):
+        return checks
+    normalized = json.loads(json.dumps(checks))
+    for result in normalized.values():
+        if isinstance(result, dict) and result.get("type") == "streamAuthToken":
+            result.pop("expiresAt", None)
+    return normalized
 
 
 def diff_json(expected: Any, actual: Any, path: str = "$") -> list[tuple[str, Any, Any]]:
     """Structural diff. Key order-insensitive; array order, types, and
     null-vs-omitted distinctions are significant."""
     differences: list[tuple[str, Any, Any]] = []
+    # JSON has one number type. Python's decoder materializes integral and
+    # fractional JSON numbers as different Python types, so 0 and 0.0 are
+    # wire-equivalent and must not become a false compatibility mismatch.
+    if (
+        isinstance(expected, numbers.Number)
+        and not isinstance(expected, bool)
+        and isinstance(actual, numbers.Number)
+        and not isinstance(actual, bool)
+    ):
+        return [] if expected == actual else [(path, expected, actual)]
     if type(expected) is not type(actual):
         return [(path, expected, actual)]
     if isinstance(expected, dict):
@@ -133,6 +189,7 @@ def compare_scenario(
     expected: dict[str, Any],
     actual_dir: Path,
     actual: dict[str, Any],
+    request_template: str | None = None,
 ) -> list[Difference]:
     differences: list[Difference] = []
 
@@ -142,6 +199,9 @@ def compare_scenario(
     for field in ("method", "url", "auth", "headers", "jsonTemplate", "bodyTemplate"):
         left = expected.get("request", {}).get(field)
         right = actual.get("request", {}).get(field)
+        if field == "url" and request_template:
+            left = normalize_request_url(left, request_template)
+            right = normalize_request_url(right, request_template)
         if left != right:
             differences.append(Difference(name, f"request.{field}", left, right))
 
@@ -196,8 +256,8 @@ def compare_scenario(
     for path, left, right in diff_json(left_norm, right_norm):
         differences.append(Difference(name, f"response.body{path}", _short(left), _short(right)))
 
-    left_checks = expected.get("structureChecks")
-    right_checks = actual.get("structureChecks")
+    left_checks = normalize_structure_checks(expected.get("structureChecks"))
+    right_checks = normalize_structure_checks(actual.get("structureChecks"))
     if left_checks != right_checks:
         differences.append(Difference(name, "structureChecks", left_checks, right_checks))
     return differences
@@ -207,6 +267,7 @@ def compare(
     expected_dir: Path,
     actual_dir: Path,
     scenario_names: set[str] | None = None,
+    request_templates: dict[str, str] | None = None,
 ) -> list[Difference]:
     expected = metadata_by_name(expected_dir)
     actual = metadata_by_name(actual_dir)
@@ -226,7 +287,14 @@ def compare(
 
     for name in sorted(expected.keys() & actual.keys()):
         differences.extend(
-            compare_scenario(name, expected_dir, expected[name], actual_dir, actual[name])
+            compare_scenario(
+                name,
+                expected_dir,
+                expected[name],
+                actual_dir,
+                actual[name],
+                (request_templates or {}).get(name),
+            )
         )
     return differences
 

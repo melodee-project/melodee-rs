@@ -19,11 +19,10 @@ async fn import_and_verify(source_url: &str, target_url: &str, target: &sqlx::Pg
     args.push("--library-path-map".to_string());
     args.push(map_arg());
     run_legacy(target_url, &args);
-    let run_id: String =
-        sqlx::query_scalar("SELECT id::text FROM legacy_migration.runs LIMIT 1")
-            .fetch_one(target)
-            .await
-            .expect("run id");
+    let run_id: String = sqlx::query_scalar("SELECT id::text FROM legacy_migration.runs LIMIT 1")
+        .fetch_one(target)
+        .await
+        .expect("run id");
     let mut verify_args = vec!["verify".to_string(), "--run".to_string(), run_id.clone()];
     verify_args.extend(source_args(source_url));
     let stdout = run_legacy(target_url, &verify_args);
@@ -48,20 +47,23 @@ async fn baseline_records_immutable_snapshot_with_redacted_fingerprint() {
     args.extend(source_args(&source.url));
     run_legacy(&target.url, &args);
 
-    let notes: serde_json::Value = sqlx::query_scalar(
-        "SELECT notes FROM legacy_migration.runs WHERE id = $1::uuid",
-    )
-    .bind(&run_id)
-    .fetch_one(&target.pool)
-    .await
-    .expect("run notes");
+    let notes: serde_json::Value =
+        sqlx::query_scalar("SELECT notes FROM legacy_migration.runs WHERE id = $1::uuid")
+            .bind(&run_id)
+            .fetch_one(&target.pool)
+            .await
+            .expect("run notes");
     let baseline = &notes["baseline"];
     assert_eq!(
         baseline["schema_fingerprint"].as_str(),
         Some("20260714155936_AddDeleteSourceResidueAfterIngestSetting")
     );
     assert_eq!(baseline["table_count"].as_i64(), Some(52));
-    assert!(baseline["snapshot_marker"].as_str().is_some_and(|m| m.starts_with("rows:")));
+    assert!(
+        baseline["snapshot_marker"]
+            .as_str()
+            .is_some_and(|m| m.starts_with("rows:"))
+    );
     // Redaction: the settings fingerprint is keys only — the seeded key is
     // present, and no value material appears anywhere in the baseline.
     let keys = baseline["configuration_fingerprint"]["settings_keys"]
@@ -89,11 +91,10 @@ async fn freeze_gates_on_state_and_acknowledgement() {
     args.push("--library-path-map".to_string());
     args.push(map_arg());
     run_legacy(&target.url, &args);
-    let run_id: String =
-        sqlx::query_scalar("SELECT id::text FROM legacy_migration.runs LIMIT 1")
-            .fetch_one(&target.pool)
-            .await
-            .expect("run id");
+    let run_id: String = sqlx::query_scalar("SELECT id::text FROM legacy_migration.runs LIMIT 1")
+        .fetch_one(&target.pool)
+        .await
+        .expect("run id");
     let mut freeze_args = vec!["freeze".to_string(), "--run".to_string(), run_id.clone()];
     freeze_args.extend(source_args(&source.url));
     let stderr = run_legacy_failing(&target.url, &freeze_args);
@@ -145,13 +146,12 @@ async fn freeze_gates_on_state_and_acknowledgement() {
             .await
             .expect("run state");
     assert_eq!(state, "cutover-ready");
-    let notes: serde_json::Value = sqlx::query_scalar(
-        "SELECT notes FROM legacy_migration.runs WHERE id = $1::uuid",
-    )
-    .bind(&run_id)
-    .fetch_one(&target.pool)
-    .await
-    .expect("run notes");
+    let notes: serde_json::Value =
+        sqlx::query_scalar("SELECT notes FROM legacy_migration.runs WHERE id = $1::uuid")
+            .bind(&run_id)
+            .fetch_one(&target.pool)
+            .await
+            .expect("run notes");
     assert_eq!(
         notes["freeze"]["acknowledgement"].as_str(),
         Some("rehearsal drill: freeze verified by operator")
@@ -202,12 +202,11 @@ async fn freeze_aborts_when_source_writes_during_window() {
         // Wait until the delta has visibly started applying display-field
         // updates (revision > 1), then write to the source inside the window.
         for _ in 0..600 {
-            let updated: i64 = sqlx::query_scalar(
-                "SELECT COUNT(*) FROM artists WHERE revision > 1",
-            )
-            .fetch_one(&target_pool)
-            .await
-            .expect("watch target");
+            let updated: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM artists WHERE revision > 1")
+                    .fetch_one(&target_pool)
+                    .await
+                    .expect("watch target");
             if updated > 0 {
                 break;
             }
@@ -245,7 +244,10 @@ async fn freeze_aborts_when_source_writes_during_window() {
             .fetch_one(&target.pool)
             .await
             .expect("run state");
-    assert_eq!(state, "delta-ready", "aborted freeze leaves run delta-ready");
+    assert_eq!(
+        state, "delta-ready",
+        "aborted freeze leaves run delta-ready"
+    );
 
     drop_db(&source.name).await;
     drop_db(&target.name).await;

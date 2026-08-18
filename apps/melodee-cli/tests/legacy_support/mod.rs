@@ -237,7 +237,10 @@ pub fn legacy_protect(security_key: &str, plaintext: &str) -> String {
     combined.extend_from_slice(&nonce_bytes);
     combined.extend_from_slice(&in_out[split..]);
     combined.extend_from_slice(&in_out[..split]);
-    format!("v1:gcm:{}", base64::engine::general_purpose::STANDARD.encode(combined))
+    format!(
+        "v1:gcm:{}",
+        base64::engine::general_purpose::STANDARD.encode(combined)
+    )
 }
 
 pub async fn count(pool: &PgPool, sql_table: &str) -> i64 {

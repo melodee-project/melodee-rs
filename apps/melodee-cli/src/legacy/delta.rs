@@ -19,6 +19,7 @@ use super::source::SourceDb;
 ///
 /// # Errors
 /// Returns fencing/source/target errors; row-level anomalies are issues.
+#[allow(clippy::too_many_arguments)]
 pub async fn apply_delta(
     source: &SourceDb,
     target: &PgPool,
@@ -86,11 +87,13 @@ pub async fn apply_delta(
     if release_lease {
         runs::release_lease(target, run_id, &owner).await?;
     }
-    println!(
-        "run {run_id}: delta applied (artists updated={artists_updated}, \
-         releases updated={releases_updated}, deletion issues={deletion_issues}); \
-         state remains delta-ready"
-    );
+    if release_lease {
+        println!(
+            "run {run_id}: delta applied (artists updated={artists_updated}, \
+             releases updated={releases_updated}, deletion issues={deletion_issues}); \
+             state remains delta-ready"
+        );
+    }
     Ok(())
 }
 

@@ -26,7 +26,7 @@ WORKDIR /src
 COPY . ./
 RUN cargo build --locked --release -p melodee-server -p melodee-cli
 
-FROM debian:bookworm-slim AS runtime
+FROM debian:trixie-slim AS runtime
 
 ARG VERSION=dev
 ARG REVISION=unknown

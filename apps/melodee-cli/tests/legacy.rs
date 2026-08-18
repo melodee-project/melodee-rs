@@ -153,6 +153,43 @@ async fn full_import_covers_all_domains_and_preserves_identity() {
     assert_eq!(count(&target.pool, "release_artists").await, 1);
     assert_eq!(count(&target.pool, "media_assets").await, 2);
 
+    let (bitrate_bps, tempo): (i64, Option<f64>) = sqlx::query_as(
+        "SELECT media.bitrate_bps, features.tempo
+         FROM tracks track
+         JOIN media_assets media ON media.id = track.playable_media_asset_id
+         LEFT JOIN native_track_audio_features features ON features.track_id = track.id
+         ORDER BY track.public_api_id
+         LIMIT 1",
+    )
+    .fetch_one(&target.pool)
+    .await
+    .expect("migrated audio facts");
+    assert_eq!(
+        bitrate_bps, 900_000,
+        "legacy bitrate is represented in Rust bps"
+    );
+    assert_eq!(
+        tempo,
+        Some(0.0),
+        "legacy zero BPM remains an observed tempo"
+    );
+    let metadata_reference: (i64, serde_json::Value) = sqlx::query_as(
+        "SELECT COUNT(*) OVER (), detail
+         FROM legacy_migration.issues
+         WHERE code = 'metadata.reference_only'
+         ORDER BY source_pk
+         LIMIT 1",
+    )
+    .fetch_one(&target.pool)
+    .await
+    .expect("reference-only metadata issue");
+    assert_eq!(metadata_reference.0, 2);
+    assert!(
+        metadata_reference.1["fields"]
+            .as_array()
+            .is_some_and(|fields| fields.iter().any(|field| field == "Songs.BitDepth"))
+    );
+
     // Original release date is preserved separately from edition date.
     let (release_date, original): (Option<time::Date>, Option<time::Date>) =
         sqlx::query_as("SELECT release_date, original_release_date FROM releases")
@@ -169,7 +206,10 @@ async fn full_import_covers_all_domains_and_preserves_identity() {
             .fetch_all(&target.pool)
             .await
             .expect("media paths");
-    assert_eq!(paths[0].0, "library/Miles Davis/miles/kind of blue/01 So What.flac");
+    assert_eq!(
+        paths[0].0,
+        "library/Miles Davis/miles/kind of blue/01 So What.flac"
+    );
     assert_eq!(
         paths[0].1,
         "0000000000000000000000000000000000000000000000000000000000000000"
@@ -192,6 +232,31 @@ async fn full_import_covers_all_domains_and_preserves_identity() {
     assert_eq!(
         hashes[1].1,
         "$2a$10$abcdefghijklmnopqrstuuV5k7oW1O0Z1m8H0S1m8H0S1m8H0S1m8H0S"
+    );
+    let (is_admin, is_editor): (bool, bool) =
+        sqlx::query_as("SELECT is_admin, is_editor FROM native_users WHERE username = 'mel'")
+            .fetch_one(&target.pool)
+            .await
+            .expect("migrated user flags");
+    assert!(is_admin);
+    assert!(is_editor, "administrators retain the effective editor flag");
+    let roles: Vec<String> = sqlx::query_scalar(
+        "SELECT role FROM native_user_roles \
+         WHERE user_id = (SELECT id FROM native_users WHERE username = 'mel') \
+         ORDER BY role",
+    )
+    .fetch_all(&target.pool)
+    .await
+    .expect("migrated user roles");
+    assert_eq!(
+        roles,
+        vec![
+            "Administrator",
+            "HasDownloadRole",
+            "HasPlaylistRole",
+            "HasShareRole",
+            "HasStreamRole",
+        ]
     );
     let credential_issues: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM legacy_migration.issues WHERE code = 'credential.unsupported'",

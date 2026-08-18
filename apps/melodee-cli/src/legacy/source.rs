@@ -32,15 +32,31 @@ pub const INVENTORY_TABLES: &[(&str, &str, &str)] = &[
     ("track_plays", "UserSongPlayHistories", "\"Id\"::bigint"),
     ("podcast_channels", "PodcastChannels", "\"Id\"::bigint"),
     ("podcast_episodes", "PodcastEpisodes", "\"Id\"::bigint"),
-    ("podcast_episode_bookmarks", "PodcastEpisodeBookmarks", "\"Id\"::bigint"),
-    ("podcast_play_history", "UserPodcastEpisodePlayHistories", "\"Id\"::bigint"),
+    (
+        "podcast_episode_bookmarks",
+        "PodcastEpisodeBookmarks",
+        "\"Id\"::bigint",
+    ),
+    (
+        "podcast_play_history",
+        "UserPodcastEpisodePlayHistories",
+        "\"Id\"::bigint",
+    ),
     ("radio_stations", "RadioStations", "\"Id\"::bigint"),
     ("settings", "Settings", "\"Id\"::bigint"),
     ("smart_playlists", "SmartPlaylists", "\"Id\"::bigint"),
     ("user_groups", "UserGroups", "\"Id\"::bigint"),
     ("user_group_members", "UserGroupMembers", "\"Id\"::bigint"),
-    ("playback_settings", "UserPlaybackSettings", "\"Id\"::bigint"),
-    ("equalizer_presets", "UserEqualizerPresets", "\"Id\"::bigint"),
+    (
+        "playback_settings",
+        "UserPlaybackSettings",
+        "\"Id\"::bigint",
+    ),
+    (
+        "equalizer_presets",
+        "UserEqualizerPresets",
+        "\"Id\"::bigint",
+    ),
     ("social_logins", "UserSocialLogins", "\"Id\"::bigint"),
     ("user_pins", "UserPins", "\"Id\"::bigint"),
     ("device_profiles", "UserDeviceProfiles", "\"Id\"::bigint"),
@@ -58,8 +74,7 @@ pub const PLAYLIST_ITEM_KEY_SQL: &str =
     "(\"PlaylistId\"::bigint * 1000000::bigint + \"PlaylistOrder\")";
 /// Synthetic source key for legacy `RequestUserStates` rows:
 /// `RequestId * 2^31 + UserId` (both int4; the product cannot overflow i64).
-pub const REQUEST_SEEN_KEY_SQL: &str =
-    "(\"RequestId\"::bigint * 2147483648::bigint + \"UserId\")";
+pub const REQUEST_SEEN_KEY_SQL: &str = "(\"RequestId\"::bigint * 2147483648::bigint + \"UserId\")";
 
 /// A read-only handle to the legacy snapshot. Every session enforces
 /// `default_transaction_read_only = on` so a write fails at the database
@@ -166,7 +181,9 @@ impl SourceDb {
         Ok(format!(
             "rows:{} updated:{}",
             rows.unwrap_or(0),
-            updated.map(|t| t.unix_timestamp_nanos().to_string()).unwrap_or_else(|| "none".to_string())
+            updated
+                .map(|t| t.unix_timestamp_nanos().to_string())
+                .unwrap_or_else(|| "none".to_string())
         ))
     }
 
@@ -346,8 +363,12 @@ pub async fn collect_inventory(source: &SourceDb) -> Result<Inventory, String> {
             domain: (*domain).to_string(),
             source_table: (*table).to_string(),
             rows: row.try_get::<i64, _>(0).map_err(|e| e.to_string())?,
-            min_pk: row.try_get::<Option<i64>, _>(1).map_err(|e| e.to_string())?,
-            max_pk: row.try_get::<Option<i64>, _>(2).map_err(|e| e.to_string())?,
+            min_pk: row
+                .try_get::<Option<i64>, _>(1)
+                .map_err(|e| e.to_string())?,
+            max_pk: row
+                .try_get::<Option<i64>, _>(2)
+                .map_err(|e| e.to_string())?,
         });
     }
 

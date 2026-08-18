@@ -1,0 +1,19 @@
+# The repository contains deliberately synthetic credentials and a generated
+# private key used only by compatibility/security fixtures. Keep the scanner
+# enabled for every other path; these exact fixtures are not deployment
+# material and are already isolated from production configuration.
+[allowlist]
+description = "Synthetic compatibility and cryptography fixtures"
+paths = [
+  '''^apps/melodee-cli/tests/legacy\\.rs$''',
+  '''^apps/melodee-server/tests/fixtures/google-test-private\\.pem$''',
+  '''^apps/melodee-server/tests/opensubsonic_system_api\\.rs$''',
+  '''^compatibility/jellyfin/golden/browse/jf-browse-item-song-detail\\.json$''',
+  '''^compatibility/jellyfin/golden/browse/jf-browse-user-views-by-id\\.json$''',
+  '''^compatibility/jellyfin/golden/browse/jf-browse-userviews\\.json$''',
+  '''^compatibility/jellyfin/golden/browse/jf-browse-items-parent-album\\.json$''',
+  '''^compatibility/melodee-api-v1/golden/native-catalog/catalog-search-songs-filter-by-artist\\.metadata\\.json$''',
+  '''^compatibility/scenarios/native-catalog\\.json$''',
+  '''^crates/melodee-persistence/tests/native_community_phase7\\.rs$''',
+  '''^tests/python/test_native_v1_capture\\.py$''',
+]

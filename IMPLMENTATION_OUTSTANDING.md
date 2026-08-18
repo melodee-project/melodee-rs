@@ -121,19 +121,22 @@ rewritten merely to remove phase-oriented language from current product document
 
 ### 3.2 Requirement status snapshot
 
-The generated requirement registry currently contains 239 requirements (after R3 closure):
+The generated requirement registry currently contains 239 requirements (after local R4/R5
+preparatory closure work):
 
 | Status | Count |
 |---|---:|
-| Tested | 204 |
+| Tested | 211 |
 | Implemented | 9 |
-| In progress | 11 |
-| Planned | 7 |
+| In progress | 12 |
+| Planned | 0 |
 | Deferred | 7 |
-| Captured | 1 |
+| Captured | 0 |
 
-This snapshot is a planning input, not release evidence. R1 must reconcile stale status labels
-against accepted phase reports and current tests. R5 requires every requirement to be terminal:
+This snapshot is a planning input, not release evidence. The local R4/R5 preparatory work
+terminalized the directly evidenced security rows and updated the migration/media evidence, but
+it did not claim external production, physical-client, scheduled-run, or release-owner evidence.
+R5 requires every requirement to be terminal:
 `tested`, `implemented` with an approved reason that testing is inapplicable, `deferred` under an
 accepted decision, or `superseded` by an identified requirement.
 
@@ -167,7 +170,7 @@ flowchart LR
     R0 --> R1[R1 Requirement and security closure\nComplete]
     R1 --> R2[R2 Mandatory runtime gaps\nComplete]
     R2 --> R3[R3 Official Phase 11 migration tooling\nComplete]
-    R3 --> R4[R4 Rehearsal, dual run, cutover\nNot started]
+    R3 --> R4[R4 Rehearsal, dual run, cutover\nIn progress]
     R4 --> R5[R5 Release-candidate hardening\nNot started]
     R5 --> R6[R6 1.0 documentation and publication\nNot started]
     R6 --> V[Melodee 1.0.0]
@@ -179,8 +182,8 @@ flowchart LR
 | R1 — Requirement and security closure | Complete | R0 | Truthful terminal disposition plan and closed evidence-only gaps |
 | R2 — Mandatory runtime gaps | Complete | R1 | All non-migration runtime requirements implemented |
 | R3 — Official Phase 11 migration tooling | Complete | R2 | Repeatable legacy import and verification tooling |
-| R4 — Production rehearsal, dual run, and cutover | Not started | R3 | Migration and rollback proven on production-shaped data |
-| R5 — Release-candidate hardening | Not started | R4 | All Gates A–I green from a release candidate |
+| R4 — Production rehearsal, dual run, and cutover | In progress | R3 | Isolated production-shaped rehearsal is evidenced; external snapshot/client/provider/cutover acceptance remains |
+| R5 — Release-candidate hardening | Not started (local preparation recorded) | R4 | Local correctness and hardening gates are green; formal entry waits for R4 exit |
 | R6 — 1.0 documentation and publication | Not started | R5 | Code-complete documentation, version, tag, images, and release |
 
 Only one closure phase may be reported as `In progress` at a time. A later phase may be explored
@@ -749,7 +752,7 @@ and rollback. Once accepted, coding agents implement it literally.
 
 ## 9. R4 — Production rehearsal, dual run, cutover, and rollback
 
-**Status:** Not started  
+**Status:** In progress (isolated rehearsal and local rollback evidence landed; external production acceptance remains)
 **Depends on:** R3  
 **Official roadmap phase:** Phase 11, rehearsal and cutover portion  
 **Primary gates:** A, C, D, E, F, H
@@ -874,7 +877,7 @@ moved.
 
 ## 10. R5 — Release-candidate hardening and complete gate
 
-**Status:** Not started  
+**Status:** Not started (local preparatory evidence recorded; formal entry waits for R4 exit) — evidence: `design/evidence/r5/README.md`
 **Depends on:** R4  
 **Primary authority:** PRD Release Gates A–I, Definition of Done, ADR-0144
 

@@ -3,7 +3,7 @@
 //! Wire DTOs remain in the native adapter. This module accepts internal User
 //! IDs and public catalog IDs so authorization never depends on display text.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use sqlx::{PgPool, Postgres, Transaction};
 use thiserror::Error;
@@ -295,8 +295,16 @@ impl NativeUserStateStore {
                    0, NULL, $6, $6
             FROM artists WHERE public_api_id = $2
             ON CONFLICT (user_id, artist_id) DO UPDATE SET
-                starred = CASE WHEN $3 = 'starred' THEN $4 ELSE native_artist_user_states.starred END,
-                hated = CASE WHEN $3 = 'hated' THEN $4 ELSE native_artist_user_states.hated END,
+                starred = CASE
+                    WHEN $3 = 'starred' THEN $4
+                    WHEN $3 = 'hated' AND $4 THEN false
+                    ELSE native_artist_user_states.starred
+                END,
+                hated = CASE
+                    WHEN $3 = 'hated' THEN $4
+                    WHEN $3 = 'starred' AND $4 THEN false
+                    ELSE native_artist_user_states.hated
+                END,
                 rating = CASE WHEN $3 = 'rating' THEN $5 ELSE native_artist_user_states.rating END,
                 pinned = CASE WHEN $3 = 'pinned' THEN $4 ELSE native_artist_user_states.pinned END,
                 updated_at = $6
@@ -338,8 +346,16 @@ impl NativeUserStateStore {
                    0, NULL, $6, $6
             FROM releases WHERE public_api_id = $2 AND status = 'active'
             ON CONFLICT (user_id, release_id) DO UPDATE SET
-                starred = CASE WHEN $3 = 'starred' THEN $4 ELSE native_release_user_states.starred END,
-                hated = CASE WHEN $3 = 'hated' THEN $4 ELSE native_release_user_states.hated END,
+                starred = CASE
+                    WHEN $3 = 'starred' THEN $4
+                    WHEN $3 = 'hated' AND $4 THEN false
+                    ELSE native_release_user_states.starred
+                END,
+                hated = CASE
+                    WHEN $3 = 'hated' THEN $4
+                    WHEN $3 = 'starred' AND $4 THEN false
+                    ELSE native_release_user_states.hated
+                END,
                 rating = CASE WHEN $3 = 'rating' THEN $5 ELSE native_release_user_states.rating END,
                 pinned = CASE WHEN $3 = 'pinned' THEN $4 ELSE native_release_user_states.pinned END,
                 updated_at = $6
@@ -381,8 +397,16 @@ impl NativeUserStateStore {
                    0, NULL, $6, $6
             FROM tracks WHERE public_api_id = $2
             ON CONFLICT (user_id, track_id) DO UPDATE SET
-                starred = CASE WHEN $3 = 'starred' THEN $4 ELSE native_track_user_states.starred END,
-                hated = CASE WHEN $3 = 'hated' THEN $4 ELSE native_track_user_states.hated END,
+                starred = CASE
+                    WHEN $3 = 'starred' THEN $4
+                    WHEN $3 = 'hated' AND $4 THEN false
+                    ELSE native_track_user_states.starred
+                END,
+                hated = CASE
+                    WHEN $3 = 'hated' THEN $4
+                    WHEN $3 = 'starred' AND $4 THEN false
+                    ELSE native_track_user_states.hated
+                END,
                 rating = CASE WHEN $3 = 'rating' THEN $5 ELSE native_track_user_states.rating END,
                 pinned = CASE WHEN $3 = 'pinned' THEN $4 ELSE native_track_user_states.pinned END,
                 updated_at = $6
@@ -463,8 +487,7 @@ impl NativeUserStateStore {
         .ok_or(NativeUserStateStoreError::NotFound)
     }
 
-    /// Lists owned playlists in the captured deterministic creation order
-    /// (newest first, the frozen native-v1 contract).
+    /// Lists owned playlists in the captured deterministic name order.
     pub async fn playlists(
         pool: &PgPool,
         owner_user_id: Uuid,
@@ -505,12 +528,16 @@ impl NativeUserStateStore {
                 .bind(owner_user_id)
                 .fetch_one(pool)
                 .await?;
-        let direction = if oldest_first { "ASC" } else { "DESC" };
+        let ordering = if oldest_first {
+            "created_at ASC, public_api_id"
+        } else {
+            "lower(name) ASC, public_api_id"
+        };
         let rows = sqlx::query_as::<_, NativePlaylist>(sqlx::AssertSqlSafe(format!(
             "SELECT id, public_api_id, owner_user_id, name, description, is_public,
                     revision, created_at, updated_at
              FROM native_playlists WHERE owner_user_id = $1
-             ORDER BY created_at {direction}, public_api_id
+             ORDER BY {ordering}
              LIMIT $2 OFFSET $3"
         )))
         .bind(owner_user_id)
@@ -613,9 +640,31 @@ impl NativeUserStateStore {
                 .bind(playlist_id)
                 .fetch_one(&mut *tx)
                 .await?;
+        let existing_track_ids = sqlx::query_scalar::<_, Uuid>(
+            "SELECT t.public_api_id
+             FROM native_playlist_items item
+             JOIN tracks t ON t.id = item.track_id
+             WHERE item.playlist_id = $1 AND t.public_api_id = ANY($2)",
+        )
+        .bind(playlist_id)
+        .bind(track_public_ids)
+        .fetch_all(&mut *tx)
+        .await?
+        .into_iter()
+        .collect::<HashSet<_>>();
+        let mut seen_track_ids = existing_track_ids;
+        let new_track_ids = track_public_ids
+            .iter()
+            .copied()
+            .filter(|track_id| seen_track_ids.insert(*track_id))
+            .collect::<Vec<_>>();
+        if new_track_ids.is_empty() {
+            tx.commit().await?;
+            return Ok(());
+        }
         let final_count = usize::try_from(existing)
             .ok()
-            .and_then(|count| count.checked_add(track_public_ids.len()))
+            .and_then(|count| count.checked_add(new_track_ids.len()))
             .ok_or(NativeUserStateStoreError::InvalidRequest(
                 "playlist item count overflow",
             ))?;
@@ -628,7 +677,7 @@ impl NativeUserStateStore {
             &mut tx,
             playlist_id,
             owner_user_id,
-            track_public_ids,
+            &new_track_ids,
             next_position,
             now,
         )
@@ -659,28 +708,44 @@ impl NativeUserStateStore {
         .bind(playlist_id)
         .fetch_all(&mut *tx)
         .await?;
-        if current.len() > MAX_NATIVE_PLAYLIST_ITEMS
-            || current.len() != ordered_track_public_ids.len()
-        {
+        if current.len() > MAX_NATIVE_PLAYLIST_ITEMS {
             return Err(NativeUserStateStoreError::Conflict);
         }
+        // MeloAmp can resend a drag-reorder list while a prior request is
+        // still in flight. Treat repeated Track IDs as one requested item;
+        // the playlist itself remains occurrence-aware if it contains
+        // duplicates from older data.
+        let mut requested_track_ids = Vec::with_capacity(ordered_track_public_ids.len());
+        let mut requested = HashSet::with_capacity(ordered_track_public_ids.len());
+        for track_id in ordered_track_public_ids {
+            if requested.insert(*track_id) {
+                requested_track_ids.push(*track_id);
+            }
+        }
         let mut available: HashMap<Uuid, VecDeque<Uuid>> = HashMap::new();
-        for item in current {
+        for item in &current {
             available
                 .entry(item.track_public_id)
                 .or_default()
                 .push_back(item.id);
         }
-        let mut item_ids = Vec::with_capacity(ordered_track_public_ids.len());
-        for track_id in ordered_track_public_ids {
+        let mut selected = HashSet::with_capacity(requested_track_ids.len());
+        let mut item_ids = Vec::with_capacity(current.len());
+        for track_id in requested_track_ids {
             let item_id = available
-                .get_mut(track_id)
+                .get_mut(&track_id)
                 .and_then(VecDeque::pop_front)
                 .ok_or(NativeUserStateStoreError::Conflict)?;
+            selected.insert(item_id);
             item_ids.push(item_id);
         }
-        if available.values().any(|ids| !ids.is_empty()) {
-            return Err(NativeUserStateStoreError::Conflict);
+        // The legacy endpoint accepts a partial list. Preserve omitted items
+        // after the requested prefix in their prior relative order, which
+        // also gives the atomic update a complete, unique position set.
+        for item in current {
+            if selected.insert(item.id) {
+                item_ids.push(item.id);
+            }
         }
         let positions = (0..item_ids.len())
             .map(i32::try_from)

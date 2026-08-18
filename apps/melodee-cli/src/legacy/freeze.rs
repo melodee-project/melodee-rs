@@ -6,10 +6,10 @@
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use super::LibraryPathMap;
 use super::media::CanonicalRootValidator;
 use super::runs;
 use super::source::SourceDb;
-use super::LibraryPathMap;
 
 /// Runs the final freeze pass for a verified run.
 ///
@@ -31,7 +31,9 @@ pub async fn freeze(
 ) -> Result<(), String> {
     let owner = super::default_owner();
     if !runs::claim_run(target, run_id, &owner).await? {
-        return Err(format!("run {run_id} is held by another live owner or is terminal"));
+        return Err(format!(
+            "run {run_id} is held by another live owner or is terminal"
+        ));
     }
     let state: String = sqlx::query_scalar("SELECT state FROM legacy_migration.runs WHERE id = $1")
         .bind(run_id)
@@ -48,7 +50,9 @@ pub async fn freeze(
     }
     if acknowledge && note.is_none() {
         runs::release_lease(target, run_id, &owner).await?;
-        return Err("--acknowledge-cutover requires --note with the operator statement".to_string());
+        return Err(
+            "--acknowledge-cutover requires --note with the operator statement".to_string(),
+        );
     }
 
     let started = std::time::Instant::now();
@@ -120,7 +124,9 @@ pub async fn freeze(
     let mut final_state = "delta-ready";
     if acknowledge {
         if !runs::transition(target, run_id, &owner, &["delta-ready"], "cutover-ready").await? {
-            return Err(format!("run {run_id}: lost fencing before cutover-ready transition"));
+            return Err(format!(
+                "run {run_id}: lost fencing before cutover-ready transition"
+            ));
         }
         final_state = "cutover-ready";
     }

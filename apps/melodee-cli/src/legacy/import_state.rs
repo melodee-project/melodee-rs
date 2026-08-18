@@ -5,9 +5,24 @@
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
+use melodee_persistence::{NativeShareImport, NativeShareStore};
+
 use super::map;
 use super::runs;
 use super::source::SourceDb;
+
+type ExistingShareRow = (
+    Uuid,
+    String,
+    Uuid,
+    i16,
+    Uuid,
+    Option<String>,
+    bool,
+    Option<time::OffsetDateTime>,
+    time::OffsetDateTime,
+    time::OffsetDateTime,
+);
 
 async fn user_target(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
@@ -39,7 +54,9 @@ pub async fn import_playlists(
         if rows.is_empty() {
             break;
         }
-        let last_pk = rows.last().map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
+        let last_pk = rows
+            .last()
+            .map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
         let count = i64::try_from(rows.len()).unwrap_or(0);
 
         let mut tx = target.begin().await.map_err(|e| e.to_string())?;
@@ -296,7 +313,9 @@ pub async fn import_shares(
         if rows.is_empty() {
             break;
         }
-        let last_pk = rows.last().map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
+        let last_pk = rows
+            .last()
+            .map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
         let count = i64::try_from(rows.len()).unwrap_or(0);
 
         let mut tx = target.begin().await.map_err(|e| e.to_string())?;
@@ -330,24 +349,8 @@ pub async fn import_shares(
                 continue;
             };
             let share_unique: Option<String> = row.get("ShareUniqueId");
-            let valid_unique = share_unique
-                .as_deref()
-                .is_some_and(|u| u.len() == 32 && u.bytes().all(|b| b.is_ascii_hexdigit()));
-            if !valid_unique {
-                runs::record_issue(
-                    &mut tx,
-                    run_id,
-                    "shares",
-                    Some(source_pk),
-                    "error",
-                    "share.malformed_unique_id",
-                    "ShareUniqueId is missing or not 32 hex characters; skipped",
-                    None,
-                )
-                .await?;
-                issues += 1;
-                continue;
-            }
+            let legacy_token = share_unique.as_deref().unwrap_or_default();
+            let legacy_token_is_secure = secure_share_token(legacy_token);
             let public_id: Uuid = row.get("ApiKey");
             // Legacy ShareId is the shared entity's numeric PK; resolve its
             // preserved public ApiKey through the catalog mappings (track
@@ -422,46 +425,121 @@ pub async fn import_shares(
             }
             let created: time::OffsetDateTime = row.get("CreatedAt");
             let updated = map::clamp_updated(created, row.get("LastUpdatedAt"));
+            let description: Option<String> = row.get("Description");
+            let is_downloadable = row.get::<bool, _>("IsDownloadable");
+            let expires_at = row.get::<Option<time::OffsetDateTime>, _>("ExpiresAt");
+
+            // A later migration run may encounter a share created by an
+            // earlier run. Reuse it after checking all source-owned facts;
+            // asking NativeShareStore to insert again would correctly report
+            // an identity conflict, but the migration adapter needs to add a
+            // new run-local mapping to the already authoritative row.
+            let existing: Option<ExistingShareRow> = sqlx::query_as(
+                "SELECT id, share_unique_id, owner_user_id, share_type,
+                        resource_public_api_id, description, is_downloadable,
+                        expires_at, created_at, updated_at
+                   FROM native_shares WHERE public_api_id = $1",
+            )
+            .bind(public_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|e| format!("share {source_pk} existing-row lookup failed: {e}"))?;
+            if let Some((
+                existing_id,
+                active_token,
+                existing_owner,
+                existing_type,
+                existing_resource,
+                existing_description,
+                existing_downloadable,
+                existing_expires,
+                existing_created,
+                existing_updated,
+            )) = existing
+            {
+                let facts_match = existing_owner == owner_target
+                    && existing_type == share_type as i16
+                    && existing_resource == resource_public
+                    && existing_description == description
+                    && existing_downloadable == is_downloadable
+                    && existing_expires == expires_at
+                    && existing_created == created
+                    && existing_updated == updated;
+                let token_match = !legacy_token_is_secure || active_token == legacy_token;
+                if !facts_match || !token_match {
+                    runs::record_issue(
+                        &mut tx,
+                        run_id,
+                        "shares",
+                        Some(source_pk),
+                        "error",
+                        "target.public_id_conflict",
+                        "share ApiKey already exists with different source-owned facts",
+                        None,
+                    )
+                    .await?;
+                    issues += 1;
+                    continue;
+                }
+                map::insert_mapping(
+                    &mut tx,
+                    run_id,
+                    "shares",
+                    source_pk,
+                    Some(public_id),
+                    existing_id,
+                    updated,
+                )
+                .await?;
+                inserted += 1;
+                continue;
+            }
+
             let target_id = Uuid::now_v7();
-            let written = sqlx::query(
-                "INSERT INTO native_shares (
-                    id, public_api_id, share_unique_id, owner_user_id, share_type,
-                    resource_public_api_id, description, is_downloadable,
-                    visit_count, expires_at, last_visited_at, created_at, updated_at
-                 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-                 ON CONFLICT (share_unique_id) DO NOTHING",
+            let source_key = format!("legacy-share:{source_pk}");
+            let request = NativeShareImport {
+                source_key: &source_key,
+                internal_id: target_id,
+                public_api_id: public_id,
+                legacy_token,
+                legacy_token_is_secure,
+                owner_user_id: owner_target,
+                share_type: share_type as i16,
+                resource_public_api_id: resource_public,
+                description: description.as_deref(),
+                is_downloadable,
+                expires_at,
+                created_at: created,
+                updated_at: updated,
+            };
+            let result = NativeShareStore::new()
+                .import_share_in_transaction(&mut tx, &request)
+                .await
+                .map_err(|e| format!("share {source_pk} import failed: {e}"))?;
+            sqlx::query(
+                "UPDATE native_shares
+                    SET visit_count = $2, last_visited_at = $3
+                  WHERE id = $1",
             )
             .bind(target_id)
-            .bind(public_id)
-            .bind(share_unique.as_deref().unwrap_or_default())
-            .bind(owner_target)
-            .bind(share_type as i16)
-            .bind(resource_public)
-            .bind(row.get::<Option<String>, _>("Description"))
-            .bind(row.get::<bool, _>("IsDownloadable"))
             .bind(row.get::<i32, _>("VisitCount"))
-            .bind(row.get::<Option<time::OffsetDateTime>, _>("ExpiresAt"))
             .bind(row.get::<Option<time::OffsetDateTime>, _>("LastVisitedAt"))
-            .bind(created)
-            .bind(updated)
             .execute(&mut *tx)
             .await
-            .map_err(|e| format!("share {source_pk} insert failed: {e}"))?
-            .rows_affected();
-            if written == 0 {
+            .map_err(|e| format!("share {source_pk} visit state update failed: {e}"))?;
+            if result.rotated_weak_token {
                 runs::record_issue(
                     &mut tx,
                     run_id,
                     "shares",
                     Some(source_pk),
-                    "error",
-                    "target.share_conflict",
-                    "share_unique_id already exists in the target outside this run",
-                    None,
+                    "warning",
+                    "share.weak_token_rotated",
+                    "legacy public-share token did not meet the secure bearer floor and was rotated",
+                    Some(serde_json::json!({ "legacy_token_length": legacy_token.len() })),
                 )
                 .await?;
                 issues += 1;
-                continue;
             }
             map::insert_mapping(
                 &mut tx,
@@ -488,6 +566,10 @@ pub async fn import_shares(
     Ok(())
 }
 
+fn secure_share_token(token: &str) -> bool {
+    token.len() == 32 && token.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
 pub async fn import_bookmarks(
     source: &SourceDb,
     target: &PgPool,
@@ -510,7 +592,9 @@ pub async fn import_bookmarks(
         if rows.is_empty() {
             break;
         }
-        let last_pk = rows.last().map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
+        let last_pk = rows
+            .last()
+            .map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
         let count = i64::try_from(rows.len()).unwrap_or(0);
 
         let mut tx = target.begin().await.map_err(|e| e.to_string())?;

@@ -202,6 +202,26 @@ pub fn normalized_or(value: Option<String>, fallback: &str) -> String {
         .unwrap_or_else(|| fallback.trim().to_lowercase())
 }
 
+/// Converts the legacy bitrate field to the Rust `bitrate_bps` unit.
+///
+/// Frozen legacy rows use the historical UI unit (kbps) for ordinary values
+/// such as `1411`, while some imported/test rows already contain a bits-per-
+/// second value such as `900000`. Keep large values intact and convert only
+/// the bounded human-scale form; this avoids turning an already-bps value into
+/// an invalid thousand-fold rate while preserving the captured API value.
+pub fn legacy_bitrate_bps(value: Option<i32>) -> Option<i64> {
+    value.and_then(|value| {
+        let value = i64::from(value);
+        if value <= 0 {
+            None
+        } else if value < 100_000 {
+            value.checked_mul(1_000)
+        } else {
+            Some(value)
+        }
+    })
+}
+
 /// Adopts a legacy FileHash only when it already satisfies the 64-lowercase-
 /// hex target constraint; anything else becomes the hash-pending sentinel.
 pub fn adopt_or_sentinel_hash(legacy: Option<String>) -> String {
@@ -212,4 +232,18 @@ pub fn adopt_or_sentinel_hash(legacy: Option<String>) -> String {
                     .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
         })
         .unwrap_or_else(|| HASH_PENDING_SENTINEL.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::legacy_bitrate_bps;
+
+    #[test]
+    fn legacy_bitrate_conversion_preserves_captured_units() {
+        assert_eq!(legacy_bitrate_bps(Some(1411)), Some(1_411_000));
+        assert_eq!(legacy_bitrate_bps(Some(320)), Some(320_000));
+        assert_eq!(legacy_bitrate_bps(Some(900_000)), Some(900_000));
+        assert_eq!(legacy_bitrate_bps(Some(0)), None);
+        assert_eq!(legacy_bitrate_bps(None), None);
+    }
 }

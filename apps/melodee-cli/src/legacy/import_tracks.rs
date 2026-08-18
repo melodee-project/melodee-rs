@@ -47,8 +47,14 @@ pub async fn import_tracks(
                SELECT s."Id", s."ApiKey", s."Title", s."TitleNormalized",
                       s."TitleSort", s."SongNumber", s."Duration", s."FileName",
                       s."FileSize", s."FileHash", s."ContentType", s."BitRate",
-                      s."SamplingRate", s."ChannelCount", s."AlbumId",
+                      s."SamplingRate", s."ChannelCount", s."BPM", s."AlbumId",
+                      COALESCE(cardinality(s."Genres"), 0) AS genre_count,
+                      COALESCE(cardinality(s."Moods"), 0) AS mood_count,
+                      s."Comment", s."Lyrics", s."PartTitles", s."Tags", s."Notes",
+                      s."Description", s."AlternateNames", s."BitDepth", s."IsVbr",
+                      s."PlayedCount", s."LastPlayedAt", s."LastMetaDataUpdatedAt",
                       al."Directory" AS album_directory,
+                      ar."Id" AS artist_id,
                       ar."Directory" AS artist_directory,
                       ar."Name" AS artist_name,
                       s."CreatedAt", s."LastUpdatedAt",
@@ -68,7 +74,9 @@ pub async fn import_tracks(
         if rows.is_empty() {
             break;
         }
-        let last_pk = rows.last().map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
+        let last_pk = rows
+            .last()
+            .map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
         let count = i64::try_from(rows.len()).unwrap_or(0);
 
         let mut tx = target.begin().await.map_err(|e| e.to_string())?;
@@ -219,10 +227,13 @@ pub async fn import_tracks(
                 .unwrap_or_else(|| title.clone());
             let track_number = Some(row.get::<i32, _>("SongNumber"));
             let ordinal: i64 = row.get("ordinal");
-            let duration_secs: Option<f64> = row.get("Duration");
-            let duration_ms = duration_secs
-                .filter(|d| *d > 0.0)
-                .map(|d| (d * 1000.0) as i64);
+            // Frozen EF data stores Song.Duration in milliseconds; the
+            // legacy MQL layer converts it to seconds only for query input.
+            // Preserve the persisted unit at the Rust boundary.
+            let duration_ms = row
+                .get::<Option<f64>, _>("Duration")
+                .filter(|duration| *duration > 0.0)
+                .map(|duration| duration.round() as i64);
             let created: time::OffsetDateTime = row.get("CreatedAt");
             let updated = map::clamp_updated(created, row.get("LastUpdatedAt"));
 
@@ -246,7 +257,10 @@ pub async fn import_tracks(
             .bind(&mime)
             .bind(row.get::<Option<i32>, _>("SamplingRate"))
             .bind(row.get::<Option<i32>, _>("ChannelCount"))
-            .bind(row.get::<Option<i32>, _>("BitRate").map(i64::from))
+            // The frozen EF model stores BitRate in kbps; Rust media assets
+            // store bitrate_bps. Preserve the value without the legacy unit
+            // mismatch that otherwise exposes 1411 kbps as 1 kbps.
+            .bind(map::legacy_bitrate_bps(row.get("BitRate")))
             .bind(duration_ms)
             .bind(created)
             .execute(&mut *tx)
@@ -338,6 +352,129 @@ pub async fn import_tracks(
             .execute(&mut *tx)
             .await
             .map_err(|e| format!("track media link failed: {e}"))?;
+            if let Some(tempo) = row.get::<Option<i32>, _>("BPM") {
+                let tempo = f64::from(tempo.max(0));
+                sqlx::query(
+                    "INSERT INTO native_track_audio_features (track_id, tempo, updated_at)
+                     VALUES ($1, $2, $3)
+                     ON CONFLICT (track_id) DO UPDATE
+                     SET tempo = EXCLUDED.tempo, updated_at = EXCLUDED.updated_at",
+                )
+                .bind(track_id)
+                .bind(tempo)
+                .bind(updated)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| {
+                    format!("track audio features insert failed for song {source_pk}: {e}")
+                })?;
+            }
+
+            // ADR-0148 §D.8 requires every source value without an
+            // authoritative Rust representation to remain visible in the
+            // migration audit. Do not turn legacy presentation metadata into
+            // ReleaseTrait values, fabricate play events, or add schema here;
+            // those choices require a separate accepted contract.
+            let mut reference_fields = Vec::new();
+            if row.get::<i32, _>("genre_count") > 0 {
+                reference_fields.push("Songs.Genres");
+            }
+            if row.get::<i32, _>("mood_count") > 0 {
+                reference_fields.push("Songs.Moods");
+            }
+            for (field, value) in [
+                ("Songs.Comment", row.get::<Option<String>, _>("Comment")),
+                ("Songs.Lyrics", row.get::<Option<String>, _>("Lyrics")),
+                (
+                    "Songs.PartTitles",
+                    row.get::<Option<String>, _>("PartTitles"),
+                ),
+                ("Songs.Tags", row.get::<Option<String>, _>("Tags")),
+                ("Songs.Notes", row.get::<Option<String>, _>("Notes")),
+                (
+                    "Songs.Description",
+                    row.get::<Option<String>, _>("Description"),
+                ),
+                (
+                    "Songs.AlternateNames",
+                    row.get::<Option<String>, _>("AlternateNames"),
+                ),
+            ] {
+                if value.is_some_and(|value| !value.trim().is_empty()) {
+                    reference_fields.push(field);
+                }
+            }
+            if row.get::<i32, _>("BitDepth") > 0 {
+                reference_fields.push("Songs.BitDepth");
+            }
+            if row.get::<bool, _>("IsVbr") {
+                reference_fields.push("Songs.IsVbr");
+            }
+            if row.get::<i32, _>("PlayedCount") > 0 {
+                reference_fields.push("Songs.PlayedCount");
+            }
+            if row
+                .get::<Option<time::OffsetDateTime>, _>("LastPlayedAt")
+                .is_some()
+            {
+                reference_fields.push("Songs.LastPlayedAt");
+            }
+            if row
+                .get::<Option<time::OffsetDateTime>, _>("LastMetaDataUpdatedAt")
+                .is_some()
+            {
+                reference_fields.push("Songs.LastMetaDataUpdatedAt");
+            }
+            if !reference_fields.is_empty() {
+                runs::record_issue(
+                    &mut tx,
+                    run_id,
+                    "tracks",
+                    Some(source_pk),
+                    "warning",
+                    "metadata.reference_only",
+                    "legacy track metadata has no authoritative Rust representation; source values remain reference-only",
+                    Some(serde_json::json!({ "fields": reference_fields })),
+                )
+                .await?;
+                issues += 1;
+            }
+            let artist_pk = i64::from(row.get::<i32, _>("artist_id"));
+            let Some(artist_id) =
+                map::catalog_mapping(&mut tx, run_id, "artist", artist_pk).await?
+            else {
+                runs::record_issue(
+                    &mut tx,
+                    run_id,
+                    "tracks",
+                    Some(source_pk),
+                    "error",
+                    "catalog.broken_song_artist_fk",
+                    "song album artist has no target mapping; track remains without a billed Artist link",
+                    None,
+                )
+                .await?;
+                issues += 1;
+                continue;
+            };
+            sqlx::query(
+                "INSERT INTO track_artists (
+                    id, track_id, artist_id, observed_artist_id, role,
+                    presentation_order, display_value, join_phrase, created_at
+                 ) VALUES ($1,$2,$3,NULL,'primary',1,$4,'',$5)
+                 ON CONFLICT (track_id, presentation_order) DO NOTHING",
+            )
+            .bind(Uuid::now_v7())
+            .bind(track_id)
+            .bind(artist_id)
+            .bind(
+                row.get::<Option<String>, _>("artist_name")
+                    .unwrap_or_else(|| title.clone()),
+            )
+            .bind(created)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| format!("track artist link failed for song {source_pk}: {e}"))?;
             map::insert_catalog_mapping(&mut tx, run_id, "track", source_pk, track_id, public_id)
                 .await?;
             inserted += 1;

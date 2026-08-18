@@ -356,12 +356,7 @@ async fn playlist_crud_routes_preserve_order_dual_add_shapes_and_ownership() {
             .iter()
             .map(|song| song["id"].as_str().unwrap())
             .collect::<Vec<_>>(),
-        vec![
-            second.to_string(),
-            first.to_string(),
-            second.to_string(),
-            first.to_string()
-        ]
+        vec![second.to_string(), first.to_string()]
     );
 
     sqlx::query(
@@ -395,8 +390,8 @@ async fn playlist_crud_routes_preserve_order_dual_add_shapes_and_ownership() {
     .await;
     assert_eq!(status, StatusCode::OK);
     let public_playlist = public_playlist.expect("public playlist body");
-    assert_eq!(public_playlist["songCount"], 2);
-    assert_eq!(public_playlist["durationMs"], 444_000);
+    assert_eq!(public_playlist["songCount"], 1);
+    assert_eq!(public_playlist["durationMs"], 222_000);
     let (status, public_songs) = json_call(
         state.clone(),
         principal(&outsider),
@@ -407,8 +402,8 @@ async fn playlist_crud_routes_preserve_order_dual_add_shapes_and_ownership() {
     .await;
     assert_eq!(status, StatusCode::OK);
     let public_songs = public_songs.expect("public playlist songs");
-    assert_eq!(public_songs["meta"]["totalCount"], 2);
-    assert_eq!(public_songs["meta"]["totalPages"], 2);
+    assert_eq!(public_songs["meta"]["totalCount"], 1);
+    assert_eq!(public_songs["meta"]["totalPages"], 1);
     assert_eq!(public_songs["data"].as_array().map(Vec::len), Some(1));
     assert_eq!(public_songs["data"][0]["id"], second.to_string());
 
@@ -495,7 +490,7 @@ async fn playlist_crud_routes_preserve_order_dual_add_shapes_and_ownership() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    let (status, _) = json_call(
+    let (status, body) = json_call(
         state,
         principal(&owner),
         Method::GET,
@@ -504,6 +499,10 @@ async fn playlist_crud_routes_preserve_order_dual_add_shapes_and_ownership() {
     )
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(
+        body.expect("not-found body")["message"],
+        "Playlist not found"
+    );
     db.drop().await;
 }
 

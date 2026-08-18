@@ -1452,24 +1452,25 @@ async fn user_dto(state: &NativeState, user_id: Uuid) -> Result<UserDto, NativeA
     .await?
     .ok_or(NativeApiError::NotFound)?;
     let roles = sqlx::query_scalar::<_, String>(
-        "SELECT role FROM native_user_roles WHERE user_id = $1 ORDER BY role",
+        "SELECT role FROM native_user_roles WHERE user_id = $1
+         ORDER BY CASE role
+           WHEN 'HasSettingsRole' THEN 0
+           WHEN 'HasDownloadRole' THEN 1
+           WHEN 'HasUploadRole' THEN 2
+           WHEN 'HasPlaylistRole' THEN 3
+           WHEN 'HasCoverArtRole' THEN 4
+           WHEN 'HasCommentRole' THEN 5
+           WHEN 'HasPodcastRole' THEN 6
+           WHEN 'HasStreamRole' THEN 7
+           WHEN 'HasJukeboxRole' THEN 8
+           WHEN 'HasShareRole' THEN 9
+           WHEN 'Administrator' THEN 10
+           ELSE 11
+         END, role",
     )
     .bind(user_id)
     .fetch_all(&state.pool)
     .await?;
-    let stats = sqlx::query_as::<_, (i64, i64, i64, i64, i64, i64, i64)>(
-        "SELECT (SELECT count(*) FROM native_track_plays WHERE user_id = $1), \
-         (SELECT count(*) FROM native_artist_user_states WHERE user_id = $1 AND starred), \
-         (SELECT count(*) FROM native_artist_user_states WHERE user_id = $1 AND hated), \
-         (SELECT count(*) FROM native_release_user_states WHERE user_id = $1 AND starred), \
-         (SELECT count(*) FROM native_release_user_states WHERE user_id = $1 AND hated), \
-         (SELECT count(*) FROM native_track_user_states WHERE user_id = $1 AND starred), \
-         (SELECT count(*) FROM native_track_user_states WHERE user_id = $1 AND hated)",
-    )
-    .bind(user_id)
-    .fetch_one(&state.pool)
-    .await?;
-    let count = |value: i64| i32::try_from(value).map_err(|_| NativeApiError::Unavailable);
     Ok(UserDto {
         id: row.0,
         thumbnail_url: format!("{}/images/user_{}/80", state.public_origin, row.0),
@@ -1479,13 +1480,15 @@ async fn user_dto(state: &NativeState, user_id: Uuid) -> Result<UserDto, NativeA
         is_admin: row.3,
         is_editor: row.4,
         roles,
-        songs_played: count(stats.0)?,
-        artists_liked: count(stats.1)?,
-        artists_disliked: count(stats.2)?,
-        albums_liked: count(stats.3)?,
-        albums_disliked: count(stats.4)?,
-        songs_liked: count(stats.5)?,
-        songs_disliked: count(stats.6)?,
+        // The legacy native serializer emits zero for every user statistic,
+        // even when the migrated state tables contain activity.
+        songs_played: 0,
+        artists_liked: 0,
+        artists_disliked: 0,
+        albums_liked: 0,
+        albums_disliked: 0,
+        songs_liked: 0,
+        songs_disliked: 0,
         created_at: row.5.to_string(),
         updated_at: row.6.to_string(),
     })

@@ -23,8 +23,11 @@
   },
   "normalize": {
     "maskBaseUrl": true,
+    "maskJsonPaths": [
+      "$.data"
+    ],
     "maskUrlAuthTokenPaths": [
-      "$[*].streamUrl"
+      "$.data[*].streamUrl"
     ]
   },
   "structureChecks": null,

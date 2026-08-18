@@ -7,10 +7,10 @@ use axum::{
     extract::{Path, Query, State},
     routing::{get, post},
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sqlx::{AssertSqlSafe, Row};
-use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
+use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
 use melodee_persistence::{NativeUserStateMutation, NativeUserStateStore};
@@ -32,6 +32,12 @@ const DEFAULT_PAGE_SIZE: u16 = 50;
 const MAX_PAGE_SIZE: u16 = 500;
 const MAX_PAGE_OFFSET: i64 = 1_000_000;
 const MAX_QUERY_CHARS: usize = 256;
+// The legacy native-v1 SongDataInfo serializer emits this display value for
+// every song. OpenSubsonic and Jellyfin have separate serializers and retain
+// the persisted media bitrate instead.
+const LEGACY_NATIVE_DISPLAY_BITRATE_KBPS: i32 = 320;
+const LEGACY_UNKNOWN_CREATED_AT: &str = "9999-01-01 00:00:00";
+const LEGACY_UNKNOWN_UPDATED_AT: &str = "---";
 const RANDOM_CANDIDATE_WINDOW: i64 = 10_000;
 const RANDOM_ELIGIBILITY: &str = "release.status='active'
   AND ($1::uuid IS NULL OR EXISTS (
@@ -75,6 +81,15 @@ pub struct RandomSongParams {
     pub genre: Option<String>,
     pub from_year: Option<i32>,
     pub to_year: Option<i32>,
+}
+
+/// Native-v1 random-song response. The legacy controller wraps the selected
+/// songs with the returned count instead of returning the array directly.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RandomSongsResponse {
+    pub count: usize,
+    pub data: Vec<SongDto>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -226,7 +241,6 @@ struct SongRecord {
     title: String,
     duration_ms: i64,
     song_number: i32,
-    bitrate: i32,
     created_at: OffsetDateTime,
     updated_at: OffsetDateTime,
     artist: ArtistRecord,
@@ -300,7 +314,7 @@ pub fn router() -> Router<NativeState> {
         .route("/api/v1/user/songs/rated", get(user_songs_rated))
         .route("/api/v1/user/songs/top-rated", get(user_songs_top_rated))
         .route("/api/v1/user/songs/recently-played", get(user_songs_recent))
-        .route("/api/v1/user/last-played", get(user_songs_recent))
+        .route("/api/v1/user/last-played", get(user_last_played))
         .route("/api/v1/user/stats", get(user_stats))
         .route("/api/v1/user/stats/top-songs", get(user_top_songs))
         .route("/api/v1/user/stats/top-genres", get(user_top_genres))
@@ -641,12 +655,18 @@ fn canonical_direction(value: Option<&str>) -> Result<&'static str, NativeApiErr
     }
 }
 
-fn artist_order_sql(order: &str, direction: &str) -> &'static str {
+fn artist_order_sql(order: &str, direction: &str, searching: bool) -> &'static str {
     match (order, direction) {
-        ("name", "desc") => "artist.sort_name DESC, artist.public_api_id ASC",
+        ("name", "desc") => {
+            "artist.sort_name DESC, artist.created_at ASC, artist.public_api_id ASC"
+        }
         ("created_at", "asc") => "artist.created_at ASC, artist.public_api_id ASC",
         ("created_at", "desc") => "artist.created_at DESC, artist.public_api_id ASC",
-        _ => "artist.sort_name ASC, artist.public_api_id ASC",
+        // The legacy search service has its own deterministic tie break for
+        // normalized-name collisions. Preserve that captured order without
+        // changing the ordinary browse ordering contract.
+        ("name", "asc") if searching => "artist.sort_name ASC, artist.public_api_id ASC",
+        _ => "artist.sort_name ASC, artist.created_at ASC, artist.public_api_id ASC",
     }
 }
 
@@ -663,6 +683,17 @@ fn album_order_sql(order: &str, direction: &str) -> &'static str {
     }
 }
 
+fn song_order_sql(scoped: bool) -> &'static str {
+    if scoped {
+        // The legacy album/artist song queries did not add a title ordering.
+        // Import order is represented by the preserved source timestamp, with
+        // the public id providing a deterministic tie-breaker.
+        "track.created_at ASC, track.public_api_id ASC"
+    } else {
+        "track.sort_title ASC, track.public_api_id ASC"
+    }
+}
+
 fn timestamp(value: OffsetDateTime) -> String {
     format!(
         "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
@@ -673,6 +704,20 @@ fn timestamp(value: OffsetDateTime) -> String {
         value.minute(),
         value.second()
     )
+}
+
+/// Render the legacy nullable LastUpdatedAt convention after migration.
+///
+/// The Rust catalog schema requires `updated_at`, so the importer clamps a
+/// missing legacy value to `created_at` to preserve the invariant. Equality is
+/// therefore the durable marker for the legacy null case at this wire
+/// boundary; a genuinely later update remains a normal timestamp.
+fn imported_timestamp(created: OffsetDateTime, updated: OffsetDateTime) -> String {
+    if created == updated {
+        LEGACY_UNKNOWN_UPDATED_AT.to_string()
+    } else {
+        timestamp(updated)
+    }
 }
 
 fn timestamp_iso(value: OffsetDateTime) -> Result<String, NativeApiError> {
@@ -779,7 +824,7 @@ fn artist_dto_with_annotation(
         album_count: bounded_i32(record.album_count)?,
         song_count: bounded_i32(record.song_count)?,
         created_at: timestamp(record.created_at),
-        updated_at: timestamp(record.updated_at),
+        updated_at: imported_timestamp(record.created_at, record.updated_at),
         biography: None,
         genres: None,
     })
@@ -802,6 +847,13 @@ fn embedded_artist(origin: &str, record: &ArtistRecord) -> ArtistDto {
     }
 }
 
+fn embedded_album_artist(origin: &str, record: &ArtistRecord) -> ArtistDto {
+    let mut artist = embedded_artist(origin, record);
+    artist.created_at = LEGACY_UNKNOWN_CREATED_AT.to_string();
+    artist.updated_at = LEGACY_UNKNOWN_UPDATED_AT.to_string();
+    artist
+}
+
 async fn album_dto(
     state: &NativeState,
     principal: NativePrincipal,
@@ -821,7 +873,7 @@ fn album_dto_with_annotation(
 ) -> Result<AlbumDto, NativeApiError> {
     Ok(AlbumDto {
         id: record.public_id,
-        artist: embedded_artist(&state.public_origin, &record.artist),
+        artist: embedded_album_artist(&state.public_origin, &record.artist),
         thumbnail_url: image_url(&state.public_origin, "album", record.public_id, 80),
         image_url: image_url(&state.public_origin, "album", record.public_id, 1024),
         name: record.name,
@@ -832,7 +884,7 @@ fn album_dto_with_annotation(
         duration_ms: record.duration_ms,
         duration_formatted: duration_formatted(record.duration_ms),
         created_at: timestamp(record.created_at),
-        updated_at: timestamp(record.updated_at),
+        updated_at: imported_timestamp(record.created_at, record.updated_at),
         description: None,
         genre: None,
     })
@@ -908,10 +960,10 @@ fn song_dto_with_facts(
         user_starred: annotation.starred,
         user_rating: annotation.rating,
         song_number: record.song_number,
-        bitrate: record.bitrate,
+        bitrate: LEGACY_NATIVE_DISPLAY_BITRATE_KBPS,
         play_count: annotation.play_count,
         created_at: timestamp(record.created_at),
-        updated_at: timestamp(record.updated_at),
+        updated_at: imported_timestamp(record.created_at, record.updated_at),
         genre: None,
     })
 }
@@ -949,7 +1001,6 @@ fn song_from_row(row: &sqlx::postgres::PgRow) -> Result<SongRecord, sqlx::Error>
         title: row.try_get(2)?,
         duration_ms: row.try_get(3)?,
         song_number: row.try_get(4)?,
-        bitrate: row.try_get(5)?,
         created_at: row.try_get(6)?,
         updated_at: row.try_get(7)?,
         artist: artist_from_row(row, 8)?,
@@ -1073,15 +1124,35 @@ async fn scope_artist_counts(
         .map(|record| record.internal_id)
         .collect::<Vec<_>>();
     let rows = sqlx::query_as::<_, (Uuid, i64, i64)>(
-        "SELECT association.artist_id,
-                count(DISTINCT track.release_id)::bigint,
-                count(DISTINCT association.track_id)::bigint
-         FROM artist_track_associations association
-         JOIN tracks track ON track.id=association.track_id
-         JOIN releases release ON release.id=track.release_id AND release.status='active'
-         WHERE association.artist_id=ANY($1::uuid[])
-           AND native_user_can_access_release($2,track.release_id)
-         GROUP BY association.artist_id",
+        // Native-v1's Artist counters come from the legacy Artist-owned
+        // Album/Song navigation. Performance and other credit rows remain
+        // first-class domain relationships, but must not inflate these
+        // compatibility counters.
+        "SELECT artist.id,
+                COALESCE(releases.album_count, 0)::bigint,
+                COALESCE(tracks.song_count, 0)::bigint
+         FROM artists artist
+         LEFT JOIN (
+           SELECT release_artist.artist_id,
+                  count(DISTINCT release_artist.release_id)::bigint AS album_count
+           FROM release_artists release_artist
+           JOIN releases release ON release.id=release_artist.release_id
+            AND release.status='active'
+            AND native_user_can_access_release($2,release.id)
+           WHERE release_artist.role='primary'
+           GROUP BY release_artist.artist_id
+         ) releases ON releases.artist_id=artist.id
+         LEFT JOIN (
+           SELECT association.artist_id,
+                  count(DISTINCT association.track_id)::bigint AS song_count
+           FROM artist_track_associations association
+           JOIN tracks track ON track.id=association.track_id
+           JOIN releases release ON release.id=track.release_id
+            AND release.status='active'
+            AND native_user_can_access_release($2,release.id)
+           GROUP BY association.artist_id
+         ) tracks ON tracks.artist_id=artist.id
+         WHERE artist.id=ANY($1::uuid[]) ",
     )
     .bind(&artist_ids)
     .bind(user_id)
@@ -1323,12 +1394,12 @@ async fn fetch_artists(
          LEFT JOIN artist_catalog_aggregates aggregate ON aggregate.artist_id = artist.id
          WHERE artist.status NOT IN ('merged', 'deprecated')
            AND (NOT $4 OR native_user_can_access_artist($5, artist.id))
-           AND ($1::text IS NULL OR artist.canonical_name ILIKE $1 ESCAPE E'\\\\'
+           AND ($1::text IS NULL OR artist.normalized_name ILIKE $1 ESCAPE E'\\\\'
              OR EXISTS (SELECT 1 FROM artist_aliases alias
                         WHERE alias.artist_id = artist.id
                           AND alias.alias ILIKE $1 ESCAPE E'\\\\'))
          ORDER BY {} LIMIT $2 OFFSET $3",
-        artist_order_sql(order, direction),
+        artist_order_sql(order, direction, search_pattern.is_some()),
     );
     // The dynamic string contains only module-owned SQL constants; all
     // request values remain bind parameters.
@@ -1344,7 +1415,7 @@ async fn fetch_artists(
         "SELECT count(*) FROM artists artist
          WHERE artist.status NOT IN ('merged','deprecated')
            AND (NOT $2 OR native_user_can_access_artist($3,artist.id))
-           AND ($1::text IS NULL OR artist.canonical_name ILIKE $1 ESCAPE E'\\\\'
+           AND ($1::text IS NULL OR artist.normalized_name ILIKE $1 ESCAPE E'\\\\'
              OR EXISTS(SELECT 1 FROM artist_aliases alias
                        WHERE alias.artist_id=artist.id
                          AND alias.alias ILIKE $1 ESCAPE E'\\\\'))",
@@ -1447,7 +1518,7 @@ async fn fetch_albums(
          FROM releases release {ALBUM_JOINS}
          WHERE release.status = 'active'
            AND (NOT $5 OR native_user_can_access_release($6, release.id))
-           AND ($1::text IS NULL OR release.title ILIKE $1 ESCAPE E'\\\\')
+           AND ($1::text IS NULL OR release.normalized_title ILIKE $1 ESCAPE E'\\\\')
            AND ($2::uuid IS NULL OR EXISTS (
              SELECT 1 FROM release_artists scoped
              JOIN artists scoped_artist ON scoped_artist.id = scoped.artist_id
@@ -1468,7 +1539,7 @@ async fn fetch_albums(
         "SELECT count(*) FROM releases release
          WHERE release.status='active'
            AND (NOT $3 OR native_user_can_access_release($4,release.id))
-           AND ($1::text IS NULL OR release.title ILIKE $1 ESCAPE E'\\\\')
+           AND ($1::text IS NULL OR release.normalized_title ILIKE $1 ESCAPE E'\\\\')
            AND ($2::uuid IS NULL OR EXISTS(
              SELECT 1 FROM release_artists scoped JOIN artists scoped_artist ON scoped_artist.id=scoped.artist_id
              WHERE scoped.release_id=release.id AND scoped_artist.public_api_id=$2))",
@@ -1569,28 +1640,29 @@ async fn fetch_songs(
     let page = Page::parse(params.page, params.page_size)?;
     let restricted = has_library_bindings(&state.pool).await?;
     let search_pattern = contains_search_pattern(params.q.as_deref())?;
+    let scoped_artist = artist_id.or(params.filter_by_artist_api_key);
+    let order = song_order_sql(release_id.is_some() || scoped_artist.is_some());
     let query = format!(
         "{SONG_SELECT}
-         WHERE ($1::text IS NULL OR track.title ILIKE $1 ESCAPE E'\\\\')
+         WHERE ($1::text IS NULL OR track.normalized_title ILIKE $1 ESCAPE E'\\\\')
            AND ($2::uuid IS NULL OR release.public_api_id = $2)
            AND ($3::uuid IS NULL OR EXISTS (
              SELECT 1 FROM artist_track_associations scoped
              JOIN artists scoped_artist ON scoped_artist.id = scoped.artist_id
              WHERE scoped.track_id = track.id AND scoped_artist.public_api_id = $3))
            AND (NOT $6 OR native_user_can_access_release($7, release.id))
-         ORDER BY track.sort_title, track.public_api_id LIMIT $4 OFFSET $5"
+         ORDER BY {order} LIMIT $4 OFFSET $5"
     );
     let rows = sqlx::query(AssertSqlSafe(query))
         .bind(search_pattern.as_deref())
         .bind(release_id)
-        .bind(artist_id.or(params.filter_by_artist_api_key))
+        .bind(scoped_artist)
         .bind(i64::from(page.size))
         .bind(page.offset)
         .bind(restricted)
         .bind(principal.user_id)
         .fetch_all(&state.pool)
         .await?;
-    let scoped_artist = artist_id.or(params.filter_by_artist_api_key);
     let total = if search_pattern.is_none()
         && release_id.is_none()
         && scoped_artist.is_none()
@@ -1608,7 +1680,7 @@ async fn fetch_songs(
         sqlx::query_scalar::<_, i64>(
             "SELECT count(*) FROM tracks track JOIN releases release ON release.id=track.release_id
              WHERE release.status='active'
-               AND ($1::text IS NULL OR track.title ILIKE $1 ESCAPE E'\\\\')
+               AND ($1::text IS NULL OR track.normalized_title ILIKE $1 ESCAPE E'\\\\')
                AND ($2::uuid IS NULL OR release.public_api_id=$2)
                AND ($3::uuid IS NULL OR EXISTS(
                  SELECT 1 FROM artist_track_associations scoped JOIN artists scoped_artist ON scoped_artist.id=scoped.artist_id
@@ -1696,7 +1768,7 @@ pub async fn random_songs(
     State(state): State<NativeState>,
     Authenticated(principal, binding): Authenticated,
     Query(params): Query<RandomSongParams>,
-) -> Result<Json<Vec<SongDto>>, NativeApiError> {
+) -> Result<Json<RandomSongsResponse>, NativeApiError> {
     let count = params.count.unwrap_or(20);
     if !(1..=500).contains(&count)
         || params
@@ -1751,9 +1823,11 @@ pub async fn random_songs(
             .iter()
             .map(song_from_row)
             .collect::<Result<Vec<_>, _>>()?;
-        return Ok(Json(
-            song_dtos(&state, principal, &binding.0, records).await?,
-        ));
+        let data = song_dtos(&state, principal, &binding.0, records).await?;
+        return Ok(Json(RandomSongsResponse {
+            count: data.len(),
+            data,
+        }));
     }
     let query = format!(
         "WITH pivot AS MATERIALIZED (
@@ -1803,7 +1877,10 @@ pub async fn random_songs(
         .map(song_from_row)
         .collect::<Result<Vec<_>, _>>()?;
     let songs = song_dtos(&state, principal, &binding.0, records).await?;
-    Ok(Json(songs))
+    Ok(Json(RandomSongsResponse {
+        count: songs.len(),
+        data: songs,
+    }))
 }
 
 pub async fn search_songs(
@@ -1814,9 +1891,13 @@ pub async fn search_songs(
     if params
         .q
         .as_deref()
-        .is_none_or(|query| query.trim().is_empty())
+        .is_none_or(|query| query.trim().chars().count() < 2)
     {
-        return Err(NativeApiError::BadRequest);
+        let page = Page::parse(params.page, params.page_size)?;
+        return Ok(Json(PagedResponse {
+            meta: page.metadata(0)?,
+            data: Vec::new(),
+        }));
     }
     Ok(Json(
         fetch_songs(&state, principal, &binding.0, &params, None, None).await?,
@@ -1838,8 +1919,20 @@ pub async fn album_songs(
     State(state): State<NativeState>,
     Authenticated(principal, binding): Authenticated,
     Path(id): Path<Uuid>,
-    Query(params): Query<SearchSongsParams>,
+    Query(_params): Query<SearchSongsParams>,
 ) -> Result<Json<PagedResponse<SongDto>>, NativeApiError> {
+    let album = fetch_album_record(&state.pool, id, principal.user_id).await?;
+    // The legacy album controller has no paging parameters on this route. Its
+    // response uses the album's stored SongCount as pageSize and returns all
+    // album songs in one page.
+    let params = SearchSongsParams {
+        q: None,
+        page: Some(1),
+        page_size: Some(
+            i32::try_from(album.song_count.max(1)).map_err(|_| NativeApiError::BadRequest)?,
+        ),
+        filter_by_artist_api_key: None,
+    };
     Ok(Json(
         fetch_songs(&state, principal, &binding.0, &params, Some(id), None).await?,
     ))
@@ -1924,7 +2017,13 @@ pub async fn search(
         q: Some(request.query.clone()),
         page: Some(i32::from(request.artist_page.unwrap_or(1))),
         page_size: Some(i32::from(size)),
-        order_by: request.sort_by.clone(),
+        // The legacy combined-search path orders its Artist result by source
+        // creation when no explicit sort is supplied; the standalone artist
+        // search route has a different normalized-name tie order.
+        order_by: request
+            .sort_by
+            .clone()
+            .or_else(|| Some("createdAt".to_string())),
         order_direction: request.sort_order.clone(),
     };
     let album_params = ListParams {
@@ -2631,6 +2730,15 @@ fn user_page(params: &UserListParams) -> Result<Page, NativeApiError> {
     Page::parse(params.page, params.limit.or(params.page_size))
 }
 
+fn user_song_order_sql(mode: UserListMode) -> &'static str {
+    match mode {
+        UserListMode::Recent => {
+            "state.last_played_at DESC, track.created_at ASC, track.public_api_id"
+        }
+        _ => mode.order(),
+    }
+}
+
 async fn fetch_user_artists(
     state: &NativeState,
     principal: NativePrincipal,
@@ -2638,17 +2746,40 @@ async fn fetch_user_artists(
     mode: UserListMode,
 ) -> Result<PagedResponse<ArtistDto>, NativeApiError> {
     let page = user_page(params)?;
-    let query = AssertSqlSafe(format!(
-        "SELECT {ARTIST_COLUMNS}, count(*) OVER()
-         FROM native_artist_user_states state
-         JOIN artists artist ON artist.id = state.artist_id
-         LEFT JOIN artist_catalog_aggregates aggregate ON aggregate.artist_id = artist.id
-         WHERE state.user_id = $1 AND {} AND artist.status NOT IN ('merged', 'deprecated')
-           AND native_user_can_access_artist($1, artist.id)
-         ORDER BY {}, artist.public_api_id LIMIT $2 OFFSET $3",
-        mode.predicate(),
-        mode.order()
-    ));
+    let query = if matches!(mode, UserListMode::Recent) {
+        AssertSqlSafe(format!(
+            "SELECT {ARTIST_COLUMNS}, count(*) OVER()
+             FROM (
+               SELECT association.artist_id, max(state.last_played_at) AS last_played_at
+               FROM native_track_user_states state
+               JOIN tracks track ON track.id = state.track_id
+               JOIN releases release ON release.id = track.release_id
+               JOIN artist_track_associations association ON association.track_id = track.id
+               WHERE state.user_id = $1 AND state.last_played_at IS NOT NULL
+                 AND release.status = 'active'
+                 AND native_user_can_access_release($1, release.id)
+               GROUP BY association.artist_id
+             ) recent
+             JOIN artists artist ON artist.id = recent.artist_id
+             LEFT JOIN artist_catalog_aggregates aggregate ON aggregate.artist_id = artist.id
+             WHERE artist.status NOT IN ('merged', 'deprecated')
+               AND native_user_can_access_artist($1, artist.id)
+             ORDER BY recent.last_played_at DESC, artist.created_at ASC, artist.public_api_id
+             LIMIT $2 OFFSET $3"
+        ))
+    } else {
+        AssertSqlSafe(format!(
+            "SELECT {ARTIST_COLUMNS}, count(*) OVER()
+             FROM native_artist_user_states state
+             JOIN artists artist ON artist.id = state.artist_id
+             LEFT JOIN artist_catalog_aggregates aggregate ON aggregate.artist_id = artist.id
+             WHERE state.user_id = $1 AND {} AND artist.status NOT IN ('merged', 'deprecated')
+               AND native_user_can_access_artist($1, artist.id)
+             ORDER BY {}, artist.public_api_id LIMIT $2 OFFSET $3",
+            mode.predicate(),
+            mode.order()
+        ))
+    };
     let rows = sqlx::query(query)
         .bind(principal.user_id)
         .bind(i64::from(page.size))
@@ -2718,7 +2849,7 @@ async fn fetch_user_songs(
            AND native_user_can_access_release($1, release.id)
          ORDER BY {}, track.public_api_id LIMIT $2 OFFSET $3) song",
         mode.predicate(),
-        mode.order()
+        user_song_order_sql(mode)
     ));
     let rows = sqlx::query(query)
         .bind(principal.user_id)
@@ -2798,6 +2929,34 @@ song_user_handler!(user_songs_disliked, UserListMode::Disliked);
 song_user_handler!(user_songs_rated, UserListMode::Rated);
 song_user_handler!(user_songs_top_rated, UserListMode::TopRated);
 song_user_handler!(user_songs_recent, UserListMode::Recent);
+
+/// Reproduce the legacy last-played envelope. The legacy service selected
+/// UserSong rows without eager-loading their Song navigation, so the captured
+/// endpoint reports the bounded row count while serializing an empty `data`
+/// array. The richer recently-played endpoint above is a separate contract.
+pub async fn user_last_played(
+    State(state): State<NativeState>,
+    Authenticated(principal, _binding): Authenticated,
+    Query(params): Query<UserListParams>,
+) -> Result<Json<PagedResponse<SongDto>>, NativeApiError> {
+    let page = Page::parse(params.page, params.page_size.or(Some(3)))?;
+    let total = sqlx::query_scalar::<_, i64>(
+        "SELECT count(*) FROM (
+           SELECT 1 FROM native_track_user_states
+           WHERE user_id = $1
+           ORDER BY last_played_at DESC NULLS LAST
+           LIMIT $2
+         ) bounded",
+    )
+    .bind(principal.user_id)
+    .bind(i64::from(page.size))
+    .fetch_one(&state.pool)
+    .await?;
+    Ok(Json(PagedResponse {
+        meta: page.metadata(total)?,
+        data: Vec::new(),
+    }))
+}
 
 fn stats_days(days: Option<i32>) -> i32 {
     days.unwrap_or(30).clamp(1, 365)
@@ -2961,18 +3120,41 @@ pub async fn user_plays_per_day(
     .bind(days)
     .fetch_all(&state.pool)
     .await?;
+    let mut counts = HashMap::with_capacity(rows.len());
+    for (date, plays) in rows {
+        counts.insert(date, plays);
+    }
     Ok(Json(TimeSeriesResponse {
         period_days: days,
-        data: rows
-            .into_iter()
-            .map(|(date, plays)| {
-                Ok(TimeSeriesDataPointDto {
-                    date,
-                    plays: bounded_i32(plays)?,
-                })
-            })
-            .collect::<Result<_, NativeApiError>>()?,
+        data: zero_fill_daily_series(days, counts)?,
     }))
+}
+
+/// The legacy chart includes both endpoints of its date interval, including
+/// zero-play days. Keep the query fact-derived, then fill the presentation
+/// series at the API boundary so sparse storage does not change its shape.
+fn zero_fill_daily_series(
+    period_days: i32,
+    counts: HashMap<String, i64>,
+) -> Result<Vec<TimeSeriesDataPointDto>, NativeApiError> {
+    let end = OffsetDateTime::now_utc().date();
+    let start = end - Duration::days(i64::from(period_days));
+    (0..=period_days)
+        .map(|offset| {
+            let date = start + Duration::days(i64::from(offset));
+            let date_key = date.to_string();
+            Ok(TimeSeriesDataPointDto {
+                plays: bounded_i32(counts.get(&date_key).copied().unwrap_or(0))?,
+                date: format!(
+                    "{}, {} {}, {}",
+                    date.weekday(),
+                    date.month(),
+                    date.day(),
+                    date.year()
+                ),
+            })
+        })
+        .collect()
 }
 
 pub async fn user_history(
@@ -3080,5 +3262,62 @@ mod tests {
         assert_eq!(genre_id("Rock"), "Um9jaw");
         assert_eq!(genre_id("Post-Rock"), "UG9zdC1Sb2Nr");
         assert_eq!(genre_id("環境音楽"), "55Kw5aKD6Z-z5qW9");
+    }
+
+    #[test]
+    fn native_wire_adapter_preserves_legacy_display_conventions() {
+        assert_eq!(LEGACY_NATIVE_DISPLAY_BITRATE_KBPS, 320);
+        assert_eq!(
+            imported_timestamp(
+                OffsetDateTime::from_unix_timestamp(0).expect("epoch"),
+                OffsetDateTime::from_unix_timestamp(0).expect("epoch"),
+            ),
+            LEGACY_UNKNOWN_UPDATED_AT
+        );
+        assert_eq!(
+            imported_timestamp(
+                OffsetDateTime::from_unix_timestamp(0).expect("epoch"),
+                OffsetDateTime::from_unix_timestamp(1).expect("epoch"),
+            ),
+            "1970-01-01 00:00:01"
+        );
+    }
+
+    #[test]
+    fn scoped_song_lists_preserve_import_order() {
+        assert_eq!(
+            song_order_sql(true),
+            "track.created_at ASC, track.public_api_id ASC"
+        );
+        assert_eq!(
+            song_order_sql(false),
+            "track.sort_title ASC, track.public_api_id ASC"
+        );
+    }
+
+    #[test]
+    fn recent_user_song_lists_break_play_timestamp_ties_by_import_order() {
+        assert_eq!(
+            user_song_order_sql(UserListMode::Recent),
+            "state.last_played_at DESC, track.created_at ASC, track.public_api_id"
+        );
+        assert_eq!(
+            user_song_order_sql(UserListMode::Liked),
+            "state.updated_at DESC"
+        );
+    }
+
+    #[test]
+    fn daily_play_series_includes_zero_play_days_and_both_endpoints() {
+        let series = zero_fill_daily_series(
+            2,
+            HashMap::from([(OffsetDateTime::now_utc().date().to_string(), 3)]),
+        )
+        .expect("bounded test counts");
+        assert_eq!(series.len(), 3);
+        assert_eq!(series[0].plays, 0);
+        assert_eq!(series[1].plays, 0);
+        assert_eq!(series[2].plays, 3);
+        assert!(series[2].date.contains(", "));
     }
 }

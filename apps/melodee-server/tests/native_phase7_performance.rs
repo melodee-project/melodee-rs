@@ -166,7 +166,8 @@ async fn run_scale(track_count: i64, enforce_proposed_budgets: bool) {
                 assert_eq!(value["data"][0]["id"], exact_track.to_string());
             }
             if route == "/api/v1/songs/random?count=25" {
-                assert_eq!(value.as_array().map(Vec::len), Some(25));
+                assert_eq!(value["count"], 25);
+                assert_eq!(value["data"].as_array().map(Vec::len), Some(25));
             }
             if route.ends_with(&exact_track.to_string()) {
                 assert_eq!(value["id"], exact_track.to_string());

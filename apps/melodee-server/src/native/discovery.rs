@@ -1361,7 +1361,7 @@ struct ThemeInfo {
     warning_details: Option<Vec<String>>,
 }
 async fn themes(State(state): State<NativeState>) -> Result<Json<Vec<ThemeInfo>>, NativeApiError> {
-    Ok(Json(sqlx::query_as::<_,ThemeInfo>("SELECT id,name,author,version,description,is_built_in,preview_image,has_warnings,CASE WHEN warning_details IS NULL THEN NULL ELSE ARRAY[warning_details] END AS warning_details FROM native_themes ORDER BY is_built_in DESC,name,id LIMIT 1000").fetch_all(&state.pool).await?))
+    Ok(Json(sqlx::query_as::<_,ThemeInfo>("SELECT id,name,author,version,description,is_built_in,preview_image,has_warnings,CASE WHEN warning_details IS NULL THEN NULL ELSE ARRAY[warning_details] END AS warning_details FROM native_themes ORDER BY is_built_in DESC,CASE id WHEN 'light' THEN 0 WHEN 'dark' THEN 1 ELSE 2 END,name,id LIMIT 1000").fetch_all(&state.pool).await?))
 }
 
 async fn rescan_themes(

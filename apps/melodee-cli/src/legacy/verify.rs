@@ -115,7 +115,11 @@ pub async fn verify_run(
         }
         tx.commit().await.map_err(|e| e.to_string())?;
         if runs::transition(target, run_id, &owner, &["verifying"], "delta-ready").await? {
-            println!("run {run_id}: verified clean; state is now delta-ready");
+            if json {
+                eprintln!("run {run_id}: verified clean; state is now delta-ready");
+            } else {
+                println!("run {run_id}: verified clean; state is now delta-ready");
+            }
         }
         runs::release_lease(target, run_id, &owner).await?;
     } else {
@@ -135,15 +139,19 @@ pub async fn verify_run(
         )
         .await?;
         tx.commit().await.map_err(|e| e.to_string())?;
-        println!(
+        let message = format!(
             "run {run_id}: {total_mismatches} mismatch gap(s); state stays verifying \
              until gaps are resolved and verify is re-run"
         );
+        if json {
+            eprintln!("{message}");
+        } else {
+            println!("{message}");
+        }
         runs::release_lease(target, run_id, &owner).await?;
     }
     Ok(())
 }
-
 
 /// Full programmatic verification result (ADR-0149 freeze reuses it).
 #[derive(Debug)]
@@ -173,30 +181,162 @@ pub async fn compute_gate(
     let domains: &[(&str, &str, &str, &str, &str)] = &[
         ("users", "Users", "native_users", "", "\"Id\"::bigint"),
         ("artists", "Artists", "artists", "artist", "\"Id\"::bigint"),
-        ("releases", "Albums", "releases", "release", "\"Id\"::bigint"),
+        (
+            "releases",
+            "Albums",
+            "releases",
+            "release",
+            "\"Id\"::bigint",
+        ),
         ("tracks", "Songs", "tracks", "track", "\"Id\"::bigint"),
-        ("contributions", "Contributors", "contributions", "", "\"Id\"::bigint"),
-        ("playlists", "Playlists", "native_playlists", "", "\"Id\"::bigint"),
+        (
+            "contributions",
+            "Contributors",
+            "contributions",
+            "",
+            "\"Id\"::bigint",
+        ),
+        (
+            "playlists",
+            "Playlists",
+            "native_playlists",
+            "",
+            "\"Id\"::bigint",
+        ),
         ("shares", "Shares", "native_shares", "", "\"Id\"::bigint"),
-        ("bookmarks", "Bookmarks", "opensubsonic_bookmarks", "", "\"Id\"::bigint"),
-        ("user_track_states", "UserSongs", "native_track_user_states", "", "\"Id\"::bigint"),
-        ("user_release_states", "UserAlbums", "native_release_user_states", "", "\"Id\"::bigint"),
-        ("user_artist_states", "UserArtists", "native_artist_user_states", "", "\"Id\"::bigint"),
-        ("track_plays", "UserSongPlayHistories", "native_track_plays", "", "\"Id\"::bigint"),
-        ("podcast_channels", "PodcastChannels", "native_podcast_channels", "", "\"Id\"::bigint"),
-        ("podcast_episodes", "PodcastEpisodes", "native_podcast_episodes", "", "\"Id\"::bigint"),
-        ("radio_stations", "RadioStations", "opensubsonic_radio_stations", "", "\"Id\"::bigint"),
-        ("user_groups", "UserGroups", "native_library_access_groups", "", "\"Id\"::bigint"),
-        ("user_group_members", "UserGroupMembers", "native_user_library_groups", "", "\"Id\"::bigint"),
-        ("smart_playlists", "SmartPlaylists", "native_smart_playlists", "", "\"Id\"::bigint"),
-        ("playback_settings", "UserPlaybackSettings", "native_playback_settings", "", "\"Id\"::bigint"),
-        ("equalizer_presets", "UserEqualizerPresets", "native_equalizer_presets", "", "\"Id\"::bigint"),
-        ("social_logins", "UserSocialLogins", "native_user_social_logins", "", "\"Id\"::bigint"),
-        ("requests", "Requests", "native_requests", "", "\"Id\"::bigint"),
-        ("request_comments", "RequestComments", "native_request_comments", "", "\"Id\"::bigint"),
-        ("request_seen", "RequestUserStates", "native_request_seen", "", super::source::REQUEST_SEEN_KEY_SQL),
-        ("podcast_episode_bookmarks", "PodcastEpisodeBookmarks", "native_podcast_bookmarks", "", "\"Id\"::bigint"),
-        ("podcast_play_history", "UserPodcastEpisodePlayHistories", "native_podcast_play_history", "", "\"Id\"::bigint"),
+        (
+            "bookmarks",
+            "Bookmarks",
+            "opensubsonic_bookmarks",
+            "",
+            "\"Id\"::bigint",
+        ),
+        (
+            "user_track_states",
+            "UserSongs",
+            "native_track_user_states",
+            "",
+            "\"Id\"::bigint",
+        ),
+        (
+            "user_release_states",
+            "UserAlbums",
+            "native_release_user_states",
+            "",
+            "\"Id\"::bigint",
+        ),
+        (
+            "user_artist_states",
+            "UserArtists",
+            "native_artist_user_states",
+            "",
+            "\"Id\"::bigint",
+        ),
+        (
+            "track_plays",
+            "UserSongPlayHistories",
+            "native_track_plays",
+            "",
+            "\"Id\"::bigint",
+        ),
+        (
+            "podcast_channels",
+            "PodcastChannels",
+            "native_podcast_channels",
+            "",
+            "\"Id\"::bigint",
+        ),
+        (
+            "podcast_episodes",
+            "PodcastEpisodes",
+            "native_podcast_episodes",
+            "",
+            "\"Id\"::bigint",
+        ),
+        (
+            "radio_stations",
+            "RadioStations",
+            "opensubsonic_radio_stations",
+            "",
+            "\"Id\"::bigint",
+        ),
+        (
+            "user_groups",
+            "UserGroups",
+            "native_library_access_groups",
+            "",
+            "\"Id\"::bigint",
+        ),
+        (
+            "user_group_members",
+            "UserGroupMembers",
+            "native_user_library_groups",
+            "",
+            "\"Id\"::bigint",
+        ),
+        (
+            "smart_playlists",
+            "SmartPlaylists",
+            "native_smart_playlists",
+            "",
+            "\"Id\"::bigint",
+        ),
+        (
+            "playback_settings",
+            "UserPlaybackSettings",
+            "native_playback_settings",
+            "",
+            "\"Id\"::bigint",
+        ),
+        (
+            "equalizer_presets",
+            "UserEqualizerPresets",
+            "native_equalizer_presets",
+            "",
+            "\"Id\"::bigint",
+        ),
+        (
+            "social_logins",
+            "UserSocialLogins",
+            "native_user_social_logins",
+            "",
+            "\"Id\"::bigint",
+        ),
+        (
+            "requests",
+            "Requests",
+            "native_requests",
+            "",
+            "\"Id\"::bigint",
+        ),
+        (
+            "request_comments",
+            "RequestComments",
+            "native_request_comments",
+            "",
+            "\"Id\"::bigint",
+        ),
+        (
+            "request_seen",
+            "RequestUserStates",
+            "native_request_seen",
+            "",
+            super::source::REQUEST_SEEN_KEY_SQL,
+        ),
+        (
+            "podcast_episode_bookmarks",
+            "PodcastEpisodeBookmarks",
+            "native_podcast_bookmarks",
+            "",
+            "\"Id\"::bigint",
+        ),
+        (
+            "podcast_play_history",
+            "UserPodcastEpisodePlayHistories",
+            "native_podcast_play_history",
+            "",
+            "\"Id\"::bigint",
+        ),
     ];
 
     let mut results = Vec::with_capacity(domains.len());
@@ -361,8 +501,10 @@ async fn verify_public_id_equality(
             .fetch_all(source.pool())
             .await
             .map_err(|e| format!("public-id verify source read failed for {entity}: {e}"))?;
-            let source_by_pk: std::collections::HashMap<i64, Uuid> =
-                source_ids.into_iter().map(|(pk, id)| (i64::from(pk), id)).collect();
+            let source_by_pk: std::collections::HashMap<i64, Uuid> = source_ids
+                .into_iter()
+                .map(|(pk, id)| (i64::from(pk), id))
+                .collect();
             for (pk, _internal, mapped_public) in &mappings {
                 match source_by_pk.get(pk) {
                     Some(source_public) if source_public != mapped_public => {
@@ -585,12 +727,17 @@ async fn verify_orphan_mappings(
     let mut samples = Vec::new();
     for (domain, table, column) in domain_targets {
         // Identifiers come from the hardcoded allowlist above.
+        let target_exists = if *domain == "contributions" {
+            "(EXISTS (SELECT 1 FROM contributions t WHERE t.id = m.target_id)
+             OR EXISTS (SELECT 1 FROM observed_artists t WHERE t.id = m.target_id))"
+                .to_string()
+        } else {
+            format!("EXISTS (SELECT 1 FROM {table} t WHERE t.{column} = m.target_id)")
+        };
         let orphans: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
             "SELECT COUNT(*) FROM legacy_migration.entity_map m
               WHERE m.run_id = $1 AND m.domain = '{domain}'
-                AND NOT EXISTS (
-                  SELECT 1 FROM {table} t WHERE t.{column} = m.target_id
-                )"
+                AND NOT {target_exists}"
         )))
         .bind(run_id)
         .fetch_one(target)

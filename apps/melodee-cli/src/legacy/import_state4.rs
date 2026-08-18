@@ -39,7 +39,9 @@ pub async fn import_playback_settings(
         if rows.is_empty() {
             break;
         }
-        let last_pk = rows.last().map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
+        let last_pk = rows
+            .last()
+            .map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
         let count = i64::try_from(rows.len()).unwrap_or(0);
 
         let mut tx = target.begin().await.map_err(|e| e.to_string())?;
@@ -205,7 +207,9 @@ pub async fn import_equalizer_presets(
         if rows.is_empty() {
             break;
         }
-        let last_pk = rows.last().map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
+        let last_pk = rows
+            .last()
+            .map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
         let count = i64::try_from(rows.len()).unwrap_or(0);
 
         let mut tx = target.begin().await.map_err(|e| e.to_string())?;
@@ -361,7 +365,9 @@ pub async fn import_social_logins(
         if rows.is_empty() {
             break;
         }
-        let last_pk = rows.last().map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
+        let last_pk = rows
+            .last()
+            .map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
         let count = i64::try_from(rows.len()).unwrap_or(0);
 
         let mut tx = target.begin().await.map_err(|e| e.to_string())?;
@@ -523,7 +529,9 @@ pub async fn import_lastfm_links(
         if rows.is_empty() {
             break;
         }
-        let last_pk = rows.last().map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
+        let last_pk = rows
+            .last()
+            .map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
         let count = i64::try_from(rows.len()).unwrap_or(0);
 
         let mut tx = target.begin().await.map_err(|e| e.to_string())?;
@@ -629,7 +637,9 @@ pub async fn import_user_pins(
         if rows.is_empty() {
             break;
         }
-        let last_pk = rows.last().map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
+        let last_pk = rows
+            .last()
+            .map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
         let count = i64::try_from(rows.len()).unwrap_or(0);
 
         let mut tx = target.begin().await.map_err(|e| e.to_string())?;
@@ -768,7 +778,9 @@ pub async fn import_device_profiles_reference_only(
         if rows.is_empty() {
             break;
         }
-        let last_pk = rows.last().map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
+        let last_pk = rows
+            .last()
+            .map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
         let count = i64::try_from(rows.len()).unwrap_or(0);
 
         let mut tx = target.begin().await.map_err(|e| e.to_string())?;
@@ -843,7 +855,9 @@ pub async fn import_requests(
         if rows.is_empty() {
             break;
         }
-        let last_pk = rows.last().map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
+        let last_pk = rows
+            .last()
+            .map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
         let count = i64::try_from(rows.len()).unwrap_or(0);
 
         let mut tx = target.begin().await.map_err(|e| e.to_string())?;
@@ -1031,7 +1045,9 @@ async fn import_request_comments(
         if rows.is_empty() {
             break;
         }
-        let last_pk = rows.last().map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
+        let last_pk = rows
+            .last()
+            .map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
         let count = i64::try_from(rows.len()).unwrap_or(0);
 
         let mut tx = target.begin().await.map_err(|e| e.to_string())?;
@@ -1317,12 +1333,16 @@ pub async fn import_opensubsonic_secrets(
         if rows.is_empty() {
             break;
         }
-        let last_pk = rows.last().map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
+        let last_pk = rows
+            .last()
+            .map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
         let count = i64::try_from(rows.len()).unwrap_or(0);
 
         let mut tx = target.begin().await.map_err(|e| e.to_string())?;
         if !runs::is_fenced_in(&mut tx, run_id, owner).await? {
-            return Err(format!("run {run_id}: lost lease during opensubsonic secrets import"));
+            return Err(format!(
+                "run {run_id}: lost lease during opensubsonic secrets import"
+            ));
         }
         let mut inserted = 0_i64;
         let mut issues = 0_i64;
@@ -1340,19 +1360,15 @@ pub async fn import_opensubsonic_secrets(
             let protected: String = row.get("OpenSubsonicSecretProtected");
             let plaintext = (|| -> Option<Vec<u8>> {
                 let cipher = cipher.as_ref()?;
-                let combined = protected
-                    .strip_prefix("v1:gcm:")
-                    .and_then(|b64| {
-                        use base64::Engine;
-                        base64::engine::general_purpose::STANDARD.decode(b64).ok()
-                    })?;
+                let combined = protected.strip_prefix("v1:gcm:").and_then(|b64| {
+                    use base64::Engine;
+                    base64::engine::general_purpose::STANDARD.decode(b64).ok()
+                })?;
                 if combined.len() < 12 + 16 + 1 {
                     return None;
                 }
-                let nonce = Nonce::try_assume_unique_for_key(
-                    combined[..12].try_into().ok()?,
-                )
-                .ok()?;
+                let nonce =
+                    Nonce::try_assume_unique_for_key(combined[..12].try_into().ok()?).ok()?;
                 // ring expects ciphertext‖tag; legacy packs nonce‖tag‖ct.
                 let mut in_out = combined[28..].to_vec();
                 in_out.extend_from_slice(&combined[12..28]);
@@ -1400,13 +1416,27 @@ pub async fn import_opensubsonic_secrets(
             .await
             .map_err(|e| format!("opensubsonic secret {source_pk} insert failed: {e}"))?;
             map::insert_mapping(
-                &mut tx, run_id, "opensubsonic_secrets", source_pk, None, user_target, now,
+                &mut tx,
+                run_id,
+                "opensubsonic_secrets",
+                source_pk,
+                None,
+                user_target,
+                now,
             )
             .await?;
             inserted += 1;
         }
         runs::advance_checkpoint(
-            &mut tx, run_id, "opensubsonic_secrets", last_pk, count, inserted, 0, issues, 0,
+            &mut tx,
+            run_id,
+            "opensubsonic_secrets",
+            last_pk,
+            count,
+            inserted,
+            0,
+            issues,
+            0,
         )
         .await?;
         tx.commit().await.map_err(|e| e.to_string())?;

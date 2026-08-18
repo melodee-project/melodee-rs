@@ -24,6 +24,7 @@ pub async fn import_users(
                       "HasStreamRole", "HasDownloadRole", "HasUploadRole",
                       "HasPlaylistRole", "HasShareRole", "HasCoverArtRole",
                       "HasCommentRole", "HasPodcastRole", "HasSettingsRole",
+                      "HasJukeboxRole",
                       "PreferredLanguage", "PreferredTheme", "CreatedAt",
                       "LastUpdatedAt"
                FROM "Users" WHERE "Id" > $1 ORDER BY "Id" LIMIT $2"#,
@@ -36,7 +37,9 @@ pub async fn import_users(
         if rows.is_empty() {
             break;
         }
-        let last_pk = rows.last().map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
+        let last_pk = rows
+            .last()
+            .map_or(key, |r| i64::from(r.get::<i32, _>("Id")));
         let count = i64::try_from(rows.len()).unwrap_or(0);
 
         let mut tx = target.begin().await.map_err(|e| e.to_string())?;
@@ -55,13 +58,18 @@ pub async fn import_users(
             }
             let public_id: Uuid = row.get("ApiKey");
             let username: String = row.get("UserName");
-            let normalized = map::normalized_or(row.get("UserNameNormalized"), &username);
+            // Legacy normalized columns use a different comparer (the
+            // frozen fixture removes punctuation). Native auth normalizes by
+            // trimming and uppercasing the submitted login, so recompute the
+            // target key from the displayed identity rather than preserving
+            // an incompatible legacy search key.
+            let normalized = username.trim().to_uppercase();
             let (email, normalized_email) = match row
                 .get::<Option<String>, _>("Email")
                 .filter(|v| !v.trim().is_empty())
             {
                 Some(email) => {
-                    let norm = map::normalized_or(row.get("EmailNormalized"), &email);
+                    let norm = email.trim().to_uppercase();
                     (email, norm)
                 }
                 None => {
@@ -113,7 +121,9 @@ pub async fn import_users(
             .bind(&password_hash)
             .bind(&stream_key)
             .bind(row.get::<bool, _>("IsAdmin"))
-            .bind(row.get::<bool, _>("IsEditor"))
+            // The legacy user DTO exposes administrators as effective
+            // editors even when the stored IsEditor bit is false.
+            .bind(row.get::<bool, _>("IsEditor") || row.get::<bool, _>("IsAdmin"))
             .bind(row.get::<bool, _>("IsLocked"))
             .bind(row.get::<Option<String>, _>("PreferredLanguage"))
             .bind(row.get::<Option<String>, _>("PreferredTheme"))
@@ -174,24 +184,28 @@ pub async fn import_users(
     Ok(())
 }
 
-/// Maps legacy `Has*Role` flags to native role rows.
+/// Maps legacy `Has*Role` flags to the preserved native role vocabulary.
 async fn insert_user_roles(
     tx: &mut Transaction<'_, Postgres>,
     target_id: Uuid,
     row: &sqlx::postgres::PgRow,
 ) -> Result<(), String> {
     let flags: &[(&str, bool)] = &[
-        ("stream", row.get("HasStreamRole")),
-        ("download", row.get("HasDownloadRole")),
-        ("upload", row.get("HasUploadRole")),
-        ("playlist", row.get("HasPlaylistRole")),
-        ("share", row.get("HasShareRole")),
-        ("cover_art", row.get("HasCoverArtRole")),
-        ("comment", row.get("HasCommentRole")),
-        ("podcast", row.get("HasPodcastRole")),
-        ("settings", row.get("HasSettingsRole")),
+        ("HasStreamRole", row.get("HasStreamRole")),
+        ("HasDownloadRole", row.get("HasDownloadRole")),
+        ("HasUploadRole", row.get("HasUploadRole")),
+        ("HasPlaylistRole", row.get("HasPlaylistRole")),
+        ("HasShareRole", row.get("HasShareRole")),
+        ("HasCoverArtRole", row.get("HasCoverArtRole")),
+        ("HasCommentRole", row.get("HasCommentRole")),
+        ("HasPodcastRole", row.get("HasPodcastRole")),
+        ("HasSettingsRole", row.get("HasSettingsRole")),
+        ("HasJukeboxRole", row.get("HasJukeboxRole")),
     ];
-    for (role, enabled) in flags {
+    for (role, enabled) in flags
+        .iter()
+        .chain([("Administrator", row.get("IsAdmin"))].iter())
+    {
         if *enabled {
             sqlx::query(
                 "INSERT INTO native_user_roles (user_id, role, created_at)

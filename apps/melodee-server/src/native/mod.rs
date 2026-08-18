@@ -20,6 +20,7 @@ use axum::{
     Json, Router,
     extract::{FromRequestParts, Request},
     http::request::Parts,
+    http::{HeaderValue, header::CONTENT_TYPE},
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::{any, get},
@@ -363,6 +364,29 @@ async fn require_native_principal(request: Request, next: Next) -> Response {
     next.run(request).await
 }
 
+/// The frozen native-v1 responses use ASP.NET's explicit UTF-8 media type.
+/// Axum's `Json` extractor intentionally emits the shorter
+/// `application/json`; normalize only native JSON responses so the three
+/// compatibility products keep independent wire contracts.
+fn add_native_json_charset(response: &mut Response) {
+    let is_plain_json = response
+        .headers()
+        .get(CONTENT_TYPE)
+        .is_some_and(|value| value.as_bytes() == b"application/json");
+    if is_plain_json {
+        response.headers_mut().insert(
+            CONTENT_TYPE,
+            HeaderValue::from_static("application/json; charset=utf-8"),
+        );
+    }
+}
+
+async fn normalize_native_json_response(request: Request, next: Next) -> Response {
+    let mut response = next.run(request).await;
+    add_native_json_charset(&mut response);
+    response
+}
+
 pub async fn system_info() -> Json<ServerInfoDto> {
     Json(ServerInfoDto::default())
 }
@@ -413,6 +437,7 @@ pub fn router() -> Router<NativeState> {
         .merge(images::router())
         .merge(protected)
         .merge(stream::router())
+        .layer(middleware::from_fn(normalize_native_json_response))
 }
 
 /// Builds the production native router with JWT validation and principal
@@ -448,6 +473,7 @@ pub fn configured_router(state: NativeState) -> Router {
         .merge(protected)
         .merge(cookie_protected)
         .merge(stream::router())
+        .layer(middleware::from_fn(normalize_native_json_response))
         .with_state(state)
 }
 
@@ -455,11 +481,37 @@ pub fn configured_router(state: NativeState) -> Router {
 mod tests {
     #![allow(clippy::expect_used, clippy::unwrap_used)]
 
-    use axum::{body::Body, http::Request};
+    use axum::{
+        body::Body,
+        http::{HeaderMap, Request},
+    };
     use http_body_util::BodyExt;
     use tower::ServiceExt;
 
     use super::*;
+
+    #[test]
+    fn native_json_charset_is_added_without_touching_other_media_types() {
+        let mut headers = HeaderMap::new();
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+        let mut response = Response::new(Body::empty());
+        *response.headers_mut() = headers;
+        add_native_json_charset(&mut response);
+        assert_eq!(
+            response.headers().get(CONTENT_TYPE),
+            Some(&HeaderValue::from_static("application/json; charset=utf-8"))
+        );
+
+        let mut response = Response::new(Body::empty());
+        response
+            .headers_mut()
+            .insert(CONTENT_TYPE, HeaderValue::from_static("audio/wav"));
+        add_native_json_charset(&mut response);
+        assert_eq!(
+            response.headers().get(CONTENT_TYPE),
+            Some(&HeaderValue::from_static("audio/wav"))
+        );
+    }
 
     #[derive(Debug)]
     struct TestSigner;

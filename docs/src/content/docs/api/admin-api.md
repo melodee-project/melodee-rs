@@ -26,6 +26,13 @@ deployed — see [Configuration](../installation/configuration/)) signs in throu
 cookie sign-in endpoints (`POST /api/v1/auth/cookie/sign-in`) and is bound by the same gate;
 route guards in the UI are a convenience only.
 
+The browser-facing `/admin` and `/api/admin/v1` responses carry a dedicated security-header
+policy: a same-origin Content Security Policy, `X-Content-Type-Options: nosniff`,
+`X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, and a restrictive
+`Permissions-Policy`. The native v1, OpenSubsonic, Jellyfin, media, and health compatibility
+responses are not modified by this policy, so their captured headers remain stable. Configure
+HSTS at the TLS-terminating reverse proxy when serving the application over HTTPS.
+
 ## Implemented endpoints
 
 The following diagnostics endpoints are implemented and tested against real PostgreSQL. They

@@ -15,7 +15,10 @@ an explicit security review.
 
 ## Baseline rules
 
-- Secrets never enter source control, fixtures, logs, screenshots, or generated compatibility data.
+- Deployment secrets never enter source control, logs, screenshots, or generated compatibility
+  data. A small set of explicitly synthetic credentials and a test-only private key are isolated
+  in compatibility fixtures and are allowlisted by the repository secret scanner; they are not
+  accepted deployment material.
 - Paths from users or external metadata are canonicalized and constrained to configured roots.
 - Child-process arguments are passed as structured arguments, never shell-concatenated strings.
 - Public errors are safe; internal logs retain correlation and root-cause detail without secrets.
