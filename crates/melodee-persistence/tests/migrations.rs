@@ -490,3 +490,190 @@ async fn catalog_entity_images_schema_enforces_bounds_and_store_round_trip() {
 
     db.drop().await;
 }
+
+/// ADR-0148 / migration 0032: a database sitting at the pre-contract schema
+/// (migrations 0001–0031) with representative production-shaped rows upgrades
+/// forward cleanly, the `legacy_migration` schema and
+/// `releases.original_release_date` appear, and no pre-existing row content
+/// is altered by the upgrade.
+#[tokio::test]
+async fn migration_0032_forward_from_prior_schema_preserves_existing_data() {
+    use melodee_persistence::MIGRATOR;
+    use sqlx::migrate::Migrator;
+    use std::borrow::Cow;
+
+    let db = TestDb::create_unmigrated("migrations_forward_0032").await;
+
+    // Apply exactly the schema versions that existed before 0032.
+    let prior: Vec<sqlx::migrate::Migration> = MIGRATOR
+        .migrations
+        .iter()
+        .filter(|migration| migration.version <= 31)
+        .cloned()
+        .collect();
+    assert_eq!(prior.len(), 31, "expected migrations 0001..=0031");
+    let prior_migrator = Migrator {
+        migrations: Cow::Owned(prior),
+        ..Migrator::DEFAULT
+    };
+    prior_migrator
+        .run(&db.pool)
+        .await
+        .expect("apply pre-0032 schema");
+
+    // Representative pre-0032 data: one artist, one release with a filled
+    // edition date, one work item. Content is asserted verbatim after the
+    // forward migration.
+    sqlx::query(
+        "INSERT INTO artists (
+            id, public_api_id, canonical_name, normalized_name, sort_name,
+            artist_type, status, revision, created_at, updated_at
+         ) VALUES (uuidv7(), '99999999-9999-9999-9999-999999999999',
+                   'Forward Artist', 'forward artist', 'Forward Artist',
+                   'group', 'verified', 1, now(), now())",
+    )
+    .execute(&db.pool)
+    .await
+    .expect("seed artist");
+    sqlx::query(
+        "INSERT INTO releases (
+            id, public_api_id, title, normalized_title, sort_title,
+            release_date, status, revision, created_at, updated_at
+         ) VALUES (uuidv7(), '88888888-8888-8888-8888-888888888888',
+                   'Forward Release', 'forward release', 'Forward Release',
+                   DATE '2001-09-11', 'active', 1, now(), now())",
+    )
+    .execute(&db.pool)
+    .await
+    .expect("seed release");
+
+    // The forward migration applies only 0032.
+    migrate(&db.pool).await.expect("forward migration to 0032");
+
+    // New contract objects exist.
+    let schema_exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM information_schema.schemata
+          WHERE schema_name = 'legacy_migration')",
+    )
+    .fetch_one(&db.pool)
+    .await
+    .expect("schema check");
+    assert!(schema_exists, "legacy_migration schema must exist");
+    let original: Option<time::Date> = sqlx::query_scalar(
+        "SELECT original_release_date FROM releases
+         WHERE public_api_id = '88888888-8888-8888-8888-888888888888'",
+    )
+    .fetch_one(&db.pool)
+    .await
+    .expect("original_release_date column must exist");
+    assert_eq!(original, None, "existing rows gain NULL, never a rewrite");
+
+    // Existing row content is byte-identical after the upgrade.
+    let row: (String, Option<time::Date>) = sqlx::query_as(
+        "SELECT title, release_date FROM releases
+         WHERE public_api_id = '88888888-8888-8888-8888-888888888888'",
+    )
+    .fetch_one(&db.pool)
+    .await
+    .expect("release after upgrade");
+    assert_eq!(row.0, "Forward Release");
+    assert_eq!(
+        row.1.map(|d| d.year()),
+        Some(2001),
+        "existing edition date untouched"
+    );
+    let artist_name: String = sqlx::query_scalar(
+        "SELECT canonical_name FROM artists
+         WHERE public_api_id = '99999999-9999-9999-9999-999999999999'",
+    )
+    .fetch_one(&db.pool)
+    .await
+    .expect("artist after upgrade");
+    assert_eq!(artist_name, "Forward Artist");
+
+    db.drop().await;
+}
+
+/// ADR-0148 §D.5/D.6 schema contract: the run state machine, uuidv7 primary
+/// keys, non-negative checkpoint counters, the entity-map row-hash shape, and
+/// the issue severity vocabulary are enforced declaratively.
+#[tokio::test]
+async fn legacy_migration_schema_enforces_the_run_contract() {
+    let db = TestDb::create("migrations_legacy_contract").await;
+
+    // Invalid run state is rejected.
+    let result = sqlx::query(
+        "INSERT INTO legacy_migration.runs (
+            id, state, source_identity, source_snapshot_marker, created_at, updated_at
+         ) VALUES (uuidv7(), 'bogus', 'src', 'marker', now(), now())",
+    )
+    .execute(&db.pool)
+    .await;
+    assert!(result.is_err(), "unknown run state must be rejected");
+
+    // Non-v7 run id is rejected.
+    let result = sqlx::query(
+        "INSERT INTO legacy_migration.runs (
+            id, state, source_identity, source_snapshot_marker, created_at, updated_at
+         ) VALUES (gen_random_uuid(), 'planned', 'src', 'marker', now(), now())",
+    )
+    .execute(&db.pool)
+    .await;
+    assert!(result.is_err(), "non-v7 run id must be rejected");
+
+    let run_id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO legacy_migration.runs (
+                id, state, source_identity, source_snapshot_marker, created_at, updated_at
+             ) VALUES (uuidv7(), 'planned', 'src', 'marker', now(), now())
+             RETURNING id",
+    )
+    .fetch_one(&db.pool)
+    .await
+    .expect("valid run");
+
+    // Negative checkpoint counters are rejected.
+    let result = sqlx::query(
+        "INSERT INTO legacy_migration.checkpoints (
+            run_id, domain, last_source_pk, processed, inserted, updated,
+            issues, elapsed_ms, updated_at
+         ) VALUES ($1, 'artists', -1, 0, 0, 0, 0, 0, now())",
+    )
+    .bind(run_id)
+    .execute(&db.pool)
+    .await;
+    assert!(result.is_err(), "negative checkpoint must be rejected");
+
+    // Malformed row hash is rejected; a real 64-hex hash is accepted.
+    let result = sqlx::query(
+        "INSERT INTO legacy_migration.entity_map (
+            run_id, domain, source_pk, target_id, created_at, row_hash
+         ) VALUES ($1, 'users', 1, uuidv7(), now(), 'not-hex')",
+    )
+    .bind(run_id)
+    .execute(&db.pool)
+    .await;
+    assert!(result.is_err(), "malformed row_hash must be rejected");
+    sqlx::query(
+        "INSERT INTO legacy_migration.entity_map (
+            run_id, domain, source_pk, target_id, created_at, row_hash
+         ) VALUES ($1, 'users', 1, uuidv7(), now(),
+                   'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')",
+    )
+    .bind(run_id)
+    .execute(&db.pool)
+    .await
+    .expect("valid mapping row");
+
+    // Invalid issue severity is rejected.
+    let result = sqlx::query(
+        "INSERT INTO legacy_migration.issues (
+            id, run_id, domain, severity, code, message, created_at
+         ) VALUES (uuidv7(), $1, 'users', 'fatal', 'x', 'y', now())",
+    )
+    .bind(run_id)
+    .execute(&db.pool)
+    .await;
+    assert!(result.is_err(), "unknown issue severity must be rejected");
+
+    db.drop().await;
+}

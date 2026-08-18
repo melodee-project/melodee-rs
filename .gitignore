@@ -50,3 +50,4 @@ admin-ui/coverage/
 coverage/
 test-results/
 playwright-report/
+.kilo-tmp/

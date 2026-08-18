@@ -94,5 +94,7 @@ Implemented normalization checks:
   `melodee-cli search status`; rebuild if the configured active generation is missing or incompatible.
 
 For container-specific checks, image tags, attestation verification, and persistent paths, see
-[Container deployment](../installation/docker/). Legacy C# migration/cutover troubleshooting will
-be added with its Phase 11 tooling; it is not part of a Rust container upgrade.
+[Container deployment](../installation/docker/). For legacy C# migration issues — unsupported
+schema fingerprints, durable issue codes, resume after interruption, and media adoption
+validation — see [Legacy C# migration tooling](../installation/legacy-migration/); it is not
+part of a Rust container upgrade.

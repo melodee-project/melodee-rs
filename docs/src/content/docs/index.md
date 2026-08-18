@@ -19,8 +19,9 @@ hero:
 
 :::note[Project status]
 This documentation describes the Rust Melodee server and its official GHCR
-container deployment. Legacy C# migration, dual run, and cutover remain planned
-Phase 11 work and are explicitly identified where relevant.
+container deployment. Legacy C# migration tooling is documented under
+[Installation](./installation/legacy-migration/); its production cutover/rollback rehearsal is
+the remaining release gate and is identified where relevant.
 :::
 
 ## Documentation map

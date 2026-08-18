@@ -59,6 +59,8 @@ restored service is verified.
 
 ## Legacy C# migration
 
-Migration, dual run, final delta sync, cutover, and demonstrable rollback from an existing C#
-Melodee installation are Phase 11 work and are not yet supported. Do not treat a container upgrade
-as a legacy-server migration.
+Migration from an existing C# Melodee installation is handled by the
+[legacy migration tooling](./legacy-migration/): inventory, plan, import, verify, delta, and
+status commands that adopt the canonical library in place. Dual run, final delta sync, cutover,
+and demonstrable rollback against a production snapshot remain rehearsal-gated; do not treat a
+container upgrade as a legacy-server migration.

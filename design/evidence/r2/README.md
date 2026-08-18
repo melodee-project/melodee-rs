@@ -736,3 +736,95 @@ contract.
   the already-documented redirect and non-public-address rejections.
 - Last.fm and SMTP changes are test-infrastructure and internal constructor seams; no
   user-visible behavior changed, so no other public documentation moved.
+
+## 10. R2.7 — Performance and fault evidence
+
+### 10.1 Catalog query planner benchmark (`PRD-SCALE-001`, `PRD-SCALE-002`, `PRD-PERF-003`)
+
+`crates/melodee-persistence/tests/perf_catalog_queries.rs` seeds a production-shaped catalog
+(2 000 artists, 10 000 releases, 120 000 tracks, 5/12 of rows carrying the `Rock` token) and
+exercises the real `list_catalog_releases` / `list_catalog_artists` / `list_catalog_tracks`
+query builders end-to-end — unfiltered first page, broad low-selectivity `ILIKE '%rock%'`
+(match counts 800 / 4 000 / 50 000 per entity), and a narrow single-row match. It captures the
+`EXPLAIN` plan and three timed samples per query. Measured minima: unfiltered releases 2–4 ms,
+broad releases 8–10 ms, narrow release 12–13 ms, broad artists 6 ms, tracks-by-release 2 ms,
+broad tracks (50 000 of 120 000 matched) 48–68 ms. Planner evidence for the broad track query
+shows the indexed path held: `tracks_native_browse_title_idx` Index Scan under an Incremental
+Sort on `(sort_title, id)` with a Memoized FK join — no sequential scan at 120k rows. Artifact:
+`design/evidence/r2/catalog-query-benchmark.json` (refresh with
+`MELODEE_WRITE_PERF_EVIDENCE=1`; correctness gates never rewrite it). No threshold is asserted —
+these are planner/behavior measurements, not SLAs.
+
+### 10.2 Tantivy measurement (`PRD-SCALE-002`, `PRD-PERF-003`)
+
+`phase6_benchmark` at the documented 1 000 000-track shape (1 085 000 total documents including
+artist/release rollups): index 221 123 846 bytes (≈211 MiB, ≈204 bytes/document), build wall
+9 777 ms (≈110 969 documents/second), peak process RSS 297 936 KiB (≈291 MiB), zero source-media
+and zero canonical-media reads (rebuild reads only PostgreSQL projections). Artifact:
+`design/evidence/r2/search-benchmark-1m.json`, produced by
+`cargo run --release -p melodee-search --bin phase6_benchmark -- --tracks 1000000`. The 10M
+track release-scale run remains the documented manual release-gate evidence; this 1M shape is
+the gate-feasible recorded measurement.
+
+### 10.3 Repeated termination across stages, 200 releases (`PRD-TEST-005`, `PRD-TEST-007`, Gate B)
+
+`normalization.rs::two_hundred_releases_survive_repeated_termination_across_all_stages` drives
+200 tagged-MP3 releases through reconciliation, acquisition handoff, inspection, normalization,
+validation, and publication while simulating ungraceful worker death at every stage boundary:
+three rounds per stage claim a bounded batch (3 items) under a fresh worker identity and abandon
+it without completion or release, then expire all outstanding leases. 63 claims were terminated
+across the 12 rounds. Every stage's next pass reclaimed the expired leases through the standard
+lease/fencing model; final state proves 200 complete staging handoffs (`inbound_removed` with
+tree hash), 200 manifests with zero duplicates, 200 publication receipts, exactly 200
+`publishing → published` transitions (exactly-once), zero leased stragglers, staged source bytes
+hash-identical to the pre-run snapshot, 200 canonical `manifest.json` files, no `.incoming`/
+`.copying` fragments, an empty post-publish reconciliation, and inbound drained. Artifact:
+`design/evidence/r2/repeated-termination-200.json` (82 236 ms wall, recorded not asserted).
+Indexing termination is covered at its own service boundary by the search crash-window fencing
+tests (`rebuild_integration.rs`): an interrupted rebuild never activates a partial generation.
+
+### 10.4 Environment fault suite (`PRD-TEST-005`, `PRD-TEST-006`, `PRD-TEST-007`)
+
+`crates/melodee-ingestion/tests/environment_faults.rs` (5 tests, all green) plus the
+pre-existing search/provider fault suites close the §7.8 fault list:
+
+| Fault | Test | Proven behavior |
+|---|---|---|
+| Full staging disk | `full_staging_disk_fails_closed_and_retry_converges` | Acquisition write hook fails closed at the copy boundary; no receipt, no partial authoritative tree, inbound retained; retry after the fault clears converges with a verified receipt and drained inbound |
+| Slow storage | `slow_storage_acquisition_converges_durably` | Delayed writes still converge; receipt/tree complete, inbound drained |
+| Hung FFmpeg | `hung_ffmpeg_times_out_actionably_and_retry_converges` | Configured timeout kills the tool; actionable typed failure; retry converges |
+| Full work disk (FFmpeg ENOSPC, partial output) | `ffmpeg_enospc_partial_output_fails_actionably_and_retry_converges` | Partial attempt output never publishes; typed failure; retry converges |
+| PostgreSQL restart during handoff | `postgres_unavailable_during_handoff_fails_closed_and_recovers` | Drained pool fails the handoff at the intent-persistence boundary before any filesystem mutation; no receipt, no tree, inbound retained; after reconnect a fresh claim converges with a complete receipt |
+| Interrupted network/provider calls | `podcast_http_fixtures` (R2.6: redirect/error/206/mid-body interruption), `lastfm_scrobble` retry/rate-limit suite | Fail-closed with backoff; no partial bytes; retry publishes byte-identical payload |
+| Index rebuild interruption | `rebuild_integration.rs` crash-window fencing + lease-theft tests | Committed-then-crashed rows are fenced by lease expiry; an interrupted rebuild never activates a partial generation; scheduler converges on the next pass |
+
+No fault produced duplicate authoritative catalog rows, lost durable work, partial canonical
+publication, or destructive uncertainty handling — each test asserts those negatives
+explicitly rather than by omission.
+
+### 10.5 Requirement dispositions (R2.7)
+
+- `PRD-INGEST-009` → **tested**: all resource classes were bounded (R2.4) and exposed through
+  diagnostics (R2.5); the fault suites above prove bounded, restart-safe behavior under
+  saturation and environment failure.
+- `PRD-PERF-003`, `PRD-PERF-004` → stay `in-progress` per the R1 disposition map; the R2.7
+  planner/Tantivy/termination measurements are appended as evidence rows, with production-scale
+  confirmation owned by R4.
+- `PRD-TEST-005`, `PRD-TEST-006`, `PRD-TEST-007` → stay `in-progress` through R4 per the R1
+  disposition map; the fault, corpus, and invariant rows above are appended as evidence.
+- `PRD-SCALE-001`, `PRD-SCALE-002` → stay `in-progress` through R4; the catalog planner and
+  Tantivy artifacts above are the R2 evidence increment.
+
+### 10.6 Tests and gate (R2.7 increment)
+
+- `cargo test -p melodee-persistence --test perf_catalog_queries` — 1/1 pass (≈43 s including
+  seed).
+- `cargo test -p melodee-ingestion --features test-support --test normalization
+  two_hundred_releases_survive` — 1/1 pass (≈84 s).
+- `cargo test -p melodee-ingestion --features test-support --test environment_faults` — 5/5 pass.
+- Requirement artifacts regenerated with `extract_requirements.py`.
+
+Documentation impact:
+- None for `/docs` — all R2.7 additions are internal tests and evidence artifacts; no
+  documented user-visible behavior, setting, or surface changed. Internal: this report, the
+  three JSON artifacts, and the requirement registry rows.

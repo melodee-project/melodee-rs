@@ -18,6 +18,8 @@ use sqlx::PgPool;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
+mod legacy;
+
 #[derive(Debug, Parser)]
 #[command(name = "melodee", version, about = "Melodee Rust administrative CLI")]
 struct Cli {
@@ -102,6 +104,13 @@ enum Commands {
     Config {
         #[command(subcommand)]
         command: ConfigCommands,
+    },
+    /// Phase 11 legacy (C#) migration tooling: inventory, plan, import,
+    /// verify, delta, and status against a read-only source snapshot
+    /// (ADR-0148).
+    Legacy {
+        #[command(subcommand)]
+        command: legacy::LegacyCommands,
     },
 }
 
@@ -1668,6 +1677,12 @@ async fn main() {
         Commands::Notifications { command } => run_notification_command(&command).await,
         Commands::Scripts { command } => run_script_command(&command).await,
         Commands::Config { command } => run_config_command(&command).await,
+        Commands::Legacy { command } => {
+            if let Err(message) = legacy::run(command, pool().await).await {
+                eprintln!("legacy migration error: {message}");
+                std::process::exit(1);
+            }
+        }
     }
 }
 

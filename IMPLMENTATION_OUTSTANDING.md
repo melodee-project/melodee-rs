@@ -121,15 +121,15 @@ rewritten merely to remove phase-oriented language from current product document
 
 ### 3.2 Requirement status snapshot
 
-The generated requirement registry currently contains 239 requirements (after R0 closure):
+The generated requirement registry currently contains 239 requirements (after R3 closure):
 
 | Status | Count |
 |---|---:|
-| Tested | 182 |
+| Tested | 204 |
 | Implemented | 9 |
-| In progress | 24 |
-| Planned | 17 |
-| Deferred | 6 |
+| In progress | 11 |
+| Planned | 7 |
+| Deferred | 7 |
 | Captured | 1 |
 
 This snapshot is a planning input, not release evidence. R1 must reconcile stale status labels
@@ -165,8 +165,8 @@ phases. They exist to finish the official roadmap without creating a fictitious 
 flowchart LR
     H[Historical Phases 0-10\nComplete] --> R0[R0 Corrective baseline\nComplete]
     R0 --> R1[R1 Requirement and security closure\nComplete]
-    R1 --> R2[R2 Mandatory runtime gaps\nIn progress]
-    R2 --> R3[R3 Official Phase 11 migration tooling\nNot started]
+    R1 --> R2[R2 Mandatory runtime gaps\nComplete]
+    R2 --> R3[R3 Official Phase 11 migration tooling\nComplete]
     R3 --> R4[R4 Rehearsal, dual run, cutover\nNot started]
     R4 --> R5[R5 Release-candidate hardening\nNot started]
     R5 --> R6[R6 1.0 documentation and publication\nNot started]
@@ -177,8 +177,8 @@ flowchart LR
 |---|---|---|---|
 | R0 — Corrective baseline | Complete | Phases 0–10 | ADR-0145 complete and current baseline green |
 | R1 — Requirement and security closure | Complete | R0 | Truthful terminal disposition plan and closed evidence-only gaps |
-| R2 — Mandatory runtime gaps | In progress | R1 | All non-migration runtime requirements implemented |
-| R3 — Official Phase 11 migration tooling | Not started | R2 | Repeatable legacy import and verification tooling |
+| R2 — Mandatory runtime gaps | Complete | R1 | All non-migration runtime requirements implemented |
+| R3 — Official Phase 11 migration tooling | Complete | R2 | Repeatable legacy import and verification tooling |
 | R4 — Production rehearsal, dual run, and cutover | Not started | R3 | Migration and rollback proven on production-shaped data |
 | R5 — Release-candidate hardening | Not started | R4 | All Gates A–I green from a release candidate |
 | R6 — 1.0 documentation and publication | Not started | R5 | Code-complete documentation, version, tag, images, and release |
@@ -435,7 +435,7 @@ proves it wrong, but must record the evidence and may not silently reduce scope.
 
 ## 7. R2 — Mandatory runtime implementation gaps
 
-**Status:** In progress (R2-SEC-1..5 dispositions, R2.1 media matrix, R2.2 CUE/sidecar closure, R2.3 configured transcoding under ADR-0147, R2.4 bounded-resource enumeration/instrumentation, the R2.5 correlation/health/CLI-retry increments, and R2.6 scheduled/provider behavior — Last.fm per-test isolation, SMTP disposable-server success, podcast HTTP fixtures — landed; see `design/evidence/r2/README.md`)  
+**Status:** Complete (2026-08-17; all work packages R2-SEC and R2.1–R2.7 landed including the R2.7 performance/fault evidence — catalog planner benchmark, Tantivy 1M measurement, 200-release repeated-termination vertical, and the five-scenario environment fault suite; full `./scripts/check.sh` green; see `design/evidence/r2/README.md`)  
 **Depends on:** R1  
 **Primary requirements:** `PRD-INGEST-009`, `PRD-MEDIA-001`, `PRD-MEDIA-006`,
 `PRD-STREAM-002`, `PRD-OBS-001`, `PRD-OBS-002`, `PRD-PERF-003`, `PRD-PERF-004`,
@@ -583,7 +583,7 @@ fault fixtures.
 
 ## 8. R3 — Official Phase 11 migration tooling
 
-**Status:** Not started  
+**Status:** Complete (2026-08-17; ADR-0148 accepted; evidence: `design/evidence/r3/README.md`)  
 **Depends on:** R2  
 **Official roadmap phase:** Phase 11, migration/dual-run/cutover tooling portion  
 **Primary requirements:** `PRD-MIG-001`, `PRD-MIG-002`, `PRD-MIG-003`, `PRD-MIG-004`,

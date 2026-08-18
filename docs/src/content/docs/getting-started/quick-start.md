@@ -48,8 +48,10 @@ reachable remotely and set the public origin to that proxy. For image tags, pers
 backups, upgrade steps, and attestation verification, continue to
 [Container deployment](../installation/docker/).
 
-Melodee currently has no supported migration/cutover path from an existing C# production
-installation. That Phase 11 work remains separate from starting a new Rust deployment.
+Migrating an existing C# production installation uses the
+[legacy migration tooling](../../installation/legacy-migration/) — a rehearsal-ready command
+group whose production cutover/rollback proof is the remaining release gate. It is separate
+from starting a new Rust deployment.
 
 ## First-run onboarding (implemented)
 

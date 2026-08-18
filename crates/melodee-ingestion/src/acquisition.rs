@@ -99,6 +99,20 @@ pub enum AcquisitionFaultPoint {
 ///-loss, and mutation-during-copy tests. A fault fires at most once per hook
 /// instance: the crashed attempt observes the error and the retried attempt
 /// converges, modeling a process restart that no longer injects the fault.
+/// Write-path faults for the verified copy. Each variant models an
+/// environment failure at the exact destination-write boundary.
+///
+/// This type is absent unless the non-default `test-support` feature is
+/// explicitly enabled, so no production build can inject write faults.
+#[cfg(feature = "test-support")]
+#[doc(hidden)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AcquisitionWriteFault {
+    /// The first destination write fails with ENOSPC, modeling a full
+    /// staging disk mid-copy.
+    NoSpaceLeft,
+}
+
 #[cfg(feature = "test-support")]
 #[doc(hidden)]
 #[derive(Debug, Clone)]
@@ -106,6 +120,8 @@ pub struct AcquisitionTestHook {
     force_copy: bool,
     pause_during_copy: bool,
     fault: Option<AcquisitionFaultPoint>,
+    write_fault: Option<AcquisitionWriteFault>,
+    copy_write_delay: Option<std::time::Duration>,
     state: Arc<AcquisitionTestHookState>,
 }
 
@@ -113,6 +129,7 @@ pub struct AcquisitionTestHook {
 #[derive(Debug)]
 struct AcquisitionTestHookState {
     fault_fired: AtomicBool,
+    write_fault_fired: AtomicBool,
     copy_reached: AtomicBool,
     copy_released: AtomicBool,
     notify_reached: tokio::sync::Notify,
@@ -127,8 +144,11 @@ impl AcquisitionTestHook {
             force_copy: false,
             pause_during_copy: false,
             fault: None,
+            write_fault: None,
+            copy_write_delay: None,
             state: Arc::new(AcquisitionTestHookState {
                 fault_fired: AtomicBool::new(false),
+                write_fault_fired: AtomicBool::new(false),
                 copy_reached: AtomicBool::new(false),
                 copy_released: AtomicBool::new(false),
                 notify_reached: tokio::sync::Notify::new(),
@@ -149,6 +169,22 @@ impl AcquisitionTestHook {
     #[must_use]
     pub fn with_fault(mut self, fault: AcquisitionFaultPoint) -> Self {
         self.fault = Some(fault);
+        self
+    }
+
+    /// Inject a one-shot write fault on the first destination write of the
+    /// verified copy, modeling a full staging disk.
+    #[must_use]
+    pub fn with_write_fault(mut self, fault: AcquisitionWriteFault) -> Self {
+        self.write_fault = Some(fault);
+        self
+    }
+
+    /// Sleep the given duration before every destination write of the
+    /// verified copy, modeling slow storage.
+    #[must_use]
+    pub fn delaying_copy_writes(mut self, delay: std::time::Duration) -> Self {
+        self.copy_write_delay = Some(delay);
         self
     }
 
@@ -183,6 +219,25 @@ impl AcquisitionTestHook {
 
     fn should_fire(&self, point: AcquisitionFaultPoint) -> bool {
         self.fault == Some(point) && !self.state.fault_fired.swap(true, Ordering::SeqCst)
+    }
+
+    /// Fires the configured write fault at most once, on the first
+    /// destination write, so the crashed attempt observes the error and the
+    /// retried attempt converges — the same restart semantics as
+    /// `should_fire`.
+    fn take_write_fault(&self) -> Option<AcquisitionWriteFault> {
+        if self.write_fault.is_some() && !self.state.write_fault_fired.swap(true, Ordering::SeqCst)
+        {
+            self.write_fault
+        } else {
+            None
+        }
+    }
+
+    fn delay_write(&self) {
+        if let Some(delay) = self.copy_write_delay {
+            std::thread::sleep(delay);
+        }
     }
 
     fn pause_copy_window(&self) {
@@ -679,7 +734,12 @@ fn copy_tree(
                     .map_err(|error| io_error(&destination_path, error))?;
                 queue.push((source_path, destination_path));
             } else if metadata.is_file() {
-                copy_regular_file(&source_path, &destination_path)?;
+                copy_regular_file(
+                    &source_path,
+                    &destination_path,
+                    #[cfg(feature = "test-support")]
+                    test_hook,
+                )?;
                 #[cfg(feature = "test-support")]
                 inject_test_fault(test_hook, AcquisitionFaultPoint::DuringCopy, &source_path)?;
             } else {
@@ -695,13 +755,29 @@ fn copy_tree(
     Ok(())
 }
 
-fn copy_regular_file(source: &Path, destination: &Path) -> Result<(), AcquisitionError> {
+fn copy_regular_file(
+    source: &Path,
+    destination: &Path,
+    #[cfg(feature = "test-support")] test_hook: Option<&AcquisitionTestHook>,
+) -> Result<(), AcquisitionError> {
     let input = File::open(source).map_err(|error| io_error(source, error))?;
     let output = OpenOptions::new()
         .write(true)
         .create_new(true)
         .open(destination)
         .map_err(|error| io_error(destination, error))?;
+    #[cfg(feature = "test-support")]
+    if let Some(hook) = test_hook
+        && let Some(fault) = hook.take_write_fault()
+    {
+        // The error arrives at the same boundary as a real write failure:
+        // an `io::Error` attributed to the destination path with no special
+        // variant, so production error handling is unchanged.
+        let error = match fault {
+            AcquisitionWriteFault::NoSpaceLeft => io::Error::from_raw_os_error(28),
+        };
+        return Err(io_error(destination, error));
+    }
     let mut reader = BufReader::with_capacity(COPY_BUFFER_BYTES, input);
     let mut writer = BufWriter::with_capacity(COPY_BUFFER_BYTES, output);
     let mut buffer = vec![0_u8; COPY_BUFFER_BYTES];
@@ -711,6 +787,10 @@ fn copy_regular_file(source: &Path, destination: &Path) -> Result<(), Acquisitio
             .map_err(|error| io_error(source, error))?;
         if read == 0 {
             break;
+        }
+        #[cfg(feature = "test-support")]
+        if let Some(hook) = test_hook {
+            hook.delay_write();
         }
         writer
             .write_all(&buffer[..read])

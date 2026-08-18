@@ -59,6 +59,33 @@ impl TestDb {
         }
     }
 
+    /// Creates the per-test database without applying migrations, for
+    /// forward-migration tests that drive a specific schema version.
+    pub async fn create_unmigrated(test_name: &str) -> Self {
+        let admin_pool = PgPool::connect(&admin_url()).await.unwrap_or_else(|e| {
+            panic!("connect to admin database (is dev Postgres running on :5433?): {e}")
+        });
+        let sanitized: String = test_name
+            .chars()
+            .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+            .collect();
+        let name = format!("melodee_test_{}_{}", sanitized, Uuid::now_v7().simple());
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!("CREATE DATABASE \"{name}\"")))
+            .execute(&admin_pool)
+            .await
+            .unwrap_or_else(|e| panic!("create test database: {e}"));
+
+        let db_url = admin_url().replace("/postgres", &format!("/{name}"));
+        let pool = PgPool::connect(&db_url)
+            .await
+            .unwrap_or_else(|e| panic!("connect to test database: {e}"));
+        Self {
+            name,
+            pool,
+            admin_pool,
+        }
+    }
+
     pub async fn drop(self) {
         self.pool.close().await;
         sqlx::raw_sql(sqlx::AssertSqlSafe(format!(

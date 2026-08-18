@@ -793,6 +793,302 @@ async fn two_hundred_releases_reach_published_once_with_zero_loss_and_bounded_co
     scenario.finish().await;
 }
 
+/// Expires every outstanding work-item lease, simulating the ungraceful
+/// death of whichever worker held it (no release, no failure record). The
+/// lease/fencing model must make every such item reclaimable by a fresh
+/// worker; returns how many leases were terminated.
+async fn expire_outstanding_leases(pool: &sqlx::PgPool) -> u64 {
+    sqlx::query(
+        "UPDATE release_work_items
+         SET lease_expires_at = now() - interval '1 second'
+         WHERE lease_owner IS NOT NULL",
+    )
+    .execute(pool)
+    .await
+    .expect("expire outstanding leases")
+    .rows_affected()
+}
+
+/// R2.7 repeated-termination vertical: 200 releases cross acquisition,
+/// inspection, normalization, validation, and publication while workers
+/// die ungracefully between every stage boundary. Each termination round
+/// claims a bounded batch with a fresh worker and abandons it (no
+/// completion, no release); the next pass must reclaim the expired leases
+/// and converge with exactly-once semantics. Indexing termination is
+/// covered at its own service boundary by the search crash-window fencing
+/// tests (`melodee-search/tests/rebuild_integration.rs`), which prove an
+/// interrupted rebuild never activates a partial generation.
+#[cfg(unix)]
+#[tokio::test]
+async fn two_hundred_releases_survive_repeated_termination_across_all_stages() {
+    if !tools_available() {
+        eprintln!("skipping repeated-termination acceptance: media tools unavailable");
+        return;
+    }
+    let mut scenario = Scenario::new("normalization_termination_200").await;
+    let fixture = scenario.root.join("fixture.mp3");
+    generate_tagged_mp3(&fixture);
+    for index in 0..200 {
+        let release = scenario.root.join(format!("release-{index:03}"));
+        fs::create_dir(&release).unwrap();
+        fs::copy(&fixture, release.join("track.mp3")).unwrap();
+    }
+    fs::remove_file(fixture).unwrap();
+    let storage_root = scenario.enable_publication();
+    let source_before = source_hashes(&scenario.root);
+    let started = Instant::now();
+    let mut terminated_claims = 0_u64;
+    let kill_engine = WorkEngineConfig {
+        claim_batch_size: 3,
+        ..WorkEngineConfig::default()
+    };
+
+    reconcile_all_sources(&scenario.config, &WorkItemStore, &scenario.pool, common::T0)
+        .await
+        .expect("discover");
+    reconcile_all_sources(
+        &scenario.config,
+        &WorkItemStore,
+        &scenario.pool,
+        common::T0 + Duration::seconds(1),
+    )
+    .await
+    .expect("settle");
+
+    // Stage 1+2: acquisition handoff and inspection. Three termination
+    // rounds abandon claimed ready items before the drain.
+    for _ in 0..3 {
+        let doomed = WorkerId::new();
+        let abandoned = WorkItemStore
+            .claim(
+                &scenario.pool,
+                &doomed,
+                &kill_engine,
+                OffsetDateTime::now_utc(),
+            )
+            .await
+            .expect("termination-round claim");
+        drop(abandoned);
+        terminated_claims += expire_outstanding_leases(&scenario.pool).await;
+    }
+    let mut inspected = 0_u64;
+    loop {
+        let stats = inspect_ready_once(
+            &scenario.config,
+            &WorkItemStore,
+            &scenario.pool,
+            &WorkEngineConfig::default(),
+            OffsetDateTime::now_utc(),
+            None,
+        )
+        .await
+        .expect("inspection batch");
+        inspected += stats.completed;
+        assert_eq!(0, stats.failed, "inspection failures");
+        assert_eq!(0, stats.errors, "inspection errors");
+        if stats.claimed == 0 {
+            break;
+        }
+    }
+    assert_eq!(200, inspected);
+    let remaining_candidates = fs::read_dir(&scenario.root)
+        .unwrap()
+        .filter(|entry| entry.as_ref().is_ok_and(|entry| entry.path().is_dir()))
+        .count();
+    assert_eq!(0, remaining_candidates, "inbound drained after acquisition");
+
+    // Stage 3: normalization with termination rounds between drain passes.
+    for _ in 0..3 {
+        let doomed = WorkerId::new();
+        let abandoned = WorkItemStore
+            .claim_normalizing(
+                &scenario.pool,
+                &doomed,
+                &kill_engine,
+                OffsetDateTime::now_utc(),
+            )
+            .await
+            .expect("normalization termination-round claim");
+        drop(abandoned);
+        terminated_claims += expire_outstanding_leases(&scenario.pool).await;
+    }
+    let mut normalized = 0_u64;
+    loop {
+        let stats = normalize_once(
+            &scenario.config,
+            &WorkItemStore,
+            &scenario.pool,
+            &WorkEngineConfig::default(),
+            OffsetDateTime::now_utc(),
+        )
+        .await
+        .expect("normalization batch");
+        normalized += stats.completed;
+        assert_eq!(0, stats.failed, "normalization failures");
+        assert_eq!(0, stats.errors, "normalization errors");
+        if stats.claimed == 0 {
+            break;
+        }
+    }
+    assert_eq!(200, normalized);
+
+    // Stage 4: validation.
+    for _ in 0..3 {
+        let doomed = WorkerId::new();
+        let abandoned = WorkItemStore
+            .claim_validating(
+                &scenario.pool,
+                &doomed,
+                &kill_engine,
+                OffsetDateTime::now_utc(),
+            )
+            .await
+            .expect("validation termination-round claim");
+        drop(abandoned);
+        terminated_claims += expire_outstanding_leases(&scenario.pool).await;
+    }
+    let mut validated = 0_u64;
+    loop {
+        let stats = validate_once(
+            &scenario.config,
+            &WorkItemStore,
+            &scenario.pool,
+            &WorkEngineConfig::default(),
+            OffsetDateTime::now_utc(),
+        )
+        .await
+        .expect("validation batch");
+        validated += stats.completed;
+        assert_eq!(0, stats.needs_review, "validation review");
+        assert_eq!(0, stats.failed, "validation failures");
+        assert_eq!(0, stats.errors, "validation errors");
+        if stats.claimed == 0 {
+            break;
+        }
+    }
+    assert_eq!(200, validated);
+
+    // Stage 5: publication.
+    for _ in 0..3 {
+        let doomed = WorkerId::new();
+        let abandoned = WorkItemStore
+            .claim_publication(
+                &scenario.pool,
+                &doomed,
+                &kill_engine,
+                OffsetDateTime::now_utc(),
+            )
+            .await
+            .expect("publication termination-round claim");
+        drop(abandoned);
+        terminated_claims += expire_outstanding_leases(&scenario.pool).await;
+    }
+    let mut published = 0_u64;
+    let mut adopted = 0_u64;
+    loop {
+        let stats = publish_once(
+            &scenario.config,
+            &WorkItemStore,
+            &scenario.pool,
+            &WorkEngineConfig::default(),
+            OffsetDateTime::now_utc(),
+        )
+        .await
+        .expect("publication batch");
+        published += stats.completed;
+        adopted += stats.adopted;
+        assert_eq!(0, stats.failed, "publication failures");
+        assert_eq!(0, stats.errors, "publication errors");
+        if stats.claimed == 0 {
+            break;
+        }
+    }
+    assert_eq!(200, published);
+    assert_eq!(0, adopted);
+
+    // Exactly-once authoritative results after every termination round.
+    assert_eq!(
+        source_before,
+        staged_source_hashes(&scenario.config, &scenario.pool).await
+    );
+    let (handoffs, manifests, duplicate_manifests, receipts, published_transitions, leased): (
+        i64,
+        i64,
+        i64,
+        i64,
+        i64,
+        i64,
+    ) = sqlx::query_as(
+        "SELECT
+           (SELECT COUNT(*) FROM release_work_item_staging_handoffs
+            WHERE status = 'inbound_removed' AND tree_hash IS NOT NULL),
+           (SELECT COUNT(*) FROM release_work_item_manifests),
+           (SELECT COUNT(*) - COUNT(DISTINCT work_item_id) FROM release_work_item_manifests),
+           (SELECT COUNT(*) FROM release_publication_receipts),
+           (SELECT COUNT(*) FROM release_work_item_events
+            WHERE from_state = 'publishing' AND to_state = 'published'),
+           (SELECT COUNT(*) FROM release_work_items WHERE lease_owner IS NOT NULL)",
+    )
+    .fetch_one(&scenario.pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        (200, 200, 0, 200, 200, 0),
+        (
+            handoffs,
+            manifests,
+            duplicate_manifests,
+            receipts,
+            published_transitions,
+            leased
+        ),
+        "exactly-once state after repeated termination; {}",
+        phase_diagnostics(&scenario.pool).await
+    );
+    let final_states: Vec<(String, i64)> = sqlx::query_as(
+        "SELECT state, COUNT(*) FROM release_work_items GROUP BY state ORDER BY state",
+    )
+    .fetch_all(&scenario.pool)
+    .await
+    .unwrap();
+    assert_eq!(vec![("published".to_owned(), 200)], final_states);
+    assert_eq!(200, regular_files_named(&storage_root, "manifest.json"));
+    assert_eq!(0, paths_with_fragment(&storage_root, ".incoming"));
+    assert_eq!(0, paths_with_fragment(&storage_root, ".copying"));
+
+    let rescan = reconcile_all_sources(
+        &scenario.config,
+        &WorkItemStore,
+        &scenario.pool,
+        OffsetDateTime::now_utc(),
+    )
+    .await
+    .expect("post-publish reconcile");
+    let (rescan_seen, rescan_new): (u64, u64) = rescan
+        .iter()
+        .map(|result| (result.stats.candidates_seen, result.stats.new_work_items))
+        .fold((0, 0), |acc, row| (acc.0 + row.0, acc.1 + row.1));
+    assert_eq!(
+        (0, 0),
+        (rescan_seen, rescan_new),
+        "empty reconciliation after inbound drain and publication"
+    );
+
+    let report = format!(
+        "{{\"scenario\":\"repeated-termination-200\",\"releases\":200,\"terminated_claims\":{terminated_claims},\"normalized\":{normalized},\"validated\":{validated},\"published\":{published},\"receipts\":{receipts},\"lost\":0,\"duplicate_authoritative_result\":0,\"elapsed_ms\":{}}}",
+        started.elapsed().as_millis()
+    );
+    eprintln!("r2.7-repeated-termination={report}");
+    if std::env::var_os("MELODEE_WRITE_PERF_EVIDENCE").is_some() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../design/evidence/r2/repeated-termination-200.json"
+        );
+        std::fs::write(path, format!("{report}\n")).expect("write termination evidence");
+    }
+    scenario.finish().await;
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn lease_shorter_than_old_heartbeat_is_renewed_during_long_operation() {

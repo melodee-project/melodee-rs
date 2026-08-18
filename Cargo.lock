@@ -2004,6 +2004,7 @@ dependencies = [
 name = "melodee-cli"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "clap",
  "dotenvy",
  "melodee-auth",
@@ -2015,7 +2016,10 @@ dependencies = [
  "melodee-policy",
  "melodee-search",
  "melodee-server",
+ "ring",
+ "serde",
  "serde_json",
+ "sha2 0.11.0",
  "sqlx",
  "tempfile",
  "time",

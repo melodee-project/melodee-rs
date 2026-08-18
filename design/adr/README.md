@@ -72,6 +72,13 @@ python3 scripts/new_adr.py "short title"
 
 - [ADR-0144: Publish official releases as GHCR OCI images](ADR-0144-publish-official-releases-as-ghcr-oci-images.md)
 
+## Release closure decisions (R0–R3)
+
+- [ADR-0145: Drain inbound into durable staging before ingestion](ADR-0145-drain-inbound-into-durable-staging-before-ingestion.md)
+- [ADR-0146: CUE-driven track segmentation in normalization](ADR-0146-cue-driven-track-segmentation-in-normalization.md)
+- [ADR-0147: Configured transcoding for OpenSubsonic and Jellyfin streaming](ADR-0147-configured-transcoding-for-opensubsonic-and-jellyfin-streaming.md)
+- [ADR-0148: Legacy migration contract (Phase 11 tooling)](ADR-0148-legacy-migration-contract.md)
+
 ## ADR quality rules
 
 - State the decision, not merely the chosen technology.
