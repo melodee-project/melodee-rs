@@ -3,6 +3,9 @@
 **Document status:** Active release-closure plan  
 **Baseline date:** 2026-08-16  
 **Baseline commit:** `a5ba0e88fdb7cb3a383d6a992f5b3738753440f7`  
+**Status audited:** 2026-08-18 through commit `a45619572372588dfb38b9b58ed99281802cb168` \
+**Overall release status:** **Incomplete** — R0 through R3 are complete; R4 is in progress; R5
+and R6 have not formally started. \
 **Target:** Initial production release `1.0.0`
 
 This document is the executable backlog for closing the gap between the completed historical
@@ -117,12 +120,12 @@ rewritten merely to remove phase-oriented language from current product document
 | Phase 8 | OpenSubsonic and Jellyfin compatibility | Complete | Transcoding and final client gate in R2/R5 |
 | Phase 9 | Remaining parity domains | Complete with accepted waivers | Traceability cleanup in R1 |
 | Phase 10 | Admin UI | Complete with accepted deferrals | Final Admin UI and diagnostics gate in R5 |
-| Phase 11 | Migration, dual run, and cutover | Not complete | Implemented through R3 and R4 |
+| Phase 11 | Migration, dual run, and cutover | Partially implemented; not complete | R3 tooling is complete; every R4 package still has mandatory acceptance work |
 
 ### 3.2 Requirement status snapshot
 
-The generated requirement registry currently contains 239 requirements (after local R4/R5
-preparatory closure work):
+The generated requirement registry currently contains 239 requirements (audited 2026-08-18 after
+local R4/R5 preparatory closure work):
 
 | Status | Count |
 |---|---:|
@@ -151,13 +154,23 @@ accepted decision, or `superseded` by an identified requirement.
   `source_change_during_inspection_discards_manifest` assert the owned-staging lifecycle; the
   mutation fixture writes to the deterministic staged source, and acquisition-time mutation lives
   in the handoff fault suite (`tests/acquisition.rs`).
-- Scheduled CI previously exposed Last.fm mock endpoint isolation based on shared process-global
-  state. The full local gate passes from the R0 commit; a fresh scheduled run and the R2
-  configured-state fixture work (per-test isolation) remain the verification path.
+- ~~Scheduled CI exposed Last.fm mock endpoint isolation based on shared process-global state.~~
+  **The code/fixture defect is resolved in R2** with per-test isolated Last.fm endpoints and
+  deterministic configured-state fixtures. A fresh scheduled/nightly run from the eventual
+  release-candidate SHA is still required by R5.4; no workflow URL is recorded yet.
 - ~~`PRD-INGEST-005` non-terminal.~~ **Resolved in R0** — status `tested` with R0 evidence.
 - Public migration documentation correctly states that Phase 11 is not yet supported. It cannot
   be changed to supported until R3 and R4 pass.
 - The workspace version remains pre-1.0 and must not be changed to `1.0.0` until R5 passes.
+- ADR-0149 (rehearsal/freeze/cutover), ADR-0150 (legacy media metadata disposition), and ADR-0151
+  (release-image runtime base) remain **Proposed**, not accepted. Their dependent release claims
+  remain open.
+- The current migrated-snapshot differential has 185 unclassified native differences; the earlier
+  OpenSubsonic run recorded 389 unclassified differences, and no final migrated-snapshot Jellyfin
+  classification is recorded. These are release blockers, not approved waivers.
+- The release-image prototype is not a candidate: its exact image scan reported 8 critical and
+  160 high findings, and the arm64 attempt timed out before producing an image. R5.2/R5.6 remain
+  open.
 
 ## 4. 1.0 closure phase map
 
@@ -180,21 +193,54 @@ flowchart LR
 |---|---|---|---|
 | R0 — Corrective baseline | Complete | Phases 0–10 | ADR-0145 complete and current baseline green |
 | R1 — Requirement and security closure | Complete | R0 | Truthful terminal disposition plan and closed evidence-only gaps |
-| R2 — Mandatory runtime gaps | Complete | R1 | All non-migration runtime requirements implemented |
-| R3 — Official Phase 11 migration tooling | Complete | R2 | Repeatable legacy import and verification tooling |
-| R4 — Production rehearsal, dual run, and cutover | In progress | R3 | Isolated production-shaped rehearsal is evidenced; external snapshot/client/provider/cutover acceptance remains |
-| R5 — Release-candidate hardening | Not started (local preparation recorded) | R4 | Local correctness and hardening gates are green; formal entry waits for R4 exit |
+| R2 — Mandatory runtime gaps | Complete | R1 | R2-scoped runtime code and local evidence complete; production-scale validation remains R4 work |
+| R3 — Official Phase 11 migration tooling | Complete | R2 | Repeatable legacy import and verification tooling; this does not complete official Phase 11 |
+| R4 — Production rehearsal, dual run, and cutover | In progress; 0/8 packages fully complete | R3 | Six packages have local partial evidence; external snapshot/client/provider/cutover acceptance remains |
+| R5 — Release-candidate hardening | Not started formally; 0/6 packages fully complete | R4 | Local preparation exists, but entry waits for R4 and release blockers remain |
 | R6 — 1.0 documentation and publication | Not started | R5 | Code-complete documentation, version, tag, images, and release |
 
 Only one closure phase may be reported as `In progress` at a time. A later phase may be explored
 for estimation, but its implementation may not be used to declare an earlier exit criterion
 complete.
 
+### 4.1 Audited work-package ledger
+
+Status terms are strict: **Complete** means every package-specific exit condition has direct
+evidence; **Partial** means useful implementation or local evidence exists but at least one
+mandatory assertion is still false; **Not started** means no qualifying completion evidence is
+recorded for that package. Local preparation in a dependency-blocked phase does not advance that
+phase to `In progress`.
+
+| Closure phase / package | Audited status | Evidence or work still required |
+|---|---|---|
+| R0.1–R0.7 | **Complete (7/7)** | Accepted package matrix and full gate in `design/evidence/r0/README.md` |
+| R1.1–R1.4 | **Complete (4/4)** | Requirement/parity/security/residual reconciliation in `design/evidence/r1/README.md` |
+| R2.1–R2.7 plus R2 security follow-ups | **Complete (7/7)** | Runtime, media, provider, performance, and fault evidence in `design/evidence/r2/README.md` |
+| R3.1–R3.8 | **Complete (8/8)** | Accepted ADR-0148 and migration tooling evidence in `design/evidence/r3/README.md` |
+| R4.1 — Rehearsal environment/baseline | **Partial** | Synthetic isolated baseline exists; real production snapshot, topology, and backup baseline remain |
+| R4.2 — Production-sized migration rehearsal | **Partial** | Two repeatable 12,000-Track synthetic runs pass; the real approximately-5 TB snapshot and operational measurements remain |
+| R4.3 — Search rebuild/validation | **Partial** | Local migrated rebuild and interruption suites pass; real-catalog sizing, headroom, and operator validation remain |
+| R4.4 — Dual-run differential | **Partial** | Native replay ran, but 185 differences remain unclassified; OpenSubsonic has 389 unresolved differences; final Jellyfin/production-traffic classification remains |
+| R4.5 — Current real-client acceptance | **Not started** | Historical Phase 7/8 client evidence does not replace a migrated release-candidate Android/Auto, MeloAmp, OpenSubsonic, and Jellyfin run |
+| R4.6 — Production integrations | **Not started** | Production OIDC, Last.fm, SMTP, podcast, proxy/TLS, storage topology, and backup/restore evidence is absent |
+| R4.7 — Final delta/write-freeze rehearsal | **Partial** | Local synthetic delta/freeze runs pass; accepted ADR-0149 and operator-authorized production procedure/timing remain |
+| R4.8 — Backup/cutover/rollback rehearsal | **Partial** | Local target backup/restore and failed-target retention pass; production-equivalent traffic switch, restore, and operator rollback remain |
+| R5.1 — Data-loss threat-model review | **Partial preparation** | Local operation inventory is recorded; actual approximately-5 TB topology and restore-target review remain |
+| R5.2 — Security/FOSS gate | **Partial preparation; blocked** | Local dependency/docs/secret checks pass, but the prototype image fails the critical-vulnerability policy, arm64 is incomplete, and ADR-0151 is Proposed |
+| R5.3 — Full correctness matrix | **Partial preparation** | `check.sh` and docs gates pass locally; candidate-SHA Playwright/visual, security, container, compatibility, and external gates remain |
+| R5.4 — Flake/scheduled-run closure | **Not started** | No scheduled/nightly workflow URLs from a candidate SHA are recorded |
+| R5.5 — Requirement/release-gate closure | **Partial preparation** | 12 requirements remain `in-progress`; PRD Gates A–I do not yet all pass |
+| R5.6 — Release-candidate artifacts | **Not started** | No accepted RC, multi-architecture image, digest, final SBOM/provenance, or publication exists |
+| R6.1–R6.5 | **Not started (0/5)** | R6 depends on accepted R5 completion; no version, tag, images, GitHub Release, or final reports exist |
+
+This ledger is the authoritative short-form status summary. The detailed package bullets below
+remain the required scope and exit conditions.
+
 ---
 
 ## 5. R0 — Corrective baseline and durable staging closure
 
-**Status:** Complete (2026-08-16) — evidence: `design/evidence/r0/README.md`  
+**Status:** Complete (2026-08-16; 7/7 work packages) — evidence: `design/evidence/r0/README.md` \
 **Primary authority:** ADR-0145, ADR-0115, ADR-0116, ADR-0105, ADR-0106  
 **Primary requirements:** `PRD-INGEST-005`, `PRD-INGEST-009`, `PRD-STORAGE-004`,
 `PRD-TEST-005`, `PRD-TEST-006`, `PRD-TEST-007`
@@ -339,7 +385,7 @@ staging. Crash recovery, path reuse, delayed cleanup, and stale leases must be s
 
 ## 6. R1 — Requirement, parity, security, and evidence closure
 
-**Status:** Complete (2026-08-16; evidence: design/evidence/r1/README.md)  
+**Status:** Complete (2026-08-16; 4/4 work packages; evidence: design/evidence/r1/README.md) \
 **Depends on:** R0  
 **Primary authority:** Requirement index, feature-parity matrix, phase reports, Gates G and I
 
@@ -438,7 +484,10 @@ proves it wrong, but must record the evidence and may not silently reduce scope.
 
 ## 7. R2 — Mandatory runtime implementation gaps
 
-**Status:** Complete (2026-08-17; all work packages R2-SEC and R2.1–R2.7 landed including the R2.7 performance/fault evidence — catalog planner benchmark, Tantivy 1M measurement, 200-release repeated-termination vertical, and the five-scenario environment fault suite; full `./scripts/check.sh` green; see `design/evidence/r2/README.md`)  
+**Status:** Complete (2026-08-17; 7/7 work packages plus all R2 security follow-ups). The R2.7
+performance/fault evidence includes the catalog planner benchmark, Tantivy 1M measurement,
+200-release repeated-termination vertical, and five-scenario environment fault suite. Full
+`./scripts/check.sh` green; see `design/evidence/r2/README.md`. \
 **Depends on:** R1  
 **Primary requirements:** `PRD-INGEST-009`, `PRD-MEDIA-001`, `PRD-MEDIA-006`,
 `PRD-STREAM-002`, `PRD-OBS-001`, `PRD-OBS-002`, `PRD-PERF-003`, `PRD-PERF-004`,
@@ -586,7 +635,8 @@ fault fixtures.
 
 ## 8. R3 — Official Phase 11 migration tooling
 
-**Status:** Complete (2026-08-17; ADR-0148 accepted; evidence: `design/evidence/r3/README.md`)  
+**Status:** Complete (2026-08-17; 8/8 tooling work packages; ADR-0148 accepted; evidence:
+`design/evidence/r3/README.md`). This completes the R3 tooling slice, not official Phase 11. \
 **Depends on:** R2  
 **Official roadmap phase:** Phase 11, migration/dual-run/cutover tooling portion  
 **Primary requirements:** `PRD-MIG-001`, `PRD-MIG-002`, `PRD-MIG-003`, `PRD-MIG-004`,
@@ -752,7 +802,10 @@ and rollback. Once accepted, coding agents implement it literally.
 
 ## 9. R4 — Production rehearsal, dual run, cutover, and rollback
 
-**Status:** In progress (isolated rehearsal and local rollback evidence landed; external production acceptance remains)
+**Status:** In progress — 0/8 work packages fully complete (six have partial local evidence;
+R4.5 and R4.6 have no qualifying current acceptance evidence). Isolated rehearsal and local
+rollback evidence landed; external production acceptance remains. Evidence:
+`design/evidence/r4/README.md`. \
 **Depends on:** R3  
 **Official roadmap phase:** Phase 11, rehearsal and cutover portion  
 **Primary gates:** A, C, D, E, F, H
@@ -883,7 +936,9 @@ the unclassified entries remain open and are not an approved waiver.
 
 ## 10. R5 — Release-candidate hardening and complete gate
 
-**Status:** Not started (local preparatory evidence recorded; formal entry waits for R4 exit) — evidence: `design/evidence/r5/README.md`
+**Status:** Not started formally — 0/6 work packages fully complete. R5.1–R5.3 and R5.5 have
+partial local preparation; R5.4 and R5.6 are not started. Formal entry waits for R4 exit.
+Evidence: `design/evidence/r5/README.md`. \
 **Depends on:** R4  
 **Primary authority:** PRD Release Gates A–I, Definition of Done, ADR-0144
 
@@ -989,7 +1044,7 @@ requirements, repeatable official artifacts, and complete operational evidence.
 
 ## 11. R6 — Code-complete documentation, versioning, and 1.0 publication
 
-**Status:** Not started  
+**Status:** Not started — 0/5 work packages complete \
 **Depends on:** R5  
 **Primary authority:** ADR-0144, repository release process
 

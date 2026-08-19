@@ -22,6 +22,11 @@
 [design/evidence/phase-9/PHASE-9-REPORT.md](design/evidence/phase-9/PHASE-9-REPORT.md);
 **Phase 10 complete (2026-08-15)**, see
 [design/evidence/phase-10/PHASE-10-REPORT.md](design/evidence/phase-10/PHASE-10-REPORT.md).
+**Phase 11 is not complete:** repeatable migration tooling and isolated synthetic rehearsal
+evidence have landed, but production-snapshot rehearsal, unresolved differential classification,
+current physical-client and provider acceptance, final cutover/rollback, and release gates remain
+open. The current completion ledger is
+[`IMPLMENTATION_OUTSTANDING.md`](IMPLMENTATION_OUTSTANDING.md).
 **Date:** 2026-08-07  
 **Governing documents:** [PRD.md](PRD.md), [SPEC.md](SPEC.md), accepted ADRs
 

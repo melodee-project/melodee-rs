@@ -1,6 +1,6 @@
 # R2 — Mandatory Runtime Implementation Gaps
 
-Date: 2026-08-16. Status: In progress. Depends on: R1 (`2c54be5`). Scope per
+Date: 2026-08-17. Status: Complete. Depends on: R1 (`2c54be5`). Scope per
 `IMPLMENTATION_OUTSTANDING.md` §7: R2.1 media-format matrix, R2.2 CUE/sidecar, R2.3 configured
 transcoding, R2.4 bounded resource classes, R2.5 observability/health, R2.6 scheduled/provider
 behavior, R2.7 performance/fault evidence — plus the five bounded-input fixes assigned to R2 by
@@ -503,8 +503,8 @@ Documentation impact:
 PRD-OBS-002 health surface (including the fpcalc fingerprinting-tool probe that was missing
 from the media-tools preflight), the extended subsystem status vocabulary, operator retry via
 Admin UI and CLI, and staging-handoff provenance through the existing durable event history
-are all implemented and gated below. R2 overall remains in progress (R2.6 scheduled/provider
-work, R2.7 performance/fault evidence, R2.9 exit criteria).
+are all implemented and gated below. At this intermediate increment R2.6 and R2.7 remained; both
+are complete in the later sections of this report, so R2 overall is now Complete.
 
 Scope per `IMPLMENTATION_OUTSTANDING.md` §7.6. Design assumptions recorded before
 implementation; each is constrained by frozen external contracts and the existing Phase-10
