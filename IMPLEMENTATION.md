@@ -459,6 +459,11 @@ Build the Carbon operator/curation SPA using the canonical screens.
 
 ## 14. Phase 11 — Migration, dual run, and cutover
 
+**Status:** Not complete. The repeatable tooling and isolated rehearsal evidence are tracked in
+the release-closure plan's R3 and R4 work packages; production-sized rehearsal, differential
+classification, client/provider acceptance, cutover, and rollback remain open. See
+[`IMPLMENTATION_OUTSTANDING.md`](IMPLMENTATION_OUTSTANDING.md) for the current closure ledger.
+
 ### Objective
 
 Move the current production installation safely with rollback.

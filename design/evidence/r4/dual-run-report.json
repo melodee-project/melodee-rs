@@ -192,6 +192,11 @@
       "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
     },
     {
+      "scenario": "catalog-playlist-crud/import-empty",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
       "scenario": "catalog-playlist-crud/list-playlists",
       "field": "response.headers",
       "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
@@ -218,6 +223,11 @@
     },
     {
       "scenario": "catalog-playlist-crud/update-playlist",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "catalog-playlist-crud/upload-image-empty",
       "field": "response.headers",
       "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
     },
@@ -952,6 +962,11 @@
       "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
     },
     {
+      "scenario": "native-discovery/themes-file",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
       "scenario": "native-discovery/themes-list",
       "field": "response.headers",
       "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
@@ -1309,92 +1324,10 @@
   ],
   "unexpected": [
     {
-      "scenario": "catalog-images/image-album-large",
-      "field": "response.headers",
-      "expected": {
-        "content-length": "785",
-        "content-type": "image/jpeg"
-      },
-      "actual": {
-        "content-type": "image/jpeg",
-        "content-length": "785",
-        "cache-control": "public, max-age=86400"
-      }
-    },
-    {
-      "scenario": "catalog-images/image-artist-thumb",
-      "field": "response.headers",
-      "expected": {
-        "content-length": "784",
-        "content-type": "image/jpeg"
-      },
-      "actual": {
-        "content-type": "image/jpeg",
-        "content-length": "784",
-        "cache-control": "public, max-age=86400"
-      }
-    },
-    {
-      "scenario": "catalog-images/image-playlist-thumb",
-      "field": "response.headers",
-      "expected": {
-        "content-length": "41624",
-        "content-type": "image/gif"
-      },
-      "actual": {
-        "content-type": "image/gif",
-        "content-length": "41624",
-        "cache-control": "public, max-age=86400"
-      }
-    },
-    {
-      "scenario": "catalog-images/image-song-thumb",
-      "field": "response.headers",
-      "expected": {
-        "content-length": "785",
-        "content-type": "image/jpeg"
-      },
-      "actual": {
-        "content-type": "image/jpeg",
-        "content-length": "785",
-        "cache-control": "public, max-age=86400"
-      }
-    },
-    {
-      "scenario": "catalog-images/image-user-thumb",
-      "field": "response.headers",
-      "expected": {
-        "content-length": "2271384",
-        "content-type": "image/jpeg"
-      },
-      "actual": {
-        "content-type": "image/jpeg",
-        "content-length": "2271384",
-        "cache-control": "public, max-age=86400"
-      }
-    },
-    {
       "scenario": "catalog-playlist-crud/create-playlist",
       "field": "response.body$.description",
       "expected": "\"\"",
       "actual": "\"synthetic CRUD probe\""
-    },
-    {
-      "scenario": "catalog-playlist-crud/import-empty",
-      "field": "response.headers",
-      "expected": {
-        "content-type": "application/problem+json; charset=utf-8"
-      },
-      "actual": {
-        "content-type": "text/plain; charset=utf-8",
-        "content-length": "52"
-      }
-    },
-    {
-      "scenario": "catalog-playlist-crud/import-empty",
-      "field": "response.body",
-      "expected": "240 bytes sha256=aa64a2ce844466f38eee49dc02d1a2b7885d32150d799dd96b5b94cd5fa38a54",
-      "actual": "52 bytes sha256=8e8697689744b3ffe3dcfde199f98756a37ef1540bfcc1290e996f1494067f02"
     },
     {
       "scenario": "catalog-playlist-crud/list-playlists",
@@ -1413,23 +1346,6 @@
       "field": "response.body$.description",
       "expected": "\"\"",
       "actual": "\"updated\""
-    },
-    {
-      "scenario": "catalog-playlist-crud/upload-image-empty",
-      "field": "response.headers",
-      "expected": {
-        "content-type": "application/problem+json; charset=utf-8"
-      },
-      "actual": {
-        "content-type": "text/plain; charset=utf-8",
-        "content-length": "52"
-      }
-    },
-    {
-      "scenario": "catalog-playlist-crud/upload-image-empty",
-      "field": "response.body",
-      "expected": "240 bytes sha256=aa64a2ce844466f38eee49dc02d1a2b7885d32150d799dd96b5b94cd5fa38a54",
-      "actual": "52 bytes sha256=8e8697689744b3ffe3dcfde199f98756a37ef1540bfcc1290e996f1494067f02"
     },
     {
       "scenario": "catalog-star-rating/album-detail-after-rating",
@@ -2284,12 +2200,6 @@
       "actual": "0"
     },
     {
-      "scenario": "native-discovery/backend-heartbeat",
-      "field": "response.body$.message",
-      "expected": "\"Session or endpoint not found not found\"",
-      "actual": "\"Resource not found\""
-    },
-    {
       "scenario": "native-discovery/backend-register",
       "field": "response.status",
       "expected": 500,
@@ -2311,60 +2221,6 @@
       "field": "response.body",
       "expected": "27 bytes sha256=d7704ae97a620c3d3792bd66f5c2fb1cb9851d8af9e7d0d30cc066fb8333fdc0",
       "actual": "100 bytes sha256=d981647844801a43d6982619d5caa576fb40d052b0746dce9cef725e1c3e96d3"
-    },
-    {
-      "scenario": "native-discovery/themes-file",
-      "field": "response.headers",
-      "expected": {
-        "content-type": "application/problem+json; charset=utf-8",
-        "cache-control": "public,max-age=31536000"
-      },
-      "actual": {
-        "content-type": "application/json; charset=utf-8",
-        "content-length": "106"
-      }
-    },
-    {
-      "scenario": "native-discovery/themes-file",
-      "field": "response.body$.status",
-      "expected": "404",
-      "actual": "\"<omitted>\""
-    },
-    {
-      "scenario": "native-discovery/themes-file",
-      "field": "response.body$.title",
-      "expected": "\"Not Found\"",
-      "actual": "\"<omitted>\""
-    },
-    {
-      "scenario": "native-discovery/themes-file",
-      "field": "response.body$.traceId",
-      "expected": "\"00-e64223d7c6697f940580eec09c746371-f30ef26a73799328-00\"",
-      "actual": "\"<omitted>\""
-    },
-    {
-      "scenario": "native-discovery/themes-file",
-      "field": "response.body$.type",
-      "expected": "\"https://tools.ietf.org/html/rfc9110#section-15.5.5\"",
-      "actual": "\"<omitted>\""
-    },
-    {
-      "scenario": "native-discovery/themes-file",
-      "field": "response.body$.code",
-      "expected": "\"<omitted>\"",
-      "actual": "\"NOT_FOUND\""
-    },
-    {
-      "scenario": "native-discovery/themes-file",
-      "field": "response.body$.correlationId",
-      "expected": "\"<omitted>\"",
-      "actual": "\"<volatile>\""
-    },
-    {
-      "scenario": "native-discovery/themes-file",
-      "field": "response.body$.message",
-      "expected": "\"<omitted>\"",
-      "actual": "\"Resource not found\""
     },
     {
       "scenario": "podcasts-surface/discover-trending",
@@ -2424,7 +2280,7 @@
       "scenario": "podcasts-surface/opml-export",
       "field": "response.body",
       "expected": "309 bytes sha256=4bf0ebe6dc81c3d9e9be5055d4a9556235d23ff754608ca1cfb96c873c10cc77",
-      "actual": "311 bytes sha256=6f5495949944df1b232bcc630882afd1b7ebf9fae5aa47923d280dab77da752d"
+      "actual": "311 bytes sha256=68ee6cdab3f6598713d2df26ab753938fc35d868a8e3c45f3eef5799ca82b1d5"
     },
     {
       "scenario": "stream/album-songs-for-stream-url",
@@ -2439,12 +2295,6 @@
       "actual": "0"
     },
     {
-      "scenario": "stream/get-unknown-user",
-      "field": "response.body$.message",
-      "expected": "\"Authorization token is invalid\"",
-      "actual": "\"Invalid Auth Token\""
-    },
-    {
       "scenario": "native-user-extra/admin-users",
       "field": "response.body$[0].createdAt",
       "expected": "\"2026-08-09T19:53:33.5438340Z\"",
@@ -2454,7 +2304,7 @@
       "scenario": "native-user-extra/admin-users",
       "field": "response.body$[0].lastLoginAt",
       "expected": "\"2026-08-12T13:30:01.4578900Z\"",
-      "actual": "\"2026-08-18T22:05:00.273459Z\""
+      "actual": "\"2026-08-18T23:31:44.987717Z\""
     },
     {
       "scenario": "native-user-extra/genre-hate",
@@ -2477,7 +2327,7 @@
       "scenario": "native-user-extra/genre-hate",
       "field": "response.body",
       "expected": "0 bytes sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "actual": "120 bytes sha256=fdbcb38b61c945ce64c10bb17b14e5f3ec9bfdfeaccb8bce758b4d89567f352f"
+      "actual": "120 bytes sha256=d1611da8cd378d34d0cc6522ae5ebd37def8f55062a2f1a5f0158a8f1be13fd6"
     },
     {
       "scenario": "native-user-extra/genre-songs",
@@ -2519,7 +2369,7 @@
       "scenario": "native-user-extra/genre-songs",
       "field": "response.body$.correlationId",
       "expected": "\"<omitted>\"",
-      "actual": "\"01a016e8-084e-74d2-a321-9f3516977659\""
+      "actual": "\"01a01737-7306-73d0-b586-745e36e99094\""
     },
     {
       "scenario": "native-user-extra/genre-songs",
@@ -2548,7 +2398,7 @@
       "scenario": "native-user-extra/genre-star",
       "field": "response.body",
       "expected": "0 bytes sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "actual": "120 bytes sha256=0faf166447b9b50d2db9feb826c979e113bead90c9ef2b193d0c8f8371c617d6"
+      "actual": "120 bytes sha256=8b7f5a716200d2b98999824b53055d0bc29de0fbe5e33708e79dfba0ca4dbea4"
     },
     {
       "scenario": "native-user-extra/genres-hated",

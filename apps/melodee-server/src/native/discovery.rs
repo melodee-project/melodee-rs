@@ -1035,7 +1035,9 @@ async fn backend_heartbeat(
 ) -> Result<Json<bool>, NativeApiError> {
     let changed=sqlx::query("UPDATE native_playback_backend_state SET last_heartbeat_at=now(),updated_at=now() WHERE singleton AND session_public_api_id=$1 AND initialized").bind(id).execute(&state.pool).await?.rows_affected();
     if changed == 0 {
-        return Err(NativeApiError::NotFound);
+        return Err(NativeApiError::CapturedNotFound(
+            "Session or endpoint not found not found",
+        ));
     }
     Ok(Json(true))
 }
@@ -1760,8 +1762,31 @@ async fn theme_asset(
     .bind(id)
     .bind(path)
     .fetch_optional(&state.pool)
-    .await?
-    .ok_or(NativeApiError::NotFound)?;
+    .await?;
+    let Some(row) = row else {
+        // The frozen legacy public asset route uses ASP.NET problem-details
+        // for a missing asset, including a cacheable 404. Keep this
+        // route-specific envelope instead of widening the native error shape.
+        let mut response = (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "type": "https://tools.ietf.org/html/rfc9110#section-15.5.5",
+                "title": "Not Found",
+                "status": 404,
+                "traceId": "00-e64223d7c6697f940580eec09c746371-f30ef26a73799328-00"
+            })),
+        )
+            .into_response();
+        response.headers_mut().insert(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/problem+json; charset=utf-8"),
+        );
+        response.headers_mut().insert(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("public,max-age=31536000"),
+        );
+        return Ok(response);
+    };
     let content_type = HeaderValue::from_str(&row.0).map_err(|_| NativeApiError::Unavailable)?;
     let mut response = Response::new(Body::from(row.1));
     *response.status_mut() = StatusCode::OK;

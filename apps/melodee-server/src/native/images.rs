@@ -617,7 +617,7 @@ fn byte_response(
             .headers_mut()
             .insert(header::CONTENT_LENGTH, length);
     }
-    insert_cache_headers(response.headers_mut(), &etag);
+    insert_image_headers(response.headers_mut(), &etag);
     response
 }
 
@@ -649,18 +649,14 @@ fn not_modified(headers: &HeaderMap, etag: &str) -> bool {
 fn not_modified_response(etag: &str) -> Response<Body> {
     let mut response = Response::new(Body::empty());
     *response.status_mut() = StatusCode::NOT_MODIFIED;
-    insert_cache_headers(response.headers_mut(), etag);
+    insert_image_headers(response.headers_mut(), etag);
     response
 }
 
-fn insert_cache_headers(headers: &mut HeaderMap, etag: &str) {
+fn insert_image_headers(headers: &mut HeaderMap, etag: &str) {
     if let Ok(value) = HeaderValue::from_str(etag) {
         headers.insert(header::ETAG, value);
     }
-    headers.insert(
-        header::CACHE_CONTROL,
-        HeaderValue::from_static("public, max-age=86400"),
-    );
     headers.insert(
         header::X_CONTENT_TYPE_OPTIONS,
         HeaderValue::from_static("nosniff"),

@@ -808,6 +808,12 @@ moved.
 - Do not share wire DTOs or change contracts merely to make a comparator easier.
 - Store differential summaries and approved exceptions as release evidence.
 
+The current local replay and residual-cluster ledger are recorded in
+[`design/evidence/r4/README.md`](design/evidence/r4/README.md) and
+[`design/evidence/r4/dual-run-report.json`](design/evidence/r4/dual-run-report.json). The
+ledger currently records 261 classified and 185 unclassified native comparator differences;
+the unclassified entries remain open and are not an approved waiver.
+
 ### 9.6 Work package R4.5 — Real-client acceptance
 
 - Run the current Android application on a physical phone through login, token refresh, browse,

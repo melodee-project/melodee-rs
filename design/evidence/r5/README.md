@@ -40,7 +40,7 @@ cd docs && pnpm install --frozen-lockfile && pnpm check && pnpm check:links && p
 ```
 
 The focused migration/freeze suite passed 14/14 tests. The full gate passed repository and
-requirements validation, 140 Python tests, Admin UI typecheck/lint/i18n/unit/build (248 unit
+requirements validation, 143 Python tests, Admin UI typecheck/lint/i18n/unit/build (248 unit
 tests), workspace formatting, Clippy, the complete workspace test suite including PostgreSQL
 integration, and dependency checks. The Admin UI lint reported two existing non-fatal Fast Refresh
 warnings; it reported zero errors. `cargo deny check` reported advisories, bans, licenses, and
@@ -184,9 +184,10 @@ or bypassed as part of this work. The local 12,000-Track R4 rehearsal now has tw
 zero verification gaps, zero duplicate public IDs, matching catalog counts, successful restore,
 freeze/delta, rollback retention, and unchanged canonical media; this is still synthetic
 production-shaped evidence, not the required real-library rehearsal. The current native
-differential replay is documented in the R4 report with 258 classified and 204 unclassified
-differences; the replay closed the captured native search-suggest, login-version, and
-cookie-cache mismatches, while the remaining
+differential replay is documented in the R4 report with 261 classified and 185 unclassified
+differences; the replay closed the captured native search-suggest, login-version, cookie-cache,
+missing-chart-message, missing-theme-asset-envelope, empty-upload-validation, heartbeat-message,
+unknown-stream-user-message, and native-image-cache-header mismatches, while the remaining
 unclassified set still requires external compatibility classification or implementation fixes and
 is not silently waived. The earlier OpenSubsonic replay recorded 389 differences. Proposed
 ADR-0150 records the remaining legacy media metadata boundary.

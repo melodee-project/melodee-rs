@@ -7,7 +7,7 @@ use std::{
 
 use axum::{
     Json, Router,
-    extract::{DefaultBodyLimit, Multipart, Path, Query, State},
+    extract::{DefaultBodyLimit, Multipart, Path, Query, State, multipart::MultipartRejection},
     http::{HeaderValue, StatusCode, header::LOCATION},
     response::IntoResponse,
     routing::{get, post, put},
@@ -440,9 +440,10 @@ pub async fn upload_playlist_image(
     State(state): State<NativeState>,
     Authenticated(principal, _binding): Authenticated,
     Path(id): Path<Uuid>,
-    multipart: Multipart,
+    multipart: Result<Multipart, MultipartRejection>,
 ) -> Result<StatusCode, NativeApiError> {
     require_playlist_owner(&state, principal.user_id, id).await?;
+    let multipart = multipart.map_err(|_| NativeApiError::CapturedMissingFile)?;
     let upload = read_file_part(multipart, MAX_IMAGE_BYTES).await?;
     let mime = image_mime_from_magic(&upload.bytes).ok_or(NativeApiError::BadRequest)?;
     let bytes = validate_uploaded_image(upload.bytes)
@@ -483,8 +484,9 @@ pub async fn import_playlist(
     State(state): State<NativeState>,
     Authenticated(principal, _binding): Authenticated,
     Query(params): Query<ImportParams>,
-    multipart: Multipart,
+    multipart: Result<Multipart, MultipartRejection>,
 ) -> Result<Json<PlaylistImportResult>, NativeApiError> {
+    let multipart = multipart.map_err(|_| NativeApiError::CapturedMissingFile)?;
     let upload = read_file_part(multipart, MAX_M3U_BYTES).await?;
     let extension_ok = upload.file_name.as_ref().is_some_and(|name| {
         let lower = name.to_ascii_lowercase();

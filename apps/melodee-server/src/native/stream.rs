@@ -190,7 +190,7 @@ async fn stream_inner(
         .await
         .map_err(|_| StreamRouteError::Unavailable)?
         .filter(melodee_persistence::StreamPrincipal::is_authorized)
-        .ok_or(StreamRouteError::Unauthorized)?;
+        .ok_or(StreamRouteError::UnknownUser)?;
     StreamTokenCodec
         .validate(
             principal.stream_signing_key.expose_secret(),
@@ -277,6 +277,7 @@ async fn resolve_playable_asset(
 #[derive(Debug)]
 enum StreamRouteError {
     Unauthorized,
+    UnknownUser,
     UnableToLoad,
     Unavailable,
 }
@@ -305,6 +306,11 @@ impl IntoResponse for StreamRouteError {
                 StatusCode::UNAUTHORIZED,
                 "UNAUTHORIZED",
                 "Invalid Auth Token",
+            ),
+            Self::UnknownUser => (
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHORIZED",
+                "Authorization token is invalid",
             ),
             Self::UnableToLoad => (
                 StatusCode::BAD_REQUEST,

@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use axum::{
     body::Body,
-    http::{Method, Request, StatusCode, header::CONTENT_TYPE},
+    http::{HeaderValue, Method, Request, StatusCode, header::CONTENT_TYPE},
 };
 use catalog_common::CatalogFixturePresentation;
 use http_body_util::BodyExt;
@@ -527,6 +527,57 @@ async fn playlist_import_and_image_routes_are_bounded_and_content_safe() {
             .expect("created playlist ID"),
     )
     .expect("UUID");
+
+    for uri in [
+        format!("/api/v1/playlists/{playlist_id}/image"),
+        "/api/v1/playlists/import".to_string(),
+    ] {
+        let response = melodee_server::native::router()
+            .with_state(state.clone())
+            .oneshot({
+                let mut request = Request::builder()
+                    .method(Method::POST)
+                    .uri(uri)
+                    .body(Body::empty())
+                    .expect("empty multipart request");
+                request.extensions_mut().insert(principal(&owner));
+                request
+                    .extensions_mut()
+                    .insert(NativeClientBinding("127.0.0.1".to_owned()));
+                request
+            })
+            .await
+            .expect("empty multipart response");
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            response.headers().get(CONTENT_TYPE),
+            Some(&HeaderValue::from_static(
+                "application/problem+json; charset=utf-8"
+            ))
+        );
+        let body = response
+            .into_body()
+            .collect()
+            .await
+            .expect("empty multipart body")
+            .to_bytes();
+        let body: serde_json::Value = serde_json::from_slice(&body).expect("validation body");
+        assert_eq!(
+            body["type"],
+            "https://tools.ietf.org/html/rfc9110#section-15.5.1"
+        );
+        assert_eq!(body["title"], "One or more validation errors occurred.");
+        assert_eq!(body["status"], 400);
+        assert_eq!(
+            body["errors"]["file"],
+            serde_json::json!(["The file field is required."])
+        );
+        assert!(
+            body["traceId"]
+                .as_str()
+                .is_some_and(|value| value.starts_with("00-"))
+        );
+    }
 
     let boundary = "playlist-image-test";
     let svg = multipart_body(boundary, "cover.png", b"<svg onload=alert(1)>");

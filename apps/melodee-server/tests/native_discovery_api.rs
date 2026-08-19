@@ -13,7 +13,7 @@ use std::{io::Write, net::SocketAddr, sync::Arc};
 
 use axum::{
     body::Body,
-    http::{Request, StatusCode},
+    http::{HeaderValue, Request, StatusCode, header},
 };
 use catalog_common::CatalogFixturePresentation;
 use http_body_util::BodyExt;
@@ -90,6 +90,32 @@ async fn request_with_content_type(
         .to_bytes()
         .to_vec();
     (status, bytes)
+}
+
+async fn response(
+    state: NativeState,
+    principal: Option<NativePrincipal>,
+    method: &str,
+    path: &str,
+    body: Body,
+) -> axum::response::Response {
+    let mut request = Request::builder()
+        .method(method)
+        .uri(path)
+        .header("content-type", "application/json")
+        .body(body)
+        .expect("request");
+    if let Some(principal) = principal {
+        request.extensions_mut().insert(principal);
+        request
+            .extensions_mut()
+            .insert(NativeClientBinding("127.0.0.1".to_owned()));
+    }
+    melodee_server::native::router()
+        .with_state(state)
+        .oneshot(request)
+        .await
+        .expect("response")
 }
 
 fn theme_zip() -> Vec<u8> {
@@ -552,6 +578,17 @@ async fn native_discovery_routes_use_durable_bounded_facts_and_preserve_wire_sha
     let first_endpoint: serde_json::Value = serde_json::from_slice(&first_endpoint).unwrap();
     let second_endpoint: serde_json::Value = serde_json::from_slice(&second_endpoint).unwrap();
     assert_eq!(first_endpoint["apiKey"], second_endpoint["apiKey"]);
+    let (status, bytes) = request(
+        state.clone(),
+        Some(principal),
+        "POST",
+        &format!("/api/v1/playback-backend/heartbeat/{}", Uuid::nil()),
+        Body::empty(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let error: serde_json::Value = serde_json::from_slice(&bytes).expect("missing heartbeat");
+    assert_eq!(error["message"], "Session or endpoint not found not found");
     let (status, _) = request(
         state.clone(),
         Some(principal),
@@ -643,6 +680,41 @@ async fn native_discovery_routes_use_durable_bounded_facts_and_preserve_wire_sha
     )
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+
+    let missing_theme = response(
+        state.clone(),
+        None,
+        "GET",
+        "/api/v1/themes/phase7-missing/file/theme.css",
+        Body::empty(),
+    )
+    .await;
+    assert_eq!(missing_theme.status(), StatusCode::NOT_FOUND);
+    assert_eq!(
+        missing_theme.headers().get(header::CONTENT_TYPE),
+        Some(&HeaderValue::from_static(
+            "application/problem+json; charset=utf-8"
+        ))
+    );
+    assert_eq!(
+        missing_theme.headers().get(header::CACHE_CONTROL),
+        Some(&HeaderValue::from_static("public,max-age=31536000"))
+    );
+    let missing_theme_body = missing_theme
+        .into_body()
+        .collect()
+        .await
+        .expect("missing theme body")
+        .to_bytes();
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&missing_theme_body).expect("problem body"),
+        serde_json::json!({
+            "type": "https://tools.ietf.org/html/rfc9110#section-15.5.5",
+            "title": "Not Found",
+            "status": 404,
+            "traceId": "00-e64223d7c6697f940580eec09c746371-f30ef26a73799328-00"
+        })
+    );
 
     sqlx::query("DELETE FROM native_track_audio_features WHERE track_id=$1")
         .bind(track_id)

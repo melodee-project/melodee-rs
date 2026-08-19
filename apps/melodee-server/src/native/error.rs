@@ -1,6 +1,10 @@
 //! Native-v1 error and authentication rejection shapes.
 
-use axum::{Json, http::StatusCode, response::IntoResponse};
+use axum::{
+    Json,
+    http::{HeaderValue, StatusCode, header::CONTENT_TYPE},
+    response::IntoResponse,
+};
 use serde::Serialize;
 use uuid::Uuid;
 
@@ -18,6 +22,8 @@ pub enum NativeApiError {
     BadRequest,
     #[error("bad request: {0}")]
     CapturedBadRequest(&'static str),
+    #[error("captured multipart validation failure")]
+    CapturedMissingFile,
     #[error("resource not found")]
     NotFound,
     #[error("resource not found: {0}")]
@@ -41,6 +47,11 @@ impl NativeApiError {
         match self {
             Self::BadRequest => (StatusCode::BAD_REQUEST, "BAD_REQUEST", "Invalid request"),
             Self::CapturedBadRequest(message) => (StatusCode::BAD_REQUEST, "BAD_REQUEST", message),
+            Self::CapturedMissingFile => (
+                StatusCode::BAD_REQUEST,
+                "BAD_REQUEST",
+                "One or more validation errors occurred.",
+            ),
             Self::NotFound => (StatusCode::NOT_FOUND, "NOT_FOUND", "Resource not found"),
             Self::CapturedNotFound(message) => (StatusCode::NOT_FOUND, "NOT_FOUND", message),
             Self::CapturedInternal(message) => {
@@ -76,6 +87,28 @@ impl NativeApiError {
 
 impl IntoResponse for NativeApiError {
     fn into_response(self) -> axum::response::Response {
+        if matches!(self, Self::CapturedMissingFile) {
+            let trace_hex = crate::correlation::envelope_id().simple().to_string();
+            let trace_id = format!("00-{trace_hex}-{}-00", &trace_hex[..16]);
+            let mut response = (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "type": "https://tools.ietf.org/html/rfc9110#section-15.5.1",
+                    "title": "One or more validation errors occurred.",
+                    "status": 400,
+                    "errors": {
+                        "file": ["The file field is required."]
+                    },
+                    "traceId": trace_id
+                })),
+            )
+                .into_response();
+            response.headers_mut().insert(
+                CONTENT_TYPE,
+                HeaderValue::from_static("application/problem+json; charset=utf-8"),
+            );
+            return response;
+        }
         if matches!(
             self,
             Self::Database(_) | Self::Search(_) | Self::Unavailable | Self::CapturedInternal(_)

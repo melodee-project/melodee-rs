@@ -420,6 +420,10 @@ async fn native_catalog_browse_detail_and_search_preserve_public_ids_and_user_st
             Some(expected_type)
         );
         assert_eq!(bytes, expected_bytes, "frozen image bytes changed for {path}");
+        assert!(
+            headers.get(header::CACHE_CONTROL).is_none(),
+            "native-v1 image contract must not add Cache-Control for {path}"
+        );
         let etag = headers
             .get(header::ETAG)
             .and_then(|value| value.to_str().ok())
