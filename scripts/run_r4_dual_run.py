@@ -488,10 +488,17 @@ def main() -> None:
         print(f"  [known] {scenario}: {field} — {reason}")
     report_dir = ROOT / "design" / "evidence" / "r4"
     report_dir.mkdir(parents=True, exist_ok=True)
-    report_path = report_dir / "dual-run-report.json"
+    # Keep a surface-scoped invocation from replacing another product's
+    # authoritative evidence.  The no-filter invocation remains the aggregate
+    # report used by the release ledger.
+    report_name = "dual-run-report.json" if args.only is None else f"dual-run-report-{args.only}.json"
+    report_path = report_dir / report_name
     report_path.write_text(
         json.dumps(
             {
+                "artifact": "melodee.r4-dual-run",
+                "schema_version": 1,
+                "surface": args.only or "all",
                 "source": "migrated melodee_phase0 snapshot via melodee-cli legacy import",
                 "migration_run_observed": migrated_once,
                 "groups_replayed": sorted(replayed_groups),

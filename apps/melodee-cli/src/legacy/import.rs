@@ -33,7 +33,8 @@ pub async fn import_all(
         None => {
             let inventory = super::source::collect_inventory(source).await?;
             let identity = source.source_identity().await?;
-            runs::record_plan(target, &inventory, maps, &identity, false).await?
+            let marker = source.snapshot_marker().await?;
+            runs::record_plan(target, &inventory, maps, &identity, &marker, false).await?
         }
     };
     if !runs::claim_run(target, run_id, &owner).await? {

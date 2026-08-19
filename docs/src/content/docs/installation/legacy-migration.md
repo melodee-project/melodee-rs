@@ -1,6 +1,6 @@
 ---
 title: Legacy C# migration tooling
-description: Inventory, plan, import, verify, delta, and status commands for migrating a frozen C# Melodee database to the Rust server.
+description: Inventory, plan, baseline, import, verify, delta, freeze, and status commands for migrating a frozen C# Melodee database to the Rust server.
 sidebar:
   order: 6
 ---
@@ -49,8 +49,9 @@ re-hashing, or deleting it**. The migration is governed by the accepted migratio
    ```
 
 3. Grant the migration user `SELECT` on all tables. `pg_monitor` (or superuser) additionally
-   lets the tooling record the source system identifier; without it a host/port/database
-   identity is used instead.
+   lets the tooling read the PostgreSQL system identifier. If unavailable, the tooling uses
+   connection facts only as input to a redacted source-identity digest; it never emits the
+   host, port, database name, or connection URL.
 
 4. Initialize the Rust target database with the normal schema migrations
    (`melodee-cli migrate`) before planning.
@@ -83,6 +84,22 @@ melodee-cli legacy plan \
   --source-db postgres://user:pass@host/legacy_snapshot \
   --library-path-map /music=library
 ```
+
+The plan records the source snapshot marker. Capture the immutable baseline from that same
+snapshot before importing; the command fails closed if the marker has changed. The JSON artifact
+has schema version `1`, records only non-sensitive source identity/read-only facts, hashes
+non-secret setting values with SHA-256, and records secret setting keys only with `redacted: true`.
+It never prints the source connection URL or setting values:
+
+```bash
+melodee-cli legacy baseline \
+  --run <uuid> \
+  --source-db postgres://user:pass@host/legacy_snapshot \
+  --json > legacy-baseline.json
+```
+
+Keep `legacy-baseline.json` with the rehearsal evidence. Do not commit a production URL, password,
+private host name, canonical root, or raw configuration export.
 
 ### `legacy import`
 
@@ -162,6 +179,23 @@ time), and ownership. Omit `--run` to list recent runs.
 ```bash
 melodee-cli legacy status --run <uuid>
 ```
+
+### `legacy freeze`
+
+Runs the final delta and verification pass for a `delta-ready` run. It records the source marker
+and freeze duration but leaves the run in `delta-ready` unless the operator explicitly supplies
+`--acknowledge-cutover --note "..."`. A changing source marker aborts the pass; it never guesses
+which writes should be included.
+
+```bash
+melodee-cli legacy freeze --run <uuid> \
+  --source-db postgres://user:pass@host/legacy_snapshot \
+  --library-path-map /music=library \
+  --canonical-root /srv/melodee/canonical
+```
+
+The acknowledgement is an operator decision, not a scripted default. Keep the recorded note with
+the rehearsal report and perform traffic switching only through the approved deployment runbook.
 
 ## Inspect and resolve issues
 

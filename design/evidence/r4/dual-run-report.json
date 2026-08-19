@@ -2155,25 +2155,25 @@
       "scenario": "catalog/user-playlists-limit-param",
       "field": "response.body$.data[0].owner.createdAt",
       "expected": "\"2026-08-09T19:53:33Z\"",
-      "actual": "\"2026-08-12T14:18:53.908775Z\""
+      "actual": "\"2026-08-19T01:40:20.936384Z\""
     },
     {
       "scenario": "catalog/user-playlists-limit-param",
       "field": "response.body$.data[0].owner.updatedAt",
       "expected": "\"\"",
-      "actual": "\"2026-08-12T14:18:53.908775Z\""
+      "actual": "\"2026-08-19T01:40:20.936384Z\""
     },
     {
       "scenario": "catalog/user-playlists-limit-param",
       "field": "response.body$.data[1].owner.createdAt",
       "expected": "\"2026-08-09T19:53:33Z\"",
-      "actual": "\"2026-08-12T14:18:53.908775Z\""
+      "actual": "\"2026-08-19T01:40:20.936384Z\""
     },
     {
       "scenario": "catalog/user-playlists-limit-param",
       "field": "response.body$.data[1].owner.updatedAt",
       "expected": "\"\"",
-      "actual": "\"2026-08-12T14:18:53.908775Z\""
+      "actual": "\"2026-08-19T01:40:20.936384Z\""
     },
     {
       "scenario": "community-lifecycle/share-list",
@@ -2280,7 +2280,7 @@
       "scenario": "podcasts-surface/opml-export",
       "field": "response.body",
       "expected": "309 bytes sha256=4bf0ebe6dc81c3d9e9be5055d4a9556235d23ff754608ca1cfb96c873c10cc77",
-      "actual": "311 bytes sha256=68ee6cdab3f6598713d2df26ab753938fc35d868a8e3c45f3eef5799ca82b1d5"
+      "actual": "311 bytes sha256=308cba425f39b6c921b259b1038e9502733f4ddeb2c968fa244a08b60a49d5d0"
     },
     {
       "scenario": "stream/album-songs-for-stream-url",
@@ -2298,13 +2298,13 @@
       "scenario": "native-user-extra/admin-users",
       "field": "response.body$[0].createdAt",
       "expected": "\"2026-08-09T19:53:33.5438340Z\"",
-      "actual": "\"2026-08-12T14:18:53.908775Z\""
+      "actual": "\"2026-08-19T01:40:20.936384Z\""
     },
     {
       "scenario": "native-user-extra/admin-users",
       "field": "response.body$[0].lastLoginAt",
       "expected": "\"2026-08-12T13:30:01.4578900Z\"",
-      "actual": "\"2026-08-18T23:31:44.987717Z\""
+      "actual": "\"2026-08-19T12:05:37.812093Z\""
     },
     {
       "scenario": "native-user-extra/genre-hate",
@@ -2327,7 +2327,7 @@
       "scenario": "native-user-extra/genre-hate",
       "field": "response.body",
       "expected": "0 bytes sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "actual": "120 bytes sha256=d1611da8cd378d34d0cc6522ae5ebd37def8f55062a2f1a5f0158a8f1be13fd6"
+      "actual": "120 bytes sha256=580da34cb764a07ad2b30a90e72c9a33b040704d513ed816459aab2eb6a3e639"
     },
     {
       "scenario": "native-user-extra/genre-songs",
@@ -2369,7 +2369,7 @@
       "scenario": "native-user-extra/genre-songs",
       "field": "response.body$.correlationId",
       "expected": "\"<omitted>\"",
-      "actual": "\"01a01737-7306-73d0-b586-745e36e99094\""
+      "actual": "\"01a019e9-a5c6-7ea1-aef4-42905fe12ef4\""
     },
     {
       "scenario": "native-user-extra/genre-songs",
@@ -2398,7 +2398,7 @@
       "scenario": "native-user-extra/genre-star",
       "field": "response.body",
       "expected": "0 bytes sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "actual": "120 bytes sha256=8b7f5a716200d2b98999824b53055d0bc29de0fbe5e33708e79dfba0ca4dbea4"
+      "actual": "120 bytes sha256=ea612402f04f538f3a0908ce7964710f653446aba5acb394ecf57db0982759b9"
     },
     {
       "scenario": "native-user-extra/genres-hated",

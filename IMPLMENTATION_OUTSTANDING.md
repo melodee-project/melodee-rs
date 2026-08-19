@@ -3,7 +3,7 @@
 **Document status:** Active release-closure plan  
 **Baseline date:** 2026-08-16  
 **Baseline commit:** `a5ba0e88fdb7cb3a383d6a992f5b3738753440f7`  
-**Status audited:** 2026-08-18 through commit `a45619572372588dfb38b9b58ed99281802cb168` \
+**Status audited:** 2026-08-19 through the current working tree (release-closure changes uncommitted) \
 **Overall release status:** **Incomplete** — R0 through R3 are complete; R4 is in progress; R5
 and R6 have not formally started. \
 **Target:** Initial production release `1.0.0`
@@ -124,7 +124,7 @@ rewritten merely to remove phase-oriented language from current product document
 
 ### 3.2 Requirement status snapshot
 
-The generated requirement registry currently contains 239 requirements (audited 2026-08-18 after
+The generated requirement registry currently contains 239 requirements (audited 2026-08-19 after
 local R4/R5 preparatory closure work):
 
 | Status | Count |
@@ -136,9 +136,22 @@ local R4/R5 preparatory closure work):
 | Deferred | 7 |
 | Captured | 0 |
 
-This snapshot is a planning input, not release evidence. The local R4/R5 preparatory work
-terminalized the directly evidenced security rows and updated the migration/media evidence, but
-it did not claim external production, physical-client, scheduled-run, or release-owner evidence.
+The 45-package ledger was recalculated from the package rows and phase sections on 2026-08-19:
+
+| Package status | Count |
+|---|---:|
+| Complete | 26 |
+| Partial | 12 |
+| Not started | 7 |
+
+The added partial packages are R4.5 and R4.6: the current migrated-client checklist/launch paths
+and bounded read-only integration probe now exist, but no physical-client, production endpoint, or
+credential-backed acceptance has been run.
+
+This snapshot is a planning input, not release evidence. The current R4 local work adds the
+versioned baseline/marker, repeatable synthetic rehearsal measurements, bounded integration
+probes, and one focused share-order correction, but it does not claim external production,
+physical-client, scheduled-run, or release-owner evidence.
 R5 requires every requirement to be terminal:
 `tested`, `implemented` with an approved reason that testing is inapplicable, `deferred` under an
 accepted decision, or `superseded` by an identified requirement.
@@ -165,9 +178,9 @@ accepted decision, or `superseded` by an identified requirement.
 - ADR-0149 (rehearsal/freeze/cutover), ADR-0150 (legacy media metadata disposition), and ADR-0151
   (release-image runtime base) remain **Proposed**, not accepted. Their dependent release claims
   remain open.
-- The current migrated-snapshot differential has 185 unclassified native differences; the earlier
-  OpenSubsonic run recorded 389 unclassified differences, and no final migrated-snapshot Jellyfin
-  classification is recorded. These are release blockers, not approved waivers.
+- The current migrated-snapshot differential has 183 unclassified native differences, 389
+  unclassified OpenSubsonic differences, and 48 unclassified Jellyfin differences. All three
+  surface-scoped reports are committed; none is treated as a waiver. These are release blockers.
 - The release-image prototype is not a candidate: its exact image scan reported 8 critical and
   160 high findings, and the arm64 attempt timed out before producing an image. R5.2/R5.6 remain
   open.
@@ -195,7 +208,7 @@ flowchart LR
 | R1 — Requirement and security closure | Complete | R0 | Truthful terminal disposition plan and closed evidence-only gaps |
 | R2 — Mandatory runtime gaps | Complete | R1 | R2-scoped runtime code and local evidence complete; production-scale validation remains R4 work |
 | R3 — Official Phase 11 migration tooling | Complete | R2 | Repeatable legacy import and verification tooling; this does not complete official Phase 11 |
-| R4 — Production rehearsal, dual run, and cutover | In progress; 0/8 packages fully complete | R3 | Six packages have local partial evidence; external snapshot/client/provider/cutover acceptance remains |
+| R4 — Production rehearsal, dual run, and cutover | In progress; 0/8 packages fully complete | R3 | Eight packages have local partial preparation/evidence; external snapshot/client/provider/cutover acceptance remains |
 | R5 — Release-candidate hardening | Not started formally; 0/6 packages fully complete | R4 | Local preparation exists, but entry waits for R4 and release blockers remain |
 | R6 — 1.0 documentation and publication | Not started | R5 | Code-complete documentation, version, tag, images, and release |
 
@@ -217,12 +230,12 @@ phase to `In progress`.
 | R1.1–R1.4 | **Complete (4/4)** | Requirement/parity/security/residual reconciliation in `design/evidence/r1/README.md` |
 | R2.1–R2.7 plus R2 security follow-ups | **Complete (7/7)** | Runtime, media, provider, performance, and fault evidence in `design/evidence/r2/README.md` |
 | R3.1–R3.8 | **Complete (8/8)** | Accepted ADR-0148 and migration tooling evidence in `design/evidence/r3/README.md` |
-| R4.1 — Rehearsal environment/baseline | **Partial** | Synthetic isolated baseline exists; real production snapshot, topology, and backup baseline remain |
-| R4.2 — Production-sized migration rehearsal | **Partial** | Two repeatable 12,000-Track synthetic runs pass; the real approximately-5 TB snapshot and operational measurements remain |
-| R4.3 — Search rebuild/validation | **Partial** | Local migrated rebuild and interruption suites pass; real-catalog sizing, headroom, and operator validation remain |
-| R4.4 — Dual-run differential | **Partial** | Native replay ran, but 185 differences remain unclassified; OpenSubsonic has 389 unresolved differences; final Jellyfin/production-traffic classification remains |
-| R4.5 — Current real-client acceptance | **Not started** | Historical Phase 7/8 client evidence does not replace a migrated release-candidate Android/Auto, MeloAmp, OpenSubsonic, and Jellyfin run |
-| R4.6 — Production integrations | **Not started** | Production OIDC, Last.fm, SMTP, podcast, proxy/TLS, storage topology, and backup/restore evidence is absent |
+| R4.1 — Rehearsal environment/baseline | **Partial** | Versioned baseline schema, redaction, source marker v2 over all 52 frozen source tables, read-only facts, path validation, backup validator, and malformed-input tests pass locally; approved production snapshot, topology, and backup baseline remain |
+| R4.2 — Production-sized migration rehearsal | **Partial** | Two current repeatable 12,000-Track synthetic runs pass with counts/media/queue/disk/RSS/backup/freeze/rollback metrics; the real approximately-5 TB snapshot and operational measurements remain |
+| R4.3 — Search rebuild/validation | **Partial** | Local migrated rebuild, bounded query measurements, interruption/restart/lease/corruption tests, and CLI path pass; real-catalog sizing, headroom, and operator validation remain |
+| R4.4 — Dual-run differential | **Partial** | Current native/OpenSubsonic/Jellyfin replays record 183/389/48 unclassified differences in committed surface-scoped reports; a focused share-order correction and ADR-0150 decision package are recorded, while production-traffic classification remains |
+| R4.5 — Current real-client acceptance | **Partial** | Current migrated-client checklist, machine-readable matrix, and reproducible launch paths are recorded in `compatibility/clients/r4/`; historical Phase 7/8 client evidence still does not replace a migrated release-candidate Android/Auto, MeloAmp, OpenSubsonic, and Jellyfin run |
+| R4.6 — Production integrations | **Partial** | Read-only bounded probe and redaction tests cover health/range/OIDC discovery/podcast XML/SMTP STARTTLS/filesystem topology/backup integrity; production OIDC, Last.fm, SMTP delivery, podcast, proxy/TLS, storage, and restore evidence is absent |
 | R4.7 — Final delta/write-freeze rehearsal | **Partial** | Local synthetic delta/freeze runs pass; accepted ADR-0149 and operator-authorized production procedure/timing remain |
 | R4.8 — Backup/cutover/rollback rehearsal | **Partial** | Local target backup/restore and failed-target retention pass; production-equivalent traffic switch, restore, and operator rollback remain |
 | R5.1 — Data-loss threat-model review | **Partial preparation** | Local operation inventory is recorded; actual approximately-5 TB topology and restore-target review remain |
@@ -802,9 +815,9 @@ and rollback. Once accepted, coding agents implement it literally.
 
 ## 9. R4 — Production rehearsal, dual run, cutover, and rollback
 
-**Status:** In progress — 0/8 work packages fully complete (six have partial local evidence;
-R4.5 and R4.6 have no qualifying current acceptance evidence). Isolated rehearsal and local
-rollback evidence landed; external production acceptance remains. Evidence:
+**Status:** In progress — 0/8 work packages fully complete (seven have partial local evidence;
+R4.5 has no qualifying current acceptance evidence). Isolated rehearsal and local rollback
+evidence landed; external production acceptance remains. Evidence:
 `design/evidence/r4/README.md`. \
 **Depends on:** R3  
 **Official roadmap phase:** Phase 11, rehearsal and cutover portion  
@@ -862,10 +875,14 @@ moved.
 - Store differential summaries and approved exceptions as release evidence.
 
 The current local replay and residual-cluster ledger are recorded in
-[`design/evidence/r4/README.md`](design/evidence/r4/README.md) and
-[`design/evidence/r4/dual-run-report.json`](design/evidence/r4/dual-run-report.json). The
-ledger currently records 261 classified and 185 unclassified native comparator differences;
-the unclassified entries remain open and are not an approved waiver.
+[`design/evidence/r4/README.md`](design/evidence/r4/README.md) and the committed
+surface reports [`dual-run-report-native.json`](design/evidence/r4/dual-run-report-native.json),
+[`dual-run-report-opensubsonic.json`](design/evidence/r4/dual-run-report-opensubsonic.json),
+and [`dual-run-report-jellyfin.json`](design/evidence/r4/dual-run-report-jellyfin.json). The
+ledger currently records 261 classified and 183 unclassified native comparator differences;
+the focused migrated share-order correction is covered by the native community integration
+suite, and the ADR-0150 decision package records the metadata boundary without accepting it.
+The unclassified entries remain open and are not an approved waiver.
 
 ### 9.6 Work package R4.5 — Real-client acceptance
 
@@ -894,6 +911,10 @@ the unclassified entries remain open and are not an approved waiver.
   inbound/staging paths.
 - Exercise backup target, restore target, TLS termination, proxy headers, range streaming, and
   shutdown behavior in the deployment environment.
+
+The local read-only probe harness is `scripts/r4_integration_probe.py`; it validates the bounded
+probe configuration and exercises only explicitly supplied endpoints/paths. It is preparatory
+tooling, not production-integration acceptance.
 
 ### 9.8 Work package R4.7 — Final delta and write-freeze rehearsal
 

@@ -55,6 +55,11 @@ async fn baseline_records_immutable_snapshot_with_redacted_fingerprint() {
             .expect("run notes");
     let baseline = &notes["baseline"];
     assert_eq!(
+        baseline["artifact"].as_str(),
+        Some("melodee.legacy-baseline")
+    );
+    assert_eq!(baseline["schema_version"].as_i64(), Some(1));
+    assert_eq!(
         baseline["schema_fingerprint"].as_str(),
         Some("20260714155936_AddDeleteSourceResidueAfterIngestSetting")
     );
@@ -62,7 +67,7 @@ async fn baseline_records_immutable_snapshot_with_redacted_fingerprint() {
     assert!(
         baseline["snapshot_marker"]
             .as_str()
-            .is_some_and(|m| m.starts_with("rows:"))
+            .is_some_and(|m| m.starts_with("legacy-marker-v2:"))
     );
     // Redaction: the settings fingerprint is keys only — the seeded key is
     // present, and no value material appears anywhere in the baseline.
@@ -74,6 +79,48 @@ async fn baseline_records_immutable_snapshot_with_redacted_fingerprint() {
     assert!(
         !serialized.contains("true\","),
         "baseline must not carry setting values: {serialized}"
+    );
+    assert_eq!(baseline["source_read_only"]["transaction_read_only"], true);
+    assert_eq!(
+        baseline["configuration_fingerprint"]["algorithm"],
+        "sha256-v1"
+    );
+
+    drop_db(&source.name).await;
+    drop_db(&target.name).await;
+}
+
+#[tokio::test]
+async fn baseline_rejects_a_source_snapshot_that_drifted_after_plan() {
+    let source = create_source("baseline_drift", SEED_MIXED).await;
+    let target = create_target("baseline_drift").await;
+
+    let mut plan_args = vec!["plan".to_string(), "--json".to_string()];
+    plan_args.extend(source_args(&source.url));
+    plan_args.push("--library-path-map".to_string());
+    plan_args.push(map_arg());
+    let plan = run_legacy(&target.url, &plan_args);
+    let run_id: String =
+        serde_json::from_str::<serde_json::Value>(&plan).expect("plan JSON")["run_id"]
+            .as_str()
+            .expect("run id")
+            .to_string();
+
+    sqlx::query(
+        r#"UPDATE "Artists"
+           SET "LastUpdatedAt" = now() + interval '1 minute'
+           WHERE "Id" = 1"#,
+    )
+    .execute(&source.pool)
+    .await
+    .expect("drift source snapshot");
+
+    let mut baseline_args = vec!["baseline".to_string(), "--run".to_string(), run_id];
+    baseline_args.extend(source_args(&source.url));
+    let stderr = run_legacy_failing(&target.url, &baseline_args);
+    assert!(
+        stderr.contains("snapshot marker mismatch"),
+        "stderr: {stderr}"
     );
 
     drop_db(&source.name).await;

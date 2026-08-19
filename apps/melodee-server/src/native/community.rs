@@ -757,7 +757,9 @@ async fn list_shares(
         "SELECT public_api_id, share_unique_id, owner_user_id, share_type, resource_public_api_id, \
          description, is_downloadable, visit_count, expires_at, last_visited_at, created_at, \
          count(*) OVER() AS total_count FROM native_shares WHERE owner_user_id = $1 \
-         ORDER BY created_at DESC, public_api_id LIMIT $2 OFFSET $3",
+         -- The legacy share index is oldest-first; preserve that ordering so
+         -- a migrated pre-existing share stays ahead of a newly-created one.
+         ORDER BY created_at ASC, public_api_id LIMIT $2 OFFSET $3",
     )
     .bind(principal.user_id)
     .bind(i64::from(size))

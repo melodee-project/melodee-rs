@@ -4,7 +4,8 @@
 //! into the Rust model. The source database is opened strictly read-only, the
 //! run model is durable and fenced (`legacy_migration.runs`), resume is
 //! idempotent on `(run, domain, source_pk)`, and nothing unrepresentable is
-//! silently dropped (every anomaly is a durable issue row).
+//! silently dropped (every anomaly is a durable issue row). `baseline` and
+//! `freeze` provide the immutable-snapshot and cutover gates around the run.
 
 mod baseline;
 mod delta;
@@ -185,11 +186,27 @@ pub fn parse_library_path_maps(values: &[String]) -> Result<Vec<LibraryPathMap>,
         let (legacy, prefix) = value
             .split_once('=')
             .ok_or_else(|| format!("invalid --library-path-map {value:?}: expected A=B"))?;
+        if legacy.contains('\0') || prefix.contains('\0') {
+            return Err(format!(
+                "invalid --library-path-map {value:?}: NUL is not allowed"
+            ));
+        }
         let legacy = legacy.trim().trim_end_matches('/');
-        let prefix = prefix.trim().trim_matches('/');
+        let raw_prefix = prefix.trim();
+        if raw_prefix.starts_with('/') || raw_prefix.contains('\\') {
+            return Err(format!(
+                "invalid --library-path-map {value:?}: relative prefix must not be absolute or contain backslashes"
+            ));
+        }
+        let prefix = raw_prefix.trim_matches('/');
         if legacy.is_empty() || !legacy.starts_with('/') {
             return Err(format!(
                 "invalid --library-path-map {value:?}: legacy path must be absolute"
+            ));
+        }
+        if legacy.split('/').any(|component| component == "..") {
+            return Err(format!(
+                "invalid --library-path-map {value:?}: legacy path may not contain '..'"
             ));
         }
         // An empty prefix maps the legacy library root onto the canonical
@@ -202,6 +219,14 @@ pub fn parse_library_path_maps(values: &[String]) -> Result<Vec<LibraryPathMap>,
         {
             return Err(format!(
                 "invalid --library-path-map {value:?}: relative prefix has unsafe components"
+            ));
+        }
+        if maps
+            .iter()
+            .any(|map: &LibraryPathMap| map.legacy_path == legacy)
+        {
+            return Err(format!(
+                "invalid --library-path-map {value:?}: duplicate legacy root"
             ));
         }
         maps.push(LibraryPathMap {
@@ -229,8 +254,16 @@ pub async fn run(command: LegacyCommands, target: PgPool) -> Result<(), String> 
             let source = source::SourceDb::connect(args.source.source_db()).await?;
             let inventory = source::collect_inventory(&source).await?;
             let identity = source.source_identity().await?;
-            let run_id =
-                runs::record_plan(&target, &inventory, &maps, &identity, args.source.json).await?;
+            let marker = source.snapshot_marker().await?;
+            let run_id = runs::record_plan(
+                &target,
+                &inventory,
+                &maps,
+                &identity,
+                &marker,
+                args.source.json,
+            )
+            .await?;
             inventory.render_plan(&maps, run_id, args.source.json);
             Ok(())
         }
@@ -324,5 +357,42 @@ pub async fn run(command: LegacyCommands, target: PgPool) -> Result<(), String> 
 impl LegacySourceArgs {
     pub fn source_db(&self) -> &str {
         &self.source_db
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_library_path_maps;
+
+    #[test]
+    fn path_maps_reject_unsafe_or_ambiguous_configuration() {
+        for value in [
+            "relative=library",
+            "/music=../library",
+            "/music=/absolute",
+            "/music=library\\nested",
+            "/music/../other=library",
+            "/music=library\0suffix",
+        ] {
+            assert!(
+                parse_library_path_maps(&[value.to_string()]).is_err(),
+                "{value:?}"
+            );
+        }
+        assert!(
+            parse_library_path_maps(&["/music=library".to_string(), "/music=other".to_string(),])
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn path_maps_preserve_longest_root_matching_inputs() -> Result<(), String> {
+        let maps = parse_library_path_maps(&[
+            "/srv/music=library".to_string(),
+            "/srv/music/live=live".to_string(),
+        ])?;
+        assert_eq!(maps[0].legacy_path, "/srv/music");
+        assert_eq!(maps[1].relative_prefix, "live");
+        Ok(())
     }
 }

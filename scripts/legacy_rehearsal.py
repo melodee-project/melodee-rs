@@ -37,6 +37,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
 EVIDENCE_DIR = ROOT / "design" / "evidence" / "r4"
@@ -50,6 +51,64 @@ CLI = ROOT / "target" / "debug" / "melodee-cli"
 SOURCE_DB = "legacy_rehearsal_source"
 TARGET_DB = "legacy_rehearsal_target"
 RESTORE_DB = "legacy_rehearsal_restore"
+
+
+def validate_database_url(value: str) -> None:
+    """Reject malformed rehearsal connection configuration without echoing it."""
+    parsed = urlparse(value)
+    if parsed.scheme not in {"postgres", "postgresql"} or not parsed.hostname:
+        raise ValueError("database URL must be a postgres:// or postgresql:// URL with a host")
+    if not parsed.path or parsed.path == "/":
+        raise ValueError("database URL must name a database")
+
+
+def validate_drill_config(songs: int) -> None:
+    """Keep synthetic runs bounded and fail before creating any database."""
+    if songs < 1 or songs > 10_000_000:
+        raise ValueError("songs must be between 1 and 10000000")
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def validate_backup_artifact(path: Path) -> dict:
+    """Validate one pg_dump artifact before it is used for restore evidence."""
+    if not path.exists():
+        raise ValueError("backup artifact does not exist")
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("backup artifact must be a regular, non-symlink file")
+    size = path.stat().st_size
+    if size <= 0:
+        raise ValueError("backup artifact is empty")
+    listing = subprocess.run(
+        ["pg_restore", "--list", str(path)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if listing.returncode != 0 or not listing.stdout.strip():
+        raise ValueError("backup artifact failed pg_restore --list validation")
+    return {
+        "bytes": size,
+        "sha256": _sha256_file(path),
+        "toc_entries": sum(1 for line in listing.stdout.splitlines() if line.strip() and not line.startswith(";") ),
+    }
+
+
+def filesystem_metrics(path: Path) -> dict:
+    usage = shutil.disk_usage(path)
+    return {
+        "path_fingerprint": hashlib.sha256(str(path).encode()).hexdigest(),
+        "total_bytes": usage.total,
+        "used_bytes": usage.used,
+        "free_bytes": usage.free,
+        "headroom_ratio": round(usage.free / usage.total, 6) if usage.total else 0.0,
+    }
 
 
 def _process_memory_kib(pid: int) -> int:
@@ -170,6 +229,7 @@ cli_plain.last_metrics = {}
 
 def seed_source(songs: int) -> dict:
     """Creates the disposable legacy source at the requested shape."""
+    validate_drill_config(songs)
     artists = max(50, songs // 24)
     albums = max(100, songs // 12)
     create_db(SOURCE_DB)
@@ -271,19 +331,25 @@ def tree_fingerprint(root: Path) -> dict:
     total = 0
     for path in sorted(root.rglob("*")):
         if path.is_file() and not path.is_symlink():
-            digest = hashlib.blake2b(path.read_bytes(), digest_size=16).hexdigest()
+            digest = hashlib.blake2b(digest_size=16)
+            with path.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(chunk)
             size = path.stat().st_size
-            entries.append({"path": str(path.relative_to(root)), "size": size, "blake2b": digest})
+            entries.append({"path": str(path.relative_to(root)), "size": size, "blake2b": digest.hexdigest()})
             total += size
     return {"files": len(entries), "bytes": total, "entries": entries}
 
 
 def drill(songs: int) -> dict:
+    validate_database_url(DB_ADMIN_URL)
+    validate_drill_config(songs)
     evidence: dict = {
         "drill": "legacy_rehearsal",
         "songs_requested": songs,
         "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "steps": {},
+        "measurement_schema_version": 1,
     }
     workdir = Path(tempfile.mkdtemp(prefix="melodee-r4-rehearsal-"))
     canonical = make_canonical_root(workdir, songs)
@@ -301,6 +367,7 @@ def drill(songs: int) -> dict:
         create_db(TARGET_DB)
         cli_plain(TARGET_DB, ["migrate"])
         evidence["steps"]["create_target"] = {"wall_s": round(time.monotonic() - step, 2)}
+        evidence["steps"]["create_target"]["disk"] = filesystem_metrics(workdir)
 
         step = time.monotonic()
         out = cli(TARGET_DB, ["plan", "--source-db", db_url(SOURCE_DB), "--library-path-map",
@@ -340,6 +407,38 @@ def drill(songs: int) -> dict:
             "users": int(psql("SELECT COUNT(*) FROM native_users", TARGET_DB)),
         }
         evidence["target_counts"] = target_counts
+        evidence["migration_metrics"] = {
+            "database_counts": target_counts,
+            "media": {
+                "file_count": int(psql("SELECT COUNT(*) FROM media_assets", TARGET_DB)),
+                "bytes": int(psql("SELECT COALESCE(SUM(byte_size), 0) FROM media_assets", TARGET_DB)),
+            },
+            "issues": {
+                "total": int(psql("SELECT COUNT(*) FROM legacy_migration.issues", TARGET_DB)),
+                "errors": int(psql("SELECT COUNT(*) FROM legacy_migration.issues WHERE severity = 'error'", TARGET_DB)),
+                "warnings": int(psql("SELECT COUNT(*) FROM legacy_migration.issues WHERE severity = 'warning'", TARGET_DB)),
+            },
+            # The durable checkpoint schema records work totals, not attempt
+            # counters. Do not infer retries from those totals: a skipped row
+            # and a retry are different events. This drill injects no retry,
+            # so the explicit observed value is zero and the scope is clear.
+            "retries": {
+                "observed": 0,
+                "scope": "rehearsal command process",
+                "source": "no retry injection; checkpoint schema has no attempt counter",
+            },
+            "queue_age_seconds": float(psql(
+                "SELECT COALESCE(EXTRACT(EPOCH FROM (now() - MIN(created_at))), 0) "
+                "FROM legacy_migration.runs",
+                TARGET_DB,
+            ) or 0),
+            "failures": int(psql(
+                "SELECT COUNT(*) FROM legacy_migration.issues WHERE severity = 'error'",
+                TARGET_DB,
+            )),
+            "oldest_issue_age_seconds": float(psql("SELECT COALESCE(EXTRACT(EPOCH FROM (now() - MIN(created_at))), 0) FROM legacy_migration.issues", TARGET_DB) or 0),
+            "disk": filesystem_metrics(workdir),
+        }
         evidence["target_db_bytes"] = int(
             psql(f"SELECT pg_database_size('{TARGET_DB}')")
         )
@@ -407,6 +506,13 @@ def drill(songs: int) -> dict:
             "dump_bytes": dump_path.stat().st_size,
             "restored_tracks": restored_tracks,
             "restore_matches": restored_tracks == target_counts["tracks"],
+            "backup": validate_backup_artifact(dump_path),
+            "restored_counts": {
+                "artists": int(psql("SELECT COUNT(*) FROM artists", RESTORE_DB)),
+                "releases": int(psql("SELECT COUNT(*) FROM releases", RESTORE_DB)),
+                "tracks": restored_tracks,
+                "users": int(psql("SELECT COUNT(*) FROM native_users", RESTORE_DB)),
+            },
         }
         assert restored_tracks == target_counts["tracks"]
 
@@ -454,6 +560,9 @@ def drill(songs: int) -> dict:
                 psql(f"SELECT COUNT(*) FROM pg_database WHERE datname = '{TARGET_DB}'")
             )
             == 1,
+            "objective_trigger": "cutover target unavailable; restore traffic to legacy",
+            "decision_window_seconds": 300,
+            "forensic_target": TARGET_DB,
         }
         canonical_after = tree_fingerprint(canonical)
         evidence["steps"]["rollback"]["canonical_tree_unchanged"] = (

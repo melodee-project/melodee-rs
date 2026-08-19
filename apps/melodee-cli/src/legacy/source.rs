@@ -1,6 +1,7 @@
 //! Read-only legacy source access, frozen-baseline fingerprint gate, and
 //! inventory collection (ADR-0148 §D.1, R3.3).
 
+use sha2::{Digest, Sha256};
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use sqlx::{PgPool, Row};
 
@@ -76,6 +77,77 @@ pub const PLAYLIST_ITEM_KEY_SQL: &str =
 /// `RequestId * 2^31 + UserId` (both int4; the product cannot overflow i64).
 pub const REQUEST_SEEN_KEY_SQL: &str = "(\"RequestId\"::bigint * 2147483648::bigint + \"UserId\")";
 
+/// Frozen-schema tables included in the write-stillness marker. Tables with
+/// `LastUpdatedAt` contribute both their row count and maximum timestamp;
+/// append-only or join tables contribute their row count. The list is kept
+/// separate from `INVENTORY_TABLES` because a source write must invalidate a
+/// freeze even when the table is intentionally excluded from migration by an
+/// accepted decision.
+const SNAPSHOT_MARKER_TABLES: &[(&str, bool)] = &[
+    ("Albums", true),
+    ("ArtistRelation", true),
+    ("Artists", true),
+    ("Bookmarks", true),
+    ("ChartItems", false),
+    ("Charts", false),
+    ("Contributors", true),
+    ("JellyfinAccessTokens", false),
+    ("JobHistories", false),
+    ("Libraries", true),
+    ("LibraryAccessControls", true),
+    ("LibraryScanHistories", false),
+    ("PartyAuditEvents", true),
+    ("PartyPlaybackStates", true),
+    ("PartyQueueItems", true),
+    ("PartySessionEndpoints", true),
+    ("PartySessionParticipants", false),
+    ("PartySessions", true),
+    ("PlayQues", true),
+    ("Players", true),
+    ("PlaylistSong", false),
+    ("PlaylistUploadedFileItems", true),
+    ("PlaylistUploadedFiles", true),
+    ("Playlists", true),
+    ("PodcastChannels", true),
+    ("PodcastEpisodeBookmarks", false),
+    ("PodcastEpisodes", true),
+    ("RadioStations", true),
+    ("RefreshTokens", true),
+    ("RequestComments", false),
+    ("RequestParticipants", false),
+    ("RequestUserStates", false),
+    ("Requests", false),
+    ("SearchHistories", false),
+    ("Settings", true),
+    ("ShareActivities", false),
+    ("Shares", true),
+    ("SmartPlaylists", true),
+    ("Songs", true),
+    ("UserAlbums", true),
+    ("UserArtists", true),
+    ("UserDeviceProfiles", true),
+    ("UserEqualizerPresets", true),
+    ("UserGroupMembers", true),
+    ("UserGroups", true),
+    ("UserPins", true),
+    ("UserPlaybackSettings", true),
+    ("UserPodcastEpisodePlayHistories", false),
+    ("UserSocialLogins", true),
+    ("UserSongPlayHistories", false),
+    ("UserSongs", true),
+    ("Users", true),
+];
+
+/// Stable, non-sensitive facts proving that a source connection is using the
+/// read-only boundary. The role may have wider privileges on an isolated
+/// snapshot, but every migration session must still be transaction-read-only.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ReadOnlyStatus {
+    pub transaction_read_only: bool,
+    pub default_transaction_read_only: bool,
+    pub in_recovery: bool,
+}
+
 /// A read-only handle to the legacy snapshot. Every session enforces
 /// `default_transaction_read_only = on` so a write fails at the database
 /// regardless of a tooling bug (ADR-0148 §D.1).
@@ -140,62 +212,108 @@ impl SourceDb {
                  Restore the supported snapshot or record a new compatibility decision."
             ));
         }
-        Ok(Self { pool, fingerprint })
+        let source = Self { pool, fingerprint };
+        source.ensure_read_only().await?;
+        Ok(source)
     }
 
     pub fn pool(&self) -> &PgPool {
         &self.pool
     }
 
-    /// Write-stillness marker for freeze verification (ADR-0149 §D.2): row
-    /// counts plus the maximum `LastUpdatedAt` across the mutable catalog and
-    /// user tables. Any legacy insert/update/delete moves at least one
-    /// component; read-only activity never does. This is a verification
-    /// signal — freeze enforcement itself is the operator procedure.
+    /// Returns the session/database read-only facts used by baseline evidence.
+    /// `transaction_read_only` is checked rather than inferred from the URL so
+    /// a future connection-pool change cannot silently weaken the source
+    /// boundary.
+    pub async fn read_only_status(&self) -> Result<ReadOnlyStatus, String> {
+        let row = sqlx::query(
+            "SELECT current_setting('transaction_read_only'),\n\
+                    current_setting('default_transaction_read_only'),\n\
+                    pg_is_in_recovery()",
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| format!("cannot inspect source read-only settings: {e}"))?;
+        let transaction = row.try_get::<String, _>(0).map_err(|e| e.to_string())?;
+        let default_transaction = row.try_get::<String, _>(1).map_err(|e| e.to_string())?;
+        let in_recovery = row.try_get::<bool, _>(2).map_err(|e| e.to_string())?;
+        Ok(ReadOnlyStatus {
+            transaction_read_only: transaction == "on",
+            default_transaction_read_only: default_transaction == "on",
+            in_recovery,
+        })
+    }
+
+    /// Fails closed unless the pool is transaction-read-only. A standby is
+    /// acceptable but not required: an isolated snapshot can be writable at
+    /// the PostgreSQL role level while this session remains unable to commit a
+    /// source mutation.
+    async fn ensure_read_only(&self) -> Result<(), String> {
+        let status = self.read_only_status().await?;
+        if !status.transaction_read_only || !status.default_transaction_read_only {
+            return Err(
+                "legacy source connection is not read-only; refusing migration (both transaction_read_only and default_transaction_read_only must be on)".to_string(),
+            );
+        }
+        Ok(())
+    }
+
+    /// Write-stillness marker for freeze verification (ADR-0149 §D.2): a
+    /// digest of row counts plus the maximum `LastUpdatedAt` across every
+    /// table in the frozen source schema. Any insert/delete changes a count;
+    /// updates to timestamped tables change their timestamp component. This
+    /// is a verification signal — freeze enforcement itself is the operator
+    /// procedure.
     ///
     /// # Errors
     /// Returns the database error.
     pub async fn snapshot_marker(&self) -> Result<String, String> {
-        let row = sqlx::query(
-            r#"SELECT
-                 (SELECT COUNT(*) FROM "Artists")
-               + (SELECT COUNT(*) FROM "Albums")
-               + (SELECT COUNT(*) FROM "Songs")
-               + (SELECT COUNT(*) FROM "Users")
-               + (SELECT COUNT(*) FROM "Playlists")
-               + (SELECT COUNT(*) FROM "Shares") AS rows,
-               (SELECT MAX(m) FROM (
-                    SELECT MAX("LastUpdatedAt") AS m FROM "Artists"
-                    UNION ALL SELECT MAX("LastUpdatedAt") FROM "Albums"
-                    UNION ALL SELECT MAX("LastUpdatedAt") FROM "Songs"
-                    UNION ALL SELECT MAX("LastUpdatedAt") FROM "Users"
-                    UNION ALL SELECT MAX("LastUpdatedAt") FROM "Playlists"
-                    UNION ALL SELECT MAX("LastUpdatedAt") FROM "Shares"
-               ) maxima) AS updated"#,
-        )
-        .fetch_one(&self.pool)
-        .await
-        .map_err(|e| format!("cannot compute source snapshot marker: {e}"))?;
-        let rows: Option<i64> = row.try_get(0).map_err(|e| e.to_string())?;
-        let updated: Option<time::OffsetDateTime> = row.try_get(1).map_err(|e| e.to_string())?;
-        Ok(format!(
-            "rows:{} updated:{}",
-            rows.unwrap_or(0),
-            updated
-                .map(|t| t.unix_timestamp_nanos().to_string())
-                .unwrap_or_else(|| "none".to_string())
-        ))
+        let mut material = format!("schema={};", self.fingerprint);
+        for (table, has_updated_at) in SNAPSHOT_MARKER_TABLES {
+            let query = if *has_updated_at {
+                format!(
+                    r#"SELECT COUNT(*)::bigint, MAX("LastUpdatedAt")
+                       FROM "{table}""#
+                )
+            } else {
+                format!(r#"SELECT COUNT(*)::bigint FROM "{table}""#)
+            };
+            // The identifier is selected exclusively from the frozen static
+            // table list above; no operator input reaches this SQL.
+            let row = sqlx::query(sqlx::AssertSqlSafe(query))
+                .fetch_one(&self.pool)
+                .await
+                .map_err(|e| format!("cannot compute source snapshot marker for {table}: {e}"))?;
+            let count: i64 = row.try_get(0).map_err(|e| e.to_string())?;
+            material.push_str(table);
+            material.push('=');
+            material.push_str(&count.to_string());
+            if *has_updated_at {
+                let updated: Option<time::OffsetDateTime> =
+                    row.try_get(1).map_err(|e| e.to_string())?;
+                material.push(':');
+                material.push_str(
+                    &updated
+                        .map(|timestamp| timestamp.unix_timestamp_nanos().to_string())
+                        .unwrap_or_else(|| "none".to_string()),
+                );
+            }
+            material.push(';');
+        }
+        let digest = Sha256::digest(material.as_bytes());
+        Ok(format!("legacy-marker-v2:{}", hex_digest(&digest)))
     }
 
-    /// Stable source identity for run records: engine version + schema
-    /// fingerprint + database name. Contains no credentials (ADR-0148 §D.5).
+    /// Stable source identity for run records. The emitted value is a digest,
+    /// not a host, database name, or connection URL, so evidence cannot leak
+    /// private deployment topology (ADR-0148 §D.5).
     ///
     /// # Errors
     /// Returns the database error.
     pub async fn source_identity(&self) -> Result<String, String> {
         // pg_control_system() needs superuser/pg_monitor; rehearsal snapshots
-        // may connect with a plainer role, so fall back to the server
-        // address tuple, which is still stable per snapshot host.
+        // may connect with a plainer role, so fall back to stable connection
+        // facts. The emitted identity below is a digest, never those facts.
         let system_id: String =
             sqlx::query_scalar("SELECT system_identifier::text FROM pg_control_system()")
                 .fetch_one(&self.pool)
@@ -213,11 +331,21 @@ impl SourceDb {
         let version: String = row.try_get(1).map_err(|e| e.to_string())?;
         let host: String = row.try_get(2).map_err(|e| e.to_string())?;
         let port: String = row.try_get(3).map_err(|e| e.to_string())?;
+        let material = format!(
+            "system={system_id};host={host};port={port};db={db};server={version};schema={}",
+            self.fingerprint
+        );
+        let digest = Sha256::digest(material.as_bytes());
         Ok(format!(
-            "pg:{system_id}@{host}:{port} db:{db} server:{version} schema:{}",
+            "pg-source-sha256:{}:schema:{}",
+            hex_digest(&digest),
             self.fingerprint
         ))
     }
+}
+
+fn hex_digest(digest: &[u8]) -> String {
+    digest.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 /// One table's inventory row: bounds and anomalies relevant to migration.

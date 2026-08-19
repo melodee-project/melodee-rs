@@ -1,40 +1,58 @@
 {
   "drill": "legacy_rehearsal",
   "songs_requested": 12000,
-  "started_at": "2026-08-18T20:25:18Z",
+  "started_at": "2026-08-19T12:21:25Z",
   "steps": {
     "create_target": {
-      "wall_s": 1.19
+      "wall_s": 1.03,
+      "disk": {
+        "path_fingerprint": "98c0ec138d3191cd532de3c4594fc937ff4a0781c9b527875300a4dd78a79f84",
+        "total_bytes": 33654050816,
+        "used_bytes": 6298034176,
+        "free_bytes": 27356016640,
+        "headroom_ratio": 0.81286
+      }
     },
     "plan": {
-      "run_id": "01a0168c-c8cf-7080-a7fe-da5fa651a7cc",
-      "wall_s": 0.25
+      "run_id": "01a019f8-21a4-7222-8f59-b7bc354f5fc9",
+      "wall_s": 0.35
     },
     "import": {
-      "wall_s": 181.46,
-      "peak_rss_bytes": 31539200
+      "wall_s": 178.41,
+      "peak_rss_bytes": 32153600
     },
     "verify": {
-      "wall_s": 2.21,
-      "peak_rss_bytes": 26345472,
+      "wall_s": 2.16,
+      "peak_rss_bytes": 26509312,
       "total_mismatch_gaps": 0,
       "duplicate_public_ids": 0
     },
     "search_rebuild": {
-      "wall_s": 5.78,
-      "peak_rss_bytes": 161017856,
-      "output": "rebuild requested: 01a0168f-9849-7ba1-877c-2dcc0acfd031\nrebuild activated: 01a0168f-9849-7ba1-877c-2dcc0acfd031"
+      "wall_s": 5.88,
+      "peak_rss_bytes": 138530816,
+      "output": "rebuild requested: 01a019fa-e5e4-7ae3-bc87-b5287a2f2ee6\nrebuild activated: 01a019fa-e5e4-7ae3-bc87-b5287a2f2ee6"
     },
     "backup_restore": {
-      "wall_s": 4.87,
-      "dump_bytes": 7380207,
+      "wall_s": 4.88,
+      "dump_bytes": 7364275,
       "restored_tracks": 12000,
-      "restore_matches": true
+      "restore_matches": true,
+      "backup": {
+        "bytes": 7364275,
+        "sha256": "ac23db4e4a2079421ca81a85571c4ea2103ac17f8bb24658e3df202f4ecb89b3",
+        "toc_entries": 959
+      },
+      "restored_counts": {
+        "artists": 500,
+        "releases": 1000,
+        "tracks": 12000,
+        "users": 50
+      }
     },
     "freeze": {
       "wall_s": 3.67,
       "state": "cutover-ready",
-      "freeze_window_ms": 3462,
+      "freeze_window_ms": 3400,
       "pre_marker_write_imported": true
     },
     "rollback": {
@@ -45,15 +63,26 @@
       "media_tree_after": 16,
       "media_tree_bytes_after": 16000000,
       "failed_target_preserved": true,
+      "objective_trigger": "cutover target unavailable; restore traffic to legacy",
+      "decision_window_seconds": 300,
+      "forensic_target": "legacy_rehearsal_target",
       "canonical_tree_unchanged": true
     }
   },
+  "measurement_schema_version": 1,
   "baseline": {
-    "captured_at": "2026-08-18 20:25:20.610823176 +00:00:00",
-    "source_identity": "pg:7671348264268230695@172.21.0.2:5432 db:legacy_rehearsal_source server:18.4 schema:20260714155936_AddDeleteSourceResidueAfterIngestSetting",
+    "artifact": "melodee.legacy-baseline",
+    "schema_version": 1,
+    "captured_at": "2026-08-19 12:21:27.412570824 +00:00:00",
+    "source_identity": "pg-source-sha256:b4e54683e22497193c76eecce13a9d8fa6654776de18a327138479ec580b9b8e:schema:20260714155936_AddDeleteSourceResidueAfterIngestSetting",
     "schema_fingerprint": "20260714155936_AddDeleteSourceResidueAfterIngestSetting",
     "table_count": 52,
-    "snapshot_marker": "rows:13650 updated:1787084718740830000",
+    "snapshot_marker": "legacy-marker-v2:2db17e132bdd7e6624c9a4ba34c7c12abf8a14f34351718bd51acf5b42474f75",
+    "source_read_only": {
+      "transaction_read_only": true,
+      "default_transaction_read_only": true,
+      "in_recovery": false
+    },
     "domains": [
       {
         "domain": "users",
@@ -260,7 +289,9 @@
       "total_bytes": 12000000000
     },
     "configuration_fingerprint": {
+      "algorithm": "sha256-v1",
       "settings_keys": [],
+      "settings": [],
       "library_root_count": 1
     }
   },
@@ -270,39 +301,71 @@
     "tracks": 12000,
     "users": 50
   },
-  "target_db_bytes": 98899647,
-  "search_index_bytes": 5985087,
+  "migration_metrics": {
+    "database_counts": {
+      "artists": 500,
+      "releases": 1000,
+      "tracks": 12000,
+      "users": 50
+    },
+    "media": {
+      "file_count": 12000,
+      "bytes": 12000000000
+    },
+    "issues": {
+      "total": 12001,
+      "errors": 0,
+      "warnings": 12000
+    },
+    "retries": {
+      "observed": 0,
+      "scope": "rehearsal command process",
+      "source": "no retry injection; checkpoint schema has no attempt counter"
+    },
+    "queue_age_seconds": 181.197006,
+    "failures": 0,
+    "oldest_issue_age_seconds": 178.754489,
+    "disk": {
+      "path_fingerprint": "98c0ec138d3191cd532de3c4594fc937ff4a0781c9b527875300a4dd78a79f84",
+      "total_bytes": 33654050816,
+      "used_bytes": 6297878528,
+      "free_bytes": 27356172288,
+      "headroom_ratio": 0.812864
+    }
+  },
+  "target_db_bytes": 98907839,
+  "search_index_bytes": 6154625,
   "search_validation": {
     "queries": [
       {
         "expression": "artist:\"Rehearsal Artist 1\"",
         "hit_count": 27,
         "wall_s": 0.1,
-        "peak_rss_bytes": 25632768
+        "peak_rss_bytes": 25358336
       },
       {
         "expression": "artist:rehearsal",
         "hit_count": 100,
         "wall_s": 0.25,
-        "peak_rss_bytes": 43143168
+        "peak_rss_bytes": 43204608
       },
       {
         "expression": "release:rehearsal",
         "hit_count": 100,
         "wall_s": 0.1,
-        "peak_rss_bytes": 25706496
+        "peak_rss_bytes": 25624576
       },
       {
         "expression": "track:rehearsal",
         "hit_count": 100,
         "wall_s": 0.15,
-        "peak_rss_bytes": 35323904
+        "peak_rss_bytes": 35926016
       },
       {
         "expression": "artist:rehearsal AND year>=1990",
         "hit_count": 100,
         "wall_s": 0.25,
-        "peak_rss_bytes": 43098112
+        "peak_rss_bytes": 43446272
       }
     ],
     "p50_ms": 150.0,
@@ -313,7 +376,7 @@
     "bytes": 16000000,
     "before_after_match": true
   },
-  "finished_at": "2026-08-18T20:28:40Z",
+  "finished_at": "2026-08-19T12:24:44Z",
   "result": "pass",
   "source_counts": {
     "artists": 500,

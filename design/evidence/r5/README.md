@@ -60,8 +60,10 @@ docker compose config
 ```
 
 The production-shaped R4 rehearsal remains the source for migration/rollback measurements:
-`design/evidence/r4/rehearsal-drill-12000.json` and
-`design/evidence/r4/dual-run-report.json`.
+`design/evidence/r4/rehearsal-drill-12000.json` and the surface-scoped reports
+`design/evidence/r4/dual-run-report-native.json`,
+`design/evidence/r4/dual-run-report-opensubsonic.json`, and
+`design/evidence/r4/dual-run-report-jellyfin.json`.
 
 ## R5.1 — Data-loss and migration safety review
 
@@ -184,7 +186,7 @@ or bypassed as part of this work. The local 12,000-Track R4 rehearsal now has tw
 zero verification gaps, zero duplicate public IDs, matching catalog counts, successful restore,
 freeze/delta, rollback retention, and unchanged canonical media; this is still synthetic
 production-shaped evidence, not the required real-library rehearsal. The current native
-differential replay is documented in the R4 report with 261 classified and 185 unclassified
+differential replay is documented in the R4 report with 261 classified and 183 unclassified
 differences; the replay closed the captured native search-suggest, login-version, cookie-cache,
 missing-chart-message, missing-theme-asset-envelope, empty-upload-validation, heartbeat-message,
 unknown-stream-user-message, and native-image-cache-header mismatches, while the remaining

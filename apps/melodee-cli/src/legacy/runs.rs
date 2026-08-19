@@ -21,12 +21,14 @@ pub async fn record_plan(
     inventory: &Inventory,
     maps: &[LibraryPathMap],
     source_identity: &str,
+    source_snapshot_marker: &str,
     _json: bool,
 ) -> Result<Uuid, String> {
     let run_id = Uuid::now_v7();
     let now = OffsetDateTime::now_utc();
     let notes = serde_json::json!({
         "plan": {
+            "schema_fingerprint": inventory.schema_fingerprint,
             "tables": inventory.tables.iter().map(|t| serde_json::json!({
                 "domain": t.domain, "rows": t.rows, "max_pk": t.max_pk,
             })).collect::<Vec<_>>(),
@@ -46,7 +48,7 @@ pub async fn record_plan(
     )
     .bind(run_id)
     .bind(source_identity)
-    .bind(&inventory.schema_fingerprint)
+    .bind(source_snapshot_marker)
     .bind(notes)
     .bind(now)
     .execute(target)

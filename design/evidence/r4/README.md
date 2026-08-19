@@ -4,7 +4,7 @@ Status: In progress. The isolated rehearsal and local rollback legs are
 complete; production snapshot, physical-client, and deployment-provider legs
 remain operator-owned acceptance work.
 
-Date: 2026-08-18
+Date: 2026-08-19
 
 ## Scope and authority
 
@@ -41,15 +41,15 @@ The run proved:
 - baseline capture is source-identity and marker based, with a key-only
   configuration fingerprint;
 - one planned run is imported and verified without a second implicit run;
-- import completed in 177.24 seconds with batch size 2,500 and a measured
-  31,588,352-byte peak RSS for the CLI process;
+- import completed in 179.14 seconds with batch size 2,500 and a measured
+  31,793,152-byte peak RSS for the CLI process in the current run;
 - verification found zero mismatch gaps and zero duplicate public IDs;
-- a fresh Tantivy generation was rebuilt and activated (7,178,032 bytes) in
-  5.68 seconds with a measured 160,940,032-byte peak RSS;
+- a fresh Tantivy generation was rebuilt and activated in 5.83 seconds with a
+  measured 170,680,320-byte peak RSS in the current run;
 - five bounded exact/broad/Artist/Release/Track/year-filtered search queries
   returned within 150 ms p50 and 350 ms p95, with the default 100-hit limit;
 - the target database measured 98,932,415 bytes after import, and a
-  custom-format PostgreSQL backup (7,364,899 bytes) restored with 12,000
+  custom-format PostgreSQL backup (7,381,156 bytes in the current run) restored with 12,000
   Tracks present;
 - a write arriving before the freeze marker was imported by the final delta;
 - the acknowledged freeze reached `cutover-ready` in a 3,553 ms freeze window;
@@ -84,9 +84,11 @@ production-shaped migration/search evidence, not a replacement for that
 fault suite.
 
 The native replay was rerun after the migration authorization, audio-metadata,
-catalog ordering, user-state, login-version, cookie-cache, and comparator fixes
-and remains recorded in `dual-run-report.json`: all 12 native groups executed,
-with 261 classified differences and 185 unclassified comparator differences.
+catalog ordering, user-state, login-version, cookie-cache, comparator, and
+migrated share-order fixes and is recorded in
+[`dual-run-report-native.json`](dual-run-report-native.json): all 12 native
+groups executed, with 261 classified differences and 183 unclassified
+comparator differences.
 The replay also closed the previously observed
 `native-user-extra/search-suggest`, `native-discovery/login`, and
 `auth-cookie-sign-in`, and missing-chart error-message mismatches:
@@ -99,7 +101,7 @@ intentional current-vs-legacy behavior, migration metadata boundaries, and
 unresolved catalog ordering/state gaps. They must receive external
 compatibility classification or implementation fixes before release.
 
-The current 185-entry unclassified set has a concrete residual shape rather
+The current 183-entry unclassified set has a concrete residual shape rather
 than one undifferentiated parity claim. The largest clusters are 117 catalog
 list projection/order fields (63 `albums-list`, 32 `artists-list-page2`, and
 22 `artists-list`), 20 genre/reference-only fields and route results, 10 live
@@ -117,16 +119,21 @@ in this residual set is silently reclassified by this report.
 
 An OpenSubsonic replay also executed 11 groups through migrated snapshots. Its
 negative-route matrix matched, but the run stopped closed on the captured
-legacy range/playlist status quirks and recorded 389 unclassified differences,
+legacy range/playlist status quirks and recorded 389 unclassified differences
+in [`dual-run-report-opensubsonic.json`](dual-run-report-opensubsonic.json),
 primarily missing migrated manifest metadata (genre and bit depth),
 legacy-derived play fields, and canonical path presentation. BPM and bitrate
 differences are no longer present after the audio-metadata fix. The remaining
 metadata boundary is recorded in proposed ADR-0150 and the importer's durable
-`metadata.reference_only` issues. This is
-additional R4 blocker evidence, not an adapter-contract change; the committed
-report is left as the native replay report so the accepted native evidence is
-stable, while the disposable OpenSubsonic run remains under
-`/tmp/melodee-r4-dual-opensubsonic` for investigation.
+`metadata.reference_only` issues. This is additional R4 blocker evidence, not
+an adapter-contract change. The surface-scoped report is committed so the
+result is reproducible and reviewable.
+
+A Jellyfin replay executed eight migrated groups and is recorded in
+[`dual-run-report-jellyfin.json`](dual-run-report-jellyfin.json): 149 classified
+and 48 unclassified differences. The residuals are concentrated in genre
+projection, WAV/media metadata, instant-mix cardinality, and playlist/user-state
+fields; no broad comparator exclusion was added.
 
 The smaller `rehearsal-drill-1200.json` run is retained as a quick local
 iteration sample. It is not a substitute for the 12,000-Track evidence.
@@ -138,10 +145,27 @@ mismatch gaps and zero duplicate public IDs, identical 500/1,000/12,000/50
 Artist/Release/Track/user counts, 12,000 restored Tracks, a successful
 cutover-ready freeze with the pre-marker write imported, a retained failed
 target, and an unchanged 16-file/16,000,000-byte canonical tree. Import peak
-RSS was 31,588,352 and 31,539,200 bytes; search rebuild peak RSS was
-160,940,032 and 161,017,856 bytes. These repeat results establish local
+RSS was 31,793,152 and 32,153,600 bytes; search rebuild peak RSS was
+170,680,320 and 138,530,816 bytes. These repeat results establish local
 reproducibility, but do not substitute for the production-sized snapshot,
 queue/headroom, and deployment-topology measurements required by R4.2.
+
+The current marker implementation is `legacy-marker-v2`: it hashes row counts
+for all 52 frozen source data tables and includes the maximum
+`LastUpdatedAt` for timestamped tables, including tables excluded from import
+by accepted decisions. The 1,200-Track refresh and the current 12,000-Track
+refresh record this marker, disk headroom, queue age, issue/error counts, and
+an explicit retry measurement. No retries are inferred from checkpoint totals;
+the drill injects none and records `retries.observed: 0` with that scope.
+
+The read-only production-integration probe is
+`scripts/r4_integration_probe.py`. It has no credential arguments and performs
+only explicitly requested bounded checks for health/readiness, range
+responses, OIDC discovery metadata, podcast XML, Last.fm reachability without
+credentials, SMTP STARTTLS handshake, filesystem topology, and custom-format backup integrity. Endpoint hosts and
+configuration paths are fingerprinted in JSON output. Unit coverage is in
+`tests/python/test_r4_integration_probe.py`; the probe does not substitute for
+the operator's real credentials or external integration acceptance.
 
 ## Implemented corrective work
 
@@ -203,22 +227,23 @@ hardware and cannot be honestly generated by this isolated local harness:
 
 - R4.2 repeat on the real approximately-5 TB production-shaped snapshot;
 - R4.4 dual-run replay against equivalent C# and Rust snapshots. The local
-  executable native replay is recorded in `dual-run-report.json`: all 12
-  native groups ran from isolated per-file migrated snapshots, and stream
-  HEAD/full/range requests passed. The current comparator report records 261
-  classified and 185 unclassified differences; the unclassified set is not
-  silently waived and still requires compatibility classification or fixes.
-  The earlier OpenSubsonic replay recorded 389 differences, including
-  migration metadata omissions, and requires a separate correction and
-  compatibility review.
+  executable reports are `dual-run-report-native.json`,
+  `dual-run-report-opensubsonic.json`, and `dual-run-report-jellyfin.json`:
+  all three ran from isolated per-file migrated snapshots. Native stream
+  HEAD/full/range requests passed; the reports record 183, 389, and 48
+  unclassified differences respectively. None is silently waived and each
+  still requires compatibility classification or fixes.
 - R4.5 physical Android, Android Auto/DHU, MeloAmp, OpenSubsonic, and Jellyfin
-  client workflows;
+  client workflows. Current migrated-client checklist and launch preparation
+  are in `compatibility/clients/r4/`, but every matrix row remains pending
+  external device/client evidence;
 - R4.6 production Google OIDC, Last.fm, SMTP, real podcast, proxy/TLS, and
   storage-topology integrations; and
 - R4.7/R4.8 operator-authorized production freeze, traffic switch, and rollback.
 
-The executable entry points are `scripts/run_r4_dual_run.py` and
-`scripts/legacy_rehearsal.py`; their reports must be attached here after those
+The executable entry points are `scripts/run_r4_dual_run.py`,
+`scripts/legacy_rehearsal.py`, and `scripts/r4_integration_probe.py`; their
+reports must be attached here after those
 environment-owned runs. R4 is therefore intentionally not promoted to
 Complete by this local evidence alone.
 
@@ -233,6 +258,8 @@ does not replace the physical-client or provider evidence.
 
 Documentation impact:
 
-- Updated — this internal R4 evidence report and the migration rehearsal
-  script. Public migration documentation remains truthful about the
-  rehearsal-gated production cutover and therefore needs no status change yet.
+- Updated — this internal R4 evidence report, the migration rehearsal and
+  integration-probe scripts, the ADR-0150 decision package, and the public
+  migration command reference. Public migration documentation remains truthful
+  about the rehearsal-gated production cutover and therefore has no support
+  status change yet.

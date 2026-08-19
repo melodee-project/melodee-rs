@@ -4,30 +4,62 @@
 //! (setting keys only, never values) — and records it durably into the run's
 //! `notes` when `--run` is given.
 
+use sha2::{Digest, Sha256};
 use sqlx::Row;
 use uuid::Uuid;
 
 use super::runs;
 use super::source::{Inventory, SourceDb};
 
-/// Builds the stable baseline JSON from an inventory plus the source markers.
-/// Setting values are never read — only key names and categories, so the
-/// fingerprint cannot leak credentials.
+/// Builds the versioned baseline JSON from an inventory plus source markers.
+/// Non-secret setting values are represented by a digest; secret values are
+/// represented only by their key and a redaction flag. This keeps the artifact
+/// useful for comparing snapshots without turning it into a configuration dump.
 pub async fn capture(
     source: &SourceDb,
     inventory: &Inventory,
 ) -> Result<serde_json::Value, String> {
     let identity = source.source_identity().await?;
     let marker = source.snapshot_marker().await?;
-    // Legacy Settings keys only. The value column is deliberately never
-    // selected: a baseline that hashes or copies values could leak secrets.
-    let mut settings_keys: Vec<String> = sqlx::query_scalar(
-        r#"SELECT "Key" FROM "Settings" WHERE "Key" IS NOT NULL ORDER BY "Key""#,
+    let read_only = source.read_only_status().await?;
+    let settings: Vec<(String, Option<String>)> = sqlx::query(
+        r#"SELECT "Key", "Value" FROM "Settings"
+           WHERE "Key" IS NOT NULL ORDER BY "Key""#,
     )
     .fetch_all(source.pool())
     .await
-    .map_err(|e| format!("settings fingerprint failed: {e}"))?;
-    settings_keys.retain(|k| !k.trim().is_empty());
+    .map_err(|e| format!("configuration fingerprint failed: {e}"))?
+    .into_iter()
+    .map(|row| {
+        Ok::<_, sqlx::Error>((
+            row.try_get::<String, _>(0)?,
+            row.try_get::<Option<String>, _>(1)?,
+        ))
+    })
+    .collect::<Result<Vec<_>, _>>()
+    .map_err(|e| format!("configuration fingerprint row failed: {e}"))?;
+
+    let mut settings_keys = Vec::with_capacity(settings.len());
+    let mut setting_fingerprints = Vec::with_capacity(settings.len());
+    for (key, value) in settings {
+        let key = key.trim().to_string();
+        if key.is_empty() {
+            continue;
+        }
+        settings_keys.push(key.clone());
+        if is_secret_setting(&key) {
+            setting_fingerprints.push(serde_json::json!({
+                "key": key,
+                "redacted": true,
+            }));
+        } else {
+            let digest = Sha256::digest(value.unwrap_or_default().as_bytes());
+            setting_fingerprints.push(serde_json::json!({
+                "key": key,
+                "sha256": hex_digest(&digest),
+            }));
+        }
+    }
 
     let library_roots: i64 =
         sqlx::query(r#"SELECT COUNT(*) FROM "Libraries" WHERE "Path" IS NOT NULL"#)
@@ -37,11 +69,14 @@ pub async fn capture(
             .map_err(|e| format!("library root count failed: {e}"))?;
 
     Ok(serde_json::json!({
+        "artifact": "melodee.legacy-baseline",
+        "schema_version": 1,
         "captured_at": time::OffsetDateTime::now_utc().to_string(),
         "source_identity": identity,
         "schema_fingerprint": inventory.schema_fingerprint,
         "table_count": inventory.table_count,
         "snapshot_marker": marker,
+        "source_read_only": read_only,
         "domains": inventory.tables.iter().map(|t| serde_json::json!({
             "domain": t.domain, "rows": t.rows, "min_pk": t.min_pk, "max_pk": t.max_pk,
         })).collect::<Vec<_>>(),
@@ -53,10 +88,32 @@ pub async fn capture(
             "total_bytes": inventory.total_media_bytes,
         },
         "configuration_fingerprint": {
+            "algorithm": "sha256-v1",
             "settings_keys": settings_keys,
+            "settings": setting_fingerprints,
             "library_root_count": library_roots,
         },
     }))
+}
+
+fn hex_digest(digest: &[u8]) -> String {
+    digest.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn is_secret_setting(key: &str) -> bool {
+    let key = key.to_ascii_lowercase();
+    [
+        "password",
+        "secret",
+        "token",
+        "privatekey",
+        "private_key",
+        "apikey",
+        "api_key",
+        "credential",
+    ]
+    .iter()
+    .any(|marker| key.contains(marker))
 }
 
 /// Records the baseline into the run's notes (fenced), or prints it when no
@@ -83,6 +140,23 @@ pub async fn record_baseline(
         let mut tx = target.begin().await.map_err(|e| e.to_string())?;
         if !runs::is_fenced_in(&mut tx, run_id, &owner).await? {
             return Err(format!("run {run_id}: lost lease during baseline record"));
+        }
+        let expected_marker: String = sqlx::query_scalar(
+            "SELECT source_snapshot_marker FROM legacy_migration.runs WHERE id = $1",
+        )
+        .bind(run_id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| format!("cannot read run {run_id} snapshot marker: {e}"))?;
+        let actual_marker = baseline["snapshot_marker"]
+            .as_str()
+            .ok_or_else(|| "baseline snapshot marker is not a string".to_string())?;
+        if expected_marker != actual_marker {
+            tx.rollback().await.map_err(|e| e.to_string())?;
+            runs::release_lease(target, run_id, &owner).await?;
+            return Err(format!(
+                "source snapshot marker mismatch for run {run_id}: planned {expected_marker:?}, current {actual_marker:?}; create a new plan from the approved snapshot"
+            ));
         }
         sqlx::query(
             "UPDATE legacy_migration.runs

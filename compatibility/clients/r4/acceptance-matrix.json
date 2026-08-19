@@ -1,0 +1,12 @@
+{
+  "artifact": "melodee.r4.current-client-acceptance",
+  "schemaVersion": 1,
+  "status": "pending-external",
+  "rows": [
+    {"client": "android-phone", "surface": "native-v1", "status": "pending-external"},
+    {"client": "android-auto-or-dhu", "surface": "native-v1", "status": "pending-external"},
+    {"client": "meloamp", "surface": "native-v1", "status": "pending-external"},
+    {"client": "representative-opensubsonic", "surface": "opensubsonic", "status": "pending-external"},
+    {"client": "representative-jellyfin", "surface": "jellyfin", "status": "pending-external"}
+  ]
+}
