@@ -152,20 +152,78 @@ fn writable_or_creatable(root: &std::path::Path) -> Result<String, String> {
     Err(format!("{} has no existing ancestor", root.display()))
 }
 
+#[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
 pub(crate) fn directory_is_writable(directory: &std::path::Path) -> bool {
+    use rustix::fs::{AtFlags, Mode, OFlags, openat, unlinkat};
+
     let probe = directory.join(format!(
         ".melodee-write-probe-{}",
         uuid::Uuid::now_v7().simple()
     ));
-    let writable = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&probe)
-        .is_ok();
-    if writable {
-        let _ = std::fs::remove_file(&probe);
+    let Ok(parent) = open_directory_nofollow(directory) else {
+        return false;
+    };
+    let Some(name) = probe.file_name() else {
+        return false;
+    };
+    let Ok(file) = openat(
+        &parent,
+        name,
+        OFlags::WRONLY | OFlags::CREATE | OFlags::EXCL | OFlags::CLOEXEC | OFlags::NOFOLLOW,
+        Mode::RUSR | Mode::WUSR,
+    ) else {
+        return false;
+    };
+    drop(file);
+    unlinkat(&parent, name, AtFlags::empty()).is_ok()
+}
+
+/// Opens a configured directory without following any component. The probe
+/// cleanup must use the same directory descriptor as the create so a local
+/// path replacement cannot redirect the unlink into another tree.
+#[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+fn open_directory_nofollow(path: &std::path::Path) -> std::io::Result<rustix::fd::OwnedFd> {
+    use rustix::fs::{CWD, Mode, OFlags, openat};
+
+    if !path.is_absolute() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "writable probe directory must be absolute",
+        ));
     }
-    writable
+    let mut current = openat(
+        CWD,
+        b"/".as_slice(),
+        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC | OFlags::NOFOLLOW,
+        Mode::empty(),
+    )
+    .map_err(std::io::Error::from)?;
+    for component in path.components() {
+        let std::path::Component::Normal(name) = component else {
+            if matches!(component, std::path::Component::RootDir) {
+                continue;
+            }
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "writable probe directory contains traversal",
+            ));
+        };
+        current = openat(
+            &current,
+            name,
+            OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC | OFlags::NOFOLLOW,
+            Mode::empty(),
+        )
+        .map_err(std::io::Error::from)?;
+    }
+    Ok(current)
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android", target_vendor = "apple")))]
+pub(crate) fn directory_is_writable(_directory: &std::path::Path) -> bool {
+    // A path-only create/delete probe cannot provide the no-follow and
+    // same-parent guarantees required by the data-loss threat model.
+    false
 }
 
 pub(crate) async fn check_database(pool: &PgPool) -> PreflightCheck {

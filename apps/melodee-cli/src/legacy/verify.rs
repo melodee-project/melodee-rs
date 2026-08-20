@@ -124,6 +124,11 @@ pub async fn verify_run(
         runs::release_lease(target, run_id, &owner).await?;
     } else {
         let mut tx = target.begin().await.map_err(|e| e.to_string())?;
+        if !runs::is_fenced_in(&mut tx, run_id, &owner).await? {
+            return Err(format!(
+                "run {run_id}: lost lease during verify issue recording"
+            ));
+        }
         runs::record_issue(
             &mut tx,
             run_id,
@@ -350,7 +355,10 @@ pub async fn compute_gate(
         .fetch_one(source.pool())
         .await
         .map_err(|e| format!("verify count failed for {source_table}: {e}"))?;
-        let mapped_rows: i64 = if entity.is_empty() {
+        let state_shape = user_state_shape(domain);
+        let mapped_rows: i64 = if let Some((entity_type, _, entity_fk)) = state_shape {
+            count_user_state_targets(target, run_id, target_table, entity_type, entity_fk).await?
+        } else if entity.is_empty() {
             sqlx::query_scalar(
                 "SELECT COUNT(*) FROM legacy_migration.entity_map
                   WHERE run_id = $1 AND domain = $2",
@@ -377,17 +385,34 @@ pub async fn compute_gate(
         .fetch_one(target)
         .await
         .map_err(|e| format!("verify target count failed for {target_table}: {e}"))?;
-        let missing_samples = missing_samples(
-            source,
-            target,
-            run_id,
-            domain,
-            source_table,
-            key_sql,
-            entity,
-            sample_limit,
-        )
-        .await?;
+        let missing_samples =
+            if let Some((entity_type, source_entity_column, entity_fk)) = state_shape {
+                missing_user_state_samples(
+                    source,
+                    target,
+                    run_id,
+                    domain,
+                    source_table,
+                    source_entity_column,
+                    entity_type,
+                    target_table,
+                    entity_fk,
+                    sample_limit,
+                )
+                .await?
+            } else {
+                missing_samples(
+                    source,
+                    target,
+                    run_id,
+                    domain,
+                    source_table,
+                    key_sql,
+                    entity,
+                    sample_limit,
+                )
+                .await?
+            };
         let gap = source_rows - mapped_rows;
         if gap != 0 || !missing_samples.is_empty() {
             total_mismatches += gap
@@ -703,17 +728,15 @@ async fn verify_orphan_mappings(
     run_id: Uuid,
     sample_limit: i64,
 ) -> Result<DeepCheck, String> {
-    // domain -> (target table, target column). Bookmarks and user states map
-    // to their catalog entity; podcast channels map to the public id.
+    // domain -> (target table, target column). Bookmarks map to their catalog
+    // entity; composite user-state facts are verified against their
+    // (user, catalog entity) key above and have no entity_map target.
     let domain_targets: &[(&str, &str, &str)] = &[
         ("users", "native_users", "id"),
         ("playlists", "native_playlists", "id"),
         ("shares", "native_shares", "id"),
         ("contributions", "contributions", "id"),
         ("bookmarks", "tracks", "id"),
-        ("user_track_states", "tracks", "id"),
-        ("user_release_states", "releases", "id"),
-        ("user_artist_states", "artists", "id"),
         ("track_plays", "native_track_plays", "id"),
         (
             "podcast_channels",
@@ -879,6 +902,128 @@ async fn verify_media_references(
         mismatches,
         samples,
     })
+}
+
+/// Returns the source/target columns needed to verify a composite user-state
+/// fact. User-state rows have no standalone target identity and therefore are
+/// intentionally absent from `legacy_migration.entity_map`.
+fn user_state_shape(domain: &str) -> Option<(&'static str, &'static str, &'static str)> {
+    match domain {
+        "user_track_states" => Some(("track", "SongId", "track_id")),
+        "user_release_states" => Some(("release", "AlbumId", "release_id")),
+        "user_artist_states" => Some(("artist", "ArtistId", "artist_id")),
+        _ => None,
+    }
+}
+
+async fn count_user_state_targets(
+    target: &PgPool,
+    run_id: Uuid,
+    target_table: &str,
+    entity_type: &str,
+    entity_fk: &str,
+) -> Result<i64, String> {
+    let query = format!(
+        "SELECT COUNT(*) FROM {target_table} state
+         WHERE EXISTS (
+             SELECT 1 FROM legacy_migration.entity_map users
+             WHERE users.run_id = $1 AND users.domain = 'users'
+               AND users.target_id = state.user_id
+         )
+           AND EXISTS (
+             SELECT 1 FROM legacy_catalog_id_mappings catalog
+             WHERE catalog.migration_run_id = $1
+               AND catalog.entity_type = $2
+               AND catalog.internal_id = state.{entity_fk}
+         )"
+    );
+    sqlx::query_scalar(sqlx::AssertSqlSafe(query))
+        .bind(run_id)
+        .bind(entity_type)
+        .fetch_one(target)
+        .await
+        .map_err(|error| format!("user-state target count failed for {entity_type}: {error}"))
+}
+
+/// Returns up to `limit` source primary keys whose composite user-state fact
+/// has no corresponding target row. The bounded batch query keeps verification
+/// set-based while still reporting source keys that reference unmapped users or
+/// catalog entities.
+#[allow(clippy::too_many_arguments)]
+async fn missing_user_state_samples(
+    source: &SourceDb,
+    target: &PgPool,
+    run_id: Uuid,
+    domain: &str,
+    source_table: &str,
+    source_entity_column: &str,
+    entity_type: &str,
+    target_table: &str,
+    entity_fk: &str,
+    limit: i64,
+) -> Result<Vec<i64>, String> {
+    let mut missing = Vec::new();
+    let mut key = 0_i64;
+    loop {
+        let source_rows: Vec<(i64, i64, i64)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+            r#"SELECT "Id"::bigint, "UserId"::bigint,
+                      "{source_entity_column}"::bigint
+               FROM "{source_table}" WHERE "Id"::bigint > $1
+               ORDER BY "Id" LIMIT 1000"#
+        )))
+        .bind(key)
+        .fetch_all(source.pool())
+        .await
+        .map_err(|error| format!("user-state source read failed for {domain}: {error}"))?;
+        if source_rows.is_empty() {
+            break;
+        }
+        key = source_rows.last().map_or(key, |row| row.0);
+        let source_pks: Vec<i64> = source_rows.iter().map(|row| row.0).collect();
+        let user_pks: Vec<i64> = source_rows.iter().map(|row| row.1).collect();
+        let entity_pks: Vec<i64> = source_rows.iter().map(|row| row.2).collect();
+        let query = format!(
+            "WITH source_rows AS (
+                 SELECT * FROM unnest($2::bigint[], $3::bigint[], $4::bigint[])
+                   AS input(source_pk, user_pk, entity_pk)
+             )
+             SELECT input.source_pk
+             FROM source_rows input
+             LEFT JOIN legacy_migration.entity_map users
+               ON users.run_id = $1 AND users.domain = 'users'
+              AND users.source_pk = input.user_pk
+             LEFT JOIN legacy_catalog_id_mappings catalog
+               ON catalog.migration_run_id = $1
+              AND catalog.entity_type = $5
+              AND catalog.legacy_numeric_id = input.entity_pk
+             WHERE users.target_id IS NULL OR catalog.internal_id IS NULL
+                OR NOT EXISTS (
+                    SELECT 1 FROM {target_table} state
+                    WHERE state.user_id = users.target_id
+                      AND state.{entity_fk} = catalog.internal_id
+                )
+             ORDER BY input.source_pk"
+        );
+        let unmatched: Vec<i64> = sqlx::query_scalar(sqlx::AssertSqlSafe(query))
+            .bind(run_id)
+            .bind(&source_pks)
+            .bind(&user_pks)
+            .bind(&entity_pks)
+            .bind(entity_type)
+            .fetch_all(target)
+            .await
+            .map_err(|error| format!("user-state target read failed for {domain}: {error}"))?;
+        for source_pk in unmatched {
+            missing.push(source_pk);
+            if i64::try_from(missing.len()).unwrap_or(0) >= limit {
+                return Ok(missing);
+            }
+        }
+        if source_rows.len() < 1000 {
+            break;
+        }
+    }
+    Ok(missing)
 }
 
 /// Returns up to `limit` source primary keys with no mapping for the run.

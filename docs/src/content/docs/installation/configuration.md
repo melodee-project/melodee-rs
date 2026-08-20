@@ -15,7 +15,9 @@ Effective values resolve through four layers, highest precedence first:
 1. environment variables (`MELODEE__*` — the documented keys below, plus any registry key as
    `MELODEE__` + the key with `.` replaced by `__`, uppercased);
 2. an optional JSON config file (`MELODEE__CONFIG_FILE` points at a bounded
-   `{"key": value, …}` object);
+   `{"key": value, …}` object). On supported Unix platforms, the file and every
+   parent component are opened without following symlinks; a symlink or special-file
+   replacement fails closed;
 3. database-backed settings (`server_settings`, managed at runtime through the CLI and the admin
    API);
 4. built-in defaults (the legacy registry's seeded values).
@@ -42,13 +44,18 @@ layer (environment and config-file overlays are deployment concerns and are not 
 Administrators can also use `GET /api/admin/v1/config/export` (see the
 [Admin API](../api/admin-api/)).
 
+When `--output` is supplied, the file is created atomically without following symlinks; an
+existing destination is refused. Choose a new path or explicitly remove an old export before
+writing another one.
+
 The export carries a header warning: **every secret value is redacted to a fixed marker and must
 be re-entered after import.** Handle exported files as sensitive even so — non-secret values can
 reveal infrastructure details.
 
 `melodee-cli config import <path>` is a **preview by default**: it prints the diff (added, changed,
 unchanged keys; secret keys by name only with an explicit warning; unknown keys) without writing
-anything. `melodee-cli config import <path> --apply` validates every value against the registry's
+anything. The input must be a regular file and is opened without following symlinks on supported
+Unix platforms. `melodee-cli config import <path> --apply` validates every value against the registry's
 type/range rules and writes the rows atomically; keys outside the known registry are rejected
 unless `--allow-unknown` is passed. The redaction marker is never accepted as a value, so a
 redacted export can never overwrite a stored secret. The admin API equivalent is

@@ -7,7 +7,7 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    fs::{self, File},
+    fs,
     path::{Component, Path, PathBuf},
     process::{Command, Stdio},
     sync::Arc,
@@ -29,6 +29,7 @@ use time::OffsetDateTime;
 use tracing::info;
 use uuid::Uuid;
 
+use crate::secure_fs;
 use crate::{
     InspectionOptions, ProbeResult, hash_file, image_dimensions, path_to_posix, read_limited,
     run_ffprobe_cancellable, tool_version,
@@ -684,6 +685,7 @@ fn process_cue_governed_source(
         }
         let segment_relative = format!("{}.track-{:02}", plan.cue_path, segment.number);
         let output_path = output_path_for(work_dir, "audio", &segment_relative, "mp3")?;
+        ensure_output_absent(&output_path)?;
         run_ffmpeg_segment(
             source,
             &output_path,
@@ -795,7 +797,10 @@ fn run_ffmpeg_segment(
 ) -> Result<(), NormalizationError> {
     let timestamp = |ms: u64| format!("{}.{:03}", ms / 1000, ms % 1000);
     let mut args: Vec<String> = vec![
-        "-y".to_owned(),
+        // The attempt directory is private and the destination must not be
+        // replaced. `-n` makes ffmpeg fail closed if a destination appears
+        // between planning and the tool opening it.
+        "-n".to_owned(),
         "-v".to_owned(),
         "error".to_owned(),
         "-xerror".to_owned(),
@@ -947,18 +952,13 @@ fn process_audio_file(
 
     let output_path = output_path_for(work_dir, "audio", relative, "mp3")?;
     ensure_within(&output_path, work_dir)?;
-    fs::create_dir_all(output_path.parent().unwrap_or(work_dir)).map_err(|error| {
-        NormalizationError::WorkAreaCreation {
-            path: output_path.clone(),
-            message: error.to_string(),
-        }
-    })?;
+    ensure_output_absent(&output_path)?;
 
     let retained = is_retainable_mp3(&source_probe);
 
     if retained {
         verify_audio_decodes(source, options)?;
-        fs::copy(source, &output_path).map_err(|error| {
+        secure_fs::copy_new(source, &output_path).map_err(|error| {
             NormalizationError::Ffmpeg(format!(
                 "failed to copy canonical source {relative}: {error}"
             ))
@@ -1064,6 +1064,7 @@ fn process_external_artwork(
 ) -> Result<Option<NormalizedArtwork>, NormalizationError> {
     preflight_artwork(source, options)?;
     let output_path = output_path_for(work_dir, "artwork/external", &file.relative_path, "jpg")?;
+    ensure_output_absent(&output_path)?;
 
     run_ffmpeg_image_normalize(source, &output_path, None, options)?;
     let verified = verify_normalized_artwork(&output_path, work_dir, options)?;
@@ -1120,6 +1121,7 @@ fn process_embedded_artwork(
         &format!("{stable_name}.embedded"),
         "jpg",
     )?;
+    ensure_output_absent(&output_path)?;
 
     run_ffmpeg_image_normalize(source, &output_path, Some(picture_index), options)?;
     let verified = verify_normalized_artwork(&output_path, work_dir, options)?;
@@ -1146,21 +1148,24 @@ fn preflight_artwork(
     source: &Path,
     options: &NormalizationOptions,
 ) -> Result<(), NormalizationError> {
-    let metadata = fs::metadata(source).map_err(|error| NormalizationError::SourceUnreadable {
-        path: source.to_path_buf(),
-        message: error.to_string(),
-    })?;
-    if metadata.len() == 0 || metadata.len() > options.max_artwork_bytes as u64 {
+    let file =
+        secure_fs::open_read(source).map_err(|error| NormalizationError::SourceUnreadable {
+            path: source.to_path_buf(),
+            message: error.to_string(),
+        })?;
+    let size = file
+        .metadata()
+        .map_err(|error| NormalizationError::SourceUnreadable {
+            path: source.to_path_buf(),
+            message: error.to_string(),
+        })?
+        .len();
+    if size == 0 || size > options.max_artwork_bytes as u64 {
         return Err(NormalizationError::Verification(format!(
             "artwork byte size {} is outside 1..={} bytes",
-            metadata.len(),
-            options.max_artwork_bytes
+            size, options.max_artwork_bytes
         )));
     }
-    let file = File::open(source).map_err(|error| NormalizationError::SourceUnreadable {
-        path: source.to_path_buf(),
-        message: error.to_string(),
-    })?;
     let bytes = read_limited(file, options.max_artwork_bytes).map_err(|error| {
         NormalizationError::SourceUnreadable {
             path: source.to_path_buf(),
@@ -1197,7 +1202,7 @@ fn verify_normalized_artwork(
             options.max_artwork_bytes
         )));
     }
-    let file = File::open(output).map_err(|error| {
+    let file = secure_fs::open_read(output).map_err(|error| {
         NormalizationError::Verification(format!("normalized artwork could not be opened: {error}"))
     })?;
     let bytes = read_limited(file, options.max_artwork_bytes).map_err(|error| {
@@ -1374,7 +1379,7 @@ fn run_ffmpeg_encode(
 ) -> Result<(), NormalizationError> {
     let mut invocation = crate::ToolInvocation::start("ffmpeg", input);
     let args: Vec<String> = vec![
-        "-y".to_string(),
+        "-n".to_string(),
         "-v".to_string(),
         "error".to_string(),
         "-xerror".to_string(),
@@ -1647,7 +1652,7 @@ fn run_ffmpeg_image_normalize(
         dim = CANONICAL_ARTWORK_MAX_DIMENSION
     );
     let args: Vec<String> = vec![
-        "-y".to_string(),
+        "-n".to_string(),
         "-v".to_string(),
         "error".to_string(),
         "-xerror".to_string(),
@@ -1720,29 +1725,35 @@ fn create_work_area(
     work_item_id: Uuid,
     attempt_id: Uuid,
 ) -> Result<PathBuf, NormalizationError> {
-    fs::create_dir_all(base).map_err(|error| NormalizationError::WorkAreaCreation {
-        path: base.to_path_buf(),
-        message: error.to_string(),
+    secure_fs::create_directory_tree(base).map_err(|error| {
+        NormalizationError::WorkAreaCreation {
+            path: base.to_path_buf(),
+            message: error.to_string(),
+        }
     })?;
     let attempts_dir = base
         .join(work_item_id.simple().to_string())
         .join("attempts");
-    fs::create_dir_all(&attempts_dir).map_err(|error| NormalizationError::WorkAreaCreation {
-        path: attempts_dir.clone(),
-        message: error.to_string(),
+    secure_fs::create_directory_tree(&attempts_dir).map_err(|error| {
+        NormalizationError::WorkAreaCreation {
+            path: attempts_dir.clone(),
+            message: error.to_string(),
+        }
     })?;
     let work_dir = attempts_dir.join(attempt_id.simple().to_string());
-    fs::create_dir(&work_dir).map_err(|error| NormalizationError::WorkAreaCreation {
-        path: work_dir.clone(),
-        message: error.to_string(),
+    secure_fs::create_directory(&work_dir).map_err(|error| {
+        NormalizationError::WorkAreaCreation {
+            path: work_dir.clone(),
+            message: error.to_string(),
+        }
     })?;
-    fs::create_dir_all(work_dir.join("audio")).map_err(|error| {
+    secure_fs::create_directory_tree(&work_dir.join("audio")).map_err(|error| {
         NormalizationError::WorkAreaCreation {
             path: work_dir.join("audio"),
             message: error.to_string(),
         }
     })?;
-    fs::create_dir_all(work_dir.join("artwork")).map_err(|error| {
+    secure_fs::create_directory_tree(&work_dir.join("artwork")).map_err(|error| {
         NormalizationError::WorkAreaCreation {
             path: work_dir.join("artwork"),
             message: error.to_string(),
@@ -1829,9 +1840,11 @@ fn output_path_for(
     let parent = output.parent().ok_or_else(|| {
         NormalizationError::PathEscape(format!("output has no parent: {}", output.display()))
     })?;
-    fs::create_dir_all(parent).map_err(|error| NormalizationError::WorkAreaCreation {
-        path: parent.to_path_buf(),
-        message: error.to_string(),
+    secure_fs::create_directory_tree(parent).map_err(|error| {
+        NormalizationError::WorkAreaCreation {
+            path: parent.to_path_buf(),
+            message: error.to_string(),
+        }
     })?;
     Ok(output)
 }
@@ -1842,6 +1855,23 @@ fn is_canceled(options: &NormalizationOptions) -> bool {
             .shutdown
             .as_ref()
             .is_some_and(|signal| signal.load(Ordering::SeqCst))
+}
+
+/// Reject an existing output before an external encoder is invoked. This is
+/// intentionally a fail-closed preflight; ffmpeg also receives `-n` so a
+/// concurrent create cannot turn the output operation into an overwrite.
+fn ensure_output_absent(path: &Path) -> Result<(), NormalizationError> {
+    match fs::symlink_metadata(path) {
+        Ok(_) => Err(NormalizationError::Verification(format!(
+            "normalization output already exists: {}",
+            path.display()
+        ))),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(NormalizationError::WorkAreaCreation {
+            path: path.to_path_buf(),
+            message: error.to_string(),
+        }),
+    }
 }
 
 fn ensure_within(path: &Path, base: &Path) -> Result<(), NormalizationError> {
@@ -1921,19 +1951,23 @@ fn parse_sidecar_content(
         _ => "sidecar",
     };
 
-    let metadata = fs::metadata(source).map_err(|error| NormalizationError::SourceUnreadable {
-        path: source.to_path_buf(),
-        message: error.to_string(),
-    })?;
-    if metadata.len() > MAX_SIDECAR_BYTES {
+    let file_handle =
+        secure_fs::open_read(source).map_err(|error| NormalizationError::SourceUnreadable {
+            path: source.to_path_buf(),
+            message: error.to_string(),
+        })?;
+    let size = file_handle
+        .metadata()
+        .map_err(|error| NormalizationError::SourceUnreadable {
+            path: source.to_path_buf(),
+            message: error.to_string(),
+        })?
+        .len();
+    if size > MAX_SIDECAR_BYTES {
         return Err(NormalizationError::Verification(format!(
             "sidecar exceeds the {MAX_SIDECAR_BYTES} byte limit"
         )));
     }
-    let file_handle = File::open(source).map_err(|error| NormalizationError::SourceUnreadable {
-        path: source.to_path_buf(),
-        message: error.to_string(),
-    })?;
     let limit = usize::try_from(MAX_SIDECAR_BYTES).unwrap_or(usize::MAX);
     let bytes = read_limited(file_handle, limit.saturating_add(1)).map_err(|error| {
         NormalizationError::SourceUnreadable {
@@ -2541,6 +2575,75 @@ mod tests {
         assert!(second.ends_with("audio/disc2/01.flac.mp3"));
         assert!(output_path_for(&temp, "audio", "../escape.flac", "mp3").is_err());
         fs::remove_dir_all(temp).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn media_filesystem_operations_fail_closed_on_symlink_components_and_leaves() {
+        use std::os::unix::fs::symlink;
+
+        let temp = test_temp_dir();
+        let outside = test_temp_dir();
+        let source = temp.join("source.flac");
+        let external = outside.join("external.flac");
+        fs::write(&source, b"source bytes").unwrap();
+        fs::write(&external, b"external bytes").unwrap();
+
+        let source_link = temp.join("source-link.flac");
+        symlink(&external, &source_link).unwrap();
+        assert!(secure_fs::open_read(&source_link).is_err());
+        assert!(hash_file(&source_link).is_err());
+
+        let fifo = temp.join("source.fifo");
+        rustix::fs::mkfifoat(
+            rustix::fs::CWD,
+            &fifo,
+            rustix::fs::Mode::RUSR | rustix::fs::Mode::WUSR,
+        )
+        .unwrap();
+        // The opener must reject the special file without blocking for a
+        // writer. This is the raced-FIFO failure mode guarded by O_NONBLOCK
+        // followed by the descriptor type check.
+        assert!(secure_fs::open_read(&fifo).is_err());
+
+        let linked_parent = temp.join("linked-parent");
+        symlink(&outside, &linked_parent).unwrap();
+        assert!(secure_fs::create_directory_tree(&linked_parent.join("nested")).is_err());
+
+        let destination_link = temp.join("destination.mp3");
+        symlink(&external, &destination_link).unwrap();
+        assert!(secure_fs::copy_new(&source, &destination_link).is_err());
+        assert_eq!(fs::read(&external).unwrap(), b"external bytes");
+
+        fs::remove_dir_all(temp).unwrap();
+        fs::remove_dir_all(outside).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn output_planning_rejects_symlinked_parent_and_existing_leaf() {
+        use std::os::unix::fs::symlink;
+
+        let temp = test_temp_dir();
+        let outside = test_temp_dir();
+        let linked_audio = temp.join("audio");
+        symlink(&outside, &linked_audio).unwrap();
+        assert!(output_path_for(&temp, "audio", "track.flac", "mp3").is_err());
+
+        let output_parent = temp.join("safe");
+        fs::create_dir(&output_parent).unwrap();
+        let output = output_parent.join("track.flac.mp3");
+        let external = outside.join("target.mp3");
+        fs::write(&external, b"keep").unwrap();
+        symlink(&external, &output).unwrap();
+        assert!(matches!(
+            ensure_output_absent(&output),
+            Err(NormalizationError::Verification(_))
+        ));
+        assert_eq!(fs::read(&external).unwrap(), b"keep");
+
+        fs::remove_dir_all(temp).unwrap();
+        fs::remove_dir_all(outside).unwrap();
     }
 
     #[test]

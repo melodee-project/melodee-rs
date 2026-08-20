@@ -1460,6 +1460,7 @@ pub async fn record_excluded_summaries(
     source: &SourceDb,
     target: &PgPool,
     run_id: Uuid,
+    owner: &str,
 ) -> Result<(), String> {
     const EXCLUDED: &[(&str, &str)] = &[
         ("SearchHistories", "telemetry"),
@@ -1484,6 +1485,11 @@ pub async fn record_excluded_summaries(
         ("PlayQues", "retired_adr_0133"),
     ];
     let mut tx = target.begin().await.map_err(|e| e.to_string())?;
+    if !runs::is_fenced_in(&mut tx, run_id, owner).await? {
+        return Err(format!(
+            "run {run_id}: lost lease before excluded-table reconciliation"
+        ));
+    }
     for (table, reason) in EXCLUDED {
         // Table names come from the hardcoded exclusion allowlist above.
         let rows: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(

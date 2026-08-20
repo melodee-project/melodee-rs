@@ -6,7 +6,7 @@
 #![forbid(unsafe_code)]
 
 use std::{
-    fs::{self, DirEntry, File},
+    fs::{self, DirEntry},
     io::{self, Read},
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -19,7 +19,7 @@ use blake3::Hasher;
 use lofty::{
     file::{AudioFile, TaggedFileExt},
     prelude::Accessor,
-    read_from_path,
+    read_from,
     tag::ItemKey,
 };
 use melodee_domain::{
@@ -84,6 +84,7 @@ impl Drop for ToolInvocation {
 }
 
 mod normalize;
+mod secure_fs;
 
 pub use normalize::{
     NormalizationError, NormalizationOptions, NormalizationReport, normalize_release,
@@ -125,7 +126,8 @@ pub struct MediaTagProbe {
 /// exactly like the legacy provider did (log-and-skip).
 #[must_use]
 pub fn probe_media_file(path: &Path) -> Option<MediaTagProbe> {
-    let tagged = read_from_path(path).ok()?;
+    let mut file = secure_fs::open_read(path).ok()?;
+    let tagged = read_from(&mut file).ok()?;
     let duration_ms = u64::try_from(tagged.properties().duration().as_millis()).ok();
     let track_number = tagged
         .primary_tag()
@@ -452,10 +454,19 @@ fn inspect_file(
     bytes_hashed: &mut u64,
     ffprobe_invocations: &mut u32,
 ) -> Result<ObservedFile, InspectionError> {
-    let metadata = fs::metadata(path).map_err(|error| InspectionError::SourceUnreadable {
+    // Take the initial metadata snapshot from the same no-follow open used by
+    // the content readers. A path-only metadata check could observe a regular
+    // file and then let a replacement redirect the subsequent readers.
+    let file = secure_fs::open_read(path).map_err(|error| InspectionError::SourceUnreadable {
         path: path.to_path_buf(),
         message: error.to_string(),
     })?;
+    let metadata = file
+        .metadata()
+        .map_err(|error| InspectionError::SourceUnreadable {
+            path: path.to_path_buf(),
+            message: error.to_string(),
+        })?;
     let kind = classify(relative_path);
     let modified_at = metadata.modified().ok().map(|value| {
         OffsetDateTime::from(value)
@@ -617,7 +628,7 @@ fn inspect_file(
                     "max_bytes": options.max_artwork_bytes,
                 }),
             });
-        } else if let Err(error) = inspect_image_header(path) {
+        } else if let Err(error) = inspect_image_header(path, options.max_artwork_bytes) {
             file.findings.push(Finding {
                 code: "artwork.invalid".to_owned(),
                 message: error,
@@ -747,7 +758,10 @@ fn mime_for_container(format_name: Option<&str>) -> Option<String> {
 }
 
 pub(crate) fn hash_file(path: &Path) -> io::Result<(String, u64)> {
-    let mut file = File::open(path)?;
+    // Hash through the descriptor-relative no-follow opener. This keeps the
+    // inspection/normalization settling hash from following a source symlink
+    // introduced after the caller's metadata check.
+    let mut file = secure_fs::open_read(path)?;
     let mut hasher = Hasher::new();
     let mut buffer = vec![0_u8; HASH_BUFFER_SIZE];
     let mut bytes = 0_u64;
@@ -767,7 +781,8 @@ fn read_native_metadata(
     relative_path: &str,
     max_artwork_bytes: usize,
 ) -> Result<(ObservedMetadata, Vec<ObservedArtwork>, Vec<Finding>), String> {
-    let tagged = read_from_path(path).map_err(|error| error.to_string())?;
+    let mut file = secure_fs::open_read(path).map_err(|error| error.to_string())?;
+    let tagged = read_from(&mut file).map_err(|error| error.to_string())?;
     let tag = tagged.primary_tag().or_else(|| tagged.first_tag());
     let Some(tag) = tag else {
         return Err("no native metadata tag".to_owned());
@@ -1085,8 +1100,9 @@ pub(crate) fn parse_milliseconds(value: &str) -> Option<u64> {
     Some(millis as u64)
 }
 
-fn inspect_image_header(path: &Path) -> Result<(), String> {
-    let bytes = fs::read(path).map_err(|error| error.to_string())?;
+fn inspect_image_header(path: &Path, max_bytes: usize) -> Result<(), String> {
+    let file = secure_fs::open_read(path).map_err(|error| error.to_string())?;
+    let bytes = read_limited(file, max_bytes).map_err(|error| error.to_string())?;
     image_dimensions(&bytes)
         .map(|_| ())
         .ok_or_else(|| "unsupported or malformed image header".to_owned())

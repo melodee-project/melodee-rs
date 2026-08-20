@@ -773,6 +773,130 @@ fn generation_identity_and_manifest_facts_are_fail_closed() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn manifest_and_pending_symlinks_are_rejected_without_external_write() {
+    let parent = TempDir::new().unwrap();
+    let root = SearchRoot::open(&parent.path().join("search")).unwrap();
+    let generation_id = uuid::Uuid::now_v7();
+    let generation = root
+        .create_generation(
+            generation_id,
+            time::OffsetDateTime::UNIX_EPOCH,
+            melodee_search::SCHEMA_VERSION,
+            0,
+        )
+        .unwrap();
+    let outside = parent.path().join("outside-authoritative");
+    std::fs::write(&outside, b"authoritative").unwrap();
+
+    std::fs::remove_file(generation.join("generation.json")).unwrap();
+    std::os::unix::fs::symlink(&outside, generation.join("generation.json")).unwrap();
+    assert!(root.read_manifest(generation_id).is_err());
+    assert_eq!(std::fs::read(&outside).unwrap(), b"authoritative");
+}
+
+#[cfg(unix)]
+#[test]
+fn manifest_parent_symlink_is_rejected_without_external_read() {
+    let parent = TempDir::new().unwrap();
+    let root = SearchRoot::open(&parent.path().join("search")).unwrap();
+    let generation_id = uuid::Uuid::now_v7();
+    let generation = root
+        .create_generation(
+            generation_id,
+            time::OffsetDateTime::UNIX_EPOCH,
+            melodee_search::SCHEMA_VERSION,
+            0,
+        )
+        .unwrap();
+    let outside = parent.path().join("outside-generation");
+    std::fs::create_dir(&outside).unwrap();
+    std::fs::write(outside.join("generation.json"), b"authoritative").unwrap();
+    std::fs::remove_dir_all(&generation).unwrap();
+    std::os::unix::fs::symlink(&outside, &generation).unwrap();
+
+    assert!(root.read_manifest(generation_id).is_err());
+    assert_eq!(
+        std::fs::read(outside.join("generation.json")).unwrap(),
+        b"authoritative"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn sealing_rejects_a_pending_symlink_without_writing_its_target() {
+    let parent = TempDir::new().unwrap();
+    let root = SearchRoot::open(&parent.path().join("search")).unwrap();
+    let generation_id = uuid::Uuid::now_v7();
+    let generation = root
+        .create_generation(
+            generation_id,
+            time::OffsetDateTime::UNIX_EPOCH,
+            melodee_search::SCHEMA_VERSION,
+            0,
+        )
+        .unwrap();
+    let outside = parent.path().join("outside-authoritative");
+    std::fs::write(&outside, b"authoritative").unwrap();
+    let pending = generation.join("generation.json.pending");
+    std::os::unix::fs::symlink(&outside, &pending).unwrap();
+
+    let manifest = root.read_manifest(generation_id).unwrap();
+    assert!(
+        root.seal_generation(
+            manifest,
+            melodee_persistence::SearchDocumentCounts {
+                artists: 1,
+                releases: 2,
+                tracks: 3,
+            },
+        )
+        .is_err()
+    );
+    assert_eq!(std::fs::read(&outside).unwrap(), b"authoritative");
+    assert!(pending.symlink_metadata().unwrap().file_type().is_symlink());
+}
+
+#[test]
+fn sealing_replaces_a_stale_regular_pending_file_and_updates_counts() {
+    let directory = TempDir::new().unwrap();
+    let root = SearchRoot::open(directory.path()).unwrap();
+    let generation_id = uuid::Uuid::now_v7();
+    let generation = root
+        .create_generation(
+            generation_id,
+            time::OffsetDateTime::UNIX_EPOCH,
+            melodee_search::SCHEMA_VERSION,
+            0,
+        )
+        .unwrap();
+    std::fs::write(generation.join("generation.json.pending"), b"stale").unwrap();
+
+    let manifest = root.read_manifest(generation_id).unwrap();
+    let hash = root
+        .seal_generation(
+            manifest,
+            melodee_persistence::SearchDocumentCounts {
+                artists: 1,
+                releases: 2,
+                tracks: 3,
+            },
+        )
+        .unwrap();
+    let sealed = root.read_manifest(generation_id).unwrap();
+    assert_eq!(sealed.document_counts.artists, 1);
+    assert_eq!(sealed.document_counts.releases, 2);
+    assert_eq!(sealed.document_counts.tracks, 3);
+    assert!(!generation.join("generation.json.pending").exists());
+    assert_eq!(
+        hash,
+        blake3::hash(&serde_json::to_vec(&sealed).unwrap())
+            .to_hex()
+            .to_string()
+    );
+}
+
 #[test]
 fn invalid_regex_is_reported_instead_of_becoming_an_empty_query() {
     let (_directory, store) = populated();

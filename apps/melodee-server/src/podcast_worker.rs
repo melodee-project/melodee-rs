@@ -4,7 +4,7 @@ use std::{
     collections::HashMap,
     env,
     net::{IpAddr, SocketAddr},
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     time::Duration,
 };
 
@@ -142,21 +142,28 @@ impl PodcastConfig {
         if !root.is_absolute() {
             return Err(PodcastConfigError::InvalidRoot);
         }
-        reject_symlink_components(root)?;
-        let metadata = std::fs::symlink_metadata(root).map_err(PodcastConfigError::RootIo)?;
-        if !metadata.is_dir() || metadata.file_type().is_symlink() {
-            return Err(PodcastConfigError::InvalidRoot);
+        #[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+        {
+            verify_root_marker(root)
         }
-        let marker = root.join(ROOT_MARKER);
-        let marker_metadata =
-            std::fs::symlink_metadata(&marker).map_err(|error| match error.kind() {
-                std::io::ErrorKind::NotFound => PodcastConfigError::UnownedRoot,
-                _ => PodcastConfigError::RootIo(error),
-            })?;
-        if !marker_metadata.is_file() || marker_metadata.file_type().is_symlink() {
-            return Err(PodcastConfigError::InvalidRoot);
+        #[cfg(not(any(target_os = "linux", target_os = "android", target_vendor = "apple")))]
+        {
+            reject_symlink_components(root)?;
+            let metadata = std::fs::symlink_metadata(root).map_err(PodcastConfigError::RootIo)?;
+            if !metadata.is_dir() || metadata.file_type().is_symlink() {
+                return Err(PodcastConfigError::InvalidRoot);
+            }
+            let marker = root.join(ROOT_MARKER);
+            let marker_metadata =
+                std::fs::symlink_metadata(&marker).map_err(|error| match error.kind() {
+                    std::io::ErrorKind::NotFound => PodcastConfigError::UnownedRoot,
+                    _ => PodcastConfigError::RootIo(error),
+                })?;
+            if !marker_metadata.is_file() || marker_metadata.file_type().is_symlink() {
+                return Err(PodcastConfigError::InvalidRoot);
+            }
+            verify_root_marker(root)
         }
-        verify_root_marker(root)
     }
 }
 
@@ -218,22 +225,60 @@ fn validate_owned_root(root: &Path) -> Result<(), PodcastConfigError> {
     if !root.is_absolute() {
         return Err(PodcastConfigError::InvalidRoot);
     }
-    reject_symlink_components(root)?;
-    std::fs::create_dir_all(root).map_err(PodcastConfigError::RootIo)?;
-    reject_symlink_components(root)?;
-    let metadata = std::fs::symlink_metadata(root).map_err(PodcastConfigError::RootIo)?;
-    if !metadata.is_dir() || metadata.file_type().is_symlink() {
-        return Err(PodcastConfigError::InvalidRoot);
-    }
-    let marker = root.join(ROOT_MARKER);
-    if marker.exists() {
-        let marker_metadata =
-            std::fs::symlink_metadata(&marker).map_err(PodcastConfigError::RootIo)?;
-        if !marker_metadata.is_file() || marker_metadata.file_type().is_symlink() {
+    #[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+    let directory = open_podcast_directory(root, true).map_err(PodcastConfigError::RootIo)?;
+    #[cfg(not(any(target_os = "linux", target_os = "android", target_vendor = "apple")))]
+    {
+        reject_symlink_components(root)?;
+        std::fs::create_dir_all(root).map_err(PodcastConfigError::RootIo)?;
+        reject_symlink_components(root)?;
+        let metadata = std::fs::symlink_metadata(root).map_err(PodcastConfigError::RootIo)?;
+        if !metadata.is_dir() || metadata.file_type().is_symlink() {
             return Err(PodcastConfigError::InvalidRoot);
         }
+    }
+    #[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+    let marker_state = {
+        use rustix::fs::{AtFlags, FileType, statat};
+        match statat(&directory, ROOT_MARKER, AtFlags::SYMLINK_NOFOLLOW) {
+            Ok(stat) if FileType::from_raw_mode(stat.st_mode).is_file() => Some(()),
+            Ok(_) => return Err(PodcastConfigError::InvalidRoot),
+            Err(error) if error == rustix::io::Errno::NOENT => None,
+            Err(error) => return Err(PodcastConfigError::RootIo(std::io::Error::from(error))),
+        }
+    };
+    #[cfg(not(any(target_os = "linux", target_os = "android", target_vendor = "apple")))]
+    let marker_state = {
+        let marker = root.join(ROOT_MARKER);
+        match std::fs::symlink_metadata(&marker) {
+            Ok(metadata) if metadata.is_file() && !metadata.file_type().is_symlink() => Some(()),
+            Ok(_) => return Err(PodcastConfigError::InvalidRoot),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => return Err(PodcastConfigError::RootIo(error)),
+        }
+    };
+    if marker_state.is_some() {
         return verify_root_marker(root);
     }
+    #[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+    let is_empty = {
+        use rustix::fs::Dir;
+        let mut entries = Dir::read_from(&directory)
+            .map_err(std::io::Error::from)
+            .map_err(PodcastConfigError::RootIo)?;
+        let mut empty = true;
+        for entry in &mut entries {
+            let entry = entry
+                .map_err(std::io::Error::from)
+                .map_err(PodcastConfigError::RootIo)?;
+            if !matches!(entry.file_name().to_bytes(), b"." | b"..") {
+                empty = false;
+                break;
+            }
+        }
+        empty
+    };
+    #[cfg(not(any(target_os = "linux", target_os = "android", target_vendor = "apple")))]
     let is_empty = std::fs::read_dir(root)
         .map_err(PodcastConfigError::RootIo)?
         .next()
@@ -280,16 +325,58 @@ fn reject_symlink_components(path: &Path) -> Result<(), PodcastConfigError> {
     Ok(())
 }
 
+/// Opens an absolute podcast root one component at a time. Creation is done
+/// with `mkdirat` relative to the already-open parent, so a concurrent
+/// replacement cannot redirect ownership initialization through a symlink.
 #[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
-fn verify_root_marker(root: &Path) -> Result<(), PodcastConfigError> {
-    use rustix::fs::{Mode, OFlags, open, openat};
-    let directory = open(
-        root,
+fn open_podcast_directory(root: &Path, create: bool) -> std::io::Result<std::fs::File> {
+    use rustix::fs::{CWD, Mode, OFlags, mkdirat, openat};
+
+    if !root.is_absolute() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "podcast root must be absolute",
+        ));
+    }
+    let mut current = openat(
+        CWD,
+        b"/".as_slice(),
         OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC | OFlags::NOFOLLOW,
         Mode::empty(),
     )
-    .map_err(std::io::Error::from)
-    .map_err(PodcastConfigError::RootIo)?;
+    .map_err(std::io::Error::from)?;
+    for component in root.components() {
+        let Component::Normal(name) = component else {
+            if matches!(component, Component::RootDir) {
+                continue;
+            }
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "podcast root contains traversal",
+            ));
+        };
+        let flags = OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC | OFlags::NOFOLLOW;
+        match openat(&current, name, flags, Mode::empty()) {
+            Ok(next) => current = next,
+            Err(error) if create && error == rustix::io::Errno::NOENT => {
+                match mkdirat(&current, name, Mode::RWXU | Mode::RGRP | Mode::XGRP) {
+                    Ok(()) => {}
+                    Err(error) if error == rustix::io::Errno::EXIST => {}
+                    Err(error) => return Err(std::io::Error::from(error)),
+                }
+                current =
+                    openat(&current, name, flags, Mode::empty()).map_err(std::io::Error::from)?;
+            }
+            Err(error) => return Err(std::io::Error::from(error)),
+        }
+    }
+    Ok(std::fs::File::from(current))
+}
+
+#[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+fn verify_root_marker(root: &Path) -> Result<(), PodcastConfigError> {
+    use rustix::fs::{Mode, OFlags, openat};
+    let directory = open_podcast_directory(root, false).map_err(PodcastConfigError::RootIo)?;
     let marker = openat(
         &directory,
         ROOT_MARKER,
@@ -310,14 +397,8 @@ fn verify_root_marker(root: &Path) -> Result<(), PodcastConfigError> {
 
 #[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
 fn create_root_marker(root: &Path) -> Result<(), PodcastConfigError> {
-    use rustix::fs::{Mode, OFlags, open, openat};
-    let directory = open(
-        root,
-        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC | OFlags::NOFOLLOW,
-        Mode::empty(),
-    )
-    .map_err(std::io::Error::from)
-    .map_err(PodcastConfigError::RootIo)?;
+    use rustix::fs::{Mode, OFlags, openat};
+    let directory = open_podcast_directory(root, false).map_err(PodcastConfigError::RootIo)?;
     let marker = openat(
         &directory,
         ROOT_MARKER,
@@ -329,7 +410,8 @@ fn create_root_marker(root: &Path) -> Result<(), PodcastConfigError> {
     let mut marker = std::fs::File::from(marker);
     std::io::Write::write_all(&mut marker, b"melodee-podcast-root-v1\n")
         .map_err(PodcastConfigError::RootIo)?;
-    std::io::Write::flush(&mut marker).map_err(PodcastConfigError::RootIo)
+    std::io::Write::flush(&mut marker).map_err(PodcastConfigError::RootIo)?;
+    marker.sync_all().map_err(PodcastConfigError::RootIo)
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "android", target_vendor = "apple")))]
@@ -858,19 +940,17 @@ async fn create_owned_temp(
     root: &Path,
     path: &Path,
 ) -> Result<tokio::fs::File, PodcastWorkerError> {
-    use rustix::fs::{Mode, OFlags, open, openat};
+    use rustix::fs::{Mode, OFlags, openat};
     if path.parent() != Some(root) {
         return Err(PodcastWorkerError::InvalidResponse);
     }
     let name = path
         .file_name()
         .ok_or(PodcastWorkerError::InvalidResponse)?;
-    let directory = open(
-        root,
-        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC | OFlags::NOFOLLOW,
-        Mode::empty(),
-    )
-    .map_err(std::io::Error::from)?;
+    // Hold every ancestor with O_NOFOLLOW. Opening `root` by pathname with
+    // O_NOFOLLOW would still permit an ancestor replacement to redirect the
+    // download into an operator-managed tree.
+    let directory = open_podcast_directory(root, false).map_err(PodcastWorkerError::Io)?;
     let file = openat(
         &directory,
         name,
@@ -902,16 +982,11 @@ async fn rename_owned_noreplace(
     source: &Path,
     destination: &Path,
 ) -> Result<(), PodcastWorkerError> {
-    use rustix::fs::{Mode, OFlags, RenameFlags, open, renameat_with};
+    use rustix::fs::{RenameFlags, renameat_with};
     if source.parent() != Some(root) || destination.parent() != Some(root) {
         return Err(PodcastWorkerError::InvalidResponse);
     }
-    let directory = open(
-        root,
-        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC | OFlags::NOFOLLOW,
-        Mode::empty(),
-    )
-    .map_err(std::io::Error::from)?;
+    let directory = open_podcast_directory(root, false).map_err(PodcastWorkerError::Io)?;
     renameat_with(
         &directory,
         source
@@ -977,6 +1052,30 @@ async fn record_failure(
     Ok(())
 }
 
+#[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+async fn remove_owned_file(root: &Path, path: &Path) -> Result<(), PodcastWorkerError> {
+    use rustix::fs::{AtFlags, FileType, statat, unlinkat};
+
+    if path.parent() != Some(root) {
+        return Err(PodcastWorkerError::InvalidResponse);
+    }
+    let name = path
+        .file_name()
+        .ok_or(PodcastWorkerError::InvalidResponse)?;
+    let directory = open_podcast_directory(root, false).map_err(PodcastWorkerError::Io)?;
+    let stat = match statat(&directory, name, AtFlags::SYMLINK_NOFOLLOW) {
+        Ok(stat) => stat,
+        Err(error) if error == rustix::io::Errno::NOENT => return Ok(()),
+        Err(error) => return Err(PodcastWorkerError::Io(std::io::Error::from(error))),
+    };
+    if FileType::from_raw_mode(stat.st_mode) != FileType::RegularFile {
+        return Err(PodcastWorkerError::InvalidResponse);
+    }
+    unlinkat(&directory, name, AtFlags::empty()).map_err(std::io::Error::from)?;
+    Ok(())
+}
+
+#[cfg(windows)]
 async fn remove_owned_file(root: &Path, path: &Path) -> Result<(), PodcastWorkerError> {
     if path.parent() != Some(root) {
         return Err(PodcastWorkerError::InvalidResponse);
@@ -990,6 +1089,19 @@ async fn remove_owned_file(root: &Path, path: &Path) -> Result<(), PodcastWorker
         Err(error) => return Err(error.into()),
     }
     Ok(())
+}
+
+#[cfg(not(any(
+    target_os = "linux",
+    target_os = "android",
+    target_vendor = "apple",
+    windows
+)))]
+async fn remove_owned_file(_root: &Path, _path: &Path) -> Result<(), PodcastWorkerError> {
+    Err(PodcastWorkerError::Io(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "race-resistant owned-file cleanup is unsupported",
+    )))
 }
 
 pub async fn run_podcast_once(
@@ -1453,6 +1565,44 @@ mod tests {
                 b"external"
             );
         }
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+    #[tokio::test]
+    async fn owned_publication_rejects_an_ancestor_symlink() {
+        let directory = tempfile::tempdir().expect("temp");
+        let real_parent = directory.path().join("real-parent");
+        std::fs::create_dir(&real_parent).expect("real parent");
+        let real_root = real_parent.join("podcasts");
+        std::fs::create_dir(&real_root).expect("podcast root");
+        std::fs::write(real_root.join(ROOT_MARKER), b"melodee-podcast-root-v1\n")
+            .expect("root marker");
+        let linked_parent = directory.path().join("linked-parent");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&real_parent, &linked_parent).expect("linked parent");
+        let linked_root = linked_parent.join("podcasts");
+        let temporary = linked_root.join("download.tmp");
+
+        assert!(create_owned_temp(&linked_root, &temporary).await.is_err());
+        assert!(!real_root.join("download.tmp").exists());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn owned_cleanup_rejects_symlink_without_touching_the_target() {
+        let directory = tempfile::tempdir().expect("temp");
+        let root = directory.path();
+        let external = root.join("external.media");
+        let link = root.join("owned.media");
+        std::fs::write(&external, b"authoritative").expect("external");
+        std::os::unix::fs::symlink(&external, &link).expect("symlink");
+
+        assert!(remove_owned_file(root, &link).await.is_err());
+        assert!(link.is_symlink());
+        assert_eq!(
+            std::fs::read(&external).expect("unchanged"),
+            b"authoritative"
+        );
     }
 
     #[test]

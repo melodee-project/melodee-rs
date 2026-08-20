@@ -129,4 +129,5 @@ proves procedure.
 
 - [PRD.md](../../PRD.md) §49 (migration requirements)
 - [ADR-0148: Legacy migration contract](ADR-0148-legacy-migration-contract.md)
+- [ADR-0149 decision package](../evidence/r4/adr-0149-decision-package.md)
 - [IMPLMENTATION_OUTSTANDING.md](../../IMPLMENTATION_OUTSTANDING.md) §9 (R4)

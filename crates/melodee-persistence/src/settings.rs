@@ -40,7 +40,7 @@
 //! deliberately NOT carried from the legacy seed: both shipped publicly
 //! known values and must be regenerated, never imported (inventory quirk 4).
 
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, io::Read, path::Path};
 
 use serde::{Deserialize, Serialize};
 use sqlx::{PgExecutor, PgPool};
@@ -70,6 +70,129 @@ pub const ENV_CONFIG_FILE: &str = "MELODEE__CONFIG_FILE";
 pub const CONFIG_EXPORT_WARNING: &str = "This file contains server configuration. Secret values \
 are REDACTED and must be re-entered after import; redacted markers are never accepted as values. \
 Handle this file as sensitive: non-secret values can still reveal infrastructure details.";
+
+/// Read the optional config layer through a descriptor boundary. The config
+/// file is operator-managed input, but resolving it through `std::fs::read`
+/// would leave a check-to-use window in which a replaced symlink could point
+/// the resolver at a different file. Supported Unix targets walk every parent
+/// component with `O_NOFOLLOW` and inspect the opened leaf before reading it.
+fn read_config_file(path: &Path) -> std::io::Result<Vec<u8>> {
+    #[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+    {
+        use std::{ffi::OsString, os::unix::ffi::OsStrExt};
+
+        use rustix::{
+            fd::OwnedFd,
+            fs::{CWD, FileType, Mode, OFlags, fstat, openat},
+        };
+
+        fn open_root() -> std::io::Result<OwnedFd> {
+            openat(
+                CWD,
+                b"/".as_slice(),
+                OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC | OFlags::NOFOLLOW,
+                Mode::empty(),
+            )
+            .map_err(std::io::Error::from)
+        }
+
+        fn normalized_absolute_path(path: &Path) -> std::io::Result<std::path::PathBuf> {
+            let input = if path.is_absolute() {
+                path.to_path_buf()
+            } else {
+                std::env::current_dir()?.join(path)
+            };
+            let mut components = Vec::<OsString>::new();
+            for component in input.components() {
+                match component {
+                    std::path::Component::RootDir => components.clear(),
+                    std::path::Component::Normal(name) => components.push(name.to_os_string()),
+                    std::path::Component::CurDir => {}
+                    std::path::Component::ParentDir => {
+                        components.pop().ok_or_else(|| {
+                            std::io::Error::new(
+                                std::io::ErrorKind::InvalidInput,
+                                "config file path escapes the filesystem root",
+                            )
+                        })?;
+                    }
+                    std::path::Component::Prefix(_) => {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::InvalidInput,
+                            "config file path has an unsupported prefix",
+                        ));
+                    }
+                }
+            }
+            let mut absolute = std::path::PathBuf::from("/");
+            for component in components {
+                absolute.push(component);
+            }
+            Ok(absolute)
+        }
+
+        let absolute = normalized_absolute_path(path)?;
+        let parent = absolute.parent().ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "config file path has no parent",
+            )
+        })?;
+        let name = absolute.file_name().ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "config file path has no file name",
+            )
+        })?;
+        let mut directory = open_root()?;
+        for component in parent.components() {
+            let std::path::Component::Normal(component) = component else {
+                if matches!(component, std::path::Component::RootDir) {
+                    continue;
+                }
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "config file parent contains traversal",
+                ));
+            };
+            directory = openat(
+                &directory,
+                component.as_bytes(),
+                OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC | OFlags::NOFOLLOW,
+                Mode::empty(),
+            )
+            .map_err(std::io::Error::from)?;
+        }
+        let file = openat(
+            &directory,
+            name.as_bytes(),
+            OFlags::RDONLY | OFlags::CLOEXEC | OFlags::NOFOLLOW | OFlags::NONBLOCK,
+            Mode::empty(),
+        )
+        .map_err(std::io::Error::from)?;
+        let stat = fstat(&file).map_err(std::io::Error::from)?;
+        if FileType::from_raw_mode(stat.st_mode) != FileType::RegularFile {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "config file is not a regular file",
+            ));
+        }
+        let file = std::fs::File::from(file);
+        let mut raw = Vec::new();
+        file.take(MAX_IMPORT_DOCUMENT_BYTES as u64 + 1)
+            .read_to_end(&mut raw)?;
+        Ok(raw)
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "android", target_vendor = "apple")))]
+    {
+        let _ = path;
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "race-resistant config-file reads are unsupported on this platform",
+        ))
+    }
+}
 
 /// Value shape and validation rule for a known registry key.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -932,7 +1055,7 @@ impl<'a> SettingsResolver<'a> {
         path: &std::path::Path,
         env_reader: &'a (dyn Fn(&str) -> Option<String> + Send + Sync),
     ) -> Result<Self, SettingsError> {
-        let raw = std::fs::read(path)
+        let raw = read_config_file(path)
             .map_err(|error| SettingsError::ConfigFile(format!("{}: {error}", path.display())))?;
         if raw.len() > MAX_IMPORT_DOCUMENT_BYTES {
             return Err(SettingsError::ConfigFile(format!(

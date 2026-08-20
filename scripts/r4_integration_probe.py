@@ -20,9 +20,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import shutil
+import os
+import re
 import smtplib
 import ssl
+import stat
 import subprocess
 import sys
 import time
@@ -34,18 +36,36 @@ from urllib.parse import urljoin, urlsplit
 
 
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
+MAX_OIDC_KEYS = 256
+HEADER_NAME = re.compile(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
 
 
 class ProbeError(RuntimeError):
     """A failed bounded probe with no sensitive endpoint material."""
 
 
+class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Keep an explicitly supplied probe endpoint as the only target."""
+
+    def redirect_request(self, request, fp, code, msg, headers, newurl):
+        del request, fp, code, msg, headers, newurl
+        return None
+
+
+NO_REDIRECT_OPENER = urllib.request.build_opener(NoRedirectHandler)
+
+
 def validate_url(value: str, label: str) -> str:
-    parsed = urlsplit(value)
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+    except ValueError as error:
+        raise ProbeError(f"{label} must use a valid URL host and port") from error
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
         raise ProbeError(f"{label} must be an http(s) URL with a host")
     if parsed.username or parsed.password:
         raise ProbeError(f"{label} must not contain embedded credentials")
+    del port
     return value.rstrip("/")
 
 
@@ -65,55 +85,214 @@ def read_response(response: urllib.response.addinfourl) -> bytes:
 def http_get(url: str, headers: dict[str, str] | None = None) -> tuple[int, dict[str, str], bytes]:
     request = urllib.request.Request(url, headers=headers or {}, method="GET")
     try:
-        with urllib.request.urlopen(request, timeout=10) as response:
+        with NO_REDIRECT_OPENER.open(request, timeout=10) as response:
             return response.status, dict(response.headers.items()), read_response(response)
     except urllib.error.HTTPError as error:
-        body = error.read(MAX_RESPONSE_BYTES + 1)
-        if len(body) > MAX_RESPONSE_BYTES:
-            raise ProbeError("error response exceeded the 4 MiB bounded probe limit") from error
-        return error.code, dict(error.headers.items()), body
+        try:
+            body = error.read(MAX_RESPONSE_BYTES + 1)
+            if len(body) > MAX_RESPONSE_BYTES:
+                raise ProbeError("error response exceeded the 4 MiB bounded probe limit") from error
+            return error.code, dict(error.headers.items()), body
+        finally:
+            error.close()
     except (urllib.error.URLError, TimeoutError) as error:
         raise ProbeError(f"HTTP probe failed for endpoint {endpoint_fingerprint(url)}") from error
 
 
+def parse_expected_header(value: str) -> tuple[str, str]:
+    """Parse a response-header assertion without ever echoing its value."""
+    name, separator, expected = value.partition("=")
+    name = name.strip()
+    if not separator or not HEADER_NAME.fullmatch(name):
+        raise ProbeError("--expect-header must use a valid Header-Name=value form")
+    if any(ord(character) < 32 or ord(character) == 127 for character in expected):
+        raise ProbeError("--expect-header contains a control character")
+    return name.lower(), expected
+
+
+def proxy_tls_probe(
+    url: str,
+    *,
+    require_https: bool,
+    expected_headers: list[str],
+) -> dict[str, object]:
+    """Perform a bounded GET through the intended proxy/TLS endpoint.
+
+    Only the requested header names and a fingerprint of the endpoint are
+    emitted. Values are compared in memory and are never printed or stored in
+    the evidence artifact, preventing accidental capture of cookies or tokens.
+    """
+    endpoint = validate_url(url, "--proxy-url")
+    parsed = urlsplit(endpoint)
+    if require_https and parsed.scheme != "https":
+        raise ProbeError("--proxy-url must use https when --require-https is set")
+    assertions = [parse_expected_header(value) for value in expected_headers]
+    status, headers, _body = http_get(endpoint)
+    normalized = {name.lower(): value for name, value in headers.items()}
+    for name, expected in assertions:
+        if normalized.get(name) != expected:
+            raise ProbeError(f"proxy/TLS response header assertion failed for {name}")
+    return {
+        "status": status,
+        "scheme": parsed.scheme,
+        "endpoint_fingerprint": endpoint_fingerprint(endpoint),
+        "asserted_headers": [name for name, _expected in assertions],
+    }
+
+
+def validate_jwks_document(document: object) -> dict[str, object]:
+    """Validate only bounded public-key metadata, never returning key material."""
+    if not isinstance(document, dict) or not isinstance(document.get("keys"), list):
+        raise ProbeError("OIDC JWKS response lacks a keys array")
+    keys = document["keys"]
+    if len(keys) < 1 or len(keys) > MAX_OIDC_KEYS:
+        raise ProbeError(f"OIDC JWKS keys array must contain 1 to {MAX_OIDC_KEYS} keys")
+    key_types: set[str] = set()
+    for key in keys:
+        if not isinstance(key, dict) or not isinstance(key.get("kty"), str) or not key["kty"]:
+            raise ProbeError("OIDC JWKS contains a key without a key type")
+        if "kid" in key and not isinstance(key["kid"], str):
+            raise ProbeError("OIDC JWKS contains a non-string key identifier")
+        key_types.add(key["kty"])
+    return {"key_count": len(keys), "key_types": sorted(key_types)}
+
+
+def contains_symlink_component(path: Path) -> bool:
+    """Return true when any existing component of ``path`` is a symlink."""
+    current = Path(path.anchor) if path.is_absolute() else Path(".")
+    for component in path.parts:
+        if component in {"", path.anchor}:
+            continue
+        current /= component
+        try:
+            mode = current.lstat().st_mode
+        except FileNotFoundError:
+            break
+        except OSError:
+            # The caller must fail closed when a component cannot be inspected.
+            return True
+        if stat.S_ISLNK(mode):
+            return True
+    return False
+
+
+def open_descriptor_nofollow(path: Path, leaf_flags: int) -> tuple[int, os.stat_result]:
+    """Open a path through directory descriptors without following races."""
+    if os.name != "posix":
+        raise ProbeError("secure descriptor inspection is unsupported on this platform")
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    directory = getattr(os, "O_DIRECTORY", 0)
+    if not nofollow or not directory:
+        raise ProbeError("secure descriptor inspection requires no-follow directory support")
+    absolute = path if path.is_absolute() else Path.cwd() / path
+    components = absolute.parts
+    if not components or any(component == ".." for component in components):
+        raise ProbeError("backup file path must not contain traversal")
+    flags = os.O_RDONLY | os.O_CLOEXEC | nofollow | directory
+    current = os.open(absolute.anchor or ".", flags)
+    try:
+        for component in components[1:] if absolute.anchor else components:
+            if component in {"", "."}:
+                continue
+            is_leaf = component == components[-1]
+            next_fd = os.open(
+                component,
+                leaf_flags if is_leaf else flags,
+                dir_fd=current,
+            )
+            os.close(current)
+            current = next_fd
+        metadata = os.fstat(current)
+        return current, metadata
+    except OSError as error:
+        os.close(current)
+        raise ProbeError("path could not be opened through a safe descriptor") from error
+
+
+def open_regular_file_nofollow(path: Path) -> tuple[int, os.stat_result]:
+    """Open a backup through directory descriptors without following races."""
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    cloexec = getattr(os, "O_CLOEXEC", 0)
+    nonblock = getattr(os, "O_NONBLOCK", 0)
+    descriptor, metadata = open_descriptor_nofollow(
+        path,
+        os.O_RDONLY | cloexec | nofollow | nonblock,
+    )
+    if not stat.S_ISREG(metadata.st_mode):
+        os.close(descriptor)
+        raise ProbeError("backup file must be a regular, non-symlink file")
+    return descriptor, metadata
+
+
+def open_directory_nofollow(path: Path) -> tuple[int, os.stat_result]:
+    """Open a configured directory through held no-follow descriptors."""
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    cloexec = getattr(os, "O_CLOEXEC", 0)
+    directory = getattr(os, "O_DIRECTORY", 0)
+    descriptor, metadata = open_descriptor_nofollow(
+        path,
+        os.O_RDONLY | cloexec | directory | nofollow,
+    )
+    if not stat.S_ISDIR(metadata.st_mode):
+        os.close(descriptor)
+        raise ProbeError("configured path is not a regular directory")
+    return descriptor, metadata
+
+
 def filesystem_probe(path: Path, label: str) -> dict[str, object]:
-    if path.is_symlink() or not path.exists() or not path.is_dir():
+    if contains_symlink_component(path):
         raise ProbeError(f"{label} must be an existing regular directory and not a symlink")
-    usage = shutil.disk_usage(path)
+    descriptor, metadata = open_directory_nofollow(path)
+    try:
+        usage = os.fstatvfs(descriptor)
+        block_size = usage.f_frsize or usage.f_bsize
+        free_bytes = usage.f_bavail * block_size
+        total_bytes = usage.f_blocks * block_size
+    finally:
+        os.close(descriptor)
     return {
         "label": label,
         "path_fingerprint": hashlib.sha256(str(path).encode()).hexdigest(),
-        "device": path.stat().st_dev,
-        "free_bytes": usage.free,
-        "total_bytes": usage.total,
-        "headroom_ratio": round(usage.free / usage.total, 6) if usage.total else 0.0,
+        "device": metadata.st_dev,
+        "free_bytes": free_bytes,
+        "total_bytes": total_bytes,
+        "headroom_ratio": round(free_bytes / total_bytes, 6) if total_bytes else 0.0,
     }
 
 
 def backup_probe(path: Path) -> dict[str, object]:
-    if path.is_symlink() or not path.is_file():
+    if contains_symlink_component(path):
         raise ProbeError("backup file must be a regular, non-symlink file")
-    if path.stat().st_size <= 0:
-        raise ProbeError("backup file is empty")
-    result = subprocess.run(
-        ["pg_restore", "--list", str(path)],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0 or not result.stdout.strip():
-        raise ProbeError("backup file failed pg_restore --list validation")
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return {
-        "bytes": path.stat().st_size,
-        "sha256": digest.hexdigest(),
-        "toc_entries": sum(
-            1 for line in result.stdout.splitlines() if line.strip() and not line.startswith(";")
-        ),
-    }
+    descriptor, metadata = open_regular_file_nofollow(path)
+    try:
+        if metadata.st_size <= 0:
+            raise ProbeError("backup file is empty")
+        digest = hashlib.sha256()
+        with os.fdopen(os.dup(descriptor), "rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        result = subprocess.run(
+            ["pg_restore", "--list", f"/proc/self/fd/{descriptor}"],
+            check=False,
+            capture_output=True,
+            text=True,
+            pass_fds=(descriptor,),
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            raise ProbeError("backup file failed pg_restore --list validation")
+        return {
+            "bytes": metadata.st_size,
+            "sha256": digest.hexdigest(),
+            "device": metadata.st_dev,
+            "toc_entries": sum(
+                1
+                for line in result.stdout.splitlines()
+                if line.strip() and not line.startswith(";")
+            ),
+        }
+    finally:
+        os.close(descriptor)
 
 
 def run(args: argparse.Namespace) -> dict[str, object]:
@@ -141,7 +320,7 @@ def run(args: argparse.Namespace) -> dict[str, object]:
             method="GET",
         )
         try:
-            with urllib.request.urlopen(request, timeout=10) as response:
+            with NO_REDIRECT_OPENER.open(request, timeout=10) as response:
                 body = read_response(response)
                 status = response.status
                 content_range = response.headers.get("Content-Range", "")
@@ -160,10 +339,25 @@ def run(args: argparse.Namespace) -> dict[str, object]:
             raise ProbeError("OIDC discovery response was not JSON") from error
         if status != 200 or not isinstance(document.get("issuer"), str) or not isinstance(document.get("jwks_uri"), str):
             raise ProbeError("OIDC discovery response lacks issuer/jwks_uri")
+        issuer_url = validate_url(document["issuer"], "OIDC issuer")
+        jwks_url = validate_url(document["jwks_uri"], "OIDC jwks_uri")
+        jwks_status, _jwks_headers, jwks_body = http_get(jwks_url)
+        try:
+            jwks_document = json.loads(jwks_body)
+        except json.JSONDecodeError as error:
+            raise ProbeError("OIDC JWKS response was not JSON") from error
+        if jwks_status != 200:
+            raise ProbeError(f"OIDC JWKS endpoint returned {jwks_status}, expected 200")
+        jwks_summary = validate_jwks_document(jwks_document)
         checks["oidc_discovery"] = {
             "status": status,
-            "issuer_fingerprint": endpoint_fingerprint(document["issuer"]),
-            "jwks_fingerprint": endpoint_fingerprint(document["jwks_uri"]),
+            "issuer_fingerprint": endpoint_fingerprint(issuer_url),
+            "jwks_fingerprint": endpoint_fingerprint(jwks_url),
+            "jwks_status": jwks_status,
+        }
+        checks["oidc_jwks"] = {
+            "status": jwks_status,
+            **jwks_summary,
         }
 
     if args.podcast_feed:
@@ -190,6 +384,14 @@ def run(args: argparse.Namespace) -> dict[str, object]:
             "endpoint_fingerprint": endpoint_fingerprint(lastfm_url),
         }
 
+    proxy_url = getattr(args, "proxy_url", None)
+    if proxy_url:
+        checks["proxy_tls"] = proxy_tls_probe(
+            proxy_url,
+            require_https=getattr(args, "require_https", False),
+            expected_headers=getattr(args, "expect_header", []),
+        )
+
     if args.smtp_host:
         if args.smtp_port < 1 or args.smtp_port > 65535:
             raise ProbeError("--smtp-port must be between 1 and 65535")
@@ -209,11 +411,12 @@ def run(args: argparse.Namespace) -> dict[str, object]:
     if args.backup_file:
         checks["backup"] = backup_probe(args.backup_file)
     if args.canonical_root and args.backup_file:
-        backup_device = args.backup_file.stat().st_dev
+        backup_device = checks["backup"]["device"]  # type: ignore[index]
+        canonical_device = checks["canonical_root"]["device"]  # type: ignore[index]
         checks["storage_topology"] = {
-            "canonical_device": args.canonical_root.stat().st_dev,
+            "canonical_device": canonical_device,
             "backup_device": backup_device,
-            "same_filesystem": args.canonical_root.stat().st_dev == backup_device,
+            "same_filesystem": canonical_device == backup_device,
         }
     results["result"] = "pass"
     return results
@@ -227,6 +430,22 @@ def main() -> int:
     parser.add_argument("--oidc-discovery-url")
     parser.add_argument("--podcast-feed")
     parser.add_argument("--lastfm-api-url")
+    parser.add_argument(
+        "--proxy-url",
+        help="bounded GET endpoint exposed through the intended proxy/TLS path",
+    )
+    parser.add_argument(
+        "--require-https",
+        action="store_true",
+        help="require --proxy-url to use HTTPS with normal certificate validation",
+    )
+    parser.add_argument(
+        "--expect-header",
+        action="append",
+        default=[],
+        metavar="NAME=VALUE",
+        help="assert a response header without recording its value; repeatable",
+    )
     parser.add_argument("--smtp-host")
     parser.add_argument("--smtp-port", type=int, default=587)
     parser.add_argument("--smtp-starttls", action="store_true")

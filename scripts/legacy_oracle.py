@@ -354,7 +354,12 @@ def seed_media_files(catalog: dict) -> dict[str, tuple[int, str]]:
     return results
 
 
-def seed_sql(catalog: dict, media: dict[str, tuple[int, str]]) -> str:
+def seed_sql(
+    catalog: dict,
+    media: dict[str, tuple[int, str]],
+    *,
+    include_native_share: bool = True,
+) -> str:
     now = "TIMESTAMPTZ '2026-08-07T00:00:00Z'"
     statements: list[str] = ["BEGIN;"]
 
@@ -699,30 +704,34 @@ def seed_sql(catalog: dict, media: dict[str, tuple[int, str]]) -> str:
                 + ");"
             )
 
-    # Stable anonymous native-v1 share fixture. The public short ID is part of
-    # the external contract and intentionally remains human-readable here so
-    # the unauthenticated route can be captured without leaking a generated ID
-    # from a prior request step.
-    statements.append(
-        'INSERT INTO "Shares" ("UserId","ShareId","ShareType","ShareUniqueId","IsDownloadable",'
-        '"VisitCount","IsLocked","SortOrder","ApiKey","CreatedAt","Description") VALUES ('
-        + ",".join(
-            [
-                f'(SELECT "Id" FROM "Users" WHERE "UserName" = {sql_literal(FIXTURE_USER)})',
-                str(song_ids["nl-02-polarveil"]),
-                "1",
-                sql_literal("phase7-public-song"),
-                "false",
-                "0",
-                "false",
-                "0",
-                sql_literal(fixture_uuid("share", "public-song")),
-                now,
-                sql_literal("Phase 7 public share fixture"),
-            ]
+    if include_native_share:
+        # Stable anonymous native-v1 share fixture. The public short ID is
+        # part of the external contract and intentionally remains
+        # human-readable here so the unauthenticated route can be captured
+        # without leaking a generated ID from a prior request step. The
+        # OpenSubsonic and Jellyfin capture flows do not use this native-only
+        # setup; omitting it keeps their clean-target share state aligned with
+        # their independently captured goldens.
+        statements.append(
+            'INSERT INTO "Shares" ("UserId","ShareId","ShareType","ShareUniqueId","IsDownloadable",'
+            '"VisitCount","IsLocked","SortOrder","ApiKey","CreatedAt","Description") VALUES ('
+            + ",".join(
+                [
+                    f'(SELECT "Id" FROM "Users" WHERE "UserName" = {sql_literal(FIXTURE_USER)})',
+                    str(song_ids["nl-02-polarveil"]),
+                    "1",
+                    sql_literal("phase7-public-song"),
+                    "false",
+                    "0",
+                    "false",
+                    "0",
+                    sql_literal(fixture_uuid("share", "public-song")),
+                    now,
+                    sql_literal("Phase 7 public share fixture"),
+                ]
+            )
+            + ");"
         )
-        + ");"
-    )
 
     statements.append("SET session_replication_role = DEFAULT;")
 
@@ -756,7 +765,7 @@ def seed_sql(catalog: dict, media: dict[str, tuple[int, str]]) -> str:
     return "\n".join(statements)
 
 
-def cmd_seed(config: OracleConfig) -> None:
+def cmd_seed(config: OracleConfig, *, include_native_share: bool = True) -> None:
     catalog = json.loads(FIXTURE_CATALOG.read_text(encoding="utf-8"))
 
     # Deterministic canonical baseUrl (never the legacy placeholder) and
@@ -808,7 +817,7 @@ def cmd_seed(config: OracleConfig) -> None:
 
     LIBRARY_DIR.mkdir(parents=True, exist_ok=True)
     media = seed_media_files(catalog)
-    sql = seed_sql(catalog, media)
+    sql = seed_sql(catalog, media, include_native_share=include_native_share)
     sql_file = WORK_DIR / "seed.sql"
     sql_file.parent.mkdir(parents=True, exist_ok=True)
     sql_file.write_text(sql, encoding="utf-8")
@@ -1069,7 +1078,9 @@ def cmd_capture(config: OracleConfig) -> None:
         if not scenario_path.exists():
             print(f"skipping {scenario_file} (not present)")
             continue
-        cmd_seed(config)
+        # The native community flow needs the deterministic public share;
+        # all other surface captures start without native-only state.
+        cmd_seed(config, include_native_share=scenario_file == "native-community.json")
         # The legacy server caches user/song detail rows; restart so reseeded
         # credential and catalog changes are visible (Issue 6 discovery).
         cmd_stop(config)
@@ -1144,19 +1155,26 @@ def main() -> None:
         "command",
         choices=["status", "build", "reset-db", "seed", "start", "stop", "verify", "recreate", "capture"],
     )
+    parser.add_argument(
+        "--without-native-share",
+        action="store_true",
+        help="omit the native-v1 public-share fixture when running the seed command",
+    )
     args = parser.parse_args()
     config = OracleConfig(args)
-    {
-        "status": cmd_status,
-        "build": cmd_build,
-        "reset-db": cmd_reset_db,
-        "seed": cmd_seed,
-        "start": cmd_start,
-        "stop": cmd_stop,
-        "verify": cmd_verify,
-        "recreate": cmd_recreate,
-        "capture": cmd_capture,
-    }[args.command](config)
+    if args.command == "seed":
+        cmd_seed(config, include_native_share=not args.without_native_share)
+    else:
+        {
+            "status": cmd_status,
+            "build": cmd_build,
+            "reset-db": cmd_reset_db,
+            "start": cmd_start,
+            "stop": cmd_stop,
+            "verify": cmd_verify,
+            "recreate": cmd_recreate,
+            "capture": cmd_capture,
+        }[args.command](config)
 
 
 if __name__ == "__main__":

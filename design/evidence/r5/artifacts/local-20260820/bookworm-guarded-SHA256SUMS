@@ -1,0 +1,3 @@
+0f7fdc40e901b3476f33df613492bf9aaf50edf338b421f0fa55889f015105cd  design/evidence/r5/artifacts/local-20260820/bookworm-guarded-amd64-metadata.json
+cbb2a2618cd748432677e15ef95c061365b57d190634d5f79595a1674ab919a7  design/evidence/r5/artifacts/local-20260820/bookworm-guarded-amd64-sbom.spdx.json
+17779256912ed17850610a5704af4b7f676ec3971e50408da1fcdcb2b03e27e0  design/evidence/r5/artifacts/local-20260820/bookworm-guarded-amd64-trivy-full.json

@@ -151,6 +151,75 @@ async fn config_export_and_import_round_trip_with_preview_default() {
     assert!(exported.contains(SECRET_REDACTION_MARKER));
     assert!(!exported.contains("super-secret-password"));
 
+    let stderr = run_cli_failing(
+        &database_url,
+        &[
+            "config",
+            "export",
+            "--output",
+            export_path.to_str().expect("utf-8 path"),
+        ],
+    );
+    assert!(
+        stderr.contains("cannot write"),
+        "existing export destination must be refused: {stderr}"
+    );
+
+    #[cfg(unix)]
+    {
+        let external = std::env::temp_dir().join(format!(
+            "melodee-wp08-export-target-{}.json",
+            uuid::Uuid::now_v7().simple()
+        ));
+        let link = std::env::temp_dir().join(format!(
+            "melodee-wp08-export-link-{}.json",
+            uuid::Uuid::now_v7().simple()
+        ));
+        std::fs::write(&external, b"keep me").expect("external target");
+        std::os::unix::fs::symlink(&external, &link).expect("export symlink");
+        let stderr = run_cli_failing(
+            &database_url,
+            &[
+                "config",
+                "export",
+                "--output",
+                link.to_str().expect("utf-8 path"),
+            ],
+        );
+        assert!(
+            stderr.contains("cannot write"),
+            "symlink must be refused: {stderr}"
+        );
+        assert_eq!(
+            std::fs::read(&external).expect("external unchanged"),
+            b"keep me"
+        );
+        let _ = std::fs::remove_file(&link);
+        let _ = std::fs::remove_file(&external);
+    }
+
+    #[cfg(unix)]
+    {
+        let import_link = std::env::temp_dir().join(format!(
+            "melodee-wp08-import-link-{}.json",
+            uuid::Uuid::now_v7().simple()
+        ));
+        std::os::unix::fs::symlink(&export_path, &import_link).expect("import symlink");
+        let stderr = run_cli_failing(
+            &database_url,
+            &[
+                "config",
+                "import",
+                import_link.to_str().expect("utf-8 path"),
+            ],
+        );
+        assert!(
+            stderr.contains("cannot read"),
+            "config import must reject a symlink input: {stderr}"
+        );
+        std::fs::remove_file(&import_link).expect("remove import symlink");
+    }
+
     // Import into a fresh database: preview first (default), then apply.
     let target = TestDb::create("cli_config_import_target").await;
     let target_url = db_url(&target);

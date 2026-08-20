@@ -7,6 +7,8 @@ set -euo pipefail
 # to those areas.
 python3 scripts/validate_repository.py
 python3 scripts/extract_requirements.py --check
+python3 scripts/audit_requirement_overrides.py
+python3 scripts/validate_r4_client_acceptance.py
 cargo fmt --all --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features --lib

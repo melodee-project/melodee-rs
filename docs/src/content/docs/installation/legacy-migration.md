@@ -56,6 +56,31 @@ re-hashing, or deleting it**. The migration is governed by the accepted migratio
 4. Initialize the Rust target database with the normal schema migrations
    (`melodee-cli migrate`) before planning.
 
+### Rehearse an existing snapshot
+
+The repository rehearsal harness can consume an already-created, isolated snapshot. This mode
+does not seed, write, or drop the source database, and it requires an explicit library mapping
+and an existing canonical root before it creates the disposable Rust target databases:
+
+```bash
+python3 scripts/legacy_rehearsal.py drill \
+  --source-db "$SNAPSHOT_URL" \
+  --library-path-map /srv/music=library \
+  --canonical-root "$CANONICAL_ROOT" \
+  --source-backup "$LEGACY_BACKUP" \
+  --output design/evidence/r4/rehearsal-drill-existing-snapshot.json
+```
+
+The harness records source counts, migration/search/backup/restore/freeze measurements, and
+checks that the source and canonical root were not changed by the rehearsal. It leaves the run
+in `delta-ready` unless `--acknowledge-cutover` is supplied with the operator's externally
+performed freeze acknowledgement. Metadata-only media observation is the default so a large
+library is not read twice; add `--hash-media` only when the operator has budgeted a complete
+byte-level before/after hash. `--source-backup` is required in existing-snapshot mode; the file
+must be a regular, non-symlink custom-format PostgreSQL dump and is validated with
+`pg_restore --list` before any Rust target database is created. This remains rehearsal evidence:
+it does not authorize production traffic switching or a release cutover.
+
 ## Command reference
 
 All commands take `--source-db` (or `MELODEE_LEGACY_SOURCE_DATABASE_URL`) for the read-only
@@ -121,10 +146,11 @@ melodee-cli legacy import \
 - `--run <uuid>` resumes an existing run after interruption.
 - `--batch-size <n>` bounds rows per target transaction (default 500).
 - `--canonical-root <path>` mounts the canonical storage root for **read-only** validation of
-  each adopted file: containment, symlink policy, existence, and expected size. Missing or
-  mismatched files are recorded as warning issues; a path escaping the root through a symlink
-  is an error and that track is skipped. Without this flag, adoption is metadata-only and the
-  run records one informational `media.verification_skipped` issue.
+  each adopted file: containment, no-follow path safety, existence, regular-file type, and
+  expected size. Missing or mismatched files are recorded as warning issues; a path escaping the
+  root, traversing a symlink, or resolving to a special file is an error and that track is
+  skipped. Without this flag, adoption is metadata-only and the run records one informational
+  `media.verification_skipped` issue.
 
 Users whose legacy password hash is not portable bcrypt are imported with an unguessable
 placeholder credential and a `credential.unsupported` issue; they must complete a password

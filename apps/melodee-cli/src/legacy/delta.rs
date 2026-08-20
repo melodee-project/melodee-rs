@@ -81,7 +81,8 @@ pub async fn apply_delta(
         ("release", "Albums"),
         ("track", "Songs"),
     ] {
-        deletion_issues += report_deletions(source, target, run_id, entity, source_table).await?;
+        deletion_issues +=
+            report_deletions(source, target, run_id, &owner, entity, source_table).await?;
     }
 
     if release_lease {
@@ -292,6 +293,7 @@ async fn report_deletions(
     source: &SourceDb,
     target: &PgPool,
     run_id: Uuid,
+    owner: &str,
     entity: &str,
     source_table: &str,
 ) -> Result<i64, String> {
@@ -333,6 +335,11 @@ async fn report_deletions(
             .collect();
         if !missing.is_empty() {
             let mut tx = target.begin().await.map_err(|e| e.to_string())?;
+            if !runs::is_fenced_in(&mut tx, run_id, owner).await? {
+                return Err(format!(
+                    "run {run_id}: lost lease during deletion reconciliation"
+                ));
+            }
             for pk in &missing {
                 runs::record_issue(
                     &mut tx, run_id, "delta", Some(*pk), "warning",

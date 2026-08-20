@@ -763,18 +763,6 @@
   ],
   "unexpected": [
     {
-      "scenario": "jf-artists-genres/albumartists-list",
-      "field": "response.body$.Items[4].ChildCount",
-      "expected": "1",
-      "actual": "2"
-    },
-    {
-      "scenario": "jf-artists-genres/artists-list",
-      "field": "response.body$.Items[4].ChildCount",
-      "expected": "1",
-      "actual": "2"
-    },
-    {
       "scenario": "jf-artists-genres/genres-list",
       "field": "response.body$.Items.length",
       "expected": "9",
@@ -805,24 +793,6 @@
       "actual": "0"
     },
     {
-      "scenario": "jf-browse/item-song-detail",
-      "field": "response.body$.Container",
-      "expected": "\"wav\"",
-      "actual": "null"
-    },
-    {
-      "scenario": "jf-browse/item-song-detail",
-      "field": "response.body$.MediaSources[0].Container",
-      "expected": "\"wav\"",
-      "actual": "\"\""
-    },
-    {
-      "scenario": "jf-browse/item-song-detail",
-      "field": "response.body$.MediaSources[0].MediaStreams[0].Codec",
-      "expected": "\"wav\"",
-      "actual": "\"\""
-    },
-    {
       "scenario": "jf-browse/items-albums",
       "field": "response.body$.Items[1].Genres.length",
       "expected": "1",
@@ -847,12 +817,6 @@
       "actual": "0"
     },
     {
-      "scenario": "jf-browse/items-artists",
-      "field": "response.body$.Items[4].ChildCount",
-      "expected": "1",
-      "actual": "2"
-    },
-    {
       "scenario": "jf-browse/items-filters",
       "field": "response.body$.genres.length",
       "expected": "9",
@@ -865,88 +829,10 @@
       "actual": "2"
     },
     {
-      "scenario": "jf-browse/items-parent-album",
-      "field": "response.body$.Items[0].Container",
-      "expected": "\"wav\"",
-      "actual": "null"
-    },
-    {
-      "scenario": "jf-browse/items-parent-album",
-      "field": "response.body$.Items[0].MediaSources[0].Container",
-      "expected": "\"wav\"",
-      "actual": "\"\""
-    },
-    {
-      "scenario": "jf-browse/items-parent-album",
-      "field": "response.body$.Items[0].MediaSources[0].MediaStreams[0].Codec",
-      "expected": "\"wav\"",
-      "actual": "\"\""
-    },
-    {
-      "scenario": "jf-browse/items-parent-album",
-      "field": "response.body$.Items[1].Container",
-      "expected": "\"wav\"",
-      "actual": "null"
-    },
-    {
-      "scenario": "jf-browse/items-parent-album",
-      "field": "response.body$.Items[1].MediaSources[0].Container",
-      "expected": "\"wav\"",
-      "actual": "\"\""
-    },
-    {
-      "scenario": "jf-browse/items-parent-album",
-      "field": "response.body$.Items[1].MediaSources[0].MediaStreams[0].Codec",
-      "expected": "\"wav\"",
-      "actual": "\"\""
-    },
-    {
-      "scenario": "jf-browse/items-parent-album",
-      "field": "response.body$.Items[2].Container",
-      "expected": "\"wav\"",
-      "actual": "null"
-    },
-    {
-      "scenario": "jf-browse/items-parent-album",
-      "field": "response.body$.Items[2].MediaSources[0].Container",
-      "expected": "\"wav\"",
-      "actual": "\"\""
-    },
-    {
-      "scenario": "jf-browse/items-parent-album",
-      "field": "response.body$.Items[2].MediaSources[0].MediaStreams[0].Codec",
-      "expected": "\"wav\"",
-      "actual": "\"\""
-    },
-    {
-      "scenario": "jf-browse/items-parent-album",
-      "field": "response.body$.Items[3].Container",
-      "expected": "\"wav\"",
-      "actual": "null"
-    },
-    {
-      "scenario": "jf-browse/items-parent-album",
-      "field": "response.body$.Items[3].MediaSources[0].Container",
-      "expected": "\"wav\"",
-      "actual": "\"\""
-    },
-    {
-      "scenario": "jf-browse/items-parent-album",
-      "field": "response.body$.Items[3].MediaSources[0].MediaStreams[0].Codec",
-      "expected": "\"wav\"",
-      "actual": "\"\""
-    },
-    {
       "scenario": "jf-browse/items-parent-artist",
       "field": "response.body$.Items[0].Genres.length",
       "expected": "2",
       "actual": "0"
-    },
-    {
-      "scenario": "jf-browse/items-searchterm-dune",
-      "field": "response.body$.Items[0].ChildCount",
-      "expected": "1",
-      "actual": "2"
     },
     {
       "scenario": "jf-browse/items-similar-song",
@@ -955,46 +841,10 @@
       "actual": "2"
     },
     {
-      "scenario": "jf-extra/playbackinfo-post",
-      "field": "response.body$.MediaSources[0].Container",
-      "expected": "\"wav\"",
-      "actual": "\"mp3\""
-    },
-    {
-      "scenario": "jf-extra/playbackinfo-post",
-      "field": "response.body$.MediaSources[0].MediaStreams[0].Codec",
-      "expected": "\"pcm\"",
-      "actual": "\"mp3\""
-    },
-    {
-      "scenario": "jf-extra/playbackinfo-post",
-      "field": "response.body$.MediaSources[0].MediaStreams[0].DisplayTitle",
-      "expected": "\"PCM -  channels\"",
-      "actual": "\"MP3 -  channels\""
-    },
-    {
       "scenario": "jf-extra/songs-instantmix",
       "field": "response.body$.TotalRecordCount",
       "expected": "5",
       "actual": "2"
-    },
-    {
-      "scenario": "jf-playback/playbackinfo",
-      "field": "response.body$.MediaSources[0].Container",
-      "expected": "\"wav\"",
-      "actual": "\"mp3\""
-    },
-    {
-      "scenario": "jf-playback/playbackinfo",
-      "field": "response.body$.MediaSources[0].MediaStreams[0].Codec",
-      "expected": "\"pcm\"",
-      "actual": "\"mp3\""
-    },
-    {
-      "scenario": "jf-playback/playbackinfo",
-      "field": "response.body$.MediaSources[0].MediaStreams[0].DisplayTitle",
-      "expected": "\"PCM -  channels\"",
-      "actual": "\"MP3 -  channels\""
     },
     {
       "scenario": "jf-playlists/playlist-detail",
@@ -1013,42 +863,6 @@
       "field": "response.body$.Items[1].Overview",
       "expected": "\"Synthetic private playlist fixture.\"",
       "actual": "null"
-    },
-    {
-      "scenario": "jf-userstate/verify-favorite",
-      "field": "response.body$.Container",
-      "expected": "\"wav\"",
-      "actual": "null"
-    },
-    {
-      "scenario": "jf-userstate/verify-favorite",
-      "field": "response.body$.MediaSources[0].Container",
-      "expected": "\"wav\"",
-      "actual": "\"\""
-    },
-    {
-      "scenario": "jf-userstate/verify-favorite",
-      "field": "response.body$.MediaSources[0].MediaStreams[0].Codec",
-      "expected": "\"wav\"",
-      "actual": "\"\""
-    },
-    {
-      "scenario": "jf-userstate/verify-unfavorite",
-      "field": "response.body$.Container",
-      "expected": "\"wav\"",
-      "actual": "null"
-    },
-    {
-      "scenario": "jf-userstate/verify-unfavorite",
-      "field": "response.body$.MediaSources[0].Container",
-      "expected": "\"wav\"",
-      "actual": "\"\""
-    },
-    {
-      "scenario": "jf-userstate/verify-unfavorite",
-      "field": "response.body$.MediaSources[0].MediaStreams[0].Codec",
-      "expected": "\"wav\"",
-      "actual": "\"\""
     }
   ]
 }

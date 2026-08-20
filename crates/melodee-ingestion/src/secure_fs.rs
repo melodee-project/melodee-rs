@@ -14,7 +14,10 @@ mod platform {
 
     use rustix::{
         fd::OwnedFd,
-        fs::{CWD, Mode, OFlags, RenameFlags, mkdirat, openat, renameat_with},
+        fs::{
+            AtFlags, CWD, Dir, FileType, Mode, OFlags, RenameFlags, fstat, mkdirat, openat,
+            renameat_with, statat, unlinkat,
+        },
     };
 
     use super::*;
@@ -89,14 +92,22 @@ mod platform {
 
     pub fn open_read(path: &Path) -> io::Result<File> {
         let (parent, name) = open_parent(path, false)?;
-        openat(
+        let file = openat(
             &parent,
             name.as_bytes(),
-            OFlags::RDONLY | OFlags::CLOEXEC | OFlags::NOFOLLOW,
+            // A raced FIFO must not block a worker before its type is checked.
+            OFlags::RDONLY | OFlags::CLOEXEC | OFlags::NOFOLLOW | OFlags::NONBLOCK,
             Mode::empty(),
         )
-        .map(File::from)
-        .map_err(io_error)
+        .map_err(io_error)?;
+        let stat = fstat(&file).map_err(io_error)?;
+        if FileType::from_raw_mode(stat.st_mode) != FileType::RegularFile {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "acquisition source is not a regular file",
+            ));
+        }
+        Ok(File::from(file))
     }
 
     pub fn open_write(path: &Path) -> io::Result<File> {
@@ -105,6 +116,21 @@ mod platform {
             &parent,
             name.as_bytes(),
             OFlags::WRONLY | OFlags::CREATE | OFlags::TRUNC | OFlags::CLOEXEC | OFlags::NOFOLLOW,
+            Mode::RUSR | Mode::WUSR,
+        )
+        .map(File::from)
+        .map_err(io_error)
+    }
+
+    /// Create a regular file without following a leaf symlink or replacing an
+    /// existing destination. This is used for first-write staging where a
+    /// path check must not become an overwrite race.
+    pub fn open_write_new(path: &Path) -> io::Result<File> {
+        let (parent, name) = open_parent(path, false)?;
+        openat(
+            &parent,
+            name.as_bytes(),
+            OFlags::WRONLY | OFlags::CREATE | OFlags::EXCL | OFlags::CLOEXEC | OFlags::NOFOLLOW,
             Mode::RUSR | Mode::WUSR,
         )
         .map(File::from)
@@ -139,61 +165,112 @@ mod platform {
         )
         .map_err(io_error)
     }
+
+    fn remove_contents(directory: &OwnedFd, display_path: &Path) -> io::Result<()> {
+        let mut entries = Dir::read_from(directory)?;
+        for entry in &mut entries {
+            let entry = entry?;
+            let name = entry.file_name();
+            if name.to_bytes() == b"." || name.to_bytes() == b".." {
+                continue;
+            }
+            let entry_path = display_path.join(std::ffi::OsStr::from_bytes(name.to_bytes()));
+            let stat = statat(directory, name, AtFlags::SYMLINK_NOFOLLOW).map_err(io_error)?;
+            match FileType::from_raw_mode(stat.st_mode) {
+                FileType::Directory => {
+                    let child = openat(
+                        directory,
+                        name,
+                        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC | OFlags::NOFOLLOW,
+                        Mode::empty(),
+                    )
+                    .map_err(io_error)?;
+                    remove_contents(&child, &entry_path)?;
+                    unlinkat(directory, name, AtFlags::REMOVEDIR).map_err(io_error)?;
+                }
+                FileType::RegularFile => {
+                    unlinkat(directory, name, AtFlags::empty()).map_err(io_error)?;
+                }
+                _ => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::PermissionDenied,
+                        format!(
+                            "refusing to remove symlink or special file {}",
+                            entry_path.display()
+                        ),
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Remove one owned directory without following a path component or a
+    /// child symlink. The parent and every child are held or opened through
+    /// directory descriptors so a concurrent replacement cannot redirect
+    /// cleanup outside the configured root.
+    pub fn remove_directory_tree(path: &Path) -> io::Result<()> {
+        let (parent, name) = open_parent(path, false)?;
+        let directory = openat(
+            &parent,
+            name.as_bytes(),
+            OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC | OFlags::NOFOLLOW,
+            Mode::empty(),
+        )
+        .map_err(io_error)?;
+        remove_contents(&directory, path)?;
+        drop(directory);
+        unlinkat(&parent, name.as_bytes(), AtFlags::REMOVEDIR).map_err(io_error)
+    }
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "android", target_vendor = "apple")))]
 mod platform {
-    use std::{
-        fs::{self, OpenOptions},
-        path::Path,
-    };
+    use std::path::Path;
 
     use super::*;
 
-    pub fn create_directory_tree(path: &Path) -> io::Result<()> {
-        fs::create_dir_all(path)
+    fn unsupported() -> io::Error {
+        io::Error::new(
+            io::ErrorKind::Unsupported,
+            "race-resistant ingestion filesystem operations are unsupported on this platform",
+        )
     }
 
-    pub fn open_read(path: &Path) -> io::Result<File> {
-        File::open(path)
+    pub fn create_directory_tree(_path: &Path) -> io::Result<()> {
+        Err(unsupported())
     }
 
-    pub fn open_write(path: &Path) -> io::Result<File> {
-        OpenOptions::new()
-            .create(true)
-            .truncate(true)
-            .write(true)
-            .open(path)
+    pub fn open_read(_path: &Path) -> io::Result<File> {
+        Err(unsupported())
     }
 
-    pub fn open_lock(path: &Path) -> io::Result<File> {
-        OpenOptions::new()
-            .create(true)
-            .read(true)
-            .write(true)
-            .open(path)
+    pub fn open_write(_path: &Path) -> io::Result<File> {
+        Err(unsupported())
     }
 
-    pub fn open_directory(path: &Path) -> io::Result<File> {
-        File::open(path)
+    pub fn open_write_new(_path: &Path) -> io::Result<File> {
+        Err(unsupported())
     }
 
-    pub fn rename_noreplace(source: &Path, destination: &Path) -> io::Result<()> {
-        #[cfg(windows)]
-        {
-            fs::rename(source, destination)
-        }
-        #[cfg(not(windows))]
-        {
-            let _ = (source, destination);
-            Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "atomic no-replace rename is unsupported on this platform",
-            ))
-        }
+    pub fn open_lock(_path: &Path) -> io::Result<File> {
+        Err(unsupported())
+    }
+
+    pub fn open_directory(_path: &Path) -> io::Result<File> {
+        Err(unsupported())
+    }
+
+    pub fn rename_noreplace(_source: &Path, _destination: &Path) -> io::Result<()> {
+        Err(unsupported())
+    }
+
+    pub fn remove_directory_tree(_path: &Path) -> io::Result<()> {
+        Err(unsupported())
     }
 }
 
 pub(crate) use platform::{
-    create_directory_tree, open_directory, open_lock, open_read, open_write, rename_noreplace,
+    create_directory_tree, open_directory, open_lock, open_read, open_write, open_write_new,
+    remove_directory_tree, rename_noreplace,
 };

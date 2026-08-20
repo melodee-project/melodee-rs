@@ -1,0 +1,4 @@
+a902f344c84cb43e468232e67a702cfeb703b64999d2d3bf7ae66bebf0a4255a  design/evidence/r5/artifacts/local-20260820/amd64-trivy-full.json
+9a0d3dbc232893edc1c017fe2dcaf0d7190303d752eb520510bd755fcabd52af  design/evidence/r5/artifacts/local-20260820/arm64-trivy-full.json
+d06d8553673057e4c09cd2690b98108250e52e9ee2c02e0d169bb77452aa7f81  design/evidence/r5/artifacts/local-20260820/amd64-sbom.spdx.json
+82291d6493ac3681c3fe48bfa19d7820eecf50b4ea841ec70ad8547d6f452c65  design/evidence/r5/artifacts/local-20260820/arm64-sbom.spdx.json

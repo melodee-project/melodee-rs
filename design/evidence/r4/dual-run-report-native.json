@@ -620,6 +620,26 @@
       "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
     },
     {
+      "scenario": "catalog/user-playlists-limit-param",
+      "field": "response.body$.data[0].owner.createdAt",
+      "reason": "replay-created account timestamp is volatile"
+    },
+    {
+      "scenario": "catalog/user-playlists-limit-param",
+      "field": "response.body$.data[0].owner.updatedAt",
+      "reason": "replay-created account timestamp is volatile"
+    },
+    {
+      "scenario": "catalog/user-playlists-limit-param",
+      "field": "response.body$.data[1].owner.createdAt",
+      "reason": "replay-created account timestamp is volatile"
+    },
+    {
+      "scenario": "catalog/user-playlists-limit-param",
+      "field": "response.body$.data[1].owner.updatedAt",
+      "reason": "replay-created account timestamp is volatile"
+    },
+    {
       "scenario": "community-lifecycle/equalizer-list-empty",
       "field": "response.headers",
       "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
@@ -1150,6 +1170,16 @@
       "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
     },
     {
+      "scenario": "native-user-extra/admin-users",
+      "field": "response.body$[0].createdAt",
+      "reason": "replay-created account timestamp is volatile"
+    },
+    {
+      "scenario": "native-user-extra/admin-users",
+      "field": "response.body$[0].lastLoginAt",
+      "reason": "replay login timestamp is volatile"
+    },
+    {
       "scenario": "native-user-extra/genre-songs",
       "field": "response.headers",
       "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
@@ -1394,8 +1424,20 @@
     },
     {
       "scenario": "catalog/album-songs",
+      "field": "response.body$.data[1].playCount",
+      "expected": "4",
+      "actual": "0"
+    },
+    {
+      "scenario": "catalog/album-songs",
       "field": "response.body$.data[2].playCount",
       "expected": "3",
+      "actual": "0"
+    },
+    {
+      "scenario": "catalog/album-songs-multidisc",
+      "field": "response.body$.data[2].playCount",
+      "expected": "9",
       "actual": "0"
     },
     {
@@ -1796,6 +1838,12 @@
     },
     {
       "scenario": "catalog/artist-songs",
+      "field": "response.body$.data[1].playCount",
+      "expected": "4",
+      "actual": "0"
+    },
+    {
+      "scenario": "catalog/artist-songs",
       "field": "response.body$.data[2].playCount",
       "expected": "3",
       "actual": "0"
@@ -2149,34 +2197,28 @@
       "actual": "0"
     },
     {
+      "scenario": "catalog/playlist-songs",
+      "field": "response.body$.data[2].playCount",
+      "expected": "9",
+      "actual": "0"
+    },
+    {
       "scenario": "catalog/search-post-dune",
       "field": "response.body$.data.artists[0].albumCount",
       "expected": "1",
       "actual": "2"
     },
     {
-      "scenario": "catalog/user-playlists-limit-param",
-      "field": "response.body$.data[0].owner.createdAt",
-      "expected": "\"2026-08-09T19:53:33Z\"",
-      "actual": "\"2026-08-19T01:40:20.936384Z\""
+      "scenario": "catalog/song-detail",
+      "field": "response.body$.playCount",
+      "expected": "4",
+      "actual": "0"
     },
     {
-      "scenario": "catalog/user-playlists-limit-param",
-      "field": "response.body$.data[0].owner.updatedAt",
-      "expected": "\"\"",
-      "actual": "\"2026-08-19T01:40:20.936384Z\""
-    },
-    {
-      "scenario": "catalog/user-playlists-limit-param",
-      "field": "response.body$.data[1].owner.createdAt",
-      "expected": "\"2026-08-09T19:53:33Z\"",
-      "actual": "\"2026-08-19T01:40:20.936384Z\""
-    },
-    {
-      "scenario": "catalog/user-playlists-limit-param",
-      "field": "response.body$.data[1].owner.updatedAt",
-      "expected": "\"\"",
-      "actual": "\"2026-08-19T01:40:20.936384Z\""
+      "scenario": "catalog/songs-list",
+      "field": "response.body$.data[2].playCount",
+      "expected": "9",
+      "actual": "0"
     },
     {
       "scenario": "community-lifecycle/share-update",
@@ -2215,63 +2257,21 @@
     },
     {
       "scenario": "podcasts-surface/discover-trending",
-      "field": "response.body$.results[0].artist",
-      "expected": "\"Mel Robbins\"",
-      "actual": "\"iHeartPodcasts\""
-    },
-    {
-      "scenario": "podcasts-surface/discover-trending",
       "field": "response.body$.results[0].episodeCount",
       "expected": "425",
-      "actual": "478"
-    },
-    {
-      "scenario": "podcasts-surface/discover-trending",
-      "field": "response.body$.results[0].feedUrl",
-      "expected": "\"https://feeds.simplecast.com/UCwaTX1J\"",
-      "actual": "\"https://rss.art19.com/the-psychology-podcast\""
-    },
-    {
-      "scenario": "podcasts-surface/discover-trending",
-      "field": "response.body$.results[0].genre",
-      "expected": "\"Self-Improvement\"",
-      "actual": "\"Social Sciences\""
-    },
-    {
-      "scenario": "podcasts-surface/discover-trending",
-      "field": "response.body$.results[0].imageUrl",
-      "expected": "\"https://is1-ssl.mzstatic.com/image/thumb/Podcasts211/v4/ab/66/a5/ab66a5f5-b52b-c70a-227b-0721bd9dc660/mza_1354698492...",
-      "actual": "\"https://is1-ssl.mzstatic.com/image/thumb/Podcasts221/v4/cf/5a/f0/cf5af016-6056-30f0-be09-f29351430893/mza_3453059785..."
-    },
-    {
-      "scenario": "podcasts-surface/discover-trending",
-      "field": "response.body$.results[0].itunesId",
-      "expected": "\"1646101002\"",
-      "actual": "\"942777522\""
-    },
-    {
-      "scenario": "podcasts-surface/discover-trending",
-      "field": "response.body$.results[0].itunesUrl",
-      "expected": "\"https://podcasts.apple.com/us/podcast/the-mel-robbins-podcast/id1646101002?uo=4\"",
-      "actual": "\"https://podcasts.apple.com/us/podcast/the-psychology-podcast/id942777522?uo=4\""
+      "actual": "428"
     },
     {
       "scenario": "podcasts-surface/discover-trending",
       "field": "response.body$.results[0].lastReleaseDate",
       "expected": "\"2026-08-10T04:05:00Z\"",
-      "actual": "\"2025-12-04T08:00:00Z\""
-    },
-    {
-      "scenario": "podcasts-surface/discover-trending",
-      "field": "response.body$.results[0].title",
-      "expected": "\"The Mel Robbins Podcast\"",
-      "actual": "\"The Psychology Podcast\""
+      "actual": "\"2026-08-20T04:05:00Z\""
     },
     {
       "scenario": "podcasts-surface/opml-export",
       "field": "response.body",
       "expected": "309 bytes sha256=4bf0ebe6dc81c3d9e9be5055d4a9556235d23ff754608ca1cfb96c873c10cc77",
-      "actual": "311 bytes sha256=faa70550df9ef884e38bf24ad58be76276eaf38ca70093f855516c5c1c49fb80"
+      "actual": "311 bytes sha256=832161de52bf664d97da766a175a2b90eaa7b584284e97bfdf3ddb1908b1bdf9"
     },
     {
       "scenario": "stream/album-songs-for-stream-url",
@@ -2281,21 +2281,15 @@
     },
     {
       "scenario": "stream/album-songs-for-stream-url",
-      "field": "response.body$.data[2].playCount",
-      "expected": "3",
+      "field": "response.body$.data[1].playCount",
+      "expected": "4",
       "actual": "0"
     },
     {
-      "scenario": "native-user-extra/admin-users",
-      "field": "response.body$[0].createdAt",
-      "expected": "\"2026-08-09T19:53:33.5438340Z\"",
-      "actual": "\"2026-08-19T01:40:20.936384Z\""
-    },
-    {
-      "scenario": "native-user-extra/admin-users",
-      "field": "response.body$[0].lastLoginAt",
-      "expected": "\"2026-08-12T13:30:01.4578900Z\"",
-      "actual": "\"2026-08-19T12:55:24.657081Z\""
+      "scenario": "stream/album-songs-for-stream-url",
+      "field": "response.body$.data[2].playCount",
+      "expected": "3",
+      "actual": "0"
     },
     {
       "scenario": "native-user-extra/genre-hate",
@@ -2318,7 +2312,7 @@
       "scenario": "native-user-extra/genre-hate",
       "field": "response.body",
       "expected": "0 bytes sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "actual": "120 bytes sha256=14402208b0e630d5df222f7b337da93faa2f8f305ce97b6c3d74fd6eb60022a9"
+      "actual": "120 bytes sha256=59cab2fbdc3fceff21c88c991001dbc68465a391cc79fc90bd5c0bbf21deb11f"
     },
     {
       "scenario": "native-user-extra/genre-songs",
@@ -2360,7 +2354,7 @@
       "scenario": "native-user-extra/genre-songs",
       "field": "response.body$.correlationId",
       "expected": "\"<omitted>\"",
-      "actual": "\"01a01a17-392e-7d02-94d1-4d2272eea3d7\""
+      "actual": "\"01a02025-3c6e-7291-9305-8c0bcd1a55d9\""
     },
     {
       "scenario": "native-user-extra/genre-songs",
@@ -2389,7 +2383,7 @@
       "scenario": "native-user-extra/genre-star",
       "field": "response.body",
       "expected": "0 bytes sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "actual": "120 bytes sha256=3ec678cde6b6362c0f2d1087bdc74c2e8149e2d24681baa4844169a42ddfa7c2"
+      "actual": "120 bytes sha256=1203c4baceb6be0b498fb36224e4dd2c781a04649d8381abd9bac3240583d7a9"
     },
     {
       "scenario": "native-user-extra/genres-hated",
@@ -2407,6 +2401,12 @@
       "scenario": "native-user-extra/search-similar",
       "field": "response.body$.similar.length",
       "expected": "3",
+      "actual": "0"
+    },
+    {
+      "scenario": "native-user-extra/songs-recent",
+      "field": "response.body$.data[2].playCount",
+      "expected": "9",
       "actual": "0"
     },
     {
@@ -2438,6 +2438,48 @@
       "field": "response.body$.data[0].biography",
       "expected": "\"Synthetic ordinary solo artist fixture.\"",
       "actual": "null"
+    },
+    {
+      "scenario": "native-user-extra/user-songs-liked",
+      "field": "response.body$.data[0].playCount",
+      "expected": "4",
+      "actual": "0"
+    },
+    {
+      "scenario": "native-user-extra/user-songs-rated",
+      "field": "response.body$.data[0].playCount",
+      "expected": "4",
+      "actual": "0"
+    },
+    {
+      "scenario": "native-user-extra/user-songs-rated",
+      "field": "response.body$.data[1].playCount",
+      "expected": "9",
+      "actual": "0"
+    },
+    {
+      "scenario": "native-user-extra/user-songs-recent",
+      "field": "response.body$.data[0].playCount",
+      "expected": "4",
+      "actual": "0"
+    },
+    {
+      "scenario": "native-user-extra/user-songs-recent",
+      "field": "response.body$.data[1].playCount",
+      "expected": "9",
+      "actual": "0"
+    },
+    {
+      "scenario": "native-user-extra/user-songs-top-rated",
+      "field": "response.body$.data[0].playCount",
+      "expected": "4",
+      "actual": "0"
+    },
+    {
+      "scenario": "native-user-extra/user-songs-top-rated",
+      "field": "response.body$.data[1].playCount",
+      "expected": "9",
+      "actual": "0"
     }
   ]
 }

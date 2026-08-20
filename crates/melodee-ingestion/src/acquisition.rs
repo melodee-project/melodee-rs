@@ -6,7 +6,7 @@
 //! then removed from inbound.
 
 use std::{
-    fs::{self, File, OpenOptions},
+    fs,
     io::{self, BufReader, BufWriter, Read, Write},
     path::{Component, Path, PathBuf},
 };
@@ -30,7 +30,10 @@ use time::OffsetDateTime;
 
 use crate::{
     config::{InboundSource, IngestionConfig},
-    secure_fs::{create_directory_tree, open_directory, rename_noreplace},
+    secure_fs::{
+        create_directory_tree, open_directory, open_read, open_write_new, remove_directory_tree,
+        rename_noreplace,
+    },
     snapshot::snapshot_release_directory,
 };
 
@@ -682,15 +685,29 @@ fn cleanup_inbound(
             inbound.display()
         )));
     }
-    if !inbound.exists() {
-        return Ok(CleanupResult::AlreadyAbsent);
+    let metadata = match fs::symlink_metadata(inbound) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            return Ok(CleanupResult::AlreadyAbsent);
+        }
+        Err(error) => return Err(io_error(inbound, error)),
+    };
+    // A delayed cleanup must never follow a path that was replaced with a
+    // symlink (or any other non-directory).  Treat the replacement as a new
+    // occurrence and retain it for the next reconciliation pass.
+    if !metadata.is_dir() {
+        return Ok(CleanupResult::Replaced);
     }
     if source_generation(inbound)? != expected_generation
         || tree_hash(inbound)? != expected_tree_hash
     {
         return Ok(CleanupResult::Replaced);
     }
-    fs::remove_dir_all(inbound).map_err(|error| io_error(inbound, error))?;
+    // Re-open and remove through verified directory descriptors after the
+    // generation/hash check. The occurrence can be replaced between that
+    // check and cleanup; path-based recursion would make that race harder to
+    // audit and could follow an unexpected child.
+    remove_directory_tree(inbound).map_err(|error| io_error(inbound, error))?;
     sync_directory(inbound_root)?;
     Ok(CleanupResult::Removed)
 }
@@ -730,7 +747,7 @@ fn copy_tree(
             let metadata = fs::symlink_metadata(&source_path)
                 .map_err(|error| io_error(&source_path, error))?;
             if metadata.is_dir() {
-                fs::create_dir(&destination_path)
+                create_directory_tree(&destination_path)
                     .map_err(|error| io_error(&destination_path, error))?;
                 queue.push((source_path, destination_path));
             } else if metadata.is_file() {
@@ -760,12 +777,11 @@ fn copy_regular_file(
     destination: &Path,
     #[cfg(feature = "test-support")] test_hook: Option<&AcquisitionTestHook>,
 ) -> Result<(), AcquisitionError> {
-    let input = File::open(source).map_err(|error| io_error(source, error))?;
-    let output = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(destination)
-        .map_err(|error| io_error(destination, error))?;
+    // The metadata check in copy_tree is only a snapshot. Re-open the source
+    // through the descriptor-relative no-follow boundary so a concurrent
+    // replacement cannot turn a regular source into an external symlink.
+    let input = open_read(source).map_err(|error| io_error(source, error))?;
+    let output = open_write_new(destination).map_err(|error| io_error(destination, error))?;
     #[cfg(feature = "test-support")]
     if let Some(hook) = test_hook
         && let Some(fault) = hook.take_write_fault()
@@ -829,7 +845,9 @@ fn tree_hash(root: &Path) -> Result<String, AcquisitionError> {
                 queue.push((path, next_relative));
             } else if metadata.is_file() {
                 hash_path(&mut hasher, &next_relative, &metadata);
-                let file = File::open(&path).map_err(|error| io_error(&path, error))?;
+                // Re-open through the same no-follow boundary used by copy
+                // so the hash cannot be redirected after symlink_metadata.
+                let file = open_read(&path).map_err(|error| io_error(&path, error))?;
                 let mut reader = BufReader::with_capacity(COPY_BUFFER_BYTES, file);
                 let mut buffer = vec![0_u8; COPY_BUFFER_BYTES];
                 loop {
@@ -865,13 +883,14 @@ fn hash_path(hasher: &mut blake3::Hasher, path: &Path, metadata: &fs::Metadata) 
 }
 
 fn remove_partial(partial: &Path, releases_root: &Path) -> Result<(), AcquisitionError> {
-    if partial.parent() != Some(releases_root) || !partial.is_dir() {
+    let metadata = fs::symlink_metadata(partial).map_err(|error| io_error(partial, error))?;
+    if partial.parent() != Some(releases_root) || !metadata.is_dir() {
         return Err(AcquisitionError::InvalidSourcePath(format!(
             "refusing to remove unexpected partial staging path {}",
             partial.display()
         )));
     }
-    fs::remove_dir_all(partial).map_err(|error| io_error(partial, error))
+    remove_directory_tree(partial).map_err(|error| io_error(partial, error))
 }
 
 fn sync_directory(path: &Path) -> Result<(), AcquisitionError> {
@@ -1010,6 +1029,34 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn delayed_cleanup_never_follows_a_replaced_inbound_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let root = temporary_root("replacement-symlink");
+        let inbound_root = root.join("inbound");
+        let candidate = inbound_root.join("release");
+        let outside = root.join("outside");
+        fs::create_dir_all(&candidate).unwrap();
+        fs::write(candidate.join("track.flac"), b"occurrence-a").unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        fs::write(outside.join("keep.me"), b"must-survive").unwrap();
+        let generation = source_generation(&candidate).unwrap();
+        let hash = tree_hash(&candidate).unwrap();
+
+        fs::remove_dir_all(&candidate).unwrap();
+        symlink(&outside, &candidate).unwrap();
+
+        assert!(matches!(
+            cleanup_inbound(&candidate, &inbound_root, &generation, &hash).unwrap(),
+            CleanupResult::Replaced
+        ));
+        assert!(candidate.is_symlink());
+        assert_eq!(fs::read(outside.join("keep.me")).unwrap(), b"must-survive");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn tree_hash_and_copy_tree_skip_symlinks_and_special_files() {
         use std::os::unix::fs::symlink;
 
@@ -1045,6 +1092,98 @@ mod tests {
         assert!(!destination.join("escape").exists());
         assert_eq!(tree_hash(&destination).unwrap(), expected);
 
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn direct_copy_rejects_a_symlinked_source_at_open_time() {
+        use std::os::unix::fs::symlink;
+
+        let root = temporary_root("copy-source-symlink");
+        let source = root.join("source.flac");
+        let external = root.join("external.flac");
+        let destination = root.join("destination.flac");
+        let external_destination = root.join("external-destination.flac");
+        let symlink_destination = root.join("symlink-destination.flac");
+        fs::write(&external, b"authoritative outside bytes").unwrap();
+        fs::write(&external_destination, b"destination must survive").unwrap();
+        symlink(&external, &source).unwrap();
+        symlink(&external_destination, &symlink_destination).unwrap();
+
+        assert!(
+            copy_regular_file(
+                &source,
+                &destination,
+                #[cfg(feature = "test-support")]
+                None,
+            )
+            .is_err()
+        );
+        assert!(!destination.exists());
+        assert_eq!(fs::read(&external).unwrap(), b"authoritative outside bytes");
+
+        fs::write(&source, b"inbound bytes").unwrap();
+        assert!(
+            copy_regular_file(
+                &source,
+                &symlink_destination,
+                #[cfg(feature = "test-support")]
+                None,
+            )
+            .is_err()
+        );
+        assert!(symlink_destination.is_symlink());
+        assert_eq!(
+            fs::read(&external_destination).unwrap(),
+            b"destination must survive"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn partial_cleanup_never_follows_an_internal_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let root = temporary_root("partial-symlink");
+        let releases = root.join("releases");
+        let partial = releases.join(".attempt.acquiring");
+        let outside = root.join("outside");
+        fs::create_dir_all(&partial).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        fs::write(outside.join("must-survive"), b"authoritative").unwrap();
+        symlink(&outside, partial.join("escape")).unwrap();
+
+        assert!(remove_partial(&partial, &releases).is_err());
+        assert!(partial.is_dir());
+        assert_eq!(
+            fs::read(outside.join("must-survive")).unwrap(),
+            b"authoritative"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn partial_cleanup_rejects_a_replaced_root_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let root = temporary_root("partial-root-symlink");
+        let releases = root.join("releases");
+        let partial = releases.join(".attempt.acquiring");
+        let outside = root.join("outside");
+        fs::create_dir_all(&releases).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        fs::write(outside.join("must-survive"), b"authoritative").unwrap();
+        symlink(&outside, &partial).unwrap();
+
+        assert!(remove_partial(&partial, &releases).is_err());
+        assert!(partial.is_symlink());
+        assert_eq!(
+            fs::read(outside.join("must-survive")).unwrap(),
+            b"authoritative"
+        );
         fs::remove_dir_all(root).unwrap();
     }
 }

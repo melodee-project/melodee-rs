@@ -3,6 +3,8 @@ set -euo pipefail
 
 python3 scripts/validate_repository.py
 python3 scripts/extract_requirements.py --check
+python3 scripts/audit_requirement_overrides.py
+python3 scripts/validate_r4_client_acceptance.py
 python3 -m unittest discover -s tests/python -p 'test_*.py' -v
 
 # Admin SPA gate (ADR-0138): skipped locally when pnpm is absent; CI installs it.

@@ -42,6 +42,9 @@ const HEALTH = {
   tantivy: { status: 'ok', detail: 'active search generation validated' },
   storage: { status: 'ok', detail: 'storage paths writable' },
   ffmpeg: { status: 'ok', detail: 'ffmpeg 8.1' },
+  podcastStorage: { status: 'disabled', detail: 'podcast worker disabled' },
+  disk: { status: 'ok', detail: 'tightest storage root has sufficient free space' },
+  workers: { status: 'ok', detail: 'no stale leases; worker queues are healthy' },
   apiSurfaces: [
     { surface: 'native', status: 'serving' },
     { surface: 'admin', status: 'serving' },

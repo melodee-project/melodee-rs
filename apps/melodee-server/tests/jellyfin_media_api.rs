@@ -348,6 +348,45 @@ async fn artists_list_matches_frozen_shape_and_etags() {
 }
 
 #[tokio::test]
+async fn artist_child_count_uses_primary_releases_not_featured_credits() {
+    let (db, fixture, _ids) = seeded_fixture("jf_media_artist_primary_release_count").await;
+    // Keep Aurora Fields as the track artist on a second release while using
+    // another artist as that release's primary artist. The legacy Artist
+    // aggregate counts only albums whose Album.ArtistId is Aurora Fields;
+    // featured/track credits must not inflate Jellyfin ChildCount.
+    phase5_common::seed_cataloged_release(
+        &db,
+        2,
+        CatalogFixturePresentation {
+            release_title: "Featured Credit Release",
+            release_artist: "Harbour Guest",
+            track_title: "Aurora Feature",
+            track_artist: "Aurora Fields",
+            release_date: "2002-03-04",
+        },
+    )
+    .await;
+
+    let (status, _, bytes) = respond(
+        &fixture.state,
+        get(
+            "/Artists?searchTerm=Aurora%20Fields&limit=10",
+            &fixture.token,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let json = json_body(&bytes);
+    let aurora = json["Items"]
+        .as_array()
+        .expect("artist items")
+        .iter()
+        .find(|item| item["Name"] == "Aurora Fields")
+        .expect("Aurora Fields artist");
+    assert_eq!(aurora["ChildCount"], 1);
+}
+
+#[tokio::test]
 async fn artist_detail_and_search_term_folding() {
     let (_db, fixture, ids) = seeded_fixture("jf_media_artist_detail").await;
     let (status, headers, bytes) = respond(

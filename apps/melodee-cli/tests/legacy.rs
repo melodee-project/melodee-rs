@@ -153,8 +153,8 @@ async fn full_import_covers_all_domains_and_preserves_identity() {
     assert_eq!(count(&target.pool, "release_artists").await, 1);
     assert_eq!(count(&target.pool, "media_assets").await, 2);
 
-    let (bitrate_bps, tempo): (i64, Option<f64>) = sqlx::query_as(
-        "SELECT media.bitrate_bps, features.tempo
+    let (bitrate_bps, tempo, container): (i64, Option<f64>, Option<String>) = sqlx::query_as(
+        "SELECT media.bitrate_bps, features.tempo, media.container
          FROM tracks track
          JOIN media_assets media ON media.id = track.playable_media_asset_id
          LEFT JOIN native_track_audio_features features ON features.track_id = track.id
@@ -173,6 +173,7 @@ async fn full_import_covers_all_domains_and_preserves_identity() {
         Some(0.0),
         "legacy zero BPM remains an observed tempo"
     );
+    assert_eq!(container.as_deref(), Some("flac"));
     let metadata_reference: (i64, serde_json::Value) = sqlx::query_as(
         "SELECT COUNT(*) OVER (), detail
          FROM legacy_migration.issues
@@ -278,6 +279,30 @@ async fn full_import_covers_all_domains_and_preserves_identity() {
     assert_eq!(count(&target.pool, "native_podcast_channels").await, 1);
     assert_eq!(count(&target.pool, "opensubsonic_radio_stations").await, 1);
 
+    // Counts alone do not prove that migrated user state remained attached to
+    // the correct public catalog identity. Assert the full fixture values so
+    // a mapping or upsert regression cannot silently turn seeded stars,
+    // ratings, or play counts into default zeroes.
+    let track_state: (bool, i16, i64) =
+        sqlx::query_as("SELECT starred, rating, play_count FROM native_track_user_states LIMIT 1")
+            .fetch_one(&target.pool)
+            .await
+            .expect("migrated track user state");
+    assert_eq!(track_state, (true, 5, 12));
+    let release_state: (bool, i16, i64) = sqlx::query_as(
+        "SELECT starred, rating, play_count FROM native_release_user_states LIMIT 1",
+    )
+    .fetch_one(&target.pool)
+    .await
+    .expect("migrated release user state");
+    assert_eq!(release_state, (false, 4, 3));
+    let artist_state: (bool, i16, i64) =
+        sqlx::query_as("SELECT starred, rating, play_count FROM native_artist_user_states LIMIT 1")
+            .fetch_one(&target.pool)
+            .await
+            .expect("migrated artist user state");
+    assert_eq!(artist_state, (true, 5, 0));
+
     // Extended user/operational domains (R3.5).
     assert_eq!(count(&target.pool, "native_library_access_groups").await, 1);
     assert_eq!(count(&target.pool, "native_user_library_groups").await, 1);
@@ -343,6 +368,45 @@ async fn full_import_covers_all_domains_and_preserves_identity() {
     .await
     .expect("settings issues");
     assert_eq!(settings_issues, 1);
+
+    drop_db(&source.name).await;
+    drop_db(&target.name).await;
+}
+
+#[tokio::test]
+async fn user_state_import_allows_multiple_users_on_one_track() {
+    let seed = format!(
+        "{SEED_MIXED}\n\
+         INSERT INTO \"UserSongs\" (\"Id\",\"ApiKey\",\"UserId\",\"SongId\",\
+         \"IsStarred\",\"IsHated\",\"Rating\",\"PlayedCount\",\"IsLocked\",\
+         \"SortOrder\",\"LastPlayedAt\",\"CreatedAt\",\"LastUpdatedAt\")\
+         VALUES (2,'dddddddd-0000-0000-0000-000000000006',2,1,false,false,3,2,false,0,now(),now(),now());"
+    );
+    let source = create_source("user_state_shared_track", &seed).await;
+    let target = create_target("user_state_shared_track").await;
+
+    let mut import_args = vec!["import".to_string()];
+    import_args.extend(source_args(&source.url));
+    import_args.push("--library-path-map".to_string());
+    import_args.push(map_arg());
+    run_legacy(&target.url, &import_args);
+
+    assert_eq!(count(&target.pool, "native_track_user_states").await, 2);
+
+    let run_id: String = sqlx::query_scalar("SELECT id::text FROM legacy_migration.runs")
+        .fetch_one(&target.pool)
+        .await
+        .expect("run id");
+    let mut verify_args = vec![
+        "verify".to_string(),
+        "--run".to_string(),
+        run_id,
+        "--json".to_string(),
+    ];
+    verify_args.extend(source_args(&source.url));
+    let verify: serde_json::Value =
+        serde_json::from_str(&run_legacy(&target.url, &verify_args)).expect("verify JSON");
+    assert_eq!(verify["total_mismatch_gaps"], 0);
 
     drop_db(&source.name).await;
     drop_db(&target.name).await;

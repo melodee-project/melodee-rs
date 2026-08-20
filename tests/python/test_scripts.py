@@ -55,6 +55,45 @@ class CaptureSafetyTests(unittest.TestCase):
         self.assertTrue(all("name" in item and "path" in item for item in value))
 
 
+class R4DualRunScenarioTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.module = load_module("run_r4_dual_run", ROOT / "scripts" / "run_r4_dual_run.py")
+
+    def test_replays_the_separate_disabled_podcast_phase(self) -> None:
+        self.assertIn("opensubsonic-conditional-off.json", self.module.SCENARIO_FILES)
+
+
+class R4AdrDecisionPackageTests(unittest.TestCase):
+    def test_adr_0150_inventory_matches_committed_surface_reports(self) -> None:
+        expected = {"native": 185, "opensubsonic": 330, "jellyfin": 17}
+        for surface, count in expected.items():
+            with self.subTest(surface=surface):
+                report = json.loads(
+                    (
+                        ROOT
+                        / "design"
+                        / "evidence"
+                        / "r4"
+                        / f"dual-run-report-{surface}.json"
+                    ).read_text()
+                )
+                self.assertEqual(len(report["unexpected"]), count)
+
+        package = (
+            ROOT / "design" / "evidence" / "r4" / "adr-0150-decision-package.md"
+        ).read_text()
+        for required_text in (
+            "185, 330, and 17",
+            "Reference-only metadata",
+            "Accepted schema-backed projection",
+            "Bounded adapter reconstruction",
+            "no comparator mask is added here",
+        ):
+            with self.subTest(required_text=required_text):
+                self.assertIn(required_text, package)
+
+
 SAMPLE_CONTROLLER = """
 using Microsoft.AspNetCore.Mvc;
 
@@ -389,6 +428,113 @@ class CompareCapturesTests(unittest.TestCase):
             self.assertEqual(len(differences), 1)
             self.assertEqual(differences[0].actual, "unknown")
 
+
+class R4DifferenceClassificationTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.module = load_module(
+            "run_phase8_differential", ROOT / "scripts" / "run_phase8_differential.py"
+        )
+
+    def test_replay_account_timestamps_use_only_narrow_volatile_rules(self) -> None:
+        self.assertEqual(
+            self.module.is_known_difference(
+                "catalog/user-playlists-limit-param",
+                "response.body$.data[0].owner.createdAt",
+                '"old"',
+                '"new"',
+            ),
+            "replay-created account timestamp is volatile",
+        )
+        self.assertEqual(
+            self.module.is_known_difference(
+                "native-user-extra/admin-users",
+                "response.body$[0].lastLoginAt",
+                '"old"',
+                '"new"',
+            ),
+            "replay login timestamp is volatile",
+        )
+
+    def test_volatile_rules_do_not_widen_to_other_user_or_playlist_fields(self) -> None:
+        self.assertIsNone(
+            self.module.is_known_difference(
+                "catalog/user-playlists-limit-param",
+                "response.body$.data[0].owner.username",
+                '"old"',
+                '"new"',
+            )
+        )
+        self.assertIsNone(
+            self.module.is_known_difference(
+                "native-user-extra/admin-users",
+                "response.body$[0].email",
+                '"old"',
+                '"new"',
+            )
+        )
+
+    def test_image_and_release_date_rules_are_exact_scenario_field_pairs(self) -> None:
+        image_entries = [
+            entry
+            for entry in self.module.KNOWN_DIFFERENCES
+            if "exact captured field is volatile" in entry[2]
+        ]
+        release_date_entries = [
+            entry
+            for entry in self.module.KNOWN_DIFFERENCES
+            if "exact captured field" in entry[2]
+            and "OriginalReleaseDate" in entry[2]
+        ]
+        self.assertEqual(len(image_entries), 32)
+        self.assertEqual(len(release_date_entries), 6)
+        for scenario, field, reason in image_entries + release_date_entries:
+            self.assertEqual(
+                self.module.is_known_difference(scenario, field, '"old"', '"new"'),
+                reason,
+            )
+
+        self.assertIsNone(
+            self.module.is_known_difference(
+                "os-getalbum-compilation",
+                "response.body$.subsonic-response.album.titleImageUrl",
+                '"old"',
+                '"new"',
+            )
+        )
+        self.assertIsNone(
+            self.module.is_known_difference(
+                "os-getalbum-minimal",
+                "response.body$.subsonic-response.album.artists[0].artistImageUrl",
+                '"old"',
+                '"new"',
+            )
+        )
+        self.assertIsNone(
+            self.module.is_known_difference(
+                "os-getalbuminfo2-extra",
+                "response.body$.subsonic-response.albumInfo.largeImageUrl",
+                '"old"',
+                '"new"',
+            )
+        )
+        self.assertIsNone(
+            self.module.is_known_difference(
+                "os-getalbum-multidisc",
+                "response.body$.subsonic-response.album.releaseDate.year",
+                '"old"',
+                '"new"',
+            )
+        )
+        self.assertIn(
+            "null-SortName",
+            self.module.is_known_difference(
+                "os-getalbum-multidisc",
+                "response.body$.subsonic-response.album.sortName",
+                '"old"',
+                '"new"',
+            ),
+        )
 
 class NewAdrTests(unittest.TestCase):
     @classmethod

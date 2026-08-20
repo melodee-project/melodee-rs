@@ -200,7 +200,7 @@ pub async fn import_tracks(
                         .await?;
                         issues += 1;
                     }
-                    MediaCheck::Escape => {
+                    MediaCheck::Unsafe => {
                         runs::record_issue(
                             &mut tx,
                             run_id,
@@ -208,7 +208,7 @@ pub async fn import_tracks(
                             Some(source_pk),
                             "error",
                             "media.unadoptable",
-                            "adopted path resolves outside the canonical root through a symlink",
+                            "adopted path is unsafe or resolves outside the canonical root",
                             Some(serde_json::json!({ "path": relative_path })),
                         )
                         .await?;
@@ -243,11 +243,15 @@ pub async fn import_tracks(
                 .get::<Option<String>, _>("ContentType")
                 .filter(|v| !v.trim().is_empty())
                 .unwrap_or_else(|| "application/octet-stream".to_string());
+            let container = map::legacy_container(
+                Some(mime.as_str()),
+                row.get::<Option<String>, _>("FileName").as_deref(),
+            );
             let asset_written = sqlx::query(
                 "INSERT INTO media_assets (
                     id, canonical_relative_path, byte_hash, byte_size, mime_type,
-                    sample_rate_hz, channels, bitrate_bps, duration_ms, created_at
-                 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+                    container, sample_rate_hz, channels, bitrate_bps, duration_ms, created_at
+                 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
                  ON CONFLICT (canonical_relative_path) DO NOTHING",
             )
             .bind(media_id_new)
@@ -255,6 +259,7 @@ pub async fn import_tracks(
             .bind(&byte_hash)
             .bind(file_size.unwrap_or(0))
             .bind(&mime)
+            .bind(container)
             .bind(row.get::<Option<i32>, _>("SamplingRate"))
             .bind(row.get::<Option<i32>, _>("ChannelCount"))
             // The frozen EF model stores BitRate in kbps; Rust media assets

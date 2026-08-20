@@ -1,0 +1,1204 @@
+{
+  "drill": "legacy_rehearsal",
+  "songs_requested": 19,
+  "started_at": "2026-08-20T10:43:21Z",
+  "steps": {
+    "create_target": {
+      "wall_s": 1.88,
+      "disk": {
+        "path_fingerprint": "62efe8d123070457c8f92770c4346d4bda87a2f2f7f57c2622928f6638788cca",
+        "total_bytes": 33654050816,
+        "used_bytes": 9258041344,
+        "free_bytes": 24396009472,
+        "headroom_ratio": 0.724906
+      }
+    },
+    "plan": {
+      "run_id": "01a01ec4-b965-7763-a95d-6a791bf668d4",
+      "wall_s": 0.35
+    },
+    "import": {
+      "wall_s": 0.6,
+      "peak_rss_bytes": 30027776
+    },
+    "verify": {
+      "wall_s": 0.4,
+      "peak_rss_bytes": 26525696,
+      "total_mismatch_gaps": 0,
+      "duplicate_public_ids": 0
+    },
+    "search_rebuild": {
+      "wall_s": 0.35,
+      "peak_rss_bytes": 83517440,
+      "output": "rebuild requested: 01a01ec4-bfdb-7e42-a37b-975b35a138c8\nrebuild activated: 01a01ec4-bfdb-7e42-a37b-975b35a138c8"
+    },
+    "backup_restore": {
+      "wall_s": 2.93,
+      "dump_bytes": 549673,
+      "restored_tracks": 19,
+      "restore_matches": true,
+      "backup": {
+        "bytes": 549673,
+        "sha256": "5a799927dbe595fc18ab8c3fda6c55713cb9a9d248a4b4aa3340eefc4af360f1",
+        "toc_entries": 959
+      },
+      "restored_counts": {
+        "artists": 10,
+        "releases": 10,
+        "tracks": 19,
+        "users": 1
+      }
+    },
+    "freeze": {
+      "wall_s": 0.65,
+      "state": "delta-ready",
+      "freeze_window_ms": 418,
+      "cutover_acknowledged": false,
+      "pre_marker_write_injected": false
+    },
+    "rollback": {
+      "source_counts_after": {
+        "artists": 10,
+        "songs": 19
+      },
+      "media_tree_after": 20,
+      "media_tree_bytes_after": 4093382,
+      "failed_target_preserved": true,
+      "objective_trigger": "cutover target unavailable; restore traffic to legacy",
+      "decision_window_seconds": 300,
+      "forensic_target": "legacy_rehearsal_target",
+      "source_mutated_by_harness": false,
+      "canonical_tree_unchanged": true
+    }
+  },
+  "measurement_schema_version": 1,
+  "source_mode": "existing_snapshot",
+  "source_backup": {
+    "bytes": 234866,
+    "sha256": "6f19061a0e113b40ffd5e180a5540eeaadbc73cb32edfb2a7d17950eada748cf",
+    "toc_entries": 513
+  },
+  "preflight": {
+    "disk": {
+      "path_fingerprint": "62efe8d123070457c8f92770c4346d4bda87a2f2f7f57c2622928f6638788cca",
+      "total_bytes": 33654050816,
+      "used_bytes": 9258041344,
+      "free_bytes": 24396009472,
+      "headroom_ratio": 0.724906,
+      "minimum_free_bytes": 0,
+      "minimum_headroom_ratio": 0.0
+    }
+  },
+  "baseline": {
+    "artifact": "melodee.legacy-baseline",
+    "schema_version": 1,
+    "captured_at": "2026-08-20 10:43:24.42022893 +00:00:00",
+    "source_identity": "pg-source-sha256:f138754e7ae4fbf9d89b2864fff31d20daf6d52a493643c0a9f606bac5bd455d:schema:20260714155936_AddDeleteSourceResidueAfterIngestSetting",
+    "schema_fingerprint": "20260714155936_AddDeleteSourceResidueAfterIngestSetting",
+    "table_count": 52,
+    "snapshot_marker": "legacy-marker-v2:d60fdf9280b00ceb1ca5006a68f528d0c2e39c3f5171bc95c9454f1c771d0de2",
+    "source_read_only": {
+      "transaction_read_only": true,
+      "default_transaction_read_only": true,
+      "in_recovery": false
+    },
+    "domains": [
+      {
+        "domain": "users",
+        "rows": 1,
+        "min_pk": 1,
+        "max_pk": 1
+      },
+      {
+        "domain": "libraries",
+        "rows": 9,
+        "min_pk": 1,
+        "max_pk": 9
+      },
+      {
+        "domain": "artists",
+        "rows": 10,
+        "min_pk": 100000,
+        "max_pk": 100036
+      },
+      {
+        "domain": "releases",
+        "rows": 10,
+        "min_pk": 100001,
+        "max_pk": 100037
+      },
+      {
+        "domain": "tracks",
+        "rows": 19,
+        "min_pk": 100002,
+        "max_pk": 100038
+      },
+      {
+        "domain": "contributions",
+        "rows": 5,
+        "min_pk": 1,
+        "max_pk": 5
+      },
+      {
+        "domain": "playlists",
+        "rows": 2,
+        "min_pk": 1,
+        "max_pk": 2
+      },
+      {
+        "domain": "playlist_items",
+        "rows": 6,
+        "min_pk": 1000001,
+        "max_pk": 2000002
+      },
+      {
+        "domain": "shares",
+        "rows": 1,
+        "min_pk": 1,
+        "max_pk": 1
+      },
+      {
+        "domain": "bookmarks",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "user_track_states",
+        "rows": 7,
+        "min_pk": 1,
+        "max_pk": 7
+      },
+      {
+        "domain": "user_release_states",
+        "rows": 3,
+        "min_pk": 1,
+        "max_pk": 3
+      },
+      {
+        "domain": "user_artist_states",
+        "rows": 3,
+        "min_pk": 1,
+        "max_pk": 3
+      },
+      {
+        "domain": "track_plays",
+        "rows": 2,
+        "min_pk": 1,
+        "max_pk": 2
+      },
+      {
+        "domain": "podcast_channels",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "podcast_episodes",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "podcast_episode_bookmarks",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "podcast_play_history",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "radio_stations",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "settings",
+        "rows": 159,
+        "min_pk": 1,
+        "max_pk": 1930
+      },
+      {
+        "domain": "smart_playlists",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "user_groups",
+        "rows": 1,
+        "min_pk": 1,
+        "max_pk": 1
+      },
+      {
+        "domain": "user_group_members",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "playback_settings",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "equalizer_presets",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "social_logins",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "user_pins",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "device_profiles",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "requests",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "request_comments",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "request_seen",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "party_sessions_excluded",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "play_queues_excluded",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      }
+    ],
+    "anomalies": [],
+    "media": {
+      "file_count": 19,
+      "total_bytes": 4093310
+    },
+    "configuration_fingerprint": {
+      "algorithm": "sha256-v1",
+      "settings_keys": [
+        "conversion.bitrate",
+        "conversion.enabled",
+        "conversion.samplingRate",
+        "conversion.vbrLevel",
+        "defaults.batchSize",
+        "defaults.pagesize",
+        "email.enabled",
+        "email.fromEmail",
+        "email.fromName",
+        "email.resetPassword.subject",
+        "email.smtpHost",
+        "email.smtpPassword",
+        "email.smtpPort",
+        "email.smtpUseSsl",
+        "email.smtpUseStartTls",
+        "email.smtpUsername",
+        "encryption.privateKey",
+        "filtering.lessThanDuration",
+        "filtering.lessThanSongCount",
+        "formatting.dateTimeDisplayActivityFormat",
+        "formatting.dateTimeDisplayFormatShort",
+        "imaging.doLoadEmbeddedImages",
+        "imaging.largeSize",
+        "imaging.maximumNumberOfAlbumImages",
+        "imaging.maximumNumberOfArtistImages",
+        "imaging.mediumSize",
+        "imaging.minimumImageSize",
+        "imaging.smallSize",
+        "jellyfin.enabled",
+        "jellyfin.rateLimit.apiPeriodSeconds",
+        "jellyfin.rateLimit.apiRequestsPerPeriod",
+        "jellyfin.rateLimit.streamConcurrentPerUser",
+        "jellyfin.routePrefix",
+        "jellyfin.token.allowLegacyHeaders",
+        "jellyfin.token.expiresAfterHours",
+        "jellyfin.token.maxActivePerUser",
+        "jellyfin.token.pepper",
+        "jobs.artistHousekeeping.cronExpression",
+        "jobs.artistSearchEngineHousekeeping.cronExpression",
+        "jobs.chartUpdate.cronExpression",
+        "jobs.libraryInsert.cronExpression",
+        "jobs.libraryProcess.cronExpression",
+        "jobs.musicbrainzUpdateDatabase.cronExpression",
+        "jobs.podcastCleanup.cronExpression",
+        "jobs.podcastDownload.cronExpression",
+        "jobs.podcastRecovery.cronExpression",
+        "jobs.podcastRefresh.cronExpression",
+        "jobs.stagingAutoMove.cronExpression",
+        "jukebox.backendType",
+        "jukebox.enabled",
+        "magic.doRemoveFeaturingArtistFromSongArtist",
+        "magic.doRemoveFeaturingArtistFromSongTitle",
+        "magic.doRemoveUnwantedTextFromAlbumTitle",
+        "magic.doRemoveUnwantedTextFromSongTitles",
+        "magic.doRenumberSongs",
+        "magic.doReplaceSongsArtistSeparators",
+        "magic.doSetYearToCurrentIfInvalid",
+        "magic.enabled",
+        "mpd.enableDebugOutput",
+        "mpd.host",
+        "mpd.initialVolume",
+        "mpd.instanceName",
+        "mpd.password",
+        "mpd.port",
+        "mpd.timeoutMs",
+        "mpv.audioDevice",
+        "mpv.enableDebugOutput",
+        "mpv.extraArgs",
+        "mpv.initialVolume",
+        "mpv.path",
+        "mpv.socketPath",
+        "openSubsonicServer.openSubsonic.serverSupportedVersion",
+        "openSubsonicServer.openSubsonicServer.index.artistLimit",
+        "openSubsonicServer.openSubsonicServer.type",
+        "openSubsonicServer.openSubsonicServerLicenseEmail",
+        "plugin.cueSheet.enabled",
+        "plugin.m3u.enabled",
+        "plugin.nfo.enabled",
+        "plugin.simpleFileVerification.enabled",
+        "podcast.download.maxConcurrent.global",
+        "podcast.download.maxConcurrent.perUser",
+        "podcast.download.maxEnclosureBytes",
+        "podcast.enabled",
+        "podcast.http.allowHttp",
+        "podcast.http.maxFeedBytes",
+        "podcast.http.maxRedirects",
+        "podcast.http.timeoutSeconds",
+        "podcast.quota.maxBytesPerUser",
+        "podcast.recovery.orphanedUsageThresholdHours",
+        "podcast.recovery.stuckDownloadThresholdMinutes",
+        "podcast.refresh.maxItemsPerChannel",
+        "podcast.retention.downloadedEpisodesInDays",
+        "podcast.retention.keepLastNEpisodes",
+        "podcast.retention.keepUnplayedOnly",
+        "processing.albumTitleRemovals",
+        "processing.artistNameReplacements",
+        "processing.convertedExtension",
+        "processing.deleteSourceResidueAfterIngest",
+        "processing.doContinueOnDirectoryProcessingErrors",
+        "processing.doDeleteComments",
+        "processing.doDeleteOriginal",
+        "processing.doOverrideExistingMelodeeDataFiles",
+        "processing.doUseCurrentYearAsDefaultOrigAlbumYearValue",
+        "processing.duplicateAlbumPrefix",
+        "processing.fileExtensionsToDelete",
+        "processing.ignoredArticles",
+        "processing.ignoredPerformers",
+        "processing.ignoredProduction",
+        "processing.ignoredPublishers",
+        "processing.maximumAlbumDirectoryNameLength",
+        "processing.maximumArtistDirectoryNameLength",
+        "processing.maximumProcessingCount",
+        "processing.processedExtension",
+        "processing.songTitleRemovals",
+        "scripting.enabled",
+        "scripting.postDiscoveryScript",
+        "scripting.preDiscoveryScript",
+        "scrobbling.enabled",
+        "scrobbling.lastFm.Enabled",
+        "scrobbling.lastFm.apiKey",
+        "scrobbling.lastFm.sharedSecret",
+        "searchEngine.artistSearchDatabaseRefreshInDays",
+        "searchEngine.deezer.enabled",
+        "searchEngine.defaultPageSize",
+        "searchEngine.discogs.enabled",
+        "searchEngine.discogs.userToken",
+        "searchEngine.itunes.enabled",
+        "searchEngine.lastFm.Enabled",
+        "searchEngine.maximumAllowedPageSize",
+        "searchEngine.metalApi.enabled",
+        "searchEngine.musicbrainz.enabled",
+        "searchEngine.musicbrainz.importBatchSize",
+        "searchEngine.musicbrainz.importLastImportTimestamp",
+        "searchEngine.musicbrainz.importMaximumToProcess",
+        "searchEngine.musicbrainz.storagePath",
+        "searchEngine.spotify.accessToken",
+        "searchEngine.spotify.apiKey",
+        "searchEngine.spotify.enabled",
+        "searchEngine.spotify.sharedSecret",
+        "searchEngine.userAgent",
+        "searchEngine.wikidata.enabled",
+        "security.passwordResetTokenExpiryMinutes",
+        "security.secretKey",
+        "system.baseUrl",
+        "system.isDownloadingEnabled",
+        "system.maxUploadSize",
+        "system.onboardingCompletedAt",
+        "system.siteName",
+        "transcoding.command.aac",
+        "transcoding.command.mp3",
+        "transcoding.command.opus",
+        "transcoding.default",
+        "userDeviceProfile.enabled",
+        "userinterface.toastAutoCloseTime",
+        "validation.maximumAlbumYear",
+        "validation.maximumSongNumber",
+        "validation.minimumAlbumDuration",
+        "validation.minimumAlbumYear",
+        "validation.minimumSongCount"
+      ],
+      "settings": [
+        {
+          "key": "conversion.bitrate",
+          "sha256": "37b73510175057c633ebe4beb0a34917fa2a0696432db43a4eeb2c3ff83a4c3b"
+        },
+        {
+          "key": "conversion.enabled",
+          "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+        },
+        {
+          "key": "conversion.samplingRate",
+          "sha256": "5d1dbce82e135ab816d7c6d1f5f9020b94000975fa77f0a349a5b4d226d82332"
+        },
+        {
+          "key": "conversion.vbrLevel",
+          "sha256": "4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a"
+        },
+        {
+          "key": "defaults.batchSize",
+          "sha256": "1e472b39b105d349bcd069c4a711b44a2fffb8e274714bb07ecfff69a9a7f67b"
+        },
+        {
+          "key": "defaults.pagesize",
+          "sha256": "ad57366865126e55649ecb23ae1d48887544976efea46a48eb5d85a6eeb4d306"
+        },
+        {
+          "key": "email.enabled",
+          "sha256": "fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa"
+        },
+        {
+          "key": "email.fromEmail",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "key": "email.fromName",
+          "sha256": "b4dd53a283f3a3fd668edd63d0b151f55f5b6384f8ae8d976e0aca6b29006fa4"
+        },
+        {
+          "key": "email.resetPassword.subject",
+          "redacted": true
+        },
+        {
+          "key": "email.smtpHost",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "key": "email.smtpPassword",
+          "redacted": true
+        },
+        {
+          "key": "email.smtpPort",
+          "sha256": "82a93b152b275d4c8de67c3d05c9b00e92477eeb024f117c7632cdb26fd874aa"
+        },
+        {
+          "key": "email.smtpUseSsl",
+          "sha256": "fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa"
+        },
+        {
+          "key": "email.smtpUseStartTls",
+          "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+        },
+        {
+          "key": "email.smtpUsername",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "key": "encryption.privateKey",
+          "redacted": true
+        },
+        {
+          "key": "filtering.lessThanDuration",
+          "sha256": "82f17fe086067552dba3dc56b1933b0732ee7305c8a3709826f70b72ed9ce0c9"
+        },
+        {
+          "key": "filtering.lessThanSongCount",
+          "sha256": "4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce"
+        },
+        {
+          "key": "formatting.dateTimeDisplayActivityFormat",
+          "sha256": "6eea0884cdd28ec9b8985a9a91458af59db032fe9d7ae5ba13091570162ed6bf"
+        },
+        {
+          "key": "formatting.dateTimeDisplayFormatShort",
+          "sha256": "0b0ebebc962a014de6469ba74ec9ccdedb180f67ae1a1d2352b384ae544b2905"
+        },
+        {
+          "key": "imaging.doLoadEmbeddedImages",
+          "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+        },
+        {
+          "key": "imaging.largeSize",
+          "sha256": "b458944d9ec4322f9ff0de2885ce82d580341fcf0fd688422e9929b6e7ce3b2d"
+        },
+        {
+          "key": "imaging.maximumNumberOfAlbumImages",
+          "sha256": "b7a56873cd771f2c446d369b649430b65a756ba278ff97ec81bb6f55b2e73569"
+        },
+        {
+          "key": "imaging.maximumNumberOfArtistImages",
+          "sha256": "b7a56873cd771f2c446d369b649430b65a756ba278ff97ec81bb6f55b2e73569"
+        },
+        {
+          "key": "imaging.mediumSize",
+          "sha256": "284b7e6d788f363f910f7beb1910473e23ce9d6c871f1ce0f31f22a982d48ad4"
+        },
+        {
+          "key": "imaging.minimumImageSize",
+          "sha256": "983bd614bb5afece5ab3b6023f71147cd7b6bc2314f9d27af7422541c6558389"
+        },
+        {
+          "key": "imaging.smallSize",
+          "sha256": "983bd614bb5afece5ab3b6023f71147cd7b6bc2314f9d27af7422541c6558389"
+        },
+        {
+          "key": "jellyfin.enabled",
+          "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+        },
+        {
+          "key": "jellyfin.rateLimit.apiPeriodSeconds",
+          "sha256": "39fa9ec190eee7b6f4dff1100d6343e10918d044c75eac8f9e9a2596173f80c9"
+        },
+        {
+          "key": "jellyfin.rateLimit.apiRequestsPerPeriod",
+          "sha256": "27badc983df1780b60c2b3fa9d3a19a00e46aac798451f0febdca52920faaddf"
+        },
+        {
+          "key": "jellyfin.rateLimit.streamConcurrentPerUser",
+          "sha256": "d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35"
+        },
+        {
+          "key": "jellyfin.routePrefix",
+          "sha256": "856dae17819875693399c1bea30d3ff7d3ae33b8bf3c209a5b73a00e52bfe86b"
+        },
+        {
+          "key": "jellyfin.token.allowLegacyHeaders",
+          "redacted": true
+        },
+        {
+          "key": "jellyfin.token.expiresAfterHours",
+          "redacted": true
+        },
+        {
+          "key": "jellyfin.token.maxActivePerUser",
+          "redacted": true
+        },
+        {
+          "key": "jellyfin.token.pepper",
+          "redacted": true
+        },
+        {
+          "key": "jobs.artistHousekeeping.cronExpression",
+          "sha256": "7140e86007406717526c961b1162759aa348448d750f61d53f1c1e893deab1f1"
+        },
+        {
+          "key": "jobs.artistSearchEngineHousekeeping.cronExpression",
+          "sha256": "84e0c4ed0d2f3e42dd1028385bc31aacd9031f2626157288f541a51c5fe8ebbe"
+        },
+        {
+          "key": "jobs.chartUpdate.cronExpression",
+          "sha256": "25312518b7034ae0861ec517d80c19f5a766db7b5379767a06553ca766459535"
+        },
+        {
+          "key": "jobs.libraryInsert.cronExpression",
+          "sha256": "84e0c4ed0d2f3e42dd1028385bc31aacd9031f2626157288f541a51c5fe8ebbe"
+        },
+        {
+          "key": "jobs.libraryProcess.cronExpression",
+          "sha256": "583c20f94609bb870973e696de53bd31aa6d5487a6535e62d46e10442c65d4f7"
+        },
+        {
+          "key": "jobs.musicbrainzUpdateDatabase.cronExpression",
+          "sha256": "76cbed525760324d4c3a7d9b7647d9e5384a43aae5a6115f3b254488db30bf85"
+        },
+        {
+          "key": "jobs.podcastCleanup.cronExpression",
+          "sha256": "25312518b7034ae0861ec517d80c19f5a766db7b5379767a06553ca766459535"
+        },
+        {
+          "key": "jobs.podcastDownload.cronExpression",
+          "sha256": "2a38eb940c3e6899035508224b0f48afefae238c7dbbb65783c9156d7b442cbc"
+        },
+        {
+          "key": "jobs.podcastRecovery.cronExpression",
+          "sha256": "87b67b2514ad53bcbf976375bc396ed83f2f9d56371722a171988db999e349ac"
+        },
+        {
+          "key": "jobs.podcastRefresh.cronExpression",
+          "sha256": "b1957d43f9564b25cb96ca3b88c960ff9a13c2af2d052eca0e7d9f29c6ca00c0"
+        },
+        {
+          "key": "jobs.stagingAutoMove.cronExpression",
+          "sha256": "cbb9a519acc7b37b17bac3598896d4b90608be61b00add4e07803e692a5e8f8c"
+        },
+        {
+          "key": "jukebox.backendType",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "key": "jukebox.enabled",
+          "sha256": "fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa"
+        },
+        {
+          "key": "magic.doRemoveFeaturingArtistFromSongArtist",
+          "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+        },
+        {
+          "key": "magic.doRemoveFeaturingArtistFromSongTitle",
+          "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+        },
+        {
+          "key": "magic.doRemoveUnwantedTextFromAlbumTitle",
+          "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+        },
+        {
+          "key": "magic.doRemoveUnwantedTextFromSongTitles",
+          "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+        },
+        {
+          "key": "magic.doRenumberSongs",
+          "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+        },
+        {
+          "key": "magic.doReplaceSongsArtistSeparators",
+          "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+        },
+        {
+          "key": "magic.doSetYearToCurrentIfInvalid",
+          "sha256": "fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa"
+        },
+        {
+          "key": "magic.enabled",
+          "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+        },
+        {
+          "key": "mpd.enableDebugOutput",
+          "sha256": "fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa"
+        },
+        {
+          "key": "mpd.host",
+          "sha256": "49960de5880e8c687434170f6476605b8fe4aeb9a28632c7995cf3ba831d9763"
+        },
+        {
+          "key": "mpd.initialVolume",
+          "sha256": "1e9d7c27c8bbc8ddf0055c93e064a62fa995d177fee28cc8fa949bc8a4db06f4"
+        },
+        {
+          "key": "mpd.instanceName",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "key": "mpd.password",
+          "redacted": true
+        },
+        {
+          "key": "mpd.port",
+          "sha256": "1ff474b06c92dfea39c7c1a93f238f385ce3f9ad4cd634ccef22f66c3129b3cc"
+        },
+        {
+          "key": "mpd.timeoutMs",
+          "sha256": "39e5b4830d4d9c14db7368a95b65d5463ea3d09520373723430c03a5a453b5df"
+        },
+        {
+          "key": "mpv.audioDevice",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "key": "mpv.enableDebugOutput",
+          "sha256": "fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa"
+        },
+        {
+          "key": "mpv.extraArgs",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "key": "mpv.initialVolume",
+          "sha256": "1e9d7c27c8bbc8ddf0055c93e064a62fa995d177fee28cc8fa949bc8a4db06f4"
+        },
+        {
+          "key": "mpv.path",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "key": "mpv.socketPath",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "key": "openSubsonicServer.openSubsonic.serverSupportedVersion",
+          "sha256": "0254d38a4ea19673fb1bb9f3f12b6ae5534f132414ec76bf7bfa6120ee3ed798"
+        },
+        {
+          "key": "openSubsonicServer.openSubsonicServer.index.artistLimit",
+          "sha256": "40510175845988f13f6162ed8526f0b09f73384467fa855e1e79b44a56562a58"
+        },
+        {
+          "key": "openSubsonicServer.openSubsonicServer.type",
+          "sha256": "b4dd53a283f3a3fd668edd63d0b151f55f5b6384f8ae8d976e0aca6b29006fa4"
+        },
+        {
+          "key": "openSubsonicServer.openSubsonicServerLicenseEmail",
+          "sha256": "99453d26cf73e242fe5d273c8d6dcb789e0e3fa70cdff589880f1d36d968af95"
+        },
+        {
+          "key": "plugin.cueSheet.enabled",
+          "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+        },
+        {
+          "key": "plugin.m3u.enabled",
+          "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+        },
+        {
+          "key": "plugin.nfo.enabled",
+          "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+        },
+        {
+          "key": "plugin.simpleFileVerification.enabled",
+          "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+        },
+        {
+          "key": "podcast.download.maxConcurrent.global",
+          "sha256": "d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35"
+        },
+        {
+          "key": "podcast.download.maxConcurrent.perUser",
+          "sha256": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b"
+        },
+        {
+          "key": "podcast.download.maxEnclosureBytes",
+          "sha256": "39f8d58187887b481fe709f7b323f2b876d9f522e9f7afef815c2089084a36d7"
+        },
+        {
+          "key": "podcast.enabled",
+          "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+        },
+        {
+          "key": "podcast.http.allowHttp",
+          "sha256": "fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa"
+        },
+        {
+          "key": "podcast.http.maxFeedBytes",
+          "sha256": "09e61b46bf7dcb6dbce3beb716d8a5d165c748833eebd52f53859b4699834cf8"
+        },
+        {
+          "key": "podcast.http.maxRedirects",
+          "sha256": "4a44dc15364204a80fe80e9039455cc1608281820fe2b24f1e5233ade6af1dd5"
+        },
+        {
+          "key": "podcast.http.timeoutSeconds",
+          "sha256": "624b60c58c9d8bfb6ff1886c2fd605d2adeb6ea4da576068201b6c6958ce93f4"
+        },
+        {
+          "key": "podcast.quota.maxBytesPerUser",
+          "sha256": "72c94c11dd0127ba23d44d0a02f1ac140da858b36c64b7aa430dff6163ae065d"
+        },
+        {
+          "key": "podcast.recovery.orphanedUsageThresholdHours",
+          "sha256": "6b51d431df5d7f141cbececcf79edf3dd861c3b4069f0b11661a3eefacbba918"
+        },
+        {
+          "key": "podcast.recovery.stuckDownloadThresholdMinutes",
+          "sha256": "39fa9ec190eee7b6f4dff1100d6343e10918d044c75eac8f9e9a2596173f80c9"
+        },
+        {
+          "key": "podcast.refresh.maxItemsPerChannel",
+          "sha256": "0604cd3138feed202ef293e062da2f4720f77a05d25ee036a7a01c9cfcdd1f0a"
+        },
+        {
+          "key": "podcast.retention.downloadedEpisodesInDays",
+          "sha256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9"
+        },
+        {
+          "key": "podcast.retention.keepLastNEpisodes",
+          "sha256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9"
+        },
+        {
+          "key": "podcast.retention.keepUnplayedOnly",
+          "sha256": "fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa"
+        },
+        {
+          "key": "processing.albumTitleRemovals",
+          "sha256": "e7f01429693d3ea80754d12ff67ced355fe021242293a79432019fa425646325"
+        },
+        {
+          "key": "processing.artistNameReplacements",
+          "sha256": "54aa954dc2a53600b28cfbf72fdaf59a638c9c18c4976dbab51e0c62a7d6d793"
+        },
+        {
+          "key": "processing.convertedExtension",
+          "sha256": "7bebe7572d835ac7966d982935094bc7acc1da6d1527bbe3bc36dc0e001f27ba"
+        },
+        {
+          "key": "processing.deleteSourceResidueAfterIngest",
+          "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+        },
+        {
+          "key": "processing.doContinueOnDirectoryProcessingErrors",
+          "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+        },
+        {
+          "key": "processing.doDeleteComments",
+          "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+        },
+        {
+          "key": "processing.doDeleteOriginal",
+          "sha256": "fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa"
+        },
+        {
+          "key": "processing.doOverrideExistingMelodeeDataFiles",
+          "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+        },
+        {
+          "key": "processing.doUseCurrentYearAsDefaultOrigAlbumYearValue",
+          "sha256": "fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa"
+        },
+        {
+          "key": "processing.duplicateAlbumPrefix",
+          "sha256": "7395d122265d7f5c641c44dd593afe60741d713f09a6fd536a9317bad9eb18c8"
+        },
+        {
+          "key": "processing.fileExtensionsToDelete",
+          "sha256": "27899939d3b82f186154d5469d24e8042bacb82760fd3d24310e103a3aa9de55"
+        },
+        {
+          "key": "processing.ignoredArticles",
+          "sha256": "0379faf7ec5a9062eb83434602ba2ce89e9bb5fb284bd7a4632f56383f7d20b2"
+        },
+        {
+          "key": "processing.ignoredPerformers",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "key": "processing.ignoredProduction",
+          "sha256": "31b86dc12bb80be1d28303f1ac6cea98dccf6337cd19e1a56398c4ff5c870460"
+        },
+        {
+          "key": "processing.ignoredPublishers",
+          "sha256": "bd00c8977d75e93c7ea09fcd4019042a61b561d8411f585d20dc1228b012bc25"
+        },
+        {
+          "key": "processing.maximumAlbumDirectoryNameLength",
+          "sha256": "9556b82499cc0aaf86aee7f0d253e17c61b7ef73d48a295f37d98f08b04ffa7f"
+        },
+        {
+          "key": "processing.maximumArtistDirectoryNameLength",
+          "sha256": "9556b82499cc0aaf86aee7f0d253e17c61b7ef73d48a295f37d98f08b04ffa7f"
+        },
+        {
+          "key": "processing.maximumProcessingCount",
+          "sha256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9"
+        },
+        {
+          "key": "processing.processedExtension",
+          "sha256": "5c7c6a3e63b3a40b181e7392c2fdf02d6215ee020ce619120652169d0fcc9181"
+        },
+        {
+          "key": "processing.songTitleRemovals",
+          "sha256": "c6931999e404d0a9519b2ceb87dec69f11b2dcde5b21cae90fe877a38ea81739"
+        },
+        {
+          "key": "scripting.enabled",
+          "sha256": "fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa"
+        },
+        {
+          "key": "scripting.postDiscoveryScript",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "key": "scripting.preDiscoveryScript",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "key": "scrobbling.enabled",
+          "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+        },
+        {
+          "key": "scrobbling.lastFm.Enabled",
+          "sha256": "fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa"
+        },
+        {
+          "key": "scrobbling.lastFm.apiKey",
+          "redacted": true
+        },
+        {
+          "key": "scrobbling.lastFm.sharedSecret",
+          "redacted": true
+        },
+        {
+          "key": "searchEngine.artistSearchDatabaseRefreshInDays",
+          "sha256": "8527a891e224136950ff32ca212b45bc93f69fbb801c3b1ebedac52775f99e61"
+        },
+        {
+          "key": "searchEngine.deezer.enabled",
+          "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+        },
+        {
+          "key": "searchEngine.defaultPageSize",
+          "sha256": "f5ca38f748a1d6eaf726b8a42fb575c3c71f1864a8143301782de13da2d9202b"
+        },
+        {
+          "key": "searchEngine.discogs.enabled",
+          "sha256": "fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa"
+        },
+        {
+          "key": "searchEngine.discogs.userToken",
+          "redacted": true
+        },
+        {
+          "key": "searchEngine.itunes.enabled",
+          "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+        },
+        {
+          "key": "searchEngine.lastFm.Enabled",
+          "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+        },
+        {
+          "key": "searchEngine.maximumAllowedPageSize",
+          "sha256": "40510175845988f13f6162ed8526f0b09f73384467fa855e1e79b44a56562a58"
+        },
+        {
+          "key": "searchEngine.metalApi.enabled",
+          "sha256": "fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa"
+        },
+        {
+          "key": "searchEngine.musicbrainz.enabled",
+          "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+        },
+        {
+          "key": "searchEngine.musicbrainz.importBatchSize",
+          "sha256": "60734f174b2035e5b2ba85fef8c648cc0cb18c5995b419d3cd1c025c5b09d0c7"
+        },
+        {
+          "key": "searchEngine.musicbrainz.importLastImportTimestamp",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "key": "searchEngine.musicbrainz.importMaximumToProcess",
+          "sha256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9"
+        },
+        {
+          "key": "searchEngine.musicbrainz.storagePath",
+          "sha256": "c63f4ba3a75aaff55a23aff021d9abb5bb9f4cef54c97c6c83cd2a0d97329751"
+        },
+        {
+          "key": "searchEngine.spotify.accessToken",
+          "redacted": true
+        },
+        {
+          "key": "searchEngine.spotify.apiKey",
+          "redacted": true
+        },
+        {
+          "key": "searchEngine.spotify.enabled",
+          "sha256": "fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa"
+        },
+        {
+          "key": "searchEngine.spotify.sharedSecret",
+          "redacted": true
+        },
+        {
+          "key": "searchEngine.userAgent",
+          "sha256": "db21d900f47cb7122681c263bfecf625038052b92e3c23647e82ad20e185a820"
+        },
+        {
+          "key": "searchEngine.wikidata.enabled",
+          "sha256": "fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa"
+        },
+        {
+          "key": "security.passwordResetTokenExpiryMinutes",
+          "redacted": true
+        },
+        {
+          "key": "security.secretKey",
+          "redacted": true
+        },
+        {
+          "key": "system.baseUrl",
+          "sha256": "c54802e74efd6a2a993eb6b9d23064f11b9b2e88f7536dea4571b626ae754cab"
+        },
+        {
+          "key": "system.isDownloadingEnabled",
+          "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+        },
+        {
+          "key": "system.maxUploadSize",
+          "sha256": "1e8c1c7e50e5595caef818da21aaf0f291666ae1ef07fa561763f8e859f8713a"
+        },
+        {
+          "key": "system.onboardingCompletedAt",
+          "sha256": "2b1d67d4d58ce23dbcf11679b67ca39d235643c1d931d0140cd93e0530aa1ca5"
+        },
+        {
+          "key": "system.siteName",
+          "sha256": "b4dd53a283f3a3fd668edd63d0b151f55f5b6384f8ae8d976e0aca6b29006fa4"
+        },
+        {
+          "key": "transcoding.command.aac",
+          "sha256": "a5e8e7ef716406d78ee078d09d0d8db3dcd348e954fbe40669cc956e6d0d5b2a"
+        },
+        {
+          "key": "transcoding.command.mp3",
+          "sha256": "bd60e82412e3b3fdc6b2b226785dd6d0d80800b466cda51b7e516eb911609a58"
+        },
+        {
+          "key": "transcoding.command.opus",
+          "sha256": "ad3585b05a23665bac81b28db53c650cd559a72bff2d96621b4cb9f7f7207373"
+        },
+        {
+          "key": "transcoding.default",
+          "sha256": "d7439bee24773bcbfa2d0a97947ee36227b10d1022b1a55847e928965bb6bfde"
+        },
+        {
+          "key": "userDeviceProfile.enabled",
+          "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+        },
+        {
+          "key": "userinterface.toastAutoCloseTime",
+          "sha256": "81a83544cf93c245178cbc1620030f1123f435af867c79d87135983c52ab39d9"
+        },
+        {
+          "key": "validation.maximumAlbumYear",
+          "sha256": "81b187544ef8734d6c3668ffd47b2e7761a7c374074eb4091e95a5385a318c9d"
+        },
+        {
+          "key": "validation.maximumSongNumber",
+          "sha256": "888df25ae35772424a560c7152a1de794440e0ea5cfee62828333a456a506e05"
+        },
+        {
+          "key": "validation.minimumAlbumDuration",
+          "sha256": "4a44dc15364204a80fe80e9039455cc1608281820fe2b24f1e5233ade6af1dd5"
+        },
+        {
+          "key": "validation.minimumAlbumYear",
+          "sha256": "5cd5e6e836cd713686bd2ccc7a5626db84a4c23f91d00d02eaed726d9f5b7220"
+        },
+        {
+          "key": "validation.minimumSongCount",
+          "sha256": "4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce"
+        }
+      ],
+      "library_root_count": 9
+    }
+  },
+  "target_counts": {
+    "artists": 10,
+    "releases": 10,
+    "tracks": 19,
+    "users": 1
+  },
+  "migration_metrics": {
+    "database_counts": {
+      "artists": 10,
+      "releases": 10,
+      "tracks": 19,
+      "users": 1
+    },
+    "media": {
+      "file_count": 19,
+      "bytes": 4093310
+    },
+    "issues": {
+      "total": 185,
+      "errors": 1,
+      "warnings": 23
+    },
+    "retries": {
+      "observed": 0,
+      "scope": "rehearsal command process",
+      "source": "no retry injection; checkpoint schema has no attempt counter"
+    },
+    "queue_age_seconds": 1.538211,
+    "failures": 1,
+    "oldest_issue_age_seconds": 0.952054,
+    "disk": {
+      "path_fingerprint": "62efe8d123070457c8f92770c4346d4bda87a2f2f7f57c2622928f6638788cca",
+      "total_bytes": 33654050816,
+      "used_bytes": 9258041344,
+      "free_bytes": 24396009472,
+      "headroom_ratio": 0.724906
+    }
+  },
+  "target_db_bytes": 17176255,
+  "search_index_bytes": 77809,
+  "search_validation": {
+    "queries": [
+      {
+        "expression": "artist:\"Rehearsal Artist 1\"",
+        "hit_count": 0,
+        "wall_s": 0.1,
+        "peak_rss_bytes": 25759744
+      },
+      {
+        "expression": "artist:rehearsal",
+        "hit_count": 0,
+        "wall_s": 0.1,
+        "peak_rss_bytes": 25694208
+      },
+      {
+        "expression": "release:rehearsal",
+        "hit_count": 0,
+        "wall_s": 0.1,
+        "peak_rss_bytes": 25751552
+      },
+      {
+        "expression": "track:rehearsal",
+        "hit_count": 0,
+        "wall_s": 0.1,
+        "peak_rss_bytes": 25243648
+      },
+      {
+        "expression": "artist:rehearsal AND year>=1990",
+        "hit_count": 0,
+        "wall_s": 0.1,
+        "peak_rss_bytes": 25542656
+      }
+    ],
+    "p50_ms": 100.0,
+    "p95_ms": 100.0
+  },
+  "canonical_media": {
+    "files": 20,
+    "bytes": 4093382,
+    "before_after_match": true,
+    "content_hash_collected": true
+  },
+  "finished_at": "2026-08-20T10:43:31Z",
+  "result": "pass",
+  "source_counts": {
+    "artists": 10,
+    "albums": 10,
+    "songs": 19,
+    "users": 1
+  }
+}

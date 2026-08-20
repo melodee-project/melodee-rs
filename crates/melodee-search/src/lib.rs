@@ -13,6 +13,7 @@ pub mod error;
 pub mod generation;
 pub mod rebuild;
 pub mod schema;
+mod secure_fs;
 pub mod service;
 pub mod store;
 pub mod translator;

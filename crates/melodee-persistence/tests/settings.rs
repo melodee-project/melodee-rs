@@ -331,6 +331,17 @@ async fn resolution_layers_env_over_file_over_database_over_default() {
         SettingsResolver::with_config_file(&db.pool, &file_path, no_env),
         Err(SettingsError::ConfigFile(_))
     ));
+
+    #[cfg(unix)]
+    {
+        let link_path = file_path.with_extension("link.json");
+        std::os::unix::fs::symlink(&file_path, &link_path).expect("symlink config file");
+        assert!(matches!(
+            SettingsResolver::with_config_file(&db.pool, &link_path, no_env),
+            Err(SettingsError::ConfigFile(_))
+        ));
+        std::fs::remove_file(&link_path).expect("remove config-file symlink");
+    }
     let _ = std::fs::remove_file(&file_path);
 
     // Environment beats everything (legacy overlay direction); env text is

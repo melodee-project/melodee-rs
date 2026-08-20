@@ -1614,6 +1614,68 @@ async fn native_library_acl_prevents_cross_library_browse_search_mutation_and_sc
 }
 
 #[tokio::test]
+async fn native_song_play_count_reads_global_play_ledger_without_user_state_row() {
+    let db = common::TestDb::create("server_native_play_count").await;
+    let fixture = phase5_common::seed_cataloged_release(
+        &db,
+        7_301,
+        CatalogFixturePresentation {
+            release_title: "Global Play Count Release",
+            release_artist: "Global Play Count Artist",
+            track_title: "Ledger Count Track",
+            track_artist: "Global Play Count Artist",
+            release_date: "2026-08-12",
+        },
+    )
+    .await;
+    let (state, principal) = native_test_state(&db, "global-play-count-user").await;
+    let (track_id, track_public_id, release_public_id): (Uuid, Uuid, Uuid) = sqlx::query_as(
+        "SELECT track.id, track.public_api_id, release.public_api_id
+         FROM tracks track JOIN releases release ON release.id = track.release_id
+         WHERE track.release_id = $1",
+    )
+    .bind(fixture.release_id().into_uuid())
+    .fetch_one(&db.pool)
+    .await
+    .expect("catalog Track and Release IDs");
+    let played_at = OffsetDateTime::now_utc();
+    sqlx::query(
+        "INSERT INTO native_track_plays
+           (id,user_id,track_id,client_event_id,played_at,submitted_at,completed)
+         SELECT uuidv7(),$1,$2,format('native-play-count-%s', ordinal),$3,$3,true
+         FROM generate_series(1,3) AS ordinal",
+    )
+    .bind(principal.user_id)
+    .bind(track_id)
+    .bind(played_at)
+    .execute(&db.pool)
+    .await
+    .expect("global play facts");
+
+    let (status, song) = response_json(
+        state.clone(),
+        principal,
+        &format!("/api/v1/songs/{track_public_id}"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(song["playCount"], 3);
+    assert_eq!(song["userStarred"], false);
+    assert_eq!(song["userRating"], 0);
+
+    let (status, album_songs) = response_json(
+        state,
+        principal,
+        &format!("/api/v1/albums/{release_public_id}/songs?page=1&pageSize=10"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(album_songs["data"][0]["id"], track_public_id.to_string());
+    assert_eq!(album_songs["data"][0]["playCount"], 3);
+    db.drop().await;
+}
+
+#[tokio::test]
 async fn native_similar_song_preserves_captured_genre_bpm_order_scores_and_acl() {
     let db = common::TestDb::create("server_native_similar").await;
     let source = phase5_common::seed_cataloged_release(

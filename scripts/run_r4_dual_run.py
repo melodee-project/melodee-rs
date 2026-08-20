@@ -74,7 +74,12 @@ SURFACE_GOLDENS = {
 
 # All scenario files in the oracle's capture order (state-mutating flows stay
 # isolated by a migrated reseed between files, mirroring the oracle's reseed).
-SCENARIO_FILES = oracle.SCENARIO_FILES
+# The oracle stores the disabled-podcast phase separately from its main
+# capture list, but R4 must replay that conditional contract as well.
+SCENARIO_FILES = [
+    *oracle.SCENARIO_FILES,
+    "opensubsonic-conditional-off.json",
+]
 
 
 def request_templates() -> dict[str, str]:
@@ -141,7 +146,7 @@ def snapshot_legacy_source(keep_dump: Path) -> None:
     )
 
 
-def reseed_legacy_oracle() -> None:
+def reseed_legacy_oracle(*, include_native_share: bool) -> None:
     """Restore the frozen oracle fixture state used by the goldens.
 
     Capture files are deliberately reseeded one file at a time because many
@@ -150,8 +155,11 @@ def reseed_legacy_oracle() -> None:
     cloning the oracle only once would compare later files against mutated
     state and manufacture migration differences.
     """
+    seed_command = [sys.executable, str(ROOT / "scripts" / "legacy_oracle.py"), "seed"]
+    if not include_native_share:
+        seed_command.append("--without-native-share")
     subprocess.run(
-        [sys.executable, str(ROOT / "scripts" / "legacy_oracle.py"), "seed"],
+        seed_command,
         cwd=ROOT,
         check=True,
         capture_output=True,
@@ -283,7 +291,7 @@ def main() -> None:
     harness.generate_media(catalog, storage_root)
 
     print("reseed and snapshot legacy fixture database ...")
-    reseed_legacy_oracle()
+    reseed_legacy_oracle(include_native_share=True)
     snapshot_legacy_source(work_dir)
     source_url = harness.DB_ADMIN_URL.rsplit("/", 1)[0] + "/" + SOURCE_DB
     target_url = harness.DB_ADMIN_URL.rsplit("/", 1)[0] + "/" + TARGET_DB
@@ -410,7 +418,9 @@ def main() -> None:
             for process in servers:
                 stop_server(process)
             servers.clear()
-            reseed_legacy_oracle()
+            reseed_legacy_oracle(
+                include_native_share=scenario_file == "native-community.json"
+            )
             snapshot_legacy_source(work_dir)
             migrate_fresh(
                 source_url, target_url, library_path, storage_root, base_url,
@@ -446,7 +456,7 @@ def main() -> None:
             for process in servers:
                 stop_server(process)
             servers.clear()
-            reseed_legacy_oracle()
+            reseed_legacy_oracle(include_native_share=False)
             snapshot_legacy_source(work_dir)
             migrate_fresh(
                 source_url, target_url, library_path, storage_root, base_url,

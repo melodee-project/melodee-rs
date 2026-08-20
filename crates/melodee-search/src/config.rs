@@ -12,6 +12,7 @@ use melodee_mql::Bounds;
 use serde::{Deserialize, Serialize};
 
 use crate::error::SearchError;
+use crate::secure_fs;
 
 #[cfg(feature = "test-support")]
 use crate::worker::{SearchApplyTestBarrier, SearchSchedulerTestProbe};
@@ -214,9 +215,21 @@ pub fn validate_search_root(path: &Path) -> Result<PathBuf, SearchError> {
             path.display()
         )));
     }
-    // Reject symlink components anywhere in the path prefix.
+    // Reject symlink and non-directory components anywhere in the path prefix.
+    // Missing components are created one at a time through the descriptor-
+    // relative no-follow boundary.  A path-based create_dir_all here would
+    // reintroduce a check-to-create race against an operator-managed symlink.
     let mut accum = PathBuf::new();
     for component in path.components() {
+        if !matches!(
+            component,
+            std::path::Component::RootDir | std::path::Component::Normal(_)
+        ) {
+            return Err(SearchError::InvalidRoot(format!(
+                "search root contains an unsupported path component: {}",
+                path.display()
+            )));
+        }
         accum.push(component.as_os_str());
         let meta = std::fs::symlink_metadata(&accum);
         match meta {
@@ -226,9 +239,39 @@ pub fn validate_search_root(path: &Path) -> Result<PathBuf, SearchError> {
                     accum.display()
                 )));
             }
+            Ok(m) if !m.is_dir() => {
+                return Err(SearchError::InvalidRoot(format!(
+                    "search root component is not a directory: {}",
+                    accum.display()
+                )));
+            }
             Ok(_) => {}
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                // Not yet created; that's fine, we create it below.
+                match secure_fs::create_directory(&accum) {
+                    Ok(()) => {}
+                    Err(create_error)
+                        if create_error.kind() == std::io::ErrorKind::AlreadyExists =>
+                    {
+                        let raced = std::fs::symlink_metadata(&accum).map_err(|source| {
+                            SearchError::Io {
+                                path: accum.clone(),
+                                source,
+                            }
+                        })?;
+                        if raced.file_type().is_symlink() || !raced.is_dir() {
+                            return Err(SearchError::InvalidRoot(format!(
+                                "search root component was replaced during creation: {}",
+                                accum.display()
+                            )));
+                        }
+                    }
+                    Err(source) => {
+                        return Err(SearchError::Io {
+                            path: accum.clone(),
+                            source,
+                        });
+                    }
+                }
             }
             Err(e) => {
                 return Err(SearchError::Io {
@@ -236,23 +279,6 @@ pub fn validate_search_root(path: &Path) -> Result<PathBuf, SearchError> {
                     source: e,
                 });
             }
-        }
-    }
-    // Create if missing.
-    if !path.exists() {
-        std::fs::create_dir_all(path).map_err(|source| SearchError::Io {
-            path: path.to_path_buf(),
-            source,
-        })?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).map_err(
-                |source| SearchError::Io {
-                    path: path.to_path_buf(),
-                    source,
-                },
-            )?;
         }
     }
     let canonical = path.canonicalize().map_err(|source| SearchError::Io {
@@ -263,6 +289,17 @@ pub fn validate_search_root(path: &Path) -> Result<PathBuf, SearchError> {
         return Err(SearchError::InvalidRoot(
             "filesystem root cannot be used as the search root".to_string(),
         ));
+    }
+    let same_directory =
+        secure_fs::same_directory(path, &canonical).map_err(|source| SearchError::Io {
+            path: path.to_path_buf(),
+            source,
+        })?;
+    if !same_directory {
+        return Err(SearchError::InvalidRoot(format!(
+            "search root changed while it was being validated: {}",
+            path.display()
+        )));
     }
     Ok(canonical)
 }
@@ -413,5 +450,13 @@ mod tests {
         std::os::unix::fs::symlink(&real, &link).expect("symlink fixture");
         assert!(validate_search_root(&link).is_err());
         assert!(validate_search_root(&link.join("search")).is_err());
+    }
+
+    #[test]
+    fn root_validation_rejects_a_regular_file() {
+        let directory = tempfile::tempdir().expect("temporary root");
+        let file = directory.path().join("not-a-directory");
+        std::fs::write(&file, b"not a search root").expect("file fixture");
+        assert!(validate_search_root(&file).is_err());
     }
 }

@@ -1,7 +1,29 @@
 {
   "artifact": "melodee.r4.current-client-acceptance",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "status": "pending-external",
+  "rowSchema": {
+    "pending-external": {
+      "required": ["client", "surface", "status"]
+    },
+    "pass-or-fail": {
+      "required": [
+        "client",
+        "surface",
+        "status",
+        "serverCommit",
+        "migratedRunId",
+        "clientVersion",
+        "platformVersion",
+        "configurationFingerprint",
+        "command",
+        "result",
+        "evidence"
+      ],
+      "evidencePaths": "repository-relative",
+      "secretPolicy": "no bearer tokens, passwords, cookies, private roots, or credentials"
+    }
+  },
   "rows": [
     {"client": "android-phone", "surface": "native-v1", "status": "pending-external"},
     {"client": "android-auto-or-dhu", "surface": "native-v1", "status": "pending-external"},

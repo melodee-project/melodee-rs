@@ -118,6 +118,16 @@ KNOWN_DIFFERENCES: list[tuple[str, str, str]] = [
     ("catalog-scrobble/scrobble-unknown-song", "", "ADR-0128: unknown scrobble Track IDs use the typed not-found result"),
     ("catalog-scrobble/song-detail-after-scrobble", "playCount", "ADR-0128: scrobble and derived user/Track counters are committed transactionally"),
     ("catalog-smart-playlists/", "", "ADR-0128: durable smart-playlist routes replace the captured missing-table 500 lifecycle"),
+    # These fields are generated from the capture/replay account lifecycle,
+    # not migrated catalog semantics. Keep the rule narrow to the exact
+    # replay scenarios and properties; owner identity, playlist contents, and
+    # all other timestamps remain differential assertions.
+    ("catalog/user-playlists-limit-param", "response.body$.data[0].owner.createdAt", "replay-created account timestamp is volatile"),
+    ("catalog/user-playlists-limit-param", "response.body$.data[0].owner.updatedAt", "replay-created account timestamp is volatile"),
+    ("catalog/user-playlists-limit-param", "response.body$.data[1].owner.createdAt", "replay-created account timestamp is volatile"),
+    ("catalog/user-playlists-limit-param", "response.body$.data[1].owner.updatedAt", "replay-created account timestamp is volatile"),
+    ("native-user-extra/admin-users", "response.body$[0].createdAt", "replay-created account timestamp is volatile"),
+    ("native-user-extra/admin-users", "response.body$[0].lastLoginAt", "replay login timestamp is volatile"),
     ("native-discovery/recommendations", "", "ADR-0128: recommendations derive from bounded committed catalog facts instead of the captured placeholder empty result"),
     ("native-discovery/endpoints-list", "", "ADR-0128: endpoint registry authorization uses the validated native principal"),
     ("native-discovery/endpoints-attach", "", "ADR-0128: endpoint registry authorization uses the validated native principal"),
@@ -184,18 +194,52 @@ KNOWN_DIFFERENCES: list[tuple[str, str, str]] = [
     # signature — knowing a username authenticated as that user. The Rust
     # adapter rejects unsigned/forged JWTs; the frozen 200 is not preserved.
     ("os-auth-jwt-forged-unsigned", "", "R1: legacy unsigned-JWT auth bypass intentionally not preserved"),
-    # The legacy serializer embedded the request origin in the image URL
-    # fields (artistImageUrl, albumInfo/artistInfo small/medium/large URLs)
-    # and the Phase 0 capture did not mask it (the goldens literally encode
-    # the capture port 5157); the value is per-run origin data, not contract.
-    ("", "ImageUrl", "image URL embeds per-run origin; unmasked capture volatility"),
-    # Legacy Album.OriginalReleaseDate/PlayedCount/LastPlayedAt are
-    # album-level columns with no Rust schema counterpart (the domain models
-    # play stats per user; original release date storage needs a schema ADR).
-    # `played` and song-summed play counts are reproduced; the standalone
-    # original-release-date fields are not.
-    ("", "originalReleaseDate", "legacy Album.OriginalReleaseDate column absent from Rust schema (deferred schema ADR)"),
-    ("", "originalAlbumDate", "legacy Album.OriginalReleaseDate column absent from Rust schema (deferred schema ADR)"),
+    # The legacy serializer embedded the request origin in these exact image
+    # URL fields, and the Phase 0 capture did not mask it (the goldens
+    # literally encode capture port 5157). Keep every entry tied to its
+    # scenario and complete response path: a future image URL field or the
+    # same field on another route must remain an unexplained difference.
+    ("os-getalbum-compilation", "response.body$.subsonic-response.album.artists[0].artistImageUrl", "image URL embeds per-run origin; exact captured field is volatile"),
+    ("os-getalbuminfo", "response.body$.subsonic-response.albumInfo.largeImageUrl", "image URL embeds per-run origin; exact captured field is volatile"),
+    ("os-getalbuminfo", "response.body$.subsonic-response.albumInfo.mediumImageUrl", "image URL embeds per-run origin; exact captured field is volatile"),
+    ("os-getalbuminfo", "response.body$.subsonic-response.albumInfo.smallImageUrl", "image URL embeds per-run origin; exact captured field is volatile"),
+    ("os-getalbuminfo2", "response.body$.subsonic-response.albumInfo.largeImageUrl", "image URL embeds per-run origin; exact captured field is volatile"),
+    ("os-getalbuminfo2", "response.body$.subsonic-response.albumInfo.mediumImageUrl", "image URL embeds per-run origin; exact captured field is volatile"),
+    ("os-getalbuminfo2", "response.body$.subsonic-response.albumInfo.smallImageUrl", "image URL embeds per-run origin; exact captured field is volatile"),
+    ("os-getartist", "response.body$.subsonic-response.artist.artistImageUrl", "image URL embeds per-run origin; exact captured field is volatile"),
+    ("os-getartist-collision", "response.body$.subsonic-response.artist.artistImageUrl", "image URL embeds per-run origin; exact captured field is volatile"),
+    ("os-getartist-various", "response.body$.subsonic-response.artist.artistImageUrl", "image URL embeds per-run origin; exact captured field is volatile"),
+    ("os-getartistinfo", "response.body$.subsonic-response.artistInfo.largeImageUrl", "image URL embeds per-run origin; exact captured field is volatile"),
+    ("os-getartistinfo", "response.body$.subsonic-response.artistInfo.mediumImageUrl", "image URL embeds per-run origin; exact captured field is volatile"),
+    ("os-getartistinfo", "response.body$.subsonic-response.artistInfo.smallImageUrl", "image URL embeds per-run origin; exact captured field is volatile"),
+    ("os-getartistinfo2", "response.body$.subsonic-response.artistInfo2.largeImageUrl", "image URL embeds per-run origin; exact captured field is volatile"),
+    ("os-getartistinfo2", "response.body$.subsonic-response.artistInfo2.mediumImageUrl", "image URL embeds per-run origin; exact captured field is volatile"),
+    ("os-getartistinfo2", "response.body$.subsonic-response.artistInfo2.smallImageUrl", "image URL embeds per-run origin; exact captured field is volatile"),
+    ("os-getartists", "response.body$.subsonic-response.artists.index[0].artist[0].artistImageUrl", "image URL embeds per-run origin; exact captured field is volatile"),
+    ("os-getartists", "response.body$.subsonic-response.artists.index[1].artist[0].artistImageUrl", "image URL embeds per-run origin; exact captured field is volatile"),
+    ("os-getartists", "response.body$.subsonic-response.artists.index[2].artist[0].artistImageUrl", "image URL embeds per-run origin; exact captured field is volatile"),
+    ("os-getartists", "response.body$.subsonic-response.artists.index[3].artist[0].artistImageUrl", "image URL embeds per-run origin; exact captured field is volatile"),
+    ("os-getartists", "response.body$.subsonic-response.artists.index[4].artist[0].artistImageUrl", "image URL embeds per-run origin; exact captured field is volatile"),
+    ("os-getartists", "response.body$.subsonic-response.artists.index[5].artist[0].artistImageUrl", "image URL embeds per-run origin; exact captured field is volatile"),
+    ("os-getartists", "response.body$.subsonic-response.artists.index[6].artist[0].artistImageUrl", "image URL embeds per-run origin; exact captured field is volatile"),
+    ("os-getartists", "response.body$.subsonic-response.artists.index[7].artist[0].artistImageUrl", "image URL embeds per-run origin; exact captured field is volatile"),
+    ("os-getindexes", "response.body$.subsonic-response.indexes.index[0].artist[0].artistImageUrl", "image URL embeds per-run origin; exact captured field is volatile"),
+    ("os-getindexes", "response.body$.subsonic-response.indexes.index[1].artist[0].artistImageUrl", "image URL embeds per-run origin; exact captured field is volatile"),
+    ("os-getindexes", "response.body$.subsonic-response.indexes.index[2].artist[0].artistImageUrl", "image URL embeds per-run origin; exact captured field is volatile"),
+    ("os-getindexes", "response.body$.subsonic-response.indexes.index[3].artist[0].artistImageUrl", "image URL embeds per-run origin; exact captured field is volatile"),
+    ("os-getindexes", "response.body$.subsonic-response.indexes.index[4].artist[0].artistImageUrl", "image URL embeds per-run origin; exact captured field is volatile"),
+    ("os-getindexes", "response.body$.subsonic-response.indexes.index[5].artist[0].artistImageUrl", "image URL embeds per-run origin; exact captured field is volatile"),
+    ("os-getindexes", "response.body$.subsonic-response.indexes.index[6].artist[0].artistImageUrl", "image URL embeds per-run origin; exact captured field is volatile"),
+    ("os-getindexes", "response.body$.subsonic-response.indexes.index[7].artist[0].artistImageUrl", "image URL embeds per-run origin; exact captured field is volatile"),
+    # Legacy Album.OriginalReleaseDate had no Rust schema counterpart. The
+    # exact six captured date components remain evidence for the unresolved
+    # ADR-0150 decision; a different date field must not be masked.
+    ("os-getalbum-multidisc", "response.body$.subsonic-response.album.originalAlbumDate.day", "legacy Album.OriginalReleaseDate column absent from Rust schema (deferred schema ADR); exact captured field"),
+    ("os-getalbum-multidisc", "response.body$.subsonic-response.album.originalAlbumDate.month", "legacy Album.OriginalReleaseDate column absent from Rust schema (deferred schema ADR); exact captured field"),
+    ("os-getalbum-multidisc", "response.body$.subsonic-response.album.originalAlbumDate.year", "legacy Album.OriginalReleaseDate column absent from Rust schema (deferred schema ADR); exact captured field"),
+    ("os-getalbum-multidisc", "response.body$.subsonic-response.album.originalReleaseDate.day", "legacy Album.OriginalReleaseDate column absent from Rust schema (deferred schema ADR); exact captured field"),
+    ("os-getalbum-multidisc", "response.body$.subsonic-response.album.originalReleaseDate.month", "legacy Album.OriginalReleaseDate column absent from Rust schema (deferred schema ADR); exact captured field"),
+    ("os-getalbum-multidisc", "response.body$.subsonic-response.album.originalReleaseDate.year", "legacy Album.OriginalReleaseDate column absent from Rust schema (deferred schema ADR); exact captured field"),
     # Legacy NULL SortName artifacts: entities without a catalog sortName
     # (Sæglópur 日本, Cassette Ghost, all albums but Northern Lights) omitted
     # `sortName`; the Rust schema requires non-empty sort values (migration
@@ -275,6 +319,17 @@ KNOWN_DIFFERENCES: list[tuple[str, str, str]] = [
     ("os-getindexes", "indexes.index", "legacy null-SortName empty-index artifact; Rust requires sort_name"),
     ("os-getmusicdirectory", "indexes.index", "legacy null-SortName empty-index artifact; Rust requires sort_name"),
 ]
+
+# These rules use complete capture paths and therefore require exact scenario
+# identity as well as exact field identity. The registry still stores the
+# common three-tuple shape for report tooling, but ``is_known_difference``
+# handles these entries before applying prefix rules below. Other entries for
+# the same scenario may intentionally retain prefix matching.
+EXACT_FIELD_RULES = frozenset(
+    (prefix, field_fragment)
+    for prefix, field_fragment, reason in KNOWN_DIFFERENCES
+    if "exact captured field" in reason
+)
 
 
 def uuid7() -> str:
@@ -1037,6 +1092,10 @@ def is_known_difference(
         if not missing and set(extra) <= {"content-length"} and changed <= {"content-length"}:
             return "content-length reflects unmasked volatile byte lengths; body tree matches"
     for prefix, field_fragment, reason in KNOWN_DIFFERENCES:
+        if (prefix, field_fragment) in EXACT_FIELD_RULES:
+            if name == prefix and field == field_fragment:
+                return reason
+            continue
         if name.startswith(prefix) and field_fragment in field:
             return reason
     return None

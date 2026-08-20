@@ -118,7 +118,7 @@ pub async fn import_all(
         source, target, run_id, &owner, batch_size,
     )
     .await?;
-    super::import_state4::record_excluded_summaries(source, target, run_id).await?;
+    super::import_state4::record_excluded_summaries(source, target, run_id, &owner).await?;
 
     // The migration writes the normalized catalog in set-sized batches, so
     // no ordinary catalog mutation has had a chance to maintain the derived
@@ -126,7 +126,7 @@ pub async fn import_all(
     // from authoritative rows before verification or server cutover. The
     // statements are additive for an existing target and use conflict-safe
     // upserts, which keeps a resumed migration from deleting unrelated data.
-    rebuild_catalog_projections(target).await?;
+    rebuild_catalog_projections(target, run_id, &owner).await?;
 
     if release_lease {
         runs::release_lease(target, run_id, &owner).await?;
@@ -135,9 +135,18 @@ pub async fn import_all(
     Ok(())
 }
 
-async fn rebuild_catalog_projections(target: &PgPool) -> Result<(), String> {
+async fn rebuild_catalog_projections(
+    target: &PgPool,
+    run_id: Uuid,
+    owner: &str,
+) -> Result<(), String> {
     let rebuilt_at = OffsetDateTime::now_utc();
     let mut tx = target.begin().await.map_err(|e| e.to_string())?;
+    if !runs::is_fenced_in(&mut tx, run_id, owner).await? {
+        return Err(format!(
+            "run {run_id}: lost lease before catalog projection rebuild"
+        ));
+    }
     sqlx::query(
         "INSERT INTO artist_track_associations (
             artist_id, track_id, association_type, participation_kind,

@@ -252,8 +252,12 @@ async fn scheduler_runs_periodically_and_stops_gracefully() {
     }
 
     let latest = handle.stop().await;
-    let stats = latest.expect("stopped loop reports its last pass");
-    assert!(stats.candidates_corrected >= 1);
+    // `stop` reports the latest completed pass, which may legitimately be a
+    // no-op pass if the ticker fires again between observing the repaired row
+    // and sending the stop signal. The loop above already proves that a
+    // scheduled pass repaired the durable projection; here we only require a
+    // completed pass to have been reported by the stopped worker.
+    assert!(latest.is_some(), "stopped loop reports a completed pass");
     db.drop().await;
 }
 

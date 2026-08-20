@@ -222,6 +222,41 @@ pub fn legacy_bitrate_bps(value: Option<i32>) -> Option<i64> {
     })
 }
 
+/// Returns the existing media-container label that can be derived without
+/// opening or rewriting a legacy media file. Unknown values remain absent;
+/// migration must not pretend that an arbitrary MIME value proves a codec.
+pub fn legacy_container(content_type: Option<&str>, file_name: Option<&str>) -> Option<String> {
+    let content_type = content_type
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_ascii_lowercase);
+    let from_content_type = content_type.as_deref().and_then(|value| match value {
+        "audio/mpeg" | "audio/mp3" => Some("mp3"),
+        "audio/flac" => Some("flac"),
+        "audio/ogg" | "application/ogg" => Some("ogg"),
+        "audio/opus" => Some("opus"),
+        "audio/mp4" | "audio/x-m4a" => Some("m4a"),
+        "audio/aac" => Some("aac"),
+        "audio/wav" | "audio/x-wav" | "audio/wave" => Some("wav"),
+        "audio/x-ms-wma" => Some("wma"),
+        _ => None,
+    });
+    if let Some(container) = from_content_type {
+        return Some(container.to_owned());
+    }
+
+    let extension = file_name?
+        .rsplit_once('.')
+        .map(|(_, extension)| extension)
+        .filter(|extension| !extension.is_empty())?
+        .to_ascii_lowercase();
+    matches!(
+        extension.as_str(),
+        "aac" | "flac" | "m4a" | "mp3" | "oga" | "ogg" | "opus" | "wav" | "wma"
+    )
+    .then_some(extension)
+}
+
 /// Adopts a legacy FileHash only when it already satisfies the 64-lowercase-
 /// hex target constraint; anything else becomes the hash-pending sentinel.
 pub fn adopt_or_sentinel_hash(legacy: Option<String>) -> String {
@@ -236,7 +271,7 @@ pub fn adopt_or_sentinel_hash(legacy: Option<String>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::legacy_bitrate_bps;
+    use super::{legacy_bitrate_bps, legacy_container};
 
     #[test]
     fn legacy_bitrate_conversion_preserves_captured_units() {
@@ -245,5 +280,30 @@ mod tests {
         assert_eq!(legacy_bitrate_bps(Some(900_000)), Some(900_000));
         assert_eq!(legacy_bitrate_bps(Some(0)), None);
         assert_eq!(legacy_bitrate_bps(None), None);
+    }
+
+    #[test]
+    fn legacy_container_uses_content_type_before_extension() {
+        assert_eq!(
+            legacy_container(Some("audio/wav"), Some("track.flac")),
+            Some("wav".to_owned())
+        );
+        assert_eq!(
+            legacy_container(Some("audio/x-m4a"), Some("track.m4a")),
+            Some("m4a".to_owned())
+        );
+    }
+
+    #[test]
+    fn legacy_container_falls_back_only_to_known_audio_extensions() {
+        assert_eq!(
+            legacy_container(Some("application/octet-stream"), Some("track.FLAC")),
+            Some("flac".to_owned())
+        );
+        assert_eq!(
+            legacy_container(Some("application/octet-stream"), Some("track.bin")),
+            None
+        );
+        assert_eq!(legacy_container(None, None), None);
     }
 }

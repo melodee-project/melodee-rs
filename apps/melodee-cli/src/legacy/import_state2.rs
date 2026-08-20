@@ -16,6 +16,29 @@ async fn user_target(
     map::mapped_target(tx, run_id, "users", user_pk).await
 }
 
+async fn state_exists(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    target_table: &str,
+    entity_fk: &str,
+    user_id: Uuid,
+    entity_id: Uuid,
+) -> Result<bool, String> {
+    // User-state tables have a composite identity (user, catalog entity), not
+    // a standalone target UUID. They therefore cannot be represented by an
+    // entity_map row whose target_id is the catalog entity: two users may
+    // legitimately annotate the same Track/Release/Artist. The table and
+    // column names are selected from the hardcoded importer allowlist.
+    let query = format!(
+        "SELECT EXISTS (SELECT 1 FROM {target_table} WHERE user_id = $1 AND {entity_fk} = $2)",
+    );
+    sqlx::query_scalar(sqlx::AssertSqlSafe(query))
+        .bind(user_id)
+        .bind(entity_id)
+        .fetch_one(&mut **tx)
+        .await
+        .map_err(|error| format!("user state existence check failed: {error}"))
+}
+
 pub async fn import_user_states(
     source: &SourceDb,
     target: &PgPool,
@@ -102,12 +125,6 @@ pub async fn import_user_states(
             );
             for row in &rows {
                 let source_pk: i64 = i64::from(row.get::<i32, _>("Id"));
-                if map::mapped_target(&mut tx, run_id, domain, source_pk)
-                    .await?
-                    .is_some()
-                {
-                    continue;
-                }
                 let user_pk = i64::from(row.get::<i32, _>("UserId"));
                 let entity_pk = i64::from(row.get::<i32, _>("entity_pk"));
                 let user_target = user_target(&mut tx, run_id, user_pk).await?;
@@ -128,6 +145,16 @@ pub async fn import_user_states(
                     issues += 1;
                     continue;
                 };
+                if state_exists(&mut tx, target_table, entity_fk, user_target, entity_target)
+                    .await?
+                {
+                    // A process can die after the state row commits but
+                    // before its checkpoint advances. Re-reading the
+                    // composite target key is the idempotency anchor for
+                    // this domain and does not confuse two users sharing an
+                    // annotated catalog entity.
+                    continue;
+                }
                 let created: time::OffsetDateTime = row.get("CreatedAt");
                 let updated = map::clamp_updated(created, row.get("LastUpdatedAt"));
                 sqlx::query(sqlx::AssertSqlSafe(insert.clone()))
@@ -143,16 +170,6 @@ pub async fn import_user_states(
                     .execute(&mut *tx)
                     .await
                     .map_err(|e| format!("{domain} row {source_pk} insert failed: {e}"))?;
-                map::insert_mapping(
-                    &mut tx,
-                    run_id,
-                    domain,
-                    source_pk,
-                    None,
-                    entity_target,
-                    updated,
-                )
-                .await?;
                 inserted += 1;
             }
             runs::advance_checkpoint(

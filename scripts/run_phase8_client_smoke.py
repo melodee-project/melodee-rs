@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Phase 8 real-client smoke runner.
 
-Boots the real ``melodee-server`` against a disposable PostgreSQL database
-seeded with the frozen fixture catalog (the same seeder the differential
-replay uses), serves a pinned Feishin web build, and drives the shipping
-client through the documented smoke workflows with Playwright/Chromium.
+Boots the real ``melodee-server`` against either a disposable PostgreSQL
+database seeded with the frozen fixture catalog (the same seeder the
+differential replay uses), or an explicitly supplied already-migrated target,
+serves a pinned Feishin web build, and drives the shipping client through the
+documented smoke workflows with Playwright/Chromium.
 
 Feishin v1.15.1 supports both server types this phase implements —
 Jellyfin and Subsonic/OpenSubsonic — so one real client exercises both
@@ -18,6 +19,11 @@ client application code and the server are untouched.
 
 Usage:
     python3 scripts/run_phase8_client_smoke.py --feishin-dist /path/to/out/web
+    MELODEE_R4_MIGRATED_DATABASE_URL=... \
+      python3 scripts/run_phase8_client_smoke.py \
+        --feishin-dist /path/to/out/web \
+        --existing-db-url-env MELODEE_R4_MIGRATED_DATABASE_URL \
+        --existing-storage-root /isolated/canonical-root
 
 Evidence (JSON request log, screenshots) is written to
 ``compatibility/captures/phase8-client-smoke/`` (gitignored captures tree).
@@ -29,20 +35,45 @@ import argparse
 import importlib.util
 import json
 import os
-import random
 import shutil
 import signal
+import socket
+import stat
 import subprocess
 import sys
 import tempfile
 import time
 import urllib.request
 from pathlib import Path
+from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
 CAPTURES_DIR = ROOT / "compatibility" / "captures" / "phase8-client-smoke"
+
+
+def allocate_loopback_ports(count: int) -> list[int]:
+    """Reserve distinct ephemeral loopback ports for one smoke run.
+
+    Listeners remain open while the set is selected, so the launcher cannot
+    assign the same port to the server, client, and relay. Child startup still
+    fails closed through the readiness probe if an unrelated process wins the
+    small handoff race after the reservations are released.
+    """
+    if count < 1:
+        raise ValueError("at least one loopback port is required")
+    listeners: list[socket.socket] = []
+    try:
+        for _ in range(count):
+            listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            listener.bind(("127.0.0.1", 0))
+            listeners.append(listener)
+        return [listener.getsockname()[1] for listener in listeners]
+    finally:
+        for listener in listeners:
+            listener.close()
 
 
 def load_module(name: str, path: Path):
@@ -72,6 +103,56 @@ def wait_ready(base_url: str, process: subprocess.Popen) -> None:
     raise SystemExit("server did not become ready in time")
 
 
+def wait_tcp_ready(port: int, process: subprocess.Popen, label: str) -> None:
+    """Wait for a local helper to accept TCP connections or fail closed."""
+    deadline = time.monotonic() + 30.0
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            raise SystemExit(f"{label} exited during startup with {process.returncode}")
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=1):
+                return
+        except OSError:
+            time.sleep(0.2)
+    raise SystemExit(f"{label} did not become ready in time")
+
+
+def contains_symlink_component(path: Path) -> bool:
+    """Return true when any existing component of ``path`` is a symlink."""
+    current = Path(path.anchor) if path.is_absolute() else Path(".")
+    for component in path.parts:
+        if component in {"", path.anchor}:
+            continue
+        current /= component
+        try:
+            mode = current.lstat().st_mode
+        except FileNotFoundError:
+            break
+        except OSError:
+            return True
+        if stat.S_ISLNK(mode):
+            return True
+    return False
+
+
+def validate_existing_target(database_url: str, storage_root: Path) -> None:
+    """Validate an existing-target launch without disclosing its values."""
+    parsed = urlsplit(database_url)
+    if parsed.scheme not in {"postgres", "postgresql"} or not parsed.hostname:
+        raise ValueError("existing database URL must be a PostgreSQL URL with a host")
+    if contains_symlink_component(storage_root) or not storage_root.is_dir():
+        raise ValueError("existing storage root must be an existing directory without symlink components")
+
+
+def existing_target_from_env(env_name: str, storage_root: Path) -> str:
+    """Read a migrated target URL from an environment variable only."""
+    database_url = os.environ.get(env_name)
+    if not database_url:
+        raise ValueError(f"environment variable {env_name} is required")
+    validate_existing_target(database_url, storage_root)
+    return database_url
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -81,43 +162,69 @@ def main() -> None:
         help="Path to the Feishin web build (out/web) of the pinned client release.",
     )
     parser.add_argument("--db-name", default="melodee_phase8_client_smoke")
+    parser.add_argument(
+        "--existing-db-url-env",
+        help="Environment variable containing an isolated migrated PostgreSQL URL; never printed.",
+    )
+    parser.add_argument(
+        "--existing-storage-root",
+        type=Path,
+        help="Existing non-symlink canonical storage root for migrated-target mode.",
+    )
     parser.add_argument("--keep", action="store_true")
     args = parser.parse_args()
+
+    existing_mode = args.existing_db_url_env is not None or args.existing_storage_root is not None
+    if existing_mode and (args.existing_db_url_env is None or args.existing_storage_root is None):
+        raise SystemExit(
+            "--existing-db-url-env and --existing-storage-root must be supplied together"
+        )
 
     if not (args.feishin_dist / "index.html").exists():
         raise SystemExit(f"no index.html under {args.feishin_dist}")
 
+    database_url: str | None = None
+    if existing_mode:
+        database_url = existing_target_from_env(
+            args.existing_db_url_env, args.existing_storage_root
+        )
+
     work_dir = Path(tempfile.mkdtemp(prefix="phase8-client-smoke-"))
-    storage_root = work_dir / "storage"
     inbound_root = work_dir / "inbound"
-    storage_root.mkdir()
     inbound_root.mkdir()
 
     catalog = json.loads(differential.CATALOG_PATH.read_text(encoding="utf-8"))
-    media = differential.generate_media(catalog, storage_root)
-    password_hash = subprocess.run(
-        [
-            "python3",
-            "-c",
-            "import bcrypt,sys; sys.stdout.write(bcrypt.hashpw(sys.argv[1].encode(), bcrypt.gensalt(4)).decode())",
-            oracle.FIXTURE_PASSWORD,
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout
-    seed_sql = differential.build_seed_sql(catalog, media, password_hash)
-    seed_path = work_dir / "seed.sql"
-    seed_path.write_text(seed_sql, encoding="utf-8")
+    if existing_mode:
+        storage_root = args.existing_storage_root
+        print("using existing migrated target from the supplied environment variable")
+    else:
+        storage_root = work_dir / "storage"
+        storage_root.mkdir()
+        media = differential.generate_media(catalog, storage_root)
+        password_hash = subprocess.run(
+            [
+                "python3",
+                "-c",
+                "import bcrypt,sys; sys.stdout.write(bcrypt.hashpw(sys.argv[1].encode(), bcrypt.gensalt(4)).decode())",
+                oracle.FIXTURE_PASSWORD,
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+        seed_sql = differential.build_seed_sql(catalog, media, password_hash)
+        seed_path = work_dir / "seed.sql"
+        seed_path.write_text(seed_sql, encoding="utf-8")
 
-    differential.psql(f'DROP DATABASE IF EXISTS "{args.db_name}" WITH (FORCE);')
-    differential.psql(f'CREATE DATABASE "{args.db_name}";')
+        differential.psql(f'DROP DATABASE IF EXISTS "{args.db_name}" WITH (FORCE);')
+        differential.psql(f'CREATE DATABASE "{args.db_name}";')
+        database_url = f"postgres://melodee:melodee-dev@127.0.0.1:5433/{args.db_name}"
 
-    port = random.randint(20000, 45000)
+    port, client_port, relay_port = allocate_loopback_ports(3)
     base_url = f"http://127.0.0.1:{port}"
     env = {
         **os.environ,
-        "MELODEE__DATABASE__URL": f"postgres://melodee:melodee-dev@127.0.0.1:5433/{args.db_name}",
+        "MELODEE__DATABASE__URL": database_url,
         "MELODEE__SERVER__BIND": f"127.0.0.1:{port}",
         "MELODEE__STORAGE__ROOT": str(storage_root),
         "MELODEE__INGEST__ENABLED": "false",
@@ -147,20 +254,20 @@ def main() -> None:
     )
     wait_ready(base_url, server)
 
-    # Migrations ran at boot; seed the fixture catalog.
-    subprocess.run(
-        [
-            "psql", "-h", "127.0.0.1", "-p", "5433", "-U", "melodee",
-            "-v", "ON_ERROR_STOP=1", "-d", args.db_name, "-f", str(seed_path),
-        ],
-        env={**os.environ, "PGPASSWORD": "melodee-dev"},
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    if not existing_mode:
+        # Migrations ran at boot; seed only the disposable fixture database.
+        subprocess.run(
+            [
+                "psql", "-h", "127.0.0.1", "-p", "5433", "-U", "melodee",
+                "-v", "ON_ERROR_STOP=1", "-d", args.db_name, "-f", str(seed_path),
+            ],
+            env={**os.environ, "PGPASSWORD": "melodee-dev"},
+            check=True,
+            capture_output=True,
+            text=True,
+        )
 
     # Serve the pinned Feishin web build.
-    client_port = random.randint(46000, 55000)
     client_server = subprocess.Popen(
         [sys.executable, "-m", "http.server", str(client_port), "--bind", "127.0.0.1"],
         cwd=args.feishin_dist,
@@ -168,14 +275,12 @@ def main() -> None:
         stderr=subprocess.DEVNULL,
     )
     client_url = f"http://127.0.0.1:{client_port}"
+    wait_tcp_ready(client_port, client_server, "Feishin client server")
 
     # The captured OpenSubsonic auth bypass trusts loopback clients, so a
     # same-host browser never gets a principal; route the OpenSubsonic surface
     # through the XFF-injecting relay to emulate a remote client (the same
     # mechanism Phase 0 used to defeat the bypass).
-    relay_port = random.randint(20000, 45000)
-    while relay_port == port:
-        relay_port = random.randint(20000, 45000)
     relay = subprocess.Popen(
         [
             sys.executable,
@@ -187,6 +292,7 @@ def main() -> None:
         stderr=subprocess.DEVNULL,
     )
     relay_url = f"http://127.0.0.1:{relay_port}"
+    wait_tcp_ready(relay_port, relay, "OpenSubsonic relay")
 
     CAPTURES_DIR.mkdir(parents=True, exist_ok=True)
     probe = ROOT / "compatibility" / "clients" / "phase8" / "feishin_smoke.cjs"
@@ -218,7 +324,8 @@ def main() -> None:
             except subprocess.TimeoutExpired:
                 process.kill()
         if not args.keep:
-            differential.psql(f'DROP DATABASE IF EXISTS "{args.db_name}" WITH (FORCE);')
+            if not existing_mode:
+                differential.psql(f'DROP DATABASE IF EXISTS "{args.db_name}" WITH (FORCE);')
             shutil.rmtree(work_dir, ignore_errors=True)
         else:
             print(f"kept work dir: {work_dir}")

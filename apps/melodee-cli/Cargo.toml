@@ -22,6 +22,7 @@ melodee-search = { path = "../../crates/melodee-search", version = "0.1.0" }
 melodee-server = { path = "../../apps/melodee-server", version = "0.1.0" }
 melodee-mql = { path = "../../crates/melodee-mql", version = "0.1.0" }
 ring.workspace = true
+rustix.workspace = true
 sha2.workspace = true
 sqlx.workspace = true
 serde.workspace = true

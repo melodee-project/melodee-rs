@@ -48,7 +48,7 @@ Schema contract tests: `crates/melodee-persistence/tests/migrations.rs` —
 |---|---|---|
 | `inventory` | Read-only schema fingerprint gate (fails closed on any non-frozen schema), per-domain counts/bounds, media totals from stored metadata only, anomaly pre-flight (duplicate public IDs, broken FKs, invalid timestamps, unsupported credentials, unadoptable media metadata). Writes nothing to the target. | `legacy.rs::inventory_reports_counts_anomalies_and_fingerprint`, `legacy_faults.rs::unsupported_source_schema_fails_closed`, `old_schema_fingerprint_is_rejected` |
 | `plan` | Records a durable `planned` run with the inventory + library path maps; no target domain rows. | `legacy.rs::plan_records_planned_run_without_target_writes` |
-| `import` | Batched, fenced, idempotent import of every mapped domain in dependency order (users → catalog → tracks/media → contributions → user state → extended state). Resume via `--run`; `--batch-size`; `--canonical-root` read-only media validation. | `legacy.rs::full_import_covers_all_domains_and_preserves_identity`, `second_full_import_creates_no_duplicate_authority`, `source_database_remains_strictly_read_only` |
+| `import` | Batched, fenced, idempotent import of every mapped domain in dependency order (users → catalog → tracks/media → contributions → user state → extended state). Resume via `--run`; `--batch-size`; `--canonical-root` read-only media validation. The integration assertion also checks migrated starred/rating/play-count values (`track=(true,5,12)`, `release=(false,4,3)`, `artist=(true,5,0)`), not just row counts. | `legacy.rs::full_import_covers_all_domains_and_preserves_identity`, `second_full_import_creates_no_duplicate_authority`, `source_database_remains_strictly_read_only` |
 | `verify` | Per-domain counts, exact unmatched samples, public-ID equality, relationship totals, playlist ordering, orphan mappings, duplicate public IDs, adopted-media existence/size (with `--canonical-root`). Clean runs transition to `delta-ready`; mismatches are durable issues. | `legacy.rs::verify_then_delta_is_convergent`, `production_shaped_source_imports_with_bounded_batches` |
 | `delta` | Convergent incremental pass: new rows import, authorized catalog display-field updates apply, source deletions become reconciliation issues (never destructive). A delta over an unchanged source is a no-op. | `legacy.rs::verify_then_delta_is_convergent` |
 | `status` | Run state, per-domain checkpoints, counters, ownership; `--json` stable for rehearsal comparison. | `legacy.rs::verify_then_delta_is_convergent` |
@@ -106,7 +106,7 @@ Suites spawn the real CLI binary against disposable PostgreSQL databases: the so
 from the frozen legacy DDL fixture (extracted from the baseline EF Core model snapshot, 52 user
 tables) and the target is freshly migrated.
 
-- `apps/melodee-cli/tests/legacy.rs` — **10/10 passed** (inventory, fingerprint gate, read-only
+- `apps/melodee-cli/tests/legacy.rs` — **11/11 passed** (inventory, fingerprint gate, read-only
   source proof, plan, full import across every mapped domain with verbatim identity, media
   validation on/off, second-import idempotency, verify→delta convergence, production-shaped
   500-artist/1000-release/12000-track import at batch size 997 with clean verify and
@@ -139,7 +139,7 @@ tested. `PRD-MIG-007` stays open for R4. Registry regenerated via
 
 ## 9. Gate results
 
-- Focused: `cargo test -p melodee-cli --test legacy --test legacy_faults` — 17/17 passed.
+- Focused: `cargo test -p melodee-cli --test legacy --test legacy_faults` — 18/18 passed.
   `cargo test -p melodee-persistence --test migrations` — 7/7 passed.
 - Full: `./scripts/check.sh` — see the commit message of the R3 landing commit for the exact
   counts at merge.

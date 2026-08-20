@@ -1,6 +1,6 @@
 //! Ownership-validated filesystem lifecycle for Tantivy generations.
 
-use std::fs::{self, OpenOptions};
+use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 use crate::config::validate_search_root;
 use crate::error::SearchError;
+use crate::secure_fs;
 
 const ROOT_SENTINEL: &str = ".melodee-search-root.json";
 const GENERATION_MANIFEST: &str = "generation.json";
@@ -43,34 +44,47 @@ impl SearchRoot {
         let existed = path.exists();
         let canonical = validate_search_root(path)?;
         let sentinel_path = canonical.join(ROOT_SENTINEL);
-        if sentinel_path.exists() {
-            let raw = fs::read(&sentinel_path).map_err(|source| SearchError::Io {
-                path: sentinel_path.clone(),
-                source,
-            })?;
-            let sentinel: RootSentinel = serde_json::from_slice(&raw)?;
-            if sentinel
-                != (RootSentinel {
-                    kind: "melodee-search-root".to_string(),
-                    version: 1,
-                })
-            {
-                return Err(SearchError::UnownedRoot(canonical.display().to_string()));
+        match secure_fs::open_read(&sentinel_path) {
+            Ok(mut file) => {
+                let mut raw = Vec::new();
+                Read::by_ref(&mut file)
+                    .take(MAX_GENERATION_MANIFEST_BYTES)
+                    .read_to_end(&mut raw)
+                    .map_err(|source| SearchError::Io {
+                        path: sentinel_path.clone(),
+                        source,
+                    })?;
+                let sentinel: RootSentinel = serde_json::from_slice(&raw)?;
+                if sentinel
+                    != (RootSentinel {
+                        kind: "melodee-search-root".to_string(),
+                        version: 1,
+                    })
+                {
+                    return Err(SearchError::UnownedRoot(canonical.display().to_string()));
+                }
             }
-        } else {
-            if existed && directory_has_entries(&canonical)? {
-                return Err(SearchError::UnownedRoot(format!(
-                    "existing non-empty directory {} has no ownership sentinel",
-                    canonical.display()
-                )));
+            Err(source) if source.kind() == std::io::ErrorKind::NotFound => {
+                if existed && directory_has_entries(&canonical)? {
+                    return Err(SearchError::UnownedRoot(format!(
+                        "existing non-empty directory {} has no ownership sentinel",
+                        canonical.display()
+                    )));
+                }
+                write_new_json(
+                    &sentinel_path,
+                    &RootSentinel {
+                        kind: "melodee-search-root".to_string(),
+                        version: 1,
+                    },
+                )?;
             }
-            write_new_json(
-                &sentinel_path,
-                &RootSentinel {
-                    kind: "melodee-search-root".to_string(),
-                    version: 1,
-                },
-            )?;
+            Err(source) => {
+                return Err(SearchError::Io {
+                    path: sentinel_path.clone(),
+                    source,
+                });
+            }
         }
         Ok(Self { path: canonical })
     }
@@ -100,20 +114,13 @@ impl SearchRoot {
             ));
         }
         let path = self.generation_path(generation_id);
-        fs::create_dir(&path).map_err(|source| SearchError::Io {
+        secure_fs::create_directory(&path).map_err(|source| SearchError::Io {
             path: path.clone(),
             source,
         })?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).map_err(|source| {
-                SearchError::Io {
-                    path: path.clone(),
-                    source,
-                }
-            })?;
-        }
+        // `secure_fs::create_directory` creates the generation with owner-only
+        // permissions relative to the held search-root descriptor. Avoid a
+        // second path-based chmod, which would reopen a check-to-use race.
         let manifest = GenerationManifest {
             generation_id,
             kind: "melodee-search-generation".to_string(),
@@ -153,10 +160,23 @@ impl SearchRoot {
         let path = self.generation_path(generation_id);
         validate_direct_child(&self.path, &path)?;
         let manifest_path = path.join(GENERATION_MANIFEST);
-        let raw = fs::read(&manifest_path).map_err(|source| SearchError::Io {
-            path: manifest_path,
+        let mut file = secure_fs::open_read(&manifest_path).map_err(|source| SearchError::Io {
+            path: manifest_path.clone(),
             source,
         })?;
+        let mut raw = Vec::new();
+        Read::by_ref(&mut file)
+            .take(MAX_GENERATION_MANIFEST_BYTES + 1)
+            .read_to_end(&mut raw)
+            .map_err(|source| SearchError::Io {
+                path: manifest_path.clone(),
+                source,
+            })?;
+        if u64::try_from(raw.len()).unwrap_or(u64::MAX) > MAX_GENERATION_MANIFEST_BYTES {
+            return Err(SearchError::UnownedRoot(format!(
+                "generation manifest exceeds {MAX_GENERATION_MANIFEST_BYTES} bytes"
+            )));
+        }
         let manifest: GenerationManifest = serde_json::from_slice(&raw)?;
         if manifest.generation_id != generation_id || manifest.kind != "melodee-search-generation" {
             return Err(SearchError::UnownedRoot(path.display().to_string()));
@@ -188,13 +208,38 @@ impl SearchRoot {
             .join(GENERATION_MANIFEST);
         let bytes = serde_json::to_vec(&manifest)?;
         let temporary = path.with_extension("json.pending");
-        fs::write(&temporary, &bytes).map_err(|source| SearchError::Io {
+        if let Err(source) = secure_fs::remove_regular_file(&temporary)
+            && source.kind() != std::io::ErrorKind::NotFound
+        {
+            return Err(SearchError::Io {
+                path: temporary.clone(),
+                source,
+            });
+        }
+        let mut pending =
+            secure_fs::open_write_new(&temporary).map_err(|source| SearchError::Io {
+                path: temporary.clone(),
+                source,
+            })?;
+        pending
+            .write_all(&bytes)
+            .map_err(|source| SearchError::Io {
+                path: temporary.clone(),
+                source,
+            })?;
+        pending.sync_all().map_err(|source| SearchError::Io {
             path: temporary.clone(),
             source,
         })?;
-        fs::rename(&temporary, &path).map_err(|source| SearchError::Io {
+        secure_fs::rename_replace(&temporary, &path).map_err(|source| SearchError::Io {
             path: path.clone(),
             source,
+        })?;
+        secure_fs::sync_directory(path.parent().unwrap_or(&self.path)).map_err(|source| {
+            SearchError::Io {
+                path: path.parent().unwrap_or(&self.path).to_path_buf(),
+                source,
+            }
         })?;
         Ok(blake3::hash(&bytes).to_hex().to_string())
     }
@@ -244,14 +289,10 @@ fn directory_has_entries(path: &Path) -> Result<bool, SearchError> {
 
 fn write_new_json<T: Serialize>(path: &Path, value: &T) -> Result<(), SearchError> {
     let bytes = serde_json::to_vec(value)?;
-    let mut file = OpenOptions::new()
-        .create_new(true)
-        .write(true)
-        .open(path)
-        .map_err(|source| SearchError::Io {
-            path: path.to_path_buf(),
-            source,
-        })?;
+    let mut file = secure_fs::open_write_new(path).map_err(|source| SearchError::Io {
+        path: path.to_path_buf(),
+        source,
+    })?;
     file.write_all(&bytes).map_err(|source| SearchError::Io {
         path: path.to_path_buf(),
         source,

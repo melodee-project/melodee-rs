@@ -15,6 +15,15 @@ fn search_status_rejects_overlap_with_an_inbound_source_without_leaking_paths() 
         .args(["search", "status"])
         .env("MELODEE__SEARCH__ROOT", &search)
         .env("MELODEE__INGEST__SOURCE_ROOT", &source)
+        .env("MELODEE__INGEST__ENABLED", "true")
+        .env(
+            "MELODEE__INGEST__STAGING_ROOT",
+            directory.path().join("staging"),
+        )
+        .env(
+            "MELODEE__NORMALIZATION__WORK_AREA",
+            directory.path().join("work"),
+        )
         .env_remove("MELODEE__INGEST__SOURCES_JSON")
         .env_remove("MELODEE__STORAGE__ROOT")
         .output()

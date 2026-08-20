@@ -19,6 +19,7 @@ echo "Python: $(python3 --version)"
 
 python3 scripts/validate_repository.py
 python3 scripts/extract_requirements.py --check
+python3 scripts/audit_requirement_overrides.py
 python3 -m unittest discover -s tests/python -p 'test_*.py' -v
 
 if [[ ! -f Cargo.lock ]]; then

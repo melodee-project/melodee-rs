@@ -1531,19 +1531,10 @@ async fn main() {
                 hidden,
                 generated_playlist,
             } => {
-                let mut input = Vec::new();
-                let file_handle = std::fs::File::open(&file).unwrap_or_else(|error| {
+                let input = read_bounded_file(&file, MAX_CHART_CSV_BYTES).unwrap_or_else(|error| {
                     eprintln!("error: cannot open chart CSV {}: {error}", file.display());
                     std::process::exit(2);
                 });
-                let read_limit = u64::try_from(MAX_CHART_CSV_BYTES + 1).unwrap_or(u64::MAX);
-                file_handle
-                    .take(read_limit)
-                    .read_to_end(&mut input)
-                    .unwrap_or_else(|error| {
-                        eprintln!("error: cannot read chart CSV {}: {error}", file.display());
-                        std::process::exit(2);
-                    });
                 if input.len() > MAX_CHART_CSV_BYTES {
                     eprintln!("error: chart CSV exceeds {MAX_CHART_CSV_BYTES} bytes");
                     std::process::exit(2);
@@ -1762,7 +1753,8 @@ async fn run_config_command(command: &ConfigCommands) {
             eprintln!("warning: {}", melodee_persistence::CONFIG_EXPORT_WARNING);
             match output {
                 Some(path) => {
-                    if let Err(error) = std::fs::write(path, format!("{rendered}\n")) {
+                    if let Err(error) = write_export_file(path, format!("{rendered}\n").as_bytes())
+                    {
                         eprintln!("error: cannot write {}: {error}", path.display());
                         std::process::exit(1);
                     }
@@ -1780,10 +1772,11 @@ async fn run_config_command(command: &ConfigCommands) {
             apply,
             allow_unknown,
         } => {
-            let raw = std::fs::read(path).unwrap_or_else(|error| {
-                eprintln!("error: cannot read {}: {error}", path.display());
-                std::process::exit(2);
-            });
+            let raw = read_bounded_file(path, melodee_persistence::MAX_IMPORT_DOCUMENT_BYTES)
+                .unwrap_or_else(|error| {
+                    eprintln!("error: cannot read {}: {error}", path.display());
+                    std::process::exit(2);
+                });
             if raw.len() > melodee_persistence::MAX_IMPORT_DOCUMENT_BYTES {
                 eprintln!(
                     "error: {} exceeds {} bytes",
@@ -2054,11 +2047,207 @@ async fn run_script_command(command: &ScriptCommands) {
     }
 }
 
+/// Writes a config export to a new regular file without following a parent or
+/// leaf symlink. Existing destinations are refused so an export cannot
+/// overwrite an operator-selected file during a path replacement race.
+#[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+fn write_export_file(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::{ffi::OsString, io::Write, os::unix::ffi::OsStrExt, path::Component};
+
+    use rustix::fs::{AtFlags, CWD, Mode, OFlags, RenameFlags, openat, renameat_with, unlinkat};
+
+    if path.as_os_str().is_empty() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "export path is empty",
+        ));
+    }
+    let relative_parent;
+    let absolute_parent = if path.is_absolute() {
+        path.parent().unwrap_or_else(|| std::path::Path::new("/"))
+    } else {
+        relative_parent = std::env::current_dir()?
+            .join(path.parent().unwrap_or_else(|| std::path::Path::new(".")));
+        &relative_parent
+    };
+    let name = path.file_name().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "export path has no file name",
+        )
+    })?;
+    let mut parent = openat(
+        CWD,
+        b"/".as_slice(),
+        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC | OFlags::NOFOLLOW,
+        Mode::empty(),
+    )
+    .map_err(std::io::Error::from)?;
+    for component in absolute_parent.components() {
+        let Component::Normal(component) = component else {
+            if matches!(component, Component::RootDir) {
+                continue;
+            }
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "export parent contains traversal",
+            ));
+        };
+        parent = openat(
+            &parent,
+            component.as_bytes(),
+            OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC | OFlags::NOFOLLOW,
+            Mode::empty(),
+        )
+        .map_err(std::io::Error::from)?;
+    }
+
+    let temporary = OsString::from(format!(
+        ".melodee-config-export-{}.tmp",
+        Uuid::now_v7().simple()
+    ));
+    let file = openat(
+        &parent,
+        temporary.as_os_str().as_bytes(),
+        OFlags::WRONLY | OFlags::CREATE | OFlags::EXCL | OFlags::CLOEXEC | OFlags::NOFOLLOW,
+        Mode::RUSR | Mode::WUSR,
+    )
+    .map_err(std::io::Error::from)?;
+    let mut file = std::fs::File::from(file);
+    if let Err(error) = file.write_all(bytes).and_then(|()| file.sync_all()) {
+        drop(file);
+        let _ = unlinkat(&parent, temporary.as_os_str().as_bytes(), AtFlags::empty());
+        return Err(error);
+    }
+    drop(file);
+    let result = renameat_with(
+        &parent,
+        temporary.as_os_str().as_bytes(),
+        &parent,
+        name.as_bytes(),
+        RenameFlags::NOREPLACE,
+    )
+    .map_err(std::io::Error::from);
+    if result.is_err() {
+        let _ = unlinkat(&parent, temporary.as_os_str().as_bytes(), AtFlags::empty());
+    }
+    result
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android", target_vendor = "apple")))]
+fn write_export_file(_path: &std::path::Path, _bytes: &[u8]) -> std::io::Result<()> {
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "race-resistant config export is unsupported on this platform",
+    ))
+}
+
+/// Read an operator-supplied regular file through a held no-follow parent
+/// descriptor and retain at most `limit + 1` bytes. The extra byte lets callers
+/// distinguish an exactly-at-limit document from an oversized one without
+/// allocating an unbounded buffer. Unsupported platforms fail closed because
+/// these CLI inputs can drive database or script operations.
+#[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+fn read_bounded_file(path: &std::path::Path, limit: usize) -> std::io::Result<Vec<u8>> {
+    use std::{ffi::OsString, os::unix::ffi::OsStrExt, path::Component};
+
+    use rustix::fs::{CWD, FileType, Mode, OFlags, fstat, openat};
+
+    let input = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()?.join(path)
+    };
+    let mut components = Vec::<OsString>::new();
+    for component in input.components() {
+        match component {
+            Component::RootDir => components.clear(),
+            Component::Normal(name) => components.push(name.to_os_string()),
+            Component::CurDir => {}
+            Component::ParentDir => {
+                components.pop();
+            }
+            Component::Prefix(_) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "input path has an unsupported prefix",
+                ));
+            }
+        }
+    }
+    let mut absolute = std::path::PathBuf::from("/");
+    for component in components {
+        absolute.push(component);
+    }
+    let parent_path = absolute.parent().ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::InvalidInput, "input path has no parent")
+    })?;
+    let name = absolute.file_name().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "input path has no file name",
+        )
+    })?;
+    let mut parent = openat(
+        CWD,
+        b"/".as_slice(),
+        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC | OFlags::NOFOLLOW,
+        Mode::empty(),
+    )
+    .map_err(std::io::Error::from)?;
+    for component in parent_path.components() {
+        let Component::Normal(component) = component else {
+            if matches!(component, Component::RootDir) {
+                continue;
+            }
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "input parent contains traversal",
+            ));
+        };
+        parent = openat(
+            &parent,
+            component.as_bytes(),
+            OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC | OFlags::NOFOLLOW,
+            Mode::empty(),
+        )
+        .map_err(std::io::Error::from)?;
+    }
+    let file = openat(
+        &parent,
+        name.as_bytes(),
+        OFlags::RDONLY | OFlags::CLOEXEC | OFlags::NOFOLLOW | OFlags::NONBLOCK,
+        Mode::empty(),
+    )
+    .map_err(std::io::Error::from)?;
+    let stat = fstat(&file).map_err(std::io::Error::from)?;
+    if FileType::from_raw_mode(stat.st_mode) != FileType::RegularFile {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "input is not a regular file",
+        ));
+    }
+    let mut bytes = Vec::new();
+    std::fs::File::from(file)
+        .take(limit as u64 + 1)
+        .read_to_end(&mut bytes)?;
+    Ok(bytes)
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android", target_vendor = "apple")))]
+fn read_bounded_file(_path: &std::path::Path, _limit: usize) -> std::io::Result<Vec<u8>> {
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "race-resistant CLI file reads are unsupported on this platform",
+    ))
+}
+
 fn read_json_file(path: &std::path::Path) -> serde_json::Value {
-    let bytes = std::fs::read(path).unwrap_or_else(|error| {
-        eprintln!("error: cannot read {}: {error}", path.display());
-        std::process::exit(2);
-    });
+    let bytes =
+        read_bounded_file(path, melodee_server::scripting::MAX_CTX_BYTES).unwrap_or_else(|error| {
+            eprintln!("error: cannot read {}: {error}", path.display());
+            std::process::exit(2);
+        });
     if bytes.len() > melodee_server::scripting::MAX_CTX_BYTES {
         eprintln!(
             "error: ctx file exceeds {} bytes",
@@ -2073,8 +2262,13 @@ fn read_json_file(path: &std::path::Path) -> serde_json::Value {
 }
 
 fn read_source_file(path: &std::path::Path) -> String {
-    let source = std::fs::read_to_string(path).unwrap_or_else(|error| {
-        eprintln!("error: cannot read {}: {error}", path.display());
+    let bytes = read_bounded_file(path, melodee_persistence::MAX_SCRIPT_SOURCE_BYTES)
+        .unwrap_or_else(|error| {
+            eprintln!("error: cannot read {}: {error}", path.display());
+            std::process::exit(2);
+        });
+    let source = String::from_utf8(bytes).unwrap_or_else(|_| {
+        eprintln!("error: {} is not valid UTF-8", path.display());
         std::process::exit(2);
     });
     if source.len() > melodee_persistence::MAX_SCRIPT_SOURCE_BYTES {

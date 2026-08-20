@@ -224,13 +224,7 @@ impl NativeUserStateReader for PostgresNativeUserStateReader {
         user_id: Uuid,
         track_id: Uuid,
     ) -> NativeFuture<'_, Result<NativeAnnotation, error::NativeApiError>> {
-        Box::pin(load_annotation(
-            &self.pool,
-            "native_track_user_states",
-            "track_id",
-            user_id,
-            track_id,
-        ))
+        Box::pin(load_track_annotation(&self.pool, user_id, track_id))
     }
 
     fn artist_annotations(
@@ -266,14 +260,80 @@ impl NativeUserStateReader for PostgresNativeUserStateReader {
         user_id: Uuid,
         track_ids: Vec<Uuid>,
     ) -> NativeFuture<'_, Result<Vec<(Uuid, NativeAnnotation)>, error::NativeApiError>> {
-        Box::pin(load_annotations(
-            &self.pool,
-            "native_track_user_states",
-            "track_id",
-            user_id,
-            track_ids,
-        ))
+        Box::pin(load_track_annotations(&self.pool, user_id, track_ids))
     }
+}
+
+/// Native-v1's `Song.playCount` is the legacy global count of play facts.
+/// Star/rating state remains user-scoped, so it must be joined separately from
+/// the immutable play ledger rather than read from the denormalized user-state
+/// counter. The latter is used for user-scoped list and statistics queries.
+async fn load_track_annotation(
+    pool: &sqlx::PgPool,
+    user_id: Uuid,
+    track_id: Uuid,
+) -> Result<NativeAnnotation, error::NativeApiError> {
+    let row = sqlx::query_as::<_, (bool, i32, i64)>(
+        "SELECT COALESCE(state.starred, false),
+                COALESCE(state.rating, 0)::integer,
+                (SELECT count(*) FROM native_track_plays play
+                 WHERE play.track_id = track.id)
+         FROM tracks track
+         LEFT JOIN native_track_user_states state
+           ON state.track_id = track.id AND state.user_id = $1
+         WHERE track.id = $2",
+    )
+    .bind(user_id)
+    .bind(track_id)
+    .fetch_optional(pool)
+    .await?;
+    match row {
+        Some((starred, rating, play_count)) => Ok(NativeAnnotation {
+            starred,
+            rating,
+            play_count: i32::try_from(play_count)
+                .map_err(|_| error::NativeApiError::Unavailable)?,
+        }),
+        None => Ok(NativeAnnotation::default()),
+    }
+}
+
+async fn load_track_annotations(
+    pool: &sqlx::PgPool,
+    user_id: Uuid,
+    track_ids: Vec<Uuid>,
+) -> Result<Vec<(Uuid, NativeAnnotation)>, error::NativeApiError> {
+    if track_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let rows = sqlx::query_as::<_, (Uuid, bool, i32, i64)>(
+        "SELECT track.id,
+                COALESCE(state.starred, false),
+                COALESCE(state.rating, 0)::integer,
+                (SELECT count(*) FROM native_track_plays play
+                 WHERE play.track_id = track.id)
+         FROM tracks track
+         LEFT JOIN native_track_user_states state
+           ON state.track_id = track.id AND state.user_id = $1
+         WHERE track.id = ANY($2::uuid[])",
+    )
+    .bind(user_id)
+    .bind(track_ids)
+    .fetch_all(pool)
+    .await?;
+    rows.into_iter()
+        .map(|(track_id, starred, rating, play_count)| {
+            Ok((
+                track_id,
+                NativeAnnotation {
+                    starred,
+                    rating,
+                    play_count: i32::try_from(play_count)
+                        .map_err(|_| error::NativeApiError::Unavailable)?,
+                },
+            ))
+        })
+        .collect()
 }
 
 async fn load_annotations(

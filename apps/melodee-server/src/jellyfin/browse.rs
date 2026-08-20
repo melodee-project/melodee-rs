@@ -271,7 +271,14 @@ async fn load_artists(
                 artist.created_at, artist.updated_at, \
                 COALESCE(aggregate.release_count, 0) \
            FROM artists artist \
-           LEFT JOIN artist_catalog_aggregates aggregate ON aggregate.artist_id = artist.id \
+           LEFT JOIN ( \
+                SELECT billing.artist_id, count(DISTINCT billing.release_id) AS release_count \
+                  FROM release_artists billing \
+                  JOIN releases release ON release.id = billing.release_id \
+                   AND release.status = 'active' \
+                 WHERE billing.role = 'primary' \
+                 GROUP BY billing.artist_id \
+           ) aggregate ON aggregate.artist_id = artist.id \
           WHERE artist.status NOT IN ('merged', 'deprecated') \
             AND ($1::text IS NULL OR {fold_expr} LIKE '%' || $1 || '%') \
           ORDER BY {order_clause} \
@@ -302,7 +309,14 @@ async fn load_artist(pool: &PgPool, public_id: Uuid) -> Result<Option<ArtistFact
                 artist.created_at, artist.updated_at, \
                 COALESCE(aggregate.release_count, 0) \
            FROM artists artist \
-           LEFT JOIN artist_catalog_aggregates aggregate ON aggregate.artist_id = artist.id \
+           LEFT JOIN ( \
+                SELECT billing.artist_id, count(DISTINCT billing.release_id) AS release_count \
+                  FROM release_artists billing \
+                  JOIN releases release ON release.id = billing.release_id \
+                   AND release.status = 'active' \
+                 WHERE billing.role = 'primary' \
+                 GROUP BY billing.artist_id \
+           ) aggregate ON aggregate.artist_id = artist.id \
           WHERE artist.public_api_id = $1 AND artist.status NOT IN ('merged', 'deprecated')",
     )
     .bind(public_id)
@@ -735,7 +749,14 @@ async fn get_similar_artists(
            FROM artist_genres candidate \
            JOIN artists artist ON artist.id = candidate.artist_id \
             AND artist.status NOT IN ('merged', 'deprecated') \
-           LEFT JOIN artist_catalog_aggregates aggregate ON aggregate.artist_id = artist.id \
+           LEFT JOIN ( \
+                SELECT billing.artist_id, count(DISTINCT billing.release_id) AS release_count \
+                  FROM release_artists billing \
+                  JOIN releases release ON release.id = billing.release_id \
+                   AND release.status = 'active' \
+                 WHERE billing.role = 'primary' \
+                 GROUP BY billing.artist_id \
+           ) aggregate ON aggregate.artist_id = artist.id \
           WHERE candidate.genre IN ( \
                   SELECT genre FROM artist_genres JOIN seed ON artist_genres.artist_id = seed.artist_id) \
             AND candidate.artist_id <> (SELECT artist_id FROM seed) \

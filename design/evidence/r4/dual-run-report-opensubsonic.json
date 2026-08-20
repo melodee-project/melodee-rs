@@ -281,7 +281,7 @@
     {
       "scenario": "os-getalbum-compilation",
       "field": "response.body$.subsonic-response.album.artists[0].artistImageUrl",
-      "reason": "image URL embeds per-run origin; unmasked capture volatility"
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
     },
     {
       "scenario": "os-getalbum-compilation",
@@ -316,32 +316,32 @@
     {
       "scenario": "os-getalbum-multidisc",
       "field": "response.body$.subsonic-response.album.originalAlbumDate.day",
-      "reason": "legacy Album.OriginalReleaseDate column absent from Rust schema (deferred schema ADR)"
+      "reason": "legacy Album.OriginalReleaseDate column absent from Rust schema (deferred schema ADR); exact captured field"
     },
     {
       "scenario": "os-getalbum-multidisc",
       "field": "response.body$.subsonic-response.album.originalAlbumDate.month",
-      "reason": "legacy Album.OriginalReleaseDate column absent from Rust schema (deferred schema ADR)"
+      "reason": "legacy Album.OriginalReleaseDate column absent from Rust schema (deferred schema ADR); exact captured field"
     },
     {
       "scenario": "os-getalbum-multidisc",
       "field": "response.body$.subsonic-response.album.originalAlbumDate.year",
-      "reason": "legacy Album.OriginalReleaseDate column absent from Rust schema (deferred schema ADR)"
+      "reason": "legacy Album.OriginalReleaseDate column absent from Rust schema (deferred schema ADR); exact captured field"
     },
     {
       "scenario": "os-getalbum-multidisc",
       "field": "response.body$.subsonic-response.album.originalReleaseDate.day",
-      "reason": "legacy Album.OriginalReleaseDate column absent from Rust schema (deferred schema ADR)"
+      "reason": "legacy Album.OriginalReleaseDate column absent from Rust schema (deferred schema ADR); exact captured field"
     },
     {
       "scenario": "os-getalbum-multidisc",
       "field": "response.body$.subsonic-response.album.originalReleaseDate.month",
-      "reason": "legacy Album.OriginalReleaseDate column absent from Rust schema (deferred schema ADR)"
+      "reason": "legacy Album.OriginalReleaseDate column absent from Rust schema (deferred schema ADR); exact captured field"
     },
     {
       "scenario": "os-getalbum-multidisc",
       "field": "response.body$.subsonic-response.album.originalReleaseDate.year",
-      "reason": "legacy Album.OriginalReleaseDate column absent from Rust schema (deferred schema ADR)"
+      "reason": "legacy Album.OriginalReleaseDate column absent from Rust schema (deferred schema ADR); exact captured field"
     },
     {
       "scenario": "os-getalbum-multidisc",
@@ -361,17 +361,17 @@
     {
       "scenario": "os-getalbuminfo",
       "field": "response.body$.subsonic-response.albumInfo.largeImageUrl",
-      "reason": "image URL embeds per-run origin; unmasked capture volatility"
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
     },
     {
       "scenario": "os-getalbuminfo",
       "field": "response.body$.subsonic-response.albumInfo.mediumImageUrl",
-      "reason": "image URL embeds per-run origin; unmasked capture volatility"
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
     },
     {
       "scenario": "os-getalbuminfo",
       "field": "response.body$.subsonic-response.albumInfo.smallImageUrl",
-      "reason": "image URL embeds per-run origin; unmasked capture volatility"
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
     },
     {
       "scenario": "os-getalbuminfo2",
@@ -381,17 +381,17 @@
     {
       "scenario": "os-getalbuminfo2",
       "field": "response.body$.subsonic-response.albumInfo.largeImageUrl",
-      "reason": "image URL embeds per-run origin; unmasked capture volatility"
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
     },
     {
       "scenario": "os-getalbuminfo2",
       "field": "response.body$.subsonic-response.albumInfo.mediumImageUrl",
-      "reason": "image URL embeds per-run origin; unmasked capture volatility"
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
     },
     {
       "scenario": "os-getalbuminfo2",
       "field": "response.body$.subsonic-response.albumInfo.smallImageUrl",
-      "reason": "image URL embeds per-run origin; unmasked capture volatility"
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
     },
     {
       "scenario": "os-getartist",
@@ -401,7 +401,7 @@
     {
       "scenario": "os-getartist",
       "field": "response.body$.subsonic-response.artist.artistImageUrl",
-      "reason": "image URL embeds per-run origin; unmasked capture volatility"
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
     },
     {
       "scenario": "os-getartist-collision",
@@ -411,7 +411,7 @@
     {
       "scenario": "os-getartist-collision",
       "field": "response.body$.subsonic-response.artist.artistImageUrl",
-      "reason": "image URL embeds per-run origin; unmasked capture volatility"
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
     },
     {
       "scenario": "os-getartist-unknown",
@@ -426,7 +426,7 @@
     {
       "scenario": "os-getartist-various",
       "field": "response.body$.subsonic-response.artist.artistImageUrl",
-      "reason": "image URL embeds per-run origin; unmasked capture volatility"
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
     },
     {
       "scenario": "os-getartistinfo",
@@ -436,17 +436,17 @@
     {
       "scenario": "os-getartistinfo",
       "field": "response.body$.subsonic-response.artistInfo.largeImageUrl",
-      "reason": "image URL embeds per-run origin; unmasked capture volatility"
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
     },
     {
       "scenario": "os-getartistinfo",
       "field": "response.body$.subsonic-response.artistInfo.mediumImageUrl",
-      "reason": "image URL embeds per-run origin; unmasked capture volatility"
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
     },
     {
       "scenario": "os-getartistinfo",
       "field": "response.body$.subsonic-response.artistInfo.smallImageUrl",
-      "reason": "image URL embeds per-run origin; unmasked capture volatility"
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
     },
     {
       "scenario": "os-getartistinfo2",
@@ -456,17 +456,17 @@
     {
       "scenario": "os-getartistinfo2",
       "field": "response.body$.subsonic-response.artistInfo2.largeImageUrl",
-      "reason": "image URL embeds per-run origin; unmasked capture volatility"
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
     },
     {
       "scenario": "os-getartistinfo2",
       "field": "response.body$.subsonic-response.artistInfo2.mediumImageUrl",
-      "reason": "image URL embeds per-run origin; unmasked capture volatility"
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
     },
     {
       "scenario": "os-getartistinfo2",
       "field": "response.body$.subsonic-response.artistInfo2.smallImageUrl",
-      "reason": "image URL embeds per-run origin; unmasked capture volatility"
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
     },
     {
       "scenario": "os-getartists",
@@ -481,12 +481,12 @@
     {
       "scenario": "os-getartists",
       "field": "response.body$.subsonic-response.artists.index[0].artist[0].artistImageUrl",
-      "reason": "image URL embeds per-run origin; unmasked capture volatility"
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
     },
     {
       "scenario": "os-getartists",
       "field": "response.body$.subsonic-response.artists.index[1].artist[0].artistImageUrl",
-      "reason": "image URL embeds per-run origin; unmasked capture volatility"
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
     },
     {
       "scenario": "os-getartists",
@@ -496,7 +496,7 @@
     {
       "scenario": "os-getartists",
       "field": "response.body$.subsonic-response.artists.index[2].artist[0].artistImageUrl",
-      "reason": "image URL embeds per-run origin; unmasked capture volatility"
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
     },
     {
       "scenario": "os-getartists",
@@ -531,7 +531,7 @@
     {
       "scenario": "os-getartists",
       "field": "response.body$.subsonic-response.artists.index[3].artist[0].artistImageUrl",
-      "reason": "image URL embeds per-run origin; unmasked capture volatility"
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
     },
     {
       "scenario": "os-getartists",
@@ -561,7 +561,7 @@
     {
       "scenario": "os-getartists",
       "field": "response.body$.subsonic-response.artists.index[4].artist[0].artistImageUrl",
-      "reason": "image URL embeds per-run origin; unmasked capture volatility"
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
     },
     {
       "scenario": "os-getartists",
@@ -591,7 +591,7 @@
     {
       "scenario": "os-getartists",
       "field": "response.body$.subsonic-response.artists.index[5].artist[0].artistImageUrl",
-      "reason": "image URL embeds per-run origin; unmasked capture volatility"
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
     },
     {
       "scenario": "os-getartists",
@@ -616,7 +616,7 @@
     {
       "scenario": "os-getartists",
       "field": "response.body$.subsonic-response.artists.index[6].artist[0].artistImageUrl",
-      "reason": "image URL embeds per-run origin; unmasked capture volatility"
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
     },
     {
       "scenario": "os-getartists",
@@ -646,7 +646,7 @@
     {
       "scenario": "os-getartists",
       "field": "response.body$.subsonic-response.artists.index[7].artist[0].artistImageUrl",
-      "reason": "image URL embeds per-run origin; unmasked capture volatility"
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
     },
     {
       "scenario": "os-getartists",
@@ -681,12 +681,12 @@
     {
       "scenario": "os-getindexes",
       "field": "response.body$.subsonic-response.indexes.index[0].artist[0].artistImageUrl",
-      "reason": "image URL embeds per-run origin; unmasked capture volatility"
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
     },
     {
       "scenario": "os-getindexes",
       "field": "response.body$.subsonic-response.indexes.index[1].artist[0].artistImageUrl",
-      "reason": "image URL embeds per-run origin; unmasked capture volatility"
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
     },
     {
       "scenario": "os-getindexes",
@@ -696,7 +696,7 @@
     {
       "scenario": "os-getindexes",
       "field": "response.body$.subsonic-response.indexes.index[2].artist[0].artistImageUrl",
-      "reason": "image URL embeds per-run origin; unmasked capture volatility"
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
     },
     {
       "scenario": "os-getindexes",
@@ -731,7 +731,7 @@
     {
       "scenario": "os-getindexes",
       "field": "response.body$.subsonic-response.indexes.index[3].artist[0].artistImageUrl",
-      "reason": "image URL embeds per-run origin; unmasked capture volatility"
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
     },
     {
       "scenario": "os-getindexes",
@@ -761,7 +761,7 @@
     {
       "scenario": "os-getindexes",
       "field": "response.body$.subsonic-response.indexes.index[4].artist[0].artistImageUrl",
-      "reason": "image URL embeds per-run origin; unmasked capture volatility"
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
     },
     {
       "scenario": "os-getindexes",
@@ -791,7 +791,7 @@
     {
       "scenario": "os-getindexes",
       "field": "response.body$.subsonic-response.indexes.index[5].artist[0].artistImageUrl",
-      "reason": "image URL embeds per-run origin; unmasked capture volatility"
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
     },
     {
       "scenario": "os-getindexes",
@@ -816,7 +816,7 @@
     {
       "scenario": "os-getindexes",
       "field": "response.body$.subsonic-response.indexes.index[6].artist[0].artistImageUrl",
-      "reason": "image URL embeds per-run origin; unmasked capture volatility"
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
     },
     {
       "scenario": "os-getindexes",
@@ -846,7 +846,7 @@
     {
       "scenario": "os-getindexes",
       "field": "response.body$.subsonic-response.indexes.index[7].artist[0].artistImageUrl",
-      "reason": "image URL embeds per-run origin; unmasked capture volatility"
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
     },
     {
       "scenario": "os-getindexes",
@@ -1062,6 +1062,21 @@
       "scenario": "os-searchforalbumimage",
       "field": "response.headers",
       "reason": "redirect Location embeds per-run forwarded host; credential strip per ADR-0130"
+    },
+    {
+      "scenario": "os-podcasts-disabled-create",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-podcasts-disabled-getnewest",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-podcasts-disabled-getpodcasts",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
     },
     {
       "scenario": "os-getalbumlist-newest",
@@ -1490,11 +1505,6 @@
     },
     {
       "scenario": "os-playlists/verify-updated",
-      "field": "response.body$.subsonic-response.playlist.entry[1].path",
-      "reason": "legacy cover-resolution 302 rollback not preserved (phase-0 \u00a77)"
-    },
-    {
-      "scenario": "os-playlists/verify-updated",
       "field": "response.body$.subsonic-response.playlist.name",
       "reason": "legacy cover-resolution 302 rollback not preserved (phase-0 \u00a77)"
     },
@@ -1625,12 +1635,6 @@
       "actual": "2"
     },
     {
-      "scenario": "os-annotation-rating/verify-rating",
-      "field": "response.body$.subsonic-response.song.path",
-      "expected": "\"Desert Rock Radio/02 - Caravan.wav\"",
-      "actual": "\"Dune/Desert Rock Radio/02 - Caravan.wav\""
-    },
-    {
       "scenario": "os-annotation-rating/verify-rating-cleared",
       "field": "response.body$.subsonic-response.song.bitDepth",
       "expected": "16",
@@ -1655,12 +1659,6 @@
       "actual": "2"
     },
     {
-      "scenario": "os-annotation-rating/verify-rating-cleared",
-      "field": "response.body$.subsonic-response.song.path",
-      "expected": "\"Desert Rock Radio/02 - Caravan.wav\"",
-      "actual": "\"Dune/Desert Rock Radio/02 - Caravan.wav\""
-    },
-    {
       "scenario": "os-annotation-scrobble/verify-nowplaying",
       "field": "response.body$.subsonic-response.nowPlaying.entry[0].bitDepth",
       "expected": "16",
@@ -1677,12 +1675,6 @@
       "field": "response.body$.subsonic-response.nowPlaying.entry[0].genres",
       "expected": "[{\"value\": \"Folk\", \"songCount\": 0, \"albumCount\": 0}]",
       "actual": "\"<omitted>\""
-    },
-    {
-      "scenario": "os-annotation-scrobble/verify-nowplaying",
-      "field": "response.body$.subsonic-response.nowPlaying.entry[0].path",
-      "expected": "\"Beacon/01 - Lantern.wav\"",
-      "actual": "\"The Harbour Lights/Beacon/01 - Lantern.wav\""
     },
     {
       "scenario": "os-annotation-star/verify-starred2-after-star",
@@ -1713,12 +1705,6 @@
       "field": "response.body$.subsonic-response.starred2.song[0].genres",
       "expected": "[{\"value\": \"Ambient\", \"songCount\": 0, \"albumCount\": 0}, {\"value\": \"Electronic\", \"songCount\": 0, \"albumCount\": 0}]",
       "actual": "\"<omitted>\""
-    },
-    {
-      "scenario": "os-annotation-star/verify-starred2-after-star",
-      "field": "response.body$.subsonic-response.starred2.song[0].path",
-      "expected": "\"Northern Lights/02 - Polar Veil.wav\"",
-      "actual": "\"Aurora Fields/Northern Lights/02 - Polar Veil.wav\""
     },
     {
       "scenario": "os-annotation-star/verify-starred2-after-star",
@@ -1751,12 +1737,6 @@
       "actual": "2"
     },
     {
-      "scenario": "os-annotation-star/verify-starred2-after-star",
-      "field": "response.body$.subsonic-response.starred2.song[1].path",
-      "expected": "\"Desert Rock Radio/01 - Sandstone.wav\"",
-      "actual": "\"Dune/Desert Rock Radio/01 - Sandstone.wav\""
-    },
-    {
       "scenario": "os-annotation-star/verify-starred2-after-unstar",
       "field": "response.body$.subsonic-response.starred2.album[0].genre",
       "expected": "\"Ambient\"",
@@ -1785,12 +1765,6 @@
       "field": "response.body$.subsonic-response.starred2.song[0].genres",
       "expected": "[{\"value\": \"Ambient\", \"songCount\": 0, \"albumCount\": 0}, {\"value\": \"Electronic\", \"songCount\": 0, \"albumCount\": 0}]",
       "actual": "\"<omitted>\""
-    },
-    {
-      "scenario": "os-annotation-star/verify-starred2-after-unstar",
-      "field": "response.body$.subsonic-response.starred2.song[0].path",
-      "expected": "\"Northern Lights/02 - Polar Veil.wav\"",
-      "actual": "\"Aurora Fields/Northern Lights/02 - Polar Veil.wav\""
     },
     {
       "scenario": "os-annotation-star/verify-starred2-after-unstar",
@@ -1842,12 +1816,6 @@
     },
     {
       "scenario": "os-annotation-star/verify-starred2-album",
-      "field": "response.body$.subsonic-response.starred2.song[0].path",
-      "expected": "\"Northern Lights/02 - Polar Veil.wav\"",
-      "actual": "\"Aurora Fields/Northern Lights/02 - Polar Veil.wav\""
-    },
-    {
-      "scenario": "os-annotation-star/verify-starred2-album",
       "field": "response.body$.subsonic-response.starred2.song[0].playCount",
       "expected": "4",
       "actual": "0"
@@ -1890,12 +1858,6 @@
     },
     {
       "scenario": "os-getalbum",
-      "field": "response.body$.subsonic-response.album.song[0].path",
-      "expected": "\"Northern Lights/01 - Solar Wind.wav\"",
-      "actual": "\"Aurora Fields/Northern Lights/01 - Solar Wind.wav\""
-    },
-    {
-      "scenario": "os-getalbum",
       "field": "response.body$.subsonic-response.album.song[0].playCount",
       "expected": "5",
       "actual": "0"
@@ -1920,12 +1882,6 @@
     },
     {
       "scenario": "os-getalbum",
-      "field": "response.body$.subsonic-response.album.song[1].path",
-      "expected": "\"Northern Lights/02 - Polar Veil.wav\"",
-      "actual": "\"Aurora Fields/Northern Lights/02 - Polar Veil.wav\""
-    },
-    {
-      "scenario": "os-getalbum",
       "field": "response.body$.subsonic-response.album.song[1].playCount",
       "expected": "4",
       "actual": "0"
@@ -1947,12 +1903,6 @@
       "field": "response.body$.subsonic-response.album.song[2].genres",
       "expected": "[{\"value\": \"Ambient\", \"songCount\": 0, \"albumCount\": 0}, {\"value\": \"Electronic\", \"songCount\": 0, \"albumCount\": 0}]",
       "actual": "\"<omitted>\""
-    },
-    {
-      "scenario": "os-getalbum",
-      "field": "response.body$.subsonic-response.album.song[2].path",
-      "expected": "\"Northern Lights/03 - Midnight Sun.wav\"",
-      "actual": "\"Aurora Fields/Northern Lights/03 - Midnight Sun.wav\""
     },
     {
       "scenario": "os-getalbum",
@@ -2040,24 +1990,6 @@
     },
     {
       "scenario": "os-getalbum-compilation",
-      "field": "response.body$.subsonic-response.album.song[0].contributors[0].artistId3.albumCount",
-      "expected": "0",
-      "actual": "1"
-    },
-    {
-      "scenario": "os-getalbum-compilation",
-      "field": "response.body$.subsonic-response.album.song[0].contributors[0].role",
-      "expected": "\"FeaturedArtist\"",
-      "actual": "\"featuredartist\""
-    },
-    {
-      "scenario": "os-getalbum-compilation",
-      "field": "response.body$.subsonic-response.album.song[0].path",
-      "expected": "\"Phase Zero Compilation/01 - Falling (feat. Guest Vocalist).wav\"",
-      "actual": "\"Various Artists/Phase Zero Compilation/01 - Falling (feat. Guest Vocalist).wav\""
-    },
-    {
-      "scenario": "os-getalbum-compilation",
       "field": "response.body$.subsonic-response.album.song[1].bitDepth",
       "expected": "16",
       "actual": "\"<omitted>\""
@@ -2073,18 +2005,6 @@
       "field": "response.body$.subsonic-response.album.song[1].genres",
       "expected": "[{\"value\": \"Electronic\", \"songCount\": 0, \"albumCount\": 0}, {\"value\": \"Jazz\", \"songCount\": 0, \"albumCount\": 0}]",
       "actual": "\"<omitted>\""
-    },
-    {
-      "scenario": "os-getalbum-compilation",
-      "field": "response.body$.subsonic-response.album.song[1].contributors[0].role",
-      "expected": "\"Performer\"",
-      "actual": "\"performer\""
-    },
-    {
-      "scenario": "os-getalbum-compilation",
-      "field": "response.body$.subsonic-response.album.song[1].path",
-      "expected": "\"Phase Zero Compilation/02 - String Section Interlude.wav\"",
-      "actual": "\"Various Artists/Phase Zero Compilation/02 - String Section Interlude.wav\""
     },
     {
       "scenario": "os-getalbum-compilation",
@@ -2105,28 +2025,10 @@
       "actual": "\"<omitted>\""
     },
     {
-      "scenario": "os-getalbum-compilation",
-      "field": "response.body$.subsonic-response.album.song[2].contributors[0].role",
-      "expected": "\"Performer\"",
-      "actual": "\"performer\""
-    },
-    {
-      "scenario": "os-getalbum-compilation",
-      "field": "response.body$.subsonic-response.album.song[2].path",
-      "expected": "\"Phase Zero Compilation/03 - Saxophone in the Rain.wav\"",
-      "actual": "\"Various Artists/Phase Zero Compilation/03 - Saxophone in the Rain.wav\""
-    },
-    {
       "scenario": "os-getalbum-minimal",
       "field": "response.body$.subsonic-response.album.song[0].bitDepth",
       "expected": "16",
       "actual": "\"<omitted>\""
-    },
-    {
-      "scenario": "os-getalbum-minimal",
-      "field": "response.body$.subsonic-response.album.song[0].path",
-      "expected": "\"Untitled Demos/01 - Hiss.wav\"",
-      "actual": "\"Cassette Ghost/Untitled Demos/01 - Hiss.wav\""
     },
     {
       "scenario": "os-getalbum-multidisc",
@@ -2166,12 +2068,6 @@
     },
     {
       "scenario": "os-getalbum-multidisc",
-      "field": "response.body$.subsonic-response.album.song[0].path",
-      "expected": "\"Anthology of Echoes/101 - Gatefold.wav\"",
-      "actual": "\"The Obsidian Collective/Anthology of Echoes/101 - Gatefold.wav\""
-    },
-    {
-      "scenario": "os-getalbum-multidisc",
       "field": "response.body$.subsonic-response.album.song[1].bitDepth",
       "expected": "16",
       "actual": "\"<omitted>\""
@@ -2190,12 +2086,6 @@
     },
     {
       "scenario": "os-getalbum-multidisc",
-      "field": "response.body$.subsonic-response.album.song[1].path",
-      "expected": "\"Anthology of Echoes/102 - Marble.wav\"",
-      "actual": "\"The Obsidian Collective/Anthology of Echoes/102 - Marble.wav\""
-    },
-    {
-      "scenario": "os-getalbum-multidisc",
       "field": "response.body$.subsonic-response.album.song[2].bitDepth",
       "expected": "16",
       "actual": "\"<omitted>\""
@@ -2211,12 +2101,6 @@
       "field": "response.body$.subsonic-response.album.song[2].genres",
       "expected": "[{\"value\": \"Classical\", \"songCount\": 0, \"albumCount\": 0}]",
       "actual": "\"<omitted>\""
-    },
-    {
-      "scenario": "os-getalbum-multidisc",
-      "field": "response.body$.subsonic-response.album.song[2].path",
-      "expected": "\"Anthology of Echoes/201 - Coda.wav\"",
-      "actual": "\"The Obsidian Collective/Anthology of Echoes/201 - Coda.wav\""
     },
     {
       "scenario": "os-getalbum-multidisc",
@@ -2241,12 +2125,6 @@
       "field": "response.body$.subsonic-response.album.song[3].genres",
       "expected": "[{\"value\": \"Classical\", \"songCount\": 0, \"albumCount\": 0}]",
       "actual": "\"<omitted>\""
-    },
-    {
-      "scenario": "os-getalbum-multidisc",
-      "field": "response.body$.subsonic-response.album.song[3].path",
-      "expected": "\"Anthology of Echoes/202 - Recessional.wav\"",
-      "actual": "\"The Obsidian Collective/Anthology of Echoes/202 - Recessional.wav\""
     },
     {
       "scenario": "os-getartist",
@@ -2322,12 +2200,6 @@
     },
     {
       "scenario": "os-getmusicdirectory-album",
-      "field": "response.body$.subsonic-response.directory.child[0].path",
-      "expected": "\"Anthology of Echoes/101 - Gatefold.wav\"",
-      "actual": "\"The Obsidian Collective/Anthology of Echoes/101 - Gatefold.wav\""
-    },
-    {
-      "scenario": "os-getmusicdirectory-album",
       "field": "response.body$.subsonic-response.directory.child[1].bitDepth",
       "expected": "16",
       "actual": "\"<omitted>\""
@@ -2346,12 +2218,6 @@
     },
     {
       "scenario": "os-getmusicdirectory-album",
-      "field": "response.body$.subsonic-response.directory.child[1].path",
-      "expected": "\"Anthology of Echoes/102 - Marble.wav\"",
-      "actual": "\"The Obsidian Collective/Anthology of Echoes/102 - Marble.wav\""
-    },
-    {
-      "scenario": "os-getmusicdirectory-album",
       "field": "response.body$.subsonic-response.directory.child[2].bitDepth",
       "expected": "16",
       "actual": "\"<omitted>\""
@@ -2367,12 +2233,6 @@
       "field": "response.body$.subsonic-response.directory.child[2].genres",
       "expected": "[{\"value\": \"Classical\", \"songCount\": 0, \"albumCount\": 0}]",
       "actual": "\"<omitted>\""
-    },
-    {
-      "scenario": "os-getmusicdirectory-album",
-      "field": "response.body$.subsonic-response.directory.child[2].path",
-      "expected": "\"Anthology of Echoes/201 - Coda.wav\"",
-      "actual": "\"The Obsidian Collective/Anthology of Echoes/201 - Coda.wav\""
     },
     {
       "scenario": "os-getmusicdirectory-album",
@@ -2397,12 +2257,6 @@
       "field": "response.body$.subsonic-response.directory.child[3].genres",
       "expected": "[{\"value\": \"Classical\", \"songCount\": 0, \"albumCount\": 0}]",
       "actual": "\"<omitted>\""
-    },
-    {
-      "scenario": "os-getmusicdirectory-album",
-      "field": "response.body$.subsonic-response.directory.child[3].path",
-      "expected": "\"Anthology of Echoes/202 - Recessional.wav\"",
-      "actual": "\"The Obsidian Collective/Anthology of Echoes/202 - Recessional.wav\""
     },
     {
       "scenario": "os-getmusicdirectory-album",
@@ -2466,12 +2320,6 @@
     },
     {
       "scenario": "os-getsong",
-      "field": "response.body$.subsonic-response.song.path",
-      "expected": "\"Northern Lights/02 - Polar Veil.wav\"",
-      "actual": "\"Aurora Fields/Northern Lights/02 - Polar Veil.wav\""
-    },
-    {
-      "scenario": "os-getsong",
       "field": "response.body$.subsonic-response.song.playCount",
       "expected": "4",
       "actual": "0"
@@ -2502,12 +2350,6 @@
     },
     {
       "scenario": "os-gettopsongs",
-      "field": "response.body$.subsonic-response.topSongs.song[0].path",
-      "expected": "\"Desert Rock Radio/02 - Caravan.wav\"",
-      "actual": "\"Dune/Desert Rock Radio/02 - Caravan.wav\""
-    },
-    {
-      "scenario": "os-gettopsongs",
       "field": "response.body$.subsonic-response.topSongs.song[1].bitDepth",
       "expected": "16",
       "actual": "\"<omitted>\""
@@ -2531,12 +2373,6 @@
       "actual": "2"
     },
     {
-      "scenario": "os-gettopsongs",
-      "field": "response.body$.subsonic-response.topSongs.song[1].path",
-      "expected": "\"Desert Rock Radio/01 - Sandstone.wav\"",
-      "actual": "\"Dune/Desert Rock Radio/01 - Sandstone.wav\""
-    },
-    {
       "scenario": "os-shares/create-share",
       "field": "response.body$.subsonic-response.shares.share.entry[0].bitDepth",
       "expected": "16",
@@ -2553,12 +2389,6 @@
       "field": "response.body$.subsonic-response.shares.share.entry[0].genres",
       "expected": "[{\"value\": \"Ambient\", \"songCount\": 0, \"albumCount\": 0}, {\"value\": \"Electronic\", \"songCount\": 0, \"albumCount\": 0}]",
       "actual": "\"<omitted>\""
-    },
-    {
-      "scenario": "os-shares/create-share",
-      "field": "response.body$.subsonic-response.shares.share.entry[0].path",
-      "expected": "\"Northern Lights/01 - Solar Wind.wav\"",
-      "actual": "\"Aurora Fields/Northern Lights/01 - Solar Wind.wav\""
     },
     {
       "scenario": "os-shares/create-share",
@@ -2586,12 +2416,6 @@
     },
     {
       "scenario": "os-shares/create-share",
-      "field": "response.body$.subsonic-response.shares.share.entry[1].path",
-      "expected": "\"Northern Lights/02 - Polar Veil.wav\"",
-      "actual": "\"Aurora Fields/Northern Lights/02 - Polar Veil.wav\""
-    },
-    {
-      "scenario": "os-shares/create-share",
       "field": "response.body$.subsonic-response.shares.share.entry[1].playCount",
       "expected": "4",
       "actual": "0"
@@ -2616,29 +2440,11 @@
     },
     {
       "scenario": "os-shares/create-share",
-      "field": "response.body$.subsonic-response.shares.share.entry[2].path",
-      "expected": "\"Northern Lights/03 - Midnight Sun.wav\"",
-      "actual": "\"Aurora Fields/Northern Lights/03 - Midnight Sun.wav\""
-    },
-    {
-      "scenario": "os-shares/create-share",
       "field": "response.body$.subsonic-response.shares.share.entry[2].playCount",
       "expected": "3",
       "actual": "0"
     },
     {
-      "scenario": "os-shares/getshares-empty",
-      "field": "response.body$.subsonic-response.shares.share.length",
-      "expected": "0",
-      "actual": "1"
-    },
-    {
-      "scenario": "os-shares/verify-shares",
-      "field": "response.body$.subsonic-response.shares.share.length",
-      "expected": "1",
-      "actual": "2"
-    },
-    {
       "scenario": "os-shares/verify-shares",
       "field": "response.body$.subsonic-response.shares.share[0].entry[0].bitDepth",
       "expected": "16",
@@ -2655,12 +2461,6 @@
       "field": "response.body$.subsonic-response.shares.share[0].entry[0].genres",
       "expected": "[{\"value\": \"Ambient\", \"songCount\": 0, \"albumCount\": 0}, {\"value\": \"Electronic\", \"songCount\": 0, \"albumCount\": 0}]",
       "actual": "\"<omitted>\""
-    },
-    {
-      "scenario": "os-shares/verify-shares",
-      "field": "response.body$.subsonic-response.shares.share[0].entry[0].path",
-      "expected": "\"Northern Lights/01 - Solar Wind.wav\"",
-      "actual": "\"Aurora Fields/Northern Lights/01 - Solar Wind.wav\""
     },
     {
       "scenario": "os-shares/verify-shares",
@@ -2688,12 +2488,6 @@
     },
     {
       "scenario": "os-shares/verify-shares",
-      "field": "response.body$.subsonic-response.shares.share[0].entry[1].path",
-      "expected": "\"Northern Lights/02 - Polar Veil.wav\"",
-      "actual": "\"Aurora Fields/Northern Lights/02 - Polar Veil.wav\""
-    },
-    {
-      "scenario": "os-shares/verify-shares",
       "field": "response.body$.subsonic-response.shares.share[0].entry[1].playCount",
       "expected": "4",
       "actual": "0"
@@ -2718,21 +2512,9 @@
     },
     {
       "scenario": "os-shares/verify-shares",
-      "field": "response.body$.subsonic-response.shares.share[0].entry[2].path",
-      "expected": "\"Northern Lights/03 - Midnight Sun.wav\"",
-      "actual": "\"Aurora Fields/Northern Lights/03 - Midnight Sun.wav\""
-    },
-    {
-      "scenario": "os-shares/verify-shares",
       "field": "response.body$.subsonic-response.shares.share[0].entry[2].playCount",
       "expected": "3",
       "actual": "0"
-    },
-    {
-      "scenario": "os-shares/verify-shares-empty",
-      "field": "response.body$.subsonic-response.shares.share.length",
-      "expected": "1",
-      "actual": "2"
     },
     {
       "scenario": "os-shares/verify-shares-empty",
@@ -2751,12 +2533,6 @@
       "field": "response.body$.subsonic-response.shares.share[0].entry[0].genres",
       "expected": "[{\"value\": \"Ambient\", \"songCount\": 0, \"albumCount\": 0}, {\"value\": \"Electronic\", \"songCount\": 0, \"albumCount\": 0}]",
       "actual": "\"<omitted>\""
-    },
-    {
-      "scenario": "os-shares/verify-shares-empty",
-      "field": "response.body$.subsonic-response.shares.share[0].entry[0].path",
-      "expected": "\"Northern Lights/01 - Solar Wind.wav\"",
-      "actual": "\"Aurora Fields/Northern Lights/01 - Solar Wind.wav\""
     },
     {
       "scenario": "os-shares/verify-shares-empty",
@@ -2784,12 +2560,6 @@
     },
     {
       "scenario": "os-shares/verify-shares-empty",
-      "field": "response.body$.subsonic-response.shares.share[0].entry[1].path",
-      "expected": "\"Northern Lights/02 - Polar Veil.wav\"",
-      "actual": "\"Aurora Fields/Northern Lights/02 - Polar Veil.wav\""
-    },
-    {
-      "scenario": "os-shares/verify-shares-empty",
       "field": "response.body$.subsonic-response.shares.share[0].entry[1].playCount",
       "expected": "4",
       "actual": "0"
@@ -2814,33 +2584,9 @@
     },
     {
       "scenario": "os-shares/verify-shares-empty",
-      "field": "response.body$.subsonic-response.shares.share[0].entry[2].path",
-      "expected": "\"Northern Lights/03 - Midnight Sun.wav\"",
-      "actual": "\"Aurora Fields/Northern Lights/03 - Midnight Sun.wav\""
-    },
-    {
-      "scenario": "os-shares/verify-shares-empty",
       "field": "response.body$.subsonic-response.shares.share[0].entry[2].playCount",
       "expected": "3",
       "actual": "0"
-    },
-    {
-      "scenario": "os-podcasts-disabled-create",
-      "field": "scenario",
-      "expected": "present",
-      "actual": "missing"
-    },
-    {
-      "scenario": "os-podcasts-disabled-getnewest",
-      "field": "scenario",
-      "expected": "present",
-      "actual": "missing"
-    },
-    {
-      "scenario": "os-podcasts-disabled-getpodcasts",
-      "field": "scenario",
-      "expected": "present",
-      "actual": "missing"
     },
     {
       "scenario": "os-getalbumlist-newest",
@@ -3528,12 +3274,6 @@
     },
     {
       "scenario": "os-getstarred",
-      "field": "response.body$.subsonic-response.starred.song[0].path",
-      "expected": "\"Northern Lights/02 - Polar Veil.wav\"",
-      "actual": "\"Aurora Fields/Northern Lights/02 - Polar Veil.wav\""
-    },
-    {
-      "scenario": "os-getstarred",
       "field": "response.body$.subsonic-response.starred.song[0].playCount",
       "expected": "4",
       "actual": "0"
@@ -3567,12 +3307,6 @@
       "field": "response.body$.subsonic-response.starred2.song[0].genres",
       "expected": "[{\"value\": \"Ambient\", \"songCount\": 0, \"albumCount\": 0}, {\"value\": \"Electronic\", \"songCount\": 0, \"albumCount\": 0}]",
       "actual": "\"<omitted>\""
-    },
-    {
-      "scenario": "os-getstarred2",
-      "field": "response.body$.subsonic-response.starred2.song[0].path",
-      "expected": "\"Northern Lights/02 - Polar Veil.wav\"",
-      "actual": "\"Aurora Fields/Northern Lights/02 - Polar Veil.wav\""
     },
     {
       "scenario": "os-getstarred2",
@@ -3612,12 +3346,6 @@
     },
     {
       "scenario": "os-bookmarks/verify-bookmarks",
-      "field": "response.body$.subsonic-response.bookmarks.bookmark[0].entry[0].path",
-      "expected": "\"Northern Lights/01 - Solar Wind.wav\"",
-      "actual": "\"Aurora Fields/Northern Lights/01 - Solar Wind.wav\""
-    },
-    {
-      "scenario": "os-bookmarks/verify-bookmarks",
       "field": "response.body$.subsonic-response.bookmarks.bookmark[0].entry[0].playCount",
       "expected": "5",
       "actual": "0"
@@ -3642,12 +3370,6 @@
     },
     {
       "scenario": "os-playlists/create-playlist",
-      "field": "response.body$.subsonic-response.playlist.entry[0].path",
-      "expected": "\"Northern Lights/01 - Solar Wind.wav\"",
-      "actual": "\"Aurora Fields/Northern Lights/01 - Solar Wind.wav\""
-    },
-    {
-      "scenario": "os-playlists/create-playlist",
       "field": "response.body$.subsonic-response.playlist.entry[0].playCount",
       "expected": "5",
       "actual": "0"
@@ -3669,12 +3391,6 @@
       "field": "response.body$.subsonic-response.playlist.entry[1].genres",
       "expected": "[{\"value\": \"Post-Rock\", \"songCount\": 0, \"albumCount\": 0}, {\"value\": \"\u74b0\u5883\u97f3\u697d\", \"songCount\": 0, \"albumCount\": 0}]",
       "actual": "\"<omitted>\""
-    },
-    {
-      "scenario": "os-playlists/create-playlist",
-      "field": "response.body$.subsonic-response.playlist.entry[1].path",
-      "expected": "\"\u00dcn\u00efcode R\u00eblease \u6771\u4eac/01 - Neon \u6771\u4eac.wav\"",
-      "actual": "\"S\u00e6gl\u00f3pur \u65e5\u672c/\u00dcn\u00efcode R\u00eblease \u6771\u4eac/01 - Neon \u6771\u4eac.wav\""
     },
     {
       "scenario": "os-playlists/get-private-playlist",
@@ -3702,21 +3418,9 @@
     },
     {
       "scenario": "os-playlists/get-private-playlist",
-      "field": "response.body$.subsonic-response.playlist.entry[0].path",
-      "expected": "\"Beacon/01 - Lantern.wav\"",
-      "actual": "\"The Harbour Lights/Beacon/01 - Lantern.wav\""
-    },
-    {
-      "scenario": "os-playlists/get-private-playlist",
       "field": "response.body$.subsonic-response.playlist.entry[1].bitDepth",
       "expected": "16",
       "actual": "\"<omitted>\""
-    },
-    {
-      "scenario": "os-playlists/get-private-playlist",
-      "field": "response.body$.subsonic-response.playlist.entry[1].path",
-      "expected": "\"Untitled Demos/01 - Hiss.wav\"",
-      "actual": "\"Cassette Ghost/Untitled Demos/01 - Hiss.wav\""
     },
     {
       "scenario": "os-playlists/getplaylist",
@@ -3744,12 +3448,6 @@
     },
     {
       "scenario": "os-playlists/getplaylist",
-      "field": "response.body$.subsonic-response.playlist.entry[0].path",
-      "expected": "\"Northern Lights/01 - Solar Wind.wav\"",
-      "actual": "\"Aurora Fields/Northern Lights/01 - Solar Wind.wav\""
-    },
-    {
-      "scenario": "os-playlists/getplaylist",
       "field": "response.body$.subsonic-response.playlist.entry[0].playCount",
       "expected": "5",
       "actual": "0"
@@ -3774,12 +3472,6 @@
     },
     {
       "scenario": "os-playlists/getplaylist",
-      "field": "response.body$.subsonic-response.playlist.entry[1].path",
-      "expected": "\"Phase Zero Compilation/01 - Falling (feat. Guest Vocalist).wav\"",
-      "actual": "\"Various Artists/Phase Zero Compilation/01 - Falling (feat. Guest Vocalist).wav\""
-    },
-    {
-      "scenario": "os-playlists/getplaylist",
       "field": "response.body$.subsonic-response.playlist.entry[2].bitDepth",
       "expected": "16",
       "actual": "\"<omitted>\""
@@ -3798,12 +3490,6 @@
     },
     {
       "scenario": "os-playlists/getplaylist",
-      "field": "response.body$.subsonic-response.playlist.entry[2].path",
-      "expected": "\"\u00dcn\u00efcode R\u00eblease \u6771\u4eac/01 - Neon \u6771\u4eac.wav\"",
-      "actual": "\"S\u00e6gl\u00f3pur \u65e5\u672c/\u00dcn\u00efcode R\u00eblease \u6771\u4eac/01 - Neon \u6771\u4eac.wav\""
-    },
-    {
-      "scenario": "os-playlists/getplaylist",
       "field": "response.body$.subsonic-response.playlist.entry[3].bitDepth",
       "expected": "16",
       "actual": "\"<omitted>\""
@@ -3819,12 +3505,6 @@
       "field": "response.body$.subsonic-response.playlist.entry[3].genres",
       "expected": "[{\"value\": \"Classical\", \"songCount\": 0, \"albumCount\": 0}]",
       "actual": "\"<omitted>\""
-    },
-    {
-      "scenario": "os-playlists/getplaylist",
-      "field": "response.body$.subsonic-response.playlist.entry[3].path",
-      "expected": "\"Anthology of Echoes/201 - Coda.wav\"",
-      "actual": "\"The Obsidian Collective/Anthology of Echoes/201 - Coda.wav\""
     },
     {
       "scenario": "os-playlists/getplaylist",
@@ -3864,12 +3544,6 @@
     },
     {
       "scenario": "os-playlists/verify-created",
-      "field": "response.body$.subsonic-response.playlist.entry[0].path",
-      "expected": "\"Northern Lights/01 - Solar Wind.wav\"",
-      "actual": "\"Aurora Fields/Northern Lights/01 - Solar Wind.wav\""
-    },
-    {
-      "scenario": "os-playlists/verify-created",
       "field": "response.body$.subsonic-response.playlist.entry[0].playCount",
       "expected": "5",
       "actual": "0"
@@ -3891,12 +3565,6 @@
       "field": "response.body$.subsonic-response.playlist.entry[1].genres",
       "expected": "[{\"value\": \"Post-Rock\", \"songCount\": 0, \"albumCount\": 0}, {\"value\": \"\u74b0\u5883\u97f3\u697d\", \"songCount\": 0, \"albumCount\": 0}]",
       "actual": "\"<omitted>\""
-    },
-    {
-      "scenario": "os-playlists/verify-created",
-      "field": "response.body$.subsonic-response.playlist.entry[1].path",
-      "expected": "\"\u00dcn\u00efcode R\u00eblease \u6771\u4eac/01 - Neon \u6771\u4eac.wav\"",
-      "actual": "\"S\u00e6gl\u00f3pur \u65e5\u672c/\u00dcn\u00efcode R\u00eblease \u6771\u4eac/01 - Neon \u6771\u4eac.wav\""
     },
     {
       "scenario": "os-playlists/verify-updated",
@@ -3924,12 +3592,6 @@
     },
     {
       "scenario": "os-playqueue/verify-playqueue",
-      "field": "response.body$.subsonic-response.playQueue.entry[0].path",
-      "expected": "\"Northern Lights/01 - Solar Wind.wav\"",
-      "actual": "\"Aurora Fields/Northern Lights/01 - Solar Wind.wav\""
-    },
-    {
-      "scenario": "os-playqueue/verify-playqueue",
       "field": "response.body$.subsonic-response.playQueue.entry[0].playCount",
       "expected": "5",
       "actual": "0"
@@ -3951,12 +3613,6 @@
       "field": "response.body$.subsonic-response.playQueue.entry[1].genres",
       "expected": "[{\"value\": \"Post-Rock\", \"songCount\": 0, \"albumCount\": 0}, {\"value\": \"\u74b0\u5883\u97f3\u697d\", \"songCount\": 0, \"albumCount\": 0}]",
       "actual": "\"<omitted>\""
-    },
-    {
-      "scenario": "os-playqueue/verify-playqueue",
-      "field": "response.body$.subsonic-response.playQueue.entry[1].path",
-      "expected": "\"\u00dcn\u00efcode R\u00eblease \u6771\u4eac/01 - Neon \u6771\u4eac.wav\"",
-      "actual": "\"S\u00e6gl\u00f3pur \u65e5\u672c/\u00dcn\u00efcode R\u00eblease \u6771\u4eac/01 - Neon \u6771\u4eac.wav\""
     }
   ]
 }

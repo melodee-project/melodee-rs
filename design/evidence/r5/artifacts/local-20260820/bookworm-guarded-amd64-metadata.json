@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "image": "melodee:r5-bookworm-guarded-local",
+  "image_id": "sha256:2eb48219e152cd959b96e897a71d0d6fa3ef98bc53aba99df9e4da64746b649a",
+  "labels": {
+    "org.opencontainers.image.created": "unknown",
+    "org.opencontainers.image.description": "Self-hosted Melodee music server",
+    "org.opencontainers.image.licenses": "MIT",
+    "org.opencontainers.image.revision": "2877e2c-dirty",
+    "org.opencontainers.image.source": "https://github.com/melodee-project/melodee-rs",
+    "org.opencontainers.image.title": "Melodee",
+    "org.opencontainers.image.version": "0.1.0"
+  },
+  "scan": {
+    "scanner": "Trivy 0.72.0",
+    "source": "Docker archive copied into disposable scanner containers",
+    "report": "bookworm-guarded-amd64-trivy-full.json",
+    "severities": {
+      "CRITICAL": 11,
+      "HIGH": 193,
+      "MEDIUM": 296,
+      "LOW": 231,
+      "UNKNOWN": 110
+    }
+  },
+  "sbom": {
+    "tool": "Syft latest local image",
+    "format": "SPDX 2.3",
+    "file": "bookworm-guarded-amd64-sbom.spdx.json",
+    "package_count": 301
+  },
+  "candidate": false,
+  "publication": false
+}

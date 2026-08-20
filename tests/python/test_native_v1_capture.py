@@ -68,6 +68,22 @@ class FixtureDeterminismTests(unittest.TestCase):
         self.assertIn("'Dune'", sql)
         self.assertIn("'Düné'", sql)
 
+    def test_native_share_fixture_can_be_isolated_from_other_surfaces(self) -> None:
+        catalog = json.loads(
+            (ROOT / "compatibility" / "fixtures" / "catalog-v1.json").read_text(encoding="utf-8")
+        )
+        media = {
+            song["slug"]: (100, "0" * 64)
+            for artist in catalog["artists"]
+            for album in artist["albums"]
+            for song in album["songs"]
+        }
+        native_sql = legacy_oracle.seed_sql(catalog, media)
+        surface_sql = legacy_oracle.seed_sql(catalog, media, include_native_share=False)
+
+        self.assertIn("phase7-public-song", native_sql)
+        self.assertNotIn("phase7-public-song", surface_sql)
+
     def test_wav_generation_is_deterministic(self) -> None:
         import tempfile
 

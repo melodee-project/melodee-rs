@@ -147,16 +147,33 @@ jobs:
       - name: Run complete repository gate
         run: ./scripts/check.sh
 
+      - name: Require terminal requirement dispositions
+        run: python3 scripts/audit_requirement_overrides.py --require-terminal
+
   build-and-test:
-    name: Build, smoke-test, and scan release image
+    name: Build, smoke-test, and scan ${{ matrix.architecture }} release image
     needs: [validate-release, quality-gate]
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - architecture: amd64
+            platform: linux/amd64
+            smoke_port: 18080
+          - architecture: arm64
+            platform: linux/arm64
+            smoke_port: 18081
     steps:
       - name: Check out the published release tag
         uses: actions/checkout@v6
         with:
           ref: ${{ github.event.release.tag_name }}
+
+      - name: Set up QEMU for arm64
+        if: matrix.architecture == 'arm64'
+        uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -167,8 +184,8 @@ jobs:
           context: .
           load: true
           push: false
-          platforms: linux/amd64
-          tags: melodee-release-smoke:${{ github.run_id }}
+          platforms: ${{ matrix.platform }}
+          tags: melodee-release-smoke:${{ github.run_id }}-${{ matrix.architecture }}
           build-args: |
             VERSION=${{ needs.validate-release.outputs.version }}
             REVISION=${{ needs.validate-release.outputs.revision }}
@@ -178,51 +195,53 @@ jobs:
 
       - name: Verify runtime tools, user, startup, readiness, SPA, and SIGTERM
         env:
-          SMOKE_IMAGE: melodee-release-smoke:${{ github.run_id }}
+          SMOKE_IMAGE: melodee-release-smoke:${{ github.run_id }}-${{ matrix.architecture }}
           RELEASE_VERSION: ${{ needs.validate-release.outputs.version }}
+          RELEASE_REVISION: ${{ needs.validate-release.outputs.revision }}
+        run: SMOKE_RUN_ID="github-${GITHUB_RUN_ID}-${{ matrix.architecture }}" SMOKE_PORT="${{ matrix.smoke_port }}" ./scripts/container_smoke.sh
+
+      - name: Prepare per-architecture evidence directory
+        if: always()
+        env:
+          EVIDENCE_DIR: ${{ runner.temp }}/melodee-release-evidence-${{ matrix.architecture }}
+        run: mkdir -p "$EVIDENCE_DIR"
+
+      - name: Install Syft for the image SBOM
+        id: syft
+        if: success()
+        uses: anchore/sbom-action/download-syft@v0
+        with:
+          syft-version: v1.51.0
+
+      - name: Record image identity and generate SPDX SBOM
+        if: success()
+        env:
+          SMOKE_IMAGE: melodee-release-smoke:${{ github.run_id }}-${{ matrix.architecture }}
+          RELEASE_VERSION: ${{ needs.validate-release.outputs.version }}
+          RELEASE_REVISION: ${{ needs.validate-release.outputs.revision }}
+          EVIDENCE_DIR: ${{ runner.temp }}/melodee-release-evidence-${{ matrix.architecture }}
+          SYFT_COMMAND: ${{ steps.syft.outputs.cmd }}
+          EXPECTED_ARCHITECTURE: ${{ matrix.architecture }}
         run: |
           set -euo pipefail
-          network="melodee-release-smoke-${GITHUB_RUN_ID}"
-          database="${network}-postgres"
-          server="${network}-server"
-          cleanup() {
-            docker rm -f "$server" "$database" >/dev/null 2>&1 || true
-            docker network rm "$network" >/dev/null 2>&1 || true
-          }
-          trap cleanup EXIT
-          docker network create "$network"
-          docker run -d --name "$database" --network "$network" \
-            -e POSTGRES_USER=melodee -e POSTGRES_PASSWORD=melodee-test \
-            -e POSTGRES_DB=melodee postgres:18.4-alpine
-          for _ in $(seq 1 30); do
-            if docker exec "$database" pg_isready -U melodee -d melodee >/dev/null; then
-              break
-            fi
-            sleep 1
-          done
-          docker exec "$database" pg_isready -U melodee -d melodee >/dev/null
-          test "$(docker run --rm --entrypoint id "$SMOKE_IMAGE" -u)" = "10001"
-          docker run --rm --entrypoint ffmpeg "$SMOKE_IMAGE" -version | head -1
-          docker run --rm --entrypoint ffprobe "$SMOKE_IMAGE" -version | head -1
-          docker run --rm --entrypoint fpcalc "$SMOKE_IMAGE" -version
-          docker run --rm --entrypoint melodee-cli "$SMOKE_IMAGE" --version | grep -F "$RELEASE_VERSION"
-          docker run -d --name "$server" --network "$network" -p 127.0.0.1:18080:8080 \
-            -e MELODEE__DATABASE__URL=postgres://melodee:melodee-test@"$database":5432/melodee \
-            -e MELODEE__NATIVE__PUBLIC_ORIGIN=http://127.0.0.1:18080 \
-            -e MELODEE__NATIVE__AUTH__JWT_KEY=release-smoke-native-jwt-key-at-least-thirty-two-bytes \
-            -e MELODEE__JELLYFIN__TOKEN_PEPPER=release-smoke-jellyfin-pepper-at-least-thirty-two-bytes \
-            -e MELODEE__INGEST__ENABLED=false "$SMOKE_IMAGE"
-          for _ in $(seq 1 30); do
-            if curl --fail --silent --show-error http://127.0.0.1:18080/readyz >/dev/null; then
-              break
-            fi
-            sleep 1
-          done
-          curl --fail --silent --show-error http://127.0.0.1:18080/healthz | jq -e --arg version "$RELEASE_VERSION" '.status == "ok" and .version == $version' >/dev/null
-          curl --fail --silent --show-error http://127.0.0.1:18080/readyz | jq -e --arg version "$RELEASE_VERSION" '.status == "ready" and .version == $version' >/dev/null
-          curl --fail --silent --show-error http://127.0.0.1:18080/admin/ | grep -q '<div id="root"'
-          docker stop --time 15 "$server"
-          test "$(docker inspect --format '{{.State.ExitCode}}' "$server")" = "0"
+          inspect_json="$(docker image inspect "$SMOKE_IMAGE")"
+          jq -e --arg architecture "$EXPECTED_ARCHITECTURE" '
+            .[0] as $image |
+            ($image.Id | startswith("sha256:")) and $image.Architecture == $architecture
+          ' <<< "$inspect_json" >/dev/null
+          jq -e --arg version "$RELEASE_VERSION" --arg revision "$RELEASE_REVISION" '
+            .[0].Config.Labels["org.opencontainers.image.title"] == "Melodee" and
+            .[0].Config.Labels["org.opencontainers.image.source"] == "https://github.com/melodee-project/melodee-rs" and
+            .[0].Config.Labels["org.opencontainers.image.licenses"] == "MIT" and
+            .[0].Config.Labels["org.opencontainers.image.version"] == $version and
+            .[0].Config.Labels["org.opencontainers.image.revision"] == $revision
+          ' <<< "$inspect_json" >/dev/null
+          jq '.[0] | {Id, Architecture, Os, Config: {User, Labels}}' \
+            <<< "$inspect_json" > "$EVIDENCE_DIR/image-metadata.json"
+          jq -r '.[0].Id' <<< "$inspect_json" > "$EVIDENCE_DIR/image-digest.txt"
+          "$SYFT_COMMAND" "$SMOKE_IMAGE" \
+            -o "spdx-json=$EVIDENCE_DIR/sbom.spdx.json"
+          test -s "$EVIDENCE_DIR/sbom.spdx.json"
 
       # Critical findings always block publication. High findings block only
       # when a fix is available; no ignore file exists, so exceptions require
@@ -230,8 +249,9 @@ jobs:
       - name: Fail on critical vulnerabilities in the release image
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: melodee-release-smoke:${{ github.run_id }}
-          format: table
+          image-ref: melodee-release-smoke:${{ github.run_id }}-${{ matrix.architecture }}
+          format: json
+          output: trivy-critical.json
           exit-code: "1"
           ignore-unfixed: false
           severity: CRITICAL
@@ -240,28 +260,100 @@ jobs:
       - name: Fail on actionable high vulnerabilities in the release image
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: melodee-release-smoke:${{ github.run_id }}
-          format: table
+          image-ref: melodee-release-smoke:${{ github.run_id }}-${{ matrix.architecture }}
+          format: json
+          output: trivy-high.json
           exit-code: "1"
           ignore-unfixed: true
           severity: HIGH
           vuln-type: os,library
 
-      - name: Verify required OCI labels
+      # Keep the exact image that passed smoke and vulnerability scans. The
+      # publication job assembles these archives; it must not rebuild a second
+      # image whose digest was never scanned.
+      - name: Archive exact scanned image
+        if: success()
         env:
-          SMOKE_IMAGE: melodee-release-smoke:${{ github.run_id }}
+          EVIDENCE_DIR: ${{ runner.temp }}/melodee-release-evidence-${{ matrix.architecture }}
+          SMOKE_IMAGE: melodee-release-smoke:${{ github.run_id }}-${{ matrix.architecture }}
+        run: |
+          set -euo pipefail
+          docker save "$SMOKE_IMAGE" | gzip -1 > "$EVIDENCE_DIR/image.tar.gz"
+          test -s "$EVIDENCE_DIR/image.tar.gz"
+
+      - name: Finalize image evidence checksums
+        if: always()
+        env:
+          EVIDENCE_DIR: ${{ runner.temp }}/melodee-release-evidence-${{ matrix.architecture }}
           RELEASE_VERSION: ${{ needs.validate-release.outputs.version }}
           RELEASE_REVISION: ${{ needs.validate-release.outputs.revision }}
         run: |
           set -euo pipefail
-          labels="$(docker image inspect --format '{{json .Config.Labels}}' "$SMOKE_IMAGE")"
-          jq -e --arg version "$RELEASE_VERSION" --arg revision "$RELEASE_REVISION" '
-            .["org.opencontainers.image.title"] == "Melodee" and
-            .["org.opencontainers.image.source"] == "https://github.com/melodee-project/melodee-rs" and
-            .["org.opencontainers.image.version"] == $version and
-            .["org.opencontainers.image.revision"] == $revision and
-            .["org.opencontainers.image.licenses"] == "MIT"
-          ' <<< "$labels" >/dev/null
+          for report in trivy-critical.json trivy-high.json; do
+            if [[ -f "$report" ]]; then
+              cp -- "$report" "$EVIDENCE_DIR/$report"
+            fi
+          done
+          {
+            printf 'architecture=%s\n' '${{ matrix.architecture }}'
+            printf 'critical_scan=%s\n' "$([[ -f "$EVIDENCE_DIR/trivy-critical.json" ]] && echo present || echo unavailable)"
+            printf 'high_scan=%s\n' "$([[ -f "$EVIDENCE_DIR/trivy-high.json" ]] && echo present || echo unavailable)"
+          } > "$EVIDENCE_DIR/scan-status.txt"
+          python3 scripts/validate_release_evidence.py \
+            --directory "$EVIDENCE_DIR" \
+            --architecture '${{ matrix.architecture }}' \
+            --version "$RELEASE_VERSION" \
+            --revision "$RELEASE_REVISION" \
+            --write
+          mapfile -t evidence_files < <(
+            find "$EVIDENCE_DIR" -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\n' | sort
+          )
+          if (( ${#evidence_files[@]} > 0 )); then
+            (cd "$EVIDENCE_DIR" && sha256sum -- "${evidence_files[@]}" > SHA256SUMS)
+          fi
+          python3 scripts/validate_release_evidence.py \
+            --directory "$EVIDENCE_DIR" \
+            --architecture '${{ matrix.architecture }}' \
+            --version "$RELEASE_VERSION" \
+            --revision "$RELEASE_REVISION" \
+            --check
+
+      - name: Require complete image evidence
+        if: always()
+        env:
+          EVIDENCE_DIR: ${{ runner.temp }}/melodee-release-evidence-${{ matrix.architecture }}
+        run: |
+          set -euo pipefail
+          required_files=(
+            image-metadata.json
+            image-digest.txt
+            image.tar.gz
+            sbom.spdx.json
+            trivy-critical.json
+            trivy-high.json
+            scan-status.txt
+            release-evidence.json
+            SHA256SUMS
+          )
+          missing=0
+          for file in "${required_files[@]}"; do
+            if [[ ! -s "$EVIDENCE_DIR/$file" ]]; then
+              printf 'missing required release evidence: %s\n' "$file" >&2
+              missing=1
+            fi
+          done
+          if (( missing != 0 )); then
+            exit 1
+          fi
+
+      - name: Upload per-architecture image evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: melodee-release-evidence-${{ matrix.architecture }}
+          path: ${{ runner.temp }}/melodee-release-evidence-${{ matrix.architecture }}
+          if-no-files-found: error
+          retention-days: 14
 
   publish:
     name: Publish amd64 and arm64 image to GHCR
@@ -304,29 +396,70 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up QEMU for arm64
-        uses: docker/setup-qemu-action@v4
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Build and publish multi-platform release image
-        id: push
-        uses: docker/build-push-action@v7
+      - name: Download exact scanned architecture images
+        uses: actions/download-artifact@v4
         with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            VERSION=${{ needs.validate-release.outputs.version }}
-            REVISION=${{ needs.validate-release.outputs.revision }}
-            CREATED=${{ github.event.release.published_at }}
-          # BuildKit publishes an SPDX SBOM attestation. GitHub's keyless
-          # artifact attestation below supplies the release provenance.
-          provenance: false
-          sbom: true
+          pattern: melodee-release-evidence-*
+          path: ${{ runner.temp }}/melodee-release-evidence
+          merge-multiple: false
+
+      - name: Verify and load exact scanned images
+        env:
+          EVIDENCE_ROOT: ${{ runner.temp }}/melodee-release-evidence
+          RELEASE_VERSION: ${{ needs.validate-release.outputs.version }}
+          RELEASE_REVISION: ${{ needs.validate-release.outputs.revision }}
+        run: |
+          set -euo pipefail
+          for architecture in amd64 arm64; do
+            evidence_dir="$EVIDENCE_ROOT/melodee-release-evidence-$architecture"
+            test -d "$evidence_dir"
+            (cd "$evidence_dir" && sha256sum --check SHA256SUMS)
+            python3 scripts/validate_release_evidence.py \
+              --directory "$evidence_dir" \
+              --architecture "$architecture" \
+              --version "$RELEASE_VERSION" \
+              --revision "$RELEASE_REVISION" \
+              --check
+            docker load --input "$evidence_dir/image.tar.gz"
+            image_id="$(<"$evidence_dir/image-digest.txt")"
+            [[ "$image_id" == sha256:* ]]
+            docker image inspect "$image_id" >/dev/null
+            docker tag "$image_id" "melodee-scanned:$architecture"
+            test "$(docker image inspect --format '{{.Id}}' "melodee-scanned:$architecture")" = "$image_id"
+          done
+
+      - name: Push scanned images to unique staging references
+        env:
+          STAGING_AMD64: ${{ env.IMAGE_NAME }}:${{ needs.validate-release.outputs.version }}-staging-${{ github.run_id }}-amd64
+          STAGING_ARM64: ${{ env.IMAGE_NAME }}:${{ needs.validate-release.outputs.version }}-staging-${{ github.run_id }}-arm64
+        run: |
+          set -euo pipefail
+          docker tag melodee-scanned:amd64 "$STAGING_AMD64"
+          docker tag melodee-scanned:arm64 "$STAGING_ARM64"
+          docker push "$STAGING_AMD64"
+          docker push "$STAGING_ARM64"
+
+      - name: Assemble and publish manifest tags from scanned images
+        id: push
+        env:
+          FINAL_TAGS: ${{ steps.meta.outputs.tags }}
+          STAGING_AMD64: ${{ env.IMAGE_NAME }}:${{ needs.validate-release.outputs.version }}-staging-${{ github.run_id }}-amd64
+          STAGING_ARM64: ${{ env.IMAGE_NAME }}:${{ needs.validate-release.outputs.version }}-staging-${{ github.run_id }}-arm64
+        run: |
+          set -euo pipefail
+          while IFS= read -r final_tag; do
+            [[ -n "$final_tag" ]] || continue
+            docker buildx imagetools create \
+              --tag "$final_tag" \
+              "$STAGING_AMD64" "$STAGING_ARM64"
+          done <<< "$FINAL_TAGS"
+          primary_tag="$(printf '%s\n' "$FINAL_TAGS" | sed -n '/./{p;q;}')"
+          digest="$(docker buildx imagetools inspect "$primary_tag" --format '{{.Manifest.Digest}}')"
+          [[ "$digest" == sha256:* ]]
+          printf 'digest=%s\n' "$digest" >> "$GITHUB_OUTPUT"
 
       - name: Generate keyless GitHub build provenance attestation
         uses: actions/attest@v4

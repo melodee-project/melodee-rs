@@ -491,6 +491,29 @@ fn suffix_from(source_path: Option<&str>) -> String {
         .map_or_else(String::new, |(_, extension)| format!(".{extension}"))
 }
 
+/// OpenSubsonic exposes the legacy library-relative path: the release
+/// directory and file, without the canonical Artist directory that the Rust
+/// migration stores in `tracks.source_path`. Keep the migration authority
+/// unchanged; this is only the compatibility adapter's wire projection.
+fn open_subsonic_path(source_path: Option<&str>) -> String {
+    let Some(path) = source_path else {
+        return String::new();
+    };
+    let mut components = path.split('/');
+    let Some(_artist_directory) = components.next() else {
+        return String::new();
+    };
+    let Some(release_directory) = components.next() else {
+        return path.to_string();
+    };
+    let remainder = components.collect::<Vec<_>>().join("/");
+    if remainder.is_empty() {
+        path.to_string()
+    } else {
+        format!("{release_directory}/{remainder}")
+    }
+}
+
 /// Legacy `StringExtensions.ToNormalizedString` for contributor pseudo-ids:
 /// upper-case, then keep only alphanumeric characters
 /// ("The Phase0 Strings" -> "THEPHASE0STRINGS").
@@ -501,6 +524,29 @@ fn normalized_contributor_name(name: &str) -> String {
         .collect()
 }
 
+/// Converts the canonical lowercase migration role into the legacy
+/// OpenSubsonic enum spelling. PostgreSQL stores the normalized value so
+/// catalog identity remains stable; the compatibility adapter owns wire-case
+/// restoration.
+fn legacy_contributor_role(value: &str) -> String {
+    match value.to_ascii_lowercase().as_str() {
+        "primaryartist" | "primary_artist" => "PrimaryArtist".to_string(),
+        "featuredartist" | "featured_artist" => "FeaturedArtist".to_string(),
+        "guestartist" | "guest_artist" => "GuestArtist".to_string(),
+        "performer" => "Performer".to_string(),
+        "bandmember" | "band_member" => "BandMember".to_string(),
+        "vocalist" => "Vocalist".to_string(),
+        "instrumentalist" => "Instrumentalist".to_string(),
+        "composer" => "Composer".to_string(),
+        "lyricist" => "Lyricist".to_string(),
+        "producer" => "Producer".to_string(),
+        "remixer" => "Remixer".to_string(),
+        "engineer" => "Engineer".to_string(),
+        "other" => "Other".to_string(),
+        _ => value.to_string(),
+    }
+}
+
 /// Subject of a captured contribution: either a resolved Artist identity or a
 /// name-only observation (legacy `ContributorName` with no Artist).
 #[derive(Debug, Clone)]
@@ -509,7 +555,6 @@ pub(crate) enum ContributorSubject {
         public_id: Uuid,
         name: String,
         sort_name: String,
-        album_count: i64,
     },
     NameOnly {
         name: String,
@@ -539,12 +584,13 @@ impl ContributorEntry {
                 public_id,
                 name,
                 sort_name,
-                album_count,
             } => serde_json::json!({
                 "id": format!("artist_{public_id}"),
                 "name": name,
                 "coverArt": format!("artist_{public_id}"),
-                "albumCount": album_count,
+                // The legacy contributor serializer did not hydrate the
+                // catalog aggregate used by standalone Artist DTOs.
+                "albumCount": 0,
                 // Captured: these paths never pass a UserArtist, so the
                 // rating is the `userArtist?.Rating ?? 0` fallback.
                 "userRating": 0,
@@ -598,12 +644,10 @@ pub(crate) async fn track_contributors(
     let linked_rows = sqlx::query(
         "SELECT track.public_api_id, contribution.role, contribution.role_detail,
                 contribution.is_performance, contribution.presentation_order,
-                artist.public_api_id, artist.canonical_name, artist.sort_name,
-                COALESCE(aggregate.release_count, 0)::bigint
+                artist.public_api_id, artist.canonical_name, artist.sort_name
            FROM contributions contribution
            JOIN tracks track ON track.id = contribution.track_id
            JOIN artists artist ON artist.id = contribution.artist_id
-           LEFT JOIN artist_catalog_aggregates aggregate ON aggregate.artist_id = artist.id
           WHERE track.public_api_id = ANY($1)
           ORDER BY contribution.presentation_order, contribution.id",
     )
@@ -613,14 +657,13 @@ pub(crate) async fn track_contributors(
     for row in linked_rows {
         let track_public_id: Uuid = row.try_get(0)?;
         let entry = ContributorEntry {
-            role: row.try_get(1)?,
+            role: legacy_contributor_role(row.try_get::<String, _>(1)?.as_str()),
             sub_role: row.try_get(2)?,
             is_performance: row.try_get(3)?,
             subject: ContributorSubject::Artist {
                 public_id: row.try_get(5)?,
                 name: row.try_get(6)?,
                 sort_name: row.try_get(7)?,
-                album_count: row.try_get(8)?,
             },
         };
         let ordinal: i32 = row.try_get(4)?;
@@ -646,7 +689,11 @@ pub(crate) async fn track_contributors(
         let track_public_id: Uuid = row.try_get(0)?;
         let name: String = row.try_get(1)?;
         let entry = ContributorEntry {
-            role: row.try_get::<Option<String>, _>(2)?.unwrap_or_default(),
+            role: legacy_contributor_role(
+                row.try_get::<Option<String>, _>(2)?
+                    .as_deref()
+                    .unwrap_or_default(),
+            ),
             sub_role: row.try_get(3)?,
             is_performance: row.try_get(4)?,
             subject: ContributorSubject::NameOnly { name },
@@ -718,7 +765,7 @@ fn child_json(
     }
     child.insert(
         "path".to_string(),
-        row.source_path.clone().unwrap_or_default().into(),
+        open_subsonic_path(row.source_path.as_deref()).into(),
     );
     child.insert("playCount".to_string(), row.play_count.into());
     child.insert("discNumber".to_string(), row.disc_number.into());
@@ -943,4 +990,38 @@ pub fn router() -> Router<OsState> {
         .merge(super::endpoint_router("unstar", unstar))
         .merge(super::endpoint_router("setRating", set_rating))
         .merge(super::endpoint_router("scrobble", scrobble))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{legacy_contributor_role, open_subsonic_path};
+
+    #[test]
+    fn contributor_roles_restore_legacy_wire_casing_without_changing_unknown_values() {
+        assert_eq!(legacy_contributor_role("featuredartist"), "FeaturedArtist");
+        assert_eq!(legacy_contributor_role("performer"), "Performer");
+        assert_eq!(legacy_contributor_role("featured_artist"), "FeaturedArtist");
+        assert_eq!(legacy_contributor_role("future-role"), "future-role");
+    }
+
+    #[test]
+    fn open_subsonic_path_projects_canonical_artist_prefix_away() {
+        assert_eq!(
+            open_subsonic_path(Some("Dune/Desert Rock Radio/02 - Caravan.wav")),
+            "Desert Rock Radio/02 - Caravan.wav"
+        );
+        assert_eq!(
+            open_subsonic_path(Some("Various Artists/Compilation/disc-01/01.wav")),
+            "Compilation/disc-01/01.wav"
+        );
+    }
+
+    #[test]
+    fn open_subsonic_path_preserves_legacy_relative_paths() {
+        assert_eq!(
+            open_subsonic_path(Some("Desert Rock Radio/01 - Sandstone.wav")),
+            "Desert Rock Radio/01 - Sandstone.wav"
+        );
+        assert_eq!(open_subsonic_path(None), "");
+    }
 }

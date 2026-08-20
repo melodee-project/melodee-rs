@@ -124,7 +124,7 @@ rewritten merely to remove phase-oriented language from current product document
 
 ### 3.2 Requirement status snapshot
 
-The generated requirement registry currently contains 239 requirements (audited 2026-08-19 after
+The generated requirement registry currently contains 239 requirements (audited 2026-08-20 after
 local R4/R5 preparatory closure work):
 
 | Status | Count |
@@ -136,17 +136,18 @@ local R4/R5 preparatory closure work):
 | Deferred | 7 |
 | Captured | 0 |
 
-The 45-package ledger was recalculated from the package rows and phase sections on 2026-08-19:
+The 45-package ledger was recalculated from the package rows and phase sections on 2026-08-20:
 
 | Package status | Count |
 |---|---:|
 | Complete | 26 |
-| Partial | 12 |
-| Not started | 7 |
+| Partial | 13 |
+| Not started | 6 |
 
-The added partial packages are R4.5 and R4.6: the current migrated-client checklist/launch paths
-and bounded read-only integration probe now exist, but no physical-client, production endpoint, or
-credential-backed acceptance has been run.
+The added partial packages are R4.5, R4.6, and R5.6: the current migrated-client checklist/launch
+paths, bounded read-only integration probe, and reproducible local container smoke path now exist,
+but no physical-client, production endpoint, credential-backed acceptance, accepted RC, or
+accepted multi-architecture release artifact exists.
 
 This snapshot is a planning input, not release evidence. The current R4 local work adds the
 versioned baseline/marker, repeatable synthetic rehearsal measurements, bounded integration
@@ -178,12 +179,14 @@ accepted decision, or `superseded` by an identified requirement.
 - ADR-0149 (rehearsal/freeze/cutover), ADR-0150 (legacy media metadata disposition), and ADR-0151
   (release-image runtime base) remain **Proposed**, not accepted. Their dependent release claims
   remain open.
-- The current migrated-snapshot differential has 183 unclassified native differences, 389
-  unclassified OpenSubsonic differences, and 48 unclassified Jellyfin differences. All three
+- The current migrated-snapshot differential has 185 unclassified native differences, 330
+  unclassified OpenSubsonic differences, and 17 unclassified Jellyfin differences. All three
   surface-scoped reports are committed; none is treated as a waiver. These are release blockers.
-- The release-image prototype is not a candidate: its exact image scan reported 8 critical and
-  160 high findings, and the arm64 attempt timed out before producing an image. R5.2/R5.6 remain
-  open.
+- The release-image prototype is not a candidate: exact local amd64 and arm64 image scans both
+  report 8 critical and 187 high findings. The arm64 image
+  `sha256:73ab8baaffaa79c4986873df0f6ce35ae770408f9fc41db9d297af2d88f3204b` now has committed
+  Trivy and SPDX evidence under `design/evidence/r5/artifacts/local-20260820/`; both images
+  still fail the current critical-finding policy and R5.2/R5.6 remain open.
 
 ## 4. 1.0 closure phase map
 
@@ -230,21 +233,26 @@ phase to `In progress`.
 | R1.1–R1.4 | **Complete (4/4)** | Requirement/parity/security/residual reconciliation in `design/evidence/r1/README.md` |
 | R2.1–R2.7 plus R2 security follow-ups | **Complete (7/7)** | Runtime, media, provider, performance, and fault evidence in `design/evidence/r2/README.md` |
 | R3.1–R3.8 | **Complete (8/8)** | Accepted ADR-0148 and migration tooling evidence in `design/evidence/r3/README.md` |
-| R4.1 — Rehearsal environment/baseline | **Partial** | Versioned baseline schema, redaction, source marker v2 over all 52 frozen source tables, read-only facts, path validation, backup validator, and malformed-input tests pass locally; approved production snapshot, topology, and backup baseline remain |
-| R4.2 — Production-sized migration rehearsal | **Partial** | Two current repeatable 12,000-Track synthetic runs pass with counts/media/queue/disk/RSS/backup/freeze/rollback metrics; the real approximately-5 TB snapshot and operational measurements remain |
+| R4.1 — Rehearsal environment/baseline | **Partial** | Versioned baseline schema, redaction, source marker v2 over all 52 frozen source tables, read-only facts, path validation, required source-backup validator, malformed-input tests, fail-closed existing-snapshot inputs, reproducible 78-path operator-command help audit, and the cross-package behavioral-assumptions record pass locally; approved production snapshot, topology, and backup baseline remain |
+| R4.2 — Production-sized migration rehearsal | **Partial** | Two current repeatable 12,000-Track synthetic runs pass with counts/media/queue/disk/RSS/backup/freeze/rollback metrics; the harness now consumes an existing snapshot without seeding, writing, or dropping it, supports explicit byte hashing, has a fail-closed minimum free-space/headroom preflight, and the committed 101-Track and second isolated 19-Track existing-snapshot rehearsals pass with source/media immutability and restore evidence; the real approximately 5-TB snapshot and operational measurements remain |
 | R4.3 — Search rebuild/validation | **Partial** | Local migrated rebuild, bounded query measurements, interruption/restart/lease/corruption tests, and CLI path pass; real-catalog sizing, headroom, and operator validation remain |
-| R4.4 — Dual-run differential | **Partial** | Current native/OpenSubsonic/Jellyfin replays record 183/389/48 unclassified differences in committed surface-scoped reports; a focused share-order correction and ADR-0150 decision package are recorded, while production-traffic classification remains |
-| R4.5 — Current real-client acceptance | **Partial** | Current migrated-client checklist, machine-readable matrix, and reproducible launch paths are recorded in `compatibility/clients/r4/`; historical Phase 7/8 client evidence still does not replace a migrated release-candidate Android/Auto, MeloAmp, OpenSubsonic, and Jellyfin run |
-| R4.6 — Production integrations | **Partial** | Read-only bounded probe and redaction tests cover health/range/OIDC discovery/podcast XML/SMTP STARTTLS/filesystem topology/backup integrity; production OIDC, Last.fm, SMTP delivery, podcast, proxy/TLS, storage, and restore evidence is absent |
-| R4.7 — Final delta/write-freeze rehearsal | **Partial** | Local synthetic delta/freeze runs pass; accepted ADR-0149 and operator-authorized production procedure/timing remain |
+| R4.4 — Dual-run differential | **Partial** | Current native/OpenSubsonic/Jellyfin replays record 185/330/17 unclassified differences in committed surface-scoped reports; the current native replay completed all 12 groups and keeps seven aggregate play-count fields visible as migration residuals; the dual-run harness includes the separately captured disabled-podcast phase and its three previously absent captures replay cleanly; native-v1 reads existing global play-ledger facts in single and batched projections with a 7/7 regression suite; the OpenSubsonic replay isolates the native-only public-share seed from clean OpenSubsonic/Jellyfin targets, removing three share-count fixture residuals; OpenSubsonic contributor roles restore captured legacy casing and standalone contributor `albumCount` remains the captured zero shape; the comparator's former global image/date masks are now 38 exact scenario-and-field rules with regression coverage; the 117-entry native catalog ordering/projection cluster and the current cross-surface ADR-0150 impact matrix now have decision packages; legacy aggregate play-count migration, metadata/state, provider, playlist/share classification, and production-traffic evidence remain |
+| R4.5 — Current real-client acceptance | **Partial** | Current migrated-client checklist, schema-v2 matrix, fail-closed evidence validator (including existing repository-file checks), and fixture plus no-seed existing-target Feishin launch paths are recorded in `compatibility/clients/r4/`; the Feishin launcher now allocates three distinct ephemeral loopback ports, rejects symlinked storage-root parents, and waits for its helper listeners, while smoke/full local gates pass, but historical Phase 7/8 client evidence still does not replace a migrated release-candidate Android/Auto, MeloAmp, OpenSubsonic, and Jellyfin run |
+| R4.6 — Production integrations | **Partial** | Read-only bounded probe and redaction tests cover health/range/OIDC discovery plus bounded JWKS shape/podcast XML/SMTP STARTTLS/filesystem topology/backup integrity and explicitly requested proxy/TLS response-header assertions; canonical and backup probes now reject symlinks in any supplied path component, all HTTP probe requests reject redirects and malformed ports, topology comparison reuses held descriptor facts without a second pathname lookup, and the disposable container smoke path proves bounded SIGTERM shutdown locally, while production OIDC, Last.fm, SMTP delivery, podcast, proxy/TLS, storage, and restore evidence is absent |
+| R4.7 — Final delta/write-freeze rehearsal | **Partial** | Local synthetic delta/freeze runs pass and `design/evidence/r4/adr-0149-decision-package.md` packages the measurements; accepted ADR-0149 and operator-authorized production procedure/timing remain |
 | R4.8 — Backup/cutover/rollback rehearsal | **Partial** | Local target backup/restore and failed-target retention pass; production-equivalent traffic switch, restore, and operator rollback remain |
-| R5.1 — Data-loss threat-model review | **Partial preparation** | Local operation inventory is recorded; actual approximately-5 TB topology and restore-target review remain |
-| R5.2 — Security/FOSS gate | **Partial preparation; blocked** | Local dependency/docs/secret checks pass, but the prototype image fails the critical-vulnerability policy, arm64 is incomplete, and ADR-0151 is Proposed |
-| R5.3 — Full correctness matrix | **Partial preparation** | `check.sh` and docs gates pass locally; candidate-SHA Playwright/visual, security, container, compatibility, and external gates remain |
-| R5.4 — Flake/scheduled-run closure | **Not started** | No scheduled/nightly workflow URLs from a candidate SHA are recorded |
-| R5.5 — Requirement/release-gate closure | **Partial preparation** | 12 requirements remain `in-progress`; PRD Gates A–I do not yet all pass |
-| R5.6 — Release-candidate artifacts | **Not started** | No accepted RC, multi-architecture image, digest, final SBOM/provenance, or publication exists |
+| R5.1 — Data-loss threat-model review | **Partial** | Local operation inventory is recorded; inbound/partial-staging cleanup, owned podcast cleanup, and search-generation manifest retirement now use fail-closed symlink checks, with descriptor-relative `NOFOLLOW`/`unlinkat` deletion and external-target regressions; acquisition source copy/hash reopen through the no-follow boundary after metadata checks, reject raced non-regular files without blocking, and staging destinations use exclusive no-follow file creation plus no-follow directory creation; media inspection/normalization reads and retained copies now use the same no-follow boundary, reject raced non-regular files without blocking, generated outputs reject existing destinations and use ffmpeg `-n`, and media source/destination/parent-symlink/FIFO regressions preserve external sentinels; search-root startup creation now uses descriptor-relative no-follow directory creation and verifies canonical-path identity, rejecting regular-file roots and replacement races; search generation manifests, pending-manifest, and activation writes now use descriptor-relative no-follow opens/rename and directory sync, redundant path-based permission rewrites are removed, and unsupported filesystem fallbacks fail closed; the bounded backup probe now opens path components and the backup leaf through held no-follow descriptors, rejects FIFOs/special files before reads, and passes the held descriptor to `pg_restore`; topology comparison reuses the held canonical and backup device facts without a second pathname lookup; podcast-root ownership initialization now creates and inspects directories through descriptor-relative no-follow walks, podcast download publication and cleanup reuse that component-by-component root descriptor, and onboarding write probes create/unlink through one held parent descriptor; the CLI config export writes a new file through a held no-follow parent with atomic no-replace rename and refuses existing destinations; the settings config-file layer and CLI chart/config/script inputs now read regular files through held no-follow parent descriptors with bounded buffers and reject symlink/special-file replacement; pending manifests avoid pre-existing links, and legacy delta deletion reconciliation, verification issue recording, final catalog projection rebuilding, excluded-table issue summarization, and composite multi-user state import now refresh/verify ownership or target identity before writes; actual approximately 5 TB topology and restore-target review remain |
+| R5.2 — Security/FOSS gate | **Partial** | Local dependency/docs checks and an isolated Gitleaks v8.30.0 archive scan pass; historical Trixie amd64 and arm64 prototype images were smoke-tested, scanned, and SBOMed, but both report 8 critical/187 high findings, while the current guarded Bookworm amd64 image reports 11 critical/193 high findings and fails the current critical-vulnerability policy. The source Dockerfile retains the accepted Bookworm runtime until ADR-0151 is accepted. Current Bookworm metadata, Trivy report, SPDX 2.3 SBOM, and checksums are under `design/evidence/r5/artifacts/local-20260820/`; the decision package is recorded at `design/evidence/r5/adr-0151-decision-package.md` while the ADR remains Proposed |
+| R5.3 — Full correctness matrix | **Partial** | `check.sh` and docs gates pass locally after the recorded scheduler-flake correction; the separate Admin UI Playwright matrix now passes all 289 executed tests from 351 scheduled tests with 62 intentional configuration skips, including accessibility, localization/RTL, responsive, and visual suites. The latest isolated exact-tree `./scripts/check.sh` passed 204 Python tests, Admin UI 44 files/248 unit tests, the complete workspace/PostgreSQL Rust and doctest matrix, formatting, workspace Clippy with `-D warnings`, and cargo-deny. Candidate-SHA Playwright, security, container, compatibility, and external gates remain |
+| R5.4 — Flake/scheduled-run closure | **Not started** | The current local Playwright matrix is repeatable and has zero unexplained failures after correcting stale health fixtures and three resulting System Workers baselines. The scheduled Full validation workflow exists; its latest observed run (`32330365945`, current HEAD `2877e2c`) failed the CLI search-root safety assertion because the test relied on a local `.env` staging value absent on the runner. The test now supplies isolated staging and work-area roots and passes ten consecutive local runs. The latest isolated exact-tree `./scripts/check.sh` passed 204 Python tests, 248 Admin UI unit tests, the workspace/PostgreSQL matrix, formatting, Clippy, doctests, and cargo-deny; the separate smoke gate also passed. The first attempt's Jellyfin failures were local PostgreSQL shared-memory exhaustion, then the affected suite passed 18/18 in an isolated database. The earlier scheduled run (`32214289862`, SHA `207054b`) remains recorded as failure history. No successful scheduled/nightly run from a release-candidate SHA is recorded |
+| R5.5 — Requirement/release-gate closure | **Partial** | Individual Gate A–I evaluation is recorded in `design/evidence/r5/release-gate-report.md`; the structural override audit now covers all 239 requirements, strict terminal mode fails closed on the 12 current in-progress requirements, and the published-release workflow enforces that strict check before the architecture matrix; the gates do not yet all pass |
+| R5.6 — Release-candidate artifacts | **Partial** | Reproducible bounded `scripts/container_smoke.sh` is covered by shell/Python checks and has a dependency-free `--help` path. Historical local Trixie amd64 (`sha256:1a8551faf7b973aa78f6cbdcef3be7364eae07c98935a971ef977359e9eea552`) and arm64 (`sha256:73ab8baaffaa79c4986873df0f6ce35ae770408f9fc41db9d297af2d88f3204b`) prototypes passed smoke but failed the current policy with 8 critical/187 high findings; the current guarded Bookworm amd64 image (`sha256:2eb48219e152cd959b96e897a71d0d6fa3ef98bc53aba99df9e4da64746b649a`) also passed smoke but reports 11 critical/193 high findings. The historical and guarded local Trivy, SPDX 2.3 SBOM, metadata, and SHA256 evidence remain under `design/evidence/r5/artifacts/local-20260820/`. A new candidate image is deferred until ADR-0151 is accepted, after which the release workflow must build, smoke, scan, and attest both architectures. No accepted RC, final provenance, or publication exists |
 | R6.1–R6.5 | **Not started (0/5)** | R6 depends on accepted R5 completion; no version, tag, images, GitHub Release, or final reports exist |
+
+R5.1 latest local correction: canonical-media adoption validation now uses a component-by-component
+no-follow descriptor walk, regular-file `fstat`, and bounded fail-closed handling for absolute,
+traversal, symlink, and special-file paths. This does not change the package status or replace the
+required real approximately-5-TB topology and restore-target review.
 
 This ledger is the authoritative short-form status summary. The detailed package bullets below
 remain the required scope and exit conditions.
@@ -815,7 +823,7 @@ and rollback. Once accepted, coding agents implement it literally.
 
 ## 9. R4 — Production rehearsal, dual run, cutover, and rollback
 
-**Status:** In progress — 0/8 work packages fully complete (seven have partial local evidence;
+**Status:** In progress — 0/8 work packages fully complete (all eight have partial local evidence;
 R4.5 has no qualifying current acceptance evidence). Isolated rehearsal and local rollback
 evidence landed; external production acceptance remains. Evidence:
 `design/evidence/r4/README.md`. \
@@ -879,13 +887,17 @@ The current local replay and residual-cluster ledger are recorded in
 surface reports [`dual-run-report-native.json`](design/evidence/r4/dual-run-report-native.json),
 [`dual-run-report-opensubsonic.json`](design/evidence/r4/dual-run-report-opensubsonic.json),
 and [`dual-run-report-jellyfin.json`](design/evidence/r4/dual-run-report-jellyfin.json). The
-ledger currently records 261 classified and 183 unclassified native comparator differences;
+ledger currently records 267 classified and 185 unclassified native comparator differences;
 the focused migrated share-order correction is covered by the native community integration
 suite, and the ADR-0150 decision package records the metadata boundary without accepting it.
 The unclassified entries remain open and are not an approved waiver.
 
 ### 9.6 Work package R4.5 — Real-client acceptance
 
+- Validate the committed current-client matrix with `python3 scripts/validate_r4_client_acceptance.py`;
+  schema version 2 requires commit/run/client/platform/configuration provenance, result, and
+  repository-relative sanitized evidence for every reported row, while preserving
+  `pending-external` until the physical-client run exists.
 - Run the current Android application on a physical phone through login, token refresh, browse,
   search, direct play, configured transcode, seek, next/previous, background playback, playlists,
   and reconnect.
@@ -958,7 +970,8 @@ tooling, not production-integration acceptance.
 ## 10. R5 — Release-candidate hardening and complete gate
 
 **Status:** Not started formally — 0/6 work packages fully complete. R5.1–R5.3 and R5.5 have
-partial local preparation; R5.4 and R5.6 are not started. Formal entry waits for R4 exit.
+partial local preparation; R5.4 is not started and R5.6 has bounded local smoke/artifact
+preparation. Formal entry waits for R4 exit.
 Evidence: `design/evidence/r5/README.md`. \
 **Depends on:** R4  
 **Primary authority:** PRD Release Gates A–I, Definition of Done, ADR-0144
