@@ -30,7 +30,7 @@ jobs:
       revision: ${{ steps.revision.outputs.revision }}
     steps:
       - name: Check out the published release tag
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event.release.tag_name }}
           fetch-depth: 0
@@ -104,7 +104,7 @@ jobs:
           --health-retries 10
     steps:
       - name: Check out the published release tag
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event.release.tag_name }}
 
@@ -167,7 +167,7 @@ jobs:
             smoke_port: 18081
     steps:
       - name: Check out the published release tag
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event.release.tag_name }}
 
@@ -368,7 +368,7 @@ jobs:
       id-token: write
     steps:
       - name: Check out the published release tag
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event.release.tag_name }}
 
