@@ -26,6 +26,10 @@ class CommandHelpTests(unittest.TestCase):
         with self.subTest(environment=MODULE.sanitized_environment()):
             self.assertEqual(set(MODULE.sanitized_environment()), {"PATH"})
 
+    def test_external_operator_helpers_are_part_of_the_help_audit(self) -> None:
+        self.assertTrue(callable(MODULE.check_rehearsal_help))
+        self.assertTrue(callable(MODULE.check_integration_probe_help))
+
 
 if __name__ == "__main__":
     unittest.main()

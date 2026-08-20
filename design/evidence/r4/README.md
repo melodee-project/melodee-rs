@@ -132,7 +132,7 @@ The native replay was rerun after the migration authorization, audio-metadata,
 catalog ordering, user-state, login-version, cookie-cache, comparator, and
 migrated share-order fixes and is recorded in
 [`dual-run-report-native.json`](dual-run-report-native.json): all 12 native
-groups executed, with 267 classified differences and 185 unclassified
+groups executed, with 267 classified differences and 181 unclassified
 comparator differences. Six replay-created account lifecycle timestamps are
 now classified by exact scenario-and-field rules; other user, playlist, state,
 ordering, metadata, and provider fields remain differential assertions.
@@ -148,7 +148,7 @@ intentional current-vs-legacy behavior, migration metadata boundaries, and
 unresolved catalog ordering/state gaps. They must receive external
 compatibility classification or implementation fixes before release.
 
-The current 185-entry unclassified set has a concrete residual shape rather
+The current 181-entry unclassified set has a concrete residual shape rather
 than one undifferentiated parity claim. The largest clusters are 117 catalog
 list projection/order fields (63 `albums-list`, 32 `artists-list-page2`, and
 22 `artists-list`), 20 genre/reference-only fields and route results, 10 live
@@ -405,6 +405,168 @@ OpenSubsonic, and Jellyfin client runs are captured against a migrated target.
 - Remaining risks and owner: release owner/compatibility decision owner must
   resolve catalog ordering, metadata, user-state, provider, playlist/share, and
   other residual semantics before R4.4 can complete.
+- Updated counts: 45 packages total — 26 Complete, 13 Partial, 6 Not started;
+239 requirements — 211 tested, 9 implemented, 12 in-progress, 7 deferred.
+
+### R4.3 search diagnostic and query-matrix rehearsal — 2026-08-20
+
+- Exact files changed: `scripts/legacy_rehearsal.py`,
+  `tests/python/test_legacy_rehearsal.py`, this report, the R5 report,
+  `design/evidence/r5/release-gate-report.md`, and `IMPLMENTATION_OUTSTANDING.md`.
+- Requirements: the isolated drill now validates `search status` after rebuild, requiring an
+  activated generation whose Artist/Release/Track counts and schema agree with migrated PostgreSQL
+  authority. It records index bytes and exercises prefix autocomplete plus exact, normalized,
+  Unicode, punctuation, broad, and low-selectivity query classes with bounded result limits and
+  p50/p95 timings. The synthetic source includes explicit CJK and punctuation Artist values so
+  those checks cannot pass vacuously. R4.3 remains Partial because production-catalog sizing,
+  headroom, and operator evidence are absent.
+- ADRs: accepted ADR-0148 remains applicable; no ADR was accepted or applied. ADR-0149,
+  ADR-0150, and ADR-0151 remain Proposed.
+- Tests: `python3 -m unittest tests/python/test_legacy_rehearsal.py -v` passed 19/19. The isolated
+  `python3 scripts/legacy_rehearsal.py drill --songs 5 --output /tmp/melodee-r4-search-matrix.json`
+  passed with zero migration mismatch gaps, an activated 50/100/5 search generation at schema 3,
+  a 135,246-byte index, a 20-value bounded prefix result containing seeded values, all six query classes, and 100 ms p50/p95
+  query timing. The JSON was written to `/tmp` and is not production evidence. The subsequent
+  exact local `MELODEE_TEST_DATABASE_URL=postgres://... ./scripts/check.sh` exited 0 with 209
+  Python tests, Admin UI 44 files/248 unit tests, the complete workspace/PostgreSQL Rust and
+  doctest matrix, formatting, workspace Clippy with `-D warnings`, and cargo-deny.
+- Compatibility impact: none; native v1, OpenSubsonic, and Jellyfin routes, DTOs, properties,
+  identifiers, statuses, auth, pagination, and range behavior remain unchanged and separate.
+- Data/migration impact: only the disposable synthetic source fixture gained deterministic Unicode
+  and punctuation names for search coverage; PostgreSQL remains the search authority and no
+  production source or canonical media was accessed.
+- Security/data-loss impact: positive bounded validation; an apparently successful rebuild cannot be
+  recorded as healthy when its active generation is missing, stale, mismatched, or over the query
+  limit. No destructive behavior was added.
+- Performance/operational impact: one bounded status read, one bounded autocomplete call, six bounded
+  queries, index-size measurement, and process timing per drill; no production runtime path changed.
+- Documentation impact: Updated — this report, the R5 report, the release-gate report, and
+  `IMPLMENTATION_OUTSTANDING.md`; no public documentation changed because this is internal
+  rehearsal validation.
+- Remaining risks and owner: release owner/operator still owns the real migrated catalog,
+  production-sized Tantivy measurements, disk headroom, and operator-triggered diagnostic/retry
+  evidence.
+- External input still required: approved isolated production snapshot/canonical mapping and
+  authorization for the production-sized rehearsal.
+- Updated counts: 45 packages total — 26 Complete, 13 Partial, 6 Not started; 239 requirements —
+  211 tested, 9 implemented, 12 in-progress, 7 deferred.
+
+### R4.3 migrated-catalog search probes fail closed and redact snapshot values — 2026-08-20
+
+- Exact files changed: `scripts/legacy_rehearsal.py`,
+  `tests/python/test_legacy_rehearsal.py`, this report, the R5 report,
+  `design/evidence/r5/release-gate-report.md`, and `IMPLMENTATION_OUTSTANDING.md`.
+- Requirements: snapshot-mode search validation now derives Artist representatives from the
+  migrated PostgreSQL authority instead of using synthetic names or accepting zero-result probes.
+  It requires exact, normalized, Unicode, punctuation, broad, and repeated-token
+  low-selectivity classes, bounds every result set, and redacts snapshot-derived prefixes,
+  expressions, expected values, and returned names from evidence. No requirement became
+  terminal; R4.3 remains Partial pending the real production-sized target and operator evidence.
+- ADRs: accepted ADR-0148 remains the migration/search authority; no ADR was accepted or applied.
+  ADR-0149, ADR-0150, and ADR-0151 remain Proposed.
+- Tests: `python3 -m unittest tests/python/test_legacy_rehearsal.py -v` passed 21/21;
+  `python3 -m py_compile scripts/legacy_rehearsal.py` passed; the isolated
+  `python3 scripts/legacy_rehearsal.py drill --songs 5 --output /tmp/melodee-r4-search-probe-v2.json`
+  passed migration verification, backup/restore comparison, freeze, rollback, all six query
+  classes, a 20-value prefix limit, and a low-selectivity minimum of 10 hits. The JSON remains
+  temporary synthetic evidence and is not production evidence.
+- Compatibility impact: none; native v1, OpenSubsonic, and Jellyfin routes, DTOs, identifiers,
+  statuses, auth, pagination, and range behavior remain unchanged and separate.
+- Data/migration impact: only the disposable synthetic rehearsal databases and temporary roots
+  were used; the new snapshot path is read-only and queries PostgreSQL authority after import.
+- Security/data-loss impact: positive fail-closed correction; missing required search classes now
+  stop the rehearsal, and catalog values are not copied into snapshot evidence. No destructive
+  behavior was added.
+- Performance/operational impact: one bounded authority-name query, one bounded autocomplete,
+  six bounded searches, and the existing index/timing measurements per drill; no runtime server
+  path changed.
+- Documentation impact: Updated — this report, the R5 report, the release-gate report, and
+  `IMPLMENTATION_OUTSTANDING.md`; no public documentation changed because this is internal
+  rehearsal tooling.
+- Remaining risks and owner: release owner/operator still owns production-sized Tantivy sizing,
+  headroom, real-catalog representative availability, and operator diagnostic/retry evidence.
+- External input still required: approved isolated production snapshot, canonical mapping, backup,
+  and authorization for the production-sized rehearsal.
+- Updated counts: 45 packages total — 26 Complete, 13 Partial, 6 Not started; 239 requirements —
+  211 tested, 9 implemented, 12 in-progress, 7 deferred.
+
+### R4.1/R5.1 baseline and path-map fail-closed validation — 2026-08-20
+
+- Exact files changed: `scripts/legacy_rehearsal.py`,
+  `tests/python/test_legacy_rehearsal.py`, this report, the R5 report,
+  `design/evidence/r5/release-gate-report.md`, and `IMPLMENTATION_OUTSTANDING.md`.
+- Requirements: the rehearsal now validates `--library-path-map` syntax with the same accepted
+  rules as the Rust CLI before creating a target database. It also validates the CLI's versioned
+  `melodee.legacy-baseline` JSON shape, frozen 52-table coverage, source identity/schema linkage,
+  v2 snapshot marker, transaction read-only facts, media totals, and redacted/hashed configuration
+  fingerprint. No requirement was marked terminal; R4.1 and R5.1 remain Partial pending real
+  snapshot and topology evidence.
+- ADRs: accepted ADR-0148 remains the migration authority; no ADR was accepted or applied.
+  ADR-0149, ADR-0150, and ADR-0151 remain Proposed.
+- Tests: `python3 -m unittest tests/python/test_legacy_rehearsal.py -v` passed 18/18. The isolated
+  `python3 scripts/legacy_rehearsal.py drill --songs 5` passed against the actual CLI baseline
+  output with zero verification mismatch gaps, full restore-content equality, freeze, rollback
+  retention, and unchanged canonical media. Evidence was written to a temporary path and is not
+  production evidence. The subsequent exact local `MELODEE_TEST_DATABASE_URL=postgres://... ./scripts/check.sh`
+  exited 0 with 208 Python tests, Admin UI 44 files/248 unit tests, the complete
+  workspace/PostgreSQL Rust and doctest matrix, formatting, workspace Clippy with `-D warnings`,
+  and cargo-deny.
+- Compatibility impact: none; native v1, OpenSubsonic, and Jellyfin contracts are unchanged.
+- Data/migration impact: malformed operator mappings now fail before target creation; synthetic
+  source/target databases remain isolated and no production source or canonical media was used.
+- Security/data-loss impact: positive fail-closed correction; invalid mapping configuration cannot
+  create partial target state, and baseline evidence cannot claim read-only or redaction guarantees
+  from malformed JSON.
+- Performance/operational impact: bounded string validation and in-memory JSON validation before
+  target creation; no migration or production runtime path changed.
+- Documentation impact: Updated — this report, the R5 report, the release-gate report, and
+  `IMPLMENTATION_OUTSTANDING.md`; no public documentation changed because this is internal
+  rehearsal validation.
+- Remaining risks and owner: release owner/operator still owns the approved snapshot, backup,
+  canonical mapping, production-sized run, topology, restore target, and cutover evidence.
+- External input still required: approved isolated production snapshot/backup/canonical mapping and
+  authorization for the real rehearsal.
+- Updated counts: 45 packages total — 26 Complete, 13 Partial, 6 Not started;
+  239 requirements — 211 tested, 9 implemented, 12 in-progress, 7 deferred.
+
+### R4.8 synthetic restore-content and fixture closure — 2026-08-20
+
+- Exact files changed: `scripts/legacy_rehearsal.py`,
+  `tests/python/test_legacy_rehearsal.py`, this report, the R5 report,
+  `design/evidence/r5/release-gate-report.md`, and `IMPLMENTATION_OUTSTANDING.md`.
+- Requirements: the isolated synthetic R4.8 drill now validates the generated backup before
+  restore and compares restored Artist, Release, Track, and user counts plus media file count and
+  byte totals with the migrated target. Synthetic playlist and user-state fixtures now generate
+  unique source identity pairs within their bounded capacity, so verifier failures represent
+  migration defects rather than duplicate fixture rows. R4.8 and R5.1 remain Partial because
+  production-equivalent backup, restore, traffic switch, and rollback evidence is still absent.
+- ADRs: accepted ADR-0148 remains the migration authority; no ADR was accepted or applied.
+  ADR-0149, ADR-0150, and ADR-0151 remain Proposed.
+- Tests: `python3 -m unittest tests/python/test_legacy_rehearsal.py -v` passed 16/16; the
+  isolated `python3 scripts/legacy_rehearsal.py drill --songs 5` passed end to end, including
+  zero verification mismatch gaps, backup validation, full restore-content equality, freeze,
+  failed-target retention, and canonical-media immutability. The post-change exact
+  `MELODEE_TEST_DATABASE_URL=postgres://... ./scripts/check.sh` exited 0 with 206 Python tests,
+  Admin UI 44 files/248 unit tests, the complete workspace/PostgreSQL Rust and doctest matrix,
+  formatting, workspace Clippy with `-D warnings`, and cargo-deny. The generated drill evidence
+  was written to a temporary path and is not authoritative production evidence.
+- Compatibility impact: none; native v1, OpenSubsonic, and Jellyfin routes, DTOs, properties,
+  identifiers, statuses, auth, pagination, and range behavior are unchanged.
+- Data/migration impact: synthetic databases were isolated and source/media behavior remained
+  bounded to the rehearsal. No production source, target, backup, or canonical media was used.
+- Security/data-loss impact: positive; restore verification now checks complete measured authority
+  and media content shape, and synthetic source identities no longer manufacture duplicate-state
+  discrepancies. No destructive production behavior was added.
+- Performance/operational impact: two bounded aggregate queries for restored media and catalog
+  content; no production workload or migration algorithm changed.
+- Documentation impact: Updated — this report, the R5 report, the release-gate report, and
+  `IMPLMENTATION_OUTSTANDING.md`; no public documentation changed because this is internal
+  rehearsal tooling.
+- Remaining risks and owner: release owner/operator must supply and authorize the approved
+  approximately-5-TB snapshot, backup, canonical mapping, production-equivalent restore target,
+  traffic switch, and rollback drill.
+- External input still required: isolated production snapshot/backup/canonical-root mapping and
+  explicit operator authorization for the real restore and cutover rehearsal.
 - Updated counts: 45 packages total — 26 Complete, 13 Partial, 6 Not started;
   239 requirements — 211 tested, 9 implemented, 12 in-progress, 7 deferred.
 
@@ -1098,6 +1260,85 @@ implementations were corrected against frozen legacy behavior without
 changing the intended public contract. Migration remains source-read-only,
 non-destructive, and media adopting rather than relocating or re-encoding.
 
+### R4.6 integration-probe artifact and parser hardening — 2026-08-20
+
+- Exact files changed: `scripts/r4_integration_probe.py`,
+  `scripts/check_command_help.py`, `tests/python/test_r4_integration_probe.py`,
+  `tests/python/test_command_help.py`, this report, the R5 report, the release-gate report,
+  and `IMPLMENTATION_OUTSTANDING.md`.
+- Requirements: R4.6 local probe preparation now validates its stable schema-1 JSON artifact,
+  bounds and cross-checks range measurements, rejects malformed OIDC documents and XML DTD/entity
+  declarations as controlled probe failures, and includes the integration probe in the sanitized
+  command-help audit. No requirement was marked terminal; real endpoints and operator evidence
+  remain external.
+- ADRs: no ADR was accepted or applied. ADR-0149, ADR-0150, and ADR-0151 remain Proposed.
+- Tests: `python3 -m unittest tests.python.test_r4_integration_probe tests.python.test_command_help
+  -v` passed 15/15; Python compilation, `python3 scripts/r4_integration_probe.py --help`, and
+  `python3 scripts/check_command_help.py` passed. The subsequent exact `cargo fmt --all &&
+  MELODEE_TEST_DATABASE_URL=postgres://... ./scripts/check.sh` exited 0 with 212 Python tests,
+  Admin UI 44 files/248 unit tests, the complete workspace/PostgreSQL Rust and doctest matrix,
+  formatting, workspace Clippy with warnings denied, and cargo-deny.
+- Compatibility impact: none; native v1, OpenSubsonic, and Jellyfin routes, DTOs, identifiers,
+  statuses, auth, pagination, range behavior, and intentional 410/501 behavior are unchanged.
+- Data/migration impact: none; the probe remains read-only and no database, canonical media,
+  backup, or external endpoint was contacted.
+- Security/data-loss impact: positive fail-closed correction; malformed provider responses cannot
+  escape as uncontrolled exceptions, XML entity declarations are rejected, bounded ranges must
+  match their measured body, and generated evidence rejects secret-shaped values.
+- Performance/operational impact: validation is in-memory over already bounded response metadata;
+  no runtime server or migration path changed.
+- Documentation impact: Updated — this R4 report, the R5 report, the release-gate report, and
+  `IMPLMENTATION_OUTSTANDING.md`; public behavior documentation did not change because this is
+  internal probe tooling.
+- Remaining risks and owner: release owner/operator must run the validated probe against approved
+  deployment/provider/storage/restore endpoints and retain sanitized results; R4.6 remains Partial.
+- External input still required: approved endpoint list, expected proxy policy, non-sensitive test
+  accounts, backup/restore targets, and operator authorization.
+- Updated counts: 45 packages total — 26 Complete, 13 Partial, 6 Not started; 239 requirements —
+  211 tested, 9 implemented, 12 in-progress, 7 deferred.
+
+### R4.4 primary-release aggregate correction and rebuilt replay — 2026-08-20
+
+- Exact files changed: `apps/melodee-cli/src/legacy/import.rs`,
+  `crates/melodee-persistence/src/catalog.rs`,
+  `crates/melodee-persistence/src/catalog_mutations.rs`,
+  `apps/melodee-server/tests/jellyfin_media_api.rs`, the three surface-scoped
+  differential reports, this report, `design/evidence/r5/README.md`,
+  `design/evidence/r5/release-gate-report.md`, and `IMPLMENTATION_OUTSTANDING.md`.
+- Requirements: the durable `artist_catalog_aggregates.release_count` projection now counts
+  distinct primary `Release` billing rows in legacy import, normal catalog import, and full
+  maintenance rebuild paths. The regression test forces the full maintenance rebuild before
+  checking Jellyfin `ChildCount`, proving featured/secondary credits cannot inflate the count.
+  R4.4 remains Partial; no requirement was marked terminal.
+- ADRs: no ADR was accepted or applied. This correction follows the existing captured
+  primary-release contract; ADR-0149, ADR-0150, and ADR-0151 remain Proposed. No ADR-0150
+  metadata mapping was implemented.
+- Tests: `cargo build -p melodee-cli -p melodee-server` passed; the focused Jellyfin regression
+  passed 1/1; the rebuilt isolated replays exited 1 fail-closed with 181 native, 322
+  OpenSubsonic, and 17 Jellyfin unclassified differences. `git diff --check` passed.
+- Compatibility impact: intentional correction to existing artist release-count projections;
+  native v1, OpenSubsonic, and Jellyfin wire DTOs and route contracts remain separate, and no
+  route, property, identifier, status, auth, pagination, range, or intentional 410/501 behavior
+  was changed.
+- Data/migration impact: legacy source, target databases, and canonical media used by replay were
+  disposable and isolated. The aggregate is rebuilt from authoritative migrated PostgreSQL
+  `release_artists` rows; no source mutation, media movement, or identity regeneration occurs.
+- Security/data-loss impact: positive bounded correction; it removes a false count without
+  synthesizing metadata or user state, and the differential harness remained fail-closed.
+- Performance/operational impact: one correlated distinct-primary-release count in existing
+  projection maintenance; no new dependency or runtime service was introduced. Production-sized
+  performance measurements remain absent.
+- Documentation impact: Updated — this report, the R5 report, the R5 release-gate report, and
+  `IMPLMENTATION_OUTSTANDING.md`; no public documentation changed because the correction restores
+  an existing compatibility invariant rather than adding user-visible capability.
+- Remaining risks and owner: release/compatibility owner must resolve the remaining 181/322/17
+  residuals, including ADR-0150 metadata/state/order families and the separate playlist/provider
+  decisions; production-sized and external acceptance evidence remains open.
+- External input still required: accepted ADR-0149/0150/0151 dispositions, approved production
+  snapshot/topology, and release-owner authorization for external differential and cutover runs.
+- Updated counts: 45 packages total — 26 Complete, 13 Partial, 6 Not started; 239 requirements —
+  211 tested, 9 implemented, 12 in-progress, 7 deferred.
+
 ## Remaining R4 acceptance
 
 These require deployment credentials, production-shaped snapshots, or client
@@ -1108,7 +1349,7 @@ hardware and cannot be honestly generated by this isolated local harness:
   executable reports are `dual-run-report-native.json`,
   `dual-run-report-opensubsonic.json`, and `dual-run-report-jellyfin.json`:
   all three ran from isolated per-file migrated snapshots. Native stream
-  HEAD/full/range requests passed; the current reports record 185, 330, and 17
+  HEAD/full/range requests passed; the current reports record 181, 322, and 17
   unclassified differences respectively. None is silently waived and each
   still requires compatibility classification or fixes.
 - R4.5 physical Android, Android Auto/DHU, MeloAmp, OpenSubsonic, and Jellyfin
@@ -1331,6 +1572,45 @@ Documentation impact:
   operator evidence remain release-owner owned.
 - Updated counts: 45 packages total — 26 Complete, 13 Partial, 6 Not started;
   239 requirements — 211 tested, 9 implemented, 12 in-progress, 7 deferred.
+
+### R4.5 workflow-complete client evidence schema — 2026-08-20
+
+- Exact files changed: `scripts/validate_r4_client_acceptance.py`,
+  `tests/python/test_r4_client_acceptance.py`,
+  `compatibility/clients/r4/acceptance-matrix.json`,
+  `compatibility/clients/r4/README.md`, this report, the R5 report, and
+  `IMPLMENTATION_OUTSTANDING.md`.
+- Requirements: the R4.5 evidence artifact is now schema version 3 and carries the required
+  workflow IDs for Android phone, Android Auto/DHU, MeloAmp, OpenSubsonic, and Jellyfin rows.
+  Any reported pass/fail row must provide exactly one explicit pass/fail result for every named
+  workflow; a passing row must have no failed workflow, and a failed row must identify at least
+  one failed workflow with notes. The committed matrix remains honestly `pending-external`; no
+  physical-client requirement became terminal.
+- ADRs: no ADR was accepted or applied. ADR-0149, ADR-0150, and ADR-0151 remain Proposed; no
+  wire contract or client behavior changed.
+- Tests: `python3 -m unittest tests/python/test_r4_client_acceptance.py -v` passed 8/8;
+  `python3 -m py_compile scripts/validate_r4_client_acceptance.py tests/python/test_r4_client_acceptance.py`
+  passed; and `python3 scripts/validate_r4_client_acceptance.py` passed with 0 pass, 0 fail, and
+  5 pending-external rows. The subsequent exact local `MELODEE_TEST_DATABASE_URL=postgres://... ./scripts/check.sh`
+  exited 0 with 216 Python tests, Admin UI 44 files/248 unit tests, the complete workspace/
+  PostgreSQL Rust and doctest matrix, formatting, workspace Clippy with `-D warnings`, and
+  cargo-deny.
+- Compatibility impact: none; native v1, OpenSubsonic, and Jellyfin routes, DTOs, properties,
+  identifiers, statuses, auth, pagination, and range behavior remain unchanged and separate.
+- Data/migration impact: none; this is evidence-schema validation only and does not access a
+  database, migration source, canonical media, or client account.
+- Security/data-loss impact: positive fail-closed evidence correction; incomplete workflow claims
+  cannot be promoted to a passing client row, and the existing secret/path validation remains active.
+- Performance/operational impact: bounded in-memory validation of five rows; no runtime path changed.
+- Documentation impact: Updated — this report, `compatibility/clients/r4/README.md`, the R5 report,
+  and `IMPLMENTATION_OUTSTANDING.md`; no public documentation changed because no client behavior
+  was changed.
+- Remaining risks and owner: release owner/operator still owns the current migrated physical-client
+  runs and must provide sanitized evidence for every workflow.
+- External input still required: disposable migrated target, current Android/Auto/DHU/MeloAmp/
+  OpenSubsonic/Jellyfin client builds, platform access, and operator participation.
+- Updated counts: 45 packages total — 26 Complete, 13 Partial, 6 Not started; 239 requirements —
+  211 tested, 9 implemented, 12 in-progress, 7 deferred.
 
 ### R4.4 differential comparator exactness — 2026-08-19
 

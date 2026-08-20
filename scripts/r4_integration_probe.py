@@ -38,6 +38,15 @@ from urllib.parse import urljoin, urlsplit
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 MAX_OIDC_KEYS = 256
 HEADER_NAME = re.compile(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
+HEX16 = re.compile(r"^[0-9a-f]{16}$")
+SHA256 = re.compile(r"^[0-9a-f]{64}$")
+ISO_UTC = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+CONTENT_RANGE = re.compile(r"^bytes 0-(\d+)/(\d+|\*)$")
+SECRET_VALUE = re.compile(
+    r"(?i)(?:\bbearer\s+[A-Za-z0-9._~-]{12,}\b|"
+    r"(?:password|passwd|secret|token|cookie|authorization)\s*[=:]\s*[^\s,;]+|"
+    r"postgres(?:ql)?://[^\s/]+:[^\s@]+@|-----BEGIN [^-]*PRIVATE KEY-----)"
+)
 
 
 class ProbeError(RuntimeError):
@@ -155,6 +164,219 @@ def validate_jwks_document(document: object) -> dict[str, object]:
             raise ProbeError("OIDC JWKS contains a non-string key identifier")
         key_types.add(key["kty"])
     return {"key_count": len(keys), "key_types": sorted(key_types)}
+
+
+def validate_oidc_discovery_document(document: object) -> tuple[str, str]:
+    """Validate the bounded discovery shape before accessing object fields."""
+    if not isinstance(document, dict):
+        raise ProbeError("OIDC discovery response must be a JSON object")
+    issuer = document.get("issuer")
+    jwks_uri = document.get("jwks_uri")
+    if not isinstance(issuer, str) or not isinstance(jwks_uri, str):
+        raise ProbeError("OIDC discovery response lacks issuer/jwks_uri")
+    return validate_url(issuer, "OIDC issuer"), validate_url(jwks_uri, "OIDC jwks_uri")
+
+
+def validate_podcast_xml(body: bytes) -> None:
+    """Reject DTD/entity declarations before parsing untrusted feed bytes."""
+    if re.search(rb"<!\s*(?:DOCTYPE|ENTITY)\b", body, flags=re.IGNORECASE):
+        raise ProbeError("podcast feed must not contain DTD or entity declarations")
+    try:
+        ElementTree.fromstring(body)
+    except ElementTree.ParseError as error:
+        raise ProbeError("podcast feed was not well-formed XML") from error
+
+
+def _require_status(value: object, expected: set[int], field: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value not in expected:
+        raise ProbeError(f"integration evidence {field} has an invalid status")
+    return value
+
+
+def _require_fingerprint(value: object, pattern: re.Pattern[str], field: str) -> str:
+    if not isinstance(value, str) or not pattern.fullmatch(value):
+        raise ProbeError(f"integration evidence {field} has an invalid fingerprint")
+    return value
+
+
+def _require_nonnegative_int(value: object, field: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ProbeError(f"integration evidence {field} must be a non-negative integer")
+    return value
+
+
+def validate_probe_artifact(value: object) -> dict[str, object]:
+    """Validate the stable, redacted JSON emitted by the integration probe."""
+    if not isinstance(value, dict):
+        raise ProbeError("integration evidence must be a JSON object")
+    expected_keys = {
+        "artifact",
+        "schema_version",
+        "started_at",
+        "base_endpoint_fingerprint",
+        "checks",
+        "result",
+    }
+    if set(value) != expected_keys:
+        raise ProbeError("integration evidence has an unsupported top-level shape")
+    if value.get("artifact") != "melodee.r4-integration-probe" or value.get("schema_version") != 1:
+        raise ProbeError("integration evidence schema is unsupported")
+    if not isinstance(value.get("started_at"), str) or not ISO_UTC.fullmatch(value["started_at"]):
+        raise ProbeError("integration evidence started_at is not UTC")
+    _require_fingerprint(value.get("base_endpoint_fingerprint"), HEX16, "base_endpoint_fingerprint")
+    if value.get("result") != "pass":
+        raise ProbeError("integration evidence result is not pass")
+    checks = value.get("checks")
+    if not isinstance(checks, dict):
+        raise ProbeError("integration evidence checks must be an object")
+    if set(checks) - {
+        "/healthz",
+        "/readyz",
+        "range",
+        "oidc_discovery",
+        "oidc_jwks",
+        "podcast_feed",
+        "lastfm_endpoint",
+        "proxy_tls",
+        "smtp",
+        "canonical_root",
+        "backup",
+        "storage_topology",
+    }:
+        raise ProbeError("integration evidence contains an unknown check")
+    for path in ("/healthz", "/readyz"):
+        check = checks.get(path)
+        if not isinstance(check, dict):
+            raise ProbeError(f"integration evidence is missing {path}")
+        _require_status(check.get("status"), {200}, f"{path}.status")
+        if not isinstance(check.get("content_type"), str):
+            raise ProbeError(f"integration evidence {path}.content_type is invalid")
+
+    range_check = checks.get("range")
+    if range_check is not None:
+        if not isinstance(range_check, dict):
+            raise ProbeError("integration evidence range check is invalid")
+        _require_status(range_check.get("status"), {206}, "range.status")
+        bytes_read = range_check.get("bytes_read")
+        if isinstance(bytes_read, bool) or not isinstance(bytes_read, int) or not 1 <= bytes_read <= MAX_RESPONSE_BYTES:
+            raise ProbeError("integration evidence range.bytes_read is invalid")
+        content_range = range_check.get("content_range")
+        if not isinstance(content_range, str):
+            raise ProbeError("integration evidence range.content_range is invalid")
+        match = CONTENT_RANGE.fullmatch(content_range)
+        if match is None or int(match.group(1)) + 1 != bytes_read:
+            raise ProbeError("integration evidence range does not match the bounded body")
+        if match.group(2) != "*" and int(match.group(2)) < bytes_read:
+            raise ProbeError("integration evidence range total is smaller than the body")
+
+    discovery = checks.get("oidc_discovery")
+    if discovery is not None:
+        if not isinstance(discovery, dict):
+            raise ProbeError("integration evidence OIDC discovery check is invalid")
+        _require_status(discovery.get("status"), {200}, "oidc_discovery.status")
+        _require_fingerprint(discovery.get("issuer_fingerprint"), HEX16, "oidc_discovery.issuer_fingerprint")
+        _require_fingerprint(discovery.get("jwks_fingerprint"), HEX16, "oidc_discovery.jwks_fingerprint")
+        _require_status(discovery.get("jwks_status"), {200}, "oidc_discovery.jwks_status")
+
+    jwks = checks.get("oidc_jwks")
+    if jwks is not None:
+        if not isinstance(jwks, dict):
+            raise ProbeError("integration evidence OIDC JWKS check is invalid")
+        _require_status(jwks.get("status"), {200}, "oidc_jwks.status")
+        key_count = jwks.get("key_count")
+        if isinstance(key_count, bool) or not isinstance(key_count, int) or not 1 <= key_count <= MAX_OIDC_KEYS:
+            raise ProbeError("integration evidence OIDC key_count is invalid")
+        key_types = jwks.get("key_types")
+        if (
+            not isinstance(key_types, list)
+            or not key_types
+            or key_types != sorted(key_types)
+            or any(not isinstance(key_type, str) or not key_type for key_type in key_types)
+        ):
+            raise ProbeError("integration evidence OIDC key_types is invalid")
+
+    podcast = checks.get("podcast_feed")
+    if podcast is not None:
+        if not isinstance(podcast, dict):
+            raise ProbeError("integration evidence podcast check is invalid")
+        _require_status(podcast.get("status"), {200}, "podcast_feed.status")
+        bytes_read = podcast.get("bytes")
+        if isinstance(bytes_read, bool) or not isinstance(bytes_read, int) or not 1 <= bytes_read <= MAX_RESPONSE_BYTES:
+            raise ProbeError("integration evidence podcast_feed.bytes is invalid")
+
+    lastfm = checks.get("lastfm_endpoint")
+    if lastfm is not None:
+        if not isinstance(lastfm, dict):
+            raise ProbeError("integration evidence Last.fm check is invalid")
+        _require_status(lastfm.get("status"), {200, 400, 401, 403, 404}, "lastfm_endpoint.status")
+        _require_fingerprint(lastfm.get("endpoint_fingerprint"), HEX16, "lastfm_endpoint.endpoint_fingerprint")
+
+    proxy = checks.get("proxy_tls")
+    if proxy is not None:
+        if not isinstance(proxy, dict):
+            raise ProbeError("integration evidence proxy/TLS check is invalid")
+        status = proxy.get("status")
+        if isinstance(status, bool) or not isinstance(status, int) or not 100 <= status <= 599:
+            raise ProbeError("integration evidence proxy_tls.status is invalid")
+        if proxy.get("scheme") not in {"http", "https"}:
+            raise ProbeError("integration evidence proxy_tls.scheme is invalid")
+        _require_fingerprint(proxy.get("endpoint_fingerprint"), HEX16, "proxy_tls.endpoint_fingerprint")
+        headers = proxy.get("asserted_headers")
+        if not isinstance(headers, list) or any(
+            not isinstance(header, str) or HEADER_NAME.fullmatch(header) is None for header in headers
+        ):
+            raise ProbeError("integration evidence proxy_tls.asserted_headers is invalid")
+
+    smtp = checks.get("smtp")
+    if smtp is not None:
+        if not isinstance(smtp, dict):
+            raise ProbeError("integration evidence SMTP check is invalid")
+        _require_fingerprint(smtp.get("host_fingerprint"), HEX16, "smtp.host_fingerprint")
+        port = smtp.get("port")
+        if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+            raise ProbeError("integration evidence SMTP port is invalid")
+        if not isinstance(smtp.get("starttls"), bool):
+            raise ProbeError("integration evidence SMTP starttls is invalid")
+
+    canonical = checks.get("canonical_root")
+    if canonical is not None:
+        if not isinstance(canonical, dict) or canonical.get("label") != "canonical-root":
+            raise ProbeError("integration evidence canonical-root check is invalid")
+        _require_fingerprint(canonical.get("path_fingerprint"), SHA256, "canonical_root.path_fingerprint")
+        _require_nonnegative_int(canonical.get("device"), "canonical_root.device")
+        free_bytes = _require_nonnegative_int(canonical.get("free_bytes"), "canonical_root.free_bytes")
+        total_bytes = _require_nonnegative_int(canonical.get("total_bytes"), "canonical_root.total_bytes")
+        headroom = canonical.get("headroom_ratio")
+        if not isinstance(headroom, (int, float)) or isinstance(headroom, bool) or not 0 <= headroom <= 1:
+            raise ProbeError("integration evidence canonical_root.headroom_ratio is invalid")
+        if total_bytes and free_bytes > total_bytes:
+            raise ProbeError("integration evidence canonical_root free bytes exceed total bytes")
+
+    backup = checks.get("backup")
+    if backup is not None:
+        if not isinstance(backup, dict):
+            raise ProbeError("integration evidence backup check is invalid")
+        bytes_read = backup.get("bytes")
+        if isinstance(bytes_read, bool) or not isinstance(bytes_read, int) or bytes_read <= 0:
+            raise ProbeError("integration evidence backup.bytes is invalid")
+        _require_fingerprint(backup.get("sha256"), SHA256, "backup.sha256")
+        _require_nonnegative_int(backup.get("device"), "backup.device")
+        if _require_nonnegative_int(backup.get("toc_entries"), "backup.toc_entries") < 1:
+            raise ProbeError("integration evidence backup.toc_entries is empty")
+
+    topology = checks.get("storage_topology")
+    if topology is not None:
+        if not isinstance(topology, dict):
+            raise ProbeError("integration evidence storage topology is invalid")
+        _require_nonnegative_int(topology.get("canonical_device"), "storage_topology.canonical_device")
+        _require_nonnegative_int(topology.get("backup_device"), "storage_topology.backup_device")
+        if not isinstance(topology.get("same_filesystem"), bool):
+            raise ProbeError("integration evidence storage_topology.same_filesystem is invalid")
+
+    rendered = json.dumps(value, sort_keys=True, ensure_ascii=False)
+    if SECRET_VALUE.search(rendered):
+        raise ProbeError("integration evidence contains an apparently unredacted secret")
+    return value
 
 
 def contains_symlink_component(path: Path) -> bool:
@@ -326,7 +548,13 @@ def run(args: argparse.Namespace) -> dict[str, object]:
                 content_range = response.headers.get("Content-Range", "")
         except (urllib.error.URLError, TimeoutError) as error:
             raise ProbeError(f"range probe failed for endpoint {endpoint_fingerprint(range_url)}") from error
-        if status != 206 or not content_range.startswith("bytes 0-"):
+        match = CONTENT_RANGE.fullmatch(content_range)
+        if (
+            status != 206
+            or match is None
+            or int(match.group(1)) + 1 != len(body)
+            or len(body) > args.range_bytes
+        ):
             raise ProbeError("range probe did not return a bounded 206 Content-Range")
         checks["range"] = {"status": status, "bytes_read": len(body), "content_range": content_range}
 
@@ -337,10 +565,9 @@ def run(args: argparse.Namespace) -> dict[str, object]:
             document = json.loads(body)
         except json.JSONDecodeError as error:
             raise ProbeError("OIDC discovery response was not JSON") from error
-        if status != 200 or not isinstance(document.get("issuer"), str) or not isinstance(document.get("jwks_uri"), str):
-            raise ProbeError("OIDC discovery response lacks issuer/jwks_uri")
-        issuer_url = validate_url(document["issuer"], "OIDC issuer")
-        jwks_url = validate_url(document["jwks_uri"], "OIDC jwks_uri")
+        if status != 200:
+            raise ProbeError("OIDC discovery endpoint did not return 200")
+        issuer_url, jwks_url = validate_oidc_discovery_document(document)
         jwks_status, _jwks_headers, jwks_body = http_get(jwks_url)
         try:
             jwks_document = json.loads(jwks_body)
@@ -365,10 +592,7 @@ def run(args: argparse.Namespace) -> dict[str, object]:
         status, _headers, body = http_get(feed_url)
         if status != 200:
             raise ProbeError(f"podcast feed returned {status}, expected 200")
-        try:
-            ElementTree.fromstring(body)
-        except ElementTree.ParseError as error:
-            raise ProbeError("podcast feed was not well-formed XML") from error
+        validate_podcast_xml(body)
         checks["podcast_feed"] = {"status": status, "bytes": len(body)}
 
     if args.lastfm_api_url:
@@ -419,7 +643,7 @@ def run(args: argparse.Namespace) -> dict[str, object]:
             "same_filesystem": canonical_device == backup_device,
         }
     results["result"] = "pass"
-    return results
+    return validate_probe_artifact(results)
 
 
 def main() -> int:

@@ -25,7 +25,8 @@ use image::{ImageFormat, ImageReader, Rgba, RgbaImage};
 use melodee_auth::PasswordHashAlgorithm;
 use melodee_domain::ReleaseId;
 use melodee_persistence::{
-    AuthStore, CatalogImageAudit, CatalogImageEntity, CatalogImageStore, NativeUserImport,
+    AuthStore, CatalogImageAudit, CatalogImageEntity, CatalogImageStore, CatalogStore,
+    NativeUserImport,
 };
 use melodee_server::jellyfin::{JfLibrary, JfState, SecretPepper};
 use melodee_server::native_stream::{CanonicalAssetRoot, ClientAddressResolver, DirectPlayService};
@@ -366,6 +367,15 @@ async fn artist_child_count_uses_primary_releases_not_featured_credits() {
         },
     )
     .await;
+
+    // The release import path updates only affected artists. Rebuild the full
+    // participation projection as the migration/recovery path does so this
+    // regression also proves that a featured Track credit cannot inflate the
+    // durable primary-Release count.
+    CatalogStore
+        .rebuild_all_artist_track_associations_for_maintenance(&db.pool, OffsetDateTime::now_utc())
+        .await
+        .expect("rebuild primary release aggregate");
 
     let (status, _, bytes) = respond(
         &fixture.state,

@@ -7,7 +7,10 @@ report containing the exact Melodee commit, migrated-run id (or redacted
 baseline fingerprint), client version, platform version, configuration
 fingerprint, command, result, and sanitized logs/screenshots.
 
-The committed `acceptance-matrix.json` is schema version 2. Validate it with:
+The committed `acceptance-matrix.json` is schema version 3. A reported row must
+include an explicit pass/fail result for every workflow listed in its
+`workflowSchema`; a row cannot be marked `pass` while any required workflow is
+missing or failed. Validate it with:
 
 ```bash
 python3 scripts/validate_r4_client_acceptance.py

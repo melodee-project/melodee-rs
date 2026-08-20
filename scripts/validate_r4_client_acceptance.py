@@ -27,7 +27,57 @@ EXPECTED_ROWS = {
     ("representative-opensubsonic", "opensubsonic"),
     ("representative-jellyfin", "jellyfin"),
 }
+REQUIRED_WORKFLOWS = {
+    ("android-phone", "native-v1"): (
+        "login",
+        "refresh",
+        "browse-search",
+        "direct-play",
+        "configured-transcode",
+        "range-seek",
+        "next-previous",
+        "background-playback",
+        "reconnect",
+        "playlists",
+        "scrobble",
+        "expected-errors",
+    ),
+    ("android-auto-or-dhu", "native-v1"): (
+        "root-browse",
+        "search-voice-playback",
+        "next-previous",
+        "seek",
+        "ended-event-advance",
+        "reconnect-auth-restore",
+    ),
+    ("meloamp", "native-v1"): (
+        "login-restore",
+        "browse-search",
+        "direct-play-seek",
+        "playlists",
+        "reconnect",
+        "error-paths",
+    ),
+    ("representative-opensubsonic", "opensubsonic"): (
+        "connect-auth",
+        "browse-search",
+        "direct-play-range",
+        "playlist",
+        "favorites",
+        "reconnect",
+        "expected-errors",
+    ),
+    ("representative-jellyfin", "jellyfin"): (
+        "connect-auth",
+        "browse-search",
+        "direct-play-transcode-range",
+        "favorites-playlists",
+        "reconnect",
+        "expected-errors",
+    ),
+}
 ALLOWED_STATUSES = {"pending-external", "pass", "fail"}
+ALLOWED_WORKFLOW_STATUSES = {"pass", "fail"}
 HEX_COMMIT_RE = re.compile(r"^[0-9a-fA-F]{7,64}$")
 FINGERPRINT_RE = re.compile(r"^[0-9a-fA-F]{12,128}$")
 SECRET_VALUE_RE = re.compile(
@@ -89,13 +139,55 @@ def _validate_result_row(row: dict[str, Any], index: int) -> None:
         _validate_relative_evidence_path(path, f"{prefix}.evidence[{evidence_index}]")
 
 
+def _validate_workflow_results(
+    row: dict[str, Any], index: int, identity: tuple[str, str]
+) -> None:
+    prefix = f"rows[{index}]"
+    workflow_results = row.get("workflowResults")
+    if not isinstance(workflow_results, dict):
+        raise ValidationError(f"{prefix}.workflowResults must be an object")
+    required = REQUIRED_WORKFLOWS[identity]
+    if set(workflow_results) != set(required):
+        raise ValidationError(
+            f"{prefix}.workflowResults must contain exactly the required workflow IDs"
+        )
+    statuses: dict[str, str] = {}
+    for workflow_id in required:
+        result = workflow_results[workflow_id]
+        workflow_prefix = f"{prefix}.workflowResults[{workflow_id!r}]"
+        if not isinstance(result, dict):
+            raise ValidationError(f"{workflow_prefix} must be an object")
+        workflow_status = _require_string(result.get("status"), f"{workflow_prefix}.status")
+        if workflow_status not in ALLOWED_WORKFLOW_STATUSES:
+            raise ValidationError(
+                f"{workflow_prefix}.status must be one of {sorted(ALLOWED_WORKFLOW_STATUSES)}"
+            )
+        if workflow_status == "fail":
+            _require_string(result.get("notes"), f"{workflow_prefix}.notes")
+        statuses[workflow_id] = workflow_status
+    if row["status"] == "pass" and any(status != "pass" for status in statuses.values()):
+        raise ValidationError(f"{prefix}.workflowResults must all pass for a passing row")
+    if row["status"] == "fail" and all(status == "pass" for status in statuses.values()):
+        raise ValidationError(f"{prefix}.workflowResults must record a failed workflow")
+
+
 def validate_matrix(matrix: Any) -> dict[str, int]:
     if not isinstance(matrix, dict):
         raise ValidationError("matrix root must be an object")
     if matrix.get("artifact") != "melodee.r4.current-client-acceptance":
         raise ValidationError("matrix artifact name is invalid")
-    if matrix.get("schemaVersion") != 2:
-        raise ValidationError("matrix schemaVersion must be 2")
+    if matrix.get("schemaVersion") != 3:
+        raise ValidationError("matrix schemaVersion must be 3")
+    workflow_schema = matrix.get("workflowSchema")
+    expected_workflow_schema = {
+        "statusValues": sorted(ALLOWED_WORKFLOW_STATUSES),
+        "requiredByRow": {
+            f"{client}/{surface}": list(workflows)
+            for (client, surface), workflows in sorted(REQUIRED_WORKFLOWS.items())
+        },
+    }
+    if workflow_schema != expected_workflow_schema:
+        raise ValidationError("workflowSchema does not match the required R4 workflow matrix")
     status = _require_string(matrix.get("status"), "status")
     if status not in ALLOWED_STATUSES:
         raise ValidationError(f"status must be one of {sorted(ALLOWED_STATUSES)}")
@@ -126,6 +218,7 @@ def validate_matrix(matrix: Any) -> dict[str, int]:
         counts[row_status] += 1
         if row_status != "pending-external":
             _validate_result_row(row, index)
+            _validate_workflow_results(row, index, identity)
 
     if seen != EXPECTED_ROWS:
         raise ValidationError(f"missing expected client surfaces: {sorted(EXPECTED_ROWS - seen)}")

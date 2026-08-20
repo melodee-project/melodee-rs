@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import tempfile
 import unittest
@@ -24,6 +25,18 @@ class RehearsalInputTests(unittest.TestCase):
             count = MODULE.playlist_seed_count(songs, 20)
             self.assertLessEqual(count, songs * 20)
             self.assertEqual(count, min(max(200, songs // 5), songs * 20))
+            pairs = {
+                MODULE.playlist_seed_pair(sequence, songs, 20)
+                for sequence in range(1, count + 1)
+            }
+            self.assertEqual(len(pairs), count)
+
+            user_count = MODULE.user_song_seed_count(songs, 10)
+            user_pairs = {
+                MODULE.user_song_seed_pair(sequence, songs, 10)
+                for sequence in range(1, user_count + 1)
+            }
+            self.assertEqual(len(user_pairs), user_count)
 
     def test_malformed_database_url_fails_without_echoing_credentials(self) -> None:
         with self.assertRaisesRegex(ValueError, "database URL") as context:
@@ -31,6 +44,111 @@ class RehearsalInputTests(unittest.TestCase):
                 "postgres://operator:super-secret@example.invalid"
             )
         self.assertNotIn("super-secret", str(context.exception))
+
+    def test_library_path_maps_fail_closed_before_target_creation(self) -> None:
+        invalid = [
+            "relative=library",
+            "/music=../library",
+            "/music=/absolute",
+            "/music=library\\nested",
+            "/music/../other=library",
+            "/music=library\x00suffix",
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            canonical = Path(directory) / "canonical"
+            canonical.mkdir()
+            with patch.object(MODULE, "create_db") as create_db:
+                for value in invalid:
+                    with self.subTest(value=value), self.assertRaisesRegex(
+                        ValueError, "invalid --library-path-map"
+                    ):
+                        MODULE.drill(
+                            1,
+                            source_url="postgres://operator@example.invalid/legacy",
+                            library_path_maps=[value],
+                            canonical_root=canonical,
+                            source_backup=canonical / "backup.dump",
+                        )
+            create_db.assert_not_called()
+
+    def test_baseline_artifact_schema_is_redacted_and_fail_closed(self) -> None:
+        evidence = json.loads(
+            (ROOT / "design" / "evidence" / "r4" / "rehearsal-drill-12000.json").read_text()
+        )
+        baseline = MODULE.validate_baseline_artifact(evidence["baseline"])
+        self.assertEqual(baseline["artifact"], "melodee.legacy-baseline")
+
+        malformed = json.loads(json.dumps(baseline))
+        malformed["source_read_only"]["transaction_read_only"] = False
+        with self.assertRaisesRegex(ValueError, "not transaction read-only"):
+            MODULE.validate_baseline_artifact(malformed)
+
+        malformed = json.loads(json.dumps(baseline))
+        malformed["configuration_fingerprint"]["settings"] = [
+            {"key": "smtp.password", "value": "secret"}
+        ]
+        malformed["configuration_fingerprint"]["settings_keys"] = ["smtp.password"]
+        with self.assertRaisesRegex(ValueError, "not redacted or hashed"):
+            MODULE.validate_baseline_artifact(malformed)
+
+    def test_search_status_requires_activated_authoritative_generation(self) -> None:
+        status = {
+            "projection": {"latest_rebuild_status": "activated"},
+            "generation": {
+                "artists": 2,
+                "releases": 3,
+                "tracks": 4,
+                "total": 9,
+                "schema_version": 1,
+            },
+            "generation_error_code": None,
+            "generation_error": None,
+        }
+        self.assertIs(
+            MODULE.validate_search_status(
+                status,
+                {"artists": 2, "releases": 3, "tracks": 4},
+            ),
+            status,
+        )
+
+        malformed = json.loads(json.dumps(status))
+        malformed["projection"]["latest_rebuild_status"] = "failed"
+        with self.assertRaisesRegex(ValueError, "activated rebuild"):
+            MODULE.validate_search_status(
+                malformed,
+                {"artists": 2, "releases": 3, "tracks": 4},
+            )
+
+        malformed = json.loads(json.dumps(status))
+        malformed["generation"]["tracks"] = 5
+        with self.assertRaisesRegex(ValueError, "tracks count"):
+            MODULE.validate_search_status(
+                malformed,
+                {"artists": 2, "releases": 3, "tracks": 4},
+            )
+
+    def test_snapshot_search_probe_comes_from_authority_and_requires_all_classes(self) -> None:
+        with patch.object(
+            MODULE,
+            "psql",
+            return_value='["Alpha Band", "Alpha Crew", "東京事変", "AC/DC"]',
+        ) as query:
+            probe = MODULE.build_search_probe(True, "migrated-target")
+        query.assert_called_once()
+        self.assertEqual(probe["prefix"], "Alp")
+        self.assertEqual(probe["prefix_expected"], "Alpha Band")
+        self.assertEqual(
+            {case[0] for case in probe["queries"]},
+            {"exact", "normalized", "unicode", "punctuation", "broad", "low_selectivity"},
+        )
+        self.assertIn("Alpha Band", probe["queries"][0][1])
+        self.assertNotIn("Alpha Band", MODULE._fingerprint_search_value("Alpha Band"))
+
+    def test_snapshot_search_probe_fails_when_required_representatives_are_absent(self) -> None:
+        with patch.object(MODULE, "psql", return_value='["Only Artist"]'):
+            with self.assertRaisesRegex(RuntimeError, "Unicode Artist"):
+                MODULE.build_search_probe(True)
 
     def test_synthetic_shape_is_bounded_before_database_creation(self) -> None:
         with self.assertRaisesRegex(ValueError, "between 1 and 10000000"):
@@ -51,8 +169,38 @@ class RehearsalInputTests(unittest.TestCase):
 
             link = root / "link.dump"
             link.symlink_to(source)
-            with self.assertRaisesRegex(ValueError, "regular"):
+            with self.assertRaisesRegex(ValueError, "symlink"):
                 MODULE.validate_backup_artifact(link)
+
+    @unittest.skipUnless(os.name == "posix", "requires POSIX no-follow support")
+    def test_backup_validation_rejects_special_files_without_opening_them(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fifo = Path(directory) / "backup.fifo"
+            os.mkfifo(fifo)
+            with self.assertRaisesRegex(ValueError, "regular"):
+                MODULE.validate_backup_artifact(fifo)
+
+    @unittest.skipUnless(os.name == "posix", "requires POSIX descriptor passing")
+    def test_backup_validation_keeps_pg_restore_on_the_held_descriptor(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            backup = Path(directory) / "backup.dump"
+            backup.write_bytes(b"stable backup bytes")
+            with patch.object(
+                MODULE.subprocess,
+                "run",
+                return_value=SimpleNamespace(
+                    returncode=0,
+                    stdout="; comment\nTABLE DATA public.example\n",
+                ),
+            ) as run:
+                evidence = MODULE.validate_backup_artifact(backup)
+            command = run.call_args.args[0]
+            kwargs = run.call_args.kwargs
+            self.assertEqual(command[:2], ["pg_restore", "--list"])
+            self.assertTrue(command[2].startswith("/proc/self/fd/"))
+            self.assertEqual(len(kwargs["pass_fds"]), 1)
+            self.assertEqual(evidence["bytes"], len(b"stable backup bytes"))
+            self.assertEqual(evidence["toc_entries"], 1)
 
     def test_existing_snapshot_requires_explicit_mapping_and_media_root(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -124,11 +272,20 @@ class RehearsalInputTests(unittest.TestCase):
             target.mkdir()
             link = root / "link"
             link.symlink_to(target, target_is_directory=True)
-            with self.assertRaisesRegex(ValueError, "non-symlink"):
+            with self.assertRaisesRegex(ValueError, "symlink"):
                 MODULE.validate_snapshot_config(
                     "postgres://operator@example.invalid/legacy",
                     ["/srv/music=library"],
                     link,
+                )
+
+            parent_link = root / "parent-link"
+            parent_link.symlink_to(target, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, "symlink component"):
+                MODULE.validate_snapshot_config(
+                    "postgres://operator@example.invalid/legacy",
+                    ["/srv/music=library"],
+                    parent_link / "nested",
                 )
 
     def test_snapshot_query_failure_redacts_connection_details(self) -> None:

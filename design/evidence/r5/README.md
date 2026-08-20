@@ -339,6 +339,178 @@ Documentation impact:
 - Updated counts: 45 packages total — 26 Complete, 13 Partial, 6 Not started; 239 requirements —
   211 tested, 9 implemented, 12 in-progress, 7 deferred.
 
+### R4.5 workflow-complete client evidence schema — 2026-08-20
+
+- Exact files changed: `scripts/validate_r4_client_acceptance.py`,
+  `tests/python/test_r4_client_acceptance.py`,
+  `compatibility/clients/r4/acceptance-matrix.json`,
+  `compatibility/clients/r4/README.md`, the R4 report, this report, and
+  `IMPLMENTATION_OUTSTANDING.md`.
+- Requirements: the current-client artifact now requires an explicit result for every workflow
+  named by its row, preventing a partial checklist from being reported as a full physical-client
+  pass. The artifact remains `pending-external`; R4.5 and R5.3/R5.5 remain non-terminal.
+- ADRs: no ADR was accepted or applied. ADR-0149, ADR-0150, and ADR-0151 remain Proposed.
+- Tests: the focused validator suite passed 8/8, Python compilation passed, and the committed
+  schema-v3 matrix validated with 0 pass, 0 fail, and 5 pending-external rows. The subsequent
+  exact local `MELODEE_TEST_DATABASE_URL=postgres://... ./scripts/check.sh` exited 0 with 216
+  Python tests, Admin UI 44 files/248 unit tests, the complete workspace/PostgreSQL Rust and
+  doctest matrix, formatting, workspace Clippy with `-D warnings`, and cargo-deny.
+- Compatibility impact: none; no native v1, OpenSubsonic, or Jellyfin wire contract changed.
+- Data/migration impact: none; no database, source snapshot, canonical media, or client endpoint
+  was contacted.
+- Security/data-loss impact: positive fail-closed evidence validation; missing workflow results,
+  failed workflows without notes, secret-shaped values, and non-repository evidence paths remain
+  rejected.
+- Performance/operational impact: bounded local JSON validation only.
+- Documentation impact: Updated — the R4 report, this report, the R4 client README, and
+  `IMPLMENTATION_OUTSTANDING.md`; no public documentation changed because runtime behavior is
+  unchanged.
+- Remaining risks and owner: release owner/operator still owns current migrated physical-client
+  execution and sanitized workflow evidence.
+- External input still required: current client binaries/devices, disposable migrated target, and
+  operator participation for all five matrix rows.
+- Updated counts: 45 packages total — 26 Complete, 13 Partial, 6 Not started; 239 requirements —
+  211 tested, 9 implemented, 12 in-progress, 7 deferred.
+
+### R4.3/R5.1 migrated-catalog search probe non-vacuity — 2026-08-20
+
+- Exact files changed: `scripts/legacy_rehearsal.py`,
+  `tests/python/test_legacy_rehearsal.py`, this report, the R4 report,
+  `design/evidence/r5/release-gate-report.md`, and `IMPLMENTATION_OUTSTANDING.md`.
+- Requirements: existing-snapshot search probes now derive representatives from migrated
+  PostgreSQL Artist authority, require all six search classes to return authoritative values, and
+  redact snapshot-derived catalog values from machine-readable evidence. No requirement became
+  terminal; R4.3 and R5.1 remain Partial.
+- ADRs: accepted ADR-0148 remains applicable; no ADR was accepted or applied. ADR-0149,
+  ADR-0150, and ADR-0151 remain Proposed.
+- Tests: `python3 -m unittest tests/python/test_legacy_rehearsal.py -v` passed 21/21;
+  `python3 -m py_compile scripts/legacy_rehearsal.py` passed; the isolated five-song rehearsal
+  passed migration verification, search rebuild, all six query classes, bounded autocomplete,
+  backup/restore comparison, freeze, and rollback. No production snapshot was accessed.
+- Compatibility impact: none; all three wire products and their public contracts remain unchanged
+  and separate.
+- Data/migration impact: synthetic disposable databases only; existing-snapshot mode performs a
+  read-only authority query after import and does not modify source or canonical media.
+- Security/data-loss impact: positive fail-closed validation; missing Unicode, punctuation, or
+  low-selectivity representatives stop the rehearsal instead of producing a false green result,
+  and snapshot evidence does not retain catalog text.
+- Performance/operational impact: one bounded authority query plus the existing bounded search
+  measurements; no runtime server path changed.
+- Documentation impact: Updated — this report, the R4 report, the release-gate report, and
+  `IMPLMENTATION_OUTSTANDING.md`; no public documentation changed.
+- Remaining risks and owner: production-sized search sizing, headroom, and operator diagnostics
+  still require the release owner/operator and an approved isolated snapshot.
+- External input still required: approved snapshot URL, backup, canonical mapping, and rehearsal
+  authorization.
+- Updated counts: 45 packages total — 26 Complete, 13 Partial, 6 Not started; 239 requirements —
+  211 tested, 9 implemented, 12 in-progress, 7 deferred.
+
+### R4.3 search diagnostic and query-matrix rehearsal — 2026-08-20
+
+- Exact files changed: `scripts/legacy_rehearsal.py`,
+  `tests/python/test_legacy_rehearsal.py`, the R4 report, this report,
+  `design/evidence/r5/release-gate-report.md`, and `IMPLMENTATION_OUTSTANDING.md`.
+- Requirements: local R4.3/R5.3 evidence now validates the activated search generation against
+  migrated counts and schema, bounded prefix autocomplete, six query classes, result limits, index
+  size, and latency percentiles. R4.3 remains Partial; no requirement was marked terminal.
+- ADRs: accepted ADR-0148 remains applicable; no ADR was accepted or applied. ADR-0149, ADR-0150,
+  and ADR-0151 remain Proposed.
+- Tests: focused rehearsal tests passed 19/19. The five-song isolated drill passed against the
+  rebuilt target with an activated 50/100/5 generation, schema 3, 135,246-byte index, bounded
+  prefix results, and six query classes. The subsequent exact local
+  `MELODEE_TEST_DATABASE_URL=postgres://... ./scripts/check.sh` exited 0 with 209 Python tests,
+  Admin UI 44 files/248 unit tests, the complete workspace/PostgreSQL Rust and doctest matrix,
+  formatting, workspace Clippy with `-D warnings`, and cargo-deny. This remains synthetic local
+  evidence only.
+- Compatibility impact: none; all three compatibility products retain their separate wire
+  contracts and no client behavior changed.
+- Data/migration impact: disposable fixture-only Unicode/punctuation search values; no production
+  source, target, backup, or canonical media was accessed.
+- Security/data-loss impact: positive fail-closed diagnostic and query-limit checks; no destructive
+  migration behavior changed.
+- Performance/operational impact: bounded diagnostic, autocomplete, query, index-size, and timing
+  measurements; no production workload changed.
+- Documentation impact: Updated — the R4 report, this report, the release-gate report, and
+  `IMPLMENTATION_OUTSTANDING.md`; no public documentation changed because this is internal tooling.
+- Remaining risks and owner: release owner/operator must provide the production-sized migrated
+  target, search headroom measurements, and operator-triggered rebuild/status/retry evidence.
+- External input still required: approved isolated production snapshot/canonical mapping and
+  explicit authorization for production-sized rehearsal operations.
+- Updated counts: 45 packages total — 26 Complete, 13 Partial, 6 Not started; 239 requirements —
+  211 tested, 9 implemented, 12 in-progress, 7 deferred.
+
+### R4.1/R5.1 baseline and path-map fail-closed validation — 2026-08-20
+
+- Exact files changed: `scripts/legacy_rehearsal.py`,
+  `tests/python/test_legacy_rehearsal.py`, the R4 report, this report,
+  `design/evidence/r5/release-gate-report.md`, and `IMPLMENTATION_OUTSTANDING.md`.
+- Requirements: malformed `--library-path-map` values now fail before target creation using rules
+  aligned with the Rust parser. The rehearsal validates the stable CLI baseline artifact's frozen
+  52-table coverage, identity/schema linkage, v2 marker, read-only facts, media totals, and
+  redacted configuration fingerprint. R4.1/R5.1 remain Partial and no terminal requirement
+  status was inferred.
+- ADRs: accepted ADR-0148 remains applicable; no ADR was accepted or applied. ADR-0149,
+  ADR-0150, and ADR-0151 remain Proposed.
+- Tests: focused rehearsal tests passed 18/18. The five-track isolated drill passed against the
+  actual CLI baseline JSON, including zero verification mismatch gaps, full restored catalog/media
+  equality, freeze, failed-target retention, and canonical-media immutability. This is synthetic
+  local evidence only. The subsequent exact local `MELODEE_TEST_DATABASE_URL=postgres://... ./scripts/check.sh`
+  exited 0 with 208 Python tests, Admin UI 44 files/248 unit tests, the complete
+  workspace/PostgreSQL Rust and doctest matrix, formatting, workspace Clippy with `-D warnings`,
+  and cargo-deny.
+- Compatibility impact: none; all three compatibility products retain their existing contracts.
+- Data/migration impact: malformed mappings fail before any rehearsal target is created; no
+  production source, target, backup, or canonical media was accessed.
+- Security/data-loss impact: positive fail-closed correction for partial-target creation and false
+  or improperly redacted baseline evidence.
+- Performance/operational impact: bounded preflight string/JSON checks; no production migration
+  algorithm changed.
+- Documentation impact: Updated — the R4 report, this report, the release-gate report, and
+  `IMPLMENTATION_OUTSTANDING.md`; no public documentation changed because this is internal tooling.
+- Remaining risks and owner: release owner/operator must supply the approved production snapshot,
+  backup, canonical mapping, topology, restore target, and authorization.
+- External input still required: approved isolated production snapshot/backup/canonical mapping and
+  explicit authorization for production-equivalent rehearsal operations.
+- Updated counts: 45 packages total — 26 Complete, 13 Partial, 6 Not started; 239 requirements —
+  211 tested, 9 implemented, 12 in-progress, 7 deferred.
+
+### R4.8/R5.1 synthetic restore-content and fixture closure — 2026-08-20
+
+- Exact files changed: `scripts/legacy_rehearsal.py`,
+  `tests/python/test_legacy_rehearsal.py`, the R4 report, this report,
+  `design/evidence/r5/release-gate-report.md`, and `IMPLMENTATION_OUTSTANDING.md`.
+- Requirements: the synthetic rehearsal now validates its generated backup before restore and
+  compares restored Artist, Release, Track, and user counts plus media file count and byte totals
+  against the target. Bounded synthetic playlist and user-state seeding now guarantees unique
+  source identity pairs, preventing fixture duplicates from appearing as migration loss.
+  R4.8/R5.1 remain Partial; no terminal status was inferred from synthetic evidence.
+- ADRs: accepted ADR-0148 remains the migration tooling authority; no ADR was accepted or applied.
+  ADR-0149, ADR-0150, and ADR-0151 remain Proposed.
+- Tests: `python3 -m unittest tests/python/test_legacy_rehearsal.py -v` passed 16/16. The isolated
+  `python3 scripts/legacy_rehearsal.py drill --songs 5` passed end to end with zero verification
+  mismatch gaps, full restored catalog/media equality, backup validation, freeze, failed-target
+  retention, and canonical-media immutability. The post-change exact
+  `MELODEE_TEST_DATABASE_URL=postgres://... ./scripts/check.sh` exited 0 with 208 Python tests,
+  Admin UI 44 files/248 unit tests, the complete workspace/PostgreSQL Rust and doctest matrix,
+  formatting, workspace Clippy with `-D warnings`, and cargo-deny.
+- Compatibility impact: none; all three compatibility products retain their separate existing
+  wire contracts and no client behavior changed.
+- Data/migration impact: only disposable local rehearsal databases were used; no production source,
+  target, backup, or canonical media was accessed. The production snapshot and restore-target
+  evidence remain outstanding.
+- Security/data-loss impact: positive; restore verification covers complete measured content shape,
+  while unique synthetic identity pairs prevent false source/target mismatch reports.
+- Performance/operational impact: bounded aggregate restore checks and deterministic fixture
+  generation; no production migration path changed.
+- Documentation impact: Updated — the R4 report, this report, the release-gate report, and
+  `IMPLMENTATION_OUTSTANDING.md`; no public documentation changed because this is internal tooling.
+- Remaining risks and owner: release owner/operator must run the approved real snapshot, backup,
+  topology, restore, traffic-switch, and rollback rehearsals.
+- External input still required: isolated production snapshot/backup/canonical mapping and explicit
+  authorization for production-equivalent restore/cutover operations.
+- Updated counts: 45 packages total — 26 Complete, 13 Partial, 6 Not started; 239 requirements —
+  211 tested, 9 implemented, 12 in-progress, 7 deferred.
+
 ### R5.1 podcast publication root descriptor reuse — 2026-08-20
 
 - Exact files changed: `apps/melodee-server/src/podcast_worker.rs`, this report, the R5
@@ -1973,6 +2145,39 @@ source/destination sentinels remained unchanged. No public contract or migration
 - Updated counts: 45 packages total — 26 Complete, 13 Partial, 6 Not started; 239 requirements —
   211 tested, 9 implemented, 12 in-progress, 7 deferred.
 
+### R4.6/R5.1 integration-probe artifact and parser hardening — 2026-08-20
+
+- Exact files changed: `scripts/r4_integration_probe.py`,
+  `scripts/check_command_help.py`, `tests/python/test_r4_integration_probe.py`,
+  `tests/python/test_command_help.py`, the R4 report, this report, the release-gate report, and
+  `IMPLMENTATION_OUTSTANDING.md`.
+- Requirements: local R4.6/R5.1 evidence now validates the probe's stable redacted schema, rejects
+  malformed OIDC/XML input as controlled failures, enforces bounded range metadata, and audits the
+  integration probe's help path with a PATH-only environment. No requirement was marked terminal;
+  production integration and restore-topology evidence remain open.
+- ADRs: no ADR was accepted or applied. ADR-0149, ADR-0150, and ADR-0151 remain Proposed.
+- Tests: the focused probe and command-help suites passed 15/15; compilation, probe help, and the
+  command-help audit passed. The subsequent exact `cargo fmt --all &&
+  MELODEE_TEST_DATABASE_URL=postgres://... ./scripts/check.sh` exited 0 with 212 Python tests,
+  Admin UI 44 files/248 unit tests, the complete workspace/PostgreSQL Rust and doctest matrix,
+  formatting, workspace Clippy with warnings denied, and cargo-deny.
+- Compatibility impact: none; all three compatibility products retain their existing wire
+  contracts.
+- Data/migration impact: none; no source, target, canonical media, backup, or external endpoint
+  was accessed or modified.
+- Security/data-loss impact: positive fail-closed correction; evidence cannot contain secret-shaped
+  values, XML entity declarations are rejected, and response-shape errors cannot bypass the probe's
+  controlled failure path.
+- Performance/operational impact: bounded in-memory validation only; no production runtime change.
+- Documentation impact: Updated — the R4 report, this R5 report, the release-gate report, and
+  `IMPLMENTATION_OUTSTANDING.md`; no public documentation changed.
+- Remaining risks and owner: release owner/operator must provide and run approved production
+  endpoints and restore targets; R4.6 and R5.1 remain Partial.
+- External input still required: approved endpoint/test-account set, backup/restore targets, and
+  authorization for external validation.
+- Updated counts: 45 packages total — 26 Complete, 13 Partial, 6 Not started; 239 requirements —
+  211 tested, 9 implemented, 12 in-progress, 7 deferred.
+
 ### R5.1 bounded backup-probe descriptor fencing — 2026-08-20
 
 - Exact files changed: `scripts/r4_integration_probe.py`,
@@ -2129,6 +2334,41 @@ source/destination sentinels remained unchanged. No public contract or migration
   topology, and restore-target review remain with the release owner/operator.
 - External input still required: approved isolated production snapshot/backup/canonical mapping
   and authorization for production migration and restore drills.
+- Updated counts: 45 packages total — 26 Complete, 13 Partial, 6 Not started; 239 requirements —
+  211 tested, 9 implemented, 12 in-progress, 7 deferred.
+
+### R5.1 rehearsal backup descriptor fencing — 2026-08-20
+
+- Exact files changed: `scripts/legacy_rehearsal.py`,
+  `tests/python/test_legacy_rehearsal.py`, this report, the R5 release-gate report, and
+  `IMPLMENTATION_OUTSTANDING.md`.
+- Requirements: R4.1/R4.8 and R5.1 local rehearsal tooling now validates an operator-supplied
+  backup through a component-by-component descriptor-relative `O_NOFOLLOW` walk, rejects FIFOs and
+  other non-regular leaves without reading them, hashes the held descriptor, and passes the same
+  descriptor to `pg_restore --list`. Existing-snapshot canonical roots now reject symlinked
+  ancestors before target creation. No requirement was marked terminal; R4.1, R4.8, and R5.1
+  remain Partial pending real snapshot, topology, and restore evidence.
+- ADRs: accepted ADR-0148 remains the migration tooling authority; no ADR was accepted or applied.
+  ADR-0149, ADR-0150, and ADR-0151 remain Proposed.
+- Tests: `python3 -m unittest tests/python/test_legacy_rehearsal.py -v` passed 16/16; the
+  command-help audit passed for 78 CLI paths plus the rehearsal drill. The post-change exact
+  `MELODEE_TEST_DATABASE_URL=postgres://... ./scripts/check.sh` exited 0 with 206 Python tests,
+  248 Admin UI unit tests, the complete workspace/PostgreSQL Rust and doctest matrix, formatting,
+  workspace Clippy with `-D warnings`, and cargo-deny.
+- Compatibility impact: none; native v1, OpenSubsonic, and Jellyfin contracts are unchanged.
+- Data/migration impact: the source backup and canonical root remain read-only inputs; validation
+  fails before target creation when the configured paths are unsafe.
+- Security/data-loss impact: positive fail-closed correction; pathname replacement cannot change
+  which backup bytes are hashed or inspected by `pg_restore --list`, and special files cannot block
+  the validator.
+- Performance/operational impact: one bounded descriptor walk and one bounded sequential hash per
+  validated backup; no production endpoint or database was contacted.
+- Documentation impact: None — the operator command and valid input contract are unchanged; the
+  internal evidence and implementation ledger were updated.
+- Remaining risks and owner: release owner/operator still owns the approved production snapshot,
+  backup integrity, real topology, and isolated restore drill.
+- External input still required: approved isolated production snapshot/backup/canonical mapping and
+  authorization for production migration and restore rehearsal.
 - Updated counts: 45 packages total — 26 Complete, 13 Partial, 6 Not started; 239 requirements —
   211 tested, 9 implemented, 12 in-progress, 7 deferred.
 

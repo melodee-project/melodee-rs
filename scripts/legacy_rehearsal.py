@@ -37,6 +37,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -59,6 +60,11 @@ SOURCE_DB = "legacy_rehearsal_source"
 TARGET_DB = "legacy_rehearsal_target"
 RESTORE_DB = "legacy_rehearsal_restore"
 DEFAULT_LIBRARY_PATH_MAP = "/music=library"
+BASELINE_ARTIFACT = "melodee.legacy-baseline"
+BASELINE_SCHEMA_VERSION = 1
+FROZEN_SOURCE_TABLE_COUNT = 52
+HEX_DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
+SEARCH_TOKEN_RE = re.compile(r"[^\W_]+", re.UNICODE)
 
 
 def validate_database_url(value: str) -> None:
@@ -76,6 +82,334 @@ def validate_drill_config(songs: int) -> None:
         raise ValueError("songs must be between 1 and 10000000")
 
 
+def validate_library_path_maps(values: list[str]) -> None:
+    """Validate path mappings before the rehearsal creates any target state.
+
+    This intentionally mirrors ``parse_library_path_maps`` in the Rust CLI.
+    The CLI remains the authority for migration semantics; this early check
+    only prevents an operator typo from creating a target before the CLI can
+    reject the same input.
+    """
+    seen_legacy_roots: set[str] = set()
+    for value in values:
+        if "=" not in value:
+            raise ValueError(f"invalid --library-path-map {value!r}: expected A=B")
+        legacy, raw_prefix = value.split("=", 1)
+        if "\x00" in legacy or "\x00" in raw_prefix:
+            raise ValueError(f"invalid --library-path-map {value!r}: NUL is not allowed")
+        legacy = legacy.strip().rstrip("/")
+        raw_prefix = raw_prefix.strip()
+        if raw_prefix.startswith("/") or "\\" in raw_prefix:
+            raise ValueError(
+                f"invalid --library-path-map {value!r}: relative prefix must not be absolute or contain backslashes"
+            )
+        prefix = raw_prefix.strip("/")
+        if not legacy or not legacy.startswith("/"):
+            raise ValueError(
+                f"invalid --library-path-map {value!r}: legacy path must be absolute"
+            )
+        if any(component == ".." for component in legacy.split("/")):
+            raise ValueError(
+                f"invalid --library-path-map {value!r}: legacy path may not contain '..'"
+            )
+        if prefix and any(component in {"", ".", ".."} for component in prefix.split("/")):
+            raise ValueError(
+                f"invalid --library-path-map {value!r}: relative prefix has unsafe components"
+            )
+        if legacy in seen_legacy_roots:
+            raise ValueError(
+                f"invalid --library-path-map {value!r}: duplicate legacy root"
+            )
+        seen_legacy_roots.add(legacy)
+
+
+def validate_baseline_artifact(value: object) -> dict:
+    """Validate the stable, redacted baseline artifact emitted by the CLI."""
+    if not isinstance(value, dict):
+        raise ValueError("baseline artifact must be a JSON object")
+    if value.get("artifact") != BASELINE_ARTIFACT:
+        raise ValueError("baseline artifact name is unsupported")
+    if value.get("schema_version") != BASELINE_SCHEMA_VERSION:
+        raise ValueError("baseline artifact schema version is unsupported")
+    if not isinstance(value.get("captured_at"), str) or not value["captured_at"]:
+        raise ValueError("baseline artifact captured_at is missing")
+    if value.get("table_count") != FROZEN_SOURCE_TABLE_COUNT:
+        raise ValueError("baseline artifact does not cover the frozen source table set")
+
+    schema_fingerprint = value.get("schema_fingerprint")
+    source_identity = value.get("source_identity")
+    if not isinstance(schema_fingerprint, str) or not schema_fingerprint:
+        raise ValueError("baseline schema fingerprint is missing")
+    if (
+        not isinstance(source_identity, str)
+        or not source_identity.startswith("pg-source-sha256:")
+        or ":schema:" not in source_identity
+        or source_identity.split(":schema:", 1)[1] != schema_fingerprint
+    ):
+        raise ValueError("baseline source identity is malformed")
+    snapshot_marker = value.get("snapshot_marker")
+    if (
+        not isinstance(snapshot_marker, str)
+        or not snapshot_marker.startswith("legacy-marker-v2:")
+        or not HEX_DIGEST_RE.fullmatch(snapshot_marker.removeprefix("legacy-marker-v2:"))
+    ):
+        raise ValueError("baseline snapshot marker is malformed")
+
+    read_only = value.get("source_read_only")
+    if not isinstance(read_only, dict) or any(
+        not isinstance(read_only.get(key), bool)
+        for key in ("transaction_read_only", "default_transaction_read_only", "in_recovery")
+    ):
+        raise ValueError("baseline source read-only facts are malformed")
+    if not read_only["transaction_read_only"] or not read_only["default_transaction_read_only"]:
+        raise ValueError("baseline source is not transaction read-only")
+
+    domains = value.get("domains")
+    if not isinstance(domains, list) or not domains:
+        raise ValueError("baseline domains are missing")
+    domain_names: set[str] = set()
+    for domain in domains:
+        if not isinstance(domain, dict) or not isinstance(domain.get("domain"), str):
+            raise ValueError("baseline domain entry is malformed")
+        name = domain["domain"]
+        if not name or name in domain_names:
+            raise ValueError("baseline domain names must be non-empty and unique")
+        domain_names.add(name)
+        rows = domain.get("rows")
+        if not isinstance(rows, int) or isinstance(rows, bool) or rows < 0:
+            raise ValueError("baseline domain row count is malformed")
+        for bound in ("min_pk", "max_pk"):
+            if domain.get(bound) is not None and not isinstance(domain[bound], int):
+                raise ValueError("baseline domain primary-key bounds are malformed")
+
+    anomalies = value.get("anomalies")
+    if not isinstance(anomalies, list):
+        raise ValueError("baseline anomalies are malformed")
+    for anomaly in anomalies:
+        if (
+            not isinstance(anomaly, dict)
+            or not isinstance(anomaly.get("code"), str)
+            or not anomaly["code"]
+            or not isinstance(anomaly.get("count"), int)
+            or isinstance(anomaly["count"], bool)
+            or anomaly["count"] < 0
+        ):
+            raise ValueError("baseline anomaly entry is malformed")
+
+    media = value.get("media")
+    if (
+        not isinstance(media, dict)
+        or not isinstance(media.get("file_count"), int)
+        or isinstance(media["file_count"], bool)
+        or media["file_count"] < 0
+        or not isinstance(media.get("total_bytes"), int)
+        or isinstance(media["total_bytes"], bool)
+        or media["total_bytes"] < 0
+    ):
+        raise ValueError("baseline media totals are malformed")
+
+    configuration = value.get("configuration_fingerprint")
+    if (
+        not isinstance(configuration, dict)
+        or configuration.get("algorithm") != "sha256-v1"
+        or not isinstance(configuration.get("settings_keys"), list)
+        or not isinstance(configuration.get("settings"), list)
+        or not isinstance(configuration.get("library_root_count"), int)
+        or isinstance(configuration["library_root_count"], bool)
+        or configuration["library_root_count"] < 0
+    ):
+        raise ValueError("baseline configuration fingerprint is malformed")
+    settings_keys = configuration["settings_keys"]
+    if any(not isinstance(key, str) or not key for key in settings_keys):
+        raise ValueError("baseline configuration setting keys are malformed")
+    settings = configuration["settings"]
+    if [entry.get("key") for entry in settings if isinstance(entry, dict)] != settings_keys:
+        raise ValueError("baseline configuration setting keys do not match fingerprints")
+    for setting in settings:
+        if not isinstance(setting, dict) or not isinstance(setting.get("key"), str):
+            raise ValueError("baseline configuration setting is malformed")
+        if setting.get("redacted") is True:
+            if set(setting) != {"key", "redacted"}:
+                raise ValueError("redacted baseline setting contains extra material")
+        elif set(setting) == {"key", "sha256"} and isinstance(setting["sha256"], str) and HEX_DIGEST_RE.fullmatch(setting["sha256"]):
+            continue
+        else:
+            raise ValueError("baseline configuration setting is not redacted or hashed")
+    if len(settings_keys) != len(set(settings_keys)):
+        raise ValueError("baseline configuration setting keys are not unique")
+    return value
+
+
+def validate_search_status(value: object, expected_counts: dict[str, int]) -> dict:
+    """Validate the CLI diagnostic after a rebuild without accepting ambiguity."""
+    if not isinstance(value, dict):
+        raise ValueError("search status must be a JSON object")
+    projection = value.get("projection")
+    if not isinstance(projection, dict):
+        raise ValueError("search status projection is missing")
+    generation = value.get("generation")
+    if not isinstance(generation, dict):
+        raise ValueError("search status has no active generation")
+    if value.get("generation_error_code") is not None or value.get("generation_error") is not None:
+        raise ValueError("search status reports a generation error")
+    if projection.get("latest_rebuild_status") != "activated":
+        raise ValueError("search status does not report an activated rebuild")
+    for key in ("artists", "releases", "tracks"):
+        actual = generation.get(key)
+        expected = expected_counts.get(key)
+        if not isinstance(actual, int) or isinstance(actual, bool) or actual != expected:
+            raise ValueError(f"search status {key} count does not match migrated authority")
+    total = generation.get("total")
+    expected_total = sum(expected_counts.get(key, 0) for key in ("artists", "releases", "tracks"))
+    if not isinstance(total, int) or isinstance(total, bool) or total != expected_total:
+        raise ValueError("search status total does not match migrated authority")
+    if not isinstance(generation.get("schema_version"), int) or generation["schema_version"] < 1:
+        raise ValueError("search status schema version is malformed")
+    return value
+
+
+def _mql_quote(value: str) -> str:
+    """Quote a catalog value for a bounded MQL field expression."""
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def _fingerprint_search_value(value: str) -> str:
+    """Represent a snapshot-derived search value without retaining its text."""
+    return "sha256:" + hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _snapshot_artist_names(db: str) -> list[str]:
+    """Read only searchable Artist names from the migrated PostgreSQL authority."""
+    raw = psql(
+        "SELECT COALESCE(json_agg(canonical_name ORDER BY canonical_name, public_api_id)::text, '[]') "
+        "FROM artists WHERE status IS DISTINCT FROM 'merged'",
+        db,
+    )
+    try:
+        values = json.loads(raw)
+    except json.JSONDecodeError as error:
+        raise RuntimeError("migrated Artist authority returned malformed search data") from error
+    if (
+        not isinstance(values, list)
+        or any(not isinstance(value, str) or not value.strip() for value in values)
+    ):
+        raise RuntimeError("migrated Artist authority returned invalid search values")
+    return [value.strip() for value in values]
+
+
+def build_search_probe(snapshot_mode: bool, db: str = TARGET_DB) -> dict:
+    """Build search probes from synthetic fixtures or migrated authority.
+
+    Snapshot mode must never silently turn an unexercised query class into a
+    passing result. It therefore requires representative Unicode, punctuation,
+    and repeated-token data and keeps the values out of emitted evidence.
+    """
+    if not snapshot_mode:
+        return {
+            "prefix": "reh",
+            "prefix_expected": "Rehearsal Artist ",
+            "queries": [
+                ("exact", 'artist:"Rehearsal Artist 3"', 1, "Rehearsal Artist 3"),
+                ("normalized", "artist:REHEARSAL", 1, "Rehearsal"),
+                ("unicode", "artist:東京事変", 1, "東京事変"),
+                ("punctuation", 'artist:"AC/DC Rehearsal"', 1, "AC/DC Rehearsal"),
+                ("broad", "rehearsal", 1, "Rehearsal"),
+                ("low_selectivity", "artist:Rehearsal", 10, "Rehearsal"),
+            ],
+        }
+
+    names = _snapshot_artist_names(db)
+    safe_names = [
+        name
+        for name in names
+        if not any(ord(character) < 32 for character in name)
+    ]
+    if not safe_names:
+        raise RuntimeError("migrated catalog has no usable Artist names for search validation")
+
+    unicode_name = next(
+        (name for name in safe_names if any(ord(character) > 127 for character in name)),
+        None,
+    )
+    if unicode_name is None:
+        raise RuntimeError("migrated catalog has no Unicode Artist value for search validation")
+    punctuation_name = next(
+        (
+            name
+            for name in safe_names
+            if any(
+                not character.isalnum() and not character.isspace()
+                for character in name
+            )
+        ),
+        None,
+    )
+    if punctuation_name is None:
+        raise RuntimeError(
+            "migrated catalog has no punctuation Artist value for search validation"
+        )
+
+    token_names: dict[str, set[str]] = {}
+    for name in safe_names:
+        for token in SEARCH_TOKEN_RE.findall(name):
+            folded = token.casefold()
+            if len(folded) >= 2:
+                token_names.setdefault(folded, set()).add(name)
+    repeated = sorted(
+        ((len(found), token, sorted(found)) for token, found in token_names.items()),
+        reverse=True,
+    )
+    if not repeated or repeated[0][0] < 2:
+        raise RuntimeError(
+            "migrated catalog has no repeated Artist token for low-selectivity search validation"
+        )
+    _, common_token, common_names = repeated[0]
+    normalized_name = next(
+        (name for name in safe_names if any(character.isalpha() for character in name)),
+        safe_names[0],
+    )
+    normalized_token = next(
+        (
+            token
+            for token in SEARCH_TOKEN_RE.findall(normalized_name)
+            if len(token) >= 2
+        ),
+        normalized_name,
+    )
+    prefix_name = safe_names[0]
+    prefix = prefix_name[: min(3, len(prefix_name))]
+    if not prefix:
+        raise RuntimeError("migrated catalog has an empty Artist autocomplete prefix")
+
+    return {
+        "prefix": prefix,
+        "prefix_expected": prefix_name,
+        "queries": [
+            ("exact", f"artist:{_mql_quote(safe_names[0])}", 1, safe_names[0]),
+            (
+                "normalized",
+                f"artist:{_mql_quote(normalized_token.upper())}",
+                1,
+                normalized_name,
+            ),
+            ("unicode", f"artist:{_mql_quote(unicode_name)}", 1, unicode_name),
+            (
+                "punctuation",
+                f"artist:{_mql_quote(punctuation_name)}",
+                1,
+                punctuation_name,
+            ),
+            ("broad", common_token, 1, common_names[0]),
+            (
+                "low_selectivity",
+                f"artist:{common_token}",
+                min(10, len(common_names)),
+                common_names[0],
+            ),
+        ],
+    }
+
+
 def validate_snapshot_config(
     source_url: str,
     library_path_maps: list[str],
@@ -84,12 +418,15 @@ def validate_snapshot_config(
 ) -> None:
     """Validate external-snapshot inputs before any target is created."""
     validate_database_url(source_url)
+    validate_library_path_maps(library_path_maps)
     if not library_path_maps:
         raise ValueError("an existing snapshot requires at least one --library-path-map")
     if canonical_root is None:
         raise ValueError(
             "an existing snapshot requires --canonical-root so adopted media is validated read-only"
         )
+    if contains_symlink_component(canonical_root):
+        raise ValueError("canonical root path contains a symlink component")
     if canonical_root.is_symlink() or not canonical_root.is_dir():
         raise ValueError("canonical root must be an existing, non-symlink directory")
     if source_backup is None:
@@ -114,40 +451,89 @@ def contains_symlink_component(path: Path) -> bool:
     return False
 
 
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+def open_regular_file_nofollow(path: Path) -> tuple[int, os.stat_result]:
+    """Open an operator-supplied artifact through held directory handles.
+
+    The descriptor is deliberately kept open until ``pg_restore`` has
+    inspected the artifact.  A pathname check followed by a pathname passed
+    to a subprocess would allow a concurrent replacement to change which
+    bytes are validated and restored.
+    """
+    if os.name != "posix":
+        raise ValueError("race-resistant backup validation is unsupported on this platform")
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    directory = getattr(os, "O_DIRECTORY", 0)
+    cloexec = getattr(os, "O_CLOEXEC", 0)
+    nonblock = getattr(os, "O_NONBLOCK", 0)
+    if not nofollow or not directory:
+        raise ValueError("backup validation requires no-follow directory support")
+    absolute = path if path.is_absolute() else Path.cwd() / path
+    components = absolute.parts
+    if not components or any(component == ".." for component in components):
+        raise ValueError("backup artifact path must not contain traversal")
+    flags = os.O_RDONLY | cloexec | nofollow | directory
+    current = os.open(absolute.anchor or ".", flags)
+    try:
+        remaining = components[1:] if absolute.anchor else components
+        for index, component in enumerate(remaining):
+            is_leaf = index == len(remaining) - 1
+            next_flags = os.O_RDONLY | cloexec | nofollow
+            if is_leaf:
+                next_flags |= nonblock
+            else:
+                next_flags |= directory
+            next_fd = os.open(component, next_flags, dir_fd=current)
+            os.close(current)
+            current = next_fd
+        metadata = os.fstat(current)
+        if not stat.S_ISREG(metadata.st_mode):
+            raise ValueError("backup artifact must be a regular, non-symlink file")
+        return current, metadata
+    except (OSError, ValueError) as error:
+        os.close(current)
+        if isinstance(error, ValueError):
+            raise
+        raise ValueError("backup artifact could not be opened safely") from error
 
 
 def validate_backup_artifact(path: Path) -> dict:
     """Validate one pg_dump artifact before it is used for restore evidence."""
-    if path.is_symlink():
-        raise ValueError("backup artifact must be a regular, non-symlink file")
     if contains_symlink_component(path):
         raise ValueError("backup artifact path contains a symlink component")
-    if not path.exists():
-        raise ValueError("backup artifact does not exist")
-    if path.is_symlink() or not path.is_file():
-        raise ValueError("backup artifact must be a regular, non-symlink file")
-    size = path.stat().st_size
-    if size <= 0:
-        raise ValueError("backup artifact is empty")
-    listing = subprocess.run(
-        ["pg_restore", "--list", str(path)],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if listing.returncode != 0 or not listing.stdout.strip():
-        raise ValueError("backup artifact failed pg_restore --list validation")
-    return {
-        "bytes": size,
-        "sha256": _sha256_file(path),
-        "toc_entries": sum(1 for line in listing.stdout.splitlines() if line.strip() and not line.startswith(";") ),
-    }
+    try:
+        descriptor, metadata = open_regular_file_nofollow(path)
+    except ValueError as error:
+        if not path.exists() and not path.is_symlink():
+            raise ValueError("backup artifact does not exist") from error
+        raise
+    try:
+        if metadata.st_size <= 0:
+            raise ValueError("backup artifact is empty")
+        digest = hashlib.sha256()
+        with os.fdopen(os.dup(descriptor), "rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        listing = subprocess.run(
+            ["pg_restore", "--list", f"/proc/self/fd/{descriptor}"],
+            check=False,
+            capture_output=True,
+            text=True,
+            pass_fds=(descriptor,),
+        )
+        if listing.returncode != 0 or not listing.stdout.strip():
+            raise ValueError("backup artifact failed pg_restore --list validation")
+        return {
+            "bytes": metadata.st_size,
+            "sha256": digest.hexdigest(),
+            "toc_entries": sum(
+                1
+                for line in listing.stdout.splitlines()
+                if line.strip() and not line.startswith(";")
+            ),
+        }
+    finally:
+        os.close(descriptor)
 
 
 def filesystem_metrics(path: Path) -> dict:
@@ -286,6 +672,27 @@ def playlist_seed_count(songs: int, playlists: int) -> int:
     return min(max(200, songs // 5), playlists * songs)
 
 
+def playlist_seed_pair(sequence: int, songs: int, playlists: int) -> tuple[int, int]:
+    """Return a unique playlist/song pair for a one-based seed sequence."""
+    zero_based = sequence - 1
+    playlist_id = (zero_based % playlists) + 1
+    song_id = ((zero_based // playlists) % songs) + 1
+    return playlist_id, song_id
+
+
+def user_song_seed_count(songs: int, users: int) -> int:
+    """Bound seeded user-song states to the available unique pair space."""
+    return min(max(500, songs // 2), users * songs)
+
+
+def user_song_seed_pair(sequence: int, songs: int, users: int) -> tuple[int, int]:
+    """Return a unique user/song pair for a one-based seed sequence."""
+    zero_based = sequence - 1
+    user_id = ((zero_based // songs) % users) + 1
+    song_id = (zero_based % songs) + 1
+    return user_id, song_id
+
+
 def cli(target: str, args: list[str], extra_env: dict[str, str] | None = None) -> str:
     env = dict(os.environ)
     env["MELODEE__DATABASE__URL"] = db_url(target)
@@ -320,13 +727,16 @@ def seed_source(songs: int) -> dict:
     psql_file(SOURCE_DB, ddl)
     users = max(10, artists // 10)
     playlists = max(20, artists // 5)
-    user_songs = max(500, songs // 2)
+    user_songs = user_song_seed_count(songs, users)
     playlist_items = playlist_seed_count(songs, playlists)
     seed = f"""
 INSERT INTO "Libraries" ("Id","Name","ArtistCount","AlbumCount","SongCount","Path","Type","IsLocked","SortOrder","ApiKey","CreatedAt","LastUpdatedAt")
 VALUES (1, 'Rehearsal Library', {artists}, {albums}, {songs}, '/music', 0, false, 0, gen_random_uuid(), now(), now());
 INSERT INTO "Artists" ("Id","ApiKey","Name","NameNormalized","SortName","Directory","AlbumCount","CalculatedRating","IsLocked","LibraryId","MetaDataStatus","PlayedCount","SongCount","SortOrder","CreatedAt","LastUpdatedAt")
-SELECT g, gen_random_uuid(), 'Rehearsal Artist ' || g, lower('rehearsal artist ' || g), 'Rehearsal Artist ' || g,
+SELECT g, gen_random_uuid(),
+       CASE WHEN g = 1 THEN '東京事変' WHEN g = 2 THEN 'AC/DC Rehearsal' ELSE 'Rehearsal Artist ' || g END,
+       lower(CASE WHEN g = 1 THEN '東京事変' WHEN g = 2 THEN 'AC/DC Rehearsal' ELSE 'rehearsal artist ' || g END),
+       CASE WHEN g = 1 THEN '東京事変' WHEN g = 2 THEN 'AC/DC Rehearsal' ELSE 'Rehearsal Artist ' || g END,
        'artist' || g, 0, 0, false, 1, 0, 0, 0, 0, now(), now()
 FROM generate_series(1, {artists}) g;
 INSERT INTO "Albums" ("Id","ApiKey","ArtistId","Name","NameNormalized","AlbumStatus","AlbumType","CalculatedRating","Duration","IsCompilation","IsLocked","MetaDataStatus","PlayedCount","SortOrder","ReleaseDate","OriginalReleaseDate","Directory","CreatedAt","LastUpdatedAt")
@@ -348,11 +758,11 @@ INSERT INTO "Playlists" ("Id","Name","UserId","IsPublic","Duration","IsLocked","
 SELECT g, 'Playlist ' || g, ((g - 1) % {users}) + 1, true, 0, false, 0, gen_random_uuid(), now(), now()
 FROM generate_series(1, {playlists}) g;
 INSERT INTO "PlaylistSong" ("PlaylistId","SongId","PlaylistOrder","SongApiKey")
-SELECT ((g - 1) % {playlists}) + 1, ((g - 1) % {songs}) + 1, ((g - 1) / {playlists}) + 1,
-       (SELECT "ApiKey" FROM "Songs" WHERE "Id" = ((g - 1) % {songs}) + 1)
+SELECT ((g - 1) % {playlists}) + 1, (((g - 1) / {playlists}) % {songs}) + 1, ((g - 1) / {playlists}) + 1,
+       (SELECT "ApiKey" FROM "Songs" WHERE "Id" = (((g - 1) / {playlists}) % {songs}) + 1)
 FROM generate_series(1, {playlist_items}) g;
 INSERT INTO "UserSongs" ("Id","ApiKey","UserId","SongId","IsStarred","IsHated","Rating","PlayedCount","IsLocked","SortOrder","CreatedAt","LastUpdatedAt")
-SELECT g, gen_random_uuid(), ((g - 1) % {users}) + 1, ((g - 1) % {songs}) + 1,
+SELECT g, gen_random_uuid(), (((g - 1) / {songs}) % {users}) + 1, ((g - 1) % {songs}) + 1,
        (g % 2) = 0, false, (g % 5) + 1, g, false, 0, now(), now()
 FROM generate_series(1, {user_songs}) g;
 INSERT INTO "UserSongPlayHistories" ("Id","UserId","SongId","PlayedAt","SecondsPlayed","Client","IsNowPlaying","Source")
@@ -548,6 +958,7 @@ def drill(
         source_backup_evidence = validate_backup_artifact(source_backup)
     source_database = source_url or db_url(SOURCE_DB)
     path_maps = library_path_maps or [DEFAULT_LIBRARY_PATH_MAP]
+    validate_library_path_maps(path_maps)
     evidence: dict = {
         "drill": "legacy_rehearsal",
         "songs_requested": songs,
@@ -597,7 +1008,7 @@ def drill(
             TARGET_DB,
             ["baseline", "--run", run_id, "--source-db", source_database, "--json"],
         )
-        baseline = json.loads(out)
+        baseline = validate_baseline_artifact(json.loads(out))
         evidence["baseline"] = baseline
 
         # --- R4.2: import + verify --------------------------------------
@@ -636,13 +1047,14 @@ def drill(
             "tracks": int(psql("SELECT COUNT(*) FROM tracks", TARGET_DB)),
             "users": int(psql("SELECT COUNT(*) FROM native_users", TARGET_DB)),
         }
+        target_media = {
+            "file_count": int(psql("SELECT COUNT(*) FROM media_assets", TARGET_DB)),
+            "bytes": int(psql("SELECT COALESCE(SUM(byte_size), 0) FROM media_assets", TARGET_DB)),
+        }
         evidence["target_counts"] = target_counts
         evidence["migration_metrics"] = {
             "database_counts": target_counts,
-            "media": {
-                "file_count": int(psql("SELECT COUNT(*) FROM media_assets", TARGET_DB)),
-                "bytes": int(psql("SELECT COALESCE(SUM(byte_size), 0) FROM media_assets", TARGET_DB)),
-            },
+            "media": target_media,
             "issues": {
                 "total": int(psql("SELECT COUNT(*) FROM legacy_migration.issues", TARGET_DB)),
                 "errors": int(psql("SELECT COUNT(*) FROM legacy_migration.issues WHERE severity = 'error'", TARGET_DB)),
@@ -684,28 +1096,100 @@ def drill(
         index_bytes = sum(f.stat().st_size for f in search_root.rglob("*") if f.is_file())
         evidence["search_index_bytes"] = index_bytes
 
-        query_expressions = [
-            'artist:"Rehearsal Artist 1"',
-            "artist:rehearsal",
-            "release:rehearsal",
-            "track:rehearsal",
-            "artist:rehearsal AND year>=1990",
-        ]
+        status_out = cli_plain(TARGET_DB, ["search", "status"], search_env)
+        search_status = validate_search_status(json.loads(status_out), target_counts)
+        evidence["search_status"] = {
+            "projection": search_status["projection"],
+            "generation": search_status["generation"],
+            "generation_error_code": search_status["generation_error_code"],
+            "generation_error": search_status["generation_error"],
+        }
+
+        search_probe = build_search_probe(snapshot_mode)
+        autocomplete_out = cli_plain(
+            TARGET_DB,
+            [
+                "search",
+                "autocomplete",
+                "artist",
+                search_probe["prefix"],
+                "--limit",
+                "20",
+            ],
+            search_env,
+        )
+        autocomplete_values = [line for line in autocomplete_out.splitlines() if line]
+        minimum_autocomplete_values = 1
+        if len(autocomplete_values) < minimum_autocomplete_values:
+            raise RuntimeError("search prefix query returned no suggestions")
+        if len(autocomplete_values) > 20:
+            raise RuntimeError("search prefix query exceeded its result limit")
+        if not any(
+            search_probe["prefix_expected"] in value for value in autocomplete_values
+        ):
+            raise RuntimeError("search prefix query omitted its authoritative representative")
+        if snapshot_mode:
+            evidence["search_prefix"] = {
+                "kind": "artist",
+                "prefix_sha256": _fingerprint_search_value(search_probe["prefix"]),
+                "limit": 20,
+                "value_fingerprints": [
+                    _fingerprint_search_value(value) for value in autocomplete_values
+                ],
+                "minimum_values": minimum_autocomplete_values,
+            }
+        else:
+            evidence["search_prefix"] = {
+                "kind": "artist",
+                "prefix": search_probe["prefix"],
+                "limit": 20,
+                "values": autocomplete_values,
+                "minimum_values": minimum_autocomplete_values,
+            }
+
+        query_cases = search_probe["queries"]
         query_evidence = []
         query_wall_ms = []
-        for expression in query_expressions:
+        for query_kind, expression, synthetic_minimum, expected_display in query_cases:
             out = cli_plain(
                 TARGET_DB,
                 ["search", "query", expression, "--limit", "100"],
                 search_env,
             )
-            query_evidence.append(
-                {
-                    "expression": expression,
-                    "hit_count": len([line for line in out.splitlines() if line]),
-                    **cli_plain.last_metrics,
-                }
-            )
+            hits = [line for line in out.splitlines() if line]
+            minimum_hits = synthetic_minimum if not snapshot_mode else 0
+            if len(hits) < minimum_hits:
+                raise RuntimeError(
+                    f"search {query_kind} query returned {len(hits)} hits; expected at least {minimum_hits}"
+                )
+            if len(hits) > 100:
+                raise RuntimeError(f"search {query_kind} query exceeded its result limit")
+            if not any(expected_display in hit for hit in hits):
+                raise RuntimeError(
+                    f"search {query_kind} query omitted its authoritative representative"
+                )
+            query_record = {
+                "kind": query_kind,
+                "hit_count": len(hits),
+                "minimum_hits": minimum_hits,
+                "limit": 100,
+                **cli_plain.last_metrics,
+            }
+            if snapshot_mode:
+                query_record.update(
+                    {
+                        "expression_sha256": _fingerprint_search_value(expression),
+                        "expected_display_sha256": _fingerprint_search_value(expected_display),
+                    }
+                )
+            else:
+                query_record.update(
+                    {
+                        "expression": expression,
+                        "expected_display": expected_display,
+                    }
+                )
+            query_evidence.append(query_record)
             query_wall_ms.append(cli_plain.last_metrics["wall_s"] * 1000)
         evidence["search_validation"] = {
             "queries": query_evidence,
@@ -721,30 +1205,39 @@ def drill(
             check=True,
             capture_output=True,
         )
-        subprocess.run(
-            ["pg_restore", "--list", str(dump_path)], check=True, capture_output=True
-        )
+        backup_evidence = validate_backup_artifact(dump_path)
         create_db(RESTORE_DB)
         subprocess.run(
             ["pg_restore", "-d", db_url(RESTORE_DB), str(dump_path)],
             check=True,
             capture_output=True,
         )
-        restored_tracks = int(psql("SELECT COUNT(*) FROM tracks", RESTORE_DB))
+        restored_counts = {
+            "artists": int(psql("SELECT COUNT(*) FROM artists", RESTORE_DB)),
+            "releases": int(psql("SELECT COUNT(*) FROM releases", RESTORE_DB)),
+            "tracks": int(psql("SELECT COUNT(*) FROM tracks", RESTORE_DB)),
+            "users": int(psql("SELECT COUNT(*) FROM native_users", RESTORE_DB)),
+        }
+        restored_media = {
+            "file_count": int(psql("SELECT COUNT(*) FROM media_assets", RESTORE_DB)),
+            "bytes": int(psql("SELECT COALESCE(SUM(byte_size), 0) FROM media_assets", RESTORE_DB)),
+        }
+        restore_matches = restored_counts == target_counts and restored_media == target_media
         evidence["steps"]["backup_restore"] = {
             "wall_s": round(time.monotonic() - step, 2),
             "dump_bytes": dump_path.stat().st_size,
-            "restored_tracks": restored_tracks,
-            "restore_matches": restored_tracks == target_counts["tracks"],
-            "backup": validate_backup_artifact(dump_path),
-            "restored_counts": {
-                "artists": int(psql("SELECT COUNT(*) FROM artists", RESTORE_DB)),
-                "releases": int(psql("SELECT COUNT(*) FROM releases", RESTORE_DB)),
-                "tracks": restored_tracks,
-                "users": int(psql("SELECT COUNT(*) FROM native_users", RESTORE_DB)),
-            },
+            "restored_tracks": restored_counts["tracks"],
+            "restore_matches": restore_matches,
+            "backup": backup_evidence,
+            "restored_counts": restored_counts,
+            "restored_media": restored_media,
         }
-        assert restored_tracks == target_counts["tracks"]
+        assert restore_matches, {
+            "target_counts": target_counts,
+            "restored_counts": restored_counts,
+            "target_media": target_media,
+            "restored_media": restored_media,
+        }
 
         # --- R4.7: freeze + final delta + cutover-ready ------------------
         # Only the synthetic fixture receives an injected pre-marker write.

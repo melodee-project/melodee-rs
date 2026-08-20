@@ -150,6 +150,26 @@ def check_rehearsal_help() -> None:
         raise RuntimeError("legacy_rehearsal.py drill --help did not emit usage")
 
 
+def check_integration_probe_help() -> None:
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "r4_integration_probe.py"), "--help"],
+        cwd=ROOT,
+        env=sanitized_environment(),
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip()
+        raise RuntimeError(
+            "r4_integration_probe.py --help failed "
+            f"with exit code {result.returncode}: {detail}"
+        )
+    if "usage:" not in f"{result.stdout}\n{result.stderr}".lower():
+        raise RuntimeError("r4_integration_probe.py --help did not emit usage")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -166,13 +186,14 @@ def main() -> int:
         for command in CLI_COMMANDS:
             check_command(args.cli, command)
         check_rehearsal_help()
+        check_integration_probe_help()
     except (OSError, RuntimeError, subprocess.SubprocessError) as error:
         print(f"command-help audit failed: {error}", file=sys.stderr)
         return 1
 
     print(
         f"command-help audit passed: {len(CLI_COMMANDS)} melodee-cli paths "
-        "and legacy_rehearsal.py drill"
+        "plus legacy_rehearsal.py drill and r4_integration_probe.py"
     )
     return 0
 

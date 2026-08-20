@@ -1,6 +1,58 @@
 {
   "artifact": "melodee.r4.current-client-acceptance",
-  "schemaVersion": 2,
+  "schemaVersion": 3,
+  "workflowSchema": {
+    "statusValues": ["fail", "pass"],
+    "requiredByRow": {
+      "android-auto-or-dhu/native-v1": [
+        "root-browse",
+        "search-voice-playback",
+        "next-previous",
+        "seek",
+        "ended-event-advance",
+        "reconnect-auth-restore"
+      ],
+      "android-phone/native-v1": [
+        "login",
+        "refresh",
+        "browse-search",
+        "direct-play",
+        "configured-transcode",
+        "range-seek",
+        "next-previous",
+        "background-playback",
+        "reconnect",
+        "playlists",
+        "scrobble",
+        "expected-errors"
+      ],
+      "meloamp/native-v1": [
+        "login-restore",
+        "browse-search",
+        "direct-play-seek",
+        "playlists",
+        "reconnect",
+        "error-paths"
+      ],
+      "representative-jellyfin/jellyfin": [
+        "connect-auth",
+        "browse-search",
+        "direct-play-transcode-range",
+        "favorites-playlists",
+        "reconnect",
+        "expected-errors"
+      ],
+      "representative-opensubsonic/opensubsonic": [
+        "connect-auth",
+        "browse-search",
+        "direct-play-range",
+        "playlist",
+        "favorites",
+        "reconnect",
+        "expected-errors"
+      ]
+    }
+  },
   "status": "pending-external",
   "rowSchema": {
     "pending-external": {

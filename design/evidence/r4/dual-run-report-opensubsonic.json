@@ -1629,12 +1629,6 @@
       "actual": "\"<omitted>\""
     },
     {
-      "scenario": "os-annotation-rating/verify-rating",
-      "field": "response.body$.subsonic-response.song.albumArtists[0].albumCount",
-      "expected": "1",
-      "actual": "2"
-    },
-    {
       "scenario": "os-annotation-rating/verify-rating-cleared",
       "field": "response.body$.subsonic-response.song.bitDepth",
       "expected": "16",
@@ -1651,12 +1645,6 @@
       "field": "response.body$.subsonic-response.song.genres",
       "expected": "[{\"value\": \"Rock\", \"songCount\": 0, \"albumCount\": 0}]",
       "actual": "\"<omitted>\""
-    },
-    {
-      "scenario": "os-annotation-rating/verify-rating-cleared",
-      "field": "response.body$.subsonic-response.song.albumArtists[0].albumCount",
-      "expected": "1",
-      "actual": "2"
     },
     {
       "scenario": "os-annotation-scrobble/verify-nowplaying",
@@ -1729,12 +1717,6 @@
       "field": "response.body$.subsonic-response.starred2.song[1].genres",
       "expected": "[{\"value\": \"Rock\", \"songCount\": 0, \"albumCount\": 0}]",
       "actual": "\"<omitted>\""
-    },
-    {
-      "scenario": "os-annotation-star/verify-starred2-after-star",
-      "field": "response.body$.subsonic-response.starred2.song[1].albumArtists[0].albumCount",
-      "expected": "1",
-      "actual": "2"
     },
     {
       "scenario": "os-annotation-star/verify-starred2-after-unstar",
@@ -2157,12 +2139,6 @@
       "actual": "\"<omitted>\""
     },
     {
-      "scenario": "os-getartist-collision",
-      "field": "response.body$.subsonic-response.artist.albumCount",
-      "expected": "1",
-      "actual": "2"
-    },
-    {
       "scenario": "os-getartist-various",
       "field": "response.body$.subsonic-response.artist.album[0].genre",
       "expected": "\"Electronic\"",
@@ -2344,12 +2320,6 @@
     },
     {
       "scenario": "os-gettopsongs",
-      "field": "response.body$.subsonic-response.topSongs.song[0].albumArtists[0].albumCount",
-      "expected": "1",
-      "actual": "2"
-    },
-    {
-      "scenario": "os-gettopsongs",
       "field": "response.body$.subsonic-response.topSongs.song[1].bitDepth",
       "expected": "16",
       "actual": "\"<omitted>\""
@@ -2365,12 +2335,6 @@
       "field": "response.body$.subsonic-response.topSongs.song[1].genres",
       "expected": "[{\"value\": \"Rock\", \"songCount\": 0, \"albumCount\": 0}]",
       "actual": "\"<omitted>\""
-    },
-    {
-      "scenario": "os-gettopsongs",
-      "field": "response.body$.subsonic-response.topSongs.song[1].albumArtists[0].albumCount",
-      "expected": "1",
-      "actual": "2"
     },
     {
       "scenario": "os-shares/create-share",
@@ -3313,18 +3277,6 @@
       "field": "response.body$.subsonic-response.starred2.song[0].playCount",
       "expected": "4",
       "actual": "0"
-    },
-    {
-      "scenario": "os-search2-dune",
-      "field": "response.body$.subsonic-response.searchResult2.artist[0].albumCount",
-      "expected": "1",
-      "actual": "2"
-    },
-    {
-      "scenario": "os-search3-dune",
-      "field": "response.body$.subsonic-response.searchResult3.artist[0].albumCount",
-      "expected": "1",
-      "actual": "2"
     },
     {
       "scenario": "os-bookmarks/verify-bookmarks",

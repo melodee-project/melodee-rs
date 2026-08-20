@@ -599,6 +599,101 @@ failures; the affected suite then passed 18/18 with the isolated database. This 
 dirty-tree evidence and does not provide candidate-SHA, scheduled, production, physical-client,
 ADR, or publication evidence.
 
+The rehearsal harness then closed a local backup-validation race. Operator-supplied
+`--source-backup` artifacts are opened component by component with `O_NOFOLLOW`, rejected when
+they are FIFOs or other non-regular files, hashed through the held descriptor, and passed to
+`pg_restore --list` through `/proc/self/fd`; existing-snapshot canonical roots reject symlinked
+ancestors before target creation. The focused rehearsal suite passed 16/16, including held-
+descriptor, FIFO, parent-symlink, and target-creation-order regressions. This is local R4.1/R4.8
+and R5.1 tooling evidence only; it does not provide production backup, restore, or topology
+acceptance.
+
+The post-change exact local `MELODEE_TEST_DATABASE_URL=postgres://... ./scripts/check.sh` then
+exited 0 with 206 Python tests, Admin UI static checks with 44 files and 248 unit tests, the
+complete workspace/PostgreSQL Rust and doctest matrix, formatting, workspace Clippy with
+`-D warnings`, and cargo-deny. This updates local repeatability evidence only; it does not provide
+candidate-SHA, scheduled, production, physical-client, ADR, or publication evidence.
+
+The synthetic R4.8 rehearsal then corrected two bounded fixture/content gaps. Playlist and
+user-state seed rows now use unique source identity pairs, and backup restore verification compares
+Artist, Release, Track, and user counts plus media file count and byte totals with the target. The
+focused rehearsal suite passed 16/16, and `python3 scripts/legacy_rehearsal.py drill --songs 5`
+passed end to end with zero verification mismatch gaps, full restore-content equality, backup
+validation, freeze, failed-target retention, and unchanged canonical media. This is synthetic
+local evidence only; it does not replace the required approximately-5-TB production-equivalent
+snapshot, topology, restore, traffic-switch, or rollback evidence.
+
+The post-change exact `MELODEE_TEST_DATABASE_URL=postgres://... ./scripts/check.sh` exited 0 after
+this fixture and restore-verification correction: 206 Python tests, Admin UI static checks with 44
+files and 248 unit tests, the complete workspace/PostgreSQL Rust and doctest matrix, formatting,
+workspace Clippy with `-D warnings`, and cargo-deny passed. The two existing Admin UI Fast Refresh
+warnings and cargo-deny duplicate/unmatched-license diagnostics remained non-failing warnings.
+
+The rehearsal entrypoint then added pre-target validation for Rust-equivalent library path maps and
+fail-closed validation of the CLI's versioned baseline artifact: frozen table coverage, source
+identity/schema linkage, snapshot marker, transaction read-only facts, media totals, and redacted
+configuration fingerprints. The focused suite passed 18/18, and the actual five-track drill passed
+with zero verification mismatch gaps and full restore-content equality. The subsequent exact local
+`MELODEE_TEST_DATABASE_URL=postgres://... ./scripts/check.sh` exited 0 with 208 Python tests,
+Admin UI static checks with 44 files and 248 unit tests, the complete workspace/PostgreSQL Rust and
+doctest matrix, formatting, workspace Clippy with `-D warnings`, and cargo-deny. These are local
+R4.1/R5.1 hardening results only; no production snapshot, topology, client, scheduled, ADR,
+candidate, or publication gate is claimed.
+
+The R4.3 rehearsal then added fail-closed post-rebuild diagnostics and a non-vacuous search matrix.
+The synthetic source includes CJK and punctuation Artist values; the drill validates an activated
+generation against migrated Artist/Release/Track counts and schema, bounds prefix autocomplete and
+six exact/normalized/Unicode/punctuation/broad/low-selectivity query classes, and records index
+bytes plus p50/p95 timings. The focused rehearsal suite passed 19/19, and the five-song isolated
+drill passed with a 135,246-byte index, 20 bounded prefix values, and 100 ms p50/p95 query timing.
+The subsequent exact local `MELODEE_TEST_DATABASE_URL=postgres://... ./scripts/check.sh` exited 0
+with 209 Python tests, Admin UI static checks with 44 files and 248 unit tests, the complete
+workspace/PostgreSQL Rust and doctest matrix, formatting, workspace Clippy with `-D warnings`,
+and cargo-deny. This remains local synthetic R4.3/R5.3 evidence only and does not provide
+production-catalog, candidate-SHA, scheduled, client, ADR, or publication evidence.
+
+The R4.6 integration probe then added stable schema-1 artifact validation, bounded range
+cross-checks, controlled malformed OIDC/XML failures, and a PATH-only `--help` check for the
+probe itself. The focused probe and command-help suites passed 15/15; probe compilation,
+`python3 scripts/r4_integration_probe.py --help`, and `python3 scripts/check_command_help.py`
+passed. The subsequent exact full gate exited 0 with 212 Python tests, Admin UI 44 files/248
+unit tests, the complete workspace/PostgreSQL Rust and doctest matrix, formatting, workspace
+Clippy with warnings denied, and cargo-deny. This remains local R4.6/R5.1 tooling evidence only;
+it does not provide production endpoint, provider, backup/restore, scheduled, candidate, or
+release-owner evidence.
+
+The R4.3 rehearsal was then tightened so an existing migrated snapshot cannot pass search
+validation with zero-result placeholders. It derives representative Artist values from the target
+PostgreSQL authority, requires exact, normalized, Unicode, punctuation, broad, and repeated-token
+low-selectivity results, bounds each result set, and fingerprints rather than emits snapshot
+catalog text. The focused rehearsal suite passed 21/21 and the isolated five-song drill passed
+with all six classes, a ten-hit low-selectivity minimum, bounded autocomplete, backup/restore
+equality, freeze, and rollback evidence. This is local R4.3/R5.1 hardening only; the real
+production-sized search target, scheduled candidate-SHA evidence, and external release gates are
+still absent.
+
+The exact current-tree gate was rerun from working-tree HEAD `df1ea94fa7a007d012b86bb609fe833ee3903d87`
+on 2026-08-20 after the migrated-catalog search-probe correction. `cargo fmt --all`,
+`./scripts/check-smoke.sh`, and the full `MELODEE_TEST_DATABASE_URL=postgres://... ./scripts/check.sh`
+all exited 0. The full gate recorded 214 Python tests, the Admin UI gate with 44 files and 248
+unit tests, the complete workspace/all-features PostgreSQL Rust and doctest matrix, formatting,
+workspace Clippy with `-D warnings`, and cargo-deny (`advisories`, `bans`, `licenses`, and `sources`
+all passed). Post-gate repository validation, requirement-index validation, override audit,
+operator-command-help audit, and `git diff --check` also passed. This is dirty-tree local evidence
+only; it does not provide candidate-SHA, scheduled, arm64, production, physical-client, ADR, or
+publication evidence.
+
+The R4.5 current-client evidence artifact was strengthened to schema version 3. Reported rows now
+must carry an explicit pass/fail result for every required workflow for that client surface. The
+focused validator suite passed 8/8, the committed matrix remains 0 pass / 0 fail / 5
+pending-external, and no physical-client result was inferred from this schema correction.
+
+After that correction, the exact current-tree `MELODEE_TEST_DATABASE_URL=postgres://... ./scripts/check.sh`
+also exited 0: 216 Python tests, Admin UI 44 files/248 unit tests, the complete workspace/all-features
+PostgreSQL Rust and doctest matrix, formatting, workspace Clippy with `-D warnings`, and cargo-deny.
+This remains dirty-tree local evidence only and does not provide candidate-SHA, scheduled, physical-
+client, production, ADR, or release-owner acceptance evidence.
+
 ## Release decision
 
 Gates A–I are not all passing. No release waiver is claimed. R4 remains formally active; R5 and

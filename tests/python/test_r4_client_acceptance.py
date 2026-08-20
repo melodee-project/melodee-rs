@@ -70,26 +70,55 @@ class R4ClientAcceptanceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "existing repository file"):
             MODULE.validate_matrix(self.matrix)
 
+    def _complete_result_row(self, row: dict[str, object], *, status: str = "pass") -> None:
+        identity = (row["client"], row["surface"])
+        workflow_status = "pass" if status == "pass" else "fail"
+        row.update(
+            {
+                "status": status,
+                "result": status,
+                "serverCommit": "a" * 40,
+                "migratedRunId": "r4-run-20260819",
+                "clientVersion": "1.0.0",
+                "platformVersion": "test-platform",
+                "configurationFingerprint": "b" * 16,
+                "command": "scripts/run-client-smoke.sh",
+                "evidence": ["design/evidence/r4/README.md"],
+                "workflowResults": {
+                    workflow_id: {
+                        "status": workflow_status,
+                        **({"notes": "workflow failed during external acceptance"} if status == "fail" else {}),
+                    }
+                    for workflow_id in MODULE.REQUIRED_WORKFLOWS[identity]
+                },
+            }
+        )
+
     def test_unredacted_secret_is_rejected(self) -> None:
         self.matrix["rows"][0]["operatorNote"] = "password=do-not-commit"
         with self.assertRaisesRegex(ValueError, "unredacted secret"):
             MODULE.validate_matrix(self.matrix)
 
+    def test_reported_row_requires_every_named_workflow(self) -> None:
+        row = self.matrix["rows"][0]
+        self._complete_result_row(row)
+        row["workflowResults"].pop("scrobble")
+        with self.assertRaisesRegex(ValueError, "exactly the required workflow IDs"):
+            MODULE.validate_matrix(self.matrix)
+
+    def test_passing_row_rejects_failed_workflow(self) -> None:
+        row = self.matrix["rows"][0]
+        self._complete_result_row(row)
+        row["workflowResults"]["scrobble"] = {
+            "status": "fail",
+            "notes": "client could not complete scrobble",
+        }
+        with self.assertRaisesRegex(ValueError, "must all pass"):
+            MODULE.validate_matrix(self.matrix)
+
     def test_all_pass_status_requires_all_rows_with_matching_results(self) -> None:
         for row in self.matrix["rows"]:
-            row.update(
-                {
-                    "status": "pass",
-                    "result": "pass",
-                    "serverCommit": "a" * 40,
-                    "migratedRunId": "r4-run-20260819",
-                    "clientVersion": "1.0.0",
-                    "platformVersion": "test-platform",
-                    "configurationFingerprint": "b" * 16,
-                    "command": "scripts/run-client-smoke.sh",
-                    "evidence": ["design/evidence/r4/README.md"],
-                }
-            )
+            self._complete_result_row(row)
         self.matrix["status"] = "pass"
         counts = MODULE.validate_matrix(self.matrix)
         self.assertEqual(counts["pass"], 5)

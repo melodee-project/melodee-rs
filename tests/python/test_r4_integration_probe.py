@@ -106,7 +106,12 @@ class R4IntegrationProbeTests(unittest.TestCase):
             backup = root / "backup.dump"
             backup.write_bytes(b"fixture")
             canonical_facts = MODULE.filesystem_probe(canonical, "canonical-root")
-            backup_facts = {"device": canonical_facts["device"]}
+            backup_facts = {
+                "bytes": 1,
+                "sha256": "b" * 64,
+                "device": canonical_facts["device"],
+                "toc_entries": 1,
+            }
             args = SimpleNamespace(
                 base_url="http://127.0.0.1:1",
                 range_url=None,
@@ -146,6 +151,42 @@ class R4IntegrationProbeTests(unittest.TestCase):
         with self.assertRaises(MODULE.ProbeError):
             MODULE.validate_jwks_document({"keys": [{"kty": "RSA"}] * 257})
 
+    def test_malformed_oidc_and_entity_feed_inputs_fail_as_probe_errors(self):
+        with self.assertRaises(MODULE.ProbeError):
+            MODULE.validate_oidc_discovery_document([{"issuer": "https://issuer.example"}])
+        with self.assertRaises(MODULE.ProbeError):
+            MODULE.validate_oidc_discovery_document({"issuer": "not-a-url", "jwks_uri": "https://keys.example"})
+        with self.assertRaises(MODULE.ProbeError):
+            MODULE.validate_podcast_xml(b"<!DOCTYPE rss [<!ENTITY secret SYSTEM 'file:///private'>]><rss/>")
+
+    def test_probe_artifact_validation_is_stable_and_redacted(self):
+        artifact = {
+            "artifact": "melodee.r4-integration-probe",
+            "schema_version": 1,
+            "started_at": "2026-08-20T00:00:00Z",
+            "base_endpoint_fingerprint": "a" * 16,
+            "checks": {
+                "/healthz": {"status": 200, "content_type": "application/json"},
+                "/readyz": {"status": 200, "content_type": "application/json"},
+                "range": {
+                    "status": 206,
+                    "bytes_read": 7,
+                    "content_range": "bytes 0-6/7",
+                },
+                "oidc_jwks": {"status": 200, "key_count": 1, "key_types": ["RSA"]},
+            },
+            "result": "pass",
+        }
+        self.assertIs(MODULE.validate_probe_artifact(artifact), artifact)
+        malformed = json.loads(json.dumps(artifact))
+        malformed["checks"]["range"]["content_range"] = "bytes 0-7/7"
+        with self.assertRaises(MODULE.ProbeError):
+            MODULE.validate_probe_artifact(malformed)
+        secret = json.loads(json.dumps(artifact))
+        secret["checks"]["/healthz"]["content_type"] = "token=not-redacted"
+        with self.assertRaises(MODULE.ProbeError):
+            MODULE.validate_probe_artifact(secret)
+
     def test_proxy_tls_header_assertions_are_bounded_and_value_safe(self):
         self.assertEqual(
             MODULE.parse_expected_header("X-Content-Type-Options=nosniff"),
@@ -184,7 +225,7 @@ class R4IntegrationProbeTests(unittest.TestCase):
                     status = 200
                     content_type = "application/json"
                 elif path == "/range":
-                    body = b"fixture-range"
+                    body = b"fixture"
                     status = 206
                     self.send_response(status)
                     self.send_header("Content-Range", f"bytes 0-{len(body) - 1}/{len(body)}")
