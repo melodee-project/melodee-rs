@@ -26,9 +26,8 @@ WORKDIR /src
 COPY . ./
 RUN cargo build --locked --release -p melodee-server -p melodee-cli
 
-# ADR-0151 is still Proposed. Keep the accepted Bookworm runtime until the
-# release owner accepts a runtime-base change.
-FROM debian:bookworm-slim AS runtime
+# ADR-0151 accepted. Use Debian Trixie runtime base for release images.
+FROM debian:trixie-slim AS runtime
 
 ARG VERSION=dev
 ARG REVISION=unknown

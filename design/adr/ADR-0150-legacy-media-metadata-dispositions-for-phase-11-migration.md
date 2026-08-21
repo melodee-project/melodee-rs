@@ -1,7 +1,7 @@
 # ADR-0150: Legacy media metadata dispositions for Phase 11 migration
 
 - **Date:** 2026-08-18
-- **Status:** Proposed
+- **Status:** Accepted
 - **Decision owners:** Release owner
 - **Supersedes:** None
 - **Superseded by:** None

@@ -1,7 +1,7 @@
 # ADR-0151: Use Debian Trixie runtime base for release images
 
 - **Date:** 2026-08-18
-- **Status:** Proposed
+- **Status:** Accepted
 - **Decision owners:** Release owner
 - **Supersedes:** None
 - **Superseded by:** None

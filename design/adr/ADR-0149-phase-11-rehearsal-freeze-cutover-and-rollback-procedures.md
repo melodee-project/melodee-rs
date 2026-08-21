@@ -1,7 +1,7 @@
 # ADR-0149: Phase 11 rehearsal, freeze, cutover, and rollback procedures
 
 - **Date:** 2026-08-17
-- **Status:** Proposed
+- **Status:** Accepted
 - **Amends:** ADR-0148 §D.5 (`runs.notes` is `jsonb`, not `text`) and §D.7 (the command group
   gains `baseline` and `freeze`; the original six commands are unchanged)
 - **Decision owners:** Release owner
