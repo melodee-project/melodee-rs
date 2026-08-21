@@ -1500,11 +1500,7 @@ async fn persist_prepared_import(
             artist_id, release_count, billed_track_count,
             performance_track_count, all_credit_track_count, revision, updated_at
          )
-         SELECT a.artist_id,
-                (SELECT count(DISTINCT primary_release.release_id)
-                   FROM release_artists primary_release
-                  WHERE primary_release.artist_id = a.artist_id
-                    AND primary_release.role = 'primary'),
+         SELECT a.artist_id, count(DISTINCT t.release_id),
                 count(DISTINCT a.track_id),
                 count(DISTINCT a.track_id) FILTER (WHERE a.is_performance),
                 count(DISTINCT a.track_id), 1, $2

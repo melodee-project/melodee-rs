@@ -177,6 +177,33 @@ def validate_oidc_discovery_document(document: object) -> tuple[str, str]:
     return validate_url(issuer, "OIDC issuer"), validate_url(jwks_uri, "OIDC jwks_uri")
 
 
+def validate_oidc_jwks_target(
+    discovery_url: str,
+    jwks_url: str,
+    allowed_hosts: list[str] | tuple[str, ...] = (),
+) -> None:
+    """Keep a discovery-controlled JWKS request on an approved host.
+
+    A discovery document is remote input.  Same-host JWKS endpoints are safe by
+    default for the bounded probe; a provider using a separate key host must
+    name that host explicitly.  This prevents a malformed or compromised
+    discovery response from turning the operator's probe into an arbitrary
+    internal HTTP client.
+    """
+    discovery_host = urlsplit(discovery_url).hostname
+    jwks_host = urlsplit(jwks_url).hostname
+    if not discovery_host or not jwks_host:
+        raise ProbeError("OIDC discovery and JWKS URLs must include hosts")
+    normalized_allowed = {host.strip().casefold() for host in allowed_hosts if host.strip()}
+    if normalized_allowed:
+        if jwks_host.casefold() not in normalized_allowed:
+            raise ProbeError("OIDC JWKS host is not in the explicit allowlist")
+    elif jwks_host.casefold() != discovery_host.casefold():
+        raise ProbeError(
+            "OIDC JWKS host differs from discovery host; supply --oidc-allowed-host"
+        )
+
+
 def validate_podcast_xml(body: bytes) -> None:
     """Reject DTD/entity declarations before parsing untrusted feed bytes."""
     if re.search(rb"<!\s*(?:DOCTYPE|ENTITY)\b", body, flags=re.IGNORECASE):
@@ -568,6 +595,11 @@ def run(args: argparse.Namespace) -> dict[str, object]:
         if status != 200:
             raise ProbeError("OIDC discovery endpoint did not return 200")
         issuer_url, jwks_url = validate_oidc_discovery_document(document)
+        validate_oidc_jwks_target(
+            oidc_url,
+            jwks_url,
+            getattr(args, "oidc_allowed_host", []),
+        )
         jwks_status, _jwks_headers, jwks_body = http_get(jwks_url)
         try:
             jwks_document = json.loads(jwks_body)
@@ -652,6 +684,13 @@ def main() -> int:
     parser.add_argument("--range-url")
     parser.add_argument("--range-bytes", type=int, default=1024)
     parser.add_argument("--oidc-discovery-url")
+    parser.add_argument(
+        "--oidc-allowed-host",
+        action="append",
+        default=[],
+        metavar="HOST",
+        help="explicitly allow a JWKS host different from the discovery host; repeatable",
+    )
     parser.add_argument("--podcast-feed")
     parser.add_argument("--lastfm-api-url")
     parser.add_argument(

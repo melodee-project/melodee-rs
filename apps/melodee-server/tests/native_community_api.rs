@@ -543,7 +543,7 @@ async fn native_community_routes_are_owner_fenced_bounded_and_replay_safe() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
         updated_share.expect("updated share")["isDownloadable"],
-        true
+        false
     );
     let (status, _) = call(
         state.clone(),

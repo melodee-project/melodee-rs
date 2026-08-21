@@ -292,6 +292,7 @@ async fn playlist_crud_routes_preserve_order_dual_add_shapes_and_ownership() {
     let created = created.expect("create body");
     let playlist_id = Uuid::parse_str(created["id"].as_str().unwrap()).expect("playlist ID");
     assert_eq!(created["songCount"], 2);
+    assert_eq!(created["description"], "");
     assert_eq!(created["owner"]["id"], owner.public_api_id.to_string());
     let (status, listed) = json_call(
         state.clone(),
@@ -314,7 +315,9 @@ async fn playlist_crud_routes_preserve_order_dual_add_shapes_and_ownership() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(updated.unwrap()["name"], "Native CRUD Updated");
+    let updated = updated.expect("update body");
+    assert_eq!(updated["name"], "Native CRUD Updated");
+    assert_eq!(updated["description"], "");
 
     for body in [
         serde_json::json!([first]),

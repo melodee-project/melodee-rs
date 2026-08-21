@@ -229,10 +229,7 @@ async fn rebuild_catalog_projections(
             performance_track_count, all_credit_track_count, revision, updated_at
          )
          SELECT artist.id,
-                (SELECT count(DISTINCT primary_release.release_id)
-                   FROM release_artists primary_release
-                  WHERE primary_release.artist_id = artist.id
-                    AND primary_release.role = 'primary'),
+                count(DISTINCT track.release_id),
                 count(DISTINCT association.track_id) FILTER (
                     WHERE association.association_type IN (
                         'primary_artist','featured_artist','guest_artist')),

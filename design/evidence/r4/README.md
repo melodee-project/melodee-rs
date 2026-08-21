@@ -132,7 +132,7 @@ The native replay was rerun after the migration authorization, audio-metadata,
 catalog ordering, user-state, login-version, cookie-cache, comparator, and
 migrated share-order fixes and is recorded in
 [`dual-run-report-native.json`](dual-run-report-native.json): all 12 native
-groups executed, with 267 classified differences and 181 unclassified
+groups executed, with 267 classified differences and 185 unclassified
 comparator differences. Six replay-created account lifecycle timestamps are
 now classified by exact scenario-and-field rules; other user, playlist, state,
 ordering, metadata, and provider fields remain differential assertions.
@@ -148,7 +148,7 @@ intentional current-vs-legacy behavior, migration metadata boundaries, and
 unresolved catalog ordering/state gaps. They must receive external
 compatibility classification or implementation fixes before release.
 
-The current 181-entry unclassified set has a concrete residual shape rather
+The current 185-entry unclassified set has a concrete residual shape rather
 than one undifferentiated parity claim. The largest clusters are 117 catalog
 list projection/order fields (63 `albums-list`, 32 `artists-list-page2`, and
 22 `artists-list`), 20 genre/reference-only fields and route results, 10 live
@@ -222,9 +222,9 @@ reviewable.
 
 A Jellyfin replay executed eight migrated groups and is recorded in
 [`dual-run-report-jellyfin.json`](dual-run-report-jellyfin.json): 149 classified
-and 17 unclassified differences. The migrated media-container mapping and
-Jellyfin primary-release artist-count correction removed the WAV/codec and
-artist-count residuals under focused tests. The remaining residuals are
+and 17 unclassified differences. The migrated media-container mapping and the
+Jellyfin primary-release artist-count query are covered by focused tests; the
+catalog aggregate participation statistic remains unchanged. The remaining residuals are
 concentrated in genre projection, instant-mix cardinality, and playlist
 metadata; no broad comparator exclusion was added.
 
@@ -265,8 +265,9 @@ The read-only production-integration probe is
 `scripts/r4_integration_probe.py`. It has no credential arguments and performs
 only explicitly requested bounded checks for health/readiness, range
 responses, OIDC discovery metadata plus bounded JWKS shape validation, podcast XML, Last.fm reachability without
-credentials, proxy/TLS endpoint headers, SMTP STARTTLS handshake, filesystem topology, and custom-format backup integrity. Endpoint hosts and
-configuration paths are fingerprinted in JSON output. Unit and loopback-fixture coverage is in
+credentials, proxy/TLS endpoint headers, SMTP STARTTLS handshake, filesystem topology, and custom-format backup integrity. OIDC JWKS requests stay on the discovery host unless an explicit
+`--oidc-allowed-host` value is supplied. Endpoint hosts and configuration paths are fingerprinted in
+JSON output. Unit and loopback-fixture coverage is in
 `tests/python/test_r4_integration_probe.py`; the probe does not substitute for
 the operator's real credentials or external integration acceptance.
 
@@ -528,6 +529,41 @@ OpenSubsonic, and Jellyfin client runs are captured against a migrated target.
   authorization for the real rehearsal.
 - Updated counts: 45 packages total — 26 Complete, 13 Partial, 6 Not started;
   239 requirements — 211 tested, 9 implemented, 12 in-progress, 7 deferred.
+
+### R4.6 OIDC JWKS host-bound probe — 2026-08-20
+
+- Exact files changed: `scripts/r4_integration_probe.py`,
+  `tests/python/test_r4_integration_probe.py`, this report, the R5 report, the R5 release-gate
+  report, and `IMPLMENTATION_OUTSTANDING.md`.
+- Requirements: the bounded integration probe now treats the discovery document as untrusted
+  input. It allows a JWKS request on the discovery host by default and requires repeated
+  `--oidc-allowed-host HOST` arguments for a provider whose JWKS endpoint is hosted elsewhere.
+  The allowlist is checked before the JWKS request; no credentials or key material are emitted.
+  No requirement became terminal; R4.6 remains Partial pending external integration evidence.
+- ADRs: no ADR was accepted or applied. ADR-0149, ADR-0150, and ADR-0151 remain Proposed.
+- Tests: `python3 -m unittest tests.python.test_r4_integration_probe tests.python.test_command_help -v`
+  passed 16/16; `python3 -m py_compile scripts/r4_integration_probe.py` passed; and
+  `python3 scripts/r4_integration_probe.py --help` passed with the new option visible. The
+  subsequent `MELODEE_TEST_DATABASE_URL=postgres://... ./scripts/check.sh` exited 0 with 217
+  Python tests, Admin UI 44 files/248 unit tests, the complete workspace/all-features PostgreSQL
+  Rust and doctest matrix, formatting, workspace Clippy with `-D warnings`, and cargo-deny.
+- Compatibility impact: none; native v1, OpenSubsonic, and Jellyfin routes, DTOs, properties,
+  identifiers, statuses, auth, pagination, and range behavior remain unchanged and separate.
+- Data/migration impact: none; the probe is read-only and does not access a migration source,
+  target database, or canonical media.
+- Security/data-loss impact: positive fail-closed correction; a malformed or compromised OIDC
+  discovery response can no longer redirect the probe to an unapproved JWKS host by default.
+- Performance/operational impact: one in-memory host comparison before the bounded JWKS request;
+  providers such as Google OIDC must provide their documented key host explicitly.
+- Documentation impact: Updated — this internal R4 report, the R5 report, the R5 release-gate
+  report, and `IMPLMENTATION_OUTSTANDING.md`; no public documentation changed because this is
+  internal probe behavior.
+- Remaining risks and owner: release owner/operator still owns the approved OIDC, provider,
+  proxy/TLS, SMTP, podcast, storage, and restore runs.
+- External input still required: approved endpoint set and non-sensitive test credentials through
+  the release-owner's secure channel; no endpoint was contacted by this change.
+- Updated counts: 45 packages total — 26 Complete, 13 Partial, 6 Not started; 239 requirements —
+  211 tested, 9 implemented, 12 in-progress, 7 deferred.
 
 ### R4.8 synthetic restore-content and fixture closure — 2026-08-20
 
@@ -1297,7 +1333,7 @@ non-destructive, and media adopting rather than relocating or re-encoding.
 - Updated counts: 45 packages total — 26 Complete, 13 Partial, 6 Not started; 239 requirements —
   211 tested, 9 implemented, 12 in-progress, 7 deferred.
 
-### R4.4 primary-release aggregate correction and rebuilt replay — 2026-08-20
+### R4.4 aggregate invariant regression and rebuilt replay — 2026-08-20
 
 - Exact files changed: `apps/melodee-cli/src/legacy/import.rs`,
   `crates/melodee-persistence/src/catalog.rs`,
@@ -1305,37 +1341,125 @@ non-destructive, and media adopting rather than relocating or re-encoding.
   `apps/melodee-server/tests/jellyfin_media_api.rs`, the three surface-scoped
   differential reports, this report, `design/evidence/r5/README.md`,
   `design/evidence/r5/release-gate-report.md`, and `IMPLMENTATION_OUTSTANDING.md`.
-- Requirements: the durable `artist_catalog_aggregates.release_count` projection now counts
-  distinct primary `Release` billing rows in legacy import, normal catalog import, and full
-  maintenance rebuild paths. The regression test forces the full maintenance rebuild before
-  checking Jellyfin `ChildCount`, proving featured/secondary credits cannot inflate the count.
+- Requirements: a proposed change to make the durable `artist_catalog_aggregates.release_count`
+  projection count only primary `Release` billing rows was rejected by the existing catalog
+  detail regression, which requires credited releases to remain in this participation statistic.
+  The original participation semantics were restored in legacy import, normal catalog import,
+  and full maintenance rebuild paths. The separate Jellyfin regression still forces a full
+  maintenance rebuild before checking `ChildCount`, and its direct primary-billing query passes.
   R4.4 remains Partial; no requirement was marked terminal.
 - ADRs: no ADR was accepted or applied. This correction follows the existing captured
   primary-release contract; ADR-0149, ADR-0150, and ADR-0151 remain Proposed. No ADR-0150
   metadata mapping was implemented.
-- Tests: `cargo build -p melodee-cli -p melodee-server` passed; the focused Jellyfin regression
-  passed 1/1; the rebuilt isolated replays exited 1 fail-closed with 181 native, 322
-  OpenSubsonic, and 17 Jellyfin unclassified differences. `git diff --check` passed.
-- Compatibility impact: intentional correction to existing artist release-count projections;
-  native v1, OpenSubsonic, and Jellyfin wire DTOs and route contracts remain separate, and no
-  route, property, identifier, status, auth, pagination, range, or intentional 410/501 behavior
-  was changed.
+- Tests: the initial full workspace gate exposed the regression at
+  `catalog_browse::artist_detail_exposes_identity_stats_and_bounded_sections`; after restoring
+  participation semantics, the focused catalog browse suite passed 7/7, the focused Jellyfin
+  regression passed 1/1, the rebuilt isolated replays exited 1 fail-closed with 185 native, 330
+  OpenSubsonic, and 17 Jellyfin unclassified differences, and the corrected full local gate
+  passed with 216 Python tests, Admin UI 44 files/248 unit tests, the complete workspace/all-
+  features PostgreSQL Rust and doctest matrix, formatting, Clippy, and cargo-deny.
+- Compatibility impact: no public behavior correction was retained from the rejected aggregate
+  change; native v1, OpenSubsonic, and Jellyfin wire DTOs and route contracts remain separate,
+  and no route, property, identifier, status, auth, pagination, range, or intentional 410/501
+  behavior was changed.
 - Data/migration impact: legacy source, target databases, and canonical media used by replay were
   disposable and isolated. The aggregate is rebuilt from authoritative migrated PostgreSQL
   `release_artists` rows; no source mutation, media movement, or identity regeneration occurs.
-- Security/data-loss impact: positive bounded correction; it removes a false count without
-  synthesizing metadata or user state, and the differential harness remained fail-closed.
-- Performance/operational impact: one correlated distinct-primary-release count in existing
-  projection maintenance; no new dependency or runtime service was introduced. Production-sized
+- Security/data-loss impact: the rejected aggregate change was not retained; no source/media
+  mutation, metadata synthesis, or user-state change occurred, and the differential harness
+  remained fail-closed.
+- Performance/operational impact: aggregate maintenance returns to its existing participation
+  count semantics; no new dependency or runtime service was introduced. Production-sized
   performance measurements remain absent.
 - Documentation impact: Updated — this report, the R5 report, the R5 release-gate report, and
   `IMPLMENTATION_OUTSTANDING.md`; no public documentation changed because the correction restores
   an existing compatibility invariant rather than adding user-visible capability.
-- Remaining risks and owner: release/compatibility owner must resolve the remaining 181/322/17
+- Remaining risks and owner: release/compatibility owner must resolve the remaining 185/330/17
   residuals, including ADR-0150 metadata/state/order families and the separate playlist/provider
   decisions; production-sized and external acceptance evidence remains open.
 - External input still required: accepted ADR-0149/0150/0151 dispositions, approved production
   snapshot/topology, and release-owner authorization for external differential and cutover runs.
+- Updated counts: 45 packages total — 26 Complete, 13 Partial, 6 Not started; 239 requirements —
+  211 tested, 9 implemented, 12 in-progress, 7 deferred.
+
+### R4.4 native playlist comment compatibility correction — 2026-08-20
+
+- Exact files changed: `apps/melodee-server/src/native/playlists.rs`,
+  `apps/melodee-server/tests/native_playlists.rs`, `tests/python/test_scripts.py`,
+  `docs/src/content/docs/api/melodee-api.md`, the native differential report, this report,
+  the ADR-0150 decision package, the R5 reports, and `IMPLMENTATION_OUTSTANDING.md`.
+- Requirements: native-v1 playlist create and update continue to accept the legacy wire
+  `comment` field without copying it into the returned `description`, matching the frozen
+  contract. The native replay removed its three corresponding unclassified fields; R4.4 remains
+  Partial with 182 native, 330 OpenSubsonic, and 17 Jellyfin residuals. No requirement became
+  terminal.
+- ADRs: no ADR was accepted or applied. ADR-0149, ADR-0150, and ADR-0151 remain Proposed. The
+  separate Jellyfin/OpenSubsonic playlist `Comment`/`Overview` projection conflict remains in
+  the ADR-0150 decision package and was not silently mapped into the single shared description
+  column.
+- Tests: `cargo fmt --all` passed; the focused native playlist CRUD test passed 1/1; the isolated
+  native replay completed all 12 groups and exited 1 fail-closed with 182/330/17 current
+  surface residuals; `python3 scripts/validate_repository.py`,
+  `python3 scripts/extract_requirements.py --check`, `git diff --check`, and
+  `./scripts/check-smoke.sh` passed; `cd docs && pnpm check && pnpm check:links && pnpm build`
+  passed with 42 pages; and the exact current-tree `MELODEE_TEST_DATABASE_URL=postgres://... \
+  ./scripts/check.sh` passed with 217 Python tests, Admin UI 44 files/248 unit tests, the full
+  workspace/PostgreSQL Rust and doctest matrix, formatting, Clippy `-D warnings`, and cargo-deny.
+- Compatibility impact: native v1 only; the wire `comment` property remains accepted, and the
+  captured empty response `description` is restored. OpenSubsonic and Jellyfin DTOs and routes
+  were not changed.
+- Data/migration impact: no schema or migration mapping changed; existing migrated descriptions
+  remain readable, legacy source and canonical media remain read-only, and no identity changed.
+- Security/data-loss impact: no new destructive path or external input; the correction avoids a
+  new shared-storage mutation for a legacy compatibility field.
+- Performance/operational impact: no meaningful runtime or storage overhead; one request field is
+  deserialized and intentionally ignored.
+- Documentation impact: Updated — `docs/src/content/docs/api/melodee-api.md`, this report, the
+  ADR-0150 decision package, the R5 reports, and `IMPLMENTATION_OUTSTANDING.md`.
+- Remaining risks and owner: release/compatibility owner must resolve the remaining 182/330/17
+  differences, including metadata/state/order/provider families and the cross-product playlist
+  projection decision; real production-sized and client evidence remains open.
+- External input still required: accepted ADR-0149/0150/0151 dispositions, approved isolated
+  production snapshot/topology, physical-client and integration access, scheduled candidate
+  evidence, and release-owner authorization.
+- Updated counts: 45 packages total — 26 Complete, 13 Partial, 6 Not started; 239 requirements —
+  211 tested, 9 implemented, 12 in-progress, 7 deferred.
+
+### R4.4 native share-update policy compatibility correction — 2026-08-20
+
+- Exact files changed: `apps/melodee-server/src/native/community.rs`,
+  `apps/melodee-server/tests/native_community_api.rs`,
+  `docs/src/content/docs/features/sharing.md`, the native differential report,
+  `tests/python/test_scripts.py`, this report, the R5 reports, and
+  `IMPLMENTATION_OUTSTANDING.md`.
+- Requirements: native-v1 share updates continue to deserialize the legacy
+  `isDownloadable` request property but preserve the captured share policy instead of mutating it.
+  The migrated native replay removed the corresponding unclassified field; R4.4 remains Partial
+  with 181 native, 330 OpenSubsonic, and 17 Jellyfin residuals. No requirement became terminal.
+- ADRs: no ADR was accepted or applied. Accepted ADR-0123/ADR-0128 remain the existing native
+  compatibility authorities; ADR-0149, ADR-0150, and ADR-0151 remain Proposed. No cross-product
+  DTO or metadata mapping was added.
+- Tests: the focused `native_community_routes_are_owner_fenced_bounded_and_replay_safe` test
+  passed 1/1; `cargo fmt --all` and server Clippy with `-D warnings` passed; the isolated native
+  replay completed all 12 groups and exited 1 fail-closed with 181/330/17 current residuals;
+  the committed report contains no `community-lifecycle/share-update` unexpected difference.
+- Compatibility impact: native v1 only; the legacy request property remains accepted, while the
+  captured `isDownloadable: false` response policy is preserved on update. OpenSubsonic and
+  Jellyfin DTOs and routes remain unchanged and separate.
+- Data/migration impact: no schema or migration mapping changed; legacy source, migrated target,
+  and canonical media remain isolated/read-only for replay, and no identity changed.
+- Security/data-loss impact: positive compatibility correction; update no longer changes a durable
+  share policy from an untrusted legacy compatibility field, and no destructive path was added.
+- Performance/operational impact: negligible; one request field is deserialized and intentionally
+  ignored, with no dependency or service change.
+- Documentation impact: Updated — `docs/src/content/docs/features/sharing.md`, this report, the
+  R5 reports, and `IMPLMENTATION_OUTSTANDING.md`.
+- Remaining risks and owner: release/compatibility owner must resolve the remaining 181/330/17
+  residuals, including metadata/state/order/provider families and cross-product playlist projection;
+  real production-sized and client evidence remains open.
+- External input still required: accepted ADR-0149/0150/0151 dispositions, approved isolated
+  production snapshot/topology, physical-client and integration access, scheduled candidate
+  evidence, and release-owner authorization.
 - Updated counts: 45 packages total — 26 Complete, 13 Partial, 6 Not started; 239 requirements —
   211 tested, 9 implemented, 12 in-progress, 7 deferred.
 
@@ -1349,7 +1473,7 @@ hardware and cannot be honestly generated by this isolated local harness:
   executable reports are `dual-run-report-native.json`,
   `dual-run-report-opensubsonic.json`, and `dual-run-report-jellyfin.json`:
   all three ran from isolated per-file migrated snapshots. Native stream
-  HEAD/full/range requests passed; the current reports record 181, 322, and 17
+  HEAD/full/range requests passed; the current reports record 181, 330, and 17
   unclassified differences respectively. None is silently waived and each
   still requires compatibility classification or fixes.
 - R4.5 physical Android, Android Auto/DHU, MeloAmp, OpenSubsonic, and Jellyfin

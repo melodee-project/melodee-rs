@@ -8,8 +8,8 @@ Source evidence: the current committed surface reports
 [`dual-run-report-native.json`](dual-run-report-native.json),
 [`dual-run-report-opensubsonic.json`](dual-run-report-opensubsonic.json), and
 [`dual-run-report-jellyfin.json`](dual-run-report-jellyfin.json). They record
-185, 330, and 17 unexplained field differences respectively. The reports are
-intentionally unchanged by this package; no comparator mask is added here.
+181, 330, and 17 unexplained field differences respectively. The native report includes
+the current native-v1 playlist compatibility correction; no comparator mask is added here.
 
 ## Decision requested
 
@@ -46,12 +46,12 @@ projection exposes more than one unresolved source value.
 | Surface / family | Current evidence | Compatibility impact | Schema impact if implemented | 1.0 recommendation |
 |---|---:|---|---|---|
 | Native catalog order/projection | 117 positional/list fields | Page membership, IDs, names, counts, and URLs differ together | None for reference-only; an accepted ordering/schema decision is required for a durable presentation order | Decide via the separate catalog-ordering package; do not mask |
-| Native legacy metadata/state families | 75 fields outside the 117-entry order cluster, including genre, counters, ratings/starred state, biographies, shares, backend errors, and provider lookup | Client-visible fields and some statuses differ; semantics are not interchangeable | Reference-only retains issue evidence; projected fields require schema ownership, backfill, and rollback | Keep reference-only unless the owner selects a field-specific projection |
-| OpenSubsonic metadata/state projections | 330 total; 225 are genre/bit-depth-related, 29 play-counter-related, 37 state/rating-related, and 73 playlist/share-related field matches (overlapping families) | XML/JSON fields, genre lists, annotations, playlist/share views, and counts differ | Any durable genre, bit-depth, comment, or counter projection requires a schema ADR and adapter-specific mapping | Do not implement or mask before disposition |
+| Native legacy metadata/state families | 64 fields outside the 117-entry order cluster, including genre, counters, ratings/starred state, biographies, shares, backend errors, and provider lookup | Client-visible fields and some statuses differ; semantics are not interchangeable | Reference-only retains issue evidence; projected fields require schema ownership, backfill, and rollback | Keep reference-only unless the owner selects a field-specific projection |
+| OpenSubsonic metadata/state projections | 330 total; family counts remain overlapping and are reported in the machine-readable surface report | XML/JSON fields, genre lists, annotations, playlist/share views, and counts differ | Any durable genre, bit-depth, comment, or counter projection requires a schema ADR and adapter-specific mapping | Do not implement or mask before disposition |
 | Jellyfin companion projections | 17 total; 11 genre-related, 3 playlist Overview, and 3 instant-mix/similar cardinality fields | Music metadata, playlist descriptions, and recommendation cardinality differ | Genre/comment projections require durable ownership; instant-mix requires an explicit membership rule | Preserve current authority or obtain a field-specific decision |
 | Live/provider-backed values | 10 native podcast fields plus one provider artist lookup field | Values are provider/time dependent and cannot be established from the frozen catalog | No catalog schema should be invented for live responses | Validate externally or retain as an explicit exclusion under accepted authority |
 
-The 68-field native remainder is `185 - 117`; it is a residual scope count,
+The 64-field native remainder is `181 - 117`; it is a residual scope count,
 not a waiver. The OpenSubsonic family counts intentionally overlap and therefore
 must not be summed to derive a total.
 

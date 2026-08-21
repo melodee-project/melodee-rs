@@ -18,6 +18,10 @@ same `404 Not Found` response for unknown, malformed, expired, or revoked links.
 shares report that policy in the DTO; the share does not bypass stream authorization or filesystem
 path checks.
 
+Native-v1 share updates continue to accept the legacy `isDownloadable` request property, but the
+captured compatibility behavior does not change that policy during an update. Set the policy when
+creating the share; an update can change its description or expiry.
+
 Use an expiry for links that should not remain valid indefinitely. Deleting a share removes the
 derived share record, not the underlying catalog entity or media.
 

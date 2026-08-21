@@ -235,7 +235,11 @@ pub struct CreateShare {
 #[serde(rename_all = "camelCase")]
 pub struct UpdateShare {
     pub description: Option<String>,
-    pub is_downloadable: Option<bool>,
+    // Native-v1 accepts this legacy request property, but the captured update
+    // route does not apply it. Keep it deserializable without changing the
+    // durable share policy behind the compatibility surface.
+    #[serde(rename = "isDownloadable")]
+    _is_downloadable: Option<bool>,
     pub expires_at: Option<String>,
 }
 
@@ -880,12 +884,11 @@ async fn update_share(
     let expires_at = parse_optional_time(request.expires_at.as_deref())?;
     sqlx::query(
         "UPDATE native_shares SET description = COALESCE($2, description), \
-         is_downloadable = COALESCE($3, is_downloadable), expires_at = COALESCE($4, expires_at), \
+         expires_at = COALESCE($3, expires_at), \
          updated_at = now() WHERE public_api_id = $1",
     )
     .bind(id)
     .bind(request.description)
-    .bind(request.is_downloadable)
     .bind(expires_at)
     .execute(&state.pool)
     .await?;

@@ -89,7 +89,8 @@ impl Page {
 #[serde(rename_all = "camelCase")]
 pub struct CreatePlaylistRequest {
     name: String,
-    comment: Option<String>,
+    #[serde(rename = "comment")]
+    _comment: Option<String>,
     #[serde(default)]
     is_public: bool,
     song_ids: Option<Vec<Uuid>>,
@@ -99,7 +100,8 @@ pub struct CreatePlaylistRequest {
 #[serde(rename_all = "camelCase")]
 pub struct UpdatePlaylistRequest {
     name: Option<String>,
-    comment: Option<String>,
+    #[serde(rename = "comment")]
+    _comment: Option<String>,
     is_public: Option<bool>,
 }
 
@@ -287,7 +289,12 @@ pub async fn create_playlist(
         &NativePlaylistCreate {
             public_api_id: None,
             name: request.name,
-            description: request.comment,
+            // Native-v1 accepts `comment` on the wire, but the captured
+            // legacy create route did not copy it into the response
+            // `description` field. Keep the compatibility field
+            // deserializable without inventing a new mapping into the
+            // shared playlist storage row.
+            description: None,
             is_public: request.is_public,
             track_public_ids,
         },
@@ -312,7 +319,10 @@ pub async fn update_playlist(
         id,
         &NativePlaylistUpdate {
             name: request.name,
-            description: request.comment,
+            // The legacy update route likewise ignored the incoming
+            // compatibility `comment`; preserving that behavior keeps
+            // existing clients from observing a new mutation contract.
+            description: None,
             is_public: request.is_public,
         },
         OffsetDateTime::now_utc(),

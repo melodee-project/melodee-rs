@@ -44,6 +44,10 @@ under `/api/v1`. A user's library-group membership is applied consistently to br
 search, mutation, scrobble, and stream URL generation; inaccessible catalog entities are returned
 as not found and are not included in counts or user-history results.
 
+Native-v1 playlist create and update requests continue to accept the legacy `comment` request
+field for client compatibility. The captured contract does not copy that field into the returned
+playlist `description`; existing migrated descriptions remain readable.
+
 Image URLs returned by native DTOs use the anonymous `/images/{id}/{size}` compatibility route so
 clients can render art before adding authentication headers. Typed Artist, Album, Song, Playlist,
 and User IDs are resolved through PostgreSQL facts. Missing stored art uses the captured default

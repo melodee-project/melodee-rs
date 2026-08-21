@@ -66,7 +66,7 @@ class R4DualRunScenarioTests(unittest.TestCase):
 
 class R4AdrDecisionPackageTests(unittest.TestCase):
     def test_adr_0150_inventory_matches_committed_surface_reports(self) -> None:
-        expected = {"native": 185, "opensubsonic": 330, "jellyfin": 17}
+        expected = {"native": 181, "opensubsonic": 330, "jellyfin": 17}
         for surface, count in expected.items():
             with self.subTest(surface=surface):
                 report = json.loads(
@@ -84,7 +84,7 @@ class R4AdrDecisionPackageTests(unittest.TestCase):
             ROOT / "design" / "evidence" / "r4" / "adr-0150-decision-package.md"
         ).read_text()
         for required_text in (
-            "185, 330, and 17",
+            "181, 330, and 17",
             "Reference-only metadata",
             "Accepted schema-backed projection",
             "Bounded adapter reconstruction",

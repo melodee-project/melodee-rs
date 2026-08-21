@@ -1357,28 +1357,10 @@
   ],
   "unexpected": [
     {
-      "scenario": "catalog-playlist-crud/create-playlist",
-      "field": "response.body$.description",
-      "expected": "\"\"",
-      "actual": "\"synthetic CRUD probe\""
-    },
-    {
-      "scenario": "catalog-playlist-crud/list-playlists",
-      "field": "response.body$.data[0].description",
-      "expected": "\"\"",
-      "actual": "\"synthetic CRUD probe\""
-    },
-    {
       "scenario": "catalog-playlist-crud/songs-after-reorder",
       "field": "response.body$.data[1].playCount",
       "expected": "5",
       "actual": "0"
-    },
-    {
-      "scenario": "catalog-playlist-crud/update-playlist",
-      "field": "response.body$.description",
-      "expected": "\"\"",
-      "actual": "\"updated\""
     },
     {
       "scenario": "catalog-star-rating/album-detail-after-rating",
@@ -1391,6 +1373,12 @@
       "field": "response.body$.userStarred",
       "expected": "false",
       "actual": "true"
+    },
+    {
+      "scenario": "catalog-star-rating/artist-detail-after-star",
+      "field": "response.body$.albumCount",
+      "expected": "1",
+      "actual": "2"
     },
     {
       "scenario": "catalog-star-rating/artist-detail-after-star",
@@ -1892,6 +1880,12 @@
     },
     {
       "scenario": "catalog/artists-list",
+      "field": "response.body$.data[3].albumCount",
+      "expected": "1",
+      "actual": "2"
+    },
+    {
+      "scenario": "catalog/artists-list",
       "field": "response.body$.data[3].createdAt",
       "expected": "\"2026-01-05 00:00:00\"",
       "actual": "\"2026-01-03 00:00:00\""
@@ -1972,7 +1966,7 @@
       "scenario": "catalog/artists-list-page2",
       "field": "response.body$.data[0].albumCount",
       "expected": "2",
-      "actual": "0"
+      "actual": "1"
     },
     {
       "scenario": "catalog/artists-list-page2",
@@ -2161,6 +2155,12 @@
       "actual": "\"{melodee-origin}/images/artist_89eb2dc1-fd4c-5a57-99e5-480c96b292fc/80\""
     },
     {
+      "scenario": "catalog/artists-search-q-dune",
+      "field": "response.body$.data[1].albumCount",
+      "expected": "1",
+      "actual": "2"
+    },
+    {
       "scenario": "catalog/genres-list",
       "field": "response.body$.genres.length",
       "expected": "9",
@@ -2185,6 +2185,12 @@
       "actual": "0"
     },
     {
+      "scenario": "catalog/search-post-dune",
+      "field": "response.body$.data.artists[0].albumCount",
+      "expected": "1",
+      "actual": "2"
+    },
+    {
       "scenario": "catalog/song-detail",
       "field": "response.body$.playCount",
       "expected": "4",
@@ -2195,12 +2201,6 @@
       "field": "response.body$.data[2].playCount",
       "expected": "9",
       "actual": "0"
-    },
-    {
-      "scenario": "community-lifecycle/share-update",
-      "field": "response.body$.isDownloadable",
-      "expected": "false",
-      "actual": "true"
     },
     {
       "scenario": "native-discovery/artist-lookup",
@@ -2247,7 +2247,7 @@
       "scenario": "podcasts-surface/opml-export",
       "field": "response.body",
       "expected": "309 bytes sha256=4bf0ebe6dc81c3d9e9be5055d4a9556235d23ff754608ca1cfb96c873c10cc77",
-      "actual": "311 bytes sha256=f193a4a75958f5df543f2c33a833a636e638581958fe372a0cad98cee4c33fd4"
+      "actual": "311 bytes sha256=1977bd454cac7d85cd823d3aa45c962982c5194d7f56566cd5cfc9e4324caf3e"
     },
     {
       "scenario": "stream/album-songs-for-stream-url",
@@ -2288,7 +2288,7 @@
       "scenario": "native-user-extra/genre-hate",
       "field": "response.body",
       "expected": "0 bytes sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "actual": "120 bytes sha256=2187a7b9445cbe145106b56b19afc3cc62e69eb232b1ae13db53960c160f5320"
+      "actual": "120 bytes sha256=4a10945ad1a2172f2a6f908ef2c7d027f2c486a7ce66a21e67a01a541f15e4d6"
     },
     {
       "scenario": "native-user-extra/genre-songs",
@@ -2330,7 +2330,7 @@
       "scenario": "native-user-extra/genre-songs",
       "field": "response.body$.correlationId",
       "expected": "\"<omitted>\"",
-      "actual": "\"01a02177-83e2-74b2-97ee-8f11e1ae657b\""
+      "actual": "\"01a021f0-701f-7923-b810-cd40831c32e8\""
     },
     {
       "scenario": "native-user-extra/genre-songs",
@@ -2359,7 +2359,7 @@
       "scenario": "native-user-extra/genre-star",
       "field": "response.body",
       "expected": "0 bytes sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "actual": "120 bytes sha256=91533af8a4880bcbdd0bef44e2b0649d13f3c3798b742db8d25abe005e576433"
+      "actual": "120 bytes sha256=e033d446ae4fddf7a45ebcf26bfb743394099a38654cb1c23f2f2ec115e3e08f"
     },
     {
       "scenario": "native-user-extra/genres-hated",

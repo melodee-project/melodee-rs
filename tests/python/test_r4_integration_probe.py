@@ -159,6 +159,22 @@ class R4IntegrationProbeTests(unittest.TestCase):
         with self.assertRaises(MODULE.ProbeError):
             MODULE.validate_podcast_xml(b"<!DOCTYPE rss [<!ENTITY secret SYSTEM 'file:///private'>]><rss/>")
 
+    def test_oidc_jwks_target_requires_same_host_or_explicit_allowlist(self):
+        MODULE.validate_oidc_jwks_target(
+            "https://issuer.example/.well-known/openid-configuration",
+            "https://issuer.example/keys",
+        )
+        with self.assertRaises(MODULE.ProbeError):
+            MODULE.validate_oidc_jwks_target(
+                "https://issuer.example/.well-known/openid-configuration",
+                "https://keys.example/jwks",
+            )
+        MODULE.validate_oidc_jwks_target(
+            "https://issuer.example/.well-known/openid-configuration",
+            "https://keys.example/jwks",
+            ["keys.example"],
+        )
+
     def test_probe_artifact_validation_is_stable_and_redacted(self):
         artifact = {
             "artifact": "melodee.r4-integration-probe",
