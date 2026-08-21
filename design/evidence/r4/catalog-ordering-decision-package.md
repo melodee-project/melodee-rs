@@ -88,3 +88,12 @@ Please accept, reject, or revise A/B/C and specify:
 
 Until this is decided, the 117 catalog ordering/projection differences remain unclassified and
 R4.4 remains Partial.
+
+> **Status (2026-08-21):** the counts recorded at the package point (185
+> unclassified native differences) predate the later comparator corrections; the
+> committed current migrated replay is the authoritative artifact and retains
+> 181 unclassified native differences, of which the 117-entry ordering/projection
+> cluster is the largest. ADR-0149, ADR-0150, and ADR-0151 have all been
+> accepted (commit `c8cfbd0`), but **no ordering option (A/B/C) is accepted by
+> this** — the ordering disposition itself remains an open release-owner
+> decision; acceptance of the other ADRs does not resolve it.

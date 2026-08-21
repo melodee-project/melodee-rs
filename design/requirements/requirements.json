@@ -3733,7 +3733,7 @@
       "apps/melodee-cli/src/legacy/freeze.rs and import.rs (acknowledged freeze, final delta, cutover-ready state, and source-read-only migration contract)",
       "scripts/legacy_rehearsal.py (isolated backup/restore, freeze, failed-target retention, and rollback drill)",
       "design/evidence/r4/README.md and design/evidence/r4/rehearsal-drill-12000.json (production-shaped local rollback evidence)",
-      "design/adr/ADR-0149-phase-11-rehearsal-freeze-cutover-and-rollback-procedures.md (proposed operator procedure)"
+      "design/adr/ADR-0149-phase-11-rehearsal-freeze-cutover-and-rollback-procedures.md (accepted operator procedure)"
     ],
     "tests": [
       "apps/melodee-cli/tests/legacy_freeze.rs (freeze acknowledgement, source-write abort, and immutable baseline)",

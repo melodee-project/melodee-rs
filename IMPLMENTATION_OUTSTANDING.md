@@ -177,8 +177,13 @@ accepted decision, or `superseded` by an identified requirement.
   be changed to supported until R3 and R4 pass.
 - The workspace version remains pre-1.0 and must not be changed to `1.0.0` until R5 passes.
 - ADR-0149 (rehearsal/freeze/cutover), ADR-0150 (legacy media metadata disposition), and ADR-0151
-  (release-image runtime base) remain **Proposed**, not accepted. Their dependent release claims
-  remain open.
+  (release-image runtime base) are **accepted** (commit `c8cfbd0`, 2026-08-21). ADR-0149 now
+  governs the R4.7/R4.8 operator procedures; ADR-0150 governs the metadata-boundary differential
+  classification (384/528 unclassified diffs now classifiable, see
+  `design/evidence/r4/differential-classification-wp1.md`); ADR-0151's Trixie runtime base is
+  applied in the `Dockerfile`. Remaining open items: (1) the catalog ordering decision (A/B/C)
+  for the ~136 ordering diffs, (2) the release-image severity policy (8 unfixed critical CVEs
+  in Trixie — Decision Point 1), and (3) the operator-authorized production rehearsal.
 - The current migrated-snapshot differential has 181 unclassified native differences, 330
   unclassified OpenSubsonic differences, and 17 unclassified Jellyfin differences. All three
   surface-scoped reports are committed; none is treated as a waiver. These are release blockers.

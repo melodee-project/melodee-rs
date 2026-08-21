@@ -78,8 +78,9 @@ python3 scripts/new_adr.py "short title"
 - [ADR-0146: CUE-driven track segmentation in normalization](ADR-0146-cue-driven-track-segmentation-in-normalization.md)
 - [ADR-0147: Configured transcoding for OpenSubsonic and Jellyfin streaming](ADR-0147-configured-transcoding-for-opensubsonic-and-jellyfin-streaming.md)
 - [ADR-0148: Legacy migration contract (Phase 11 tooling)](ADR-0148-legacy-migration-contract.md)
-- [ADR-0150: Legacy media metadata dispositions for Phase 11 migration (Proposed)](ADR-0150-legacy-media-metadata-dispositions-for-phase-11-migration.md)
-- [ADR-0151: Use Debian Trixie runtime base for release images (Proposed)](ADR-0151-use-debian-trixie-runtime-base-for-release-images.md)
+- [ADR-0149: Phase 11 rehearsal, freeze, cutover, and rollback procedures](ADR-0149-phase-11-rehearsal-freeze-cutover-and-rollback-procedures.md)
+- [ADR-0150: Legacy media metadata dispositions for Phase 11 migration](ADR-0150-legacy-media-metadata-dispositions-for-phase-11-migration.md)
+- [ADR-0151: Use Debian Trixie runtime base for release images](ADR-0151-use-debian-trixie-runtime-base-for-release-images.md)
 
 ## ADR quality rules
 

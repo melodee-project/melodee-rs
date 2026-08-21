@@ -67,6 +67,15 @@ be marked complete.
   metadata mappings, and runtime-base choice are not implementation authority until their decision
   owners accept or supersede them.
 
+> **Status (2026-08-21):** the bullet above is the historical record at the
+> preparation point. All three ADRs have since been **accepted** in commit
+> `c8cfbd0`: ADR-0149 now governs the rehearsal/freeze/cutover/rollback
+> procedures, ADR-0150 the legacy media metadata dispositions, and ADR-0151
+> the Debian Trixie runtime base (already applied in the `Dockerfile`).
+> Confirmation item 1 (release-owner dispositions) is therefore satisfied;
+> items 2–4 (production snapshot, physical clients, production endpoints)
+> remain open operator inputs.
+
 ## Required confirmations before promotion
 
 The following are inputs, not assumptions, for release promotion:

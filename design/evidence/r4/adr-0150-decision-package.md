@@ -130,3 +130,13 @@ This package also does not decide the separate catalog ordering, user-state,
 share/update, playback-backend, live podcast, or provider differences. Each
 needs either an implementation correction supported by a focused test or a
 named product/ADR disposition. ADR-0149 and ADR-0151 remain Proposed as well.
+
+---
+
+> **Disposition (2026-08-21):** ADR-0150 was **Accepted** by the release owner in
+> commit `c8cfbd0`; ADR-0149 and ADR-0151 were accepted in the same commit. The
+> metadata-boundary differentials recorded in this package are now governed by
+> accepted ADR-0150 and are classified under the R4.4 differential closure
+> (`design/evidence/r4/README.md`) rather than left as proposed-disposition
+> residuals. The text above is the historical decision record and is preserved
+> as written.

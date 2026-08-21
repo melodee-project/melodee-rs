@@ -168,8 +168,8 @@ already-large values are treated as bits per second). Legacy genres, moods, bit 
 free-form track metadata, and aggregate play counters currently have no authoritative Rust
 representation. Non-empty or present values are retained as `metadata.reference_only` warning
 issues with field names, rather than being copied into unrelated catalog fields or converted into
-synthetic play events. Review those issues before cutover; final 1.0 disposition is tracked by
-proposed ADR-0150.
+synthetic play events. Review those issues before cutover; the final 1.0 disposition is governed
+by ADR-0150.
 
 ### `legacy verify`
 

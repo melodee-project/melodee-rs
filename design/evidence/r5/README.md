@@ -53,9 +53,11 @@ warnings already accepted by the repository gate.
 
 The Compose checks used synthetic values from `compose.env.example`; they did not contact a
 deployment or create persistent volumes. The local smoke and full gates were rerun while the
-proposed runtime-base image was under triage; ADR-0151 remains Proposed and no runtime-base
-acceptance or publication is claimed. The source Dockerfile retains the accepted Bookworm
-runtime until that decision is accepted. The docs site built 42 pages with link validation passing.
+proposed runtime-base image was under triage; ADR-0151 was subsequently **accepted** in
+commit `c8cfbd0` (2026-08-21), which changed the `Dockerfile` runtime stage to
+`debian:trixie-slim` per the accepted decision. No runtime-base publication is claimed; the
+exact amd64/arm64 candidate rebuild, smoke, scan, SBOM, and provenance at the release commit
+remain R5.2/R5.6 scope. The docs site built 42 pages with link validation passing.
 
 The latest current-tree `./scripts/check.sh` rerun after the operator-help and evidence updates
 also passed with exit code 0: 181 Python tests, Admin UI 44 files/248 tests, all workspace and
@@ -2543,3 +2545,33 @@ source/destination sentinels remained unchanged. No public contract or migration
   and explicit authorization for the production migration and restore drills.
 - Updated counts: 45 packages total — 26 Complete, 13 Partial, 6 Not started; 239 requirements —
   211 tested, 9 implemented, 12 in-progress, 7 deferred.
+
+### R5 WP0 baseline reconciliation — 2026-08-21
+
+- Exact files changed: `design/evidence/r5/README.md` (scope section),
+  `design/evidence/r5/adr-0151-decision-package.md` (disposition note),
+  `design/evidence/r5/release-gate-report.md` (no changes — historical
+  entries preserved as written).
+- Requirements: no requirement was marked terminal.
+- ADRs: ADR-0151 is now recorded as accepted (commit `c8cfbd0`) in the
+  R5 scope section; the decision package carries a disposition note
+  preserving the historical record. ADR-0149 and ADR-0150 are accepted
+  in the same commit (recorded in the R4 report).
+- Tests: `./scripts/check-smoke.sh` passed.
+- Compatibility impact: none.
+- Data/migration impact: none.
+- Security/data-loss impact: none; the 8 critical / 187 high image-scan
+  findings remain open release blockers — the release workflow still
+  fails on any critical finding, and no suppression or versioned
+  exception has been recorded.
+- Performance/operational impact: none.
+- Documentation impact: Updated — R5 scope section and ADR-0151 decision
+  package now reflect accepted status.
+- Remaining risks and owner: Decision Point 1 (release image severity
+  policy) remains open; the exact candidate rebuild and scan remain
+  R5.2/R5.6 scope. Release owner must select a severity policy (wait,
+  versioned exception, or rebuild) before the R5 RC build.
+- External input still required: severity policy decision, exact
+  amd64/arm64 candidate build, and production-topology acceptance.
+- Updated counts: 45 packages total — 26 Complete, 13 Partial, 6 Not started;
+  239 requirements — 211 tested, 9 implemented, 12 in-progress, 7 deferred.

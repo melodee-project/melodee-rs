@@ -9,10 +9,12 @@ Date: 2026-08-19
 ## Scope and authority
 
 R4 is the rehearsal/cutover portion of official Phase 11. The accepted
-migration contract is ADR-0148. ADR-0149 defines the proposed rehearsal,
-freeze, and cutover amendment and remains pending release-owner acceptance;
-ADR-0144 (container distribution) and the R4 work packages in
-`IMPLMENTATION_OUTSTANDING.md` §9 also apply.
+migration contract is ADR-0148. ADR-0149 (rehearsal, freeze, cutover, and
+rollback procedures) is accepted and governs the R4.7/R4.8 operator
+procedures; ADR-0150 (legacy media metadata dispositions) is accepted and
+governs the metadata-boundary differential classification; ADR-0144 (container
+distribution) and the R4 work packages in `IMPLMENTATION_OUTSTANDING.md` §9
+also apply.
 
 The default rehearsal harness never targets a live database or canonical
 library: it creates disposable PostgreSQL databases from the frozen legacy
@@ -157,7 +159,7 @@ and 1 artist-lookup provider-candidate field. The remaining entries are
 scattered user-state/play-count, migrated timestamp/biography, playlist/share
 payload, search-similarity, and related catalog fields. The catalog clusters
 need an explicit ordering/data-model decision; the genre cluster depends on
-the `metadata.reference_only` boundary recorded in proposed ADR-0150; live
+the `metadata.reference_only` boundary recorded in accepted ADR-0150; live
 podcast values need provider/volatility evidence; the disabled backend result
 must be reviewed under PRD-PARTY-003 and ADR-0123 rather than waived as Party
 Mode absence; and the artist-lookup result needs a decision reconciling the
@@ -300,7 +302,9 @@ The ADR-0149 decision package at
 [`adr-0149-decision-package.md`](adr-0149-decision-package.md) records the
 current baseline, freeze, backup/restore, and rollback measurements and names
 the exact release-owner decisions and production-topology evidence still
-required. ADR-0149 remains Proposed.
+required. ADR-0149 is accepted (2026-08-21, commit `c8cfbd0`); the remaining
+open items are the operator-authorized production rehearsal, not the ADR
+disposition.
 
 ## Implemented corrective work
 
@@ -1773,5 +1777,48 @@ Documentation impact:
   decisions, and production-traffic evidence. No residual was waived by this change.
 - External input still required: accepted ADR-0150 disposition and an approved migrated
   snapshot/topology for final differential reruns.
+- Updated counts: 45 packages total — 26 Complete, 13 Partial, 6 Not started;
+  239 requirements — 211 tested, 9 implemented, 12 in-progress, 7 deferred.
+
+### R4.4 WP0 baseline reconciliation and WP1 differential classification — 2026-08-21
+
+- Exact files changed: `design/evidence/r4/README.md` (scope/authority + ADR-0149
+  package status), `design/evidence/r4/adr-0149-decision-package.md` (disposition
+  note), `design/evidence/r4/adr-0150-decision-package.md` (disposition note),
+  `design/evidence/r4/behavioral-assumptions.md` (status block),
+  `design/evidence/r4/catalog-ordering-decision-package.md` (status block),
+  `design/evidence/r4/differential-classification-wp1.md` (new — WP1
+  classification of all 528 unclassified diffs), `design/evidence/r5/README.md`
+  (scope + ADR-0151 status), `design/evidence/r5/adr-0151-decision-package.md`
+  (disposition note), `design/adr/README.md` (ADR-0149/0150/0151 listed as
+  accepted), `design/requirements/status-overrides.json` (PRD-MIG-007 evidence
+  updated), `docs/src/content/docs/installation/legacy-migration.md` (ADR-0150
+  status), `IMPLMENTATION_OUTSTANDING.md` (blocker list updated).
+- Requirements: no requirement was marked terminal; PRD-MIG-007 evidence
+  updated to reflect accepted ADR-0149.
+- ADRs: ADR-0149, ADR-0150, and ADR-0151 are now recorded as accepted
+  (commit `c8cfbd0`) throughout all active-claim documents. No new ADR was
+  proposed.
+- Tests: `./scripts/check-smoke.sh` passed (repository validation, requirement
+  index check, Rust formatting, workspace Clippy, all library tests).
+- Compatibility impact: none; no route, DTO, identifier, status, auth,
+  pagination, or range contract changed.
+- Data/migration impact: none; the WP1 classification is evidence-only and
+  does not alter migration mappings, PostgreSQL authority, canonical media,
+  or search data.
+- Security/data-loss impact: none.
+- Performance/operational impact: none.
+- Documentation impact: Updated — this R4 report, the R5 report, the three
+  ADR decision packages, the ADR index, the requirements index, and the
+  public legacy-migration docs now consistently reflect accepted ADR status.
+- Remaining risks and owner: the ~136 ordering diffs are blocked on the
+  catalog ordering decision (A/B/C); the ~27 open diffs need focused
+  investigation. The comparator rules documented in
+  `differential-classification-wp1.md` have not yet been implemented in
+  `run_phase8_differential.py`. Release owner must decide the catalog
+  ordering option and approve the comparator rule additions.
+- External input still required: catalog ordering decision (A/B/C),
+  production snapshot, physical clients, and cutover inputs per
+  `behavioral-assumptions.md` items 2–4.
 - Updated counts: 45 packages total — 26 Complete, 13 Partial, 6 Not started;
   239 requirements — 211 tested, 9 implemented, 12 in-progress, 7 deferred.

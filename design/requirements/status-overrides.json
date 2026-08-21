@@ -733,7 +733,7 @@
       "scripts/capture_media_baseline.py",
       "design/evidence/phase-0/media-baseline.md",
       "crates/melodee-media/src/lib.rs and normalize.rs (content/stream-based detection, bounded probing/hashing/artwork, and actionable failure findings)",
-      "design/evidence/r2/README.md §3 (executable practical-format matrix and pathology closure)"
+      "design/evidence/r2/README.md \u00a73 (executable practical-format matrix and pathology closure)"
     ],
     "tests": [
       "tests/python/test_media_baseline.py",
@@ -1017,7 +1017,7 @@
       "crates/melodee-search/src/bin/phase6_benchmark.rs (build/query wall time, documents/sec, index bytes, process VmHWM, query count/time fields, and zero media reads)",
       "apps/melodee-server/tests/native_phase7_performance.rs (route p50/p95/max, response bytes, seed wall, process VmHWM, and zero media reads)",
       "design/evidence/r2/catalog-query-benchmark.json (R2.7: catalog browse planner evidence at 2k/10k/120k cardinality; indexed broad low-selectivity plans)",
-      "design/evidence/r2/search-benchmark-1m.json (R2.7: Tantivy 1M-track rebuild — 211 MiB index, 9.8 s wall, 291 MiB peak RSS, zero media reads)",
+      "design/evidence/r2/search-benchmark-1m.json (R2.7: Tantivy 1M-track rebuild \u2014 211 MiB index, 9.8 s wall, 291 MiB peak RSS, zero media reads)",
       "design/evidence/r2/repeated-termination-200.json (R2.7: 200-release repeated-termination vertical, 82.2 s wall)"
     ],
     "tests": [
@@ -1037,7 +1037,7 @@
       "design/evidence/phase-4/PHASE-4-REPORT.md (bounded 200-manifest catalog result with zero loss/duplicate/partial/media-read result)",
       "design/evidence/phase-5/PHASE-5-REPORT.md (bounded 200-Release policy result with zero loss/duplicate/partial/media-read result)",
       "design/evidence/r2/catalog-query-benchmark.json (R2.7: catalog browse planner evidence at 2k/10k/120k cardinality; indexed broad low-selectivity plans)",
-      "design/evidence/r2/search-benchmark-1m.json (R2.7: Tantivy 1M-track rebuild — 211 MiB index, 9.8 s wall, 291 MiB peak RSS, zero media reads)",
+      "design/evidence/r2/search-benchmark-1m.json (R2.7: Tantivy 1M-track rebuild \u2014 211 MiB index, 9.8 s wall, 291 MiB peak RSS, zero media reads)",
       "design/evidence/r2/repeated-termination-200.json (R2.7: 200-release repeated-termination vertical, 82.2 s wall)"
     ],
     "tests": [
@@ -1254,7 +1254,7 @@
       "python3 scripts/validate_repository.py (repository/documentation validation covering the inventory document and its links)",
       "design/evidence/phase-9/checklists/11-themes-localization-web.md row 2 acceptance"
     ],
-    "note": "WP-14 deliverable. Every legacy page is classified into the PRD-WEB-001 categories (admin/curation → new Admin UI; account/profile, browsing/playback, public share, onboarding → preserved or explicitly approved replacement surface); the classification feeds PRD-WEB-002 and Phase 10 planning."
+    "note": "WP-14 deliverable. Every legacy page is classified into the PRD-WEB-001 categories (admin/curation \u2192 new Admin UI; account/profile, browsing/playback, public share, onboarding \u2192 preserved or explicitly approved replacement surface); the classification feeds PRD-WEB-002 and Phase 10 planning."
   },
   "PRD-WEB-002": {
     "status": "tested",
@@ -1270,7 +1270,7 @@
   "PRD-WORK-001": {
     "status": "tested",
     "implementation": [
-      "crates/melodee-persistence/migrations/0001_release_work_items.sql and 0002_release_work_item_events.sql plus crates/melodee-persistence/src/work_items.rs (durable work items, FOR UPDATE SKIP LOCKED leases, bounded retries, append-only history — the durable-queue replacement for the legacy everything-is-a-Quartz-job model, since Phase 2)",
+      "crates/melodee-persistence/migrations/0001_release_work_items.sql and 0002_release_work_item_events.sql plus crates/melodee-persistence/src/work_items.rs (durable work items, FOR UPDATE SKIP LOCKED leases, bounded retries, append-only history \u2014 the durable-queue replacement for the legacy everything-is-a-Quartz-job model, since Phase 2)",
       "crates/melodee-ingestion/src/scheduler.rs and apps/melodee-server/src/main.rs (scheduled ingestion reconciliation trigger)",
       "apps/melodee-server/src/podcast_worker.rs (scheduled podcast refresh/download/cleanup/recovery triggers over leased durable state)",
       "apps/melodee-server/src/policy_worker.rs (scheduled policy evaluation over leased durable state)",
@@ -1285,7 +1285,7 @@
       "apps/melodee-server/tests/discovery_worker.rs (periodic maintenance loop, idempotency, graceful stop)",
       "crates/melodee-persistence/tests/worker_pool_state.rs, apps/melodee-server/tests/worker_pools.rs, and apps/melodee-cli/tests/worker_pools.rs (durable pause/resume)"
     ],
-    "note": "The durable-queue-plus-scheduled-triggers model fully replaces the legacy Quartz mental model; this requirement is about the model, not job-for-job parity. Legacy scheduled jobs with NO Rust equivalent, recorded honestly: jobs.nowPlayingCleanup (never seeded by default; native_now_playing rows are replaced/deleted per user on new now-playing/scrobble writes instead), jobs.stagingAutoMove and jobs.stagingAlbumRevalidation (no equivalent by design — the Rust ingestion model is non-destructive and never auto-moves inbound staging media, ADR-0116), jobs.artistHousekeeping and jobs.artistSearchEngineHousekeeping (the legacy separate artist search-engine database does not exist; the Tantivy projection is rebuilt/caught up by the Phase 6 search worker), and jobs.musicbrainzUpdateDatabase (deferred with the MusicBrainz provider integration under ADR-0136)."
+    "note": "The durable-queue-plus-scheduled-triggers model fully replaces the legacy Quartz mental model; this requirement is about the model, not job-for-job parity. Legacy scheduled jobs with NO Rust equivalent, recorded honestly: jobs.nowPlayingCleanup (never seeded by default; native_now_playing rows are replaced/deleted per user on new now-playing/scrobble writes instead), jobs.stagingAutoMove and jobs.stagingAlbumRevalidation (no equivalent by design \u2014 the Rust ingestion model is non-destructive and never auto-moves inbound staging media, ADR-0116), jobs.artistHousekeeping and jobs.artistSearchEngineHousekeeping (the legacy separate artist search-engine database does not exist; the Tantivy projection is rebuilt/caught up by the Phase 6 search worker), and jobs.musicbrainzUpdateDatabase (deferred with the MusicBrainz provider integration under ADR-0136)."
   },
   "PRD-WORK-002": {
     "status": "tested",
@@ -1315,7 +1315,7 @@
     "status": "tested",
     "implementation": [
       "crates/melodee-persistence/src/work_items.rs (operator transitions: quarantine/reprocess/retry; release_lease; append-only events)",
-      "crates/melodee-persistence/migrations/0023_phase9_worker_pool_state.sql and crates/melodee-persistence/src/worker_pool.rs (durable, audited, multi-process-safe pool pause/resume, ADR-0134 §8)",
+      "crates/melodee-persistence/migrations/0023_phase9_worker_pool_state.sql and crates/melodee-persistence/src/worker_pool.rs (durable, audited, multi-process-safe pool pause/resume, ADR-0134 \u00a78)",
       "apps/melodee-server/src/podcast_worker.rs, policy_worker.rs, and discovery_worker.rs (pool rows checked between claim batches; in-flight claims finish or are released per the lease contract)",
       "apps/melodee-cli/src/main.rs (worker-pools list/pause/resume operating on the same durable rows)"
     ],
@@ -1330,7 +1330,7 @@
   "PRD-CLI-001": {
     "status": "tested",
     "implementation": [
-      "apps/melodee-cli/src/main.rs — delivered command groups covering the required minimum set: doctor (prerequisite/health inspection), config list/validate/export/import (config health), ingest reconcile/status (library reconciliation trigger and diagnostics), work list/show/retry/seed-test/claim-test (ingestion item inspect and audited retry/reprocess), catalog import/status/inspect, policy config/rules/test (diagnostics/report output), search status/rebuild/query, migrate (database migration/status), users bootstrap-admin and operator recovery (user/admin bootstrap and recovery), groups, charts, podcasts stuck/recover (stuck-download recovery), notifications templates/test-send, scripts list/test, worker-pools list/pause/resume, plan"
+      "apps/melodee-cli/src/main.rs \u2014 delivered command groups covering the required minimum set: doctor (prerequisite/health inspection), config list/validate/export/import (config health), ingest reconcile/status (library reconciliation trigger and diagnostics), work list/show/retry/seed-test/claim-test (ingestion item inspect and audited retry/reprocess), catalog import/status/inspect, policy config/rules/test (diagnostics/report output), search status/rebuild/query, migrate (database migration/status), users bootstrap-admin and operator recovery (user/admin bootstrap and recovery), groups, charts, podcasts stuck/recover (stuck-download recovery), notifications templates/test-send, scripts list/test, worker-pools list/pause/resume, plan"
     ],
     "tests": [
       "apps/melodee-cli/tests/work_retry.rs (work retry requeues failed/quarantined through the operator state-machine arm, refuses other states, fails on unknown ids)",
@@ -1345,7 +1345,7 @@
       "apps/melodee-cli/src/main.rs (all mutating commands connect via MELODEE__DATABASE__URL and operate through the same melodee-persistence stores as the server: WorkItemStore, SettingsStore, OnboardingStore, worker_pool rows, podcast lease predicates, notification template/delivery stores, script registry)",
       "apps/melodee-cli/src/main.rs (users/groups/notifications/scripts commands documented as mirroring the admin API semantics exactly; no HTTP/JWT bypass invented)",
       "apps/melodee-cli/src/main.rs (podcasts recover reuses the worker's lease predicates and owned-file reconciliation; worker-pools pause/resume writes the same audited durable rows the workers poll)",
-      "apps/melodee-cli/src/main.rs (work retry reuses WorkItemStore::transition with TransitionKind::Operator — the identical audited arm as the Admin UI reprocess endpoint)"
+      "apps/melodee-cli/src/main.rs (work retry reuses WorkItemStore::transition with TransitionKind::Operator \u2014 the identical audited arm as the Admin UI reprocess endpoint)"
     ],
     "tests": [
       "apps/melodee-cli/tests/worker_pools.rs (CLI pause/resume is durable, audited, and observed by server workers)",
@@ -1353,7 +1353,7 @@
       "apps/melodee-cli/tests/config.rs, notifications.rs, scripts.rs, users_groups.rs (DB-direct coordination through shared stores; secret redaction preserved)",
       "apps/melodee-cli/tests/work_retry.rs (retry goes through the durable state machine with an audited operator reason; non-failed/quarantined items are refused)"
     ],
-    "note": "CLI coordination is DB-direct through the shared stores/leases — the same durable safety controls (leases, audit, non-destructive rules) the server workers enforce; no command bypasses them."
+    "note": "CLI coordination is DB-direct through the shared stores/leases \u2014 the same durable safety controls (leases, audit, non-destructive rules) the server workers enforce; no command bypasses them."
   },
   "PRD-OBS-001": {
     "status": "tested",
@@ -1616,7 +1616,7 @@
       "apps/melodee-server/src/resource_bounds.rs (R2.4 process-local gauge registry: per-class utilization, queue age, saturation; RAII release on disconnect/cancellation)",
       "apps/melodee-server/src/main.rs (registry installed at startup; direct-play and transcoding gauges attached; image/podcast/notification/lastfm classes self-register)",
       "apps/melodee-server/src/admin_system.rs (additive resourceBounds snapshot on /api/admin/v1/system/health)",
-      "design/evidence/r2/README.md §10 (R2.7 environment fault suite: bounded, fail-closed, restart-safe behavior under staging-disk-full, slow storage, hung FFmpeg, ENOSPC, and PostgreSQL restart)"
+      "design/evidence/r2/README.md \u00a710 (R2.7 environment fault suite: bounded, fail-closed, restart-safe behavior under staging-disk-full, slow storage, hung FFmpeg, ENOSPC, and PostgreSQL restart)"
     ],
     "tests": [
       "crates/melodee-ingestion/tests/inspection.rs",
@@ -2016,7 +2016,7 @@
       "crates/melodee-persistence/migrations/0007_phase4_catalog.sql (separate immutable public_api_id columns and legacy mapping evidence)",
       "crates/melodee-persistence/src/catalog_mutations.rs (set-wise conflict-checked legacy public-ID import)",
       "apps/melodee-cli/src/legacy/import_catalog.rs, import_tracks.rs, import_state.rs (legacy ApiKey/ShareUniqueId preserved verbatim via legacy_catalog_id_mappings and legacy_migration.entity_map)",
-      "design/adr/ADR-0148-legacy-migration-contract.md §D.2 (identity preservation)"
+      "design/adr/ADR-0148-legacy-migration-contract.md \u00a7D.2 (identity preservation)"
     ],
     "tests": [
       "crates/melodee-persistence/tests/catalog_legacy.rs (all 39 frozen Artist/Release/Track cases)",
@@ -2058,7 +2058,7 @@
       "apps/melodee-cli/src/legacy/freeze.rs and import.rs (acknowledged freeze, final delta, cutover-ready state, and source-read-only migration contract)",
       "scripts/legacy_rehearsal.py (isolated backup/restore, freeze, failed-target retention, and rollback drill)",
       "design/evidence/r4/README.md and design/evidence/r4/rehearsal-drill-12000.json (production-shaped local rollback evidence)",
-      "design/adr/ADR-0149-phase-11-rehearsal-freeze-cutover-and-rollback-procedures.md (proposed operator procedure)"
+      "design/adr/ADR-0149-phase-11-rehearsal-freeze-cutover-and-rollback-procedures.md (accepted operator procedure)"
     ],
     "tests": [
       "apps/melodee-cli/tests/legacy_freeze.rs (freeze acknowledgement, source-write abort, and immutable baseline)",
@@ -2546,7 +2546,7 @@
     "status": "tested",
     "implementation": [
       "apps/melodee-server/src/opensubsonic/radio.rs (captured OS CRUD, Phase 8)",
-      "crates/melodee-persistence/src/radio.rs (RadioStationStore over opensubsonic_radio_stations, ADR-0134 §1)",
+      "crates/melodee-persistence/src/radio.rs (RadioStationStore over opensubsonic_radio_stations, ADR-0134 \u00a71)",
       "apps/melodee-server/src/admin_radio.rs (Admin API list/read for any authenticated user, bounded/paginated)"
     ],
     "tests": [
@@ -2656,7 +2656,7 @@
     "implementation": [
       "crates/melodee-persistence/migrations/0028_phase9_external_providers.sql (external_provider_cache: bounded jsonb payload, hashed request key, fetched_at/expires_at)",
       "crates/melodee-persistence/src/providers.rs (ProviderCacheStore get-if-fresh/upsert/purge-expired)",
-      "apps/melodee-server/src/lastfm.rs (single-attempt scrobble submission with 10 s timeout; failures degrade and drop the scrobble, never the ingestion/playback work — evidence doc section 5)",
+      "apps/melodee-server/src/lastfm.rs (single-attempt scrobble submission with 10 s timeout; failures degrade and drop the scrobble, never the ingestion/playback work \u2014 evidence doc section 5)",
       "design/adr/ADR-0136-defer-non-last-fm-external-provider-integrations-to-post-parity.md (approved deferral of the provider-lookup caching legs)"
     ],
     "tests": [
@@ -2701,7 +2701,7 @@
   "PRD-UI-003": {
     "status": "tested",
     "implementation": [
-      "admin-ui/src/components/EntityTable.tsx (Carbon DataTable with server-side sort/page; TanStack not adopted — no proven gap)"
+      "admin-ui/src/components/EntityTable.tsx (Carbon DataTable with server-side sort/page; TanStack not adopted \u2014 no proven gap)"
     ],
     "tests": [
       "admin-ui/src/components/EntityTable.test.tsx"
@@ -2761,7 +2761,7 @@
   "PRD-UI-009": {
     "status": "implemented",
     "implementation": [
-      "admin-ui/src/shell/AppShell.tsx (command palette entry, ⌘K/Ctrl+K, accessible modal navigating to screens)"
+      "admin-ui/src/shell/AppShell.tsx (command palette entry, \u2318K/Ctrl+K, accessible modal navigating to screens)"
     ],
     "tests": [
       "admin-ui shell unit tests"
@@ -3040,14 +3040,14 @@
       "apps/melodee-cli/src/legacy/import_tracks.rs (in-place canonical media adoption: containment, symlink, existence, and size validation; hash-pending sentinel; no move/re-encode/re-hash/delete)",
       "apps/melodee-cli/src/legacy/media.rs (read-only CanonicalRootValidator; sparse/5-TB-shaped metadata handling)",
       "apps/melodee-cli/src/legacy/map.rs (legacy directory + library-path-map resolution; traversal rejection)",
-      "design/adr/ADR-0148-legacy-migration-contract.md §D.3 (media adoption contract)"
+      "design/adr/ADR-0148-legacy-migration-contract.md \u00a7D.3 (media adoption contract)"
     ],
     "tests": [
       "apps/melodee-cli/tests/legacy.rs (canonical_root_validation_is_read_only_and_actionable: sparse 5 GiB file, missing file, size mismatch, symlink escape, byte-identical media tree)",
       "apps/melodee-cli/tests/legacy.rs (production_shaped_source_imports_with_bounded_batches: 12k adopted media assets)",
       "apps/melodee-cli/tests/legacy_faults.rs (malformed_media_metadata_becomes_issue_not_unsafe_path)"
     ],
-    "note": "R3 tooling evidence; the full ~5 TB production rehearsal remains R4 (IMPLMENTATION_OUTSTANDING §9)."
+    "note": "R3 tooling evidence; the full ~5 TB production rehearsal remains R4 (IMPLMENTATION_OUTSTANDING \u00a79)."
   },
   "PRD-MIG-003": {
     "status": "tested",
@@ -3057,7 +3057,7 @@
       "apps/melodee-cli/src/legacy/import_state2.rs (starred/rating/hated/play-count state, play history, podcast channels, radio, settings reference-only)",
       "apps/melodee-cli/src/legacy/import_state3.rs (user groups/members, smart playlists, podcast episodes/bookmarks/history)",
       "apps/melodee-cli/src/legacy/import_state4.rs (playback settings, equalizer presets, social logins, Last.fm re-seal, pins, requests/comments/seen, device-profile reference-only, excluded summaries)",
-      "design/adr/ADR-0148-legacy-migration-contract.md §D.8 + 2026-08-17 amendment (per-table dispositions; Party/Jukebox excluded by ADR-0133/0140/0141)"
+      "design/adr/ADR-0148-legacy-migration-contract.md \u00a7D.8 + 2026-08-17 amendment (per-table dispositions; Party/Jukebox excluded by ADR-0133/0140/0141)"
     ],
     "tests": [
       "apps/melodee-cli/tests/legacy.rs (full_import_covers_all_domains_and_preserves_identity: every mapped domain asserted)",
@@ -3070,7 +3070,7 @@
     "status": "tested",
     "implementation": [
       "apps/melodee-cli/src/legacy/map.rs (adopt_or_sentinel_hash: only already-valid 64-hex legacy hashes are adopted; all others become the never-authoritative hash-pending sentinel)",
-      "design/adr/ADR-0148-legacy-migration-contract.md §D.3 (no mandatory whole-library hash; optional bounded backfill is never deletion authority)"
+      "design/adr/ADR-0148-legacy-migration-contract.md \u00a7D.3 (no mandatory whole-library hash; optional bounded backfill is never deletion authority)"
     ],
     "tests": [
       "apps/melodee-cli/tests/legacy.rs (full_import: sentinel vs adopted hash assertions)",

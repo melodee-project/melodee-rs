@@ -25,6 +25,14 @@ must confirm:
 No production procedure, target transition, or ADR status was changed by this
 package.
 
+> **Disposition (2026-08-21):** ADR-0149 was **Accepted** by the release owner in
+> commit `c8cfbd0` (all five confirmation points: the two-command `legacy baseline` /
+> `legacy freeze` extension, the operator-enforced source write-freeze boundary and marker
+> proof, the `cutover-ready` acknowledgement rule, the non-destructive rollback procedure with
+> its objective trigger, decision window, and forensic-target retention, and the production
+> proxy/container traffic-switch mechanism). ADR-0149 is now release authority for the R4.7/R4.8
+> procedures. The text below is the historical decision record and is preserved as written.
+
 ## Implemented evidence
 
 The local implementation provides:

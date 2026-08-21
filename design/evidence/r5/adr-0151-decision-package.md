@@ -126,3 +126,15 @@ Even after the ADR decision, the following remain required: final candidate
 SBOM/provenance, scheduled candidate-SHA gates,
 and current physical-client and production-topology acceptance. No production
 endpoint, registry, tag, or GitHub Release was contacted by this work.
+
+---
+
+> **Disposition (2026-08-21):** ADR-0151 was **Accepted** by the release owner in
+> commit `c8cfbd0`, which changed the `Dockerfile` runtime stage to
+> `debian:trixie-slim` per the accepted decision. The scan findings recorded
+> above (8 critical / 187 high on the prototype, all unfixed runtime-package
+> findings) remain open release blockers: the release workflow still fails on
+> any critical finding (`ignore-unfixed: false`), and the accepted-ADR follow-up
+> work — exact amd64/arm64 candidate rebuild, smoke, scan, SBOM, and provenance
+> at the release commit — remains R5.2/R5.6 scope. The text above is the
+> historical decision record and is preserved as written.
