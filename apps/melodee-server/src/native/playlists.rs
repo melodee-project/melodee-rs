@@ -1218,7 +1218,7 @@ mod tests {
     }
 
     #[test]
-    fn smart_mql_is_parsed_with_phase_6_resource_bounds() {
+    fn smart_mql_is_parsed_with_search_resource_bounds() {
         assert!(validate_mql("artist:Bjork AND year>=2000").is_ok());
         assert!(validate_mql(&"(".repeat(4_097)).is_err());
         assert!(smart_entity_kind("songs").is_ok());

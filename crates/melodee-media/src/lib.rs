@@ -1681,7 +1681,7 @@ mod tests {
 
     #[test]
     #[ignore = "evidence harness; run explicitly with --ignored --nocapture"]
-    fn phase1c_performance_evidence() {
+    fn media_inspection_performance_evidence() {
         let root = temp_dir("performance");
         let source_wav = root.join("source.wav");
         let sample_rate = 8_000_u32;
