@@ -1241,7 +1241,8 @@ async fn password_reset_request(
         Err(_) => return unavailable(),
     };
     if exists {
-        //: notify the account email with the reset URL. Fire-and-record:  // the send runs off the request path and a delivery failure never
+        // notify the account email with the reset URL. Fire-and-record:
+        // the send runs off the request path and a delivery failure never
         // fails the reset request (PRD-NOTIF-002). The clear token travels
         // only in memory and in the message body — never in logs or the
         // delivery audit.

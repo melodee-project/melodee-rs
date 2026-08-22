@@ -5,7 +5,8 @@
 //!
 //! CLI home. (admin API) owns the route layer and was assigned
 //! admin.rs/native routes only; this module is the shared persistence
-//! implementation it can reuse. Semantics mirror the admin API contract: //! delete fails closed while the group still has members or library
+//! implementation it can reuse. Semantics mirror the admin API contract:
+//! delete fails closed while the group still has members or library
 //! bindings, and every mutation is bounded and audit-timestamped.
 
 use sqlx::{FromRow, PgPool};
@@ -58,7 +59,7 @@ pub struct AccessGroupMember {
     pub username: String,
 }
 
-/// Full operator view of one group ( admin API detail route).
+/// Full operator view of one group (admin API detail route).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AccessGroupDetail {
     pub group: StoredAccessGroup,

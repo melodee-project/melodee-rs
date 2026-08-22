@@ -1,4 +1,4 @@
-import { themePackAssetUrl } from "../api/themes";
+import { themePackAssetUrl } from '../api/themes';
 
 /**
  * Theme-pack application (PRD-THEME-004, UI-SPEC §1–§2).
@@ -17,50 +17,47 @@ import { themePackAssetUrl } from "../api/themes";
  * `--melodee-*` tokens are meaningful to this SPA.
  *
  * Documented limitations of this mapping:
- * - token values apply flat to both appearances; a legacy pack that
- * distinguished per-mode values (media-query blocks) gets its last
- * declaration of each token, not per-mode switching;
- * - fonts, images, and other assets shipped in the pack are not applied.
+ *  - token values apply flat to both appearances; a legacy pack that
+ *    distinguished per-mode values (media-query blocks) gets its last
+ *    declaration of each token, not per-mode switching;
+ *  - fonts, images, and other assets shipped in the pack are not applied.
  *
  * Any failure (network, non-OK status, or a stylesheet defining zero
  * --melodee-* tokens) is reported so the caller can fall back to the
  * built-in default pack — the UI never stays half-themed.
  */
 
-export const DEFAULT_THEME_PACK = "default";
+export const DEFAULT_THEME_PACK = 'default';
 
-const STYLE_ELEMENT_ID = "melodee-theme-pack-style";
+const STYLE_ELEMENT_ID = 'melodee-theme-pack-style';
 
 /** Mirrors the server's valid_theme_id rule (discovery.rs). */
 const SAFE_PACK_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
 /** Matches `--melodee-name: value` declarations terminated by `;` or `}`. */
-const TOKEN_DECLARATION =
-  /(--melodee-[a-z0-9-]+)\s*:\s*([^;{}]+?)\s*(?:;|\})/gi;
+const TOKEN_DECLARATION = /(--melodee-[a-z0-9-]+)\s*:\s*([^;{}]+?)\s*(?:;|\})/gi;
 
-export type ThemePackApplyFailure = "invalidId" | "fetch" | "noTokens";
+export type ThemePackApplyFailure = 'invalidId' | 'fetch' | 'noTokens';
 
 export type ThemePackApplyResult =
-  { ok: true } | { ok: false; reason: ThemePackApplyFailure };
+  | { ok: true }
+  | { ok: false; reason: ThemePackApplyFailure };
 
 /** Removes the managed pack style element, restoring tokens.css defaults. */
 export function clearThemePackStyles(): void {
   document.getElementById(STYLE_ELEMENT_ID)?.remove();
 }
 
-function injectThemePackStyles(
-  packId: string,
-  tokens: Map<string, string>,
-): void {
+function injectThemePackStyles(packId: string, tokens: Map<string, string>): void {
   const declarations = [...tokens.entries()]
     .map(([name, value]) => `  ${name}: ${value};`)
-    .join("\n");
+    .join('\n');
   // `:root` prefix lifts specificity (0,1,1) above the `.cds--g10`/`.cds--g100`
   // defaults (0,1,0) in tokens.css regardless of stylesheet order.
   const css = `:root [data-melodee-theme-pack="${packId}"] {\n${declarations}\n}`;
   let element = document.getElementById(STYLE_ELEMENT_ID);
   if (!element) {
-    element = document.createElement("style");
+    element = document.createElement('style');
     element.id = STYLE_ELEMENT_ID;
     document.head.append(element);
   }
@@ -71,30 +68,28 @@ function injectThemePackStyles(
  * Fetches and applies a server theme pack. `default` (the built-in pack)
  * simply clears any injected styles and always succeeds.
  */
-export async function applyThemePack(
-  packId: string,
-): Promise<ThemePackApplyResult> {
+export async function applyThemePack(packId: string): Promise<ThemePackApplyResult> {
   if (packId === DEFAULT_THEME_PACK) {
     clearThemePackStyles();
     return { ok: true };
   }
   if (!SAFE_PACK_ID.test(packId)) {
     clearThemePackStyles();
-    return { ok: false, reason: "invalidId" };
+    return { ok: false, reason: 'invalidId' };
   }
   let css: string;
   try {
-    const response = await fetch(themePackAssetUrl(packId, "theme.css"), {
-      credentials: "include",
+    const response = await fetch(themePackAssetUrl(packId, 'theme.css'), {
+      credentials: 'include',
     });
     if (!response.ok) {
       clearThemePackStyles();
-      return { ok: false, reason: "fetch" };
+      return { ok: false, reason: 'fetch' };
     }
     css = await response.text();
   } catch {
     clearThemePackStyles();
-    return { ok: false, reason: "fetch" };
+    return { ok: false, reason: 'fetch' };
   }
   const tokens = new Map<string, string>();
   for (const match of css.matchAll(TOKEN_DECLARATION)) {
@@ -106,7 +101,7 @@ export async function applyThemePack(
   }
   if (tokens.size === 0) {
     clearThemePackStyles();
-    return { ok: false, reason: "noTokens" };
+    return { ok: false, reason: 'noTokens' };
   }
   injectThemePackStyles(packId, tokens);
   return { ok: true };

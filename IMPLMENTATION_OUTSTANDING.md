@@ -905,7 +905,7 @@ The unclassified entries remain open and are not an approved waiver.
 
 ### 9.6 Work package R4.5 — Real-client acceptance
 
-- Validate the committed current-client matrix with `python3 scripts/validate_r4_client_acceptance.py`;
+- Validate the committed current-client matrix with `python3 scripts/validate_client_acceptance.py`;
   schema version 2 requires commit/run/client/platform/configuration provenance, result, and
   repository-relative sanitized evidence for every reported row, while preserving
   `pending-external` until the physical-client run exists.

@@ -5,7 +5,7 @@
 -- already models it; group CRUD is an API gap, not a schema gap.
 --
 -- This migration is additive. A binary downgrade leaves the table intact;
--- schema rollback restores a verified pre-Phase-9 backup into a new database.
+-- schema rollback restores a verified pre-migration backup into a new database.
 
 CREATE TABLE native_user_avatars (
     user_id uuid PRIMARY KEY REFERENCES native_users (id) ON DELETE CASCADE,

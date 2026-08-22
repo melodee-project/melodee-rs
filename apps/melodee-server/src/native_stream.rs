@@ -546,7 +546,7 @@ impl DirectPlayService {
     }
 
     /// Attaches the process resource-bounds gauge for the direct-play class
-    ///: records queued waiters, in-flight utilization, and saturation
+    /// records queued waiters, in-flight utilization, and saturation
     /// on the admin health surface. Admission behavior is unchanged.
     #[must_use]
     pub fn with_gauge(mut self, gauge: Arc<crate::resource_bounds::ResourceGauge>) -> Self {

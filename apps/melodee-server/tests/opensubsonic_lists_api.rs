@@ -1,6 +1,7 @@
 //! OpenSubsonic lists/search compatibility evidence: getAlbumList,
 //! getAlbumList2, getRandomSongs, getNowPlaying, getStarred, getStarred2,
 //! getSongsByGenre, search2, search3, and the melodeeExtensions[1] endpoints.
+//!
 //! Asserted behavior mirrors the frozen golden captures in
 //! `compatibility/opensubsonic/golden/lists/`, including the captured quirks:
 //! `type=recent` sorts by release date (not last played), search song entries
@@ -366,25 +367,25 @@ async fn album_list2_newest_matches_captured_shape_and_total() {
     assert_eq!(
         *album,
         serde_json::json!({
-                   "id": format!("album_{release_b}"),
-                   "album": "Desert Rock Radio",
-                   "title": "Desert Rock Radio",
-                   "name": "Desert Rock Radio",
-                   "coverArt": format!("album_{release_b}"),
-                   "songCount": 1,
-                   "created": "2026-01-04T00:00:00Z",
-                   "duration": 180,
-        // playedCount is the captured Album.PlayedCount class: user-state
-        // sums; this fixture seeds only global play rows, so 0.
-                   "playedCount": 0,
-                   "artistId": format!("artist_{artist_b}"),
-                   "artist": "Dune",
-                   "year": 2019,
-                   "userRating": 5,
-                   "genres": ["Rock"],
-                   "genre": "Rock",
-                   "parent": LIBRARY_WIRE_ID,
-               })
+            "id": format!("album_{release_b}"),
+            "album": "Desert Rock Radio",
+            "title": "Desert Rock Radio",
+            "name": "Desert Rock Radio",
+            "coverArt": format!("album_{release_b}"),
+            "songCount": 1,
+            "created": "2026-01-04T00:00:00Z",
+            "duration": 180,
+            // playedCount is the captured Album.PlayedCount class: user-state
+            // sums; this fixture seeds only global play rows, so 0.
+            "playedCount": 0,
+            "artistId": format!("artist_{artist_b}"),
+            "artist": "Dune",
+            "year": 2019,
+            "userRating": 5,
+            "genres": ["Rock"],
+            "genre": "Rock",
+            "parent": LIBRARY_WIRE_ID,
+        })
     );
     // Multi-value genres split in first-seen order; singular genre is first.
     let album = albums
@@ -849,38 +850,38 @@ async fn starred2_matches_the_captured_id3_shapes() {
     assert_eq!(
         artists,
         &vec![serde_json::json!({
-                   "id": format!("artist_{artist}"),
-                   "name": "Aurora Fields",
-                   "coverArt": format!("artist_{artist}"),
-                   "albumCount": 1,
-                   "userRating": 5,
-        // Captured literal placeholder quirk.
-                   "artistImageUrl": "URL",
-                   "starred": "2026-08-07T00:00:00Z",
-                   "sortName": "Aurora Fields",
-               })]
+            "id": format!("artist_{artist}"),
+            "name": "Aurora Fields",
+            "coverArt": format!("artist_{artist}"),
+            "albumCount": 1,
+            "userRating": 5,
+            // Captured literal placeholder quirk.
+            "artistImageUrl": "URL",
+            "starred": "2026-08-07T00:00:00Z",
+            "sortName": "Aurora Fields",
+        })]
     );
 
     let albums = starred2["album"].as_array().expect("albums");
     assert_eq!(
         albums,
         &vec![serde_json::json!({
-                   "id": format!("album_{release}"),
-                   "name": "Northern Lights",
-                   "artist": "Aurora Fields",
-                   "artistId": format!("artist_{artist}"),
-                   "coverArt": format!("album_{release}"),
-                   "songCount": 1,
-                   "duration": 180,
-        // playCount reads the captured album-level class (user-state
-        // sums); this fixture seeds a global play row only, so 0.
-                   "playCount": 0,
-                   "created": "2026-01-02T00:00:00Z",
-                   "starred": "2026-08-07T00:00:00Z",
-                   "year": 2021,
-                   "genres": ["Ambient", "Electronic"],
-                   "genre": "Ambient",
-               })]
+            "id": format!("album_{release}"),
+            "name": "Northern Lights",
+            "artist": "Aurora Fields",
+            "artistId": format!("artist_{artist}"),
+            "coverArt": format!("album_{release}"),
+            "songCount": 1,
+            "duration": 180,
+            // playCount reads the captured album-level class (user-state
+            // sums); this fixture seeds a global play row only, so 0.
+            "playCount": 0,
+            "created": "2026-01-02T00:00:00Z",
+            "starred": "2026-08-07T00:00:00Z",
+            "year": 2021,
+            "genres": ["Ambient", "Electronic"],
+            "genre": "Ambient",
+        })]
     );
 
     let songs = starred2["song"].as_array().expect("songs");
@@ -888,7 +889,7 @@ async fn starred2_matches_the_captured_id3_shapes() {
     let song = &songs[0];
     assert_eq!(song["id"], format!("song_{track}"));
     assert_eq!(song["title"], "Polar Veil");
-    // Song `starred` is the legacy Nullable<DateTime>.ToString artifact —
+    // Song `starred` is the legacy Nullable<DateTime>.ToString() artifact —
     // "" in the frozen goldens — while the album entry carries the real
     // StarredAt timestamp (different legacy serializers).
     assert_eq!(song["starred"], "");
@@ -944,56 +945,56 @@ async fn starred_legacy_matches_the_captured_child_and_artist_shapes() {
     assert_eq!(
         albums,
         &vec![serde_json::json!({
-                   "id": format!("album_{release}"),
-                   "parent": format!("artist_{artist}"),
-                   "isDir": true,
-                   "title": "Northern Lights",
-                   "album": "Northern Lights",
-                   "artist": "Aurora Fields",
-                   "year": 2021,
-                   "coverArt": format!("album_{release}"),
-        // v1 Child starred is the legacy Nullable<DateTime>.ToString
-        // artifact — "" for fixture-seeded rows.
-                   "starred": "",
-                   "duration": 180,
-                   "playCount": 0,
-                   "played": "2026-08-06T12:00:00Z",
-                   "created": "2026-01-02T00:00:00Z",
-                   "albumId": format!("album_{release}"),
-                   "artistId": format!("artist_{artist}"),
-                   "type": "music",
-                   "mediaType": "album",
-                   "isVideo": false,
-                   "sortName": "Northern Lights",
-                   "genres": [
-                       {"value": "Ambient", "songCount": 0, "albumCount": 0},
-                       {"value": "Electronic", "songCount": 0, "albumCount": 0}
-                   ],
-                   "artists": [],
-                   "displayArtist": "Aurora Fields",
-                   "albumArtists": [{
-                       "id": format!("artist_{artist}"),
-                       "name": "Aurora Fields",
-                       "coverArt": format!("artist_{artist}"),
-                       "albumCount": 1,
-                       "userRating": 0,
-                       "artistImageUrl": "URL",
-                       "sortName": "Aurora Fields"
-                   }],
-                   "displayAlbumArtist": "Aurora Fields",
-                   "contributors": [],
-                   "replayGain": {},
-                   "averageRating": 0,
-                   "userRating": 5,
-                   "playerId": 0,
-                   "genre": "Ambient",
-               })]
+            "id": format!("album_{release}"),
+            "parent": format!("artist_{artist}"),
+            "isDir": true,
+            "title": "Northern Lights",
+            "album": "Northern Lights",
+            "artist": "Aurora Fields",
+            "year": 2021,
+            "coverArt": format!("album_{release}"),
+            // v1 Child starred is the legacy Nullable<DateTime>.ToString()
+            // artifact — "" for fixture-seeded rows.
+            "starred": "",
+            "duration": 180,
+            "playCount": 0,
+            "played": "2026-08-06T12:00:00Z",
+            "created": "2026-01-02T00:00:00Z",
+            "albumId": format!("album_{release}"),
+            "artistId": format!("artist_{artist}"),
+            "type": "music",
+            "mediaType": "album",
+            "isVideo": false,
+            "sortName": "Northern Lights",
+            "genres": [
+                {"value": "Ambient", "songCount": 0, "albumCount": 0},
+                {"value": "Electronic", "songCount": 0, "albumCount": 0}
+            ],
+            "artists": [],
+            "displayArtist": "Aurora Fields",
+            "albumArtists": [{
+                "id": format!("artist_{artist}"),
+                "name": "Aurora Fields",
+                "coverArt": format!("artist_{artist}"),
+                "albumCount": 1,
+                "userRating": 0,
+                "artistImageUrl": "URL",
+                "sortName": "Aurora Fields"
+            }],
+            "displayAlbumArtist": "Aurora Fields",
+            "contributors": [],
+            "replayGain": {},
+            "averageRating": 0,
+            "userRating": 5,
+            "playerId": 0,
+            "genre": "Ambient",
+        })]
     );
 
     let songs = starred["song"].as_array().expect("songs");
     assert_eq!(songs.len(), 1);
     assert_eq!(songs[0]["id"], format!("song_{track}"));
-    // v1 Child song starred is the legacy Nullable<DateTime>.ToString
+    // v1 Child song starred is the legacy Nullable<DateTime>.ToString()
     // artifact — "" for fixture-seeded rows (frozen goldens).
     assert_eq!(songs[0]["starred"], "");
 }
@@ -1289,30 +1290,30 @@ async fn search_song_entries_keep_the_captured_placeholder_fields() {
     assert_eq!(
         result["song"],
         serde_json::json!([{
-                   "type": "music",
-                   "isDir": false,
-                   "id": format!("song_{song}"),
-                   "parent": format!("album_{album}"),
-                   "title": "Sandstone",
-                   "album": "Desert Rock Radio",
-                   "artist": "Dune",
-                   "coverArt": format!("song_{song}"),
-                   "created": result["song"][0]["created"],
-                   "duration": 180,
-                   "size": result["song"][0]["size"],
-        // Hardcoded legacy placeholders (SongDataInfo carries none of
-        // these), preserved from the capture.
-                   "bitrate": 0,
-                   "track": 1,
-                   "year": 2019,
-                   "genres": ["Rock"],
-                   "suffix": "mp3",
-                   "contentType": "audio/mpeg",
-                   "path": "unknown",
-                   "albumId": format!("album_{album}"),
-                   "artistId": format!("artist_{artist}"),
-                   "genre": "Rock",
-               }])
+            "type": "music",
+            "isDir": false,
+            "id": format!("song_{song}"),
+            "parent": format!("album_{album}"),
+            "title": "Sandstone",
+            "album": "Desert Rock Radio",
+            "artist": "Dune",
+            "coverArt": format!("song_{song}"),
+            "created": result["song"][0]["created"],
+            "duration": 180,
+            "size": result["song"][0]["size"],
+            // Hardcoded legacy placeholders (SongDataInfo carries none of
+            // these), preserved from the capture.
+            "bitrate": 0,
+            "track": 1,
+            "year": 2019,
+            "genres": ["Rock"],
+            "suffix": "mp3",
+            "contentType": "audio/mpeg",
+            "path": "unknown",
+            "albumId": format!("album_{album}"),
+            "artistId": format!("artist_{artist}"),
+            "genre": "Rock",
+        }])
     );
     assert_eq!(result["artist"], serde_json::json!([]));
 

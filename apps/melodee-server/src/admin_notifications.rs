@@ -185,8 +185,8 @@ pub fn router() -> Router<AdminAccessState> {
             "/api/admin/v1/notifications/test-send",
             axum::routing::post(test_send),
         )
- // Template bodies are individually bounded at 64 KiB by the store;
- // the envelope admits subject + both bodies plus JSON overhead.
+        // Template bodies are individually bounded at 64 KiB by the store;
+        // the envelope admits subject + both bodies plus JSON overhead.
         .route_layer(axum::extract::DefaultBodyLimit::max(256 * 1024))
 }
 

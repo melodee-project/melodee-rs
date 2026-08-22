@@ -1,4 +1,4 @@
-//! Fault-path integration suite for `melodee legacy` (ADR-0148): fencing
+//! fault-path integration suite for `melodee legacy` (ADR-0148): fencing
 //! against concurrent owners, restart convergence after a mid-run kill,
 //! orphan references recorded as issues, target public-ID conflicts, and
 //! malformed source data.
@@ -222,8 +222,8 @@ async fn empty_source_imports_cleanly_and_verifies() {
 
 #[tokio::test]
 async fn old_schema_fingerprint_is_rejected() {
-    // A schema without the final migration row must fail closed even though
-    // every table exists.
+    // A schema without the frozen baseline's final migration row must fail
+    // closed even though every table exists.
     let ddl = legacy_support::LEGACY_DDL.replace(
         "('20260714155936_AddDeleteSourceResidueAfterIngestSetting', '10.0.0');",
         "('20200101000000_AncientBaseline', '10.0.0');",

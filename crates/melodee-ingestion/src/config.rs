@@ -24,7 +24,8 @@ pub const ENV_SOURCES_JSON: &str = "MELODEE__INGEST__SOURCES_JSON";
 pub const ENV_SOURCE_ROOT: &str = "MELODEE__INGEST__SOURCE_ROOT";
 pub const ENV_SOURCE_LIBRARY_ID: &str = "MELODEE__INGEST__SOURCE_LIBRARY_ID";
 pub const ENV_SOURCE_LIBRARY_NAME: &str = "MELODEE__INGEST__SOURCE_LIBRARY_NAME";
-/// Durable Melodee-owned source storage. This is not normalization scratch: /// it retains original source bytes for retry, review, and quarantine.
+/// Durable Melodee-owned source storage. This is not normalization scratch:
+/// it retains original source bytes for retry, review, and quarantine.
 pub const ENV_STAGING_ROOT: &str = "MELODEE__INGEST__STAGING_ROOT";
 pub const ENV_INSPECTION_CONCURRENCY: &str = "MELODEE__INSPECTION__CONCURRENCY";
 pub const ENV_FFPROBE_PATH: &str = "MELODEE__INSPECTION__FFPROBE_PATH";

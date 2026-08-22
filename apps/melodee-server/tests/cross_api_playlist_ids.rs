@@ -1,11 +1,14 @@
 //! cross-API playlist identity evidence (PRD-PLAYLIST-001/003).
+//!
 //! All three surfaces share the `native_playlists` /
 //! `native_playlist_items` tables, so one playlist row is addressable from
 //! every adapter that exposes playlists. The designed ID relationship is a
 //! pure re-encoding of the same `public_api_id` UUID:
+//!
 //! - native v1: the dashed UUID verbatim (`/api/v1/playlists/{uuid}`)
 //! - OpenSubsonic: `playlist_` + dashed UUID (`getPlaylist?id=playlist_{uuid}`)
 //! - Jellyfin: the N-format (dashless) UUID (`/Playlists/{simple}`)
+//!
 //! This test pins that mapping plus the one intentional ordering divergence:
 //! native and Jellyfin serve items in playlist-position order, while the
 //! captured OpenSubsonic contract serves `entry` in Track creation order

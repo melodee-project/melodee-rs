@@ -219,8 +219,8 @@ fn parse_rule_set_row(row: PolicyRuleSetRow) -> Result<PolicyRuleSet, PolicyStor
     })
 }
 
-/// Title and primary-Artist display value for one dry-run sample Release
-///. A display string is never an Artist identity.
+/// Title and primary-Artist display value for one dry-run sample Release.
+/// A display string is never an Artist identity.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PolicyTestSampleRelease {
     pub release_id: Uuid,
@@ -343,7 +343,7 @@ impl PolicyStore {
     }
 
     /// Lists every persisted version of a named rule set, oldest first. Rule
-    /// sets are immutable; this history is how the admin surface finds the
+    /// sets are immutable; this history is how the policy editor finds the
     /// last-seen definition of a rule removed from the current version.
     #[instrument(skip_all)]
     pub async fn list_rule_set_versions(
@@ -3450,7 +3450,7 @@ struct StoredEvidenceRow {
     detail: String,
 }
 
-/// Persisted per-Track novelty row ( operator review read).
+/// Persisted per-Track novelty row (operator review read).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StoredTrackNovelty {
     pub track_id: melodee_domain::TrackId,
@@ -3460,8 +3460,8 @@ pub struct StoredTrackNovelty {
     pub detail: String,
 }
 
-/// Persisted aggregate novelty evaluation plus its per-Track rows for
-/// operator review read. Counts are the durable evaluation facts, not a
+/// Persisted aggregate novelty evaluation plus its per-Track rows for operator
+/// review. Counts are the durable evaluation facts, not a
 /// recomputation.
 #[derive(Debug, Clone)]
 pub struct StoredNoveltyEvaluation {

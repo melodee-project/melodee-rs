@@ -1,9 +1,10 @@
-//! environment fault scenarios (PRD-TEST-005, PRD-TEST-007): full
+//! Environment fault scenarios (PRD-TEST-005, PRD-TEST-007): full
 //! staging disk during acquisition, slow storage during acquisition, hung
 //! media tool, and media-tool ENOSPC with partial output. Each scenario
 //! proves fail-closed behavior — no lost durable work, no partial
 //! authoritative state, no destructive uncertainty handling — and that the
 //! supported retry path converges after the fault clears.
+//!
 //! Staging-disk and slow-storage faults are injected through the one-shot
 //! `test-support` acquisition write hook (the same restart semantics as the
 //! crash-matrix points). Media-tool faults use wrapper scripts on the
@@ -50,7 +51,7 @@ impl Scenario {
         let mut config = IngestionConfig::with_sources(vec![source]);
         config.settling_quiet_period = Duration::ZERO;
         // `with_sources` derives the staging root as `<inbound-parent>/
-        //.melodee-staging-test`, which is shared by every parallel test
+        // `.melodee-staging-test`, which is shared by every parallel test
         // using a /tmp inbound root. Each scenario needs its own staging,
         // staging cleanup, and work roots to stay isolated under `cargo
         // test` parallelism.
@@ -244,7 +245,7 @@ async fn acquire(
     .await
 }
 
-/// a full staging disk fails the verified copy with an ordinary I/O
+/// A full staging disk fails the verified copy with an ordinary I/O
 /// error attributed to the destination; the acquisition fails closed with no
 /// durable receipt, no final authoritative tree, and inbound retained. After
 /// the operator frees space, the supported retry converges with a complete
@@ -292,7 +293,7 @@ async fn full_staging_disk_fails_closed_and_retry_converges() {
     // Fail-closed invariants: intent only, no receipt, no final tree, and
     // inbound untouched. Hidden attempt scratch from the crashed copy may
     // remain; it is attempt-isolated under staging and is reclaimed by the
-    // retried attempt, exactly like an crash boundary.
+    // retried attempt, exactly like a crash boundary.
     let (status, method, tree_hash) = scenario.handoff(item_id).await.expect("durable intent");
     assert_eq!("intent", status);
     assert!(
@@ -331,9 +332,9 @@ async fn full_staging_disk_fails_closed_and_retry_converges() {
     scenario.drop().await;
 }
 
-/// slow storage delays every destination write of the verified copy.
+/// Slow storage delays every destination write of the verified copy.
 /// Acquisition remains correct — bounded streaming, byte-identical result,
-/// durable receipt, inbound drained - and the delay is observable in wall
+/// durable receipt, inbound drained — and the delay is observable in wall
 /// time. The delay hook is applied on the retried attempt as well to prove
 /// the slow path, not just the fast path, is durable.
 #[cfg(feature = "test-support")]
@@ -502,7 +503,7 @@ async fn postgres_unavailable_during_handoff_fails_closed_and_recovers() {
     scenario.drop().await;
 }
 
-/// a hung FFmpeg is killed at the configured timeout with an
+/// A hung FFmpeg is killed at the configured timeout with an
 /// actionable, typed failure; no orphan process survives; the durable
 /// staged source is untouched; and the supported operator retry path
 /// (failed -> ready -> inspect -> normalizing) converges to `validating`.

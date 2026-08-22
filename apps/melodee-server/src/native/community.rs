@@ -356,9 +356,9 @@ pub fn protected_router() -> Router<NativeState> {
 pub fn public_router() -> Router<NativeState> {
     Router::new()
         .route("/api/v1/shares/public/{unique_id}", get(public_share))
- // The captured DTO advertises this public URL. serves the same
- // bounded JSON representation here so clients can follow it verbatim
- // without depending on the later administrative UI phase.
+        // The captured DTO advertises this public URL. serves the same
+        // bounded JSON representation here so clients can follow it verbatim
+        // without depending on the later administrative UI phase.
         .route("/share/{unique_id}", get(public_share))
 }
 
@@ -515,7 +515,7 @@ async fn complete_request(
     .execute(&state.pool)
     .await?;
     owner_mutation_result(&state, id, result.rows_affected()).await?;
-    //: notify the request creator that the request is fulfilled.
+    // notify the request creator that the request is fulfilled.
     // Fire-and-record: a delivery failure never fails the completion
     // (PRD-NOTIF-002).
     let detail = sqlx::query_as::<_, (String, String)>(
@@ -826,7 +826,7 @@ async fn create_share(
         }
     })
     .await?;
-    //: notify the share owner that a share was created.
+    // notify the share owner that a share was created.
     // Fire-and-record: a delivery failure never fails share creation
     // (PRD-NOTIF-002).
     if let Some(email) = user_email_by_id(&state.pool, principal.user_id).await {

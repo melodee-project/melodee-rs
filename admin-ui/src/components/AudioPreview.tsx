@@ -1,4 +1,4 @@
-import { useTranslation } from "react-i18next";
+import { useTranslation } from 'react-i18next';
 
 /**
  * Audio evidence preview (UI-SPEC §6): labeled transport, keyboard operable
@@ -22,9 +22,9 @@ export function AudioPreview({
       controls
       preload="none"
       src={src}
-      aria-label={label ?? t("audio.previewLabel")}
+      aria-label={label ?? t('audio.previewLabel')}
       onError={onError}
-      style={{ inlineSize: "100%" }}
+      style={{ inlineSize: '100%' }}
     />
   );
 }

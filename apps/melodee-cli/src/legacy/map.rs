@@ -79,7 +79,7 @@ pub async fn insert_mapping(
     Ok(())
 }
 
-/// Inserts the catalog identity mapping (Phase-4 table, ADR-0148 §D.2).
+/// Inserts the catalog identity mapping (ADR-0148 §D.2).
 pub async fn insert_catalog_mapping(
     tx: &mut Transaction<'_, Postgres>,
     run_id: Uuid,

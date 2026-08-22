@@ -10,12 +10,12 @@ import {
   TableRow,
   TableToolbar,
   TableToolbarContent,
-} from "@carbon/react";
-import type { KeyboardEvent, ReactNode } from "react";
-import { useTranslation } from "react-i18next";
-import { useSearchParams } from "react-router-dom";
+} from '@carbon/react';
+import type { KeyboardEvent, ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 
-import { EmptyState } from "./EmptyState";
+import { EmptyState } from './EmptyState';
 
 /**
  * Catalog-scale table (UI-SPEC §6, PRD-UI-010): server-side sort and page
@@ -63,17 +63,14 @@ export interface EntityTableProps {
   selection?: EntityTableSelection;
 }
 
-function parseSort(
-  raw: string | null,
-  columns: EntityColumn[],
-): { key: string; direction: "asc" | "desc" } | null {
+function parseSort(raw: string | null, columns: EntityColumn[]): { key: string; direction: 'asc' | 'desc' } | null {
   if (!raw) {
     return null;
   }
-  const [key, direction] = raw.split(":");
+  const [key, direction] = raw.split(':');
   if (
     !key ||
-    (direction !== "asc" && direction !== "desc") ||
+    (direction !== 'asc' && direction !== 'desc') ||
     !columns.some((column) => column.key === key && column.sortable)
   ) {
     return null;
@@ -97,15 +94,9 @@ export function EntityTable({
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const page = Math.max(
-    1,
-    Number.parseInt(searchParams.get("page") ?? "1", 10) || 1,
-  );
-  const pageSize = Math.max(
-    1,
-    Number.parseInt(searchParams.get("pageSize") ?? "50", 10) || 50,
-  );
-  const sort = parseSort(searchParams.get("sort"), columns);
+  const page = Math.max(1, Number.parseInt(searchParams.get('page') ?? '1', 10) || 1);
+  const pageSize = Math.max(1, Number.parseInt(searchParams.get('pageSize') ?? '50', 10) || 50);
+  const sort = parseSort(searchParams.get('sort'), columns);
 
   const updateParams = (updates: Record<string, string | null>) => {
     const next = new URLSearchParams(searchParams);
@@ -120,15 +111,13 @@ export function EntityTable({
   };
 
   const onSort = (key: string) => {
-    const direction =
-      sort?.key === key && sort.direction === "asc" ? "desc" : "asc";
-    updateParams({ sort: `${key}:${direction}`, page: "1" });
+    const direction = sort?.key === key && sort.direction === 'asc' ? 'desc' : 'asc';
+    updateParams({ sort: `${key}:${direction}`, page: '1' });
   };
 
   const selected = new Set(selection?.selectedIds ?? []);
   const pageIds = rows.map((row) => row.id);
-  const allSelected =
-    pageIds.length > 0 && pageIds.every((id) => selected.has(id));
+  const allSelected = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
   const someSelected = pageIds.some((id) => selected.has(id));
 
   const toggleAll = () => {
@@ -161,19 +150,16 @@ export function EntityTable({
     selection.onChange([...next]);
   };
 
-  const onRowKeyDown = (
-    event: KeyboardEvent<HTMLTableRowElement>,
-    id: string,
-  ) => {
-    if (event.key === "Enter") {
+  const onRowKeyDown = (event: KeyboardEvent<HTMLTableRowElement>, id: string) => {
+    if (event.key === 'Enter') {
       event.preventDefault();
       onRowActivate?.(id);
       return;
     }
-    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
       const sibling =
-        event.key === "ArrowDown"
+        event.key === 'ArrowDown'
           ? event.currentTarget.nextElementSibling
           : event.currentTarget.previousElementSibling;
       if (sibling instanceof HTMLElement) {
@@ -184,11 +170,9 @@ export function EntityTable({
 
   const sortedAnnouncement = sort
     ? `${columns.find((column) => column.key === sort.key)?.header ?? sort.key} ${
-        sort.direction === "asc"
-          ? t("table.sortedAscending")
-          : t("table.sortedDescending")
+        sort.direction === 'asc' ? t('table.sortedAscending') : t('table.sortedDescending')
       }`
-    : t("table.notSorted");
+    : t('table.notSorted');
 
   return (
     <TableContainer title={caption}>
@@ -201,14 +185,14 @@ export function EntityTable({
       <span role="status" className="cds--visually-hidden">
         {sortedAnnouncement}
       </span>
-      <Table size={compact ? "sm" : "md"} aria-label={caption}>
+      <Table size={compact ? 'sm' : 'md'} aria-label={caption}>
         <TableHead>
           <TableRow>
             {selection ? (
               <TableHeader>
                 <Checkbox
                   id={`${caption}-select-all`}
-                  labelText={t("table.selectAllLabel")}
+                  labelText={t('table.selectAllLabel')}
                   hideLabel
                   checked={allSelected}
                   indeterminate={someSelected && !allSelected}
@@ -227,19 +211,11 @@ export function EntityTable({
                   isSortable={column.sortable ?? false}
                   isSortHeader={isSorted}
                   sortDirection={
-                    isSorted
-                      ? sort.direction === "asc"
-                        ? "ASC"
-                        : "DESC"
-                      : "NONE"
+                    isSorted ? (sort.direction === 'asc' ? 'ASC' : 'DESC') : 'NONE'
                   }
-                  onClick={
-                    column.sortable ? () => onSort(column.key) : undefined
-                  }
+                  onClick={column.sortable ? () => onSort(column.key) : undefined}
                   aria-label={
-                    column.sortable
-                      ? t("table.sortBy", { column: column.header })
-                      : undefined
+                    column.sortable ? t('table.sortBy', { column: column.header }) : undefined
                   }
                 >
                   {column.header}
@@ -259,38 +235,26 @@ export function EntityTable({
                 className={
                   activatable
                     ? `melodee-table__row--activatable${
-                        activeRowId === row.id
-                          ? " melodee-table__row--active"
-                          : ""
+                        activeRowId === row.id ? ' melodee-table__row--active' : ''
                       }`
                     : undefined
                 }
-                onClick={
-                  activatable ? () => onRowActivate?.(row.id) : undefined
-                }
-                onKeyDown={
-                  activatable
-                    ? (event) => onRowKeyDown(event, row.id)
-                    : undefined
-                }
+                onClick={activatable ? () => onRowActivate?.(row.id) : undefined}
+                onKeyDown={activatable ? (event) => onRowKeyDown(event, row.id) : undefined}
               >
                 {selection ? (
                   <TableCell onClick={(event) => event.stopPropagation()}>
                     <Checkbox
                       id={`${caption}-select-${row.id}`}
-                      labelText={t("table.selectionLabel")}
+                      labelText={t('table.selectionLabel')}
                       hideLabel
                       checked={selected.has(row.id)}
-                      onChange={(_event, { checked }) =>
-                        toggleRow(row.id, checked)
-                      }
+                      onChange={(_event, { checked }) => toggleRow(row.id, checked)}
                     />
                   </TableCell>
                 ) : null}
                 {columns.map((column) => (
-                  <TableCell key={column.key}>
-                    {row.cells[column.key] ?? null}
-                  </TableCell>
+                  <TableCell key={column.key}>{row.cells[column.key] ?? null}</TableCell>
                 ))}
               </TableRow>
             );
@@ -299,8 +263,8 @@ export function EntityTable({
       </Table>
       {rows.length === 0 ? (
         <EmptyState
-          title={emptyTitle ?? t("empty.noRecords")}
-          description={emptyDescription ?? t("empty.noResults")}
+          title={emptyTitle ?? t('empty.noRecords')}
+          description={emptyDescription ?? t('empty.noResults')}
           compact
         />
       ) : null}
@@ -309,7 +273,7 @@ export function EntityTable({
         pageSize={pageSize}
         totalItems={totalRows}
         pageSizes={[25, 50, 100]}
-        itemsPerPageText={t("common.itemsPerPage")}
+        itemsPerPageText={t('common.itemsPerPage')}
         onChange={({ page: nextPage, pageSize: nextPageSize }) => {
           updateParams({
             page: String(nextPage),

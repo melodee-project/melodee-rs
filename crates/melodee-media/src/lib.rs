@@ -110,7 +110,8 @@ pub fn is_audio_file_name(name: &str) -> bool {
         .is_some_and(|extension| AUDIO_EXTENSIONS.contains(&extension.as_str()))
 }
 
-/// Lightweight tag probe for the scripting-hook context (, ADR-0135): /// duration from container properties and track number from the primary
+/// Lightweight tag probe for the scripting-hook context (ADR-0135):
+/// duration from container properties and track number from the primary
 /// tag. Mirrors the legacy `DirectoryContextProvider`, which read real tags
 /// through song plugins and skipped files it could not process — hence
 /// `Option`, never an error.
@@ -551,7 +552,7 @@ fn inspect_file(
         *ffprobe_invocations = ffprobe_invocations.saturating_add(1);
         match run_ffprobe(path, options) {
             Ok(probe) => {
-                //: media is detected from probed content, not trusted
+                // media is detected from probed content, not trusted
                 // from the filename extension alone. A probed container MIME
                 // overrides the extension-derived guess and the disagreement
                 // is recorded as an actionable finding.

@@ -1,4 +1,4 @@
-import { Add, TrashCan } from "@carbon/icons-react";
+import { Add, TrashCan } from '@carbon/icons-react';
 import {
   ActionableNotification,
   Button,
@@ -15,9 +15,9 @@ import {
   TableHeader,
   TableRow,
   TextInput,
-} from "@carbon/react";
-import { useCallback, useEffect, useState } from "react";
-import { useTranslation } from "react-i18next";
+} from '@carbon/react';
+import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import {
   addGroupMember,
@@ -30,19 +30,11 @@ import {
   removeGroupMember,
   unbindGroupLibrary,
   updateGroup,
-} from "../../api/admin";
-import { ApiError } from "../../api/client";
-import type {
-  AccessGroup,
-  AccessGroupDetail,
-  UserSummary,
-} from "../../api/types";
-import { EmptyState } from "../../components/EmptyState";
-import {
-  formatDateTime,
-  formatNumber,
-  formatRelativeTime,
-} from "../../i18n/format";
+} from '../../api/admin';
+import { ApiError } from '../../api/client';
+import type { AccessGroup, AccessGroupDetail, UserSummary } from '../../api/types';
+import { EmptyState } from '../../components/EmptyState';
+import { formatDateTime, formatNumber, formatRelativeTime } from '../../i18n/format';
 
 /**
  * Library access groups tab (PRD-WEB-002): group list with create /
@@ -56,37 +48,35 @@ import {
  */
 
 interface Notice {
-  kind: "success" | "error" | "info" | "warning";
+  kind: 'success' | 'error' | 'info' | 'warning';
   text: string;
 }
 
 function toApiError(cause: unknown): ApiError {
-  return cause instanceof ApiError
-    ? cause
-    : new ApiError(0, "unknown", String(cause), null);
+  return cause instanceof ApiError ? cause : new ApiError(0, 'unknown', String(cause), null);
 }
 
 /** Localized text for the stable group-mutation error codes. */
 function groupErrorText(
   error: ApiError,
-  t: ReturnType<typeof useTranslation>["t"],
+  t: ReturnType<typeof useTranslation>['t'],
 ): string {
-  if (error.status === 409 && error.code === "group_exists") {
-    return t("users.groups.error.exists");
+  if (error.status === 409 && error.code === 'group_exists') {
+    return t('users.groups.error.exists');
   }
-  if (error.status === 409 && error.code === "group_name_ambiguous") {
-    return t("users.groups.error.ambiguous");
+  if (error.status === 409 && error.code === 'group_name_ambiguous') {
+    return t('users.groups.error.ambiguous');
   }
-  if (error.status === 409 && error.code === "group_not_empty") {
-    return t("users.groups.error.notEmpty");
+  if (error.status === 409 && error.code === 'group_not_empty') {
+    return t('users.groups.error.notEmpty');
   }
-  if (error.status === 400 && error.code === "invalid_group_name") {
-    return t("users.groups.error.invalidName");
+  if (error.status === 400 && error.code === 'invalid_group_name') {
+    return t('users.groups.error.invalidName');
   }
   if (error.status === 404) {
-    return t("users.groups.error.notFound");
+    return t('users.groups.error.notFound');
   }
-  return t("users.groups.error.mutation", { message: error.message });
+  return t('users.groups.error.mutation', { message: error.message });
 }
 
 export function GroupsPanel() {
@@ -149,7 +139,7 @@ export function GroupsPanel() {
     action()
       .then(() => {
         if (successKey) {
-          setNotice({ kind: "success", text: t(successKey) });
+          setNotice({ kind: 'success', text: t(successKey) });
         }
         void fetchGroups({ cancelled: false });
         if (selected) {
@@ -157,17 +147,12 @@ export function GroupsPanel() {
         }
       })
       .catch((cause: unknown) => {
-        setNotice({
-          kind: "error",
-          text: groupErrorText(toApiError(cause), t),
-        });
+        setNotice({ kind: 'error', text: groupErrorText(toApiError(cause), t) });
       });
   };
 
   const nonMembers = selected
-    ? allUsers.filter(
-        (user) => !selected.members.some((member) => member.userId === user.id),
-      )
+    ? allUsers.filter((user) => !selected.members.some((member) => member.userId === user.id))
     : [];
 
   return (
@@ -185,125 +170,106 @@ export function GroupsPanel() {
           inline
           kind="error"
           lowContrast
-          title={t("users.groups.loadErrorTitle")}
+          title={t('users.groups.loadErrorTitle')}
           subtitle={listError.message}
           hideCloseButton
-          actionButtonLabel={t("actions.retry")}
+          actionButtonLabel={t('actions.retry')}
           onActionButtonClick={() => void fetchGroups({ cancelled: false })}
         />
       ) : null}
       {groups === null && !listError ? (
-        <Loading description={t("common.loading")} withOverlay={false} />
+        <Loading description={t('common.loading')} withOverlay={false} />
       ) : null}
       {groups !== null ? (
         // The groups table is wider than the sm viewport; it scrolls inside
         // its own container rather than expanding the page (UI-SPEC §8).
         <div className="melodee-table-scroll">
           <TableContainer
-            title={t("users.groups.tableCaption")}
-            description={t("users.groups.description")}
+            title={t('users.groups.tableCaption')}
+            description={t('users.groups.description')}
           >
-            <Table aria-label={t("users.groups.tableCaption")}>
-              <TableHead>
-                <TableRow>
-                  <TableHeader>{t("common.name")}</TableHeader>
-                  <TableHeader>{t("users.groups.column.members")}</TableHeader>
-                  <TableHeader>
-                    {t("users.groups.column.libraries")}
-                  </TableHeader>
-                  <TableHeader>{t("common.created")}</TableHeader>
-                  <TableHeader>{t("users.column.actions")}</TableHeader>
+          <Table aria-label={t('users.groups.tableCaption')}>
+            <TableHead>
+              <TableRow>
+                <TableHeader>{t('common.name')}</TableHeader>
+                <TableHeader>{t('users.groups.column.members')}</TableHeader>
+                <TableHeader>{t('users.groups.column.libraries')}</TableHeader>
+                <TableHeader>{t('common.created')}</TableHeader>
+                <TableHeader>{t('users.column.actions')}</TableHeader>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {groups.map((group) => (
+                <TableRow key={group.id}>
+                  <TableCell>
+                    <Button kind="ghost" size="sm" onClick={() => openGroup(group.id)}>
+                      {group.name}
+                    </Button>
+                  </TableCell>
+                  <TableCell>{formatNumber(group.memberCount)}</TableCell>
+                  <TableCell>{formatNumber(group.bindingCount)}</TableCell>
+                  <TableCell>
+                    <span title={formatDateTime(group.createdAt)}>
+                      {formatRelativeTime(group.createdAt)}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <Button kind="ghost" size="sm" onClick={() => setRenameTarget(group)}>
+                      {t('users.groups.rename')}
+                    </Button>
+                    <Button
+                      kind="danger--ghost"
+                      size="sm"
+                      renderIcon={TrashCan}
+                      onClick={() => setDeleteTarget(group)}
+                    >
+                      {t('actions.delete')}
+                    </Button>
+                  </TableCell>
                 </TableRow>
-              </TableHead>
-              <TableBody>
-                {groups.map((group) => (
-                  <TableRow key={group.id}>
-                    <TableCell>
-                      <Button
-                        kind="ghost"
-                        size="sm"
-                        onClick={() => openGroup(group.id)}
-                      >
-                        {group.name}
-                      </Button>
-                    </TableCell>
-                    <TableCell>{formatNumber(group.memberCount)}</TableCell>
-                    <TableCell>{formatNumber(group.bindingCount)}</TableCell>
-                    <TableCell>
-                      <span title={formatDateTime(group.createdAt)}>
-                        {formatRelativeTime(group.createdAt)}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        kind="ghost"
-                        size="sm"
-                        onClick={() => setRenameTarget(group)}
-                      >
-                        {t("users.groups.rename")}
-                      </Button>
-                      <Button
-                        kind="danger--ghost"
-                        size="sm"
-                        renderIcon={TrashCan}
-                        onClick={() => setDeleteTarget(group)}
-                      >
-                        {t("actions.delete")}
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            {groups.length === 0 ? (
-              <EmptyState
-                compact
-                title={t("users.groups.emptyTitle")}
-                description={t("users.groups.emptyDescription")}
-              />
-            ) : null}
+              ))}
+            </TableBody>
+          </Table>
+          {groups.length === 0 ? (
+            <EmptyState
+              compact
+              title={t('users.groups.emptyTitle')}
+              description={t('users.groups.emptyDescription')}
+            />
+          ) : null}
           </TableContainer>
         </div>
       ) : null}
-      <div style={{ marginBlockStart: "1rem" }}>
-        <Button
-          kind="primary"
-          size="sm"
-          renderIcon={Add}
-          onClick={() => setCreateOpen(true)}
-        >
-          {t("users.groups.create")}
+      <div style={{ marginBlockStart: '1rem' }}>
+        <Button kind="primary" size="sm" renderIcon={Add} onClick={() => setCreateOpen(true)}>
+          {t('users.groups.create')}
         </Button>
       </div>
 
       {selected ? (
         <section className="melodee-panel" aria-labelledby="group-detail-title">
           <Heading id="group-detail-title" className="melodee-panel__title">
-            {t("users.groups.detailTitle", { name: selected.name })}
+            {t('users.groups.detailTitle', { name: selected.name })}
           </Heading>
-          <Heading className="melodee-panel__subtitle">
-            {t("users.groups.membersTitle")}
-          </Heading>
+          <Heading className="melodee-panel__subtitle">{t('users.groups.membersTitle')}</Heading>
           {selected.members.length === 0 ? (
-            <p className="melodee-panel__subtitle">
-              {t("users.groups.membersEmpty")}
-            </p>
+            <p className="melodee-panel__subtitle">{t('users.groups.membersEmpty')}</p>
           ) : (
             <ul>
               {selected.members.map((member) => (
                 <li key={member.userId}>
-                  {member.username}{" "}
+                  {member.username}{' '}
                   <Button
                     kind="danger--ghost"
                     size="sm"
                     onClick={() =>
                       runMutation(
                         () => removeGroupMember(selected.id, member.userId),
-                        "users.groups.memberRemoved",
+                        'users.groups.memberRemoved',
                       )
                     }
                   >
-                    {t("actions.remove")}
+                    {t('actions.remove')}
                   </Button>
                 </li>
               ))}
@@ -311,48 +277,40 @@ export function GroupsPanel() {
           )}
           <ComboBox
             id="group-add-member"
-            titleText={t("users.groups.addMember")}
-            helperText={t("users.groups.addMemberHelp")}
+            titleText={t('users.groups.addMember')}
+            helperText={t('users.groups.addMemberHelp')}
             items={nonMembers}
-            itemToString={(user: UserSummary | null) =>
-              user ? user.username : ""
-            }
-            onChange={({
-              selectedItem,
-            }: {
-              selectedItem?: UserSummary | null;
-            }) => {
+            itemToString={(user: UserSummary | null) => (user ? user.username : '')}
+            onChange={({ selectedItem }: { selectedItem?: UserSummary | null }) => {
               if (selectedItem) {
                 runMutation(
                   () => addGroupMember(selected.id, selectedItem.id),
-                  "users.groups.memberAdded",
+                  'users.groups.memberAdded',
                 );
               }
             }}
           />
           <Heading className="melodee-panel__subtitle">
-            {t("users.groups.bindingsTitle")}
+            {t('users.groups.bindingsTitle')}
           </Heading>
           {selected.libraryIds.length === 0 ? (
-            <p className="melodee-panel__subtitle">
-              {t("users.groups.bindingsEmpty")}
-            </p>
+            <p className="melodee-panel__subtitle">{t('users.groups.bindingsEmpty')}</p>
           ) : (
             <ul>
               {selected.libraryIds.map((libraryId) => (
                 <li key={libraryId}>
-                  <code>{libraryId}</code>{" "}
+                  <code>{libraryId}</code>{' '}
                   <Button
                     kind="danger--ghost"
                     size="sm"
                     onClick={() =>
                       runMutation(
                         () => unbindGroupLibrary(selected.id, libraryId),
-                        "users.groups.libraryUnbound",
+                        'users.groups.libraryUnbound',
                       )
                     }
                   >
-                    {t("users.groups.unbind")}
+                    {t('users.groups.unbind')}
                   </Button>
                 </li>
               ))}
@@ -362,7 +320,7 @@ export function GroupsPanel() {
             onBind={(libraryId) =>
               runMutation(
                 () => bindGroupLibrary(selected.id, libraryId),
-                "users.groups.libraryBound",
+                'users.groups.libraryBound',
               )
             }
           />
@@ -372,7 +330,7 @@ export function GroupsPanel() {
         <InlineNotification
           kind="error"
           lowContrast
-          title={t("users.groups.detailError")}
+          title={t('users.groups.detailError')}
           subtitle={selectedError.message}
           hideCloseButton
         />
@@ -382,64 +340,54 @@ export function GroupsPanel() {
         // Remount on each open so the name field resets.
         key={String(createOpen)}
         open={createOpen}
-        title={t("users.groups.createTitle")}
+        title={t('users.groups.createTitle')}
         initialName=""
         onClose={() => setCreateOpen(false)}
         onSubmit={(name) => {
           setCreateOpen(false);
-          runMutation(() => createGroup(name), "users.groups.createSuccess");
+          runMutation(() => createGroup(name), 'users.groups.createSuccess');
         }}
       />
       <GroupNameModal
-        key={renameTarget?.id ?? "closed"}
+        key={renameTarget?.id ?? 'closed'}
         open={renameTarget !== null}
-        title={t("users.groups.renameTitle", {
-          name: renameTarget?.name ?? "",
-        })}
-        initialName={renameTarget?.name ?? ""}
+        title={t('users.groups.renameTitle', { name: renameTarget?.name ?? '' })}
+        initialName={renameTarget?.name ?? ''}
         onClose={() => setRenameTarget(null)}
         onSubmit={(name) => {
           const target = renameTarget;
           setRenameTarget(null);
           if (target) {
-            runMutation(
-              () => updateGroup(target.id, name),
-              "users.groups.renameSuccess",
-            );
+            runMutation(() => updateGroup(target.id, name), 'users.groups.renameSuccess');
           }
         }}
       />
       {deleteTarget !== null ? (
-        <Modal
-          danger
-          open
-          modalHeading={t("users.groups.deleteTitle", {
-            name: deleteTarget.name,
-          })}
-          primaryButtonText={t("actions.delete")}
-          secondaryButtonText={t("actions.cancel")}
-          onRequestClose={() => setDeleteTarget(null)}
-          onRequestSubmit={() => {
-            const target = deleteTarget;
-            setDeleteTarget(null);
-            if (target) {
-              if (selected?.id === target.id) {
-                setSelected(null);
-              }
-              runMutation(
-                () => deleteGroup(target.id),
-                "users.groups.deleteSuccess",
-              );
+      <Modal
+        danger
+        open
+        modalHeading={t('users.groups.deleteTitle', { name: deleteTarget.name })}
+        primaryButtonText={t('actions.delete')}
+        secondaryButtonText={t('actions.cancel')}
+        onRequestClose={() => setDeleteTarget(null)}
+        onRequestSubmit={() => {
+          const target = deleteTarget;
+          setDeleteTarget(null);
+          if (target) {
+            if (selected?.id === target.id) {
+              setSelected(null);
             }
-          }}
-        >
-          <p>
-            {t("users.groups.deleteBody", {
-              members: formatNumber(deleteTarget.memberCount),
-              bindings: formatNumber(deleteTarget.bindingCount),
-            })}
-          </p>
-        </Modal>
+            runMutation(() => deleteGroup(target.id), 'users.groups.deleteSuccess');
+          }
+        }}
+      >
+        <p>
+          {t('users.groups.deleteBody', {
+            members: formatNumber(deleteTarget.memberCount),
+            bindings: formatNumber(deleteTarget.bindingCount),
+          })}
+        </p>
+      </Modal>
       ) : null}
     </div>
   );
@@ -470,15 +418,15 @@ function GroupNameModal({
     <Modal
       open={open}
       modalHeading={title}
-      primaryButtonText={t("actions.save")}
-      secondaryButtonText={t("actions.cancel")}
+      primaryButtonText={t('actions.save')}
+      secondaryButtonText={t('actions.cancel')}
       primaryButtonDisabled={!valid}
       onRequestClose={onClose}
       onRequestSubmit={() => onSubmit(name.trim())}
     >
       <TextInput
         id="group-name"
-        labelText={t("common.name")}
+        labelText={t('common.name')}
         value={name}
         onChange={(event) => setName(event.target.value)}
       />
@@ -489,14 +437,14 @@ function GroupNameModal({
 /** Bind-by-id form; no library listing endpoint exists, hence helper text. */
 function LibraryBindForm({ onBind }: { onBind: (libraryId: string) => void }) {
   const { t } = useTranslation();
-  const [libraryId, setLibraryId] = useState("");
+  const [libraryId, setLibraryId] = useState('');
   const valid = libraryId.trim().length > 0;
   return (
     <div>
       <TextInput
         id="group-bind-library"
-        labelText={t("users.groups.bindLabel")}
-        helperText={t("users.groups.bindHelp")}
+        labelText={t('users.groups.bindLabel')}
+        helperText={t('users.groups.bindHelp')}
         value={libraryId}
         onChange={(event) => setLibraryId(event.target.value)}
       />
@@ -506,10 +454,10 @@ function LibraryBindForm({ onBind }: { onBind: (libraryId: string) => void }) {
         disabled={!valid}
         onClick={() => {
           onBind(libraryId.trim());
-          setLibraryId("");
+          setLibraryId('');
         }}
       >
-        {t("users.groups.bind")}
+        {t('users.groups.bind')}
       </Button>
     </div>
   );

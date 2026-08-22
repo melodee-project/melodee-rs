@@ -25,7 +25,8 @@
 //!
 //! Test runs are read-only dry-runs over a bounded catalog snapshot. Runs
 //! against a persisted rule (by `ruleId`) are stored in `policy_test_runs`
-//! for audit. Runs carrying an ad-hoc `rule` definition cannot be persisted: //! `policy_test_runs` has a foreign key to `policy_rule_sets`, and persisting
+//! for audit. Runs carrying an ad-hoc `rule` definition cannot be persisted:
+//! `policy_test_runs` has a foreign key to `policy_rule_sets`, and persisting
 //! the candidate set would silently change the active policy. Those runs
 //! return `persisted: false` (schema/ADR gap, recorded in the report).
 

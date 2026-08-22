@@ -51,7 +51,8 @@ pub struct ResourceGauge {
     max: usize,
     in_flight: AtomicUsize,
     waiting: AtomicUsize,
-    /// Epoch millis of the oldest waiter; 0 when nobody waits. Approximate:  /// maintained on begin/end, not per-tick.
+    /// Epoch millis of the oldest waiter; 0 when nobody waits. Approximate:
+    /// maintained on begin/end, not per-tick.
     oldest_wait_start: AtomicU64,
     admitted_total: AtomicU64,
     rejected_total: AtomicU64,

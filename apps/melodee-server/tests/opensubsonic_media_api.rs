@@ -1,27 +1,29 @@
 //! OpenSubsonic media endpoint compatibility evidence.
+//!
 //! Asserts the captured stream/download/coverArt/avatar/lyrics contracts and
 //! the `/images/{id}/{size}` bypass route (PRD-API-OS-004, PRD-STREAM-002,
 //! ADR-0130 D2 single-pass range fix; golden evidence
 //! `compatibility/opensubsonic/golden/media`).
+//!
 //! Behaviors asserted:
 //! - **stream** full GET/HEAD headers + body, single-pass ranges (including the
-//! D2 regression `bytes=100000-101023` → 206 with the correct bytes, NOT the
-//! legacy 416/one-byte corruption), invalid/unsatisfiable range + timeOffset
-//! → 404 + error 70, unknown song id → credential-free 302. Configured
-//! transcoding honors `format`/`maxBitRate` per ADR-0147 (superseding the
-//! frozen silent-ignore clause): supported formats stream FFmpeg output,
-//! unsupported/disabled/unavailable templates answer the error-0 envelope,
-//! and non-triggered requests keep byte-identical direct play.
+//!   D2 regression `bytes=100000-101023` → 206 with the correct bytes, NOT the
+//!   legacy 416/one-byte corruption), invalid/unsatisfiable range + timeOffset
+//!   → 404 + error 70, unknown song id → credential-free 302. Configured
+//!   transcoding honors `format`/`maxBitRate` per ADR-0147 (superseding the
+//!   frozen silent-ignore clause): supported formats stream FFmpeg output,
+//!   unsupported/disabled/unavailable templates answer the error-0 envelope,
+//!   and non-triggered requests keep byte-identical direct play.
 //! - **download** 200 + `Content-Disposition: attachment`, gated by
-//! `downloads_enabled`; unknown → credential-free 302.
+//!   `downloads_enabled`; unknown → credential-free 302.
 //! - **getCoverArt** catalog overrides → stored artwork (a Song uses its
-//! Release override), catalog entities without artwork → captured default,
-//! playlist id → stored artwork with sniffed/stored content-type + ETag +
-//! 304 on match.
+//!   Release override), catalog entities without artwork → captured default,
+//!   playlist id → stored artwork with sniffed/stored content-type + ETag +
+//!   304 on match.
 //! - **getAvatar** by username and by `user_<id>`, 404 when absent.
 //! - **getLyrics/getLyricsBySongId** captured baseline shape (`.lrc` sidecars
-//! are intentionally not parsed at this baseline; getLyrics echoes the
-//! artist/title with an empty value, getLyricsBySongId returns bare ok).
+//!   are intentionally not parsed at this baseline; getLyrics echoes the
+//!   artist/title with an empty value, getLyricsBySongId returns bare ok).
 //! - `/images/{id}/{size}` serves playlist artwork with no auth.
 
 #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]

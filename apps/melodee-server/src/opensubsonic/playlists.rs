@@ -433,7 +433,7 @@ pub async fn update_playlist(
     let now = OffsetDateTime::now_utc();
     // The frozen `os-playlists-verify-updated` shows the original name only
     // because the legacy response serialization 302'd on cover resolution and
-    // rolled the whole mutation back — phase-0 evidence §7 marks that
+    // rolled the whole mutation back — the compatibility evidence marks that
     // cover-dependent breakage MUST NOT be preserved. The clean update
     // applies the rename like the legacy service intended.
     if let Some(name) = params.get("name")

@@ -18,7 +18,7 @@
 //! exhaustion rejects immediately. Cancellation: `kill_on_drop(true)` kills the
 //! child on client disconnect or shutdown, and tokio's orphan reaping
 //! guarantees the process is reaped; a normally completing stream awaits
-//! `wait` explicitly and logs a sanitized stderr tail on non-zero exit. No
+//! `wait()` explicitly and logs a sanitized stderr tail on non-zero exit. No
 //! wall-clock timeout is imposed on an established stream.
 
 use std::io;
@@ -221,7 +221,7 @@ impl TranscodingService {
     }
 
     /// Attaches the process resource-bounds gauge for the transcoding class
-    ///: non-blocking admission failures are counted as rejections and
+    /// non-blocking admission failures are counted as rejections and
     /// in-flight utilization appears on the admin health surface.
     #[must_use]
     pub fn with_gauge(mut self, gauge: Arc<crate::resource_bounds::ResourceGauge>) -> Self {

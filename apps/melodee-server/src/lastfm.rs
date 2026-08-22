@@ -3,22 +3,24 @@
 //! legacy ADR-0003/0004; ADR-0134 §7 as amended 2026-08-14).
 //!
 //! Behavioral evidence: `design/evidence/phase-9/lastfm-provider-evidence.md`.
-//! Preserved legacy semantics: //!
+//! Preserved legacy semantics:
+//!
 //! - Web authentication flow (`auth.getSession`) only — the user's Last.fm
-//! password is never collected (legacy ADR-0004).
-//! - `api_sig` is the Last.fm Web Services Authentication MD5 scheme: //! parameter name/value pairs concatenated without separators in sorted
-//! order, shared secret appended last, MD5 lowercase hex. MD5 is
-//! external-protocol mandated here (same compatibility category as the
-//! OpenSubsonic salted-password MD5, ADR-0130), not a security primitive.
+//!   password is never collected (legacy ADR-0004).
+//! - `api_sig` is the Last.fm Web Services Authentication MD5 scheme:
+//!   parameter name/value pairs concatenated without separators in sorted
+//!   order, shared secret appended last, MD5 lowercase hex. MD5 is
+//!   external-protocol mandated here (same compatibility category as the
+//!   OpenSubsonic salted-password MD5, ADR-0130), not a security primitive.
 //! - Scrobble timestamps are stamped at **processing time**; client-submitted
-//! timestamps are ignored (preserved quirk, evidence doc §4/§10.4).
-//! - `trackNumber ?? 0`, `chosenByUser =!randomized` (no Rust surface carries
-//! a randomized flag, so scrobbles are always user-chosen).
+//!   timestamps are ignored (preserved quirk, evidence doc §4/§10.4).
+//! - `trackNumber ?? 0`, `chosenByUser = !randomized` (no Rust surface carries
+//!   a randomized flag, so scrobbles are always user-chosen).
 //! - Single attempt, no batching, no retry, no offline queue: failures drop
-//! the scrobble (evidence doc §5). Last.fm API errors 4/9/10 clear the
-//! user's link; re-linking is the only recovery (legacy ADR-0004).
+//!   the scrobble (evidence doc §5). Last.fm API errors 4/9/10 clear the
+//!   user's link; re-linking is the only recovery (legacy ADR-0004).
 //! - Everything fails degraded: Last.fm outcomes never propagate into the
-//! playback/scrobble write path.
+//!   playback/scrobble write path.
 //!
 //! Secrets: the raw per-user session key is never at rest in plaintext, never
 //! logged, never traced, never serialized, and never exposed by any API. The
@@ -71,10 +73,10 @@ const MAX_RESPONSE_BYTES: usize = 256 * 1024;
 /// matching the JWT signing-key floor.
 const MIN_SERVER_SECRET_BYTES: usize = 32;
 
-    /// Resolves the endpoint for route wiring: `Some` selects an explicit base
-    /// URL (per-test mock servers, carried on the adapter state); `None` selects
-    /// the production endpoint. There is deliberately no process-global override:
-    /// parallel tests must never share Last.fm mock state.
+/// Resolves the endpoint for route wiring: `Some` selects an explicit base
+/// URL (per-test mock servers, carried on the adapter state); `None` selects
+/// the production endpoint. There is deliberately no process-global override:
+/// parallel tests must never share Last.fm mock state.
 fn resolve_api_base_url(api_base_url: Option<&str>) -> String {
     api_base_url
         .map(|url| url.trim().trim_end_matches('/').to_string())
@@ -549,7 +551,7 @@ pub struct LastfmDispatch {
     api_base_url: String,
 }
 
-/// Process-global bound on concurrent outbound Last.fm calls (,
+/// Process-global bound on concurrent outbound Last.fm calls (
 /// PRD-INGEST-009). Dispatches are spawned from every scrobble/now-playing
 /// write path across all three adapters and each call site builds its own
 /// `LastfmDispatch`, so the bound cannot live on the struct: it must be
@@ -848,7 +850,7 @@ impl LastfmDispatch {
 /// session key is sealed and digested here and never reaches the store.
 ///
 /// # Errors
-/// Returns `None`-equivalent errors as `Err()` with a warning logged;
+/// Returns `None`-equivalent errors as `Err(())` with a warning logged;
 /// callers map every failure to the captured 400 shapes.
 pub async fn store_linked_session(
     pool: &PgPool,

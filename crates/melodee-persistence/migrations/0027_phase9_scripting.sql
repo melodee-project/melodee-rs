@@ -2,7 +2,7 @@
 -- (ADR-0134 §6, ADR-0135, PRD-SCRIPT-001..004).
 --
 -- Additive. A binary downgrade leaves both tables intact; schema rollback
--- restores a verified pre-Phase-9 backup into a new database.
+-- restores a verified pre-migration backup into a new database.
 --
 -- Nothing is seeded: scripts are operator-installed only (ADR-0135 operator
 -- trust boundary); there is no default script content. The registry replaces

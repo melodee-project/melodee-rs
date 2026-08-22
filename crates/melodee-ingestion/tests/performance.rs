@@ -1,4 +1,5 @@
 //! Performance snapshot script for settling behavior.
+//!
 //! This test is ignored by default and is intended to be executed explicitly when
 //! capturing benchmark evidence for evidence artifacts.
 #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]

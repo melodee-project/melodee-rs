@@ -9,8 +9,8 @@ use crate::ReleaseId;
 
 /// Normalization-stage manifest contract version.
 ///
-/// Version 1 is the inspection-only contract. Version 2 adds the
-/// semantic normalization observations produced by. The optional
+/// Version 1 is the inspection-only contract. Version 2 adds semantic
+/// normalization observations. The optional
 /// field remains deserializable on v1 payloads so stored inspection manifests
 /// can be upgraded in place by the normalization worker. Normalization keeps
 /// writing v2; canonical publication upgrades the durable copy to v3.
@@ -19,10 +19,10 @@ pub const NORMALIZATION_MANIFEST_VERSION: u16 = 2;
 /// Backward-compatible name used by the normalizer.
 pub const CURRENT_MANIFEST_VERSION: u16 = NORMALIZATION_MANIFEST_VERSION;
 
-/// Inspection-only manifest version written by.
+/// Inspection-only manifest version.
 pub const INSPECTION_MANIFEST_VERSION: u16 = 1;
 
-/// Canonical-publication manifest version written by.
+/// Canonical-publication manifest version.
 pub const PUBLICATION_MANIFEST_VERSION: u16 = 3;
 
 /// Canonical layout version fixed by ADR-0116.
@@ -165,7 +165,7 @@ pub struct ManifestInspectionContext {
 /// Per-file normalized output produced by the normalizer.
 ///
 /// All paths are relative to the work-area staging directory; they are NOT
-/// canonical storage paths ( publishes canonical paths).
+/// canonical storage paths; canonical publication creates those paths.
 /// Identity of one CUE-defined segment of a governed source audio file
 /// (ADR-0146). The segment is generated into the attempt-isolated work area;
 /// the staged original is never modified.
@@ -680,11 +680,11 @@ pub struct ReleaseManifest {
     pub sidecars: Vec<ObservedFile>,
     pub findings: Vec<Finding>,
     pub inspection: ManifestInspectionContext,
-    /// normalization observations. `None` until normalization
+    /// Normalization observations. `None` until normalization
     /// completes; populated atomically with the Normalizing→Validating transition.
     #[serde(default)]
     pub normalization: Option<NormalizationObservations>,
-    /// canonical publication facts. Absent from readable v1/v2
+    /// Canonical publication facts. Absent from readable v1/v2
     /// payloads and populated only when the durable publication plan is staged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub publication: Option<ManifestPublication>,

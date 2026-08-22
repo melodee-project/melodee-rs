@@ -88,7 +88,7 @@ impl PodcastDiscoveryClient {
             client,
             endpoint,
             permits: std::sync::Arc::new(tokio::sync::Semaphore::new(MAX_DISCOVERY_CONCURRENCY)),
-            //: the iTunes-discovery class reports utilization and
+            // the iTunes-discovery class reports utilization and
             // wait-timeouts through the process resource-bounds registry when
             // startup installed one.
             gauge: crate::resource_bounds::ResourceBounds::global().map(|registry| {
@@ -435,9 +435,9 @@ pub fn router() -> Router<NativeState> {
         )
         .route("/api/v1/podcasts/episodes/{id}/history", get(play_history))
         .route("/api/v1/podcasts/opml/export", get(export_opml))
-            // The explicit limit pins the effective bound to the documented
-            // contract value; without it the route silently inherits axum's
-            // implicit 2 MiB default, which today coincides with MAX_OPML_BYTES.
+        // The explicit limit pins the effective bound to the documented
+        // contract value; without it the route silently inherits axum's
+        // implicit 2 MiB default, which today coincides with MAX_OPML_BYTES.
         .route(
             "/api/v1/podcasts/opml/import",
             post(import_opml).layer(DefaultBodyLimit::max(MAX_OPML_BYTES)),

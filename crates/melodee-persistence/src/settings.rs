@@ -6,21 +6,23 @@
 //!
 //! Effective setting values resolve through four layers, highest precedence
 //! first (matching the legacy `MelodeeConfigurationFactory` direction: the
-//! environment overlays the database, never the reverse): //!
+//! environment overlays the database, never the reverse):
+//!
 //! 1. **Environment** — `MELODEE__*` variables. Keys with an established
-//! server convention map explicitly (the `email.*` group uses the
-//! existing `MELODEE__EMAIL__*` constants; `jellyfin.token.pepper` uses
-//! `MELODEE__JELLYFIN__TOKEN_PEPPER`). Every other key maps mechanically: //! `MELODEE__` + the key with `.` replaced by `__`, uppercased (e.g.
-//! `processing.doDeleteOriginal` → `MELODEE__PROCESSING__DODELETEORIGINAL`).
-//! The legacy all-environment-variables overlay with `_`→`.` mapping is
-//! deliberately NOT reproduced (see `configuration-inventory.md` §"Rust-side
-//! mapping").
+//!    server convention map explicitly (the `email.*` group uses the
+//!    existing `MELODEE__EMAIL__*` constants; `jellyfin.token.pepper` uses
+//!    `MELODEE__JELLYFIN__TOKEN_PEPPER`). Every other key maps mechanically:
+//!    `MELODEE__` + the key with `.` replaced by `__`, uppercased (e.g.
+//!    `processing.doDeleteOriginal` → `MELODEE__PROCESSING__DODELETEORIGINAL`).
+//!    The legacy all-environment-variables overlay with `_`→`.` mapping is
+//!    deliberately NOT reproduced (see `configuration-inventory.md` §"Rust-side
+//!    mapping").
 //! 2. **Config file** — an optional JSON object `{"key": value,...}` at
-//! `MELODEE__CONFIG_FILE` for container deployments.
+//!    `MELODEE__CONFIG_FILE` for container deployments.
 //! 3. **Database** — `server_settings` rows (operator-managed at runtime).
 //! 4. **Built-in defaults** — the seeded legacy defaults from the 190-key
-//! inventory (`design/evidence/phase-9/configuration-inventory.md`),
-//! encoded in [`KNOWN_SETTINGS`].
+//!    inventory (`design/evidence/phase-9/configuration-inventory.md`),
+//!    encoded in [`KNOWN_SETTINGS`].
 //!
 //! # Secret handling (PRD-AUTH-007)
 //!
@@ -315,8 +317,7 @@ impl KnownSetting {
 /// `searchEngine.lastFm.Enabled`, the `openSubsonicServer.*` variants, and the
 /// `processing.dontDeleteExisitingMelodeeDataFiles` typo) because migration
 /// parity keys off the exact strings (inventory "Parity quirks").
-// Generated from the inventory by.tmp-wp08/gen_known_settings.py equivalent
-// classification; keep sorted by `key`.
+// Generated from the settings inventory; keep sorted by `key`.
 #[rustfmt::skip]
 pub static KNOWN_SETTINGS: &[KnownSetting] = &[
     KnownSetting { key: "artist.biographyPlaceHolderText", kind: SettingKind::Text, secret: false, default: None, env: None },
@@ -498,19 +499,19 @@ pub static KNOWN_SETTINGS: &[KnownSetting] = &[
     KnownSetting { key: "theme.enforceContrastValidation", kind: SettingKind::Bool, secret: false, default: Some("false"), env: None },
     KnownSetting { key: "theme.libraryPath", kind: SettingKind::Text, secret: false, default: None, env: None },
     KnownSetting { key: "theme.maxUploadSizeMb", kind: SettingKind::Int { min: 1, max: None }, secret: false, default: Some("50"), env: None },
- // ADR-0147: the legacy seed literals were malformed (unbalanced quotes,
- // single-quoted "JSON") and unconsumed by any legacy code path
- // (ADR-0108 ratification). The corrected defaults below are
- // parseable JSON template objects consumed by the streaming transcoding
- // service; placeholders %s (source path), %t (start offset seconds), and
- // %bk (target bitrate kbps) are substituted at launch.
+    // ADR-0147: the legacy seed literals were malformed (unbalanced quotes,
+    // single-quoted "JSON") and unconsumed by any legacy code path
+    // (ADR-0108 ratification). The corrected defaults below are
+    // parseable JSON template objects consumed by the streaming transcoding
+    // service; placeholders %s (source path), %t (start offset seconds), and
+    // %bk (target bitrate kbps) are substituted at launch.
     KnownSetting { key: "transcoding.command.aac", kind: SettingKind::Text, secret: false, default: Some("{\"format\":\"Aac\",\"bitrate\":256,\"command\":\"ffmpeg -i %s -ss %t -map 0:a:0 -b:a %bk -v 0 -c:a aac -f adts -\"}"), env: None },
     KnownSetting { key: "transcoding.command.mp3", kind: SettingKind::Text, secret: false, default: Some("{\"format\":\"Mp3\",\"bitrate\":192,\"command\":\"ffmpeg -i %s -ss %t -map 0:a:0 -b:a %bk -v 0 -f mp3 -\"}"), env: None },
     KnownSetting { key: "transcoding.command.opus", kind: SettingKind::Text, secret: false, default: Some("{\"format\":\"Opus\",\"bitrate\":128,\"command\":\"ffmpeg -i %s -ss %t -map 0:a:0 -b:a %bk -v 0 -c:a libopus -f opus -\"}"), env: None },
     KnownSetting { key: "transcoding.default", kind: SettingKind::Enum(&["raw", "aac", "mp3", "opus"]), secret: false, default: Some("raw"), env: None },
- // ADR-0147 decision 5: transcoding capacity is bounded independently of
- // direct-play streaming.maxConcurrentStreams.*; 0 disables transcoding
- // (transcode requests fail closed; direct play is unaffected).
+    // ADR-0147 decision 5: transcoding capacity is bounded independently of
+    // direct-play streaming.maxConcurrentStreams.*; 0 disables transcoding
+    // (transcode requests fail closed; direct play is unaffected).
     KnownSetting { key: "transcoding.maxConcurrent", kind: SettingKind::Int { min: 0, max: None }, secret: false, default: Some("4"), env: None },
     KnownSetting { key: "userDeviceProfile.enabled", kind: SettingKind::Bool, secret: false, default: Some("true"), env: None },
     KnownSetting { key: "userinterface.toastAutoCloseTime", kind: SettingKind::Int { min: 0, max: None }, secret: false, default: Some("2000"), env: None },

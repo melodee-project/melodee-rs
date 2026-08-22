@@ -1,8 +1,8 @@
-# R4 current migrated-client acceptance
+# Migrated-client acceptance
 
-This is the release-candidate checklist for the current Phase 11 migrated
-target. Historical Phase 7/8 reports remain useful fixtures, but none of them
-is a current R4 acceptance result. Every passing or failing row below needs a
+This is the release-candidate checklist for the current migrated target.
+Historical client reports remain useful fixtures, but none of them is a current
+acceptance result. Every passing or failing row below needs a
 report containing the exact Melodee commit, migrated-run id (or redacted
 baseline fingerprint), client version, platform version, configuration
 fingerprint, command, result, and sanitized logs/screenshots.
@@ -13,7 +13,7 @@ include an explicit pass/fail result for every workflow listed in its
 missing or failed. Validate it with:
 
 ```bash
-python3 scripts/validate_r4_client_acceptance.py
+python3 scripts/validate_client_acceptance.py
 ```
 
 The validator permits the current `pending-external` rows, requires all
@@ -43,10 +43,10 @@ python3 scripts/run_phase8_client_smoke.py --feishin-dist /path/to/feishin/out/w
 # The same smoke against an already migrated, isolated target. The URL is
 # supplied through the environment so it is not exposed in shell history or
 # the launcher's output.
-MELODEE_R4_MIGRATED_DATABASE_URL='<redacted isolated URL>' \
+MELODEE_MIGRATED_DATABASE_URL='<redacted isolated URL>' \
   python3 scripts/run_phase8_client_smoke.py \
     --feishin-dist /path/to/feishin/out/web \
-    --existing-db-url-env MELODEE_R4_MIGRATED_DATABASE_URL \
+    --existing-db-url-env MELODEE_MIGRATED_DATABASE_URL \
     --existing-storage-root /isolated/canonical-root
 
 # Frozen Android client checkout and Android Auto-mode instrumentation probe
@@ -54,7 +54,7 @@ MELODEE_PHASE7_CLIENT_BASE_URL=http://10.0.2.2:<disposable-fixture-port> \
   scripts/run_phase7_android_auto_probe.sh
 ```
 
-For R4, use the existing-target form after the target has been produced by
+For a release candidate, use the existing-target form after the target has been produced by
 `legacy import`, `legacy verify`, and `search rebuild`; record the migrated run
 and do not relabel the historical fixture evidence. The launcher does not seed
 or drop the supplied database and validates that the supplied storage root is

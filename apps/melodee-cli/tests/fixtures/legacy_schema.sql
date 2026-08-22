@@ -1,5 +1,5 @@
--- Deterministic legacy (C# Melodee) source-schema fixture for Phase 11
--- migration tests (ADR-0148, R3.8).
+-- Deterministic legacy (C# Melodee) source-schema fixture for
+-- migration tests (ADR-0148).
 --
 -- Derivation: dumped from the live frozen-baseline database (legacy oracle
 -- checkout 4028b58dbd3302ed431e2c5b32d9dde5634db218, migration head

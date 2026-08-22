@@ -1,6 +1,6 @@
-//! Core integration suite for `melodee legacy` (ADR-0148): fingerprint gate,
-//! read-only source enforcement, inventory, plan, full import of every mapped
-//! domain, public-ID preservation, in-place media adoption, idempotent
+//! core integration suite for `melodee legacy` (ADR-0148): fingerprint
+//! gate, read-only source enforcement, inventory, plan, full import of every
+//! mapped domain, public-ID preservation, in-place media adoption, idempotent
 //! re-run, verify, and convergent delta.
 
 #![allow(clippy::expect_used)]
@@ -323,7 +323,7 @@ async fn full_import_covers_all_domains_and_preserves_identity() {
             .expect("migrated artist user state");
     assert_eq!(artist_state, (true, 5, 0));
 
-    // Extended user and operational domains.
+    // Extended user/operational domains.
     assert_eq!(count(&target.pool, "native_library_access_groups").await, 1);
     assert_eq!(count(&target.pool, "native_user_library_groups").await, 1);
     assert_eq!(count(&target.pool, "native_smart_playlists").await, 1);
@@ -432,8 +432,8 @@ async fn user_state_import_allows_multiple_users_on_one_track() {
     drop_db(&target.name).await;
 }
 
-/// With the canonical root mounted, adoption validates existence, size, and
-/// symlink containment read-only. Covers a sparse multi-GB file (scale
+/// with the canonical root mounted, adoption validates existence, size,
+/// and symlink containment read-only. Covers a sparse multi-GB file (scale
 /// metadata without bytes), a missing file, a size mismatch, and a symlink
 /// escape; the media tree is byte-identical afterwards.
 #[tokio::test]
@@ -542,7 +542,7 @@ UPDATE "Songs" SET "AlbumId" = 2 WHERE "Id" = 4;
     std::fs::remove_dir_all(&outside).expect("cleanup outside");
 }
 
-/// Without `--canonical-root` the adoption is metadata-only and the run
+/// without --canonical-root the adoption is metadata-only and the run
 /// records exactly one informational verification-skipped issue.
 #[tokio::test]
 async fn adoption_without_canonical_root_records_verification_skipped() {
@@ -569,10 +569,11 @@ async fn adoption_without_canonical_root_records_verification_skipped() {
     drop_db(&target.name).await;
 }
 
-/// A production-shaped source (hundreds of artists, thousands of releases,
-/// tens of thousands of tracks) imports through bounded keyset batches with
-/// exact counts, clean verification, and a convergent re-run. This proves the
-/// batching and mapping machinery at representative relational cardinality.
+/// a production-shaped source (hundreds of artists, thousands of
+/// releases, tens of thousands of tracks) imports through bounded keyset
+/// batches with exact counts, clean verification, and a convergent re-run.
+/// owns the full 5 TB production rehearsal; this proves the batching and
+/// mapping machinery at representative relational cardinality.
 #[tokio::test]
 async fn production_shaped_source_imports_with_bounded_batches() {
     let seed = r#"

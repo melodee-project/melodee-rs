@@ -1,4 +1,5 @@
 //! Repeatable native-API scale evidence.
+//!
 //! The default smoke protects result bounds and catastrophic regressions. The
 //! ignored current-catalog run records the proposed browse/random
 //! budgets without turning an unratified proposal into a product requirement.
@@ -77,7 +78,7 @@ async fn native_api_scale_smoke_is_bounded_and_correct() {
 }
 
 #[tokio::test]
-#[ignore = "current-catalog Phase 7 performance evidence; run explicitly with --ignored"]
+#[ignore = "current-catalog performance evidence; run explicitly with --ignored"]
 async fn native_api_current_catalog_scale_evidence() {
     run_scale(CURRENT_CATALOG_TRACKS, true).await;
 }

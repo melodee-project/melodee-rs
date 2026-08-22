@@ -12,14 +12,14 @@ use crate::{
 impl ReleaseId {
     /// Reserves the catalog Release identity during publication.
     ///
-    /// catalog construction must adopt this existing ID rather than call this method.
+    /// Catalog construction must adopt this existing ID rather than call this method.
     #[must_use]
     pub fn reserve_for_publication() -> Self {
         Self::new()
     }
 }
 
-/// Non-exclusive classification inferred for a Release in.
+/// Non-exclusive classification inferred for a Release by policy evaluation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReleaseTrait {

@@ -195,7 +195,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let _ = dotenvy::dotenv();
     init_tracing()?;
 
-    //: install the process bounded-resource registry before any
+    // install the process bounded-resource registry before any
     // instrumented service is constructed (several resolve the global
     // registry at construction). Purely observational; admission behavior
     // is unchanged.
@@ -377,7 +377,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         None
     };
 
-    // notification render/delivery service over layered
+    // notification render/delivery service over layered settings resolution
     // settings (PRD-CONFIG-003): MELODEE__EMAIL__* env keys and the optional
     // config file win over DB-backed server_settings rows, which win over
     // the legacy seeded defaults. Delivery is fail-degraded and audited
@@ -517,7 +517,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         notifications: notifications.clone(),
         scripting: scripting.clone(),
     };
-    // review previews use Melodee-owned staging, never the transient
+    // review previews use Melodee-owned staging, never the transient inbox.
     // inbox. Containment is re-validated per request.
     let admin_review_state = melodee_server::admin_review::AdminReviewState::new(
         admin_access_state.clone(),
@@ -528,7 +528,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             .unwrap_or_default(),
         ingestion_config.work_area_base.clone(),
     );
-    // / dashboard + system/workers/search surface: the configured
+    // dashboard + system/workers/search surface: the configured
     // search projection handle lets health/status/rebuild report honestly
     // (search disabled → explicit `disabled`/`search_disabled`, never an
     // invented failure).
@@ -537,7 +537,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         search_config.enabled.then_some(search_config.clone()),
     )
     .with_resource_bounds(resource_bounds.clone());
-    // catalog surface: the shared read-only signer issues admin
+    // catalog surface: the shared read-only signer issues admin preview
     // preview URLs on the frozen native stream route (PRD-UI-007); the
     // resolver mirrors the native trusted-proxy rules so issued tokens
     // validate for the requesting browser.

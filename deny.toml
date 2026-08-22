@@ -12,7 +12,7 @@ version = 2
 confidence-threshold = 0.93
 allow = [
   # 0BSD: OSI-approved public-domain-equivalent; pulled in by quoted_printable
-  # via lettre (SMTP transport, PRD-NOTIF-002).
+  # via lettre (notification SMTP transport, PRD-NOTIF-002).
   "0BSD",
   "Apache-2.0",
   "BSD-2-Clause",

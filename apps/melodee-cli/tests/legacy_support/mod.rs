@@ -1,8 +1,8 @@
-//! Shared helpers for the legacy migration integration suites (`legacy.rs`,
-//! `legacy_faults.rs`). Source databases are seeded from the frozen legacy
-//! DDL fixture; targets are fresh migrated databases; the CLI under test is
-//! spawned as a real binary so coverage includes argument parsing, fencing,
-//! and exit behavior end to end.
+//! Shared helpers for the legacy-migration integration suites
+//! (`legacy.rs`, `legacy_faults.rs`). Source databases are seeded from the
+//! frozen legacy DDL fixture; targets are fresh migrated databases; the CLI
+//! under test is spawned as a real binary so coverage includes argument
+//! parsing, fencing, and exit behavior end to end.
 
 #![allow(dead_code, clippy::panic, clippy::expect_used, clippy::unwrap_used)]
 
@@ -183,7 +183,7 @@ INSERT INTO "RadioStations" ("Id","ApiKey","Name","StreamUrl","HomePageUrl","IsL
 VALUES (1,'cccccccc-cccc-cccc-cccc-cccccccccccc','Jazz FM','https://stream.example.com/jazz','https://jazz.example.com',false,0,now(),now());
 INSERT INTO "Settings" ("Id","ApiKey","Key","Value","Category","IsLocked","SortOrder","CreatedAt")
 VALUES (1,'dddddddd-0000-0000-0000-000000000005','library.scan.enabled','true',1,false,0,now());
--- Extended user/operational domains (R3.5).
+-- Extended user/operational domains.
 INSERT INTO "UserGroups" ("Id","ApiKey","Name","IsLocked","SortOrder","CreatedAt","LastUpdatedAt")
 VALUES (1,'eeeeeeee-0000-0000-0000-000000000001','Family',false,0,now(),now());
 INSERT INTO "UserGroupMembers" ("Id","ApiKey","UserGroupId","UserId","IsLocked","SortOrder","CreatedAt","LastUpdatedAt")

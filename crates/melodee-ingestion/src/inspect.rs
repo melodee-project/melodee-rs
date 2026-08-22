@@ -27,8 +27,8 @@ pub struct InspectionStats {
     pub failed: u64,
     pub errors: u64,
     pub duration_ms: i64,
-    /// Candidates denied by the `directoryProcessingStart` script hook
-    ///. Acquisition has already made staging authoritative, so a
+    /// Candidates denied by the `directoryProcessingStart` script hook.
+    /// Acquisition has already made staging authoritative, so a
     /// denied candidate remains staged as a retryable failed work item.
     pub script_skipped: u64,
 }
@@ -55,7 +55,7 @@ pub async fn inspect_ready_once(
     };
 
     for item in items {
-        //: every event inside the item boundary inherits both the
+        // every event inside the item boundary inherits both the
         // work-item id and the durable correlation id from this span.
         let span = tracing::info_span!(
             "inspect_work_item",

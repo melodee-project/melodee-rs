@@ -197,7 +197,7 @@ async fn seed_failed_item(db: &TestDb, source_path: &str) -> Uuid {
 
 #[tokio::test]
 async fn error_envelope_sources_the_request_correlation_header() {
-    // The documented admin contract: envelope `correlationId` is the
+    // the documented admin contract — envelope `correlationId` is the
     // `x-request-id` value when present, otherwise generated. The middleware
     // is layered exactly as `main.rs` does (inside the TraceLayer span).
     let db = TestDb::create("wp17_correlation").await;
@@ -739,7 +739,7 @@ async fn system_health_exposes_registered_resource_bounds() {
 
 #[tokio::test]
 async fn system_health_reports_stale_leases_and_queue_age() {
-    // With no leased work the workers subsystem is ok; a lease expired
+    // with no leased work the workers subsystem is ok; a lease expired
     // past the grace window (a worker that died mid-claim without recovery)
     // degrades it with operator-readable counts.
     let db = TestDb::create("wp17_workers_health").await;

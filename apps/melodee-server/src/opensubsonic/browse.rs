@@ -5,25 +5,26 @@
 //! `compatibility/opensubsonic/golden/browse`, capture semantics
 //! `design/evidence/phase-0/opensubsonic-capture.md` §4/§8).
 //!
-//! Captured behaviors reproduced here: //! - Wire ids are `artist_`/`album_`/`song_` + public_api_id; `library_` for
-//! the configured music folder root.
+//! Captured behaviors reproduced here:
+//! - Wire ids are `artist_`/`album_`/`song_` + public_api_id; `library_` for
+//!   the configured music folder root.
 //! - getArtists/getIndexes render first-letter index groups with the captured
-//! `ignoredArticles` set; artists whose first letter is non-ASCII land in
-//! the `""` index. The artist DTO carries albumCount, userRating,
-//! averageRating, coverArt (own id), artistImageUrl as
-//! `{public_origin}/images/{artist_id}/large`, and userStarred/starred
-//! timestamps when the caller starred the artist.
+//!   `ignoredArticles` set; artists whose first letter is non-ASCII land in
+//!   the `""` index. The artist DTO carries albumCount, userRating,
+//!   averageRating, coverArt (own id), artistImageUrl as
+//!   `{public_origin}/images/{artist_id}/large`, and userStarred/starred
+//!   timestamps when the caller starred the artist.
 //! - Unknown/malformed id classes are preserved exactly: getSong unknown
-//! `song_<uuid>` answers status ok WITH an error 44 block; a malformed id
-//! answers the same os-getsong-malformed-id shape. getArtist unknown answers
-//! status ok with NO artist key and NO error. getAlbum unknown/unprefixed
-//! answers HTTP 302 toward `/Account/Login?ReturnUrl=%2FError` (the captured
-//! credential leak in Location is not preserved).
+//!   `song_<uuid>` answers status ok WITH an error 44 block; a malformed id
+//!   answers the same os-getsong-malformed-id shape. getArtist unknown answers
+//!   status ok with NO artist key and NO error. getAlbum unknown/unprefixed
+//!   answers HTTP 302 toward `/Account/Login?ReturnUrl=%2FError` (the captured
+//!   credential leak in Location is not preserved).
 //! - getTopSongs matches BOTH normalized-name collision artists (name-based
-//! lookup), so `artist=Dune` returns tracks whose primary billing folds to
-//! DUNE regardless of the underlying identity.
+//!   lookup), so `artist=Dune` returns tracks whose primary billing folds to
+//!   DUNE regardless of the underlying identity.
 //! - getGenres, getArtistInfo/2, getAlbumInfo/2, getSimilarSongs/2 mirror the
-//! goldens (offline-provider info shapes, empty similar lists in fixture).
+//!   goldens (offline-provider info shapes, empty similar lists in fixture).
 //!
 //! Deterministic tiebreaks (ADR-0130 decision 5): every sorted list appends
 //! the entity public id as the final ORDER BY key.
@@ -927,7 +928,8 @@ pub async fn get_album(
         .unwrap_or_default()
         .remove(&detail.release_public_id)
         .unwrap_or_default();
-    // Captured `AlbumId3WithSongs.Artists` = legacy `ContributingArtists`:  // performer-type contributors of every song, in song order
+    // Captured `AlbumId3WithSongs.Artists` = legacy `ContributingArtists()`:
+    // performer-type contributors of every song, in song order
     // (os-getalbum-compilation).
     let contributing_artists: Vec<Value> = track_contributions
         .iter()
@@ -1128,7 +1130,7 @@ fn item_date(date: Option<time::Date>) -> Value {
 /// are filled here (os-getalbum-compilation) while every other path emits
 /// empty arrays. Also returns the per-track contributor entries in track
 /// order so the caller can build the album-level `artists[]`
-/// (`ContributingArtists`). The captured contract additionally keys the
+/// (`ContributingArtists()`). The captured contract additionally keys the
 /// per-song `artistId` to the release's primary artist (not the track
 /// billing) for ordinary albums; the shared projection already does this.
 async fn album_songs(

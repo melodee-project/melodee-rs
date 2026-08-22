@@ -1,6 +1,7 @@
 //! Tantivy schema for the Melodee search projection (ADR-0121).
 //!
-//! Three document kinds share one index, distinguished by the `kind` field: //! `artist`, `release`, `track`. Participation is ID-backed: Track/Release docs
+//! Three document kinds share one index, distinguished by the `kind` field:
+//! `artist`, `release`, `track`. Participation is ID-backed: Track/Release docs
 //! carry multi-valued Artist-internal-ID fields so participation queries are
 //! immediate and never reconstructed from display strings.
 

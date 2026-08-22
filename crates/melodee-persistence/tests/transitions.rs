@@ -1,4 +1,4 @@
-//! State-transition integrity tests (work-package parts XIII, XXII):
+//! State-transition integrity tests:
 //! legal/illegal transitions, atomicity, terminal completion, operator
 //! transitions, lease conflicts.
 

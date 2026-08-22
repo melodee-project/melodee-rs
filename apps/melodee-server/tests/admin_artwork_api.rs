@@ -596,7 +596,7 @@ async fn canonical_artwork_with_corrupted_storage_falls_back_to_the_captured_pla
     let db = TestDb::create("wp_art_hash_fence").await;
     let (catalog, release_public, _artist_public, _track_public) = seed_catalog(&db, 11).await;
 
-    // The phase-5 fixture publishes a media-only plan; append an immutable
+    // The policy fixture publishes a media-only plan; append an immutable
     // artwork asset carrying the REAL blake3 hash of its bytes (the same
     // hash the publication pipeline records).
     let artwork = {

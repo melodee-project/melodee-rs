@@ -7,7 +7,8 @@
 //! 4/9/10), the unconfigured/unlinked silent no-ops, disconnect idempotency,
 //! the at-rest secret invariant, and the PRD-EXT-002 no-provider-required
 //! catalog-entry invariant.
-//! Every test binds its own mock server on an ephemeral port and
+//!
+//! every test binds its own mock server on an ephemeral port and
 //! threads its base URL through the adapter state's `lastfm_api_base_url`
 //! (route-level tests) or `LastfmDispatch::with_api_base_url` (dispatch-level
 //! tests). There is no process-global endpoint override, so parallel tests
@@ -118,10 +119,10 @@ async fn start_mock() -> MockHandle {
                             .into_response();
                         }
                         if token == Some("oversized-token") {
- // Chunked body with no Content-Length that
- // exceeds the client's 256 KiB response cap:
- // the cap must trip while streaming, not
- // after a full in-memory read.
+                            // Chunked body with no Content-Length that
+                            // exceeds the client's 256 KiB response cap:
+                            // the cap must trip while streaming, not
+                            // after a full in-memory read.
                             let chunks: Vec<Result<axum::body::Bytes, std::convert::Infallible>> =
                                 (0..40)
                                     .map(|_| Ok(axum::body::Bytes::from(vec![b'x'; 8192])))
@@ -380,7 +381,8 @@ fn principal(user: &melodee_persistence::StoredNativeUser) -> NativePrincipal {
     }
 }
 
-/// Configures Last.fm scrobbling plus the server secret through the layered settings store.
+/// Configures Last.fm scrobbling plus the server secret through the
+/// layered settings store.
 async fn configure_lastfm(db: &common::TestDb) {
     let store = SettingsStore::new();
     let now = OffsetDateTime::now_utc();

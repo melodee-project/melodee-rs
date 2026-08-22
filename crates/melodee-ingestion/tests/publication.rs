@@ -1,4 +1,4 @@
-//! Structural-validation and canonical-filesystem safety contracts.
+//! structural-validation and canonical-filesystem safety contracts.
 #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 
 use std::{

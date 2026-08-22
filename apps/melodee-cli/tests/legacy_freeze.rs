@@ -1,6 +1,6 @@
-//! Legacy freeze integration suite (ADR-0149): immutable snapshot capture
-//! with redacted configuration fingerprint, freeze gating, abort on source
-//! writes during the freeze window, and the acknowledgement-gated
+//! freeze/baseline integration suite (ADR-0149): immutable baseline
+//! capture with redacted configuration fingerprint, freeze gating, abort on
+//! source writes during the freeze window, and the acknowledgement-gated
 //! cutover-ready transition.
 
 #![allow(clippy::expect_used)]

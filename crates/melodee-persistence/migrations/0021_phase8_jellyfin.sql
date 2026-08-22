@@ -1,7 +1,7 @@
 -- Jellyfin adapter token state (authority: ADR-0102, ADR-0131).
 --
 -- This migration is additive. A binary downgrade leaves the table intact;
--- schema rollback restores a verified pre-Phase-8 backup into a new database.
+-- schema rollback restores a verified pre-migration backup into a new database.
 -- Clear access tokens are never stored: lookup uses the 8-character cleartext
 -- prefix and verification uses HMAC-SHA256(pepper, salt + token), matching the
 -- captured legacy storage contract.

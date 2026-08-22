@@ -442,7 +442,7 @@ pub async fn compute_gate(
     .await
     .map_err(|e| format!("duplicate public id check failed: {e}"))?;
 
-    // Deep checks: public-ID equality, relationship totals, playlist
+    // deep checks: public-ID equality, relationship totals, playlist
     // ordering, orphan mappings, and adopted-media references.
     let mut deep = Vec::new();
     let public_id = verify_public_id_equality(source, target, run_id, sample_limit).await?;

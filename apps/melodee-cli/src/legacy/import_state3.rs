@@ -1,5 +1,5 @@
-//! Extended user/operational-state importers (ADR-0148 §D.8 amendment):
-//! user groups and memberships, smart playlists, and podcast episodes
+//! Extended user/operational-state importers (ADR-0148 §D.8 amendment,
+//!): user groups and memberships, smart playlists, and podcast episodes
 //! with their bookmarks and play history.
 
 use sqlx::{PgPool, Row};

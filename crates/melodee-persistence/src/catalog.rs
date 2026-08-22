@@ -357,7 +357,7 @@ impl CatalogStore {
     }
 
     /// Resolves catalog `release_id` bindings for a bounded set of work
-    /// items in one statement ( review-queue display). Items without
+    /// items in one statement (review-queue display). Items without
     /// an import receipt are simply absent from the result.
     pub async fn list_import_release_ids(
         &self,

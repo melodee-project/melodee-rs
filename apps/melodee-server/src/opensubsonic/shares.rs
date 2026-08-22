@@ -9,7 +9,8 @@
 //! is `{public_origin}/share/{unique}`. `updateShare`/`deleteShare` by
 //! `share_{guid}`. Unknown share ids on update/delete answer the captured
 //! error 44 "Invalid API key." shape (the legacy fixture captured
-//! `{shareId}` template ids that never resolved). Shares reuse the //! `native_shares` table (migration 0012) so a user's library is shared
+//! `{shareId}` template ids that never resolved). Shares reuse the
+//! `native_shares` table (migration 0012) so a user's library is shared
 //! across surfaces; only the OpenSubsonic wire shape lives here.
 
 use axum::{

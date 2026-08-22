@@ -1,4 +1,4 @@
-"""Tests for the fail-closed R4 current-client evidence schema."""
+"""Tests for the fail-closed current-client evidence schema."""
 from __future__ import annotations
 
 import importlib.util
@@ -8,14 +8,14 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-MODULE_PATH = ROOT / "scripts" / "validate_r4_client_acceptance.py"
-SPEC = importlib.util.spec_from_file_location("validate_r4_client_acceptance", MODULE_PATH)
+MODULE_PATH = ROOT / "scripts" / "validate_client_acceptance.py"
+SPEC = importlib.util.spec_from_file_location("validate_client_acceptance", MODULE_PATH)
 assert SPEC and SPEC.loader
 MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
 
 
-class R4ClientAcceptanceTests(unittest.TestCase):
+class ClientAcceptanceTests(unittest.TestCase):
     def setUp(self) -> None:
         self.matrix = json.loads(
             (ROOT / "compatibility" / "clients" / "r4" / "acceptance-matrix.json").read_text(
@@ -41,7 +41,7 @@ class R4ClientAcceptanceTests(unittest.TestCase):
                 "status": "pass",
                 "result": "pass",
                 "serverCommit": "a" * 40,
-                "migratedRunId": "r4-run-20260819",
+                "migratedRunId": "client-run-20260819",
                 "clientVersion": "1.0.0",
                 "platformVersion": "test-platform",
                 "configurationFingerprint": "b" * 16,
@@ -59,7 +59,7 @@ class R4ClientAcceptanceTests(unittest.TestCase):
                 "status": "pass",
                 "result": "pass",
                 "serverCommit": "a" * 40,
-                "migratedRunId": "r4-run-20260819",
+                "migratedRunId": "client-run-20260819",
                 "clientVersion": "1.0.0",
                 "platformVersion": "test-platform",
                 "configurationFingerprint": "b" * 16,

@@ -29,8 +29,6 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
-    /// Print repository phase and specification locations.
-    Plan,
     /// Check locally available prerequisites without changing the system.
     Doctor,
     /// Apply database migrations (explicit SQL, from empty or current).
@@ -40,7 +38,7 @@ enum Commands {
         #[command(subcommand)]
         command: WorkCommands,
     },
-    /// Ingestion worker operations and diagnostics.
+    /// ingestion worker operations and diagnostics.
     Ingest {
         #[command(subcommand)]
         command: IngestCommands,
@@ -50,7 +48,7 @@ enum Commands {
         #[command(subcommand)]
         command: CatalogCommands,
     },
-    /// Policy classification, novelty, and dry-run diagnostics.
+    /// policy classification, novelty, and dry-run diagnostics.
     Policy {
         #[command(subcommand)]
         command: PolicyCommands,
@@ -105,8 +103,9 @@ enum Commands {
         #[command(subcommand)]
         command: ConfigCommands,
     },
-    /// Legacy (C#) migration tooling: inventory, plan, import, verify,
-    /// delta, and status against a read-only source snapshot (ADR-0148).
+    /// legacy (C#) migration tooling: inventory, plan, import,
+    /// verify, delta, and status against a read-only source snapshot
+    /// (ADR-0148).
     Legacy {
         #[command(subcommand)]
         command: legacy::LegacyCommands,
@@ -583,19 +582,6 @@ async fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Plan => {
-            println!("Official roadmap: IMPLEMENTATION.md");
-            println!("Foundation complete — see design/evidence/phase-0/PHASE-0-REPORT.md");
-            println!("Ingestion complete — see design/evidence/phase-1/PHASE-1-REPORT.md");
-            println!("Workspace complete — see design/evidence/phase-2/PHASE-2-REPORT.md");
-            println!("Normalization complete — see design/evidence/phase-3/PHASE-3-REPORT.md");
-            println!("Catalog complete — see design/evidence/phase-4/PHASE-4-REPORT.md");
-            println!("Policy complete — see design/evidence/phase-5/PHASE-5-REPORT.md");
-            println!("Search complete — see design/evidence/phase-6/PHASE-6-REPORT.md");
-            println!("Native-v1 complete — see design/evidence/phase-7/PHASE-7-REPORT.md");
-            println!("Current work is active — see IMPLEMENTATION.md");
-            println!("Read: PRD.md, SPEC.md, IMPLEMENTATION.md, AGENTS.md");
-        }
         Commands::Doctor => {
             let checks = [
                 ("ffmpeg", command_available("ffmpeg", "-version")),
@@ -1840,7 +1826,7 @@ async fn run_config_command(command: &ConfigCommands) {
 
 /// Notification commands go through the same stores and delivery service as
 /// the server (PRD-CLI-002: never bypass safety), mirroring the admin API
-/// semantics. Email settings resolve through layered sources
+/// semantics. Email settings resolve through the layered sources
 /// (env/config-file over `server_settings` over defaults); a disabled
 /// transport records an honest `skipped` delivery instead of failing the
 /// command (PRD-NOTIF-002/003).
@@ -1917,8 +1903,8 @@ async fn run_notification_command(command: &NotificationCommands) {
     }
 }
 
-/// Scripting hook operations (PRD-SCRIPT-001/004, ADR-0135): DB-direct over
-/// the same stores and sandboxed executor as the admin API. Outcomes —
+/// scripting hook operations (PRD-SCRIPT-001/004, ADR-0135): DB-direct
+/// over the same stores and sandboxed executor as the admin API. Outcomes —
 /// including error/timeout fail-degraded results — are data, never command
 /// failures (exit 1 is reserved for store failures, exit 2 for usage).
 async fn run_script_command(command: &ScriptCommands) {

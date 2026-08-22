@@ -2,11 +2,12 @@
 //! (PRD-API-OS-005; golden evidence `compatibility/opensubsonic/golden/playlists/os-playqueue-*`).
 //!
 //! State lives in `opensubsonic_play_queue_items` + `opensubsonic_play_queues`
-//! (migration 0020). Captured quirks preserved: //! - The response `current` field is the internal bigint entry id (the legacy
-//! PlayQueId), NOT the song id the client submitted.
+//! (migration 0020). Captured quirks preserved:
+//! - The response `current` field is the internal bigint entry id (the legacy
+//!   PlayQueId), NOT the song id the client submitted.
 //! - Clearing (savePlayQueue without ids) empties the queue; getPlayQueue on
-//! an empty queue answers the synthesized default whose `changedBy` is the
-//! username (not the last saving client).
+//!   an empty queue answers the synthesized default whose `changedBy` is the
+//!   username (not the last saving client).
 //! - `c` (client name) is stored as `changed_by`.
 
 use axum::{

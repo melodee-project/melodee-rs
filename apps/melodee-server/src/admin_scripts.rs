@@ -215,9 +215,9 @@ pub fn router() -> Router<AdminAccessState> {
         .route("/api/admin/v1/scripts/id/{id}/disable", post(disable_script))
         .route("/api/admin/v1/scripts/runs", get(list_runs))
         .route("/api/admin/v1/scripts/test-run", post(test_run))
- // Source bodies are individually bounded at 256 KiB by the store and
- // ctx payloads by the executor; the envelope admits one of each plus
- // JSON overhead.
+        // Source bodies are individually bounded at 256 KiB by the store and
+        // ctx payloads by the executor; the envelope admits one of each plus
+        // JSON overhead.
         .route_layer(axum::extract::DefaultBodyLimit::max(768 * 1024))
 }
 

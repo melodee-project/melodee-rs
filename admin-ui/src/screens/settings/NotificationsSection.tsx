@@ -14,9 +14,9 @@ import {
   TableRow,
   TextArea,
   TextInput,
-} from "@carbon/react";
-import { useCallback, useEffect, useState } from "react";
-import { useTranslation } from "react-i18next";
+} from '@carbon/react';
+import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import {
   deleteNotificationTemplate,
@@ -24,19 +24,12 @@ import {
   listNotificationTemplates,
   putNotificationTemplate,
   testSendNotification,
-} from "../../api/admin";
-import { ApiError } from "../../api/client";
-import type {
-  NotificationDelivery,
-  NotificationTemplate,
-} from "../../api/types";
-import { EmptyState } from "../../components/EmptyState";
-import { StatusTag } from "../../components/StatusTag";
-import {
-  formatDateTime,
-  formatNumber,
-  formatRelativeTime,
-} from "../../i18n/format";
+} from '../../api/admin';
+import { ApiError } from '../../api/client';
+import type { NotificationDelivery, NotificationTemplate } from '../../api/types';
+import { EmptyState } from '../../components/EmptyState';
+import { StatusTag } from '../../components/StatusTag';
+import { formatDateTime, formatNumber, formatRelativeTime } from '../../i18n/format';
 
 /**
  * Notification templates + test-send (PRD-NOTIF-001..003): template
@@ -49,46 +42,34 @@ import {
  */
 
 interface Notice {
-  kind: "success" | "error" | "info" | "warning";
+  kind: 'success' | 'error' | 'info' | 'warning';
   text: string;
 }
 
 function toApiError(cause: unknown): ApiError {
-  return cause instanceof ApiError
-    ? cause
-    : new ApiError(0, "unknown", String(cause), null);
+  return cause instanceof ApiError ? cause : new ApiError(0, 'unknown', String(cause), null);
 }
 
-function deliveryKind(status: string): "success" | "error" | "neutral" {
-  if (status === "sent") {
-    return "success";
+function deliveryKind(status: string): 'success' | 'error' | 'neutral' {
+  if (status === 'sent') {
+    return 'success';
   }
-  if (status === "failed") {
-    return "error";
+  if (status === 'failed') {
+    return 'error';
   }
-  return "neutral";
+  return 'neutral';
 }
 
 export function NotificationsSection() {
   const { t } = useTranslation();
-  const [templates, setTemplates] = useState<NotificationTemplate[] | null>(
-    null,
-  );
+  const [templates, setTemplates] = useState<NotificationTemplate[] | null>(null);
   const [templatesError, setTemplatesError] = useState<ApiError | null>(null);
-  const [deliveries, setDeliveries] = useState<NotificationDelivery[] | null>(
-    null,
-  );
+  const [deliveries, setDeliveries] = useState<NotificationDelivery[] | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
 
-  const [editTarget, setEditTarget] = useState<NotificationTemplate | null>(
-    null,
-  );
-  const [testTarget, setTestTarget] = useState<NotificationTemplate | null>(
-    null,
-  );
-  const [deleteTarget, setDeleteTarget] = useState<NotificationTemplate | null>(
-    null,
-  );
+  const [editTarget, setEditTarget] = useState<NotificationTemplate | null>(null);
+  const [testTarget, setTestTarget] = useState<NotificationTemplate | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<NotificationTemplate | null>(null);
 
   const fetchTemplates = useCallback((signal: { cancelled: boolean }) => {
     return listNotificationTemplates({ limit: 500 })
@@ -128,10 +109,8 @@ export function NotificationsSection() {
 
   const mutationError = (cause: unknown) =>
     setNotice({
-      kind: "error",
-      text: t("settings.notifications.error", {
-        message: toApiError(cause).message,
-      }),
+      kind: 'error',
+      text: t('settings.notifications.error', { message: toApiError(cause).message }),
     });
 
   return (
@@ -149,35 +128,27 @@ export function NotificationsSection() {
           inline
           kind="error"
           lowContrast
-          title={t("settings.notifications.loadErrorTitle")}
+          title={t('settings.notifications.loadErrorTitle')}
           subtitle={templatesError.message}
           hideCloseButton
-          actionButtonLabel={t("actions.retry")}
+          actionButtonLabel={t('actions.retry')}
           onActionButtonClick={() => void fetchTemplates({ cancelled: false })}
         />
       ) : null}
       {templates === null && !templatesError ? (
-        <Loading description={t("common.loading")} withOverlay={false} />
+        <Loading description={t('common.loading')} withOverlay={false} />
       ) : null}
       {templates !== null ? (
-        <TableContainer title={t("settings.notifications.templatesCaption")}>
-          <Table aria-label={t("settings.notifications.templatesCaption")}>
+        <TableContainer title={t('settings.notifications.templatesCaption')}>
+          <Table aria-label={t('settings.notifications.templatesCaption')}>
             <TableHead>
               <TableRow>
-                <TableHeader>
-                  {t("settings.notifications.column.template")}
-                </TableHeader>
-                <TableHeader>
-                  {t("settings.notifications.column.locale")}
-                </TableHeader>
-                <TableHeader>
-                  {t("settings.notifications.column.subject")}
-                </TableHeader>
-                <TableHeader>
-                  {t("settings.notifications.column.version")}
-                </TableHeader>
-                <TableHeader>{t("common.updated")}</TableHeader>
-                <TableHeader>{t("users.column.actions")}</TableHeader>
+                <TableHeader>{t('settings.notifications.column.template')}</TableHeader>
+                <TableHeader>{t('settings.notifications.column.locale')}</TableHeader>
+                <TableHeader>{t('settings.notifications.column.subject')}</TableHeader>
+                <TableHeader>{t('settings.notifications.column.version')}</TableHeader>
+                <TableHeader>{t('common.updated')}</TableHeader>
+                <TableHeader>{t('users.column.actions')}</TableHeader>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -187,7 +158,7 @@ export function NotificationsSection() {
                     <code>{template.templateKey}</code>
                   </TableCell>
                   <TableCell>{template.locale}</TableCell>
-                  <TableCell>{template.subject ?? t("common.none")}</TableCell>
+                  <TableCell>{template.subject ?? t('common.none')}</TableCell>
                   <TableCell>{formatNumber(template.version)}</TableCell>
                   <TableCell>
                     <span title={formatDateTime(template.updatedAt)}>
@@ -195,26 +166,18 @@ export function NotificationsSection() {
                     </span>
                   </TableCell>
                   <TableCell>
-                    <Button
-                      kind="ghost"
-                      size="sm"
-                      onClick={() => setEditTarget(template)}
-                    >
-                      {t("actions.edit")}
+                    <Button kind="ghost" size="sm" onClick={() => setEditTarget(template)}>
+                      {t('actions.edit')}
                     </Button>
-                    <Button
-                      kind="ghost"
-                      size="sm"
-                      onClick={() => setTestTarget(template)}
-                    >
-                      {t("settings.notifications.testSend")}
+                    <Button kind="ghost" size="sm" onClick={() => setTestTarget(template)}>
+                      {t('settings.notifications.testSend')}
                     </Button>
                     <Button
                       kind="danger--ghost"
                       size="sm"
                       onClick={() => setDeleteTarget(template)}
                     >
-                      {t("actions.delete")}
+                      {t('actions.delete')}
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -224,50 +187,30 @@ export function NotificationsSection() {
           {templates.length === 0 ? (
             <EmptyState
               compact
-              title={t("settings.notifications.emptyTitle")}
-              description={t("settings.notifications.emptyDescription")}
+              title={t('settings.notifications.emptyTitle')}
+              description={t('settings.notifications.emptyDescription')}
             />
           ) : null}
         </TableContainer>
       ) : null}
 
-      <section
-        className="melodee-panel"
-        aria-labelledby="notification-deliveries-title"
-      >
-        <Heading
-          id="notification-deliveries-title"
-          className="melodee-panel__title"
-        >
-          {t("settings.notifications.deliveriesTitle")}
+      <section className="melodee-panel" aria-labelledby="notification-deliveries-title">
+        <Heading id="notification-deliveries-title" className="melodee-panel__title">
+          {t('settings.notifications.deliveriesTitle')}
         </Heading>
-        <p className="melodee-panel__subtitle">
-          {t("settings.notifications.deliveriesNote")}
-        </p>
+        <p className="melodee-panel__subtitle">{t('settings.notifications.deliveriesNote')}</p>
         {deliveries === null || deliveries.length === 0 ? (
-          <EmptyState
-            compact
-            title={t("settings.notifications.deliveriesEmpty")}
-          />
+          <EmptyState compact title={t('settings.notifications.deliveriesEmpty')} />
         ) : (
-          <TableContainer title={t("settings.notifications.deliveriesCaption")}>
-            <Table
-              size="sm"
-              aria-label={t("settings.notifications.deliveriesCaption")}
-            >
+          <TableContainer title={t('settings.notifications.deliveriesCaption')}>
+            <Table size="sm" aria-label={t('settings.notifications.deliveriesCaption')}>
               <TableHead>
                 <TableRow>
-                  <TableHeader>
-                    {t("settings.notifications.column.template")}
-                  </TableHeader>
-                  <TableHeader>
-                    {t("settings.notifications.column.recipient")}
-                  </TableHeader>
-                  <TableHeader>{t("common.status")}</TableHeader>
-                  <TableHeader>
-                    {t("settings.notifications.column.error")}
-                  </TableHeader>
-                  <TableHeader>{t("common.created")}</TableHeader>
+                  <TableHeader>{t('settings.notifications.column.template')}</TableHeader>
+                  <TableHeader>{t('settings.notifications.column.recipient')}</TableHeader>
+                  <TableHeader>{t('common.status')}</TableHeader>
+                  <TableHeader>{t('settings.notifications.column.error')}</TableHeader>
+                  <TableHeader>{t('common.created')}</TableHeader>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -278,12 +221,9 @@ export function NotificationsSection() {
                     </TableCell>
                     <TableCell>{delivery.recipient}</TableCell>
                     <TableCell>
-                      <StatusTag
-                        kind={deliveryKind(delivery.status)}
-                        label={delivery.status}
-                      />
+                      <StatusTag kind={deliveryKind(delivery.status)} label={delivery.status} />
                     </TableCell>
-                    <TableCell>{delivery.error ?? t("common.none")}</TableCell>
+                    <TableCell>{delivery.error ?? t('common.none')}</TableCell>
                     <TableCell>
                       <span title={formatDateTime(delivery.createdAt)}>
                         {formatRelativeTime(delivery.createdAt)}
@@ -298,29 +238,18 @@ export function NotificationsSection() {
       </section>
 
       <TemplateEditModal
-        key={
-          editTarget
-            ? `edit-${editTarget.templateKey}/${editTarget.locale}`
-            : "edit-closed"
-        }
+        key={editTarget ? `edit-${editTarget.templateKey}/${editTarget.locale}` : 'edit-closed'}
         template={editTarget}
         onClose={() => setEditTarget(null)}
         onSaved={() => {
           setEditTarget(null);
-          setNotice({
-            kind: "success",
-            text: t("settings.notifications.saveSuccess"),
-          });
+          setNotice({ kind: 'success', text: t('settings.notifications.saveSuccess') });
           void fetchTemplates({ cancelled: false });
         }}
         onError={mutationError}
       />
       <TestSendModal
-        key={
-          testTarget
-            ? `test-${testTarget.templateKey}/${testTarget.locale}`
-            : "test-closed"
-        }
+        key={testTarget ? `test-${testTarget.templateKey}/${testTarget.locale}` : 'test-closed'}
         template={testTarget}
         onClose={() => setTestTarget(null)}
         onSent={() => {
@@ -331,28 +260,25 @@ export function NotificationsSection() {
         <Modal
           danger
           open
-          modalHeading={t("settings.notifications.deleteTitle", {
+          modalHeading={t('settings.notifications.deleteTitle', {
             template: deleteTarget.templateKey,
             locale: deleteTarget.locale,
           })}
-          primaryButtonText={t("actions.delete")}
-          secondaryButtonText={t("actions.cancel")}
+          primaryButtonText={t('actions.delete')}
+          secondaryButtonText={t('actions.cancel')}
           onRequestClose={() => setDeleteTarget(null)}
           onRequestSubmit={() => {
             const target = deleteTarget;
             setDeleteTarget(null);
             deleteNotificationTemplate(target.templateKey, target.locale)
               .then(() => {
-                setNotice({
-                  kind: "success",
-                  text: t("settings.notifications.deleteSuccess"),
-                });
+                setNotice({ kind: 'success', text: t('settings.notifications.deleteSuccess') });
                 void fetchTemplates({ cancelled: false });
               })
               .catch(mutationError);
           }}
         >
-          <p>{t("settings.notifications.deleteBody")}</p>
+          <p>{t('settings.notifications.deleteBody')}</p>
         </Modal>
       ) : null}
     </div>
@@ -372,9 +298,9 @@ function TemplateEditModal({
   onError: (cause: unknown) => void;
 }) {
   const { t } = useTranslation();
-  const [subject, setSubject] = useState(template?.subject ?? "");
-  const [bodyText, setBodyText] = useState(template?.bodyText ?? "");
-  const [bodyHtml, setBodyHtml] = useState(template?.bodyHtml ?? "");
+  const [subject, setSubject] = useState(template?.subject ?? '');
+  const [bodyText, setBodyText] = useState(template?.bodyText ?? '');
+  const [bodyHtml, setBodyHtml] = useState(template?.bodyHtml ?? '');
   const [busy, setBusy] = useState(false);
 
   // Closed modals are not rendered (Carbon keeps them mounted otherwise).
@@ -388,9 +314,9 @@ function TemplateEditModal({
     }
     setBusy(true);
     putNotificationTemplate(template.templateKey, template.locale, {
-      subject: subject.trim() === "" ? null : subject,
-      bodyText: bodyText === "" ? null : bodyText,
-      bodyHtml: bodyHtml === "" ? null : bodyHtml,
+      subject: subject.trim() === '' ? null : subject,
+      bodyText: bodyText === '' ? null : bodyText,
+      bodyHtml: bodyHtml === '' ? null : bodyHtml,
     })
       .then(onSaved)
       .catch(onError)
@@ -401,33 +327,33 @@ function TemplateEditModal({
     <Modal
       open={template !== null}
       size="lg"
-      modalHeading={t("settings.notifications.editTitle", {
-        template: template?.templateKey ?? "",
-        locale: template?.locale ?? "",
+      modalHeading={t('settings.notifications.editTitle', {
+        template: template?.templateKey ?? '',
+        locale: template?.locale ?? '',
       })}
-      primaryButtonText={t("actions.saveChanges")}
-      secondaryButtonText={t("actions.cancel")}
+      primaryButtonText={t('actions.saveChanges')}
+      secondaryButtonText={t('actions.cancel')}
       primaryButtonDisabled={busy}
       onRequestClose={onClose}
       onRequestSubmit={submit}
     >
-      <p>{t("settings.notifications.editNote")}</p>
+      <p>{t('settings.notifications.editNote')}</p>
       <TextInput
         id="template-subject"
-        labelText={t("settings.notifications.column.subject")}
+        labelText={t('settings.notifications.column.subject')}
         value={subject}
         onChange={(event) => setSubject(event.target.value)}
       />
       <TextArea
         id="template-body-text"
-        labelText={t("settings.notifications.bodyText")}
+        labelText={t('settings.notifications.bodyText')}
         value={bodyText}
         onChange={(event) => setBodyText(event.target.value)}
       />
       <TextArea
         id="template-body-html"
-        labelText={t("settings.notifications.bodyHtml")}
-        helperText={t("settings.notifications.bodyHtmlHelp")}
+        labelText={t('settings.notifications.bodyHtml')}
+        helperText={t('settings.notifications.bodyHtmlHelp')}
         value={bodyHtml}
         onChange={(event) => setBodyHtml(event.target.value)}
       />
@@ -446,12 +372,12 @@ function TestSendModal({
   onSent: () => void;
 }) {
   const { t } = useTranslation();
-  const [recipient, setRecipient] = useState("");
+  const [recipient, setRecipient] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<NotificationDelivery | null>(null);
 
-  const valid = recipient.includes("@");
+  const valid = recipient.includes('@');
 
   if (!template) {
     return null;
@@ -474,11 +400,7 @@ function TestSendModal({
         onSent();
       })
       .catch((cause: unknown) => {
-        setError(
-          t("settings.notifications.testError", {
-            message: toApiError(cause).message,
-          }),
-        );
+        setError(t('settings.notifications.testError', { message: toApiError(cause).message }));
       })
       .finally(() => setBusy(false));
   };
@@ -486,34 +408,23 @@ function TestSendModal({
   return (
     <Modal
       open={template !== null}
-      modalHeading={t("settings.notifications.testTitle", {
-        template: template?.templateKey ?? "",
-        locale: template?.locale ?? "",
+      modalHeading={t('settings.notifications.testTitle', {
+        template: template?.templateKey ?? '',
+        locale: template?.locale ?? '',
       })}
-      primaryButtonText={t("settings.notifications.testSend")}
-      secondaryButtonText={t("actions.close")}
+      primaryButtonText={t('settings.notifications.testSend')}
+      secondaryButtonText={t('actions.close')}
       primaryButtonDisabled={!valid || busy}
       onRequestClose={onClose}
       onRequestSubmit={submit}
     >
-      <p>{t("settings.notifications.testNote")}</p>
+      <p>{t('settings.notifications.testNote')}</p>
       {error ? (
-        <InlineNotification
-          kind="error"
-          lowContrast
-          title={error}
-          hideCloseButton
-        />
+        <InlineNotification kind="error" lowContrast title={error} hideCloseButton />
       ) : null}
       {result ? (
         <InlineNotification
-          kind={
-            result.status === "failed"
-              ? "error"
-              : result.status === "sent"
-                ? "success"
-                : "info"
-          }
+          kind={result.status === 'failed' ? 'error' : result.status === 'sent' ? 'success' : 'info'}
           lowContrast
           title={t(`settings.notifications.testResult.${result.status}`, {
             recipient: result.recipient,
@@ -525,10 +436,10 @@ function TestSendModal({
       <TextInput
         id="test-send-recipient"
         type="email"
-        labelText={t("settings.notifications.column.recipient")}
+        labelText={t('settings.notifications.column.recipient')}
         value={recipient}
         invalid={recipient.length > 0 && !valid}
-        invalidText={t("validation.emailInvalid")}
+        invalidText={t('validation.emailInvalid')}
         onChange={(event) => setRecipient(event.target.value)}
       />
     </Modal>

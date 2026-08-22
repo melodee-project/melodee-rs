@@ -1,5 +1,5 @@
-//! Failure evidence and crash/recovery simulation (work-package parts XIX,
-//! XXII, XXIII): durable failure info, restart durability, lease recovery,
+//! Failure evidence and crash/recovery simulation: durable failure info,
+//! restart durability, lease recovery,
 //! rollback, renewal.
 
 // Integration tests: expect/panic on setup or assertion failure IS the

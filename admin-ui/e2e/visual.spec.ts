@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 import { CANONICAL_SCREENS, gotoScreen, type CanonicalScreen } from './mockApi';
 
 /**
- * Visual regression baselines (W4-2, PRD-UI-REF-002). Real implementation
+ * Visual regression baselines (PRD-UI-REF-002). Real implementation
  * screenshots supersede the generated mockups as the visual reference; these
  * baselines are committed and diffed on every e2e run.
  *

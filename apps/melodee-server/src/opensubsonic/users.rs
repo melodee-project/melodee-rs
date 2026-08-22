@@ -2,14 +2,15 @@
 //! `compatibility/opensubsonic/golden/conditional/os-getuser.json`,
 //! `os-createuser-*`).
 //!
-//! Captured contract: //! - `getUser` returns the calling user's role model (adminRole, streamRole,
-//! scrobblingEnabled, downloadRole, shareRole, jukeboxRole,
-//! avatarLastChanged). Only the calling user's own record is returned (the
-//! legacy `getUser?username=` honored arbitrary usernames at this baseline,
-//! but the fixture captures the self lookup).
+//! Captured contract:
+//! - `getUser` returns the calling user's role model (adminRole, streamRole,
+//!   scrobblingEnabled, downloadRole, shareRole, jukeboxRole,
+//!   avatarLastChanged). Only the calling user's own record is returned (the
+//!   legacy `getUser?username=` honored arbitrary usernames at this baseline,
+//!   but the fixture captures the self lookup).
 //! - `createUser` succeeds for fresh usernames (200 + bare ok) and returns
-//! error 10 "User creation failed." for duplicates. New users receive the
-//! stream/download/share/jukebox roles by default.
+//!   error 10 "User creation failed." for duplicates. New users receive the
+//!   stream/download/share/jukebox roles by default.
 
 use axum::{
     Router,

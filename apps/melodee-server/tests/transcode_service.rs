@@ -1,4 +1,5 @@
-//! Shared transcoding-service integration evidence (ADR-0147,).
+//! Shared transcoding-service integration evidence (ADR-0147).
+//!
 //! Exercises the bounded, cancellation-safe FFmpeg execution contract with the
 //! real toolchain (ADR-0108): template resolution through layered settings,
 //! semaphore saturation and recovery, spawn failure, client-disconnect permit
@@ -53,8 +54,8 @@ fn wav_fixture(data_size: usize) -> (TempDir, PlayableAsset, Vec<u8>) {
     (temp, asset, bytes)
 }
 
-/// A lazy pool for tests that never touch the database (`stream` resolves
-/// no settings; only `template` does).
+/// A lazy pool for tests that never touch the database (`stream()` resolves
+/// no settings; only `template()` does).
 fn lazy_pool() -> PgPool {
     PgPool::connect_lazy("postgres://127.0.0.1:1/melodee_transcode_unit").expect("lazy pool")
 }

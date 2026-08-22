@@ -84,7 +84,7 @@ pub struct NativeAnnotation {
     pub play_count: i32,
 }
 
-/// User annotation boundary. Phase-7 persistence supplies the implementation;
+/// User annotation boundary. Native user-state persistence supplies the implementation;
 /// catalog responses must not manufacture zeros for migrated user state.
 pub trait NativeUserStateReader: Send + Sync {
     fn artist_annotation(
@@ -151,7 +151,7 @@ pub trait NativeUserStateReader: Send + Sync {
     }
 }
 
-/// PostgreSQL implementation backed by the Phase-7 user-state tables.
+/// PostgreSQL implementation backed by the native user-state tables.
 #[derive(Clone)]
 pub struct PostgresNativeUserStateReader {
     pool: sqlx::PgPool,

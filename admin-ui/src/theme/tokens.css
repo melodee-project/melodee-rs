@@ -529,7 +529,7 @@
 }
 
 /*
- * Review workspace layout (WP-12): main evidence column plus a 400px
+ * Review workspace layout: main evidence column plus a 400px
  * decision/policy/timeline rail; below lg the rail stacks full-width. Same
  * structural pattern as the queue + inspector layout above.
  */
@@ -639,7 +639,7 @@
 }
 
 /*
- * Identity review workspace (WP-13): three-pane review pattern (UI-SPEC §7)
+ * Identity review workspace: three-pane review pattern (UI-SPEC §7)
  * — unresolved-observations queue, evidence/candidate column, decision
  * rail. Below lg the panes stack full-width in DOM order (queue → evidence
  * → actions), which is also the keyboard focus order.
@@ -761,7 +761,7 @@
 }
 
 /*
- * Overview dashboard (WP-14) and System/Workers (WP-17) layout. All spacing
+ * Overview dashboard and System/Workers layout. All spacing
  * uses logical properties; grids collapse to a single column below lg
  * (UI-SPEC §8).
  */
@@ -1018,7 +1018,7 @@
 }
 
 /*
- * Policies / rule editor (WP-16). Logical properties only (RTL); no colors
+ * Policies / rule editor. Logical properties only (RTL); no colors
  * or radii outside the token layer (UI-SPEC §1–§2).
  */
 .melodee-policy-editor__header {

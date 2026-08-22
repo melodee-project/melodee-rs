@@ -1,4 +1,5 @@
-//! Artist Identity Review API (PRD-API-ADMIN-002, SPEC §20): //! the operator queue of observed Artist strings awaiting an authoritative
+//! Artist Identity Review API (PRD-API-ADMIN-002, SPEC §20):
+//! the operator queue of observed Artist strings awaiting an authoritative
 //! resolution, observation detail with candidate evidence, audited
 //! resolutions (confirm / create-new / leave-provisional / never-match), the
 //! identity decision audit feed, and Artist merge/split corrections.

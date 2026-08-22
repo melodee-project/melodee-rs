@@ -1,4 +1,5 @@
 //! Shared catalog integration fixtures.
+//!
 //! These helpers construct the complete durable handoff through the
 //! public persistence API. Catalog tests can therefore begin at `Published`
 //! without bypassing the manifest, publication-plan, receipt, or lease

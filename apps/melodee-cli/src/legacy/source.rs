@@ -6,7 +6,7 @@ use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use sqlx::{PgPool, Row};
 
 /// Frozen legacy schema fingerprint: the final `__EFMigrationsHistory` row at
-/// baseline commit `4028b58d`.
+/// baseline commit `4028b58d` (baseline evidence).
 pub const FROZEN_SCHEMA_FINAL_MIGRATION: &str =
     "20260714155936_AddDeleteSourceResidueAfterIngestSetting";
 
@@ -311,7 +311,7 @@ impl SourceDb {
     /// # Errors
     /// Returns the database error.
     pub async fn source_identity(&self) -> Result<String, String> {
-        // pg_control_system needs superuser/pg_monitor; rehearsal snapshots
+        // pg_control_system() needs superuser/pg_monitor; rehearsal snapshots
         // may connect with a plainer role, so fall back to stable connection
         // facts. The emitted identity below is a digest, never those facts.
         let system_id: String =
@@ -480,7 +480,7 @@ pub async fn collect_inventory(source: &SourceDb) -> Result<Inventory, String> {
         // Table names and key expressions come exclusively from the
         // hardcoded INVENTORY_TABLES allowlist above; there is no
         // operator-controlled interpolation. The key expressions are bigint
-        // by construction (explicit ::bigint casts on the composite forms).
+        // by construction (explicit::bigint casts on the composite forms).
         let row = sqlx::query(sqlx::AssertSqlSafe(format!(
             r#"SELECT COUNT(*), MIN({key_sql})::bigint, MAX({key_sql})::bigint FROM "{table}""#
         )))

@@ -2,9 +2,10 @@
 -- PRD-NOTIF-001..003).
 --
 -- Additive. A binary downgrade leaves both tables intact; schema rollback
--- restores a verified pre-Phase-9 backup into a new database.
+-- restores a verified pre-migration backup into a new database.
 --
--- Legacy parity (evidence: design/evidence/phase-9/configuration-inventory.md §14 "Email settings"):
+-- Legacy parity (evidence:
+-- design/evidence/phase-9/configuration-inventory.md §14 "Email settings"):
 -- the legacy server seeded only `email.resetPassword.subject` ("Reset your
 -- Melodee password"); both legacy body-template keys were dead (never seeded,
 -- never consumed). The seeds below therefore carry that one captured subject

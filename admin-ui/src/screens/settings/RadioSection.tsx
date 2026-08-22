@@ -1,4 +1,4 @@
-import { Add } from "@carbon/icons-react";
+import { Add } from '@carbon/icons-react';
 import {
   ActionableNotification,
   Button,
@@ -13,20 +13,20 @@ import {
   TableHeader,
   TableRow,
   TextInput,
-} from "@carbon/react";
-import { useCallback, useEffect, useState } from "react";
-import { useTranslation } from "react-i18next";
+} from '@carbon/react';
+import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import {
   createRadioStation,
   deleteRadioStation,
   listRadioStations,
   updateRadioStation,
-} from "../../api/admin";
-import { ApiError } from "../../api/client";
-import type { RadioStation } from "../../api/types";
-import { EmptyState } from "../../components/EmptyState";
-import { formatDateTime, formatRelativeTime } from "../../i18n/format";
+} from '../../api/admin';
+import { ApiError } from '../../api/client';
+import type { RadioStation } from '../../api/types';
+import { EmptyState } from '../../components/EmptyState';
+import { formatDateTime, formatRelativeTime } from '../../i18n/format';
 
 /**
  * Internet radio stations (PRD-RADIO-001/002): CRUD over the single
@@ -36,30 +36,28 @@ import { formatDateTime, formatRelativeTime } from "../../i18n/format";
  */
 
 interface Notice {
-  kind: "success" | "error" | "info" | "warning";
+  kind: 'success' | 'error' | 'info' | 'warning';
   text: string;
 }
 
 function toApiError(cause: unknown): ApiError {
-  return cause instanceof ApiError
-    ? cause
-    : new ApiError(0, "unknown", String(cause), null);
+  return cause instanceof ApiError ? cause : new ApiError(0, 'unknown', String(cause), null);
 }
 
 function radioErrorText(
   error: ApiError,
-  t: ReturnType<typeof useTranslation>["t"],
+  t: ReturnType<typeof useTranslation>['t'],
 ): string {
-  if (error.status === 400 && error.code === "invalid_stream_url") {
-    return t("settings.radio.error.invalidStreamUrl");
+  if (error.status === 400 && error.code === 'invalid_stream_url') {
+    return t('settings.radio.error.invalidStreamUrl');
   }
-  if (error.status === 400 && error.code === "invalid_home_page_url") {
-    return t("settings.radio.error.invalidHomePageUrl");
+  if (error.status === 400 && error.code === 'invalid_home_page_url') {
+    return t('settings.radio.error.invalidHomePageUrl');
   }
-  if (error.status === 400 && error.code === "invalid_name") {
-    return t("settings.radio.error.invalidName");
+  if (error.status === 400 && error.code === 'invalid_name') {
+    return t('settings.radio.error.invalidName');
   }
-  return t("settings.radio.error.mutation", { message: error.message });
+  return t('settings.radio.error.mutation', { message: error.message });
 }
 
 export function RadioSection() {
@@ -96,7 +94,7 @@ export function RadioSection() {
   }, [fetchStations]);
 
   const mutationError = (cause: unknown) =>
-    setNotice({ kind: "error", text: radioErrorText(toApiError(cause), t) });
+    setNotice({ kind: 'error', text: radioErrorText(toApiError(cause), t) });
 
   return (
     <div>
@@ -113,31 +111,29 @@ export function RadioSection() {
           inline
           kind="error"
           lowContrast
-          title={t("settings.radio.loadErrorTitle")}
+          title={t('settings.radio.loadErrorTitle')}
           subtitle={listError.message}
           hideCloseButton
-          actionButtonLabel={t("actions.retry")}
+          actionButtonLabel={t('actions.retry')}
           onActionButtonClick={() => void fetchStations({ cancelled: false })}
         />
       ) : null}
       {stations === null && !listError ? (
-        <Loading description={t("common.loading")} withOverlay={false} />
+        <Loading description={t('common.loading')} withOverlay={false} />
       ) : null}
       {stations !== null ? (
         <TableContainer
-          title={t("settings.radio.tableCaption")}
-          description={t("settings.radio.description")}
+          title={t('settings.radio.tableCaption')}
+          description={t('settings.radio.description')}
         >
-          <Table aria-label={t("settings.radio.tableCaption")}>
+          <Table aria-label={t('settings.radio.tableCaption')}>
             <TableHead>
               <TableRow>
-                <TableHeader>{t("common.name")}</TableHeader>
-                <TableHeader>
-                  {t("settings.radio.column.streamUrl")}
-                </TableHeader>
-                <TableHeader>{t("settings.radio.column.homePage")}</TableHeader>
-                <TableHeader>{t("common.created")}</TableHeader>
-                <TableHeader>{t("users.column.actions")}</TableHeader>
+                <TableHeader>{t('common.name')}</TableHeader>
+                <TableHeader>{t('settings.radio.column.streamUrl')}</TableHeader>
+                <TableHeader>{t('settings.radio.column.homePage')}</TableHeader>
+                <TableHeader>{t('common.created')}</TableHeader>
+                <TableHeader>{t('users.column.actions')}</TableHeader>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -147,28 +143,22 @@ export function RadioSection() {
                   <TableCell>
                     <code>{station.streamUrl}</code>
                   </TableCell>
-                  <TableCell>
-                    {station.homePageUrl ?? t("common.none")}
-                  </TableCell>
+                  <TableCell>{station.homePageUrl ?? t('common.none')}</TableCell>
                   <TableCell>
                     <span title={formatDateTime(station.createdAt)}>
                       {formatRelativeTime(station.createdAt)}
                     </span>
                   </TableCell>
                   <TableCell>
-                    <Button
-                      kind="ghost"
-                      size="sm"
-                      onClick={() => setEditTarget(station)}
-                    >
-                      {t("actions.edit")}
+                    <Button kind="ghost" size="sm" onClick={() => setEditTarget(station)}>
+                      {t('actions.edit')}
                     </Button>
                     <Button
                       kind="danger--ghost"
                       size="sm"
                       onClick={() => setDeleteTarget(station)}
                     >
-                      {t("actions.delete")}
+                      {t('actions.delete')}
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -178,20 +168,15 @@ export function RadioSection() {
           {stations.length === 0 ? (
             <EmptyState
               compact
-              title={t("settings.radio.emptyTitle")}
-              description={t("settings.radio.emptyDescription")}
+              title={t('settings.radio.emptyTitle')}
+              description={t('settings.radio.emptyDescription')}
             />
           ) : null}
         </TableContainer>
       ) : null}
-      <div style={{ marginBlockStart: "1rem" }}>
-        <Button
-          kind="primary"
-          size="sm"
-          renderIcon={Add}
-          onClick={() => setCreateOpen(true)}
-        >
-          {t("settings.radio.create")}
+      <div style={{ marginBlockStart: '1rem' }}>
+        <Button kind="primary" size="sm" renderIcon={Add} onClick={() => setCreateOpen(true)}>
+          {t('settings.radio.create')}
         </Button>
       </div>
 
@@ -201,25 +186,19 @@ export function RadioSection() {
         onClose={() => setCreateOpen(false)}
         onSaved={() => {
           setCreateOpen(false);
-          setNotice({
-            kind: "success",
-            text: t("settings.radio.createSuccess"),
-          });
+          setNotice({ kind: 'success', text: t('settings.radio.createSuccess') });
           void fetchStations({ cancelled: false });
         }}
         onError={mutationError}
       />
       <StationModal
-        key={editTarget?.id ?? "closed"}
+        key={editTarget?.id ?? 'closed'}
         open={editTarget !== null}
         station={editTarget}
         onClose={() => setEditTarget(null)}
         onSaved={() => {
           setEditTarget(null);
-          setNotice({
-            kind: "success",
-            text: t("settings.radio.updateSuccess"),
-          });
+          setNotice({ kind: 'success', text: t('settings.radio.updateSuccess') });
           void fetchStations({ cancelled: false });
         }}
         onError={mutationError}
@@ -228,27 +207,22 @@ export function RadioSection() {
         <Modal
           danger
           open
-          modalHeading={t("settings.radio.deleteTitle", {
-            name: deleteTarget.name,
-          })}
-          primaryButtonText={t("actions.delete")}
-          secondaryButtonText={t("actions.cancel")}
+          modalHeading={t('settings.radio.deleteTitle', { name: deleteTarget.name })}
+          primaryButtonText={t('actions.delete')}
+          secondaryButtonText={t('actions.cancel')}
           onRequestClose={() => setDeleteTarget(null)}
           onRequestSubmit={() => {
             const target = deleteTarget;
             setDeleteTarget(null);
             deleteRadioStation(target.id)
               .then(() => {
-                setNotice({
-                  kind: "success",
-                  text: t("settings.radio.deleteSuccess"),
-                });
+                setNotice({ kind: 'success', text: t('settings.radio.deleteSuccess') });
                 void fetchStations({ cancelled: false });
               })
               .catch(mutationError);
           }}
         >
-          <p>{t("settings.radio.deleteBody")}</p>
+          <p>{t('settings.radio.deleteBody')}</p>
         </Modal>
       ) : null}
     </div>
@@ -270,9 +244,9 @@ function StationModal({
   onError: (cause: unknown) => void;
 }) {
   const { t } = useTranslation();
-  const [name, setName] = useState(station?.name ?? "");
-  const [streamUrl, setStreamUrl] = useState(station?.streamUrl ?? "");
-  const [homePageUrl, setHomePageUrl] = useState(station?.homePageUrl ?? "");
+  const [name, setName] = useState(station?.name ?? '');
+  const [streamUrl, setStreamUrl] = useState(station?.streamUrl ?? '');
+  const [homePageUrl, setHomePageUrl] = useState(station?.homePageUrl ?? '');
   const [busy, setBusy] = useState(false);
 
   const valid = name.trim().length > 0 && streamUrl.trim().length > 0 && !busy;
@@ -291,14 +265,12 @@ function StationModal({
       ? updateRadioStation(station.id, {
           name: name.trim(),
           streamUrl: streamUrl.trim(),
-          homePageUrl: homePageUrl.trim() === "" ? null : homePageUrl.trim(),
+          homePageUrl: homePageUrl.trim() === '' ? null : homePageUrl.trim(),
         })
       : createRadioStation({
           name: name.trim(),
           streamUrl: streamUrl.trim(),
-          ...(homePageUrl.trim() === ""
-            ? {}
-            : { homePageUrl: homePageUrl.trim() }),
+          ...(homePageUrl.trim() === '' ? {} : { homePageUrl: homePageUrl.trim() }),
         });
     request
       .then(onSaved)
@@ -311,33 +283,31 @@ function StationModal({
       open={open}
       modalHeading={
         station
-          ? t("settings.radio.editTitle", { name: station.name })
-          : t("settings.radio.createTitle")
+          ? t('settings.radio.editTitle', { name: station.name })
+          : t('settings.radio.createTitle')
       }
-      primaryButtonText={
-        station ? t("actions.saveChanges") : t("actions.create")
-      }
-      secondaryButtonText={t("actions.cancel")}
+      primaryButtonText={station ? t('actions.saveChanges') : t('actions.create')}
+      secondaryButtonText={t('actions.cancel')}
       primaryButtonDisabled={!valid}
       onRequestClose={onClose}
       onRequestSubmit={submit}
     >
       <TextInput
         id="station-name"
-        labelText={t("common.name")}
+        labelText={t('common.name')}
         value={name}
         onChange={(event) => setName(event.target.value)}
       />
       <TextInput
         id="station-stream-url"
-        labelText={t("settings.radio.column.streamUrl")}
+        labelText={t('settings.radio.column.streamUrl')}
         value={streamUrl}
         onChange={(event) => setStreamUrl(event.target.value)}
       />
       <TextInput
         id="station-home-page"
-        labelText={t("settings.radio.column.homePage")}
-        helperText={t("settings.radio.homePageHelp")}
+        labelText={t('settings.radio.column.homePage')}
+        helperText={t('settings.radio.homePageHelp')}
         value={homePageUrl}
         onChange={(event) => setHomePageUrl(event.target.value)}
       />

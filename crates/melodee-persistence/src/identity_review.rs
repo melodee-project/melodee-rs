@@ -1,5 +1,5 @@
 //! read-side operator queries over the Artist identity schema
-//! ( tables, ADR-0134 parity domain): unresolved observation listing,
+//! (tables, ADR-0134 parity domain): unresolved observation listing,
 //! observation detail with candidate evidence, the identity decision audit
 //! feed, and public-id resolution for merge/split entry points.
 //!

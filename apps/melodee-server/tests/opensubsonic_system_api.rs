@@ -1,4 +1,5 @@
 //! OpenSubsonic system/auth/negative compatibility evidence.
+//!
 //! Bodies and headers asserted here mirror the frozen golden captures in
 //! `compatibility/opensubsonic/golden/{system,auth,negative}` with only the
 //! scenario-declared volatile fields differing.

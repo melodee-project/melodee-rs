@@ -11,7 +11,7 @@
 //! the operation that triggered the notification (PRD-NOTIF-002).
 //!
 //! Settings come from [`EmailSettings`], a small value struct. It is built
-//! through 's layered settings resolution
+//! through layered settings resolution
 //! ([`melodee_persistence::SettingsResolver`]): explicit `MELODEE__EMAIL__*`
 //! environment keys (or the config file) win over DB-backed
 //! `server_settings` rows, which win over the legacy seeded defaults —
@@ -157,7 +157,8 @@ impl EmailSettings {
         Ok(settings)
     }
 
-    /// Builds settings through layered resolution (PRD-CONFIG-003):  /// `MELODEE__EMAIL__*` environment keys, then the optional config file,
+    /// Builds settings through layered resolution (PRD-CONFIG-003):
+    /// `MELODEE__EMAIL__*` environment keys, then the optional config file,
     /// then `server_settings` DB rows, then the legacy seeded defaults. The
     /// resolver produces typed values per the inventory classification, so
     /// extraction here never re-parses text. `validate` remains the single
@@ -469,7 +470,7 @@ impl NotificationTransport for NoopTransport {
 pub struct NotificationService {
     pool: PgPool,
     transport: Arc<dyn NotificationTransport>,
-    /// Process bound on concurrent SMTP round-trips (, PRD-INGEST-009).
+    /// Process bound on concurrent SMTP round-trips (PRD-INGEST-009).
     /// Dispatches queue on this semaphore instead of spawning an unbounded
     /// number of outbound deliveries; the durable audit row is written by
     /// `send_templated` after the send attempt, so a queued dispatch is never
@@ -625,7 +626,7 @@ impl NotificationService {
         placeholders: Vec<(String, String)>,
     ) {
         let service = Arc::clone(self);
-        //: capture the in-flight request's correlation id before the
+        // capture the in-flight request's correlation id before the
         // spawn crosses the task boundary; never log the recipient's address
         // or template content beyond the stable key.
         let correlation_id = crate::correlation::current();
@@ -639,7 +640,8 @@ impl NotificationService {
         }
         tokio::spawn(
             async move {
-                // Queue on the process dispatch bound before touching the relay:  // cancellation of this task while waiting simply never admits.
+                // Queue on the process dispatch bound before touching the relay:
+                // cancellation of this task while waiting simply never admits.
                 if let Some(gauge) = &service.gauge {
                     gauge.begin_wait();
                 }

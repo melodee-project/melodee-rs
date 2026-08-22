@@ -2,6 +2,7 @@
 //! crate stays free of web, SQL, filesystem, observability, and framework
 //! dependencies, and never depends on sibling workspace crates. Boundaries
 //! are enforced by the dependency graph plus this test, not by convention.
+//!
 //! The allow-list below is the point: adding any dependency to
 //! `melodee-domain` requires deliberately editing this test.
 #![allow(clippy::expect_used, clippy::panic)]

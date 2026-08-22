@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the committed R4 current-client acceptance artifact.
+"""Validate the committed current-client acceptance artifact.
 
 The matrix is intentionally valid while physical-client work is pending, but
 an accepted row must carry enough provenance to reproduce and review the run.
@@ -187,7 +187,7 @@ def validate_matrix(matrix: Any) -> dict[str, int]:
         },
     }
     if workflow_schema != expected_workflow_schema:
-        raise ValidationError("workflowSchema does not match the required R4 workflow matrix")
+        raise ValidationError("workflowSchema does not match the required client workflow matrix")
     status = _require_string(matrix.get("status"), "status")
     if status not in ALLOWED_STATUSES:
         raise ValidationError(f"status must be one of {sorted(ALLOWED_STATUSES)}")
@@ -208,7 +208,7 @@ def validate_matrix(matrix: Any) -> dict[str, int]:
         surface = _require_string(row.get("surface"), f"rows[{index}].surface")
         identity = (client, surface)
         if identity not in EXPECTED_ROWS:
-            raise ValidationError(f"rows[{index}] is not an expected R4 client surface")
+            raise ValidationError(f"rows[{index}] is not an expected client surface")
         if identity in seen:
             raise ValidationError(f"duplicate client surface: {client}/{surface}")
         seen.add(identity)
@@ -248,11 +248,11 @@ def main() -> None:
     try:
         counts = load_and_validate(args.matrix)
     except ValidationError as error:
-        print(f"R4 client acceptance validation failed: {error}", file=sys.stderr)
+        print(f"Client acceptance validation failed: {error}", file=sys.stderr)
         raise SystemExit(1) from error
     digest = hashlib.sha256(args.matrix.read_bytes()).hexdigest()[:16]
     print(
-        "R4 client acceptance artifact passed: "
+        "Client acceptance artifact passed: "
         f"{counts['pass']} pass, {counts['fail']} fail, "
         f"{counts['pending-external']} pending-external; sha256={digest}"
     )

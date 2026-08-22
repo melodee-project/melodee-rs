@@ -1,17 +1,18 @@
 //! Jellyfin playlist endpoints (PRD-API-JF-004/005).
 //!
 //! Reproduced from the frozen baseline (`PlaylistsController.cs` +
-//! `ItemsController.DeleteItemAsync`): //!
+//! `ItemsController.DeleteItemAsync`):
+//!
 //! - Playlist ids are ApiKey GUIDs; items are the reduced Audio shape with
-//! `ParentIndexNumber` = 1-based page position and hydrated `UserData` only
-//! when `enableUserData=true`.
+//!   `ParentIndexNumber` = 1-based page position and hydrated `UserData` only
+//!   when `enableUserData=true`.
 //! - Mutations are owner-scoped; reads allow owned or public playlists.
 //! - `DELETE /Items/{id}` deletes owned playlists only; anything else →
-//! 404 "Item not found or cannot be deleted."
+//!   404 "Item not found or cannot be deleted."
 //! - **D4 deviation (ADR-0129/0130 precedent):** the legacy
-//! add-to-nonempty-playlist latent corruption (500) is not preserved; add is
-//! the clean append the native-v1 store provides. The empty-add 204 no-op is
-//! preserved as captured.
+//!   add-to-nonempty-playlist latent corruption (500) is not preserved; add is
+//!   the clean append the native-v1 store provides. The empty-add 204 no-op is
+//!   preserved as captured.
 
 use axum::{
     Router,

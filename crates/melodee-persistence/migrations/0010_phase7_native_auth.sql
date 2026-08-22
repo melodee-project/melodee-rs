@@ -2,7 +2,7 @@
 -- authority (ADR-0124, ADR-0127).
 --
 -- This migration is additive. A binary downgrade leaves the tables intact;
--- schema rollback restores a verified pre-Phase-7 backup into a new database.
+-- schema rollback restores a verified pre-migration backup into a new database.
 -- Clear authentication tokens are never stored.
 
 CREATE TABLE native_users (

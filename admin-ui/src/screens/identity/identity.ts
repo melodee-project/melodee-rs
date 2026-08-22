@@ -5,10 +5,10 @@ import type {
   ObservationDetail,
   SplitAssignmentKind,
   UnresolvedObservation,
-} from "../../api/types";
-import type { AuditEvent } from "../../components/AuditTimeline";
-import type { Evidence } from "../../components/EvidenceItem";
-import type { StatusKind } from "../../components/StatusTag";
+} from '../../api/types';
+import type { AuditEvent } from '../../components/AuditTimeline';
+import type { Evidence } from '../../components/EvidenceItem';
+import type { StatusKind } from '../../components/StatusTag';
 
 /**
  * Shared helpers for the Artist Identity Review screen. Pure mappings
@@ -18,26 +18,20 @@ import type { StatusKind } from "../../components/StatusTag";
  */
 
 /** Decision actions in their canonical presentation order. */
-export const IDENTITY_ACTIONS = [
-  "confirm",
-  "create-new",
-  "leave-provisional",
-  "never-match",
-] as const;
+export const IDENTITY_ACTIONS = ['confirm', 'create-new', 'leave-provisional', 'never-match'] as const;
 export type IdentityAction = (typeof IDENTITY_ACTIONS)[number];
 
 /** Split assignment kinds accepted by the backend (SplitAssignment). */
 export const SPLIT_ASSIGNMENT_KINDS: SplitAssignmentKind[] = [
-  "releaseArtist",
-  "trackArtist",
-  "contribution",
-  "alias",
-  "externalIdentity",
+  'releaseArtist',
+  'trackArtist',
+  'contribution',
+  'alias',
+  'externalIdentity',
 ];
 
 /** Public-id (UUID) shape required by the merge/split forms. */
-const UUID_PATTERN =
-  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+const UUID_PATTERN = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
 export function isPublicId(value: string): boolean {
   return UUID_PATTERN.test(value.trim());
@@ -54,15 +48,15 @@ export function confidencePercent(basisPoints: number): number {
  */
 export function artistStatusKind(status: string): StatusKind {
   switch (status) {
-    case "active":
-      return "success";
-    case "provisional":
-      return "provisional";
-    case "merged":
-    case "deprecated":
-      return "neutral";
+    case 'active':
+      return 'success';
+    case 'provisional':
+      return 'provisional';
+    case 'merged':
+    case 'deprecated':
+      return 'neutral';
     default:
-      return "neutral";
+      return 'neutral';
   }
 }
 
@@ -78,7 +72,7 @@ export function evidenceFact(evidence: MatchEvidence): string {
   if (evidence.payload === null || evidence.payload === undefined) {
     return evidence.source;
   }
-  if (typeof evidence.payload === "string") {
+  if (typeof evidence.payload === 'string') {
     return evidence.payload;
   }
   try {
@@ -111,24 +105,16 @@ export interface EvidenceCount {
  * negative-polarity facts counted separately. Kinds come from the DTO, so
  * unknown kinds pass through rather than being dropped.
  */
-export function evidenceCounts(
-  detail: ObservationDetail | null,
-): EvidenceCount[] {
+export function evidenceCounts(detail: ObservationDetail | null): EvidenceCount[] {
   if (!detail) {
     return [];
   }
   const byKind = new Map<string, EvidenceCount>();
-  const allEvidence = detail.candidates.flatMap(
-    (candidate) => candidate.evidence,
-  );
+  const allEvidence = detail.candidates.flatMap((candidate) => candidate.evidence);
   for (const evidence of allEvidence) {
-    const entry = byKind.get(evidence.kind) ?? {
-      kind: evidence.kind,
-      count: 0,
-      negative: 0,
-    };
+    const entry = byKind.get(evidence.kind) ?? { kind: evidence.kind, count: 0, negative: 0 };
     entry.count += 1;
-    if (evidence.polarity === "negative") {
+    if (evidence.polarity === 'negative') {
       entry.negative += 1;
     }
     byKind.set(evidence.kind, entry);
@@ -155,10 +141,7 @@ export function selectedCandidate(
   if (!detail || !candidateId) {
     return null;
   }
-  return (
-    detail.candidates.find((candidate) => candidate.artistId === candidateId) ??
-    null
-  );
+  return detail.candidates.find((candidate) => candidate.artistId === candidateId) ?? null;
 }
 
 /**
@@ -188,14 +171,14 @@ export function nextSelection(
  * (unit tests), the consume effect simply clears the slot.
  */
 export interface FlashNotice {
-  kind: "success" | "error" | "info" | "warning";
+  kind: 'success' | 'error' | 'info' | 'warning';
   text: string;
 }
 
 let flashNotice: (FlashNotice & { armedAt: number }) | null = null;
 
 /** Flash notices go stale: a remount more than this long after arming is
- * unrelated to the mutation that armed the notice. */
+ *  unrelated to the mutation that armed the notice. */
 const FLASH_TTL_MS = 5_000;
 
 export function armFlashNotice(notice: FlashNotice): void {

@@ -1,5 +1,6 @@
 //! Durable inbound-to-staging acquisition acceptance, crash-convergence, and
-//! adversarial tests (ADR-0145; //).
+//! adversarial tests (ADR-0145).
+//!
 //! Every test runs against real PostgreSQL. Crash boundaries are simulated
 //! with the one-shot `test-support` fault hook: the crashed attempt observes
 //! the injected error and the retried attempt must converge with no loss, no
@@ -291,7 +292,7 @@ fn arm_copy_only(config: &mut IngestionConfig) {
     config.acquisition_test_hook = Some(AcquisitionTestHook::new().forcing_copy());
 }
 
-/// the forced cross-filesystem path streams, verifies, fsyncs,
+/// The forced cross-filesystem path streams, verifies, fsyncs,
 /// no-replace finalizes, records a durable receipt, and only then drains
 /// inbound.
 #[cfg(feature = "test-support")]
@@ -324,7 +325,7 @@ async fn forced_cross_filesystem_acquisition_verifies_and_drains() {
     scenario.database.drop().await;
 }
 
-/// crash matrix: every intent/receipt/cleanup boundary is crashed once
+/// Crash matrix: every intent/receipt/cleanup boundary is crashed once
 /// and retried. Each retry must converge with no loss, no overwrite, no
 /// duplicate acquisition, no partial final tree, and eventual inbound drain.
 #[cfg(feature = "test-support")]
@@ -460,7 +461,7 @@ async fn crash_boundaries_retry_and_converge() {
     scenario.database.drop().await;
 }
 
-/// Source additions, byte changes, and removals during the copy
+/// Source-stability proof: additions, byte changes, and removals during the copy
 /// window fail closed; the hidden partial is removed; inbound is untouched;
 /// and a retry against the settled new source converges.
 #[cfg(feature = "test-support")]
@@ -543,7 +544,7 @@ async fn source_mutation_during_copy_fails_closed_and_recovers() {
     scenario.database.drop().await;
 }
 
-/// a stale worker that loses its lease mid-copy cannot record the
+/// A stale worker that loses its lease mid-copy cannot record the
 /// receipt, cannot remove source, and its on-disk finalize is adopted only
 /// after byte verification by the current owner.
 #[cfg(feature = "test-support")]
@@ -617,7 +618,7 @@ async fn stale_worker_losing_lease_during_copy_cannot_commit() {
     scenario.database.drop().await;
 }
 
-/// delayed cleanup after occurrence A is replaced by occurrence B at
+/// Delayed cleanup after occurrence A is replaced by occurrence B at
 /// the same inbound path never deletes B, and B becomes a distinct
 /// acquisition.
 #[cfg(feature = "test-support")]
@@ -705,7 +706,7 @@ async fn delayed_cleanup_after_path_reuse_preserves_new_occurrence() {
     scenario.database.drop().await;
 }
 
-/// a matching pre-existing final tree is adopted (never overwritten),
+/// A matching pre-existing final tree is adopted (never overwritten),
 /// and a mismatching final tree fails closed with both trees untouched.
 #[tokio::test]
 async fn final_staging_tree_adoption_and_conflict_fail_closed() {
@@ -762,7 +763,7 @@ async fn final_staging_tree_adoption_and_conflict_fail_closed() {
     scenario.database.drop().await;
 }
 
-/// quotes, apostrophes, semicolons, ampersands, parentheses, leading
+/// Quotes, apostrophes, semicolons, ampersands, parentheses, leading
 /// dashes, and Unicode in candidate names acquire byte-for-byte.
 #[tokio::test]
 async fn adversarial_candidate_names_acquire_cleanly() {
@@ -804,7 +805,7 @@ async fn adversarial_candidate_names_acquire_cleanly() {
     scenario.database.drop().await;
 }
 
-/// traversal, absolute, and nested source paths recorded in durable
+/// Traversal, absolute, and nested source paths recorded in durable
 /// state are rejected before any filesystem mutation.
 #[tokio::test]
 async fn traversal_source_paths_are_rejected_before_io() {
@@ -859,7 +860,7 @@ async fn traversal_source_paths_are_rejected_before_io() {
     scenario.database.drop().await;
 }
 
-/// a non-directory collision at the deterministic staging path fails
+/// A non-directory collision at the deterministic staging path fails
 /// closed without touching the collision or the source.
 #[tokio::test]
 async fn staging_collision_with_non_directory_fails_closed() {
@@ -888,7 +889,7 @@ async fn staging_collision_with_non_directory_fails_closed() {
     scenario.database.drop().await;
 }
 
-/// after a restart with inbound already drained, recovery adopts the
+/// After a restart with inbound already drained, recovery adopts the
 /// durable receipt and inspection continues from the staged source.
 #[tokio::test]
 async fn restart_with_inbound_absent_continues_from_staging() {
@@ -1045,7 +1046,7 @@ async fn needs_review_and_quarantined_retain_staged_source_across_restart() {
     scenario.database.drop().await;
 }
 
-/// concurrent workers racing one occurrence produce exactly one
+/// Concurrent workers racing one occurrence produce exactly one
 /// authoritative acquisition, receipt, and drain.
 #[tokio::test]
 async fn concurrent_acquisition_of_one_occurrence_is_single_authoritative() {

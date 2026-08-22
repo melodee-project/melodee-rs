@@ -2,6 +2,7 @@
 //! getIndexes, getMusicDirectory, getArtists, getArtist, getArtistInfo,
 //! getArtistInfo2, getAlbum, getAlbumInfo, getAlbumInfo2, getSong, getGenres,
 //! getSimilarSongs, getSimilarSongs2, getTopSongs.
+//!
 //! Asserted behavior mirrors the frozen golden captures in
 //! `compatibility/opensubsonic/golden/browse/`, including the captured quirks:
 //! first-letter index groups with ignoredArticles `THE|EL|LA|LOS|LAS|LE|LES|OS|AS|O|A`
@@ -316,7 +317,7 @@ async fn seed_aurora_fixture(db: &common::TestDb) -> (Uuid, Uuid, Uuid) {
     }
     // The captured fixture rates AND stars the track (os-getsong Polar Veil:
     // userRating 5, starred ""); the "" is the legacy
-    // Nullable<DateTime>.ToString artifact for fixture-seeded stars. The
+    // Nullable<DateTime>.ToString() artifact for fixture-seeded stars. The
     // release and artist are starred.
     for mutation in [
         NativeUserStateMutation::Rating(5),

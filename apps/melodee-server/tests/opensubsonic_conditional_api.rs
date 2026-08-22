@@ -1,4 +1,5 @@
 //! OpenSubsonic conditional endpoint compatibility evidence.
+//!
 //! Asserts the captured shapes for shares, internet radio, scan, users, and
 //! podcast mutations (PRD-API-OS-004/005; golden evidence
 //! `compatibility/opensubsonic/golden/community`, `.../conditional`). The

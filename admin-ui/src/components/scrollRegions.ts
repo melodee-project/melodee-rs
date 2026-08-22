@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect } from 'react';
 
 /**
  * Keyboard access to scrollable regions (WCAG 2.1.1; axe
@@ -12,21 +12,21 @@ import { useEffect } from "react";
  * extra stops).
  *
  * Two non-obvious constraints shape the implementation:
- * - The Carbon div is not reachable from our JSX, so the marking happens
- * from the shell via DOM observation rather than props.
- * - React may replace the content root node after effects run (the Carbon
- * HeaderContainer render-prop subtree re-mounts), so the observer must
- * watch `document.body` and re-resolve the root on every pass instead of
- * capturing a node once.
+ *  - The Carbon div is not reachable from our JSX, so the marking happens
+ *    from the shell via DOM observation rather than props.
+ *  - React may replace the content root node after effects run (the Carbon
+ *    HeaderContainer render-prop subtree re-mounts), so the observer must
+ *    watch `document.body` and re-resolve the root on every pass instead of
+ *    capturing a node once.
  */
 const SCROLL_REGION_SELECTOR = [
-  ".cds--data-table-content",
-  ".melodee-review-table-scroll",
-  ".melodee-table-scroll",
-  ".melodee-onboarding-checks-scroll",
-  ".melodee-onboarding-steps-scroll",
-  ".melodee-queue-chips",
-].join(",");
+  '.cds--data-table-content',
+  '.melodee-review-table-scroll',
+  '.melodee-table-scroll',
+  '.melodee-onboarding-checks-scroll',
+  '.melodee-onboarding-steps-scroll',
+  '.melodee-queue-chips',
+].join(',');
 
 function updateScrollRegions(root: HTMLElement): void {
   root.querySelectorAll(SCROLL_REGION_SELECTOR).forEach((el) => {
@@ -34,19 +34,18 @@ function updateScrollRegions(root: HTMLElement): void {
       return;
     }
     const overflows =
-      el.scrollWidth - el.clientWidth > 1 ||
-      el.scrollHeight - el.clientHeight > 1;
+      el.scrollWidth - el.clientWidth > 1 || el.scrollHeight - el.clientHeight > 1;
     if (overflows && el.tabIndex < 0) {
       el.tabIndex = 0;
     } else if (!overflows && el.tabIndex === 0) {
       // tabIndex defaults to -1 on these containers; 0 means we set it.
-      el.removeAttribute("tabindex");
+      el.removeAttribute('tabindex');
     }
   });
 }
 
 /** Keeps overflowing scroll regions inside the main content focusable. */
-export function useScrollRegionFocus(rootId = "main-content"): void {
+export function useScrollRegionFocus(rootId = 'main-content'): void {
   useEffect(() => {
     let cancelled = false;
     const update = () => {
@@ -66,9 +65,9 @@ export function useScrollRegionFocus(rootId = "main-content"): void {
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ["class", "style"],
+      attributeFilter: ['class', 'style'],
     });
-    window.addEventListener("resize", update);
+    window.addEventListener('resize', update);
     // Webfont arrival reflows text metrics without any DOM mutation, and can
     // turn a non-overflowing region into a scrollable one.
     if (document.fonts?.ready) {
@@ -77,7 +76,7 @@ export function useScrollRegionFocus(rootId = "main-content"): void {
     return () => {
       cancelled = true;
       observer.disconnect();
-      window.removeEventListener("resize", update);
+      window.removeEventListener('resize', update);
     };
   }, [rootId]);
 }

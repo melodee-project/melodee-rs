@@ -5,7 +5,7 @@
 //! Rust-native vocabulary (`Release` work items, not `Album`) and is
 //! independently versioned under `/api/admin/v1`.
 //!
-//! scope: durable-work-item **diagnostics only** — state counts,
+//! This module provides durable-work-item **diagnostics only** — state counts,
 //! bounded/paged listing, work-item detail, append-only event history, and
 //! active-lease evidence. It does not expose secrets, arbitrary filesystem
 //! contents, or raw SQLx rows; DTOs are explicit and bounded. No compatibility
@@ -254,7 +254,7 @@ impl AdminApiErrorKind {
     }
 }
 
-/// One page of work items plus the filter's total row count ( pagination
+/// One page of work items plus the filter's total row count (pagination
 /// envelope). `total` respects the `state` filter but ignores `limit`/`offset`.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]

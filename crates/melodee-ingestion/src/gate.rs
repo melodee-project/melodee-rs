@@ -1,6 +1,7 @@
-//! Directory processing gate (, PRD-SCRIPT-001/004, ADR-0135).
+//! Directory processing gate (PRD-SCRIPT-001/004, ADR-0135).
 //!
-//! The injection point for the `directoryProcessingStart` scripting hook: //! the server installs a [`DirectoryProcessingGate`] that evaluates
+//! The injection point for the `directoryProcessingStart` scripting hook:
+//! the server installs a [`DirectoryProcessingGate`] that evaluates
 //! operator-installed scripts; the ingestion crate owns only the boundary
 //! type so it stays free of the scripting runtime. The boundary is
 //! deliberately infallible — the gate's outcome type has no error variant —
@@ -12,7 +13,8 @@
 //! this pass and re-evaluated on a later one, matching the legacy
 //! `onDeny: skip` behavior. Physical quarantine moves are deferred (they
 //! require the durable decision/audit/authorization contract); the
-//! legacy `delete` action stays rewritten to `skip` (evidence: //! design/evidence/phase-9/script-events-legacy-inventory.md §1a).
+//! legacy `delete` action stays rewritten to `skip` (evidence:
+//! design/evidence/phase-9/script-events-legacy-inventory.md §1a).
 
 use std::{future::Future, path::Path, pin::Pin};
 

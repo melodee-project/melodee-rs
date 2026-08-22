@@ -1029,9 +1029,8 @@ ALTER TABLE release_work_items
                 AND lease_acquired_at IS NULL AND lease_expires_at IS NULL))
     );
 
--- Once publication has upgraded the authoritative manifest to v3, the
--- trigger consumes it as immutable input. Rewriting any sealed field fails
--- closed.
+-- Once publication has upgraded the authoritative manifest to v3,
+-- consumes it as immutable input. Rewriting any sealed field fails closed.
 CREATE FUNCTION reject_published_manifest_rewrite() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN

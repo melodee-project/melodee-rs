@@ -129,14 +129,14 @@ impl Drop for Scenario {
                     .build()
                     .expect("cleanup runtime");
                 runtime.block_on(async move {
- // Bound the database cleanup: `PgPool::close` waits for
- // checked-out connections, and a panicking test can leave
- // leases held by tasks that will never return them. An
- // unbounded wait here previously stalled the whole test
- // process (and with it the repository gate) after any
- // mid-scenario panic. Leaking one `melodee_test_*`
- // database on a failure path is strictly better than
- // hanging the suite.
+                    // Bound the database cleanup: `PgPool::close` waits for
+                    // checked-out connections, and a panicking test can leave
+                    // leases held by tasks that will never return them. An
+                    // unbounded wait here previously stalled the whole test
+                    // process (and with it the repository gate) after any
+                    // mid-scenario panic. Leaking one `melodee_test_*`
+                    // database on a failure path is strictly better than
+                    // hanging the suite.
                     let cleanup = async {
                         pool.close().await;
                         database.drop().await;

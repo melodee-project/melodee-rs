@@ -1,5 +1,4 @@
-//! Migration integration tests: from-empty and repeatability (work-package
-//! parts XIV, XXXII).
+//! Migration integration tests covering from-empty and repeatability.
 
 // Integration tests: expect/panic on setup or assertion failure IS the
 // failure-reporting mechanism; production-code lint stays strict.

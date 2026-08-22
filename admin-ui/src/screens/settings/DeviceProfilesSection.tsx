@@ -1,4 +1,4 @@
-import { Add, Checkmark } from "@carbon/icons-react";
+import { Add, Checkmark } from '@carbon/icons-react';
 import {
   ActionableNotification,
   Button,
@@ -15,9 +15,9 @@ import {
   TableRow,
   TextArea,
   TextInput,
-} from "@carbon/react";
-import { useCallback, useEffect, useState } from "react";
-import { useTranslation } from "react-i18next";
+} from '@carbon/react';
+import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import {
   createDeviceProfile,
@@ -25,12 +25,12 @@ import {
   listDeviceProfiles,
   setDefaultDeviceProfile,
   updateDeviceProfile,
-} from "../../api/admin";
-import { ApiError } from "../../api/client";
-import type { DeviceProfile } from "../../api/types";
-import { EmptyState } from "../../components/EmptyState";
-import { StatusTag } from "../../components/StatusTag";
-import { formatDateTime, formatRelativeTime } from "../../i18n/format";
+} from '../../api/admin';
+import { ApiError } from '../../api/client';
+import type { DeviceProfile } from '../../api/types';
+import { EmptyState } from '../../components/EmptyState';
+import { StatusTag } from '../../components/StatusTag';
+import { formatDateTime, formatRelativeTime } from '../../i18n/format';
 
 /**
  * Device profiles (PRD-DEVICE-001/002): CRUD plus set-default over
@@ -41,28 +41,22 @@ import { formatDateTime, formatRelativeTime } from "../../i18n/format";
  */
 
 interface Notice {
-  kind: "success" | "error" | "info" | "warning";
+  kind: 'success' | 'error' | 'info' | 'warning';
   text: string;
 }
 
 function toApiError(cause: unknown): ApiError {
-  return cause instanceof ApiError
-    ? cause
-    : new ApiError(0, "unknown", String(cause), null);
+  return cause instanceof ApiError ? cause : new ApiError(0, 'unknown', String(cause), null);
 }
 
 function profileErrorText(
   error: ApiError,
-  t: ReturnType<typeof useTranslation>["t"],
+  t: ReturnType<typeof useTranslation>['t'],
 ): string {
-  if (error.status === 400 && error.code === "invalid_profile") {
-    return t("settings.deviceProfiles.error.invalidProfile", {
-      message: error.message,
-    });
+  if (error.status === 400 && error.code === 'invalid_profile') {
+    return t('settings.deviceProfiles.error.invalidProfile', { message: error.message });
   }
-  return t("settings.deviceProfiles.error.mutation", {
-    message: error.message,
-  });
+  return t('settings.deviceProfiles.error.mutation', { message: error.message });
 }
 
 export function DeviceProfilesSection() {
@@ -100,16 +94,13 @@ export function DeviceProfilesSection() {
   }, [fetchProfiles]);
 
   const mutationError = (cause: unknown) =>
-    setNotice({ kind: "error", text: profileErrorText(toApiError(cause), t) });
+    setNotice({ kind: 'error', text: profileErrorText(toApiError(cause), t) });
 
   const setDefault = (profile: DeviceProfile) => {
     setBusyId(profile.id);
     setDefaultDeviceProfile(profile.id)
       .then(() => {
-        setNotice({
-          kind: "success",
-          text: t("settings.deviceProfiles.defaultSuccess"),
-        });
+        setNotice({ kind: 'success', text: t('settings.deviceProfiles.defaultSuccess') });
         void fetchProfiles({ cancelled: false });
       })
       .catch(mutationError)
@@ -121,8 +112,8 @@ export function DeviceProfilesSection() {
       <InlineNotification
         kind="info"
         lowContrast
-        title={t("settings.deviceProfiles.metadataTitle")}
-        subtitle={t("settings.deviceProfiles.metadataNote")}
+        title={t('settings.deviceProfiles.metadataTitle')}
+        subtitle={t('settings.deviceProfiles.metadataNote')}
         hideCloseButton
       />
       {notice ? (
@@ -138,33 +129,27 @@ export function DeviceProfilesSection() {
           inline
           kind="error"
           lowContrast
-          title={t("settings.deviceProfiles.loadErrorTitle")}
+          title={t('settings.deviceProfiles.loadErrorTitle')}
           subtitle={listError.message}
           hideCloseButton
-          actionButtonLabel={t("actions.retry")}
+          actionButtonLabel={t('actions.retry')}
           onActionButtonClick={() => void fetchProfiles({ cancelled: false })}
         />
       ) : null}
       {profiles === null && !listError ? (
-        <Loading description={t("common.loading")} withOverlay={false} />
+        <Loading description={t('common.loading')} withOverlay={false} />
       ) : null}
       {profiles !== null ? (
-        <TableContainer title={t("settings.deviceProfiles.tableCaption")}>
-          <Table aria-label={t("settings.deviceProfiles.tableCaption")}>
+        <TableContainer title={t('settings.deviceProfiles.tableCaption')}>
+          <Table aria-label={t('settings.deviceProfiles.tableCaption')}>
             <TableHead>
               <TableRow>
-                <TableHeader>{t("common.name")}</TableHeader>
-                <TableHeader>
-                  {t("settings.deviceProfiles.column.default")}
-                </TableHeader>
-                <TableHeader>
-                  {t("settings.deviceProfiles.column.clientMatch")}
-                </TableHeader>
-                <TableHeader>
-                  {t("settings.deviceProfiles.column.profile")}
-                </TableHeader>
-                <TableHeader>{t("common.updated")}</TableHeader>
-                <TableHeader>{t("users.column.actions")}</TableHeader>
+                <TableHeader>{t('common.name')}</TableHeader>
+                <TableHeader>{t('settings.deviceProfiles.column.default')}</TableHeader>
+                <TableHeader>{t('settings.deviceProfiles.column.clientMatch')}</TableHeader>
+                <TableHeader>{t('settings.deviceProfiles.column.profile')}</TableHeader>
+                <TableHeader>{t('common.updated')}</TableHeader>
+                <TableHeader>{t('users.column.actions')}</TableHeader>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -173,12 +158,9 @@ export function DeviceProfilesSection() {
                   <TableCell>{profile.name}</TableCell>
                   <TableCell>
                     {profile.isDefault ? (
-                      <StatusTag
-                        kind="success"
-                        label={t("settings.deviceProfiles.isDefault")}
-                      />
+                      <StatusTag kind="success" label={t('settings.deviceProfiles.isDefault')} />
                     ) : (
-                      t("common.no")
+                      t('common.no')
                     )}
                   </TableCell>
                   <TableCell>
@@ -193,12 +175,8 @@ export function DeviceProfilesSection() {
                     </span>
                   </TableCell>
                   <TableCell>
-                    <Button
-                      kind="ghost"
-                      size="sm"
-                      onClick={() => setEditTarget(profile)}
-                    >
-                      {t("actions.edit")}
+                    <Button kind="ghost" size="sm" onClick={() => setEditTarget(profile)}>
+                      {t('actions.edit')}
                     </Button>
                     <Button
                       kind="ghost"
@@ -207,14 +185,14 @@ export function DeviceProfilesSection() {
                       disabled={profile.isDefault || busyId === profile.id}
                       onClick={() => setDefault(profile)}
                     >
-                      {t("settings.deviceProfiles.setDefault")}
+                      {t('settings.deviceProfiles.setDefault')}
                     </Button>
                     <Button
                       kind="danger--ghost"
                       size="sm"
                       onClick={() => setDeleteTarget(profile)}
                     >
-                      {t("actions.delete")}
+                      {t('actions.delete')}
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -224,20 +202,15 @@ export function DeviceProfilesSection() {
           {profiles.length === 0 ? (
             <EmptyState
               compact
-              title={t("settings.deviceProfiles.emptyTitle")}
-              description={t("settings.deviceProfiles.emptyDescription")}
+              title={t('settings.deviceProfiles.emptyTitle')}
+              description={t('settings.deviceProfiles.emptyDescription')}
             />
           ) : null}
         </TableContainer>
       ) : null}
-      <div style={{ marginBlockStart: "1rem" }}>
-        <Button
-          kind="primary"
-          size="sm"
-          renderIcon={Add}
-          onClick={() => setCreateOpen(true)}
-        >
-          {t("settings.deviceProfiles.create")}
+      <div style={{ marginBlockStart: '1rem' }}>
+        <Button kind="primary" size="sm" renderIcon={Add} onClick={() => setCreateOpen(true)}>
+          {t('settings.deviceProfiles.create')}
         </Button>
       </div>
 
@@ -247,25 +220,19 @@ export function DeviceProfilesSection() {
         onClose={() => setCreateOpen(false)}
         onSaved={() => {
           setCreateOpen(false);
-          setNotice({
-            kind: "success",
-            text: t("settings.deviceProfiles.createSuccess"),
-          });
+          setNotice({ kind: 'success', text: t('settings.deviceProfiles.createSuccess') });
           void fetchProfiles({ cancelled: false });
         }}
         onError={mutationError}
       />
       <ProfileModal
-        key={editTarget?.id ?? "closed"}
+        key={editTarget?.id ?? 'closed'}
         open={editTarget !== null}
         profile={editTarget}
         onClose={() => setEditTarget(null)}
         onSaved={() => {
           setEditTarget(null);
-          setNotice({
-            kind: "success",
-            text: t("settings.deviceProfiles.updateSuccess"),
-          });
+          setNotice({ kind: 'success', text: t('settings.deviceProfiles.updateSuccess') });
           void fetchProfiles({ cancelled: false });
         }}
         onError={mutationError}
@@ -274,27 +241,24 @@ export function DeviceProfilesSection() {
         <Modal
           danger
           open
-          modalHeading={t("settings.deviceProfiles.deleteTitle", {
+          modalHeading={t('settings.deviceProfiles.deleteTitle', {
             name: deleteTarget.name,
           })}
-          primaryButtonText={t("actions.delete")}
-          secondaryButtonText={t("actions.cancel")}
+          primaryButtonText={t('actions.delete')}
+          secondaryButtonText={t('actions.cancel')}
           onRequestClose={() => setDeleteTarget(null)}
           onRequestSubmit={() => {
             const target = deleteTarget;
             setDeleteTarget(null);
             deleteDeviceProfile(target.id)
               .then(() => {
-                setNotice({
-                  kind: "success",
-                  text: t("settings.deviceProfiles.deleteSuccess"),
-                });
+                setNotice({ kind: 'success', text: t('settings.deviceProfiles.deleteSuccess') });
                 void fetchProfiles({ cancelled: false });
               })
               .catch(mutationError);
           }}
         >
-          <p>{t("settings.deviceProfiles.deleteBody")}</p>
+          <p>{t('settings.deviceProfiles.deleteBody')}</p>
         </Modal>
       ) : null}
     </div>
@@ -316,12 +280,12 @@ function ProfileModal({
   onError: (cause: unknown) => void;
 }) {
   const { t } = useTranslation();
-  const [name, setName] = useState(profile?.name ?? "");
+  const [name, setName] = useState(profile?.name ?? '');
   const [clientMatchText, setClientMatchText] = useState(
-    profile ? JSON.stringify(profile.clientMatch, null, 2) : "{}",
+    profile ? JSON.stringify(profile.clientMatch, null, 2) : '{}',
   );
   const [profileText, setProfileText] = useState(
-    profile ? JSON.stringify(profile.profile, null, 2) : "{}",
+    profile ? JSON.stringify(profile.profile, null, 2) : '{}',
   );
   const [isDefault, setIsDefault] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -329,11 +293,7 @@ function ProfileModal({
   const parseObject = (text: string): Record<string, unknown> | null => {
     try {
       const parsed: unknown = JSON.parse(text);
-      if (
-        typeof parsed === "object" &&
-        parsed !== null &&
-        !Array.isArray(parsed)
-      ) {
+      if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
         return parsed as Record<string, unknown>;
       }
     } catch {
@@ -345,10 +305,7 @@ function ProfileModal({
   const clientMatch = parseObject(clientMatchText);
   const profileBody = parseObject(profileText);
   const valid =
-    name.trim().length > 0 &&
-    clientMatch !== null &&
-    profileBody !== null &&
-    !busy;
+    name.trim().length > 0 && clientMatch !== null && profileBody !== null && !busy;
 
   // Closed modals are not rendered (Carbon keeps them mounted otherwise).
   if (!open) {
@@ -384,46 +341,44 @@ function ProfileModal({
       size="lg"
       modalHeading={
         profile
-          ? t("settings.deviceProfiles.editTitle", { name: profile.name })
-          : t("settings.deviceProfiles.createTitle")
+          ? t('settings.deviceProfiles.editTitle', { name: profile.name })
+          : t('settings.deviceProfiles.createTitle')
       }
-      primaryButtonText={
-        profile ? t("actions.saveChanges") : t("actions.create")
-      }
-      secondaryButtonText={t("actions.cancel")}
+      primaryButtonText={profile ? t('actions.saveChanges') : t('actions.create')}
+      secondaryButtonText={t('actions.cancel')}
       primaryButtonDisabled={!valid}
       onRequestClose={onClose}
       onRequestSubmit={submit}
     >
-      <p>{t("settings.deviceProfiles.metadataNote")}</p>
+      <p>{t('settings.deviceProfiles.metadataNote')}</p>
       <TextInput
         id="profile-name"
-        labelText={t("common.name")}
+        labelText={t('common.name')}
         value={name}
         onChange={(event) => setName(event.target.value)}
       />
       <TextArea
         id="profile-client-match"
-        labelText={t("settings.deviceProfiles.column.clientMatch")}
-        helperText={t("settings.deviceProfiles.clientMatchHelp")}
+        labelText={t('settings.deviceProfiles.column.clientMatch')}
+        helperText={t('settings.deviceProfiles.clientMatchHelp')}
         value={clientMatchText}
         invalid={clientMatch === null}
-        invalidText={t("settings.deviceProfiles.jsonInvalid")}
+        invalidText={t('settings.deviceProfiles.jsonInvalid')}
         onChange={(event) => setClientMatchText(event.target.value)}
       />
       <TextArea
         id="profile-body"
-        labelText={t("settings.deviceProfiles.column.profile")}
-        helperText={t("settings.deviceProfiles.profileHelp")}
+        labelText={t('settings.deviceProfiles.column.profile')}
+        helperText={t('settings.deviceProfiles.profileHelp')}
         value={profileText}
         invalid={profileBody === null}
-        invalidText={t("settings.deviceProfiles.jsonInvalid")}
+        invalidText={t('settings.deviceProfiles.jsonInvalid')}
         onChange={(event) => setProfileText(event.target.value)}
       />
       {!profile ? (
         <Checkbox
           id="profile-is-default"
-          labelText={t("settings.deviceProfiles.isDefault")}
+          labelText={t('settings.deviceProfiles.isDefault')}
           checked={isDefault}
           onChange={(_event, { checked }) => setIsDefault(checked)}
         />

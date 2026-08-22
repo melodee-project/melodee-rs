@@ -1,6 +1,7 @@
 //! Shared cross-slice PostgreSQL fixtures.
-//! The fixture deliberately reaches `Cataloged` through the public /4
-//! handoff and leaves every media path nonexistent. tests can therefore
+//!
+//! The fixture deliberately reaches `Cataloged` through the public ingestion-to-catalog
+//! handoff and leaves every media path nonexistent. Tests can therefore
 //! prove policy reads PostgreSQL facts instead of reopening inbound or canonical
 //! media.
 
@@ -58,7 +59,7 @@ impl CatalogedPolicyFixture {
 
 /// Publishes and catalogs one single-Track Release through public persistence
 /// APIs. The current time is used for catalog leases because PostgreSQL fences
-/// them against `clock_timestamp`.
+/// them against `clock_timestamp()`.
 pub async fn seed_cataloged_release(
     db: &TestDb,
     ordinal: u32,

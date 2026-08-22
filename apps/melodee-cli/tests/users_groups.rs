@@ -18,7 +18,7 @@ fn run_cli(database_url: &str, args: &[&str], password: Option<&str>) -> String 
     command
         .args(args)
         .env(melodee_persistence::ENV_DATABASE_URL, database_url)
- // Never inherit a host shell's bootstrap password into a test run.
+        // Never inherit a host shell's bootstrap password into a test run.
         .env_remove("MELODEE__CLI__BOOTSTRAP_ADMIN_PASSWORD");
     if let Some(password) = password {
         command.env("MELODEE__CLI__BOOTSTRAP_ADMIN_PASSWORD", password);

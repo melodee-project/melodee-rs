@@ -1,35 +1,20 @@
-import { ArrowRight, Renew } from "@carbon/icons-react";
-import {
-  ActionableNotification,
-  Button,
-  Heading,
-  Link,
-  Loading,
-} from "@carbon/react";
-import { useCallback, useEffect, useState } from "react";
-import { useTranslation } from "react-i18next";
-import { Link as RouterLink, useNavigate } from "react-router-dom";
+import { ArrowRight, Renew } from '@carbon/icons-react';
+import { ActionableNotification, Button, Heading, Link, Loading } from '@carbon/react';
+import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
 
-import { getDashboard, getOnboardingStatus } from "../../api/admin";
-import { ApiError } from "../../api/client";
-import type { Dashboard } from "../../api/types";
-import { EmptyState } from "../../components/EmptyState";
-import { MetricCard } from "../../components/MetricCard";
-import { PageHeader } from "../../components/PageHeader";
-import { ProcessingStateTag } from "../../components/ProcessingStateTag";
-import { SystemHealthPanel } from "../../components/SystemHealthPanel";
-import {
-  formatDateTime,
-  formatNumber,
-  formatRelativeTime,
-} from "../../i18n/format";
-import { ActivityChart } from "./ActivityChart";
-import {
-  ACTIVE_STATES,
-  countStates,
-  INBOUND_STATES,
-  sortedBuckets,
-} from "./overview";
+import { getDashboard, getOnboardingStatus } from '../../api/admin';
+import { ApiError } from '../../api/client';
+import type { Dashboard } from '../../api/types';
+import { EmptyState } from '../../components/EmptyState';
+import { MetricCard } from '../../components/MetricCard';
+import { PageHeader } from '../../components/PageHeader';
+import { ProcessingStateTag } from '../../components/ProcessingStateTag';
+import { SystemHealthPanel } from '../../components/SystemHealthPanel';
+import { formatDateTime, formatNumber, formatRelativeTime } from '../../i18n/format';
+import { ActivityChart } from './ActivityChart';
+import { ACTIVE_STATES, countStates, INBOUND_STATES, sortedBuckets } from './overview';
 
 /**
  * Overview dashboard (PRD-UI-001, SPEC §22): answers "what needs
@@ -43,9 +28,7 @@ import {
 const REFRESH_MS = 60_000;
 
 function toApiError(cause: unknown): ApiError {
-  return cause instanceof ApiError
-    ? cause
-    : new ApiError(0, "unknown", String(cause), null);
+  return cause instanceof ApiError ? cause : new ApiError(0, 'unknown', String(cause), null);
 }
 
 export function OverviewScreen() {
@@ -82,10 +65,7 @@ export function OverviewScreen() {
   useEffect(() => {
     const signal = { cancelled: false };
     void fetchDashboard(signal);
-    const timer = window.setInterval(
-      () => void fetchDashboard(signal),
-      REFRESH_MS,
-    );
+    const timer = window.setInterval(() => void fetchDashboard(signal), REFRESH_MS);
     return () => {
       signal.cancelled = true;
       window.clearInterval(timer);
@@ -99,9 +79,7 @@ export function OverviewScreen() {
         // Strict shape gate: only an explicit incomplete/non-bypassed status
         // raises the banner — a malformed payload must not.
         if (!cancelled) {
-          setOnboardingPending(
-            status.completed === false && status.bypassed === false,
-          );
+          setOnboardingPending(status.completed === false && status.bypassed === false);
         }
       })
       .catch(() => {
@@ -115,11 +93,8 @@ export function OverviewScreen() {
   if (loading && dashboard === null) {
     return (
       <>
-        <PageHeader
-          title={t("overview.title")}
-          subtitle={t("overview.subtitle")}
-        />
-        <Loading description={t("common.loading")} withOverlay={false} />
+        <PageHeader title={t('overview.title')} subtitle={t('overview.subtitle')} />
+        <Loading description={t('common.loading')} withOverlay={false} />
       </>
     );
   }
@@ -131,36 +106,35 @@ export function OverviewScreen() {
   const attentionRows = attention
     ? [
         {
-          key: "unresolvedIdentities",
+          key: 'unresolvedIdentities',
           count: attention.unresolvedIdentities,
-          to: "/catalog/identity",
+          to: '/catalog/identity',
         },
         {
-          key: "pendingPolicyDecisions",
+          key: 'pendingPolicyDecisions',
           count: attention.pendingPolicyDecisions,
-          to: "/processing/review?state=needs_review",
+          to: '/processing/review?state=needs_review',
         },
         {
-          key: "failedProcessing",
+          key: 'failedProcessing',
           count: attention.failedProcessing,
-          to: "/processing?state=failed",
+          to: '/processing?state=failed',
         },
         {
-          key: "quarantined",
+          key: 'quarantined',
           count: attention.quarantined,
-          to: "/processing/review?state=quarantined",
+          to: '/processing/review?state=quarantined',
         },
       ]
     : [];
-  const storageDegraded = dashboard?.health.storage.status === "degraded";
-  const attentionEmpty =
-    attentionRows.every((row) => row.count === 0) && !storageDegraded;
+  const storageDegraded = dashboard?.health.storage.status === 'degraded';
+  const attentionEmpty = attentionRows.every((row) => row.count === 0) && !storageDegraded;
 
   return (
     <>
       <PageHeader
-        title={t("overview.title")}
-        subtitle={t("overview.subtitle")}
+        title={t('overview.title')}
+        subtitle={t('overview.subtitle')}
         actions={
           <div className="melodee-overview-actions">
             {dashboard ? (
@@ -168,9 +142,7 @@ export function OverviewScreen() {
                 className="melodee-overview-generated"
                 title={formatDateTime(dashboard.generatedAt)}
               >
-                {t("overview.generatedAt", {
-                  time: formatRelativeTime(dashboard.generatedAt),
-                })}
+                {t('overview.generatedAt', { time: formatRelativeTime(dashboard.generatedAt) })}
               </span>
             ) : null}
             <Button
@@ -182,7 +154,7 @@ export function OverviewScreen() {
                 void fetchDashboard({ cancelled: false });
               }}
             >
-              {t("actions.refresh")}
+              {t('actions.refresh')}
             </Button>
           </div>
         }
@@ -192,11 +164,11 @@ export function OverviewScreen() {
           inline
           kind="info"
           lowContrast
-          title={t("onboarding.bannerTitle")}
-          subtitle={t("onboarding.bannerBody")}
+          title={t('onboarding.bannerTitle')}
+          subtitle={t('onboarding.bannerBody')}
           hideCloseButton
-          actionButtonLabel={t("onboarding.bannerAction")}
-          onActionButtonClick={() => void navigate("/onboarding")}
+          actionButtonLabel={t('onboarding.bannerAction')}
+          onActionButtonClick={() => void navigate('/onboarding')}
         />
       ) : null}
       {error ? (
@@ -204,10 +176,10 @@ export function OverviewScreen() {
           inline
           kind="error"
           lowContrast
-          title={t("overview.loadErrorTitle")}
+          title={t('overview.loadErrorTitle')}
           subtitle={error.message}
           hideCloseButton
-          actionButtonLabel={t("actions.retry")}
+          actionButtonLabel={t('actions.retry')}
           onActionButtonClick={() => {
             setLoading(dashboard === null);
             void fetchDashboard({ cancelled: false });
@@ -217,78 +189,41 @@ export function OverviewScreen() {
       {dashboard ? (
         <>
           <div className="melodee-metric-grid">
+            <MetricCard label={t('overview.kpi.inbound')} value={formatNumber(countStates(countsByState, INBOUND_STATES))} />
+            <MetricCard label={t('overview.kpi.processing')} value={formatNumber(countStates(countsByState, ACTIVE_STATES))} />
             <MetricCard
-              label={t("overview.kpi.inbound")}
-              value={formatNumber(countStates(countsByState, INBOUND_STATES))}
+              label={t('overview.kpi.review')}
+              value={formatNumber(countStates(countsByState, ['needs_review']))}
             />
-            <MetricCard
-              label={t("overview.kpi.processing")}
-              value={formatNumber(countStates(countsByState, ACTIVE_STATES))}
-            />
-            <MetricCard
-              label={t("overview.kpi.review")}
-              value={formatNumber(countStates(countsByState, ["needs_review"]))}
-            />
-            <MetricCard
-              label={t("overview.kpi.artists")}
-              value={formatNumber(dashboard.catalog.artists)}
-            />
-            <MetricCard
-              label={t("overview.kpi.releases")}
-              value={formatNumber(dashboard.catalog.releases)}
-            />
-            <MetricCard
-              label={t("overview.kpi.tracks")}
-              value={formatNumber(dashboard.catalog.tracks)}
-            />
+            <MetricCard label={t('overview.kpi.artists')} value={formatNumber(dashboard.catalog.artists)} />
+            <MetricCard label={t('overview.kpi.releases')} value={formatNumber(dashboard.catalog.releases)} />
+            <MetricCard label={t('overview.kpi.tracks')} value={formatNumber(dashboard.catalog.tracks)} />
           </div>
           <div className="melodee-overview-columns">
-            <section
-              className="melodee-panel"
-              aria-labelledby="overview-activity-title"
-            >
-              <Heading
-                id="overview-activity-title"
-                className="melodee-panel__title"
-              >
-                {t("overview.activity.title")}
+            <section className="melodee-panel" aria-labelledby="overview-activity-title">
+              <Heading id="overview-activity-title" className="melodee-panel__title">
+                {t('overview.activity.title')}
               </Heading>
-              <p className="melodee-panel__subtitle">
-                {t("overview.activity.subtitle")}
-              </p>
+              <p className="melodee-panel__subtitle">{t('overview.activity.subtitle')}</p>
               {buckets.length === 0 ? (
-                <EmptyState compact title={t("overview.activity.empty")} />
+                <EmptyState compact title={t('overview.activity.empty')} />
               ) : (
                 <ActivityChart buckets={buckets} />
               )}
             </section>
-            <section
-              className="melodee-panel"
-              aria-labelledby="overview-attention-title"
-            >
-              <Heading
-                id="overview-attention-title"
-                className="melodee-panel__title"
-              >
-                {t("overview.attention.title")}
+            <section className="melodee-panel" aria-labelledby="overview-attention-title">
+              <Heading id="overview-attention-title" className="melodee-panel__title">
+                {t('overview.attention.title')}
               </Heading>
               {attentionEmpty ? (
-                <EmptyState
-                  compact
-                  tone="success"
-                  title={t("overview.attention.empty")}
-                />
+                <EmptyState compact tone="success" title={t('overview.attention.empty')} />
               ) : (
                 <ul className="melodee-attention-list">
                   {attentionRows
                     .filter((row) => row.count > 0)
                     .map((row) => (
                       <li key={row.key} className="melodee-attention-row">
-                        <Link
-                          as={RouterLink}
-                          to={row.to}
-                          className="melodee-attention-row__link"
-                        >
+                        <Link as={RouterLink} to={row.to} className="melodee-attention-row__link">
                           {t(`overview.attention.${row.key}`)}
                           <ArrowRight aria-hidden />
                         </Link>
@@ -304,7 +239,7 @@ export function OverviewScreen() {
                         to="/system/workers"
                         className="melodee-attention-row__link"
                       >
-                        {t("overview.attention.storageDegraded")}
+                        {t('overview.attention.storageDegraded')}
                         <ArrowRight aria-hidden />
                       </Link>
                     </li>
@@ -316,40 +251,31 @@ export function OverviewScreen() {
           <div className="melodee-overview-columns melodee-overview-columns--secondary">
             <SystemHealthPanel
               health={dashboard.health}
-              title={t("overview.health.title")}
+              title={t('overview.health.title')}
               headingId="overview-health-title"
             />
-            <section
-              className="melodee-panel"
-              aria-labelledby="overview-queue-title"
-            >
-              <Heading
-                id="overview-queue-title"
-                className="melodee-panel__title"
-              >
-                {t("overview.queue.title")}
+            <section className="melodee-panel" aria-labelledby="overview-queue-title">
+              <Heading id="overview-queue-title" className="melodee-panel__title">
+                {t('overview.queue.title')}
               </Heading>
               {countsByState.length === 0 ? (
-                <EmptyState compact title={t("overview.queue.empty")} />
+                <EmptyState compact title={t('overview.queue.empty')} />
               ) : (
                 <table
                   className="cds--data-table cds--data-table--sm melodee-mini-table"
-                  aria-label={t("overview.queue.caption")}
+                  aria-label={t('overview.queue.caption')}
                 >
                   <thead>
                     <tr>
-                      <th scope="col">{t("overview.queue.column.state")}</th>
-                      <th scope="col">{t("overview.queue.column.count")}</th>
+                      <th scope="col">{t('overview.queue.column.state')}</th>
+                      <th scope="col">{t('overview.queue.column.count')}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {countsByState.map((entry) => (
                       <tr key={entry.state}>
                         <td>
-                          <Link
-                            as={RouterLink}
-                            to={`/processing?state=${entry.state}`}
-                          >
+                          <Link as={RouterLink} to={`/processing?state=${entry.state}`}>
                             <ProcessingStateTag state={entry.state} />
                           </Link>
                         </td>
@@ -367,7 +293,7 @@ export function OverviewScreen() {
                   to="/processing"
                   renderIcon={ArrowRight}
                 >
-                  {t("overview.queue.open")}
+                  {t('overview.queue.open')}
                 </Button>
               </div>
             </section>

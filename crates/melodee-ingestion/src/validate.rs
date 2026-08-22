@@ -36,7 +36,9 @@ pub struct ValidatedNormalization {
 /// Fatal inconsistency in a normalized manifest or its work assets.
 #[derive(Debug, Error)]
 pub enum StructuralValidationError {
-    #[error("manifest schema version {actual} is not the normalization version {expected}")]
+    #[error(
+        "manifest schema version {actual} is not the Phase 3.2 normalization version {expected}"
+    )]
     UnsupportedManifestVersion { actual: u16, expected: u16 },
 
     #[error("normalized manifest is incomplete: {0}")]

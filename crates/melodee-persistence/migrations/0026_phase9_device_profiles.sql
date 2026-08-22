@@ -1,15 +1,15 @@
 -- device/transcoding profile metadata (ADR-0134 §5, PRD-DEVICE-001).
 --
 -- Additive. A binary downgrade leaves the table intact; schema rollback
--- restores a verified pre-Phase-9 backup into a new database.
+-- restores a verified pre-migration backup into a new database.
 --
 -- Rows are operator-managed METADATA ONLY (PRD-DEVICE-002): no column here
 -- feeds stream negotiation, and the admin API documenting them must not claim
 -- transcoding control. Profile-driven stream selection is post-parity work
 -- requiring its own ADR (PRD-DEVICE-003).
 --
--- Legacy parity (evidence: design/evidence/phase-9/device-profiles-legacy-inventory.md):
--- the legacy
+-- Legacy parity (evidence:
+-- design/evidence/phase-9/device-profiles-legacy-inventory.md): the legacy
 -- preview model bounded names at 255 characters and allowed exactly one
 -- default; both invariants are enforced here as constraints rather than
 -- service-level convention.

@@ -1,7 +1,7 @@
 -- OpenSubsonic adapter state (authority: ADR-0102, ADR-0130).
 --
 -- This migration is additive. A binary downgrade leaves the tables intact;
--- schema rollback restores a verified pre-Phase-8 backup into a new database.
+-- schema rollback restores a verified pre-migration backup into a new database.
 -- The per-user OpenSubsonic secret is an API token that must remain
 -- recoverable so the server can recompute md5(secret + salt) for arbitrary
 -- client-chosen salts; it is isolated from password hashes, never logged,

@@ -1,8 +1,9 @@
-//! Performance evidence for work claiming (work-package part XXVIII):
+//! Performance evidence for work claiming:
 //! a nontrivial queue, many workers, zero duplicate ownership, query plan
 //! capture. Set `MELODEE_WRITE_PERF_EVIDENCE=1` to refresh
 //! `design/evidence/phase-2/durable-work-execution/work-claim-benchmark.json`;
 //! normal correctness gates never rewrite tracked evidence.
+//!
 //! These measurements are evidence, not user-facing performance claims; no
 //! thresholds are asserted (PRD-PERF-001).
 

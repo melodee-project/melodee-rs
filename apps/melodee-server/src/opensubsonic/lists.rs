@@ -4,23 +4,24 @@
 //! (PRD-API-OS-005; golden evidence `compatibility/opensubsonic/golden/lists`,
 //! capture semantics `design/evidence/phase-0/opensubsonic-capture.md` §8).
 //!
-//! Captured behaviors reproduced here: //! - Album list types newest/alphabeticalByName/alphabeticalByArtist/byGenre/
-//! byYear/starred/frequent/recent/random/highest. `recent` sorts by release
-//! date, not last played (captured quirk). `x-total-count` carries the
-//! filtered, unpaged total.
+//! Captured behaviors reproduced here:
+//! - Album list types newest/alphabeticalByName/alphabeticalByArtist/byGenre/
+//!   byYear/starred/frequent/recent/random/highest. `recent` sorts by release
+//!   date, not last played (captured quirk). `x-total-count` carries the
+//!   filtered, unpaged total.
 //! - Legacy `albumList` entries are `albumList2` entries plus a leading
-//! `averageRating` decimal; `playedCount` there vs `playCount` on Child.
+//!   `averageRating` decimal; `playedCount` there vs `playCount` on Child.
 //! - search2/search3 share the search-result DTOs, including the hardcoded
-//! placeholder song fields (bitRate 0, suffix "mp3", path "unknown",
-//! contentType "audio/mpeg") and the offset-rounds-down-to-page quirk.
+//!   placeholder song fields (bitRate 0, suffix "mp3", path "unknown",
+//!   contentType "audio/mpeg") and the offset-rounds-down-to-page quirk.
 //! - The Dune/Düné collision: matching runs on the legacy normalized form
-//! (accent-stripped, uppercased, non-alphanumerics removed), so one query
-//! matches both identities. A query that folds to nothing (e.g. CJK-only)
-//! matches nothing, mirroring the legacy base64 fallback that never hits.
+//!   (accent-stripped, uppercased, non-alphanumerics removed), so one query
+//!   matches both identities. A query that folds to nothing (e.g. CJK-only)
+//!   matches nothing, mirroring the legacy base64 fallback that never hits.
 //! - The extension endpoints 302 to `/Account/Login?ReturnUrl=%2FError` in
-//! the captured fixture environment (external provider dependency). The
-//! captured Location embedded the request query including credentials;
-//! that leak is deliberately not preserved.
+//!   the captured fixture environment (external provider dependency). The
+//!   captured Location embedded the request query including credentials;
+//!   that leak is deliberately not preserved.
 //!
 //! Deterministic tiebreaks (ADR-0130 decision 5): every sorted list appends
 //! the entity public id as the final ORDER BY key.
@@ -762,7 +763,7 @@ fn starred_album_child(row: &StarredAlbumRow, genres: &[String]) -> Value {
     }
     album.insert("coverArt".to_string(), album_id.clone().into());
     // The v1 Child `starred` field is the legacy
-    // `Nullable<DateTime>.ToString` of the user row's LastUpdatedAt — ""
+    // `Nullable<DateTime>.ToString()` of the user row's LastUpdatedAt — ""
     // for fixture rows (runtime-set values are masked volatile in goldens).
     album.insert("starred".to_string(), "".into());
     // Captured rounding: half-to-even seconds.
@@ -798,15 +799,15 @@ fn starred_album_child(row: &StarredAlbumRow, genres: &[String]) -> Value {
     album.insert(
         "albumArtists".to_string(),
         serde_json::json!([{
-                   "id": format!("artist_{}", row.artist_id),
-                   "name": row.artist_name,
-                   "coverArt": format!("artist_{}", row.artist_id),
-                   "albumCount": row.artist_album_count,
-        // The legacy nested ArtistID3 is built without the user row.
-                   "userRating": 0,
-                   "artistImageUrl": "URL",
-                   "sortName": row.artist_sort_name,
-               }]),
+            "id": format!("artist_{}", row.artist_id),
+            "name": row.artist_name,
+            "coverArt": format!("artist_{}", row.artist_id),
+            "albumCount": row.artist_album_count,
+            // The legacy nested ArtistID3 is built without the user row.
+            "userRating": 0,
+            "artistImageUrl": "URL",
+            "sortName": row.artist_sort_name,
+        }]),
     );
     album.insert(
         "displayAlbumArtist".to_string(),
@@ -1496,7 +1497,8 @@ pub async fn search3(
 // melodeeExtensions[1]: external-provider search endpoints
 // ---------------------------------------------------------------------------
 
-/// Captured fixture-environment behavior for the extension search endpoints: /// the external provider dependency fails and the legacy Blazor error pipeline
+/// Captured fixture-environment behavior for the extension search endpoints:
+/// the external provider dependency fails and the legacy Blazor error pipeline
 /// answers HTTP 302 toward the login error page. The captured Location
 /// embedded the full request query — including the auth token and salt — in
 /// `ReturnUrl`; that credential leak is deliberately not preserved.

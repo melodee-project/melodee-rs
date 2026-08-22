@@ -1,4 +1,5 @@
 //! In-memory Tantivy search correctness tests (acceptance A1-A3, A6, A7, A20-A23).
+//!
 //! These build a generation in a temp dir, index catalog-shaped documents, and
 //! verify MQL-driven search behavior without a database.
 

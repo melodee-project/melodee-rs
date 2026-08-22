@@ -4,9 +4,9 @@
 -- All timestamps are UTC (timestamptz).
 
 CREATE TABLE release_work_items (
- -- Internal identity (uuidv7: time-ordered, app-generated for determinism).
+    -- Internal identity (uuidv7: time-ordered, app-generated for determinism).
     id                   uuid PRIMARY KEY,
- -- Operator-safe public identity (stable, safe to display in UI/CLI/logs).
+    -- Operator-safe public identity (stable, safe to display in UI/CLI/logs).
     api_key              uuid NOT NULL UNIQUE,
 
     source_library_id    uuid NULL,
@@ -19,7 +19,7 @@ CREATE TABLE release_work_items (
     source_fingerprint   text NULL,
     manifest_hash        text NULL,
 
- -- CHECK keeps persisted states inside the domain enum (readable text form).
+    -- CHECK keeps persisted states inside the domain enum (readable text form).
     state                text NOT NULL,
     state_reason         text NULL,
 
@@ -51,16 +51,16 @@ CREATE TABLE release_work_items (
         )
     ),
     CONSTRAINT release_work_items_attempt_count_check CHECK (attempt_count >= 0),
- -- Lease fields are internally consistent: owner set iff both timestamps set.
+    -- Lease fields are internally consistent: owner set iff both timestamps set.
     CONSTRAINT release_work_items_lease_consistency_check CHECK (
         (lease_owner IS NULL AND lease_acquired_at IS NULL AND lease_expires_at IS NULL)
         OR (lease_owner IS NOT NULL AND lease_acquired_at IS NOT NULL AND lease_expires_at IS NOT NULL)
     ),
- -- Retry timestamps only make sense for failed work awaiting another attempt.
+    -- Retry timestamps only make sense for failed work awaiting another attempt.
     CONSTRAINT release_work_items_retry_consistency_check CHECK (
         next_attempt_at IS NULL OR state = 'failed'
     ),
- -- Terminal states have a completion timestamp; non-terminal states do not.
+    -- Terminal states have a completion timestamp; non-terminal states do not.
     CONSTRAINT release_work_items_completion_consistency_check CHECK (
         (state IN ('indexed', 'ignored', 'deleted') AND completed_at IS NOT NULL)
         OR (state NOT IN ('indexed', 'ignored', 'deleted') AND completed_at IS NULL)

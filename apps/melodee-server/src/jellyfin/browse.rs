@@ -4,20 +4,21 @@
 //!
 //! Behavior reproduced from the frozen baseline (commit `4028b58d`,
 //! `src/Melodee.Blazor/Controllers/Jellyfin/{Items,Artists,Genres,
-//! MusicGenres,UserViews,Songs}Controller.cs`) and the golden captures: //!
+//! MusicGenres,UserViews,Songs}Controller.cs`) and the golden captures:
+//!
 //! - Paging: `skip = max(0, startIndex ?? 0)`, `take = clamp(limit ?? 100, 1, 500)`.
 //! - `sortBy`/`sortOrder`/`recursive`/`fields`/`userId` are accepted and ignored.
 //! - Non-music `includeItemTypes` are silently dropped (empty result, not an error).
 //! - `searchTerm` is a normalized CONTAINS match with diacritic folding
-//! (captured: `Dune` matches `Düné`).
+//!   (captured: `Dune` matches `Düné`).
 //! - Ordering: artists by sort name, albums by release year then sort title,
-//! songs by SongNumber — each with a stable public-id tiebreak (ADR-0131
-//! decision 7 removes the legacy nondeterministic DB-order ties).
+//!   songs by SongNumber — each with a stable public-id tiebreak (ADR-0131
+//!   decision 7 removes the legacy nondeterministic DB-order ties).
 //! - Similar/InstantMix legacy random ordering is replaced with a
-//! deterministic public-id order (documented D10-family deviation).
+//!   deterministic public-id order (documented D10-family deviation).
 //! - Audio-item `UserData` is the captured always-default object on Items
-//! surfaces (legacy never hydrates it there); playlist items hydrate only
-//! with `enableUserData=true` (see `playlists.rs`).
+//!   surfaces (legacy never hydrates it there); playlist items hydrate only
+//!   with `enableUserData=true` (see `playlists.rs`).
 
 use axum::{
     Json, Router,
@@ -723,7 +724,8 @@ async fn get_similar_artists(
         Ok(None) => return not_found("Artist not found."),
         Err(error) => return db_failure("get_similar_artists/seed", error),
     }
-    // Genre-overlap scoring (captured handler), deterministically ordered:  // overlap desc, then sort name, then public id (D10 tiebreak).
+    // Genre-overlap scoring (captured handler), deterministically ordered:
+    // overlap desc, then sort name, then public id (D10 tiebreak).
     let rows = match sqlx::query(
         "WITH artist_genres AS ( \
            SELECT billing.artist_id, btrim(part) AS genre \
@@ -905,7 +907,8 @@ async fn get_items(State(state): State<JfState>, headers: HeaderMap, uri: Uri) -
 
     // parentId probe (captured dispatch): artist -> albums; album -> songs;
     // library -> songs. The Rust catalog has a single canonical store, so a
-    // library parentId is accepted but not a filter (documented  // decision; legacy partitioned songs by Library rows).
+    // library parentId is accepted but not a filter (documented
+    // decision; legacy partitioned songs by Library rows).
     if let Some(parent) = params.parent_id.as_deref().and_then(model::parse_id) {
         match load_artist(&state.pool, parent).await {
             Ok(Some(_)) => return album_items_response(&state, &params, Some(parent)).await,
@@ -1198,7 +1201,8 @@ async fn get_similar_items(
     json_response(model::items_result(Vec::new(), 0, 0))
 }
 
-/// One InstantMix query for every captured seed kind. Binds: /// `$1` seed track public id (None for album/artist seeds),
+/// One InstantMix query for every captured seed kind. Binds:
+/// `$1` seed track public id (None for album/artist seeds),
 /// `$2` seed release public id (album seed only),
 /// `$3` seed primary artist public id,
 /// `$4` seed release genres,

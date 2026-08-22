@@ -1,7 +1,7 @@
 //! Jellyfin media-surface compatibility evidence: browse/items,
 //! genres, user views, similar/instant-mix, favorites/played state, playlists,
 //! images (including catalog artwork overrides), sessions, and audio streaming — against PostgreSQL
-//! fixtures seeded through the public –5 catalog handoff, with
+//! fixtures seeded through the public ingestion-to-catalog handoff, with
 //! frozen-golden shape comparisons for the captured wire shapes.
 
 #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
@@ -1453,7 +1453,7 @@ async fn images_fall_back_to_published_canonical_artwork() {
     let canonical_hash = "a".repeat(64);
     let canonical_path = format!("artwork/{canonical_hash}.jpg");
 
-    // The phase-5 fixture intentionally publishes media-only plans. Add a
+    // The policy fixture intentionally publishes media-only plans. Add a
     // pre-existing immutable artwork asset to its isolated plan so this test
     // exercises the real plan query and no-follow storage read, not a mock.
     sqlx::query(

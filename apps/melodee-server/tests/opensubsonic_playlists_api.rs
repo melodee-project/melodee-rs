@@ -1,4 +1,5 @@
 //! OpenSubsonic playlist compatibility evidence.
+//!
 //! Asserts the captured playlist shapes (getPlaylists/getPlaylist lists and
 //! entries, createPlaylist returning the new playlist, deletePlaylist bare
 //! ok) and the do-not-preserve mutation-breakage deviation (coverage-matrix

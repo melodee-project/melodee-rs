@@ -1,4 +1,4 @@
-import { Add } from "@carbon/icons-react";
+import { Add } from '@carbon/icons-react';
 import {
   Accordion,
   AccordionItem,
@@ -12,10 +12,10 @@ import {
   SelectItem,
   TextArea,
   TextInput,
-} from "@carbon/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useTranslation } from "react-i18next";
-import { useSearchParams } from "react-router-dom";
+} from '@carbon/react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 
 import {
   getObservationDetail,
@@ -25,8 +25,8 @@ import {
   neverMatchCandidate,
   resolveObservation,
   splitArtist,
-} from "../../api/admin";
-import { ApiError } from "../../api/client";
+} from '../../api/admin';
+import { ApiError } from '../../api/client';
 import type {
   IdentityDecisionEntry,
   IdentityResolution,
@@ -36,28 +36,17 @@ import type {
   SplitAssignmentInput,
   SplitAssignmentKind,
   UnresolvedObservation,
-} from "../../api/types";
-import { AuditTimeline } from "../../components/AuditTimeline";
-import {
-  DecisionPanel,
-  type DecisionChoice,
-} from "../../components/DecisionPanel";
-import { EmptyState } from "../../components/EmptyState";
-import { EntityAvatar } from "../../components/EntityAvatar";
-import {
-  EntityTable,
-  type EntityColumn,
-  type EntityRow,
-} from "../../components/EntityTable";
-import { EvidenceItem } from "../../components/EvidenceItem";
-import { EvidenceSummary } from "../../components/EvidenceSummary";
-import { PageHeader } from "../../components/PageHeader";
-import { StatusTag } from "../../components/StatusTag";
-import {
-  formatDateTime,
-  formatNumber,
-  formatRelativeTime,
-} from "../../i18n/format";
+} from '../../api/types';
+import { AuditTimeline } from '../../components/AuditTimeline';
+import { DecisionPanel, type DecisionChoice } from '../../components/DecisionPanel';
+import { EmptyState } from '../../components/EmptyState';
+import { EntityAvatar } from '../../components/EntityAvatar';
+import { EntityTable, type EntityColumn, type EntityRow } from '../../components/EntityTable';
+import { EvidenceItem } from '../../components/EvidenceItem';
+import { EvidenceSummary } from '../../components/EvidenceSummary';
+import { PageHeader } from '../../components/PageHeader';
+import { StatusTag } from '../../components/StatusTag';
+import { formatDateTime, formatNumber, formatRelativeTime } from '../../i18n/format';
 import {
   armFlashNotice,
   artistStatusKind,
@@ -73,7 +62,7 @@ import {
   toAuditEvent,
   toEvidence,
   type IdentityAction,
-} from "./identity";
+} from './identity';
 
 /**
  * Artist Identity Review workspace (PRD-API-ADMIN-002, SPEC §20):
@@ -93,12 +82,12 @@ import {
  */
 
 /** Sort whitelist shared with the backend (ObservedArtistSort::parse). */
-const SORT_KEYS = new Set(["createdAt", "displayValue"]);
+const SORT_KEYS = new Set(['createdAt', 'displayValue']);
 
 const FEED_LIMIT = 20;
 
 interface Notice {
-  kind: "success" | "error" | "info" | "warning";
+  kind: 'success' | 'error' | 'info' | 'warning';
   text: string;
 }
 
@@ -106,25 +95,19 @@ function parseSort(raw: string | null): SortParam | undefined {
   if (!raw) {
     return undefined;
   }
-  const [key, direction] = raw.split(":");
-  if (
-    !key ||
-    (direction !== "asc" && direction !== "desc") ||
-    !SORT_KEYS.has(key)
-  ) {
+  const [key, direction] = raw.split(':');
+  if (!key || (direction !== 'asc' && direction !== 'desc') || !SORT_KEYS.has(key)) {
     return undefined;
   }
   return `${key}:${direction}` as SortParam;
 }
 
 function parsePage(raw: string | null): number {
-  return Math.max(1, Number.parseInt(raw ?? "1", 10) || 1);
+  return Math.max(1, Number.parseInt(raw ?? '1', 10) || 1);
 }
 
 function toApiError(cause: unknown): ApiError {
-  return cause instanceof ApiError
-    ? cause
-    : new ApiError(0, "unknown", String(cause), null);
+  return cause instanceof ApiError ? cause : new ApiError(0, 'unknown', String(cause), null);
 }
 
 /** Reason-required confirmation for confirm / create-new / leave-provisional. */
@@ -135,14 +118,14 @@ function ResolveDialog({
   onClose,
   onConfirm,
 }: {
-  action: Exclude<IdentityAction, "never-match"> | null;
+  action: Exclude<IdentityAction, 'never-match'> | null;
   busy: boolean;
   candidateName: string | null;
   onClose: () => void;
   onConfirm: (reason: string) => void;
 }) {
   const { t } = useTranslation();
-  const [reason, setReason] = useState("");
+  const [reason, setReason] = useState('');
   if (!action) {
     return null;
   }
@@ -150,29 +133,29 @@ function ResolveDialog({
   return (
     <Modal
       open
-      modalHeading={t("identity.decision.confirmHeading", {
+      modalHeading={t('identity.decision.confirmHeading', {
         action: t(`identity.decision.action.${action}`),
-        candidate: candidateName ?? "",
+        candidate: candidateName ?? '',
       })}
-      primaryButtonText={t("identity.decision.apply")}
-      secondaryButtonText={t("actions.cancel")}
+      primaryButtonText={t('identity.decision.apply')}
+      secondaryButtonText={t('actions.cancel')}
       primaryButtonDisabled={!reasonValid || busy}
       onRequestClose={() => {
-        setReason("");
+        setReason('');
         onClose();
       }}
       onRequestSubmit={() => {
         const submitted = reason.trim();
-        setReason("");
+        setReason('');
         onConfirm(submitted);
       }}
     >
       <TextArea
         id="identity-decision-reason"
-        labelText={t("identity.decision.reasonLabel")}
+        labelText={t('identity.decision.reasonLabel')}
         value={reason}
         invalid={!reasonValid && reason.length > 0}
-        invalidText={t("identity.decision.reasonRequired")}
+        invalidText={t('identity.decision.reasonRequired')}
         onChange={(event) => setReason(event.target.value)}
       />
     </Modal>
@@ -194,37 +177,33 @@ function NeverMatchDialog({
   onConfirm: (reason: string) => void;
 }) {
   const { t } = useTranslation();
-  const [reason, setReason] = useState("");
+  const [reason, setReason] = useState('');
   const reasonValid = reason.trim().length > 0;
   return (
     <Modal
       open={open}
       danger
-      modalHeading={t("identity.neverMatch.title", {
-        candidate: candidateName,
-      })}
-      primaryButtonText={t("identity.decision.action.never-match")}
-      secondaryButtonText={t("actions.cancel")}
+      modalHeading={t('identity.neverMatch.title', { candidate: candidateName })}
+      primaryButtonText={t('identity.decision.action.never-match')}
+      secondaryButtonText={t('actions.cancel')}
       primaryButtonDisabled={!reasonValid || busy}
       onRequestClose={() => {
-        setReason("");
+        setReason('');
         onClose();
       }}
       onRequestSubmit={() => {
         const submitted = reason.trim();
-        setReason("");
+        setReason('');
         onConfirm(submitted);
       }}
     >
-      <p style={{ marginBlockEnd: "0.5rem" }}>
-        {t("identity.neverMatch.description")}
-      </p>
+      <p style={{ marginBlockEnd: '0.5rem' }}>{t('identity.neverMatch.description')}</p>
       <TextArea
         id="identity-never-match-reason"
-        labelText={t("identity.decision.reasonLabel")}
+        labelText={t('identity.decision.reasonLabel')}
         value={reason}
         invalid={!reasonValid && reason.length > 0}
-        invalidText={t("identity.decision.reasonRequired")}
+        invalidText={t('identity.decision.reasonRequired')}
         onChange={(event) => setReason(event.target.value)}
       />
     </Modal>
@@ -244,15 +223,12 @@ function CandidateCard({
   onSelect: (artistId: string) => void;
 }) {
   const { t } = useTranslation();
-  const candidate = detail.candidates.find(
-    (entry) => entry.artistId === artistId,
-  );
+  const candidate = detail.candidates.find((entry) => entry.artistId === artistId);
   if (!candidate) {
     return null;
   }
   const neverMatched = detail.negativeAssertions.some(
-    (assertion) =>
-      assertion.active && assertion.candidateArtistId === candidate.artistId,
+    (assertion) => assertion.active && assertion.candidateArtistId === candidate.artistId,
   );
   return (
     <button
@@ -260,7 +236,7 @@ function CandidateCard({
       role="radio"
       aria-checked={selected}
       className={`melodee-identity-candidate${
-        selected ? " melodee-identity-candidate--selected" : ""
+        selected ? ' melodee-identity-candidate--selected' : ''
       }`}
       onClick={() => onSelect(candidate.artistId)}
     >
@@ -280,44 +256,32 @@ function CandidateCard({
               })}
             />
             {candidate.latestLocked ? (
-              <StatusTag kind="neutral" label={t("status.locked")} />
+              <StatusTag kind="neutral" label={t('status.locked')} />
             ) : null}
             {neverMatched ? (
-              <StatusTag
-                kind="error"
-                label={t("identity.candidates.neverMatched")}
-              />
+              <StatusTag kind="error" label={t('identity.candidates.neverMatched')} />
             ) : null}
           </span>
         </span>
         <span className="melodee-identity-candidate__confidence">
-          <span className="melodee-review-fact__label">
-            {t("identity.candidates.confidence")}
-          </span>
+          <span className="melodee-review-fact__label">{t('identity.candidates.confidence')}</span>
           <span className="melodee-identity-candidate__confidence-value">
             {formatNumber(confidencePercent(candidate.latestConfidence))}%
           </span>
         </span>
       </span>
       <span className="melodee-identity-candidate__facts">
-        {t("identity.candidates.decisionCount", {
-          count: candidate.decisionCount,
-        })}
-        {" · "}
+        {t('identity.candidates.decisionCount', { count: candidate.decisionCount })}
+        {' · '}
         {formatRelativeTime(candidate.latestDecidedAt)}
       </span>
       {candidate.latestReason ? (
-        <span className="melodee-identity-candidate__reason">
-          {candidate.latestReason}
-        </span>
+        <span className="melodee-identity-candidate__reason">{candidate.latestReason}</span>
       ) : null}
       {candidate.evidence.length > 0 ? (
         <span className="melodee-identity-candidate__evidence">
           {candidate.evidence.map((evidence, index) => (
-            <EvidenceItem
-              key={`${evidence.source}-${index}`}
-              evidence={toEvidence(evidence)}
-            />
+            <EvidenceItem key={`${evidence.source}-${index}`} evidence={toEvidence(evidence)} />
           ))}
         </span>
       ) : null}
@@ -328,14 +292,14 @@ function CandidateCard({
 /** Merge form: two public ids, audited reason, typed confirmation (destructive-class). */
 function MergeForm({ onCompleted }: { onCompleted: () => void }) {
   const { t } = useTranslation();
-  const [sourceId, setSourceId] = useState("");
-  const [targetId, setTargetId] = useState("");
-  const [reason, setReason] = useState("");
-  const [confirmation, setConfirmation] = useState("");
+  const [sourceId, setSourceId] = useState('');
+  const [targetId, setTargetId] = useState('');
+  const [reason, setReason] = useState('');
+  const [confirmation, setConfirmation] = useState('');
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
 
-  const phrase = t("identity.ops.merge.confirmPhrase");
+  const phrase = t('identity.ops.merge.confirmPhrase');
   const valid =
     isPublicId(sourceId) &&
     isPublicId(targetId) &&
@@ -352,27 +316,24 @@ function MergeForm({ onCompleted }: { onCompleted: () => void }) {
       reason: reason.trim(),
     })
       .then(() => {
-        setNotice({ kind: "success", text: t("identity.ops.merge.success") });
-        setSourceId("");
-        setTargetId("");
-        setReason("");
-        setConfirmation("");
+        setNotice({ kind: 'success', text: t('identity.ops.merge.success') });
+        setSourceId('');
+        setTargetId('');
+        setReason('');
+        setConfirmation('');
         onCompleted();
       })
       .catch((cause: unknown) => {
         const error = toApiError(cause);
-        setNotice({
-          kind: "error",
-          text: t("identity.ops.merge.error", { message: error.message }),
-        });
+        setNotice({ kind: 'error', text: t('identity.ops.merge.error', { message: error.message }) });
       })
       .finally(() => setBusy(false));
   };
 
   return (
-    <section aria-label={t("identity.ops.merge.title")}>
-      <p style={{ color: "var(--cds-text-secondary)", marginBlockEnd: "1rem" }}>
-        {t("identity.ops.merge.description")}
+    <section aria-label={t('identity.ops.merge.title')}>
+      <p style={{ color: 'var(--cds-text-secondary)', marginBlockEnd: '1rem' }}>
+        {t('identity.ops.merge.description')}
       </p>
       {notice ? (
         <InlineNotification
@@ -380,48 +341,48 @@ function MergeForm({ onCompleted }: { onCompleted: () => void }) {
           lowContrast
           hideCloseButton
           title={notice.text}
-          style={{ marginBlockEnd: "0.5rem" }}
+          style={{ marginBlockEnd: '0.5rem' }}
         />
       ) : null}
       <TextInput
         id="identity-merge-source"
-        labelText={t("identity.ops.merge.sourceLabel")}
+        labelText={t('identity.ops.merge.sourceLabel')}
         value={sourceId}
         invalid={sourceId.length > 0 && !isPublicId(sourceId)}
-        invalidText={t("identity.ops.invalidPublicId")}
+        invalidText={t('identity.ops.invalidPublicId')}
         onChange={(event) => setSourceId(event.target.value)}
       />
       <TextInput
         id="identity-merge-target"
-        labelText={t("identity.ops.merge.targetLabel")}
+        labelText={t('identity.ops.merge.targetLabel')}
         value={targetId}
         invalid={targetId.length > 0 && !isPublicId(targetId)}
-        invalidText={t("identity.ops.invalidPublicId")}
+        invalidText={t('identity.ops.invalidPublicId')}
         onChange={(event) => setTargetId(event.target.value)}
-        style={{ marginBlockStart: "0.5rem" }}
+        style={{ marginBlockStart: '0.5rem' }}
       />
       <TextArea
         id="identity-merge-reason"
-        labelText={t("identity.decision.reasonLabel")}
+        labelText={t('identity.decision.reasonLabel')}
         value={reason}
         onChange={(event) => setReason(event.target.value)}
-        style={{ marginBlockStart: "0.5rem" }}
+        style={{ marginBlockStart: '0.5rem' }}
       />
       <TextInput
         id="identity-merge-confirm"
-        labelText={t("destructive.typeToConfirm", { phrase })}
+        labelText={t('destructive.typeToConfirm', { phrase })}
         value={confirmation}
         onChange={(event) => setConfirmation(event.target.value)}
-        style={{ marginBlockStart: "0.5rem" }}
+        style={{ marginBlockStart: '0.5rem' }}
       />
       <Button
         kind="danger"
         size="sm"
         disabled={!valid || busy}
         onClick={submit}
-        style={{ marginBlockStart: "1rem" }}
+        style={{ marginBlockStart: '1rem' }}
       >
-        {t("identity.ops.merge.action")}
+        {t('identity.ops.merge.action')}
       </Button>
     </section>
   );
@@ -434,30 +395,23 @@ function MergeForm({ onCompleted }: { onCompleted: () => void }) {
  */
 function SplitForm({ onCompleted }: { onCompleted: () => void }) {
   const { t } = useTranslation();
-  const [sourceId, setSourceId] = useState("");
-  const [canonicalName, setCanonicalName] = useState("");
-  const [sortName, setSortName] = useState("");
-  const [disambiguation, setDisambiguation] = useState("");
-  const [reason, setReason] = useState("");
+  const [sourceId, setSourceId] = useState('');
+  const [canonicalName, setCanonicalName] = useState('');
+  const [sortName, setSortName] = useState('');
+  const [disambiguation, setDisambiguation] = useState('');
+  const [reason, setReason] = useState('');
   const [assignments, setAssignments] = useState<SplitAssignmentInput[]>([
-    { kind: "releaseArtist", id: "" },
+    { kind: 'releaseArtist', id: '' },
   ]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
 
   const assignmentsValid =
-    assignments.length > 0 &&
-    assignments.every((assignment) => isPublicId(assignment.id));
+    assignments.length > 0 && assignments.every((assignment) => isPublicId(assignment.id));
   const valid =
-    isPublicId(sourceId) &&
-    canonicalName.trim().length > 0 &&
-    reason.trim().length > 0 &&
-    assignmentsValid;
+    isPublicId(sourceId) && canonicalName.trim().length > 0 && reason.trim().length > 0 && assignmentsValid;
 
-  const updateAssignment = (
-    index: number,
-    patch: Partial<SplitAssignmentInput>,
-  ) => {
+  const updateAssignment = (index: number, patch: Partial<SplitAssignmentInput>) => {
     setAssignments((current) =>
       current.map((assignment, position) =>
         position === index ? { ...assignment, ...patch } : assignment,
@@ -473,9 +427,7 @@ function SplitForm({ onCompleted }: { onCompleted: () => void }) {
       newArtist: {
         canonicalName: canonicalName.trim(),
         ...(sortName.trim() ? { sortName: sortName.trim() } : {}),
-        ...(disambiguation.trim()
-          ? { disambiguation: disambiguation.trim() }
-          : {}),
+        ...(disambiguation.trim() ? { disambiguation: disambiguation.trim() } : {}),
       },
       assignments: assignments.map((assignment) => ({
         kind: assignment.kind,
@@ -484,33 +436,28 @@ function SplitForm({ onCompleted }: { onCompleted: () => void }) {
     })
       .then((result) => {
         setNotice({
-          kind: "success",
-          text: t("identity.ops.split.success", {
-            count: result.movedAssignments,
-          }),
+          kind: 'success',
+          text: t('identity.ops.split.success', { count: result.movedAssignments }),
         });
-        setSourceId("");
-        setCanonicalName("");
-        setSortName("");
-        setDisambiguation("");
-        setReason("");
-        setAssignments([{ kind: "releaseArtist", id: "" }]);
+        setSourceId('');
+        setCanonicalName('');
+        setSortName('');
+        setDisambiguation('');
+        setReason('');
+        setAssignments([{ kind: 'releaseArtist', id: '' }]);
         onCompleted();
       })
       .catch((cause: unknown) => {
         const error = toApiError(cause);
-        setNotice({
-          kind: "error",
-          text: t("identity.ops.split.error", { message: error.message }),
-        });
+        setNotice({ kind: 'error', text: t('identity.ops.split.error', { message: error.message }) });
       })
       .finally(() => setBusy(false));
   };
 
   return (
-    <section aria-label={t("identity.ops.split.title")}>
-      <p style={{ color: "var(--cds-text-secondary)", marginBlockEnd: "1rem" }}>
-        {t("identity.ops.split.description")}
+    <section aria-label={t('identity.ops.split.title')}>
+      <p style={{ color: 'var(--cds-text-secondary)', marginBlockEnd: '1rem' }}>
+        {t('identity.ops.split.description')}
       </p>
       {notice ? (
         <InlineNotification
@@ -518,91 +465,78 @@ function SplitForm({ onCompleted }: { onCompleted: () => void }) {
           lowContrast
           hideCloseButton
           title={notice.text}
-          style={{ marginBlockEnd: "0.5rem" }}
+          style={{ marginBlockEnd: '0.5rem' }}
         />
       ) : null}
       <TextInput
         id="identity-split-source"
-        labelText={t("identity.ops.split.sourceLabel")}
+        labelText={t('identity.ops.split.sourceLabel')}
         value={sourceId}
         invalid={sourceId.length > 0 && !isPublicId(sourceId)}
-        invalidText={t("identity.ops.invalidPublicId")}
+        invalidText={t('identity.ops.invalidPublicId')}
         onChange={(event) => setSourceId(event.target.value)}
       />
       <TextInput
         id="identity-split-name"
-        labelText={t("identity.ops.split.canonicalName")}
+        labelText={t('identity.ops.split.canonicalName')}
         value={canonicalName}
         onChange={(event) => setCanonicalName(event.target.value)}
-        style={{ marginBlockStart: "0.5rem" }}
+        style={{ marginBlockStart: '0.5rem' }}
       />
       <TextInput
         id="identity-split-sort-name"
-        labelText={t("identity.ops.split.sortName")}
+        labelText={t('identity.ops.split.sortName')}
         value={sortName}
         onChange={(event) => setSortName(event.target.value)}
-        style={{ marginBlockStart: "0.5rem" }}
+        style={{ marginBlockStart: '0.5rem' }}
       />
       <TextInput
         id="identity-split-disambiguation"
-        labelText={t("identity.ops.split.disambiguation")}
+        labelText={t('identity.ops.split.disambiguation')}
         value={disambiguation}
         onChange={(event) => setDisambiguation(event.target.value)}
-        style={{ marginBlockStart: "0.5rem" }}
+        style={{ marginBlockStart: '0.5rem' }}
       />
-      <fieldset style={{ marginBlockStart: "1rem" }}>
-        <legend>{t("identity.ops.split.assignments")}</legend>
-        <p
-          style={{
-            color: "var(--cds-text-secondary)",
-            marginBlockEnd: "0.5rem",
-          }}
-        >
-          {t("identity.ops.split.internalIdNote")}
+      <fieldset style={{ marginBlockStart: '1rem' }}>
+        <legend>{t('identity.ops.split.assignments')}</legend>
+        <p style={{ color: 'var(--cds-text-secondary)', marginBlockEnd: '0.5rem' }}>
+          {t('identity.ops.split.internalIdNote')}
         </p>
         {assignments.map((assignment, index) => (
           <div key={index} className="melodee-identity-assignment">
             <Select
               id={`identity-split-kind-${index}`}
-              labelText={t("identity.ops.split.assignmentKind")}
+              labelText={t('identity.ops.split.assignmentKind')}
               value={assignment.kind}
               onChange={(event) =>
-                updateAssignment(index, {
-                  kind: event.target.value as SplitAssignmentKind,
-                })
+                updateAssignment(index, { kind: event.target.value as SplitAssignmentKind })
               }
             >
               {SPLIT_ASSIGNMENT_KINDS.map((kind) => (
                 <SelectItem
                   key={kind}
                   value={kind}
-                  text={t(`identity.ops.split.kind.${kind}`, {
-                    defaultValue: kind,
-                  })}
+                  text={t(`identity.ops.split.kind.${kind}`, { defaultValue: kind })}
                 />
               ))}
             </Select>
             <TextInput
               id={`identity-split-assignment-${index}`}
-              labelText={t("identity.ops.split.assignmentId")}
+              labelText={t('identity.ops.split.assignmentId')}
               value={assignment.id}
               invalid={assignment.id.length > 0 && !isPublicId(assignment.id)}
-              invalidText={t("identity.ops.split.invalidAssignmentId")}
-              onChange={(event) =>
-                updateAssignment(index, { id: event.target.value })
-              }
+              invalidText={t('identity.ops.split.invalidAssignmentId')}
+              onChange={(event) => updateAssignment(index, { id: event.target.value })}
             />
             <Button
               kind="ghost"
               size="sm"
               disabled={assignments.length <= 1}
               onClick={() =>
-                setAssignments((current) =>
-                  current.filter((_, position) => position !== index),
-                )
+                setAssignments((current) => current.filter((_, position) => position !== index))
               }
             >
-              {t("actions.remove")}
+              {t('actions.remove')}
             </Button>
           </div>
         ))}
@@ -611,30 +545,27 @@ function SplitForm({ onCompleted }: { onCompleted: () => void }) {
           size="sm"
           renderIcon={Add}
           onClick={() =>
-            setAssignments((current) => [
-              ...current,
-              { kind: "releaseArtist", id: "" },
-            ])
+            setAssignments((current) => [...current, { kind: 'releaseArtist', id: '' }])
           }
         >
-          {t("identity.ops.split.addAssignment")}
+          {t('identity.ops.split.addAssignment')}
         </Button>
       </fieldset>
       <TextArea
         id="identity-split-reason"
-        labelText={t("identity.decision.reasonLabel")}
+        labelText={t('identity.decision.reasonLabel')}
         value={reason}
         onChange={(event) => setReason(event.target.value)}
-        style={{ marginBlockStart: "0.5rem" }}
+        style={{ marginBlockStart: '0.5rem' }}
       />
       <Button
         kind="primary"
         size="sm"
         disabled={!valid || busy}
         onClick={submit}
-        style={{ marginBlockStart: "1rem" }}
+        style={{ marginBlockStart: '1rem' }}
       >
-        {t("identity.ops.split.action")}
+        {t('identity.ops.split.action')}
       </Button>
     </section>
   );
@@ -644,17 +575,12 @@ export function IdentityReviewScreen() {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const sort = parseSort(searchParams.get("sort"));
-  const page = parsePage(searchParams.get("page"));
-  const pageSize = Math.max(
-    1,
-    Number.parseInt(searchParams.get("pageSize") ?? "25", 10) || 25,
-  );
-  const selectedObservationId = searchParams.get("observation");
+  const sort = parseSort(searchParams.get('sort'));
+  const page = parsePage(searchParams.get('page'));
+  const pageSize = Math.max(1, Number.parseInt(searchParams.get('pageSize') ?? '25', 10) || 25);
+  const selectedObservationId = searchParams.get('observation');
 
-  const [pageData, setPageData] = useState<Page<UnresolvedObservation> | null>(
-    null,
-  );
+  const [pageData, setPageData] = useState<Page<UnresolvedObservation> | null>(null);
   const [listError, setListError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState(true);
   const [detail, setDetail] = useState<ObservationDetail | null>(null);
@@ -664,16 +590,15 @@ export function IdentityReviewScreen() {
   const [feedError, setFeedError] = useState<ApiError | null>(null);
 
   const [candidateId, setCandidateId] = useState<string | null>(null);
-  const [pendingAction, setPendingAction] = useState<Exclude<
-    IdentityAction,
-    "never-match"
-  > | null>(null);
+  const [pendingAction, setPendingAction] = useState<Exclude<IdentityAction, 'never-match'> | null>(
+    null,
+  );
   const [neverMatchOpen, setNeverMatchOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
 
   // Consume a flash notice armed before a URL-driven remount (see
-  // armFlashNotice in ./identity). setState is deferred to a microtask so
+  // armFlashNotice in the identity screen). setState is deferred to a microtask so
   // nothing updates synchronously inside the effect body.
   useEffect(() => {
     const armed = takeFlashNotice();
@@ -701,11 +626,7 @@ export function IdentityReviewScreen() {
   // flight so post-resolution refreshes do not flash an empty queue.
   const fetchPage = useCallback(
     (signal: { cancelled: boolean }) =>
-      listUnresolvedObservations({
-        limit: pageSize,
-        offset: (page - 1) * pageSize,
-        sort,
-      })
+      listUnresolvedObservations({ limit: pageSize, offset: (page - 1) * pageSize, sort })
         .then((result) => {
           if (!signal.cancelled) {
             setPageData(result);
@@ -782,9 +703,7 @@ export function IdentityReviewScreen() {
   // the selection changes; reset it during render (React docs pattern). The
   // action notice is deliberately preserved: post-resolution the queue
   // advances the selection and the success notification must survive.
-  const [prevObservationId, setPrevObservationId] = useState(
-    selectedObservationId,
-  );
+  const [prevObservationId, setPrevObservationId] = useState(selectedObservationId);
   if (prevObservationId !== selectedObservationId) {
     setPrevObservationId(selectedObservationId);
     setCandidateId(null);
@@ -815,17 +734,9 @@ export function IdentityReviewScreen() {
 
   const columns: EntityColumn[] = useMemo(
     () => [
-      {
-        key: "displayValue",
-        header: t("identity.queue.column.observation"),
-        sortable: true,
-      },
-      { key: "pending", header: t("identity.queue.column.pending") },
-      {
-        key: "createdAt",
-        header: t("identity.queue.column.added"),
-        sortable: true,
-      },
+      { key: 'displayValue', header: t('identity.queue.column.observation'), sortable: true },
+      { key: 'pending', header: t('identity.queue.column.pending') },
+      { key: 'createdAt', header: t('identity.queue.column.added'), sortable: true },
     ],
     [t],
   );
@@ -837,26 +748,18 @@ export function IdentityReviewScreen() {
         cells: {
           displayValue: (
             <>
-              <span className="melodee-work-item__title">
-                {item.displayValue}
-              </span>
-              <span className="melodee-work-item__id">
-                {observationContext(item)}
-              </span>
+              <span className="melodee-work-item__title">{item.displayValue}</span>
+              <span className="melodee-work-item__id">{observationContext(item)}</span>
             </>
           ),
           pending: (
             <StatusTag
               kind="provisional"
-              label={t("identity.queue.pendingCount", {
-                count: item.pendingMatchCount,
-              })}
+              label={t('identity.queue.pendingCount', { count: item.pendingMatchCount })}
             />
           ),
           createdAt: (
-            <span title={formatDateTime(item.createdAt)}>
-              {formatRelativeTime(item.createdAt)}
-            </span>
+            <span title={formatDateTime(item.createdAt)}>{formatRelativeTime(item.createdAt)}</span>
           ),
         },
       })),
@@ -868,12 +771,10 @@ export function IdentityReviewScreen() {
   const evidenceItems = useMemo(
     () =>
       evidence.map((entry) => ({
-        source: t(`identity.evidence.kind.${entry.kind}`, {
-          defaultValue: entry.kind,
-        }),
+        source: t(`identity.evidence.kind.${entry.kind}`, { defaultValue: entry.kind }),
         observation:
           entry.negative > 0
-            ? t("identity.evidence.countWithNegative", {
+            ? t('identity.evidence.countWithNegative', {
                 count: entry.count,
                 negative: entry.negative,
               })
@@ -886,20 +787,12 @@ export function IdentityReviewScreen() {
     id: action,
     label: t(`identity.decision.action.${action}`),
     description: t(`identity.decision.action.${action}Description`),
-    kind:
-      action === "never-match"
-        ? "destructive"
-        : action === "confirm"
-          ? "recommended"
-          : "safe",
+    kind: action === 'never-match' ? 'destructive' : action === 'confirm' ? 'recommended' : 'safe',
   }));
 
   const mutationErrorNotice = (cause: unknown) => {
     const error = toApiError(cause);
-    setNotice({
-      kind: "error",
-      text: t("identity.decision.error", { message: error.message }),
-    });
+    setNotice({ kind: 'error', text: t('identity.decision.error', { message: error.message }) });
   };
 
   /** After a successful mutation: refresh queue + feed, select the next row. */
@@ -919,14 +812,12 @@ export function IdentityReviewScreen() {
     setNotice(null);
     resolveObservation(observationId, {
       resolution,
-      ...(resolution === "confirm" && candidate
-        ? { artistId: candidate.artistId }
-        : {}),
+      ...(resolution === 'confirm' && candidate ? { artistId: candidate.artistId } : {}),
       reason,
     })
       .then(() => {
         const success: Notice = {
-          kind: "success",
+          kind: 'success',
           text: t(`identity.decision.success.${resolution}`),
         };
         setNotice(success);
@@ -948,10 +839,7 @@ export function IdentityReviewScreen() {
     setNotice(null);
     neverMatchCandidate(observationId, { artistId: candidate.artistId, reason })
       .then(() => {
-        setNotice({
-          kind: "success",
-          text: t("identity.decision.success.never-match"),
-        });
+        setNotice({ kind: 'success', text: t('identity.decision.success.never-match') });
         void fetchDetail({ cancelled: false });
         void fetchFeed({ cancelled: false });
       })
@@ -961,25 +849,19 @@ export function IdentityReviewScreen() {
 
   const onSelectAction = (id: string) => {
     setNotice(null);
-    if (id === "never-match") {
+    if (id === 'never-match') {
       if (!candidate) {
-        setNotice({
-          kind: "warning",
-          text: t("identity.decision.selectCandidateFirst"),
-        });
+        setNotice({ kind: 'warning', text: t('identity.decision.selectCandidateFirst') });
         return;
       }
       setNeverMatchOpen(true);
       return;
     }
-    if (id === "confirm" && !candidate) {
-      setNotice({
-        kind: "warning",
-        text: t("identity.decision.selectCandidateFirst"),
-      });
+    if (id === 'confirm' && !candidate) {
+      setNotice({ kind: 'warning', text: t('identity.decision.selectCandidateFirst') });
       return;
     }
-    if (id === "confirm" || id === "create-new" || id === "leave-provisional") {
+    if (id === 'confirm' || id === 'create-new' || id === 'leave-provisional') {
       setPendingAction(id);
     }
   };
@@ -988,42 +870,37 @@ export function IdentityReviewScreen() {
 
   return (
     <div>
-      <PageHeader
-        title={t("identity.title")}
-        subtitle={t("identity.subtitle")}
-      />
+      <PageHeader title={t('identity.title')} subtitle={t('identity.subtitle')} />
       <div className="melodee-identity-layout">
         <div className="melodee-identity-queue">
           <div className="melodee-review-card">
-            <Heading style={{ fontSize: "1rem" }}>
-              {t("identity.queue.title")}
-            </Heading>
+            <Heading style={{ fontSize: '1rem' }}>{t('identity.queue.title')}</Heading>
             <p className="melodee-page-header__subtitle">
-              {t("identity.queue.remaining", { count: pageData?.total ?? 0 })}
+              {t('identity.queue.remaining', { count: pageData?.total ?? 0 })}
             </p>
             {listError ? (
               <ActionableNotification
                 inline
                 kind="error"
                 lowContrast
-                title={t("identity.queue.loadErrorTitle")}
+                title={t('identity.queue.loadErrorTitle')}
                 subtitle={listError.message}
                 hideCloseButton
-                actionButtonLabel={t("actions.retry")}
+                actionButtonLabel={t('actions.retry')}
                 onActionButtonClick={() => void fetchPage({ cancelled: false })}
               />
             ) : null}
             {loading && pageData === null ? (
-              <Loading description={t("common.loading")} withOverlay={false} />
+              <Loading description={t('common.loading')} withOverlay={false} />
             ) : (
               <EntityTable
-                caption={t("identity.queue.caption")}
+                caption={t('identity.queue.caption')}
                 columns={columns}
                 rows={rows}
                 totalRows={pageData?.total ?? 0}
                 compact
-                emptyTitle={t("identity.queue.emptyTitle")}
-                emptyDescription={t("identity.queue.emptyDescription")}
+                emptyTitle={t('identity.queue.emptyTitle')}
+                emptyDescription={t('identity.queue.emptyDescription')}
                 activeRowId={selectedObservationId}
                 onRowActivate={(id) => updateParams({ observation: id })}
               />
@@ -1035,81 +912,71 @@ export function IdentityReviewScreen() {
           <div className="melodee-review-card">
             {!selectedObservationId ? (
               <EmptyState
-                title={t("identity.observation.emptyTitle")}
-                description={t("identity.observation.emptyDescription")}
+                title={t('identity.observation.emptyTitle')}
+                description={t('identity.observation.emptyDescription')}
               />
             ) : detailLoading && detail === null ? (
-              <Loading description={t("common.loading")} withOverlay={false} />
+              <Loading description={t('common.loading')} withOverlay={false} />
             ) : detailError ? (
               <ActionableNotification
                 inline
                 kind="error"
                 lowContrast
-                title={t("identity.observation.loadErrorTitle")}
+                title={t('identity.observation.loadErrorTitle')}
                 subtitle={detailError.message}
                 hideCloseButton
-                actionButtonLabel={t("actions.retry")}
-                onActionButtonClick={() =>
-                  void fetchDetail({ cancelled: false })
-                }
+                actionButtonLabel={t('actions.retry')}
+                onActionButtonClick={() => void fetchDetail({ cancelled: false })}
               />
             ) : observation ? (
               <>
                 <span className="melodee-review-fact__label">
-                  {t("identity.observation.incoming")}
+                  {t('identity.observation.incoming')}
                 </span>
                 <div className="melodee-identity-observation__header">
-                  <Heading style={{ fontSize: "1.25rem" }}>
-                    {observation.displayValue}
-                  </Heading>
-                  <StatusTag
-                    kind="provisional"
-                    label={t("identity.observation.reviewTag")}
-                  />
+                  <Heading style={{ fontSize: '1.25rem' }}>{observation.displayValue}</Heading>
+                  <StatusTag kind="provisional" label={t('identity.observation.reviewTag')} />
                 </div>
                 <div className="melodee-review-header__facts">
                   <div>
                     <div className="melodee-review-fact__label">
-                      {t("identity.observation.release")}
+                      {t('identity.observation.release')}
                     </div>
                     <div>{observation.releaseTitle}</div>
                   </div>
                   {observation.trackTitle ? (
                     <div>
                       <div className="melodee-review-fact__label">
-                        {t("identity.observation.track")}
+                        {t('identity.observation.track')}
                       </div>
                       <div>{observation.trackTitle}</div>
                     </div>
                   ) : null}
                   <div>
                     <div className="melodee-review-fact__label">
-                      {t("identity.observation.scope")}
+                      {t('identity.observation.scope')}
                     </div>
                     <div>
-                      {t(
-                        `identity.observation.scopeValue.${observation.scope}`,
-                        {
-                          defaultValue: observation.scope,
-                        },
-                      )}
+                      {t(`identity.observation.scopeValue.${observation.scope}`, {
+                        defaultValue: observation.scope,
+                      })}
                     </div>
                   </div>
                   <div>
                     <div className="melodee-review-fact__label">
-                      {t("identity.observation.normalized")}
+                      {t('identity.observation.normalized')}
                     </div>
                     <div>{observation.normalizedValue}</div>
                   </div>
                   <div>
                     <div className="melodee-review-fact__label">
-                      {t("identity.observation.source")}
+                      {t('identity.observation.source')}
                     </div>
                     <div>{observation.sourcePointer}</div>
                   </div>
                   <div>
                     <div className="melodee-review-fact__label">
-                      {t("identity.observation.added")}
+                      {t('identity.observation.added')}
                     </div>
                     <div>
                       <span title={formatDateTime(observation.createdAt)}>
@@ -1119,21 +986,19 @@ export function IdentityReviewScreen() {
                   </div>
                 </div>
                 {detail?.current ? (
-                  <div style={{ marginBlockStart: "0.75rem" }}>
+                  <div style={{ marginBlockStart: '0.75rem' }}>
                     <div className="melodee-review-fact__label">
-                      {t("identity.observation.currentDecision")}
+                      {t('identity.observation.currentDecision')}
                     </div>
                     <div>
                       {detail.current.artistName}
-                      {" · "}
+                      {' · '}
                       {t(`identity.outcome.${detail.current.outcome}`, {
                         defaultValue: detail.current.outcome,
                       })}
-                      {" · "}
-                      {formatNumber(
-                        confidencePercent(detail.current.confidence),
-                      )}
-                      %{detail.current.locked ? ` · ${t("status.locked")}` : ""}
+                      {' · '}
+                      {formatNumber(confidencePercent(detail.current.confidence))}%
+                      {detail.current.locked ? ` · ${t('status.locked')}` : ''}
                     </div>
                   </div>
                 ) : null}
@@ -1143,16 +1008,13 @@ export function IdentityReviewScreen() {
 
           {detail ? (
             <div className="melodee-review-card">
-              <Heading style={{ fontSize: "1rem", marginBlockEnd: "0.5rem" }}>
-                {t("identity.candidates.title")}
+              <Heading style={{ fontSize: '1rem', marginBlockEnd: '0.5rem' }}>
+                {t('identity.candidates.title')}
               </Heading>
               {detail.candidates.length === 0 ? (
-                <EmptyState title={t("identity.candidates.empty")} compact />
+                <EmptyState title={t('identity.candidates.empty')} compact />
               ) : (
-                <div
-                  role="radiogroup"
-                  aria-label={t("identity.candidates.title")}
-                >
+                <div role="radiogroup" aria-label={t('identity.candidates.title')}>
                   {detail.candidates.map((entry) => (
                     <CandidateCard
                       key={entry.artistId}
@@ -1170,7 +1032,7 @@ export function IdentityReviewScreen() {
           {detail ? (
             <div className="melodee-review-card">
               <EvidenceSummary
-                title={t("identity.evidence.summaryTitle")}
+                title={t('identity.evidence.summaryTitle')}
                 items={evidenceItems}
               />
             </div>
@@ -1185,18 +1047,18 @@ export function IdentityReviewScreen() {
                 lowContrast
                 hideCloseButton
                 title={notice.text}
-                style={{ marginBlockEnd: "0.5rem" }}
+                style={{ marginBlockEnd: '0.5rem' }}
               />
             ) : null}
             {detail ? (
               <DecisionPanel choices={choices} onSelect={onSelectAction} />
             ) : (
               <>
-                <Heading style={{ fontSize: "1rem", marginBlockEnd: "0.5rem" }}>
-                  {t("identity.decision.title")}
+                <Heading style={{ fontSize: '1rem', marginBlockEnd: '0.5rem' }}>
+                  {t('identity.decision.title')}
                 </Heading>
-                <p style={{ color: "var(--cds-text-secondary)" }}>
-                  {t("identity.decision.unavailable")}
+                <p style={{ color: 'var(--cds-text-secondary)' }}>
+                  {t('identity.decision.unavailable')}
                 </p>
               </>
             )}
@@ -1205,36 +1067,31 @@ export function IdentityReviewScreen() {
       </div>
 
       <div className="melodee-review-card">
-        <Heading style={{ fontSize: "1rem", marginBlockEnd: "0.5rem" }}>
-          {t("identity.feed.title")}
+        <Heading style={{ fontSize: '1rem', marginBlockEnd: '0.5rem' }}>
+          {t('identity.feed.title')}
         </Heading>
         {feedError ? (
           <InlineNotification
             kind="error"
             lowContrast
             hideCloseButton
-            title={t("identity.feed.loadErrorTitle")}
+            title={t('identity.feed.loadErrorTitle')}
             subtitle={feedError.message}
           />
         ) : (
-          <AuditTimeline
-            events={(feed?.items ?? []).map(toAuditEvent)}
-            relative
-          />
+          <AuditTimeline events={(feed?.items ?? []).map(toAuditEvent)} relative />
         )}
       </div>
 
       <div className="melodee-review-card">
         <Accordion>
-          <AccordionItem title={t("identity.ops.title")}>
+          <AccordionItem title={t('identity.ops.title')}>
             <MergeForm
               onCompleted={() => {
                 void fetchFeed({ cancelled: false });
               }}
             />
-            <hr
-              style={{ marginBlockStart: "1.5rem", marginBlockEnd: "1.5rem" }}
-            />
+            <hr style={{ marginBlockStart: '1.5rem', marginBlockEnd: '1.5rem' }} />
             <SplitForm
               onCompleted={() => {
                 void fetchFeed({ cancelled: false });

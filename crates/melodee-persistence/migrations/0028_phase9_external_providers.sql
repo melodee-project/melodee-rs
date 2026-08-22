@@ -2,7 +2,7 @@
 -- (ADR-0134 §7 as amended 2026-08-14, PRD-EXT-001..004, PRD-AUTH-002).
 --
 -- Additive. A binary downgrade leaves both tables intact; schema rollback
--- restores a verified pre-Phase-9 backup into a new database.
+-- restores a verified pre-migration backup into a new database.
 --
 -- Nothing is seeded: provider cache entries are populated by provider calls
 -- and Last.fm links exist only after a user completes the web-auth session

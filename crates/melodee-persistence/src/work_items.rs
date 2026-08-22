@@ -2349,7 +2349,7 @@ impl WorkItemStore {
     /// Records a processing failure with durable evidence and computes retry
     /// eligibility. Clears the lease. Classification decides the outcome:
     /// retryable (scheduled or exhausted), permanent, or review-required.
-    // Parameters mirror the durable failure record; see transition.
+    // Parameters mirror the durable failure record; see transition().
     #[allow(clippy::too_many_arguments)]
     #[instrument(skip_all, fields(work_item_id = %id, worker_id = %worker, error_code = %code.as_str()))]
     pub async fn record_failure(
@@ -2746,7 +2746,7 @@ impl WorkItemStore {
     /// Lists one page of work items whose state is in `states`, ordered by a
     /// whitelisted sort, bounded — plus the total row count for the filter
     /// (ignoring the page). Read-side companion to [`Self::list_page`] for
-    /// multi-state operator queues ( release review). An empty state
+    /// multi-state operator queues (release review). An empty state
     /// set short-circuits to an empty page without touching the database.
     pub async fn list_page_states(
         &self,

@@ -1,4 +1,5 @@
-//! Jellyfin error envelope (PRD-API-JF-001). The captured ProblemDetails shape: //! `{type, title, status, detail, traceId, errorCode}` with `application/json;
+//! Jellyfin error envelope (PRD-API-JF-001). The captured ProblemDetails shape:
+//! `{type, title, status, detail, traceId, errorCode}` with `application/json;
 //! charset=utf-8`. Failures are indistinguishable across token failure causes.
 
 use axum::{

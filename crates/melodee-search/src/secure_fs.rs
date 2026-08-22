@@ -1,7 +1,7 @@
 //! Descriptor-relative operations for the owned Tantivy generation root.
 //!
 //! Search generations are rebuildable, but their manifests and retirement
-//! markers still participate in ownership and activation decisions. Keep the
+//! markers still participate in ownership and activation decisions.  Keep the
 //! path checks and the filesystem operation in one no-follow boundary so a
 //! concurrent replacement cannot redirect a read or write through an
 //! operator-managed symlink.
@@ -130,7 +130,7 @@ mod platform {
     }
 
     /// Replace the destination entry without resolving either leaf through a
-    /// symlink. The source and destination parents are held open while the
+    /// symlink.  The source and destination parents are held open while the
     /// atomic rename occurs.
     pub fn rename_replace(source: &Path, destination: &Path) -> io::Result<()> {
         let (source_parent, source_name) = open_parent(source)?;

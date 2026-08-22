@@ -526,9 +526,9 @@ fn is_public_address(address: IpAddr) -> bool {
                 && (first & 0xffc0) != 0xfe80
                 && (first & 0xffc0) != 0xfec0
                 && !embedded_translation
- // The IETF protocol-assignment block contains many
- // non-routable transition/special-purpose subnets. Reject the
- // whole block instead of maintaining an incomplete denylist.
+                // The IETF protocol-assignment block contains many
+                // non-routable transition/special-purpose subnets. Reject the
+                // whole block instead of maintaining an incomplete denylist.
                 && !(segments[0] == 0x2001 && segments[1] < 0x0200)
                 && !(segments[0] == 0x2001 && segments[1] == 0x0db8)
                 && first != 0x2002

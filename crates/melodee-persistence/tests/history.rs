@@ -1,4 +1,4 @@
-//! Append-only history/audit tests (work-package part XXI): the event trail
+//! Append-only history/audit tests: the event trail
 //! answers "what happened to this Release and why".
 
 // Integration tests: expect/panic on setup or assertion failure IS the

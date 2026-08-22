@@ -305,7 +305,7 @@ const fn default_user_list_limit() -> u32 {
 /// Upper bound for one user-listing page (same clamp as the ingest listing).
 const MAX_USER_LIST_LIMIT: u32 = 500;
 
-/// One page of users plus the filter's total row count ( pagination
+/// One page of users plus the filter's total row count (pagination
 /// envelope). `total` respects the `query` filter but ignores `limit`/`offset`.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]

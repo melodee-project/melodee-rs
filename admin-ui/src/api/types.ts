@@ -31,24 +31,24 @@ export interface SystemInfo {
  * endpoint reports only states that currently have items.
  */
 export type IngestionState =
-  | "discovered"
-  | "settling"
-  | "ready"
-  | "inspecting"
-  | "normalizing"
-  | "validating"
-  | "needs_review"
-  | "staged"
-  | "publishing"
-  | "published"
-  | "cataloging"
-  | "cataloged"
-  | "indexing"
-  | "indexed"
-  | "failed"
-  | "quarantined"
-  | "ignored"
-  | "deleted";
+  | 'discovered'
+  | 'settling'
+  | 'ready'
+  | 'inspecting'
+  | 'normalizing'
+  | 'validating'
+  | 'needs_review'
+  | 'staged'
+  | 'publishing'
+  | 'published'
+  | 'cataloging'
+  | 'cataloged'
+  | 'indexing'
+  | 'indexed'
+  | 'failed'
+  | 'quarantined'
+  | 'ignored'
+  | 'deleted';
 
 /** One {state, count} row from GET /ingest/work-items/counts. */
 export interface WorkItemStateCount {
@@ -207,7 +207,7 @@ export interface NotificationDelivery {
   id: string;
   templateKey: string;
   recipient: string;
-  status: "sent" | "failed" | "skipped";
+  status: 'sent' | 'failed' | 'skipped';
   error: string | null;
   createdAt: string;
 }
@@ -316,7 +316,7 @@ export interface ScriptTestRunResult {
   effectiveOnDeny: string;
 }
 
-// ---- Release Review ----
+// ---- Release Review (PRD-API-ADMIN-002) ----
 // Shapes mirror apps/melodee-server/src/admin_review.rs (camelCase serde).
 
 /** One review-queue row: the work item plus its catalog Release binding. */
@@ -461,7 +461,7 @@ export interface ListParams {
   sort?: SortParam;
 }
 
-// ---- Artist identity review ----
+// ---- Artist identity review (apps/melodee-server/src/admin_identity.rs) ----
 
 /**
  * One unresolved observation row (UnresolvedObservationDto). A string is
@@ -547,8 +547,8 @@ export interface ObservationDetail {
 }
 
 /** Resolution verbs accepted by the resolve endpoint. `artistId` is required
- * for `confirm` and forbidden for the other two. */
-export type IdentityResolution = "confirm" | "create-new" | "leave-provisional";
+ *  for `confirm` and forbidden for the other two. */
+export type IdentityResolution = 'confirm' | 'create-new' | 'leave-provisional';
 
 export interface ResolveObservationResult {
   observationId: string;
@@ -583,11 +583,11 @@ export interface MergeArtistsResult {
 
 /** Split assignment kinds accepted by the backend (SplitAssignment). */
 export type SplitAssignmentKind =
-  | "releaseArtist"
-  | "trackArtist"
-  | "contribution"
-  | "alias"
-  | "externalIdentity";
+  | 'releaseArtist'
+  | 'trackArtist'
+  | 'contribution'
+  | 'alias'
+  | 'externalIdentity';
 
 export interface SplitAssignmentInput {
   kind: SplitAssignmentKind;
@@ -613,18 +613,18 @@ export interface SplitArtistResult {
 // Shapes mirror apps/melodee-server/src/admin_system.rs (camelCase serde).
 
 /** One subsystem's health verdict (SubsystemHealthDto). `disabled` is a
- * deliberately unconfigured optional subsystem, never a failure. The
- * `unavailable`, `readOnly`, `misconfigured`, and `capacityExhausted`
- * states let operators distinguish failure modes without reading detail
- * strings. */
+ * deliberately unconfigured optional subsystem, never a failure. Additional states include
+ *  `unavailable` (a required dependency cannot be reached), `readOnly`,
+ *  `misconfigured`, and `capacityExhausted` so operators can distinguish
+ *  failure modes without reading detail strings. */
 export type SubsystemHealthStatus =
-  | "ok"
-  | "degraded"
-  | "disabled"
-  | "unavailable"
-  | "readOnly"
-  | "misconfigured"
-  | "capacityExhausted";
+  | 'ok'
+  | 'degraded'
+  | 'disabled'
+  | 'unavailable'
+  | 'readOnly'
+  | 'misconfigured'
+  | 'capacityExhausted';
 
 export interface SubsystemHealth {
   status: SubsystemHealthStatus;
@@ -637,8 +637,8 @@ export interface ApiSurfaceStatus {
   status: string;
 }
 
-/** Point-in-time utilization of one semaphore-bounded resource class.
- * Purely observational. */
+/** Point-in-time utilization of one semaphore-bounded resource class
+ * (ResourceBoundSnapshot). Purely observational. */
 export interface ResourceBoundSnapshot {
   class: string;
   max: number;
@@ -651,24 +651,24 @@ export interface ResourceBoundSnapshot {
 }
 
 /** Aggregated subsystem health (HealthDto, SPEC §22 panel content). The
- * top-level `status` is `ok` when PostgreSQL is reachable and Tantivy is
- * healthy-or-disabled; the subsystem-specific statuses do not flip the
- * top-level indicator. */
+ *  top-level `status` is `ok` when PostgreSQL is reachable and Tantivy is
+ * healthy-or-disabled; subsystems report their own statuses without
+ *  flipping the top-level indicator. */
 export interface SystemHealth {
-  status: "ok" | "degraded";
+  status: 'ok' | 'degraded';
   postgresql: SubsystemHealth;
   tantivy: SubsystemHealth;
   storage: SubsystemHealth;
   ffmpeg: SubsystemHealth;
-  /** Podcast storage-root writability (disabled when the podcast worker is
-   * unconfigured). */
+  /** podcast storage-root writability (disabled when the podcast
+   *  worker is unconfigured). */
   podcastStorage: SubsystemHealth;
-  /** Free space across storage/work-area/podcast roots. */
+  /** free space across storage/work-area/podcast roots. */
   disk: SubsystemHealth;
-  /** Stale leases and queue depth across the durable worker pools. */
+  /** stale leases and queue depth across the durable worker pools. */
   workers: SubsystemHealth;
   apiSurfaces: ApiSurfaceStatus[];
-  /** Bounded-resource classes registered at startup (empty in tests). */
+  /** bounded-resource classes registered at startup (empty in tests). */
   resourceBounds: ResourceBoundSnapshot[];
 }
 
@@ -694,7 +694,7 @@ export interface DashboardAttention {
 }
 
 /** One completed-per-hour bucket (DashboardActivityBucketDto). Hours without
- * completions are omitted by the backend. */
+ *  completions are omitted by the backend. */
 export interface DashboardActivityBucket {
   hour: string;
   count: number;
@@ -752,7 +752,7 @@ export interface SearchGeneration {
 }
 
 /** Search projection/generation status (SearchStatusDto). When `enabled` is
- * false every other field is null. */
+ *  false every other field is null. */
 export interface SearchStatus {
   enabled: boolean;
   projection: SearchProjection | null;
@@ -768,7 +768,7 @@ export interface SearchRebuild {
   requestedBy: string;
 }
 
-// ---- Catalog browsing + detail ----
+// ---- Catalog browsing + detail (apps/melodee-server/src/admin_catalog.rs) ----
 // Shapes mirror the admin catalog DTOs (camelCase serde). Read-only views
 // over the catalog schema; public ids are the operator-safe keys.
 
@@ -779,22 +779,21 @@ export interface Section<T> {
 }
 
 /** Artist catalog status (artists_status_check). */
-export type CatalogArtistStatus =
-  "provisional" | "verified" | "merged" | "deprecated";
+export type CatalogArtistStatus = 'provisional' | 'verified' | 'merged' | 'deprecated';
 
 /** Release catalog status (releases_status_check). */
-export type CatalogReleaseStatus = "active" | "deprecated";
+export type CatalogReleaseStatus = 'active' | 'deprecated';
 
 /** Artist type taxonomy (artists_type_check). */
 export type CatalogArtistType =
-  | "person"
-  | "group"
-  | "orchestra"
-  | "ensemble"
-  | "choir"
-  | "character"
-  | "other"
-  | "unknown";
+  | 'person'
+  | 'group'
+  | 'orchestra'
+  | 'ensemble'
+  | 'choir'
+  | 'character'
+  | 'other'
+  | 'unknown';
 
 /** GET /catalog/artists row (ArtistListItemDto). */
 export interface CatalogArtistListItem {
@@ -1038,7 +1037,7 @@ export interface ReleaseProvenance {
   importedAt: string;
 }
 
-/** Persisted release classification (ReleaseClassificationDto). */
+/** Persisted classification (ReleaseClassificationDto). */
 export interface ReleaseClassification {
   traits: string[];
   /** Basis points (0–10000). */
@@ -1067,7 +1066,7 @@ export interface ReleaseDetail {
   artists: BilledArtist[];
   contributors: Section<CatalogContribution>;
   mediaAssets: Section<MediaAsset>;
-  /** Null until policy classification has run. */
+  /** Null until policy classification has run (traits). */
   classification: ReleaseClassification | null;
   /** Null for Releases that predate manifest-based import. */
   provenance: ReleaseProvenance | null;
@@ -1077,46 +1076,45 @@ export interface ReleaseDetail {
 // ---- Policies / rule editor ----
 
 /** Policy outcome for a Release (Disposition::as_str, SPEC §15). */
-export type PolicyDisposition =
-  "accept" | "review" | "ignore" | "quarantine" | "delete";
+export type PolicyDisposition = 'accept' | 'review' | 'ignore' | 'quarantine' | 'delete';
 
 /** Engine rule kinds (PolicyRuleType::as_str in melodee-domain). */
 export type PolicyRuleType =
-  | "greatest_hits_redundancy"
-  | "greatest_hits_novelty"
-  | "greatest_hits_uncertain"
-  | "corrupt_media"
-  | "administrator_override"
-  | "unknown_classification"
-  | "trait_disposition";
+  | 'greatest_hits_redundancy'
+  | 'greatest_hits_novelty'
+  | 'greatest_hits_uncertain'
+  | 'corrupt_media'
+  | 'administrator_override'
+  | 'unknown_classification'
+  | 'trait_disposition';
 
 /** Release trait values (ReleaseTrait::as_str in melodee-domain). */
 export type ReleaseTraitValue =
-  | "studio"
-  | "ep"
-  | "single"
-  | "live"
-  | "compilation"
-  | "greatest_hits"
-  | "collection"
-  | "box_set"
-  | "bootleg"
-  | "demo"
-  | "promo"
-  | "broadcast"
-  | "radio_show"
-  | "dj_mix"
-  | "remix"
-  | "tribute"
-  | "soundtrack"
-  | "cast_recording"
-  | "spoken_word"
-  | "comedy"
-  | "audiobook"
-  | "reissue"
-  | "remaster"
-  | "other"
-  | "unknown";
+  | 'studio'
+  | 'ep'
+  | 'single'
+  | 'live'
+  | 'compilation'
+  | 'greatest_hits'
+  | 'collection'
+  | 'box_set'
+  | 'bootleg'
+  | 'demo'
+  | 'promo'
+  | 'broadcast'
+  | 'radio_show'
+  | 'dj_mix'
+  | 'remix'
+  | 'tribute'
+  | 'soundtrack'
+  | 'cast_recording'
+  | 'spoken_word'
+  | 'comedy'
+  | 'audiobook'
+  | 'reissue'
+  | 'remaster'
+  | 'other'
+  | 'unknown';
 
 /**
  * Engine predicate schema (RulePredicate in melodee-policy). The deserializer

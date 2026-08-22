@@ -434,7 +434,7 @@ pub struct ReleaseProvenanceRow {
 }
 
 /// Full operator detail image of one catalog Release. Classification evidence
-/// ( traits) is loaded separately through `PolicyStore` and attached
+/// (traits) is loaded separately through `PolicyStore` and attached
 /// by the caller.
 #[derive(Debug, Clone)]
 pub struct ReleaseCatalogDetail {

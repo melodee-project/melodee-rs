@@ -951,7 +951,7 @@ async fn native_community_routes_are_owner_fenced_bounded_and_replay_safe() {
     db.drop().await;
 }
 
-/// public share Track assembly is set-based (one items
+/// Public share Track assembly is set-based (one items
 /// statement per Release/Playlist) and produces a byte-identical shape to the
 /// previous sequential per-Track DTO loads. The repository has no
 /// statement-counting test harness (the `catalog_performance.rs` pattern

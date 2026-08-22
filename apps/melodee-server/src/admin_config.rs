@@ -7,20 +7,20 @@
 //! ([`crate::admin_access::AdminPrincipal`]).
 //!
 //! - `GET /api/admin/v1/config/export` returns the export document: every
-//! known registry setting's database-or-default value plus custom stored
-//! keys, with every secret value replaced by the fixed redaction marker
-//! and a header warning. Environment/config-file overlays are deployment
-//! concerns and are deliberately not captured (import writes DB rows;
-//! env/file keep winning at runtime — see `melodee-persistence`
-//! `settings` module docs).
+//!   known registry setting's database-or-default value plus custom stored
+//!   keys, with every secret value replaced by the fixed redaction marker
+//!   and a header warning. Environment/config-file overlays are deployment
+//!   concerns and are deliberately not captured (import writes DB rows;
+//!   env/file keep winning at runtime — see `melodee-persistence`
+//!   `settings` module docs).
 //! - `POST /api/admin/v1/config/import?preview=…&allowUnknown=…` validates a
-//! document against the 190-key registry classification (kinds, numeric
-//! ranges, enums) and returns the preview diff (added / changed /
-//! unchanged / secrets by name only / unknown). `preview` defaults to
-//! `true` — an import never applies silently. The redaction marker is
-//! never accepted as a value (fail closed), and unknown keys are rejected
-//! unless `allowUnknown=true`. Applied imports commit their rows and their
-//! bounded audit entry (in the onboarding evidence) atomically.
+//!   document against the 190-key registry classification (kinds, numeric
+//!   ranges, enums) and returns the preview diff (added / changed /
+//!   unchanged / secrets by name only / unknown). `preview` defaults to
+//!   `true` — an import never applies silently. The redaction marker is
+//!   never accepted as a value (fail closed), and unknown keys are rejected
+//!   unless `allowUnknown=true`. Applied imports commit their rows and their
+//!   bounded audit entry (in the onboarding evidence) atomically.
 
 use axum::{
     Json, Router,
@@ -109,7 +109,7 @@ pub fn router() -> Router<AdminAccessState> {
     Router::new()
         .route("/api/admin/v1/config/export", get(export_settings))
         .route("/api/admin/v1/config/import", post(import_settings))
- // Import documents are bounded (settings ≤ 64 KiB each, ≤ 1000 keys).
+        // Import documents are bounded (settings ≤ 64 KiB each, ≤ 1000 keys).
         .route_layer(axum::extract::DefaultBodyLimit::max(
             MAX_IMPORT_DOCUMENT_BYTES,
         ))

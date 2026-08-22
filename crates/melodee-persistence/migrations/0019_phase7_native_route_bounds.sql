@@ -3,7 +3,7 @@
 --
 -- Additive only. Binary downgrade leaves these rebuildable projections and
 -- their maintenance triggers in place. Full schema rollback follows the
--- verified pre-Phase-7 restore-and-forward-migrate procedure. Neither
+-- verified pre-migration restore-and-forward-migrate procedure. Neither
 -- projection owns catalog identity or media and neither deletes media.
 
 CREATE TABLE native_track_file_names (

@@ -693,7 +693,7 @@ fn cleanup_inbound(
         Err(error) => return Err(io_error(inbound, error)),
     };
     // A delayed cleanup must never follow a path that was replaced with a
-    // symlink (or any other non-directory). Treat the replacement as a new
+    // symlink (or any other non-directory).  Treat the replacement as a new
     // occurrence and retain it for the next reconciliation pass.
     if !metadata.is_dir() {
         return Ok(CleanupResult::Replaced);
@@ -786,7 +786,8 @@ fn copy_regular_file(
     if let Some(hook) = test_hook
         && let Some(fault) = hook.take_write_fault()
     {
-        // The error arrives at the same boundary as a real write failure:  // an `io::Error` attributed to the destination path with no special
+        // The error arrives at the same boundary as a real write failure:
+        // an `io::Error` attributed to the destination path with no special
         // variant, so production error handling is unchanged.
         let error = match fault {
             AcquisitionWriteFault::NoSpaceLeft => io::Error::from_raw_os_error(28),

@@ -8,7 +8,8 @@
 //! [`ProviderCacheStore`] is the provenance/cache home for external metadata
 //! providers (PRD-EXT-003/004). Payloads are cache/evidence only — they
 //! never become catalog identity (PRD-ARTIST-012, PRD-EXT-002). The provider
-//! vocabulary is the enumerated legacy inventory (evidence: //! `design/evidence/phase-9/lastfm-provider-evidence.md` §9). `request_key`
+//! vocabulary is the enumerated legacy inventory (evidence:
+//! `design/evidence/phase-9/lastfm-provider-evidence.md` §9). `request_key`
 //! is a caller-hashed lookup key: raw requests can embed artist names or
 //! tokens and are never persisted.
 //!

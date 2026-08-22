@@ -1,16 +1,17 @@
 //! Jellyfin per-user item state: FavoriteItems and PlayedItems
 //! (PRD-API-JF-001/004).
 //!
-//! Reproduced from the frozen baseline (`UsersController.cs`): //!
+//! Reproduced from the frozen baseline (`UsersController.cs`):
+//!
 //! - The `{userId}` path segment must equal the bearer's public id, else
-//! 403 "Cannot modify favorites/played status for other users."; an
-//! unparseable userId takes the same 403 path (captured).
+//!   403 "Cannot modify favorites/played status for other users."; an
+//!   unparseable userId takes the same 403 path (captured).
 //! - Entity probing order is song → album → artist for favorites, song →
-//! album for played (artists are not playable → 404 "Item not found.").
+//!   album for played (artists are not playable → 404 "Item not found.").
 //! - Responses are the partial `JellyfinUserItemData` (favorites echo
-//! `IsFavorite`/`Key`; played echo `Played`/`PlayCount`/`LastPlayedDate`).
+//!   `IsFavorite`/`Key`; played echo `Played`/`PlayCount`/`LastPlayedDate`).
 //! - Played state maps to the native per-entity play counters; unplayed
-//! resets the counter and clears the last-played timestamp (captured).
+//!   resets the counter and clears the last-played timestamp (captured).
 
 use axum::{
     Router,

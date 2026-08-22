@@ -506,7 +506,7 @@ pub async fn scrobble(
                 now,
             )
             .await?;
-            //: fire-and-record Last.fm dispatch. Never blocks or fails
+            // fire-and-record Last.fm dispatch. Never blocks or fails
             // the write path; a no-op unless scrobbling.lastFm is enabled and
             // the user linked (legacy ADR-0004).
             crate::lastfm::LastfmDispatch::new(
@@ -564,7 +564,7 @@ pub async fn lastfm_auth_url(
         return Err(NativeApiError::CapturedBadRequest("Invalid callback url"));
     }
     let callback = params.callback.as_deref().unwrap_or_default();
-    //: the captured unconfigured shape remains the disabled-state
+    // the captured unconfigured shape remains the disabled-state
     // contract — blank apiKey (the default) reproduces the frozen golden.
     let api_key = match crate::lastfm::resolve_lastfm_settings(&state.pool).await {
         Ok(settings) => settings.api_key,
@@ -589,7 +589,7 @@ pub async fn lastfm_session(
     if request.token.trim().is_empty() || request.token.chars().count() > 4_096 {
         return Err(NativeApiError::BadRequest);
     }
-    //: every exchange failure — unconfigured, transport, API error,
+    // every exchange failure — unconfigured, transport, API error,
     // malformed response — keeps the captured 400 shape (evidence doc §3).
     let settings = crate::lastfm::resolve_lastfm_settings(&state.pool)
         .await
@@ -2086,7 +2086,7 @@ pub async fn search_suggest(
         }));
     };
     // The legacy SearchService applies a normalized CONTAINS filter to each
-    // category before the suggestion projection. Keep the same wildcard
+    // category before the suggestion projection.  Keep the same wildcard
     // semantics here rather than turning autocomplete into a prefix-only
     // search; e.g. `Ne` must find both `Dune` and `Sandstone`.
     let query = format!("%{}%", escaped_like_value(query)?);

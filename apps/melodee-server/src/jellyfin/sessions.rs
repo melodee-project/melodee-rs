@@ -1,15 +1,16 @@
 //! Jellyfin session endpoints (PRD-API-JF-001/003).
 //!
-//! Reproduced from the frozen baseline (`SessionsController.cs`): //!
+//! Reproduced from the frozen baseline (`SessionsController.cs`):
+//!
 //! - `GET /Sessions` returns the frozen `[]`: the legacy capture posted
-//! Playing/Progress and still listed zero sessions (HTTP playback reports
-//! never registered a listable session at this baseline), so the adapter
-//! must not synthesize entries from now-playing state.
+//!   Playing/Progress and still listed zero sessions (HTTP playback reports
+//!   never registered a listable session at this baseline), so the adapter
+//!   must not synthesize entries from now-playing state.
 //! - Playing/Progress/Stopped/Ping and Capabilities/Capabilities/Full → 204.
 //! - Playing/Progress feed now-playing; Stopped records a scrobble unless
-//! `Failed=true`; unknown/malformed ItemId is silently 204.
+//!   `Failed=true`; unknown/malformed ItemId is silently 204.
 //! - Logout lives in `auth.rs` (token lifecycle) and revokes the current
-//! token idempotently.
+//!   token idempotently.
 
 use axum::{
     Router,
@@ -106,7 +107,7 @@ async fn playback_start(
     .await
     {
         Ok(_) => {
-            //: fire-and-record Last.fm dispatch; never blocks or fails
+            // fire-and-record Last.fm dispatch; never blocks or fails
             // the write path (legacy ADR-0004 silent no-op when unlinked).
             crate::lastfm::LastfmDispatch::new(
                 state.pool.clone(),
@@ -200,7 +201,7 @@ async fn playback_stopped(
         None,
     )
     .await;
-    //: dispatch to Last.fm only for a freshly applied play — an
+    // dispatch to Last.fm only for a freshly applied play — an
     // adopted idempotent replay must not double-scrobble.
     if matches!(
         scrobble,

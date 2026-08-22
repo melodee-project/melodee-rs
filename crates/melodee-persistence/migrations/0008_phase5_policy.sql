@@ -11,13 +11,13 @@
 -- assertions are durable evidence and are never discarded in place. A binary
 -- downgrade retains the schema. There is no destructive down
 -- migration; a full schema rollback drains workers and restores a verified
--- pre-0008 backup into a new database, then explicitly accounts for evidence
--- created after that backup. Catalog, publication, identity, and
+-- pre-0008 backup into a new database, then explicitly accounts for
+-- evidence created after that backup. Catalog, publication, identity, and
 -- media rows are never rewritten by a rollback script.
 
--- Treating Cataloged as an unleased completion boundary claims that same
--- state for policy evaluation (SPEC 11.2 has no PolicyEvaluating state), so
--- Cataloged may now be either wholly leased or wholly unleased.
+-- treated Cataloged as an unleased completion boundary. claims
+-- that same state for policy evaluation (SPEC 11.2 has no PolicyEvaluating
+-- state), so Cataloged may now be either wholly leased or wholly unleased.
 ALTER TABLE release_work_items
     DROP CONSTRAINT release_work_items_catalog_lease_check;
 ALTER TABLE release_work_items
@@ -258,7 +258,7 @@ CREATE TABLE track_novelty (
         OR (category = 'uncertain' AND evidence_kind = 'insufficient_evidence')
     ),
     CONSTRAINT track_novelty_detail_check CHECK (btrim(detail) <> ''),
- -- A Track appears at most once in a release's novelty evaluation
+    -- A Track appears at most once in a release's novelty evaluation
     UNIQUE (release_id, track_id)
 );
 

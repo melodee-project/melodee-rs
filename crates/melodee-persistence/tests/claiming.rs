@@ -1,5 +1,5 @@
-//! Claiming/lease concurrency tests against real PostgreSQL (work-package
-//! part XXII): exclusive claim, parallel queue, lease blocking, expiry,
+//! Claiming/lease concurrency tests against real PostgreSQL: exclusive claim,
+//! parallel queue, lease blocking, expiry,
 //! retry delay, duplicate-claim races.
 
 // Integration tests: expect/panic on setup or assertion failure IS the

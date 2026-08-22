@@ -3,6 +3,7 @@
 //! exhibits — redirects, error statuses, conditional-request answers,
 //! partial (206) responses, malformed feeds, and mid-body enclosure
 //! interruption — and pin the worker's fail-closed handling of each.
+//!
 //! The fixture is a raw TCP HTTP/1.1 server (no framework) bound to an
 //! ephemeral loopback port per test. Responses are scripted per path and
 //! per request ordinal, so a retry sees a different answer than the first

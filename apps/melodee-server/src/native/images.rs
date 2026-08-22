@@ -102,7 +102,7 @@ impl ImageProcessor {
         let max = max_concurrency.max(1);
         Self {
             permits: Arc::new(Semaphore::new(max)),
-            //: image processing reports utilization and non-blocking
+            // image processing reports utilization and non-blocking
             // rejections through the process resource-bounds registry when
             // startup installed one.
             gauge: crate::resource_bounds::ResourceBounds::global()
@@ -390,7 +390,7 @@ async fn load_image(
             }
         }
         ImageKind::User => {
-            //: `native_user_avatars` is the avatar authority; the
+            // `native_user_avatars` is the avatar authority; the
             // migration-0010 columns remain the legacy-import fallback.
             let image = sqlx::query_as::<_, (Option<String>, Option<Vec<u8>>)>(
                 "SELECT COALESCE(a.content_type, u.image_mime_type), COALESCE(a.image, u.image_bytes)

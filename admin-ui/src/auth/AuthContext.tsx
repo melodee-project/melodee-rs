@@ -6,10 +6,10 @@ import {
   useMemo,
   useState,
   type ReactNode,
-} from "react";
+} from 'react';
 
-import { AUTH_EXPIRED_EVENT, ApiError, apiFetch } from "../api/client";
-import { getSystemInfo } from "../api/admin";
+import { AUTH_EXPIRED_EVENT, ApiError, apiFetch } from '../api/client';
+import { getSystemInfo } from '../api/admin';
 
 /**
  * Cookie-session auth state (ADR-0139).
@@ -17,17 +17,17 @@ import { getSystemInfo } from "../api/admin";
  * The SPA signs in through the frozen native-v1 cookie endpoints and holds no
  * token in web storage. Session truth comes from the server: the boot probe
  * calls an admin-gated endpoint and reads the gate's answer:
- * 200 → authenticated administrator
- * 403 → authenticated but not an administrator (access-denied state)
- * 401 → anonymous / expired session
+ *   200 → authenticated administrator
+ *   403 → authenticated but not an administrator (access-denied state)
+ *   401 → anonymous / expired session
  * The 401 path also fires from any later API call via `melodee:auth-expired`.
  */
 
 export type SessionState =
-  | { kind: "loading" }
-  | { kind: "anonymous" }
-  | { kind: "forbidden" }
-  | { kind: "admin"; username: string | null };
+  | { kind: 'loading' }
+  | { kind: 'anonymous' }
+  | { kind: 'forbidden' }
+  | { kind: 'admin'; username: string | null };
 
 export interface AuthContextValue {
   session: SessionState;
@@ -38,14 +38,14 @@ export interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 // Exact frozen native-v1 cookie auth contract (apps/melodee-server/src/native/auth.rs).
-const SIGN_IN_PATH = "/api/v1/auth/cookie/sign-in";
-const SIGN_OUT_PATH = "/api/v1/auth/cookie/sign-out";
+const SIGN_IN_PATH = '/api/v1/auth/cookie/sign-in';
+const SIGN_OUT_PATH = '/api/v1/auth/cookie/sign-out';
 
 interface MessageBody {
   message: string;
 }
 
-const USERNAME_STORAGE_KEY = "melodee.username";
+const USERNAME_STORAGE_KEY = 'melodee.username';
 
 function readStoredUsername(): string | null {
   try {
@@ -56,7 +56,7 @@ function readStoredUsername(): string | null {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<SessionState>({ kind: "loading" });
+  const [session, setSession] = useState<SessionState>({ kind: 'loading' });
 
   // Boot probe: subscription-style promise callbacks so state changes happen
   // asynchronously, never synchronously inside the effect body.
@@ -65,7 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     getSystemInfo({ suppressAuthEvent: true })
       .then(() => {
         if (!cancelled) {
-          setSession({ kind: "admin", username: readStoredUsername() });
+          setSession({ kind: 'admin', username: readStoredUsername() });
         }
       })
       .catch((error: unknown) => {
@@ -73,9 +73,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
         if (error instanceof ApiError && error.status === 403) {
-          setSession({ kind: "forbidden" });
+          setSession({ kind: 'forbidden' });
         } else {
-          setSession({ kind: "anonymous" });
+          setSession({ kind: 'anonymous' });
         }
       });
     return () => {
@@ -84,7 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const onExpired = () => setSession({ kind: "anonymous" });
+    const onExpired = () => setSession({ kind: 'anonymous' });
     window.addEventListener(AUTH_EXPIRED_EVENT, onExpired);
     return () => window.removeEventListener(AUTH_EXPIRED_EVENT, onExpired);
   }, []);
@@ -92,11 +92,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = useCallback(async (identifier: string, password: string) => {
     // LoginRequest { userName?, email?, password } — camelCase, exactly as
     // the frozen native-v1 contract declares.
-    const body = identifier.includes("@")
+    const body = identifier.includes('@')
       ? { email: identifier, password }
       : { userName: identifier, password };
     await apiFetch<MessageBody>(SIGN_IN_PATH, {
-      method: "POST",
+      method: 'POST',
       body,
       suppressAuthEvent: true,
     });
@@ -109,29 +109,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // access-denied state instead of the shell.
     try {
       await getSystemInfo({ suppressAuthEvent: true });
-      setSession({ kind: "admin", username: identifier });
+      setSession({ kind: 'admin', username: identifier });
     } catch (error) {
       if (error instanceof ApiError && error.status === 403) {
-        setSession({ kind: "forbidden" });
+        setSession({ kind: 'forbidden' });
       } else {
-        setSession({ kind: "anonymous" });
+        setSession({ kind: 'anonymous' });
       }
     }
   }, []);
 
   const signOut = useCallback(async () => {
     try {
-      await apiFetch<MessageBody>(SIGN_OUT_PATH, {
-        method: "POST",
-        suppressAuthEvent: true,
-      });
+      await apiFetch<MessageBody>(SIGN_OUT_PATH, { method: 'POST', suppressAuthEvent: true });
     } finally {
       try {
         window.sessionStorage.removeItem(USERNAME_STORAGE_KEY);
       } catch {
         // Nothing else to clean up; the server already expired the cookie.
       }
-      setSession({ kind: "anonymous" });
+      setSession({ kind: 'anonymous' });
     }
   }, []);
 
@@ -146,7 +143,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export function useAuth(): AuthContextValue {
   const context = useContext(AuthContext);
   if (!context) {
-    throw new Error("useAuth must be used inside <AuthProvider>");
+    throw new Error('useAuth must be used inside <AuthProvider>');
   }
   return context;
 }
