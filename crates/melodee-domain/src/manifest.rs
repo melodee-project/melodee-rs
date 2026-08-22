@@ -9,20 +9,20 @@ use crate::ReleaseId;
 
 /// Normalization-stage manifest contract version.
 ///
-/// Version 1 is the Phase 3.1 inspection-only contract. Version 2 adds the
-/// semantic normalization observations produced by Phase 3.2. The optional
+/// Version 1 is the inspection-only contract. Version 2 adds the
+/// semantic normalization observations produced by. The optional
 /// field remains deserializable on v1 payloads so stored inspection manifests
 /// can be upgraded in place by the normalization worker. Normalization keeps
 /// writing v2; canonical publication upgrades the durable copy to v3.
 pub const NORMALIZATION_MANIFEST_VERSION: u16 = 2;
 
-/// Backward-compatible name used by the Phase 3.2 normalizer.
+/// Backward-compatible name used by the normalizer.
 pub const CURRENT_MANIFEST_VERSION: u16 = NORMALIZATION_MANIFEST_VERSION;
 
-/// Inspection-only manifest version written by Phase 3.1.
+/// Inspection-only manifest version written by.
 pub const INSPECTION_MANIFEST_VERSION: u16 = 1;
 
-/// Canonical-publication manifest version written by Phase 3.3.
+/// Canonical-publication manifest version written by.
 pub const PUBLICATION_MANIFEST_VERSION: u16 = 3;
 
 /// Canonical layout version fixed by ADR-0116.
@@ -162,10 +162,10 @@ pub struct ManifestInspectionContext {
     pub source_stable: bool,
 }
 
-/// Per-file normalized output produced by the Phase 3.2 normalizer.
+/// Per-file normalized output produced by the normalizer.
 ///
 /// All paths are relative to the work-area staging directory; they are NOT
-/// canonical storage paths (Phase 3.3 publishes canonical paths).
+/// canonical storage paths ( publishes canonical paths).
 /// Identity of one CUE-defined segment of a governed source audio file
 /// (ADR-0146). The segment is generated into the attempt-isolated work area;
 /// the staged original is never modified.
@@ -276,7 +276,7 @@ pub struct NormalizationExecutionProvenance {
     pub work_area: Option<String>,
 }
 
-/// Normalization and fingerprint observations for a Release (Phase 3.2).
+/// Normalization and fingerprint observations for a Release.
 ///
 /// `provenance` is volatile execution metadata excluded from the semantic
 /// hash; the rest are stable media observations.
@@ -300,7 +300,7 @@ pub enum ValidationOutcome {
 }
 
 /// Versioned structural validation evidence. This is deliberately narrower
-/// than the Phase 5 classification and policy engine.
+/// than the classification and policy engine.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct StructuralValidation {
     pub profile_name: String,
@@ -309,7 +309,7 @@ pub struct StructuralValidation {
     pub findings: Vec<Finding>,
 }
 
-/// Durable reference to the narrow Phase 3 publication authorization.
+/// Durable reference to the narrow publication authorization.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PublicationAuthorization {
     pub id: Uuid,
@@ -337,7 +337,7 @@ impl PublicationAuthorization {
     }
 }
 
-/// Disposition of the inbound source after Phase 3 publication.
+/// Disposition of the inbound source after publication.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum SourceDisposition {
@@ -680,11 +680,11 @@ pub struct ReleaseManifest {
     pub sidecars: Vec<ObservedFile>,
     pub findings: Vec<Finding>,
     pub inspection: ManifestInspectionContext,
-    /// Phase 3.2 normalization observations. `None` until normalization
+    /// normalization observations. `None` until normalization
     /// completes; populated atomically with the Normalizing→Validating transition.
     #[serde(default)]
     pub normalization: Option<NormalizationObservations>,
-    /// Phase 3.3 canonical publication facts. Absent from readable v1/v2
+    /// canonical publication facts. Absent from readable v1/v2
     /// payloads and populated only when the durable publication plan is staged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub publication: Option<ManifestPublication>,

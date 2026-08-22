@@ -1,4 +1,4 @@
-//! Cross-slice PostgreSQL acceptance tests for the Phase 4 v3 catalog handoff.
+//! Cross-slice PostgreSQL acceptance tests for the v3 catalog handoff.
 
 #![allow(clippy::expect_used, clippy::panic)]
 

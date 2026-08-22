@@ -46,8 +46,8 @@ For each discovered candidate the queue uses these states:
 - `Normalizing` — a leased worker is creating and verifying attempt-isolated temporary output.
 - `Validating` — normalization observations were published atomically; canonical publication has
   not occurred yet.
-- `NeedsReview` — local presentation/ordering facts require an operator, or a Phase 5 `Review` or
-  `Delete` policy decision is pending. Uncertainty never authorizes media deletion.
+- `NeedsReview` — local presentation/ordering facts require an operator, or a pending `Review`
+  or `Delete` policy decision is present. Uncertainty never authorizes media deletion.
 - `Staged` — an immutable Release ID, structural authorization, and publication plan are durable.
 - `Publishing` — a fenced worker is copying, verifying, finalizing, or adopting the canonical
   bundle.

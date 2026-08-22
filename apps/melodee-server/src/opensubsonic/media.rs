@@ -8,34 +8,33 @@
 //! adapter owns it. The OpenSubsonic auth middleware still treats `/images/`
 //! paths as bypass-eligible, matching the captured auth rule.
 //!
-//! Captured behaviors reproduced here:
-//! - **stream** (D2 single-pass range fix — the legacy double-range bug is NOT
-//!   preserved): full GET → 200 `audio/wav` (content-type from the asset),
-//!   `Accept-Ranges: bytes`, `Content-Length`, `Content-Duration`, no-store
-//!   cache headers, `Last-Modified`, `ETag "{size}-{ticks}"`. HEAD → same
-//!   headers no body. Single-pass ranges return 206 with correct bytes and
-//!   correct `Content-Range: bytes start-end/{full_size}` total. Invalid/
-//!   unsatisfiable ranges and `timeOffset` → 404 + error 70 JSON (the legacy
-//!   416 path is unreachable). Unknown song id → 302 credential-free class.
-//!   `maxBitRate`/`format` honor configured transcoding (ADR-0147, which
-//!   supersedes the ADR-0130 silent-ignore clause): absent/`raw` without a
-//!   bitrate trigger keeps byte-identical direct play; a supported format or
-//!   bitrate trigger streams FFmpeg output (200, format Content-Type, no
-//!   Content-Length/ETag/Content-Range; Range ignored); unsupported formats
-//!   and template/capacity failures answer the generic error-0 envelope at
-//!   HTTP 200.
+//! Captured behaviors reproduced here: //! - **stream** (D2 single-pass range fix — the legacy double-range bug is NOT
+//! preserved): full GET → 200 `audio/wav` (content-type from the asset),
+//! `Accept-Ranges: bytes`, `Content-Length`, `Content-Duration`, no-store
+//! cache headers, `Last-Modified`, `ETag "{size}-{ticks}"`. HEAD → same
+//! headers no body. Single-pass ranges return 206 with correct bytes and
+//! correct `Content-Range: bytes start-end/{full_size}` total. Invalid/
+//! unsatisfiable ranges and `timeOffset` → 404 + error 70 JSON (the legacy
+//! 416 path is unreachable). Unknown song id → 302 credential-free class.
+//! `maxBitRate`/`format` honor configured transcoding (ADR-0147, which
+//! supersedes the ADR-0130 silent-ignore clause): absent/`raw` without a
+//! bitrate trigger keeps byte-identical direct play; a supported format or
+//! bitrate trigger streams FFmpeg output (200, format Content-Type, no
+//! Content-Length/ETag/Content-Range; Range ignored); unsupported formats
+//! and template/capacity failures answer the generic error-0 envelope at
+//! HTTP 200.
 //! - **download:** gated by `state.downloads_enabled`; 200 with
-//!   `Content-Disposition: attachment; filename=...`; unknown → 302
-//!   credential-free.
+//! `Content-Disposition: attachment; filename=...`; unknown → 302
+//! credential-free.
 //! - **getCoverArt:** serves stored artwork bytes with sniffed content-type,
-//!   `ETag`, `Cache-Control: public, max-age=86400`; no artwork serves the
-//!   captured default placeholder (sized → processed JPEG, unsized → raw
-//!   fixture bytes) WITHOUT Cache-Control; unknown id → 200 empty body.
+//! `ETag`, `Cache-Control: public, max-age=86400`; no artwork serves the
+//! captured default placeholder (sized → processed JPEG, unsized → raw
+//! fixture bytes) WITHOUT Cache-Control; unknown id → 200 empty body.
 //! - **getAvatar:** serves the user's stored avatar by `username`/`u`/`id`.
 //! - **getLyrics/getLyricsBySongId:** the legacy serializer ignored the
-//!   structured `.lrc` list at this baseline, so `getLyrics` echoes
-//!   `{lyrics:{value:"",artist,title}}` and `getLyricsBySongId` returns a bare
-//!   ok envelope; missing lyrics never error.
+//! structured `.lrc` list at this baseline, so `getLyrics` echoes
+//! `{lyrics:{value:"",artist,title}}` and `getLyricsBySongId` returns a bare
+//! ok envelope; missing lyrics never error.
 
 use axum::{
     Router,
@@ -139,8 +138,7 @@ fn content_duration_header(duration_ms: i64) -> String {
 
 /// ADR-0147 decision 3 stream/download plan.
 enum OsStreamPlan {
-    /// No transcode requested (or the bitrate cap already covers the source):
-    /// the captured direct-play path runs byte-identically.
+    /// No transcode requested (or the bitrate cap already covers the source):  /// the captured direct-play path runs byte-identically.
     Direct,
     /// Fail closed: unsupported format value, missing/unparseable template,
     /// or transcoding disabled. Rendered as the generic error-0 envelope at
@@ -315,7 +313,7 @@ fn add_stream_headers(
     if let Ok(value) = HeaderValue::from_str(&http_date(mtime)) {
         headers.insert(header::LAST_MODIFIED, value);
     }
-    // ETag "{size}-{ticks}": the .NET ticks value is volatile (dropped at
+    // ETag "{size}-{ticks}": the.NET ticks value is volatile (dropped at
     // compare). Use the file mtime's unix nanos as a stable stand-in.
     let ticks = mtime.unix_timestamp_nanos();
     if let Ok(value) = HeaderValue::from_str(&format!("{byte_size}-{ticks}")) {
@@ -830,7 +828,7 @@ async fn get_avatar_impl(
     // The avatar is selected by `username`/`u`/`id`. The `id` form is
     // `user_<uuid>` (native public_api_id); `username`/`u` is the login name.
     let username = params_ref.get("username").or_else(|| params_ref.get("u"));
-    // WP-03: the avatar authority is `native_user_avatars` (migration 0022,
+    //: the avatar authority is `native_user_avatars` (migration 0022,
     // ADR-0134 §2). The migration-0010 `native_users` image columns remain the
     // fallback for legacy-imported avatars; the response shape is unchanged.
     let row = if let Some(name) = username {

@@ -5,35 +5,44 @@ import type {
   ReviewDetail,
   ReviewManifestSummary,
   WorkItemEvent,
-} from '../../api/types';
-import type { AuditEvent } from '../../components/AuditTimeline';
-import type { StatusKind } from '../../components/StatusTag';
+} from "../../api/types";
+import type { AuditEvent } from "../../components/AuditTimeline";
+import type { StatusKind } from "../../components/StatusTag";
 
 /**
- * Shared helpers for the WP-12 Release Review screens (queue + workspace).
+ * Shared helpers for the Release Review screens (queue + workspace).
  * Pure mappings only; no I/O.
  */
 
 /** Review-able states, mirroring REVIEW_STATES in admin_review.rs. */
-export const REVIEW_STATES: IngestionState[] = ['needs_review', 'failed', 'quarantined'];
+export const REVIEW_STATES: IngestionState[] = [
+  "needs_review",
+  "failed",
+  "quarantined",
+];
 
 /** Decision actions in their canonical presentation order. */
-export const REVIEW_ACTIONS = ['accept', 'quarantine', 'ignore', 'delete'] as const;
+export const REVIEW_ACTIONS = [
+  "accept",
+  "quarantine",
+  "ignore",
+  "delete",
+] as const;
 export type ReviewAction = (typeof REVIEW_ACTIONS)[number];
 
 /** Maps a per-Track novelty category onto the §5 status semantics. */
 export function noveltyKind(category: string): StatusKind {
   switch (category) {
-    case 'exact_duplicate':
-    case 'known_audio_identity':
-      return 'success';
-    case 'new_track':
-      return 'info';
-    case 'alternate_recording':
-      return 'provisional';
-    case 'uncertain':
+    case "exact_duplicate":
+    case "known_audio_identity":
+      return "success";
+    case "new_track":
+      return "info";
+    case "alternate_recording":
+      return "provisional";
+    case "uncertain":
     default:
-      return 'warning';
+      return "warning";
   }
 }
 
@@ -48,18 +57,18 @@ export function noveltyLabelKey(category: string): string {
  */
 export function dispositionKind(disposition: string): StatusKind {
   switch (disposition) {
-    case 'accept':
-      return 'success';
-    case 'review':
-      return 'warning';
-    case 'quarantine':
-      return 'warning';
-    case 'ignore':
-      return 'neutral';
-    case 'delete':
-      return 'error';
+    case "accept":
+      return "success";
+    case "review":
+      return "warning";
+    case "quarantine":
+      return "warning";
+    case "ignore":
+      return "neutral";
+    case "delete":
+      return "error";
     default:
-      return 'neutral';
+      return "neutral";
   }
 }
 
@@ -71,16 +80,22 @@ export function dispositionKind(disposition: string): StatusKind {
  */
 export function recommendedAction(detail: ReviewDetail | null): ReviewAction {
   const disposition = detail?.decision?.disposition;
-  if (disposition === 'accept' || disposition === 'quarantine' || disposition === 'ignore') {
+  if (
+    disposition === "accept" ||
+    disposition === "quarantine" ||
+    disposition === "ignore"
+  ) {
     return disposition;
   }
-  return 'accept';
+  return "accept";
 }
 
 /** Maps a work-item event onto the shared audit-timeline shape. */
 export function toAuditEvent(event: WorkItemEvent): AuditEvent {
   const transition =
-    event.fromState && event.toState ? `${event.fromState} → ${event.toState}` : null;
+    event.fromState && event.toState
+      ? `${event.fromState} → ${event.toState}`
+      : null;
   return {
     id: String(event.id),
     occurredAt: event.createdAt,
@@ -106,7 +121,11 @@ export function noveltyByIndex(
   comparison: CatalogComparison | null,
 ): Map<number, NoveltyTrack> {
   const result = new Map<number, NoveltyTrack>();
-  if (!manifest || !comparison || comparison.tracks.length !== manifest.tracks.length) {
+  if (
+    !manifest ||
+    !comparison ||
+    comparison.tracks.length !== manifest.tracks.length
+  ) {
     return result;
   }
   manifest.tracks.forEach((track, position) => {
@@ -119,7 +138,9 @@ export function noveltyByIndex(
 }
 
 /** Total duration across manifest tracks, or null when nothing is known. */
-export function totalDurationMs(manifest: ReviewManifestSummary | null): number | null {
+export function totalDurationMs(
+  manifest: ReviewManifestSummary | null,
+): number | null {
   if (!manifest) {
     return null;
   }
@@ -139,10 +160,13 @@ export function totalDurationMs(manifest: ReviewManifestSummary | null): number 
  * artist and title from the manifest (display values, never identity),
  * falling back to the work-item path segment.
  */
-export function releaseDisplayTitle(detail: ReviewDetail, fallback: string): string {
+export function releaseDisplayTitle(
+  detail: ReviewDetail,
+  fallback: string,
+): string {
   const title = detail.manifest?.releaseTitle ?? fallback;
   const artists = detail.manifest?.releaseArtists ?? [];
-  return artists.length > 0 ? `${artists.join(', ')} — ${title}` : title;
+  return artists.length > 0 ? `${artists.join(", ")} — ${title}` : title;
 }
 
 /** Release display name for the queue row (manifest-free listing). */

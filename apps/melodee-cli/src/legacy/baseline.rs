@@ -1,4 +1,4 @@
-//! `legacy baseline` (ADR-0149 §D.1, R4.1): captures the immutable rehearsal
+//! `legacy baseline` (ADR-0149 §D.1): captures the immutable rehearsal
 //! baseline — source identity, schema fingerprint, snapshot marker,
 //! per-domain counts, media totals, and a redacted configuration fingerprint
 //! (setting keys only, never values) — and records it durably into the run's

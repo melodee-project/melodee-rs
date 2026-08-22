@@ -1,4 +1,4 @@
-//! Native avatar upload/change/delete routes (WP-03, PRD-USER-001,
+//! Native avatar upload/change/delete routes (, PRD-USER-001,
 //! ADR-0134 §2). These are new native-surface routes for the authenticated
 //! user's own avatar; no captured contract covers them.
 //!

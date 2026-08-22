@@ -38,7 +38,7 @@ const DEFAULT_MAX_TOOL_OUTPUT: usize = 1_048_576;
 const DEFAULT_MAX_ARTWORK_BYTES: usize = 16 * 1024 * 1024;
 const HASH_BUFFER_SIZE: usize = 128 * 1024;
 
-/// R2.5 media-tool invocation telemetry. One debug event at start and one at
+/// media-tool invocation telemetry. One debug event at start and one at
 /// drop (covering every early-return path) with the tool name, the file
 /// **name only** — absolute source roots stay out of operator logs — and the
 /// elapsed duration and outcome. `tokio::task::spawn_blocking` propagates the
@@ -92,7 +92,7 @@ pub use normalize::{
 
 /// Audio extensions the inspection classifier treats as media (the song
 /// files the legacy `directoryProcessingStart` hook context counts). Shared
-/// by the scripting-hook context builder (WP-11) so the hook sees exactly
+/// by the scripting-hook context builder so the hook sees exactly
 /// the inspection classifier's vocabulary.
 pub const AUDIO_EXTENSIONS: &[&str] = &[
     "aac", "ac3", "aif", "aiff", "ape", "flac", "m4a", "m4b", "m4p", "mp2", "mp3", "mp4", "mpc",
@@ -110,8 +110,7 @@ pub fn is_audio_file_name(name: &str) -> bool {
         .is_some_and(|extension| AUDIO_EXTENSIONS.contains(&extension.as_str()))
 }
 
-/// Lightweight tag probe for the scripting-hook context (WP-11, ADR-0135):
-/// duration from container properties and track number from the primary
+/// Lightweight tag probe for the scripting-hook context (, ADR-0135): /// duration from container properties and track number from the primary
 /// tag. Mirrors the legacy `DirectoryContextProvider`, which read real tags
 /// through song plugins and skipped files it could not process — hence
 /// `Option`, never an error.
@@ -552,7 +551,7 @@ fn inspect_file(
         *ffprobe_invocations = ffprobe_invocations.saturating_add(1);
         match run_ffprobe(path, options) {
             Ok(probe) => {
-                // R2.1: media is detected from probed content, not trusted
+                //: media is detected from probed content, not trusted
                 // from the filename extension alone. A probed container MIME
                 // overrides the extension-derived guess and the disagreement
                 // is recorded as an actionable finding.
@@ -736,8 +735,8 @@ fn mime_for_path(path: &str) -> Option<String> {
 
 /// MIME type for a probed ffprobe container (`format_name`), restricted to
 /// the vocabulary `mime_for_path` already establishes. Content-based
-/// detection (R2.1) must not invent new MIME values: containers without an
-/// established equivalent (ape, wv, ...) yield `None` and leave any
+/// detection must not invent new MIME values: containers without an
+/// established equivalent (ape, wv,...) yield `None` and leave any
 /// extension-derived value in place.
 fn mime_for_container(format_name: Option<&str>) -> Option<String> {
     for name in format_name?.split(',') {
@@ -1265,7 +1264,7 @@ mod tests {
         assert_ne!(hash_file(&left).unwrap().0, hash_file(&right).unwrap().0);
     }
 
-    /// R2.1 large-file rule: media hashing streams through a bounded buffer.
+    /// large-file rule: media hashing streams through a bounded buffer.
     /// A sparse 256 MiB file (2048x the 128 KiB chunk) hashes identically to a
     /// streamed reference, proving multi-chunk operation without materializing
     /// the file — the same code path bounds arbitrarily large media.

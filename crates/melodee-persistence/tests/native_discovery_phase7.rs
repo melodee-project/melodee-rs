@@ -1,4 +1,4 @@
-//! Phase 7 chart ingestion/linkage acceptance.
+//! chart ingestion/linkage acceptance.
 
 #![allow(clippy::expect_used)]
 

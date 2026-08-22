@@ -1,4 +1,4 @@
-//! Phase 6 search leases, fencing, rebuild lifecycle, and schema integrity.
+//! search leases, fencing, rebuild lifecycle, and schema integrity.
 
 #![allow(clippy::expect_used, clippy::panic)]
 

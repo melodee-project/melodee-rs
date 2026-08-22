@@ -1,7 +1,7 @@
-import type { ApiErrorBody } from './types';
+import type { ApiErrorBody } from "./types";
 
 /**
- * Same-origin fetch wrapper for the admin API (WP-09).
+ * Same-origin fetch wrapper for the admin API.
  *
  * The SPA authenticates through the server-issued cookie session (ADR-0139):
  * every request sends `credentials: 'include'` and no token is ever held in
@@ -11,16 +11,21 @@ import type { ApiErrorBody } from './types';
  * routing to the login screen.
  */
 
-export const AUTH_EXPIRED_EVENT = 'melodee:auth-expired';
+export const AUTH_EXPIRED_EVENT = "melodee:auth-expired";
 
 export class ApiError extends Error {
   readonly code: string;
   readonly correlationId: string | null;
   readonly status: number;
 
-  constructor(status: number, code: string, message: string, correlationId: string | null) {
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    correlationId: string | null,
+  ) {
     super(message);
-    this.name = 'ApiError';
+    this.name = "ApiError";
     this.status = status;
     this.code = code;
     this.correlationId = correlationId;
@@ -29,10 +34,10 @@ export class ApiError extends Error {
 
 function isErrorBody(value: unknown): value is ApiErrorBody {
   return (
-    typeof value === 'object' &&
+    typeof value === "object" &&
     value !== null &&
-    typeof (value as ApiErrorBody).code === 'string' &&
-    typeof (value as ApiErrorBody).message === 'string'
+    typeof (value as ApiErrorBody).code === "string" &&
+    typeof (value as ApiErrorBody).message === "string"
   );
 }
 
@@ -44,30 +49,43 @@ async function parseError(response: Response): Promise<ApiError> {
     // Non-JSON error bodies (proxies, infra) degrade to status-only errors.
   }
   if (isErrorBody(body)) {
-    return new ApiError(response.status, body.code, body.message, body.correlationId ?? null);
+    return new ApiError(
+      response.status,
+      body.code,
+      body.message,
+      body.correlationId ?? null,
+    );
   }
-  return new ApiError(response.status, 'http_error', `HTTP ${response.status}`, null);
+  return new ApiError(
+    response.status,
+    "http_error",
+    `HTTP ${response.status}`,
+    null,
+  );
 }
 
 export interface ApiRequestOptions {
-  method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  method?: "GET" | "POST" | "PUT" | "DELETE";
   body?: unknown;
   /** Raw non-JSON body (e.g. image bytes) with its wire Content-Type. */
   rawBody?: { data: BodyInit; contentType: string };
   /** When true, a 401 does not dispatch the auth-expired event (used by the
-   *  session probe itself, which handles 401 locally). */
+   * session probe itself, which handles 401 locally). */
   suppressAuthEvent?: boolean;
 }
 
-export async function apiFetch<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
+export async function apiFetch<T>(
+  path: string,
+  options: ApiRequestOptions = {},
+): Promise<T> {
   const response = await fetch(path, {
-    method: options.method ?? 'GET',
-    credentials: 'include',
+    method: options.method ?? "GET",
+    credentials: "include",
     headers:
       options.rawBody !== undefined
-        ? { 'content-type': options.rawBody.contentType }
+        ? { "content-type": options.rawBody.contentType }
         : options.body !== undefined
-          ? { 'content-type': 'application/json' }
+          ? { "content-type": "application/json" }
           : undefined,
     body:
       options.rawBody !== undefined
@@ -92,10 +110,10 @@ export async function apiFetch<T>(path: string, options: ApiRequestOptions = {})
 export function buildQuery(params: Record<string, unknown>): string {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined && value !== '' && value !== null) {
+    if (value !== undefined && value !== "" && value !== null) {
       search.set(key, String(value));
     }
   }
   const rendered = search.toString();
-  return rendered ? `?${rendered}` : '';
+  return rendered ? `?${rendered}` : "";
 }

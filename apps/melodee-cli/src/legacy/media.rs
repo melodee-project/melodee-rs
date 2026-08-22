@@ -1,4 +1,4 @@
-//! Canonical media adoption validation (ADR-0148 §D.3, R3.6). The migration
+//! Canonical media adoption validation (ADR-0148 §D.3). The migration
 //! never moves, re-encodes, re-hashes, fingerprints, or deletes media; when
 //! the operator mounts the canonical root it validates — read-only — that
 //! each adopted path is contained, symlink-safe, present, and the expected

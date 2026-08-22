@@ -1,4 +1,4 @@
-//! Phase 10 WP-15 read-side store coverage: catalog browsing listings
+//! read-side store coverage: catalog browsing listings
 //! (Artists/Releases/Tracks with filters, whitelist sorts, pagination) and
 //! the bounded Artist/Release/Track detail reads.
 

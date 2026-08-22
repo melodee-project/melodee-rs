@@ -1,4 +1,4 @@
-//! Phase 10 WP-16 Policy Rule API (PRD-POLICY-008, PRD-API-ADMIN-002,
+//! Policy Rule API (PRD-POLICY-008, PRD-API-ADMIN-002,
 //! SPEC §15/§19.4/§20): versioned rule CRUD over the durable rule-set model
 //! and the audited "test against catalog" dry-run.
 //!
@@ -25,10 +25,9 @@
 //!
 //! Test runs are read-only dry-runs over a bounded catalog snapshot. Runs
 //! against a persisted rule (by `ruleId`) are stored in `policy_test_runs`
-//! for audit. Runs carrying an ad-hoc `rule` definition cannot be persisted:
-//! `policy_test_runs` has a foreign key to `policy_rule_sets`, and persisting
+//! for audit. Runs carrying an ad-hoc `rule` definition cannot be persisted: //! `policy_test_runs` has a foreign key to `policy_rule_sets`, and persisting
 //! the candidate set would silently change the active policy. Those runs
-//! return `persisted: false` (schema/ADR gap, recorded in the WP-16 report).
+//! return `persisted: false` (schema/ADR gap, recorded in the report).
 
 use axum::{
     Json, Router,

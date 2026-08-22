@@ -13,7 +13,7 @@ fn ast(input: &str) -> MqlAst {
 
 #[test]
 fn precedence_and_binds_tighter_than_or() {
-    // a AND b OR c  ==  (a AND b) OR c
+    // a AND b OR c == (a AND b) OR c
     let a = ast("a AND b OR c");
     match a {
         MqlAst::Or(l, _) => match *l {

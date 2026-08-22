@@ -1,15 +1,14 @@
 //! Jellyfin image endpoints (PRD-API-JF-004).
 //!
-//! Reproduced from the frozen baseline (`ImagesController.cs`):
-//!
+//! Reproduced from the frozen baseline (`ImagesController.cs`): //!
 //! - `/Items/{id}/Images/{type}[/{index}]` probes artist → album → song
-//!   (songs serve their release artwork); `/Artists/{id}/Images/{type}`.
+//! (songs serve their release artwork); `/Artists/{id}/Images/{type}`.
 //! - Size buckets from maxWidth/maxHeight: none → Large, ≤100 → Small,
-//!   ≤300 → Medium, else Large.
+//! ≤300 → Medium, else Large.
 //! - Success: sniffed content type, `Cache-Control: public, max-age=86400`,
-//!   ETag + If-None-Match → 304, HEAD headers-only.
+//! ETag + If-None-Match → 304, HEAD headers-only.
 //! - No-artwork classes: "Artist image not found." / "Album image not
-//!   found." / "Song album image not found." / "Item not found."
+//! found." / "Song album image not found." / "Item not found."
 //!
 //! Artwork resolution observes the same immutable publication-plan and
 //! operator-override sources as the native endpoint (ADR-0143). The captured
@@ -70,8 +69,7 @@ struct ResolvedImage {
 }
 
 /// Resolves an operator override first, then immutable canonical artwork for
-/// the addressed catalog entity. This does not alter the captured 404 branch:
-/// an entity without either source remains no-artwork.
+/// the addressed catalog entity. This does not alter the captured 404 branch: /// an entity without either source remains no-artwork.
 async fn resolve_image(
     state: &JfState,
     kind: &str,

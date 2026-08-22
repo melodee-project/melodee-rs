@@ -1,4 +1,4 @@
-//! Adversarial Phase 5 acceptance tests for PRD-CLASS-001–003 and
+//! Adversarial acceptance tests for PRD-CLASS-001–003 and
 //! PRD-POLICY-001–008.
 
 #![allow(clippy::expect_used)]

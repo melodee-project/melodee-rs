@@ -1,4 +1,4 @@
--- Phase 7 native-v1 per-user genre preferences (ADR-0127;
+-- native-v1 per-user genre preferences (ADR-0127;
 -- PRD-API-M1-004, PRD-USER-001..002).
 --
 -- Genre names are compatibility values, not Artist or catalog identities.

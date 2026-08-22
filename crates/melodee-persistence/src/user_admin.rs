@@ -1,7 +1,7 @@
-//! Phase 9 WP-03 user administration persistence (ADR-0134 §2): the avatar
+//! user administration persistence (ADR-0134 §2): the avatar
 //! store (`native_user_avatars`, migration 0022) and admin user management
 //! beyond the frozen list route. Library-access-group administration lives in
-//! `group_admin` (shared with the WP-05 CLI surface).
+//! `group_admin` (shared with the CLI surface).
 //!
 //! Every mutation is bounded and validated before touching the database;
 //! secrets (password hashes, stream signing keys) never appear in returned
@@ -74,7 +74,7 @@ impl From<AuthStoreError> for UserAdminError {
     }
 }
 
-/// Sort keys accepted by the admin user listing (WP-10). Each variant maps to
+/// Sort keys accepted by the admin user listing. Each variant maps to
 /// a constant `ORDER BY` fragment — the whitelist is the injection boundary,
 /// so client input never reaches SQL.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -119,7 +119,7 @@ pub struct UserListPage {
     pub total: i64,
 }
 
-/// Stateless entry point for Phase 9 user/group/avatar administration.
+/// Stateless entry point for user/group/avatar administration.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct UserAdminStore;
 

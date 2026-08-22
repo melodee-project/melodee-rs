@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use time::Date;
 
-/// Failures of pure Phase 4 catalog and identity invariants.
+/// Failures of pure catalog and identity invariants.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum DomainInvariantError {
     #[error("{0} must be a UUIDv7 Melodee-owned identity")]

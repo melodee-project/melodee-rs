@@ -1,4 +1,4 @@
-//! Phase 10 WP-15 read-side operator queries over the Phase 4 catalog schema
+//! read-side operator queries over the catalog schema
 //! (ADR-0117/0118): server-side catalog browsing (Artists, Releases, Tracks)
 //! and the detail reads backing the admin Artist/Release/Track detail tabs.
 //!
@@ -361,7 +361,7 @@ pub struct ArtistCatalogDetail {
 pub struct ReleaseTrackRow {
     pub public_api_id: Uuid,
     /// Whether the Track's mandatory playable MediaAsset row resolves. The
-    /// Phase 4 schema makes the playable link mandatory, so this is
+    /// schema makes the playable link mandatory, so this is
     /// defensive: a `false` row must never be offered a preview/stream URL.
     pub has_playable: bool,
     pub ordinal: i32,
@@ -434,11 +434,11 @@ pub struct ReleaseProvenanceRow {
 }
 
 /// Full operator detail image of one catalog Release. Classification evidence
-/// (Phase 5 traits) is loaded separately through `PolicyStore` and attached
+/// ( traits) is loaded separately through `PolicyStore` and attached
 /// by the caller.
 #[derive(Debug, Clone)]
 pub struct ReleaseCatalogDetail {
-    /// Internal identity for further store lookups (e.g. Phase 5 policy
+    /// Internal identity for further store lookups (e.g. policy
     /// evidence); never exposed on the wire.
     pub internal_id: Uuid,
     pub public_api_id: Uuid,

@@ -1,4 +1,4 @@
-//! Bounded 200-Release Phase 4 catalog acceptance scenario.
+//! Bounded 200-Release catalog acceptance scenario.
 
 #![allow(clippy::expect_used, clippy::panic)]
 

@@ -7,11 +7,11 @@ import { expect, type Page } from "@playwright/test";
  * passes all render the same canonical screens against the same data.
  *
  * Determinism contract (PRD-UI-REF-002):
- *  - every timestamp is a fixed 2026-08-14 value;
- *  - artwork endpoints answer an undecodable empty 200 so the UI falls back
- *    to deterministic initials avatars (no network-dependent pixels);
- *  - `installFixedClock` freezes Date/timers so relative-time rendering and
- *    health polling never drift between baseline generation and comparison.
+ * - every timestamp is a fixed 2026-08-14 value;
+ * - artwork endpoints answer an undecodable empty 200 so the UI falls back
+ * to deterministic initials avatars (no network-dependent pixels);
+ * - `installFixedClock` freezes Date/timers so relative-time rendering and
+ * health polling never drift between baseline generation and comparison.
  */
 
 export const FIXED_NOW = new Date("2026-08-14T12:30:00Z");
@@ -34,8 +34,14 @@ const HEALTH = {
   storage: { status: "ok", detail: "storage paths writable" },
   ffmpeg: { status: "ok", detail: "ffmpeg 8.1" },
   podcastStorage: { status: "disabled", detail: "podcast worker disabled" },
-  disk: { status: "ok", detail: "tightest storage root has sufficient free space" },
-  workers: { status: "ok", detail: "no stale leases; worker queues are healthy" },
+  disk: {
+    status: "ok",
+    detail: "tightest storage root has sufficient free space",
+  },
+  workers: {
+    status: "ok",
+    detail: "no stale leases; worker queues are healthy",
+  },
   apiSurfaces: [
     { surface: "native", status: "serving" },
     { surface: "opensubsonic", status: "serving" },
@@ -980,7 +986,7 @@ export async function seedPreferences(
 }
 
 /**
- * The canonical screens (UI-SPEC §7/§8, PRD §39) plus the WP-19 surfaces
+ * The canonical screens (UI-SPEC §7/§8, PRD §39) plus the surfaces
  * (users, settings, onboarding) that complete the admin IA. `path` is
  * relative to the /admin/ baseURL; `ready` waits for the screen's stable,
  * data-driven content (never a spinner) before quality checks run.

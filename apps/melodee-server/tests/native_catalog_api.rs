@@ -1,4 +1,4 @@
-//! Phase 7 native-v1 router and catalog route integration evidence.
+//! native-v1 router and catalog route integration evidence.
 
 #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 

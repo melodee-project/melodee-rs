@@ -1,4 +1,4 @@
-//! Phase 5 Release classification: multi-valued traits, evidence, and the
+//! Release classification: multi-valued traits, evidence, and the
 //! evidence hierarchy (PRD-CLASS-001, PRD-CLASS-002, PRD-CLASS-003,
 //! SPEC section 15).
 //!

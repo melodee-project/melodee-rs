@@ -1,25 +1,23 @@
-//! R2.5 request-correlation propagation (SPEC §22, `IMPLMENTATION_OUTSTANDING`
+//! request-correlation propagation (SPEC §22, `IMPLMENTATION_OUTSTANDING`
 //! §7.6).
 //!
 //! The admin error-envelope contract has always documented `correlationId` as
 //! "sourced from the `x-request-id` header when present, otherwise generated";
 //! this module implements that sourcing once, at the HTTP boundary, and makes
 //! the id available to every error constructor on the request task without
-//! threading it through handler signatures:
-//!
+//! threading it through handler signatures: //!
 //! - [`middleware`] sources the id (header value when it parses as a UUID, a
-//!   fresh v7 id otherwise), records it on the request tracing span, stores it
-//!   as a request extension, and scopes a task-local around the rest of the
-//!   request. The header is untrusted input: a malformed value never rejects
-//!   the request (public-adapter error shapes are frozen) — it simply falls
-//!   back to a generated id.
-//! - [`envelope_id`] is the single constructor every error envelope uses:
-//!   inside the middleware scope it returns the request's id; off-task
-//!   (workers, tests, CLI) it generates a fresh id. Captured replay traffic
-//!   sends no `x-request-id`, so captured behavior is byte-identical.
+//! fresh v7 id otherwise), records it on the request tracing span, stores it
+//! as a request extension, and scopes a task-local around the rest of the
+//! request. The header is untrusted input: a malformed value never rejects
+//! the request (public-adapter error shapes are frozen) — it simply falls
+//! back to a generated id.
+//! - [`envelope_id`] is the single constructor every error envelope uses: //! inside the middleware scope it returns the request's id; off-task
+//! (workers, tests, CLI) it generates a fresh id. Captured replay traffic
+//! sends no `x-request-id`, so captured behavior is byte-identical.
 //! - [`current`] lets fire-and-record dispatchers (Last.fm, notifications)
-//!   capture the in-flight request id before `tokio::spawn`, where the
-//!   task-local no longer reaches.
+//! capture the in-flight request id before `tokio::spawn`, where the
+//! task-local no longer reaches.
 //!
 //! No response header is added: the Phase-8 differential fails on any extra
 //! response header, and the envelope proves the sourced id on its own.
@@ -28,8 +26,8 @@ use axum::{extract::Request, http::HeaderMap, middleware::Next, response::Respon
 use uuid::Uuid;
 
 tokio::task_local! {
-    /// The in-flight request's correlation id. Scoped by [`middleware`]; read
-    /// by [`envelope_id`] and [`current`].
+ /// The in-flight request's correlation id. Scoped by [`middleware`]; read
+ /// by [`envelope_id`] and [`current`].
     static CURRENT_CORRELATION_ID: Uuid;
 }
 

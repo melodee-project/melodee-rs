@@ -70,7 +70,7 @@ pub async fn is_pool_paused(pool: &PgPool, name: &str) -> Result<bool, sqlx::Err
         .map(|paused| paused.unwrap_or(false))
 }
 
-/// Per-pool work-queue metrics derived from durable state (Phase 10 WP-17).
+/// Per-pool work-queue metrics derived from durable state.
 ///
 /// Only pools whose worker owns a durable queue table report metrics:
 /// `policy` reads `release_work_items`/`release_work_item_events`, `podcast`
@@ -97,7 +97,7 @@ pub struct WorkerPoolMetrics {
 pub struct WorkerPoolStore;
 
 impl WorkerPoolStore {
-    /// R2.5 lease-health probe: leases that expired more than `grace` ago on
+    /// lease-health probe: leases that expired more than `grace` ago on
     /// claimed queue rows. An expired lease is normally reclaimed on the next
     /// claim pass, so a count that survives past the grace window is evidence
     /// of a dead or stalled worker, not ordinary poll lag. Bounded aggregate

@@ -1,4 +1,4 @@
-//! Phase 7 native-v1 playlist and smart-playlist route evidence.
+//! native-v1 playlist and smart-playlist route evidence.
 
 #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 

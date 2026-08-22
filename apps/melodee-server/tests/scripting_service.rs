@@ -1,4 +1,4 @@
-//! Phase 9 WP-11 scripting service integration tests (PRD-SCRIPT-004,
+//! scripting service integration tests (PRD-SCRIPT-004,
 //! ADR-0135 §3/§4): the audited evaluation pipeline over PostgreSQL — empty
 //! registry fast path, allow/deny verdicts with audit rows, fail-degraded
 //! error recording, the circuit breaker's transactional trip+disable, the

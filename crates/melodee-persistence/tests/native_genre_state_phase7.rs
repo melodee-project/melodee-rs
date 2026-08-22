@@ -1,4 +1,4 @@
-//! Phase 7 native-v1 genre preference persistence acceptance.
+//! native-v1 genre preference persistence acceptance.
 
 #![allow(clippy::expect_used)]
 

@@ -1,20 +1,24 @@
-import { ActionableNotification, Loading, Search } from '@carbon/react';
-import type { ReactNode, SyntheticEvent } from 'react';
-import { useCallback, useEffect, useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { ActionableNotification, Loading, Search } from "@carbon/react";
+import type { ReactNode, SyntheticEvent } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
-import type { CatalogListParams } from '../../api/admin';
-import type { ApiError } from '../../api/client';
-import type { Page } from '../../api/types';
-import { EntityTable, type EntityColumn, type EntityRow } from '../../components/EntityTable';
-import { PageHeader } from '../../components/PageHeader';
+import type { CatalogListParams } from "../../api/admin";
+import type { ApiError } from "../../api/client";
+import type { Page } from "../../api/types";
+import {
+  EntityTable,
+  type EntityColumn,
+  type EntityRow,
+} from "../../components/EntityTable";
+import { PageHeader } from "../../components/PageHeader";
 import {
   parseCatalogSort,
   parsePageParam,
   parsePageSizeParam,
   toApiError,
-} from './catalog';
+} from "./catalog";
 
 /**
  * Server-side catalog browsing table (PRD-UI-005/010, UI-SPEC §6/§7):
@@ -71,10 +75,10 @@ export function CatalogListScreen<T extends { id: string }>({
   const [searchParams, setSearchParams] = useSearchParams();
 
   const sortWhitelist = new Set(sortKeys);
-  const sort = parseCatalogSort(searchParams.get('sort'), sortWhitelist);
-  const page = parsePageParam(searchParams.get('page'));
-  const pageSize = parsePageSizeParam(searchParams.get('pageSize'));
-  const queryParam = searchParams.get('query') ?? '';
+  const sort = parseCatalogSort(searchParams.get("sort"), sortWhitelist);
+  const page = parsePageParam(searchParams.get("page"));
+  const pageSize = parsePageSizeParam(searchParams.get("pageSize"));
+  const queryParam = searchParams.get("query") ?? "";
 
   const [pageData, setPageData] = useState<Page<T> | null>(null);
   const [listError, setListError] = useState<ApiError | null>(null);
@@ -109,7 +113,7 @@ export function CatalogListScreen<T extends { id: string }>({
       return;
     }
     const timer = window.setTimeout(() => {
-      updateParams({ query: searchText || null, page: '1' });
+      updateParams({ query: searchText || null, page: "1" });
     }, SEARCH_DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
   }, [searchText, queryParam, updateParams]);
@@ -157,7 +161,7 @@ export function CatalogListScreen<T extends { id: string }>({
       size="md"
       value={searchText}
       onChange={(event) => setSearchText(event.target.value)}
-      onClear={() => setSearchText('')}
+      onClear={() => setSearchText("")}
     />
   );
 
@@ -169,15 +173,17 @@ export function CatalogListScreen<T extends { id: string }>({
           inline
           kind="error"
           lowContrast
-          title={t('catalog.list.loadErrorTitle')}
+          title={t("catalog.list.loadErrorTitle")}
           subtitle={listError.message}
           hideCloseButton
-          actionButtonLabel={t('actions.retry')}
-          onActionButtonClick={() => void fetchCurrentPage({ cancelled: false })}
+          actionButtonLabel={t("actions.retry")}
+          onActionButtonClick={() =>
+            void fetchCurrentPage({ cancelled: false })
+          }
         />
       ) : null}
       {loading && pageData === null ? (
-        <Loading description={t('common.loading')} withOverlay={false} />
+        <Loading description={t("common.loading")} withOverlay={false} />
       ) : (
         <EntityTable
           caption={t(captionKey)}
@@ -188,7 +194,9 @@ export function CatalogListScreen<T extends { id: string }>({
           emptyTitle={t(emptyTitleKey)}
           emptyDescription={t(emptyDescriptionKey)}
           onRowActivate={(id) => {
-            const item = (pageData?.items ?? []).find((candidate) => candidate.id === id);
+            const item = (pageData?.items ?? []).find(
+              (candidate) => candidate.id === id,
+            );
             if (item) {
               void navigate(detailPath(item));
             }

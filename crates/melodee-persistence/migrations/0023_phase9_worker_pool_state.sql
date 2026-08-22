@@ -1,4 +1,4 @@
--- Phase 9 worker-pool durable pause/resume control (ADR-0134 §8, PRD-WORK-005).
+-- worker-pool durable pause/resume control (ADR-0134 §8, PRD-WORK-005).
 --
 -- Additive. A binary downgrade leaves the table intact; schema rollback
 -- restores a verified pre-Phase-9 backup into a new database.
@@ -20,8 +20,8 @@ CREATE TABLE worker_pool_state (
     CONSTRAINT worker_pool_state_pool_check CHECK (
         pool ~ '^[a-z][a-z0-9_-]{0,63}$'
     ),
-    -- A paused pool always carries its operator audit, and the audit fields
-    -- are always set (or cleared) together.
+ -- A paused pool always carries its operator audit, and the audit fields
+ -- are always set (or cleared) together.
     CONSTRAINT worker_pool_state_pause_audit_check CHECK (
         (paused_by IS NULL) = (paused_at IS NULL)
         AND (paused_by IS NULL OR btrim(paused_by) <> '')

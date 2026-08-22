@@ -1,4 +1,4 @@
-//! Phase 9 WP-03 Admin API integration tests: group CRUD lifecycle,
+//! Admin API integration tests: group CRUD lifecycle,
 //! membership/binding effects on the ACL predicate, admin user management,
 //! and the administrator-only authorization gate (PRD-AUTH-003/004).
 

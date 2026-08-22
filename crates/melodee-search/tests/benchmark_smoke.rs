@@ -1,5 +1,4 @@
 //! Fast executable guard for the benchmark contract.
-//!
 //! The recorded 10-million-Track acceptance remains a manual release-scale
 //! run. This small corpus belongs in the default gate so a broken generator,
 //! incorrect result assertion, media read, or catastrophic latency regression

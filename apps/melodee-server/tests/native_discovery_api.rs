@@ -1,4 +1,4 @@
-//! Phase 7 native discovery/audio/chart/backend/theme route integration.
+//! native discovery/audio/chart/backend/theme route integration.
 
 #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 

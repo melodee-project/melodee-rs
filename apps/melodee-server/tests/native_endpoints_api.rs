@@ -1,4 +1,4 @@
-//! Phase 7 compiled PartySessionEndpointRegistry route integration.
+//! compiled PartySessionEndpointRegistry route integration.
 
 #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 

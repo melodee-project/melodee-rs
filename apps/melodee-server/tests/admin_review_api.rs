@@ -1,4 +1,4 @@
-//! Phase 10 WP-12 Release Review API integration tests: the administrator
+//! Release Review API integration tests: the administrator
 //! gate, the review queue with per-state counts, the full review detail
 //! (manifest summary, classification, catalog comparison, durable decision),
 //! audited accept/quarantine/delete decisions, reprocess, and the
@@ -183,7 +183,7 @@ async fn call(
 }
 
 /// Seeds one cataloged Release whose policy evaluation parked the work item
-/// in `needs_review` with a pending Review decision (the WP-12 target state).
+/// in `needs_review` with a pending Review decision (the target state).
 async fn seed_pending_review(db: &TestDb, ordinal: u32) -> phase5_common::CatalogedPolicyFixture {
     let fixture = phase5_common::seed_cataloged_release(
         db,

@@ -78,8 +78,8 @@ impl SearchEntityType {
             "artist" => Ok(Self::Artist),
             "release" => Ok(Self::Release),
             "track" => Ok(Self::Track),
-            // Phase 4 emits AudioIdentity rows together with affected Track
-            // rows. The Phase 6 schema has no AudioIdentity document; the
+            // emits AudioIdentity rows together with affected Track
+            // rows. The schema has no AudioIdentity document; the
             // consumer records this row as an intentional no-op.
             "audio_identity" => Ok(Self::AudioIdentity),
             other => Err(SearchStoreError::UnsupportedEntity(other.to_string())),

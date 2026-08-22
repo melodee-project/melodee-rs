@@ -1,4 +1,4 @@
-//! WP-09 CLI evidence: `melodee notifications templates list` and
+//! CLI evidence: `melodee notifications templates list` and
 //! `melodee notifications test-send` (PRD-NOTIF-003). Test-send records the
 //! honest audited outcome — `skipped` when email delivery is disabled —
 //! instead of failing the command (PRD-NOTIF-002).

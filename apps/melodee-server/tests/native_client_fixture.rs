@@ -1,5 +1,4 @@
-//! Disposable real-client fixture for the Phase 7 Android/Auto/MeloAmp gate.
-//!
+//! Disposable real-client fixture for the Android/Auto/MeloAmp gate.
 //! Run this ignored test, point clients at the printed URL and credentials,
 //! and stop the test after the smoke. It owns and drops a disposable database
 //! and canonical-media root; it never touches an existing library.

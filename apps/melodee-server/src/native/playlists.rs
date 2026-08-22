@@ -674,7 +674,7 @@ pub async fn evaluate_smart_playlist(
     .fetch_one(&state.pool)
     .await?;
     if lacks_catalog_wide_access {
-        // The Phase 6 projection deliberately contains no authorization
+        // The projection deliberately contains no authorization
         // fields. Refuse to expose its global hit count until evaluation can
         // be performed against a principal-scoped projection.
         return Err(NativeApiError::Forbidden);

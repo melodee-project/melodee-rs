@@ -1,15 +1,15 @@
-//! Phase 2 failure-isolation acceptance test.
+//! Failure-isolation acceptance test.
 //!
-//! Proves the official Phase 2 exit criterion: "One failed Release does not
-//! block others" (IMPLEMENTATION.md section 5, PRD section 56 Gate B).
+//! Proves the official exit criterion: "One failed Release does not block
+//! others" (IMPLEMENTATION.md section 5, PRD section 56 Gate B).
 //!
-//! Scenario: 200 durable Releases become independent work items. Several
-//! deliberately fail (permanent failure). The remaining valid Releases
+//! Scenario: 200 durable Releases become independent work items. Several are
+//! deliberately failed (permanent failure). The remaining valid Releases
 //! continue independently: they progress through the worker path while the
 //! failed items remain explicitly `failed` with durable evidence. No Release
 //! disappears, and the global queue does not stop because of the failures.
 //!
-//! This tests the durable work engine directly rather than manufacturing Phase 3
+//! This tests the durable work engine directly rather than manufacturing
 //! media failures, keeping the proof at the lowest useful layer.
 
 #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]

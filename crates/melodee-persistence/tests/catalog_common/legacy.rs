@@ -1,5 +1,4 @@
-//! Frozen Phase 0 compatibility IDs used by Phase 4 migration proofs.
-//!
+//! Frozen compatibility IDs used by migration proofs.
 //! These UUIDs are the exact deterministic public identifiers emitted by
 //! `scripts/legacy_oracle.py` for `compatibility/fixtures/catalog-v1.json`.
 //! Keeping the expected values literal ensures that migration tests detect a

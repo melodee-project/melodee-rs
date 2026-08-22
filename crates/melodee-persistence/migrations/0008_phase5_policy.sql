@@ -1,4 +1,4 @@
--- Phase 5: Release classification, Track novelty, versioned policy rules,
+-- Release classification, Track novelty, versioned policy rules,
 -- durable decisions, and dry-run/test results.
 --
 -- This migration is additive. No statement reads, moves, rewrites, or deletes
@@ -9,15 +9,15 @@
 -- forward repair may rebuild reproducible classification/novelty projections
 -- from immutable catalog imports, but decision audit and operator/catalog
 -- assertions are durable evidence and are never discarded in place. A binary
--- downgrade retains the Phase 5 schema. There is no destructive down
+-- downgrade retains the schema. There is no destructive down
 -- migration; a full schema rollback drains workers and restores a verified
--- pre-0008 backup into a new database, then explicitly accounts for Phase 5
--- evidence created after that backup. Catalog, publication, identity, and
+-- pre-0008 backup into a new database, then explicitly accounts for evidence
+-- created after that backup. Catalog, publication, identity, and
 -- media rows are never rewritten by a rollback script.
 
--- Phase 4 treated Cataloged as an unleased completion boundary. Phase 5 claims
--- that same state for policy evaluation (SPEC 11.2 has no PolicyEvaluating
--- state), so Cataloged may now be either wholly leased or wholly unleased.
+-- Treating Cataloged as an unleased completion boundary claims that same
+-- state for policy evaluation (SPEC 11.2 has no PolicyEvaluating state), so
+-- Cataloged may now be either wholly leased or wholly unleased.
 ALTER TABLE release_work_items
     DROP CONSTRAINT release_work_items_catalog_lease_check;
 ALTER TABLE release_work_items
@@ -258,7 +258,7 @@ CREATE TABLE track_novelty (
         OR (category = 'uncertain' AND evidence_kind = 'insufficient_evidence')
     ),
     CONSTRAINT track_novelty_detail_check CHECK (btrim(detail) <> ''),
-    -- A Track appears at most once in a release's novelty evaluation
+ -- A Track appears at most once in a release's novelty evaluation
     UNIQUE (release_id, track_id)
 );
 

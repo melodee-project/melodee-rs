@@ -1,4 +1,4 @@
-import { Download, TrashCan, Renew } from '@carbon/icons-react';
+import { Download, TrashCan, Renew } from "@carbon/icons-react";
 import {
   ActionableNotification,
   Button,
@@ -10,9 +10,9 @@ import {
   RadioButton,
   RadioButtonGroup,
   Tag,
-} from '@carbon/react';
-import { useCallback, useEffect, useState } from 'react';
-import { useTranslation } from 'react-i18next';
+} from "@carbon/react";
+import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import {
   deleteThemePack,
@@ -20,11 +20,11 @@ import {
   listThemePacks,
   rescanThemePacks,
   themePackExportUrl,
-} from '../../api/themes';
-import type { ThemePackInfo } from '../../api/types';
-import { toApiError } from '../catalog/catalog';
-import { useThemeState } from '../../theme/ThemeProvider';
-import { DEFAULT_THEME_PACK } from '../../theme/packs';
+} from "../../api/themes";
+import type { ThemePackInfo } from "../../api/types";
+import { toApiError } from "../catalog/catalog";
+import { useThemeState } from "../../theme/ThemeProvider";
+import { DEFAULT_THEME_PACK } from "../../theme/packs";
 
 /**
  * Theme settings section (PRD-THEME-004, UI-SPEC §1). Lists the theme packs
@@ -39,7 +39,7 @@ import { DEFAULT_THEME_PACK } from '../../theme/packs';
  * for non-built-in packs, matching the server-side rule.
  */
 
-type Notice = { kind: 'success' | 'error'; text: string };
+type Notice = { kind: "success" | "error"; text: string };
 
 export function ThemeSection() {
   const { t } = useTranslation();
@@ -78,29 +78,31 @@ export function ThemeSection() {
     rescanThemePacks()
       .then((result) => {
         setPacks(result);
-        setNotice({ kind: 'success', text: t('theme.rescanned') });
+        setNotice({ kind: "success", text: t("theme.rescanned") });
       })
-      .catch((cause: unknown) => setNotice({ kind: 'error', text: toApiError(cause).message }))
+      .catch((cause: unknown) =>
+        setNotice({ kind: "error", text: toApiError(cause).message }),
+      )
       .finally(() => setBusy(false));
   };
 
   const onImportFile = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     // Reset the input so selecting the same file twice re-triggers.
-    event.target.value = '';
+    event.target.value = "";
     if (!file) {
       return;
     }
     setBusy(true);
     importThemePack(file)
       .then(() => {
-        setNotice({ kind: 'success', text: t('theme.imported') });
+        setNotice({ kind: "success", text: t("theme.imported") });
         void load({ cancelled: false });
       })
       .catch((cause: unknown) => {
         setNotice({
-          kind: 'error',
-          text: `${t('theme.importFailed')} ${toApiError(cause).message}`,
+          kind: "error",
+          text: `${t("theme.importFailed")} ${toApiError(cause).message}`,
         });
       })
       .finally(() => setBusy(false));
@@ -116,14 +118,14 @@ export function ThemeSection() {
         if (themePack === deleteTarget.id) {
           setThemePack(DEFAULT_THEME_PACK);
         }
-        setNotice({ kind: 'success', text: t('theme.deleted') });
+        setNotice({ kind: "success", text: t("theme.deleted") });
         setDeleteTarget(null);
         void load({ cancelled: false });
       })
       .catch((cause: unknown) => {
         setNotice({
-          kind: 'error',
-          text: `${t('theme.deleteFailed')} ${toApiError(cause).message}`,
+          kind: "error",
+          text: `${t("theme.deleteFailed")} ${toApiError(cause).message}`,
         });
         setDeleteTarget(null);
       })
@@ -132,25 +134,25 @@ export function ThemeSection() {
 
   const packMeta = (pack: ThemePackInfo): string =>
     [
-      pack.author ? t('theme.byAuthor', { author: pack.author }) : null,
-      pack.version ? t('theme.versionLabel', { version: pack.version }) : null,
+      pack.author ? t("theme.byAuthor", { author: pack.author }) : null,
+      pack.version ? t("theme.versionLabel", { version: pack.version }) : null,
     ]
       .filter((part): part is string => part !== null)
-      .join(' · ');
+      .join(" · ");
 
   return (
     <section aria-labelledby="theme-section-title">
       <Heading id="theme-section-title" className="melodee-panel__title">
-        {t('theme.sectionTitle')}
+        {t("theme.sectionTitle")}
       </Heading>
-      <p className="melodee-panel__subtitle">{t('theme.sectionDescription')}</p>
+      <p className="melodee-panel__subtitle">{t("theme.sectionDescription")}</p>
 
       {themePackError ? (
         <InlineNotification
           kind="warning"
           lowContrast
-          title={t('theme.applyFailedTitle')}
-          subtitle={t('theme.applyFailedDescription')}
+          title={t("theme.applyFailedTitle")}
+          subtitle={t("theme.applyFailedDescription")}
           hideCloseButton
         />
       ) : null}
@@ -167,21 +169,21 @@ export function ThemeSection() {
           inline
           kind="error"
           lowContrast
-          title={t('theme.loadErrorTitle')}
+          title={t("theme.loadErrorTitle")}
           subtitle={loadError}
           hideCloseButton
-          actionButtonLabel={t('actions.retry')}
+          actionButtonLabel={t("actions.retry")}
           onActionButtonClick={() => void load({ cancelled: false })}
         />
       ) : null}
 
       {packs === null && !loadError ? (
-        <Loading description={t('common.loading')} withOverlay={false} />
+        <Loading description={t("common.loading")} withOverlay={false} />
       ) : null}
 
       {packs !== null ? (
         <RadioButtonGroup
-          legendText={t('theme.listLabel')}
+          legendText={t("theme.listLabel")}
           name="theme-pack"
           valueSelected={themePack}
           onChange={(value) => setThemePack(String(value))}
@@ -191,8 +193,11 @@ export function ThemeSection() {
             value={DEFAULT_THEME_PACK}
             labelText={
               <>
-                {t('theme.defaultPackName')} <Tag type="gray">{t('theme.builtInTag')}</Tag>
-                <span className="melodee-theme-pack__meta">{t('theme.defaultPackDescription')}</span>
+                {t("theme.defaultPackName")}{" "}
+                <Tag type="gray">{t("theme.builtInTag")}</Tag>
+                <span className="melodee-theme-pack__meta">
+                  {t("theme.defaultPackDescription")}
+                </span>
               </>
             }
           />
@@ -203,11 +208,16 @@ export function ThemeSection() {
               value={pack.id}
               labelText={
                 <>
-                  {pack.name} {pack.isBuiltIn ? <Tag type="gray">{t('theme.builtInTag')}</Tag> : null}
-                  {pack.hasWarnings ? <Tag type="red">{t('theme.warningsTag')}</Tag> : null}
+                  {pack.name}{" "}
+                  {pack.isBuiltIn ? (
+                    <Tag type="gray">{t("theme.builtInTag")}</Tag>
+                  ) : null}
+                  {pack.hasWarnings ? (
+                    <Tag type="red">{t("theme.warningsTag")}</Tag>
+                  ) : null}
                   <span className="melodee-theme-pack__meta">
                     {packMeta(pack)}
-                    {pack.description ? ` — ${pack.description}` : ''}
+                    {pack.description ? ` — ${pack.description}` : ""}
                   </span>
                 </>
               }
@@ -216,13 +226,19 @@ export function ThemeSection() {
         </RadioButtonGroup>
       ) : null}
 
-      <div className="melodee-panel__footer" style={{ marginBlock: '1rem' }}>
-        <Button kind="secondary" size="sm" renderIcon={Renew} disabled={busy} onClick={onRescan}>
-          {t('theme.rescan')}
+      <div className="melodee-panel__footer" style={{ marginBlock: "1rem" }}>
+        <Button
+          kind="secondary"
+          size="sm"
+          renderIcon={Renew}
+          disabled={busy}
+          onClick={onRescan}
+        >
+          {t("theme.rescan")}
         </Button>
         <FileUploaderButton
-          labelText={t('theme.import')}
-          accept={['.zip', 'application/zip']}
+          labelText={t("theme.import")}
+          accept={[".zip", "application/zip"]}
           buttonKind="secondary"
           size="sm"
           disabled={busy}
@@ -245,7 +261,7 @@ export function ThemeSection() {
                     as="a"
                     href={themePackExportUrl(pack.id)}
                   >
-                    {t('theme.export')}
+                    {t("theme.export")}
                   </Button>
                   <Button
                     kind="danger--ghost"
@@ -254,7 +270,7 @@ export function ThemeSection() {
                     disabled={busy}
                     onClick={() => setDeleteTarget(pack)}
                   >
-                    {t('theme.delete')}
+                    {t("theme.delete")}
                   </Button>
                 </span>
               </li>
@@ -265,13 +281,15 @@ export function ThemeSection() {
       <Modal
         open={deleteTarget !== null}
         danger
-        modalHeading={t('theme.deleteConfirmTitle')}
-        primaryButtonText={t('theme.deleteConfirmAction')}
-        secondaryButtonText={t('actions.cancel')}
+        modalHeading={t("theme.deleteConfirmTitle")}
+        primaryButtonText={t("theme.deleteConfirmAction")}
+        secondaryButtonText={t("actions.cancel")}
         onRequestClose={() => setDeleteTarget(null)}
         onRequestSubmit={onDelete}
       >
-        <p>{t('theme.deleteConfirmBody', { name: deleteTarget?.name ?? '' })}</p>
+        <p>
+          {t("theme.deleteConfirmBody", { name: deleteTarget?.name ?? "" })}
+        </p>
       </Modal>
     </section>
   );

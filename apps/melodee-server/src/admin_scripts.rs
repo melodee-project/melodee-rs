@@ -1,4 +1,4 @@
-//! Phase 9 WP-11 Admin API: scripting hook administration, execution audit,
+//! Admin API: scripting hook administration, execution audit,
 //! and operator test-run (PRD-SCRIPT-001..005, ADR-0134 §6, ADR-0135).
 //!
 //! These routes extend the Rust-native operator API (`/api/admin/v1`, SPEC
@@ -215,9 +215,9 @@ pub fn router() -> Router<AdminAccessState> {
         .route("/api/admin/v1/scripts/id/{id}/disable", post(disable_script))
         .route("/api/admin/v1/scripts/runs", get(list_runs))
         .route("/api/admin/v1/scripts/test-run", post(test_run))
-        // Source bodies are individually bounded at 256 KiB by the store and
-        // ctx payloads by the executor; the envelope admits one of each plus
-        // JSON overhead.
+ // Source bodies are individually bounded at 256 KiB by the store and
+ // ctx payloads by the executor; the envelope admits one of each plus
+ // JSON overhead.
         .route_layer(axum::extract::DefaultBodyLimit::max(768 * 1024))
 }
 

@@ -1,4 +1,4 @@
-//! Phase 9 WP-09 notification template and delivery persistence (ADR-0134
+//! notification template and delivery persistence (ADR-0134
 //! §4, PRD-NOTIF-001/002) over `notification_templates` and
 //! `notification_deliveries` (migration 0024).
 //!
@@ -171,7 +171,7 @@ fn validate_template_key(template_key: &str) -> Result<(), NotificationStoreErro
 
 /// BCP-47-ish shape shared with the migration CHECK: 2-3 ASCII letters,
 /// then optional `-`-separated 2-8 character alphanumeric subtags (en,
-/// en-US, pt-BR, zh-Hant). Phase 10 localization owns any widening.
+/// en-US, pt-BR, zh-Hant). localization owns any widening.
 pub fn is_valid_locale(locale: &str) -> bool {
     let mut segments = locale.split('-');
     let Some(language) = segments.next() else {

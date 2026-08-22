@@ -1,4 +1,4 @@
-//! Phase 9 WP-05 operator user/group administration persistence acceptance
+//! operator user/group administration persistence acceptance
 //! (PRD-CLI-001, PRD-CLI-002, PRD-AUTH-004): fail-closed first-admin
 //! bootstrap, and the access-group lifecycle the CLI exposes.
 

@@ -1,4 +1,4 @@
-import { Add, TrashCan } from '@carbon/icons-react';
+import { Add, TrashCan } from "@carbon/icons-react";
 import {
   Button,
   Heading,
@@ -15,12 +15,12 @@ import {
   TableHeader,
   TableRow,
   TextInput,
-} from '@carbon/react';
-import { useMemo, useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { Link as RouterLink } from 'react-router-dom';
+} from "@carbon/react";
+import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { Link as RouterLink } from "react-router-dom";
 
-import { ApiError } from '../../api/client';
+import { ApiError } from "../../api/client";
 import type {
   PolicyDisposition,
   PolicyRule,
@@ -28,10 +28,10 @@ import type {
   PolicyRuleType,
   PolicyTestRequest,
   PolicyTestRun,
-} from '../../api/types';
-import { StatusTag } from '../../components/StatusTag';
-import { formatNumber } from '../../i18n/format';
-import { dispositionKind } from '../review/review';
+} from "../../api/types";
+import { StatusTag } from "../../components/StatusTag";
+import { formatNumber } from "../../i18n/format";
+import { dispositionKind } from "../review/review";
 import {
   DISPOSITIONS,
   RELEASE_TRAITS,
@@ -45,10 +45,10 @@ import {
   validateDraft,
   type PredicateCondition,
   type RuleDraft,
-} from './policies';
+} from "./policies";
 
 /**
- * Policy Editor (WP-16, PRD-POLICY-008): the structured rule editor. The
+ * Policy Editor (PRD-POLICY-008): the structured rule editor. The
  * conditions builder only produces rows for the two dimensions the engine
  * predicate schema knows (`required_traits`, `existing_dispositions`); the
  * operator column is fixed per field because the predicate model has no
@@ -65,7 +65,7 @@ import {
 const MAX_TEST_RUN_RELEASES = 500;
 
 export interface PolicyEditorProps {
-  mode: 'create' | 'edit';
+  mode: "create" | "edit";
   /** The loaded rule in edit mode. */
   rule?: PolicyRule;
   busy: boolean;
@@ -81,7 +81,7 @@ export interface PolicyEditorProps {
 }
 
 interface Notice {
-  kind: 'success' | 'error' | 'info' | 'warning';
+  kind: "success" | "error" | "info" | "warning";
   text: string;
   /** Show the conflict recovery reload action. */
   reload?: boolean;
@@ -89,11 +89,11 @@ interface Notice {
 
 function defaultDraft(): RuleDraft {
   return {
-    id: '',
-    ruleType: 'trait_disposition',
-    disposition: 'review',
+    id: "",
+    ruleType: "trait_disposition",
+    disposition: "review",
     confidenceThreshold: null,
-    conditions: [{ field: 'release_trait', value: 'greatest_hits' }],
+    conditions: [{ field: "release_trait", value: "greatest_hits" }],
   };
 }
 
@@ -110,10 +110,12 @@ export function PolicyEditor({
 }: PolicyEditorProps) {
   const { t } = useTranslation();
   const [draft, setDraft] = useState<RuleDraft>(() =>
-    mode === 'edit' && rule ? ruleToDraft(rule) : defaultDraft(),
+    mode === "edit" && rule ? ruleToDraft(rule) : defaultDraft(),
   );
   const [confidenceText, setConfidenceText] = useState(() =>
-    mode === 'edit' && rule?.confidenceThreshold != null ? String(rule.confidenceThreshold) : '',
+    mode === "edit" && rule?.confidenceThreshold != null
+      ? String(rule.confidenceThreshold)
+      : "",
   );
   const [notice, setNotice] = useState<Notice | null>(null);
   const [showValidation, setShowValidation] = useState(false);
@@ -121,8 +123,8 @@ export function PolicyEditor({
   const [limitText, setLimitText] = useState(String(MAX_TEST_RUN_RELEASES));
   const [testRun, setTestRun] = useState<PolicyTestRun | null>(null);
 
-  const isProtected = mode === 'edit' && rule ? isProtectedRule(rule) : false;
-  const disabledRule = mode === 'edit' && rule ? !rule.enabled : false;
+  const isProtected = mode === "edit" && rule ? isProtectedRule(rule) : false;
+  const disabledRule = mode === "edit" && rule ? !rule.enabled : false;
   const conditionsLocked = predicateLocked(draft.ruleType);
   // Disabled rules are no longer in the active set; the backend replaces
   // only active-set rules, so saving a disabled rule is not possible.
@@ -130,7 +132,7 @@ export function PolicyEditor({
 
   const confidenceValue = useMemo(() => {
     const trimmed = confidenceText.trim();
-    if (trimmed === '') {
+    if (trimmed === "") {
       return null;
     }
     const parsed = Number(trimmed);
@@ -154,7 +156,9 @@ export function PolicyEditor({
     update({
       ruleType,
       // Snap the disposition into the new type's safe set.
-      disposition: allowed.includes(draft.disposition) ? draft.disposition : allowed[0]!,
+      disposition: allowed.includes(draft.disposition)
+        ? draft.disposition
+        : allowed[0]!,
       // Safety rules carry an empty predicate by engine invariant.
       conditions: predicateLocked(ruleType) ? [] : draft.conditions,
     });
@@ -168,29 +172,38 @@ export function PolicyEditor({
   };
 
   const removeCondition = (index: number) => {
-    update({ conditions: draft.conditions.filter((_, position) => position !== index) });
+    update({
+      conditions: draft.conditions.filter((_, position) => position !== index),
+    });
   };
 
   const addCondition = () => {
     update({
-      conditions: [...draft.conditions, { field: 'release_trait', value: RELEASE_TRAITS[0]! }],
+      conditions: [
+        ...draft.conditions,
+        { field: "release_trait", value: RELEASE_TRAITS[0]! },
+      ],
     });
   };
 
   const toErrorNotice = (cause: unknown, fallbackKey: string): Notice => {
     if (cause instanceof ApiError) {
-      if (cause.status === 409 && cause.code === 'rule_set_conflict') {
-        return { kind: 'warning', text: t('policies.editor.conflict'), reload: true };
+      if (cause.status === 409 && cause.code === "rule_set_conflict") {
+        return {
+          kind: "warning",
+          text: t("policies.editor.conflict"),
+          reload: true,
+        };
       }
-      if (cause.status === 409 && cause.code === 'protected_rule') {
-        return { kind: 'warning', text: t('policies.editor.protectedError') };
+      if (cause.status === 409 && cause.code === "protected_rule") {
+        return { kind: "warning", text: t("policies.editor.protectedError") };
       }
       return {
-        kind: 'error',
+        kind: "error",
         text: t(fallbackKey, { message: cause.message }),
       };
     }
-    return { kind: 'error', text: t(fallbackKey, { message: String(cause) }) };
+    return { kind: "error", text: t(fallbackKey, { message: String(cause) }) };
   };
 
   const save = () => {
@@ -200,7 +213,7 @@ export function PolicyEditor({
     }
     setNotice(null);
     onSave(draftToInput(effectiveDraft)).catch((cause: unknown) => {
-      setNotice(toErrorNotice(cause, 'policies.editor.saveError'));
+      setNotice(toErrorNotice(cause, "policies.editor.saveError"));
     });
   };
 
@@ -217,7 +230,10 @@ export function PolicyEditor({
     // Unchanged stored rules run by ruleId (audited); anything else runs as
     // an ad-hoc candidate, which the backend never persists.
     const request: PolicyTestRequest =
-      mode === 'edit' && rule && rule.enabled && draftMatchesRule(effectiveDraft, rule)
+      mode === "edit" &&
+      rule &&
+      rule.enabled &&
+      draftMatchesRule(effectiveDraft, rule)
         ? { ruleId: rule.id, limit }
         : { rule: draftToInput(effectiveDraft), limit };
     setTestBusy(true);
@@ -225,7 +241,7 @@ export function PolicyEditor({
     onTest(request)
       .then((run) => setTestRun(run))
       .catch((cause: unknown) => {
-        setNotice(toErrorNotice(cause, 'policies.test.error'));
+        setNotice(toErrorNotice(cause, "policies.test.error"));
       })
       .finally(() => setTestBusy(false));
   };
@@ -236,16 +252,18 @@ export function PolicyEditor({
     <section className="melodee-panel" aria-labelledby="policy-editor-title">
       <div className="melodee-policy-editor__header">
         <Heading id="policy-editor-title" className="melodee-panel__title">
-          {mode === 'create' ? t('policies.editor.titleCreate') : t('policies.editor.titleEdit')}
+          {mode === "create"
+            ? t("policies.editor.titleCreate")
+            : t("policies.editor.titleEdit")}
         </Heading>
-        {mode === 'edit' && rule ? (
+        {mode === "edit" && rule ? (
           <StatusTag
-            kind={rule.enabled ? 'success' : 'neutral'}
-            label={rule.enabled ? t('status.enabled') : t('status.disabled')}
+            kind={rule.enabled ? "success" : "neutral"}
+            label={rule.enabled ? t("status.enabled") : t("status.disabled")}
             description={
               rule.enabled
-                ? t('policies.editor.enabledDescription')
-                : t('policies.editor.disabledDescription')
+                ? t("policies.editor.enabledDescription")
+                : t("policies.editor.disabledDescription")
             }
           />
         ) : null}
@@ -256,7 +274,7 @@ export function PolicyEditor({
           kind="info"
           lowContrast
           hideCloseButton
-          title={t('policies.editor.protectedNote')}
+          title={t("policies.editor.protectedNote")}
         />
       ) : null}
       {disabledRule ? (
@@ -264,7 +282,7 @@ export function PolicyEditor({
           kind="info"
           lowContrast
           hideCloseButton
-          title={t('policies.editor.disabledNote')}
+          title={t("policies.editor.disabledNote")}
         />
       ) : null}
       {notice ? (
@@ -278,94 +296,123 @@ export function PolicyEditor({
       {notice?.reload ? (
         <div className="melodee-panel__footer">
           <Button kind="secondary" size="sm" onClick={onReload}>
-            {t('policies.editor.reload')}
+            {t("policies.editor.reload")}
           </Button>
         </div>
       ) : null}
 
       <TextInput
         id="policy-rule-id"
-        labelText={t('policies.editor.name')}
+        labelText={t("policies.editor.name")}
         helperText={
-          mode === 'create' ? t('policies.editor.nameHelp') : t('policies.editor.nameReadonlyHelp')
+          mode === "create"
+            ? t("policies.editor.nameHelp")
+            : t("policies.editor.nameReadonlyHelp")
         }
         value={draft.id}
-        disabled={formLocked || mode === 'edit'}
-        invalid={showValidation && validationErrors.includes('id')}
-        invalidText={t('policies.validation.id')}
+        disabled={formLocked || mode === "edit"}
+        invalid={showValidation && validationErrors.includes("id")}
+        invalidText={t("policies.validation.id")}
         onChange={(event) => update({ id: event.target.value })}
       />
 
       <Select
         id="policy-rule-type"
-        labelText={t('policies.editor.type')}
+        labelText={t("policies.editor.type")}
         value={draft.ruleType}
         disabled={formLocked || isProtected}
         helperText={
-          isProtected ? t('policies.editor.typeLockedHelp') : t('policies.editor.typeHelp')
+          isProtected
+            ? t("policies.editor.typeLockedHelp")
+            : t("policies.editor.typeHelp")
         }
         onChange={(event) => setRuleType(event.target.value as PolicyRuleType)}
       >
         {RULE_TYPES.map((ruleType) => (
-          <SelectItem key={ruleType} value={ruleType} text={t(`policies.type.${ruleType}`)} />
+          <SelectItem
+            key={ruleType}
+            value={ruleType}
+            text={t(`policies.type.${ruleType}`)}
+          />
         ))}
       </Select>
 
-      <Heading className="melodee-panel__title">{t('policies.editor.conditions.title')}</Heading>
-      <p className="melodee-panel__subtitle">{t('policies.editor.conditions.description')}</p>
+      <Heading className="melodee-panel__title">
+        {t("policies.editor.conditions.title")}
+      </Heading>
+      <p className="melodee-panel__subtitle">
+        {t("policies.editor.conditions.description")}
+      </p>
       {conditionsLocked ? (
         <InlineNotification
           kind="info"
           lowContrast
           hideCloseButton
-          title={t('policies.editor.conditions.locked')}
+          title={t("policies.editor.conditions.locked")}
         />
       ) : (
         <>
           {draft.conditions.length === 0 ? (
-            <p className="melodee-panel__subtitle">{t('policies.editor.conditions.empty')}</p>
+            <p className="melodee-panel__subtitle">
+              {t("policies.editor.conditions.empty")}
+            </p>
           ) : null}
           {draft.conditions.map((condition, index) => (
-            <div className="melodee-policy-condition" key={`${index}-${condition.field}`}>
+            <div
+              className="melodee-policy-condition"
+              key={`${index}-${condition.field}`}
+            >
               <Select
                 id={`policy-condition-field-${index}`}
-                labelText={t('policies.editor.conditions.field')}
+                labelText={t("policies.editor.conditions.field")}
                 hideLabel
                 value={condition.field}
                 disabled={formLocked}
                 onChange={(event) => {
-                  const field = event.target.value as PredicateCondition['field'];
+                  const field = event.target
+                    .value as PredicateCondition["field"];
                   setCondition(index, {
                     field,
-                    value: field === 'release_trait' ? RELEASE_TRAITS[0]! : DISPOSITIONS[0]!,
+                    value:
+                      field === "release_trait"
+                        ? RELEASE_TRAITS[0]!
+                        : DISPOSITIONS[0]!,
                   });
                 }}
               >
                 <SelectItem
                   value="release_trait"
-                  text={t('policies.editor.conditions.field.releaseTrait')}
+                  text={t("policies.editor.conditions.field.releaseTrait")}
                 />
                 <SelectItem
                   value="existing_disposition"
-                  text={t('policies.editor.conditions.field.existingDisposition')}
+                  text={t(
+                    "policies.editor.conditions.field.existingDisposition",
+                  )}
                 />
               </Select>
               <span className="melodee-policy-condition__operator">
-                {condition.field === 'release_trait'
-                  ? t('policies.editor.conditions.operator.requiresPresence')
-                  : t('policies.editor.conditions.operator.isOneOf')}
+                {condition.field === "release_trait"
+                  ? t("policies.editor.conditions.operator.requiresPresence")
+                  : t("policies.editor.conditions.operator.isOneOf")}
               </span>
               <Select
                 id={`policy-condition-value-${index}`}
-                labelText={t('policies.editor.conditions.value')}
+                labelText={t("policies.editor.conditions.value")}
                 hideLabel
                 value={condition.value}
                 disabled={formLocked}
-                onChange={(event) => setCondition(index, { value: event.target.value })}
+                onChange={(event) =>
+                  setCondition(index, { value: event.target.value })
+                }
               >
-                {condition.field === 'release_trait'
+                {condition.field === "release_trait"
                   ? RELEASE_TRAITS.map((trait) => (
-                      <SelectItem key={trait} value={trait} text={t(`policies.trait.${trait}`)} />
+                      <SelectItem
+                        key={trait}
+                        value={trait}
+                        text={t(`policies.trait.${trait}`)}
+                      />
                     ))
                   : DISPOSITIONS.map((disposition) => (
                       <SelectItem
@@ -378,7 +425,7 @@ export function PolicyEditor({
               <IconButton
                 kind="ghost"
                 size="md"
-                label={t('policies.editor.conditions.remove')}
+                label={t("policies.editor.conditions.remove")}
                 disabled={formLocked}
                 onClick={() => removeCondition(index)}
               >
@@ -394,30 +441,34 @@ export function PolicyEditor({
               disabled={formLocked}
               onClick={addCondition}
             >
-              {t('policies.editor.conditions.add')}
+              {t("policies.editor.conditions.add")}
             </Button>
           </div>
-          {showValidation && validationErrors.includes('traits') ? (
+          {showValidation && validationErrors.includes("traits") ? (
             <InlineNotification
               kind="error"
               lowContrast
               hideCloseButton
-              title={t('policies.validation.traits')}
+              title={t("policies.validation.traits")}
             />
           ) : null}
         </>
       )}
 
-      <Heading className="melodee-panel__title">{t('policies.editor.actions.title')}</Heading>
+      <Heading className="melodee-panel__title">
+        {t("policies.editor.actions.title")}
+      </Heading>
       <Select
         id="policy-rule-disposition"
-        labelText={t('policies.editor.disposition')}
-        helperText={t('policies.editor.dispositionHelp')}
+        labelText={t("policies.editor.disposition")}
+        helperText={t("policies.editor.dispositionHelp")}
         value={draft.disposition}
         disabled={formLocked}
-        invalid={showValidation && validationErrors.includes('disposition')}
-        invalidText={t('policies.validation.disposition')}
-        onChange={(event) => update({ disposition: event.target.value as PolicyDisposition })}
+        invalid={showValidation && validationErrors.includes("disposition")}
+        invalidText={t("policies.validation.disposition")}
+        onChange={(event) =>
+          update({ disposition: event.target.value as PolicyDisposition })
+        }
       >
         {allowed.map((disposition) => (
           <SelectItem
@@ -427,12 +478,12 @@ export function PolicyEditor({
           />
         ))}
       </Select>
-      {draft.disposition === 'delete' ? (
+      {draft.disposition === "delete" ? (
         <InlineNotification
           kind="warning"
           lowContrast
           hideCloseButton
-          title={t('policies.editor.deleteDispositionWarning')}
+          title={t("policies.editor.deleteDispositionWarning")}
         />
       ) : null}
       <TextInput
@@ -441,24 +492,28 @@ export function PolicyEditor({
         min={0}
         max={10000}
         step={1}
-        labelText={t('policies.editor.confidenceThreshold')}
-        helperText={t('policies.editor.confidenceThresholdHelp')}
+        labelText={t("policies.editor.confidenceThreshold")}
+        helperText={t("policies.editor.confidenceThresholdHelp")}
         value={confidenceText}
         disabled={formLocked}
-        invalid={showValidation && validationErrors.includes('confidence')}
-        invalidText={t('policies.validation.confidence')}
+        invalid={showValidation && validationErrors.includes("confidence")}
+        invalidText={t("policies.validation.confidence")}
         onChange={(event) => setConfidenceText(event.target.value)}
       />
 
-      <Heading className="melodee-panel__title">{t('policies.test.title')}</Heading>
-      <p className="melodee-panel__subtitle">{t('policies.test.description')}</p>
+      <Heading className="melodee-panel__title">
+        {t("policies.test.title")}
+      </Heading>
+      <p className="melodee-panel__subtitle">
+        {t("policies.test.description")}
+      </p>
       <TextInput
         id="policy-test-limit"
         type="number"
         min={1}
         max={MAX_TEST_RUN_RELEASES}
         step={1}
-        labelText={t('policies.test.limit')}
+        labelText={t("policies.test.limit")}
         value={limitText}
         disabled={busy || testBusy}
         onChange={(event) => setLimitText(event.target.value)}
@@ -470,7 +525,7 @@ export function PolicyEditor({
           disabled={busy || testBusy}
           onClick={runTest}
         >
-          {testBusy ? t('policies.test.running') : t('policies.test.run')}
+          {testBusy ? t("policies.test.running") : t("policies.test.run")}
         </Button>
       </div>
 
@@ -481,30 +536,30 @@ export function PolicyEditor({
               kind="warning"
               lowContrast
               hideCloseButton
-              title={t('policies.test.destructiveWarning', {
+              title={t("policies.test.destructiveWarning", {
                 count: formatNumber(testRun.destructiveImpact),
               })}
-              subtitle={t('policies.test.destructiveWarningDetail')}
+              subtitle={t("policies.test.destructiveWarningDetail")}
             />
           ) : null}
           <dl className="melodee-fact-list">
             <div className="melodee-fact">
-              <dt>{t('policies.test.evaluated')}</dt>
+              <dt>{t("policies.test.evaluated")}</dt>
               <dd>{formatNumber(testRun.evaluated)}</dd>
             </div>
             <div className="melodee-fact">
-              <dt>{t('policies.test.matched')}</dt>
+              <dt>{t("policies.test.matched")}</dt>
               <dd>{formatNumber(testRun.matchedCount)}</dd>
             </div>
             <div className="melodee-fact">
-              <dt>{t('policies.test.ruleSetVersion')}</dt>
+              <dt>{t("policies.test.ruleSetVersion")}</dt>
               <dd>{formatNumber(testRun.ruleSetVersion)}</dd>
             </div>
             <div className="melodee-fact">
-              <dt>{t('policies.test.proposedDispositions')}</dt>
+              <dt>{t("policies.test.proposedDispositions")}</dt>
               <dd>
                 {Object.keys(testRun.proposedDispositionCounts).length === 0 ? (
-                  t('common.none')
+                  t("common.none")
                 ) : (
                   <span className="melodee-policy-disposition-counts">
                     {Object.entries(testRun.proposedDispositionCounts).map(
@@ -515,7 +570,7 @@ export function PolicyEditor({
                             label={t(`review.disposition.${disposition}`, {
                               defaultValue: disposition,
                             })}
-                          />{' '}
+                          />{" "}
                           {formatNumber(count)}
                         </span>
                       ),
@@ -531,19 +586,21 @@ export function PolicyEditor({
             hideCloseButton
             title={
               testRun.persisted
-                ? t('policies.test.persistedNote')
-                : t('policies.test.adHocNote')
+                ? t("policies.test.persistedNote")
+                : t("policies.test.adHocNote")
             }
           />
           {testRun.sample.length === 0 ? (
-            <p className="melodee-panel__subtitle">{t('policies.test.sampleEmpty')}</p>
+            <p className="melodee-panel__subtitle">
+              {t("policies.test.sampleEmpty")}
+            </p>
           ) : (
-            <TableContainer title={t('policies.test.sampleCaption')}>
-              <Table size="sm" aria-label={t('policies.test.sampleCaption')}>
+            <TableContainer title={t("policies.test.sampleCaption")}>
+              <Table size="sm" aria-label={t("policies.test.sampleCaption")}>
                 <TableHead>
                   <TableRow>
-                    <TableHeader>{t('common.release')}</TableHeader>
-                    <TableHeader>{t('common.artist')}</TableHeader>
+                    <TableHeader>{t("common.release")}</TableHeader>
+                    <TableHeader>{t("common.artist")}</TableHeader>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -560,7 +617,9 @@ export function PolicyEditor({
                           {sample.title}
                         </Link>
                       </TableCell>
-                      <TableCell>{sample.artist ?? t('common.unknown')}</TableCell>
+                      <TableCell>
+                        {sample.artist ?? t("common.unknown")}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -572,9 +631,9 @@ export function PolicyEditor({
 
       <div className="melodee-panel__footer melodee-policy-editor__footer">
         <Button kind="ghost" size="md" disabled={busy} onClick={onCancel}>
-          {t('actions.cancel')}
+          {t("actions.cancel")}
         </Button>
-        {mode === 'edit' && rule && !isProtected ? (
+        {mode === "edit" && rule && !isProtected ? (
           <>
             <Button
               kind="danger--tertiary"
@@ -582,7 +641,7 @@ export function PolicyEditor({
               disabled={busy}
               onClick={() => onDelete(rule)}
             >
-              {t('actions.delete')}
+              {t("actions.delete")}
             </Button>
             <Button
               kind="tertiary"
@@ -591,21 +650,18 @@ export function PolicyEditor({
               onClick={() => {
                 setNotice(null);
                 onToggleEnabled(rule, !rule.enabled).catch((cause: unknown) => {
-                  setNotice(toErrorNotice(cause, 'policies.editor.toggleError'));
+                  setNotice(
+                    toErrorNotice(cause, "policies.editor.toggleError"),
+                  );
                 });
               }}
             >
-              {rule.enabled ? t('actions.disable') : t('actions.enable')}
+              {rule.enabled ? t("actions.disable") : t("actions.enable")}
             </Button>
           </>
         ) : null}
-        <Button
-          kind="primary"
-          size="md"
-          disabled={formLocked}
-          onClick={save}
-        >
-          {mode === 'create' ? t('actions.create') : t('actions.saveChanges')}
+        <Button kind="primary" size="md" disabled={formLocked} onClick={save}>
+          {mode === "create" ? t("actions.create") : t("actions.saveChanges")}
         </Button>
       </div>
     </section>

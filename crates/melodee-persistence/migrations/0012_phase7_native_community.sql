@@ -1,4 +1,4 @@
--- Phase 7 native requests, shares, and playback preferences
+-- native requests, shares, and playback preferences
 -- (ADR-0123, ADR-0127; PRD-REQUEST-001..002, PRD-SHARE-001..003,
 -- PRD-USER-003).
 --

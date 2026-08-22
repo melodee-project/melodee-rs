@@ -1,4 +1,4 @@
--- Phase 7 native user annotations, playlists, and playback history
+-- native user annotations, playlists, and playback history
 -- (ADR-0114, ADR-0127; PRD-USER-001..004, PRD-PLAYLIST-001..003).
 --
 -- Additive only. Binary downgrade retains these tables. Full schema rollback

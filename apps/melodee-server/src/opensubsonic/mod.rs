@@ -68,7 +68,7 @@ pub struct OsState {
     pub transcoding: Option<crate::transcode::TranscodingService>,
     pub client_addresses: crate::native_stream::ClientAddressResolver,
     pub search: Option<melodee_search::SearchConfig>,
-    /// Optional Last.fm API base URL for per-test mock servers (R2.6).
+    /// Optional Last.fm API base URL for per-test mock servers.
     /// Production wiring leaves this `None`; it is never an operator setting.
     #[doc(hidden)]
     pub lastfm_api_base_url: Option<String>,

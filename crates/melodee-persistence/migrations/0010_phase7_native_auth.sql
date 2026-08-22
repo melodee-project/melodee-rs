@@ -1,4 +1,4 @@
--- Phase 7 native authentication, access control, and public-ID migration
+-- native authentication, access control, and public-ID migration
 -- authority (ADR-0124, ADR-0127).
 --
 -- This migration is additive. A binary downgrade leaves the tables intact;

@@ -1,11 +1,11 @@
-//! Phase 10 WP-12 Release Review API (PRD-API-ADMIN-002, PRD-UI-007/008,
+//! Release Review API (PRD-API-ADMIN-002, PRD-UI-007/008,
 //! SPEC §20): the operator queue for Releases parked in review-able states,
 //! full review detail (manifest summary, classification evidence, catalog
 //! comparison, policy decision, timeline), audited decisions, operator
 //! reprocess, and a gated pre-publication audio preview.
 //!
 //! All routes are `AdminPrincipal`-gated. Decisions are driven through the
-//! durable Phase 5 policy store (`apply_admin_override`) when a pending
+//! durable policy store (`apply_admin_override`) when a pending
 //! durable decision exists, and through the operator arm of the work-item
 //! state machine otherwise. `delete` only ever *records* the durable
 //! administrator authorization; destructive execution stays with the
@@ -58,7 +58,7 @@ const REVIEW_STATES: [IngestionState; 3] = [
 ];
 
 /// One configured durable staging root eligible to back a preview. The name
-/// remains compatible with the Phase 10 review test harness.
+/// remains compatible with the review test harness.
 #[derive(Debug, Clone)]
 pub struct PreviewSourceRoot {
     pub id: Option<Uuid>,
@@ -84,7 +84,7 @@ impl ReviewPreview {
     }
 }
 
-/// Shared state for the WP-12 review surface: the common admin state (auth
+/// Shared state for the review surface: the common admin state (auth
 /// gate, pool) plus the preview path-safety context.
 #[derive(Clone)]
 pub struct AdminReviewState {

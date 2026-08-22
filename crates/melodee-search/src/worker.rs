@@ -332,7 +332,7 @@ async fn apply_outbox_once_with_cancel(
     let _ = root.read_manifest(active.generation_id)?;
     let worker = format!("search-{}", Uuid::now_v7());
     let now = OffsetDateTime::now_utc();
-    // R2.5: one span per claimed outbox pass; every nested load/apply/failure
+    //: one span per claimed outbox pass; every nested load/apply/failure
     // event inherits the worker and generation identity.
     let pass_span = tracing::info_span!(
         "search_outbox_pass",
@@ -439,35 +439,35 @@ async fn apply_outbox_once_with_cancel(
     heartbeat.tick().await;
     let applied = loop {
         tokio::select! {
-            result = &mut handle => {
-                break result
-                    .map_err(|error| SearchError::Retryable(format!("index task failed: {error}")))?;
-            }
-            () = cancel.cancelled() => {
-                apply_cancel.store(true, Ordering::Release);
-                let _ = handle.await;
-                release_owned_outbox_lease(pool, &worker, "cancellation").await;
-                return Err(SearchError::Retryable("search outbox application cancelled".to_string()));
-            }
-            _ = heartbeat.tick() => {
-                if let Err(error) = SearchProjectionStore::renew_outbox_lease(
-                    pool,
-                    SEARCH_PROJECTION_NAME,
-                    &worker,
-                    &ids,
-                    lease_duration,
-                    OffsetDateTime::now_utc(),
-                ).await {
-                    // Lease loss fences only this application pass. Scheduler
-                    // shutdown is a distinct signal; conflating the two would
-                    // turn one transient renewal failure into a dead worker.
-                    apply_cancel.store(true, Ordering::Release);
-                    let _ = handle.await;
-                    release_owned_outbox_lease(pool, &worker, "lease loss").await;
-                    return Err(error.into());
-                }
-            }
-        }
+                   result = &mut handle => {
+                       break result
+                           .map_err(|error| SearchError::Retryable(format!("index task failed: {error}")))?;
+                   }
+                   () = cancel.cancelled() => {
+                       apply_cancel.store(true, Ordering::Release);
+                       let _ = handle.await;
+                       release_owned_outbox_lease(pool, &worker, "cancellation").await;
+                       return Err(SearchError::Retryable("search outbox application cancelled".to_string()));
+                   }
+                   _ = heartbeat.tick() => {
+                       if let Err(error) = SearchProjectionStore::renew_outbox_lease(
+                           pool,
+                           SEARCH_PROJECTION_NAME,
+                           &worker,
+                           &ids,
+                           lease_duration,
+                           OffsetDateTime::now_utc(),
+                       ).await {
+        // Lease loss fences only this application pass. Scheduler
+        // shutdown is a distinct signal; conflating the two would
+        // turn one transient renewal failure into a dead worker.
+                           apply_cancel.store(true, Ordering::Release);
+                           let _ = handle.await;
+                           release_owned_outbox_lease(pool, &worker, "lease loss").await;
+                           return Err(error.into());
+                       }
+                   }
+               }
     };
     match applied {
         Ok(batch) => {

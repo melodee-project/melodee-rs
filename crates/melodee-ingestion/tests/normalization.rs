@@ -1,4 +1,4 @@
-//! Phase 3 vertical normalization/publication, concurrency, lease, and fault scenarios.
+//! vertical normalization/publication, concurrency, lease, and fault scenarios.
 #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 
 #[path = "../../melodee-persistence/tests/common/mod.rs"]
@@ -129,14 +129,14 @@ impl Drop for Scenario {
                     .build()
                     .expect("cleanup runtime");
                 runtime.block_on(async move {
-                    // Bound the database cleanup: `PgPool::close` waits for
-                    // checked-out connections, and a panicking test can leave
-                    // leases held by tasks that will never return them. An
-                    // unbounded wait here previously stalled the whole test
-                    // process (and with it the repository gate) after any
-                    // mid-scenario panic. Leaking one `melodee_test_*`
-                    // database on a failure path is strictly better than
-                    // hanging the suite.
+ // Bound the database cleanup: `PgPool::close` waits for
+ // checked-out connections, and a panicking test can leave
+ // leases held by tasks that will never return them. An
+ // unbounded wait here previously stalled the whole test
+ // process (and with it the repository gate) after any
+ // mid-scenario panic. Leaking one `melodee_test_*`
+ // database on a failure path is strictly better than
+ // hanging the suite.
                     let cleanup = async {
                         pool.close().await;
                         database.drop().await;
@@ -809,7 +809,7 @@ async fn expire_outstanding_leases(pool: &sqlx::PgPool) -> u64 {
     .rows_affected()
 }
 
-/// R2.7 repeated-termination vertical: 200 releases cross acquisition,
+/// repeated-termination vertical: 200 releases cross acquisition,
 /// inspection, normalization, validation, and publication while workers
 /// die ungracefully between every stage boundary. Each termination round
 /// claims a bounded batch with a fresh worker and abandons it (no

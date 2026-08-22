@@ -1,4 +1,4 @@
-//! Phase 5 PostgreSQL persistence for classification, novelty, policy
+//! PostgreSQL persistence for classification, novelty, policy
 //! rules, durable decisions, and dry-run results (ADR-0120).
 //!
 //! This crate never implements classification, novelty, or policy logic —
@@ -36,7 +36,7 @@ pub const MAX_POLICY_CLASSIFICATION_EVIDENCE: usize = 1_000;
 const SUPPORTED_CLASSIFIER_VERSION: &str = "melodee.policy.classifier-v1";
 const SUPPORTED_NOVELTY_EVALUATOR_VERSION: &str = "melodee.policy.novelty-v1";
 
-/// Typed Phase 5 persistence failures.
+/// Typed persistence failures.
 #[derive(Debug, Error)]
 pub enum PolicyStoreError {
     #[error("policy database operation failed")]
@@ -98,7 +98,7 @@ pub struct PolicyClaim {
     pub semantic_manifest_hash: String,
 }
 
-/// Bounded authoritative facts consumed by the pure Phase 5 engines.
+/// Bounded authoritative facts consumed by the pure engines.
 #[derive(Debug, Clone)]
 pub struct PolicyCatalogContext {
     pub claim: PolicyClaim,
@@ -220,7 +220,7 @@ fn parse_rule_set_row(row: PolicyRuleSetRow) -> Result<PolicyRuleSet, PolicyStor
 }
 
 /// Title and primary-Artist display value for one dry-run sample Release
-/// (Phase 10 WP-16). A display string is never an Artist identity.
+///. A display string is never an Artist identity.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PolicyTestSampleRelease {
     pub release_id: Uuid,
@@ -343,9 +343,8 @@ impl PolicyStore {
     }
 
     /// Lists every persisted version of a named rule set, oldest first. Rule
-    /// sets are immutable; this history is how the admin surface (Phase 10
-    /// WP-16) finds the last-seen definition of a rule removed from the
-    /// current version.
+    /// sets are immutable; this history is how the admin surface finds the
+    /// last-seen definition of a rule removed from the current version.
     #[instrument(skip_all)]
     pub async fn list_rule_set_versions(
         &self,
@@ -366,7 +365,7 @@ impl PolicyStore {
 
     /// Set-based per-rule match counts from durable policy decisions (how
     /// often each rule id decided a Release). Powers the admin rule listing's
-    /// match column (Phase 10 WP-16).
+    /// match column.
     pub async fn rule_match_counts(
         &self,
         pool: &PgPool,
@@ -384,7 +383,7 @@ impl PolicyStore {
     }
 
     /// Counts durable decisions still awaiting completion — the dashboard
-    /// "pending policy decisions" attention count (Phase 10 WP-14).
+    /// "pending policy decisions" attention count.
     pub async fn count_pending_decisions(&self, pool: &PgPool) -> Result<i64, PolicyStoreError> {
         Ok(sqlx::query_scalar::<_, i64>(
             "SELECT COUNT(*)::bigint FROM policy_decisions WHERE completion_state = 'pending'",
@@ -394,7 +393,7 @@ impl PolicyStore {
     }
 
     /// Loads title and primary-Artist display name for a bounded set of
-    /// Release ids (dry-run sample enrichment, Phase 10 WP-16). Bounded by
+    /// Release ids (dry-run sample enrichment). Bounded by
     /// the caller; the admin surface passes at most `MAX_POLICY_TEST_SAMPLES`.
     pub async fn test_sample_releases(
         &self,
@@ -635,7 +634,7 @@ impl PolicyStore {
     // ------------------------------------------------------------------
 
     /// Claims a bounded batch of Cataloged work, including direct reclaim of
-    /// expired Phase 5 leases. Cataloged remains the durable state while the
+    /// expired leases. Cataloged remains the durable state while the
     /// policy worker owns the lease (ADR-0120).
     #[instrument(skip_all, fields(worker_id = %worker, batch = config.claim_batch_size))]
     pub async fn claim_cataloged(
@@ -2559,7 +2558,7 @@ impl PolicyStore {
     }
 
     /// Loads the persisted novelty evaluation for a Release, including the
-    /// per-Track novelty rows, for operator review display (Phase 10). This
+    /// per-Track novelty rows, for operator review display. This
     /// is a pure read: it replays no evaluation and computes nothing new.
     #[instrument(skip_all)]
     pub async fn load_novelty(
@@ -3451,7 +3450,7 @@ struct StoredEvidenceRow {
     detail: String,
 }
 
-/// Persisted per-Track novelty row (Phase 10 operator review read).
+/// Persisted per-Track novelty row ( operator review read).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StoredTrackNovelty {
     pub track_id: melodee_domain::TrackId,
@@ -3461,8 +3460,8 @@ pub struct StoredTrackNovelty {
     pub detail: String,
 }
 
-/// Persisted aggregate novelty evaluation plus its per-Track rows (Phase 10
-/// operator review read). Counts are the durable evaluation facts, not a
+/// Persisted aggregate novelty evaluation plus its per-Track rows for
+/// operator review read. Counts are the durable evaluation facts, not a
 /// recomputation.
 #[derive(Debug, Clone)]
 pub struct StoredNoveltyEvaluation {

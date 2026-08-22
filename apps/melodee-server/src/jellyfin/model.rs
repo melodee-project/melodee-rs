@@ -3,17 +3,16 @@
 //! Protocol-owned PascalCase DTOs are built here and stay inside the Jellyfin
 //! adapter (ADR-0102); nothing is shared with native-v1 or OpenSubsonic.
 //!
-//! Frozen conventions (Phase 0 capture, `design/evidence/phase-0/jellyfin-capture.md`):
-//!
+//! Frozen conventions ( capture, `design/evidence/phase-0/jellyfin-capture.md`): //!
 //! - IDs are ApiKey GUIDs in N-format (32 lowercase hex, no dashes).
 //! - Dates are `yyyy-MM-ddTHH:mm:ss.fffffffZ` (always 7 fractional digits).
 //! - Null fields serialize as `null` (no null-stripping).
 //! - List envelope: `{Items, TotalRecordCount, StartIndex}`.
-//! - Genre ids are `md5("genre:" + name.ToUpperInvariant())` (verified against
-//!   goldens, including the Unicode `環境音楽` case).
+//! - Genre ids are `md5("genre:" + name.ToUpperInvariant)` (verified against
+//! goldens, including the Unicode `環境音楽` case).
 //! - Item ETags use the exact legacy preimage `md5("{apiKey:N}-{updatedAt
-//!   UnixTicks}")`; collection ETags use the per-handler legacy preimages
-//!   (`collection-…`, `genres-…`, `musicgenres-…`).
+//! UnixTicks}")`; collection ETags use the per-handler legacy preimages
+//! (`collection-…`, `genres-…`, `musicgenres-…`).
 
 use md5::{Digest, Md5};
 use serde_json::{Value, json};
@@ -55,7 +54,7 @@ pub fn md5_hex(input: impl AsRef<[u8]>) -> String {
     out
 }
 
-/// Deterministic genre id: `md5hex("genre:" + name.ToUpperInvariant())`.
+/// Deterministic genre id: `md5hex("genre:" + name.ToUpperInvariant)`.
 pub fn genre_public_id(name: &str) -> String {
     md5_hex(format!("genre:{}", name.to_uppercase()))
 }
@@ -73,8 +72,7 @@ pub fn item_etag(public_id: Uuid, updated: OffsetDateTime) -> String {
 }
 
 /// Milliseconds to Jellyfin `RunTimeTicks`. The frozen legacy baseline
-/// multiplies the stored duration-ms value by 10^7 (treating it as seconds:
-/// 3000 ms → 30,000,000,000 ticks), not by the correct 10^4. The quirk is
+/// multiplies the stored duration-ms value by 10^7 (treating it as seconds: /// 3000 ms → 30,000,000,000 ticks), not by the correct 10^4. The quirk is
 /// captured contract (`compatibility/jellyfin/golden` RunTimeTicks values)
 /// and is preserved until a product decision and ADR change it.
 pub fn ticks_from_ms(ms: i64) -> i64 {

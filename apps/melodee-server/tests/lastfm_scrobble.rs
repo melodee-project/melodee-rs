@@ -1,4 +1,4 @@
-//! Phase 9 WP-07 Last.fm integration acceptance (PRD-EXT-001..004,
+//! Last.fm integration acceptance (PRD-EXT-001..004,
 //! PRD-AUTH-002; legacy ADR-0003/0004; ADR-0134 §7 amended) against local
 //! mock Last.fm Web Services servers — no real network. Covers the session
 //! exchange success/failure contract, the exact scrobble/now-playing
@@ -7,8 +7,7 @@
 //! 4/9/10), the unconfigured/unlinked silent no-ops, disconnect idempotency,
 //! the at-rest secret invariant, and the PRD-EXT-002 no-provider-required
 //! catalog-entry invariant.
-//!
-//! R2.6: every test binds its own mock server on an ephemeral port and
+//! Every test binds its own mock server on an ephemeral port and
 //! threads its base URL through the adapter state's `lastfm_api_base_url`
 //! (route-level tests) or `LastfmDispatch::with_api_base_url` (dispatch-level
 //! tests). There is no process-global endpoint override, so parallel tests
@@ -80,7 +79,7 @@ impl Drop for MockHandle {
     }
 }
 
-/// A per-test mock Last.fm server (R2.6): each call binds a new ephemeral
+/// A per-test mock Last.fm server: each call binds a new ephemeral
 /// port so parallel tests never share captured traffic. Behavior is keyed off
 /// request content: the session exchange accepts only `token=valid-token`;
 /// scrobbles signed with the stale/forbidden/bad session keys get API errors
@@ -119,10 +118,10 @@ async fn start_mock() -> MockHandle {
                             .into_response();
                         }
                         if token == Some("oversized-token") {
-                            // Chunked body with no Content-Length that
-                            // exceeds the client's 256 KiB response cap:
-                            // the cap must trip while streaming, not
-                            // after a full in-memory read.
+ // Chunked body with no Content-Length that
+ // exceeds the client's 256 KiB response cap:
+ // the cap must trip while streaming, not
+ // after a full in-memory read.
                             let chunks: Vec<Result<axum::body::Bytes, std::convert::Infallible>> =
                                 (0..40)
                                     .map(|_| Ok(axum::body::Bytes::from(vec![b'x'; 8192])))
@@ -381,8 +380,7 @@ fn principal(user: &melodee_persistence::StoredNativeUser) -> NativePrincipal {
     }
 }
 
-/// Configures Last.fm scrobbling plus the server secret through the WP-08
-/// layered settings store.
+/// Configures Last.fm scrobbling plus the server secret through the layered settings store.
 async fn configure_lastfm(db: &common::TestDb) {
     let store = SettingsStore::new();
     let now = OffsetDateTime::now_utc();

@@ -1,5 +1,5 @@
 //! Periodic chart/recommendation aggregate maintenance (PRD-WORK-003,
-//! WP-04). Refreshes the materialized `native_recommendation_candidates`
+//!). Refreshes the materialized `native_recommendation_candidates`
 //! popularity projection and retries chart-item catalog linkage from durable
 //! listening/catalog facts in bounded, idempotent, set-based batches. The
 //! pass only reconciles PostgreSQL projections; it never opens media.

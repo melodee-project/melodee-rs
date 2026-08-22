@@ -1,5 +1,5 @@
 //! `legacy delta`: convergent incremental pass over rows changed since the
-//! recorded mapping (ADR-0148 §D.5, R3.7). Authorized field updates only;
+//! recorded mapping (ADR-0148 §D.5). Authorized field updates only;
 //! source deletions are reported issues, never destructive target changes.
 //!
 //! Source and target are separate databases, so every comparison is
@@ -53,8 +53,8 @@ pub async fn apply_delta(
     }
 
     // 1. New rows beyond each domain checkpoint are imported by re-running
-    //    the idempotent import loops; mapped rows are skipped. The delta
-    //    keeps the lease for its own fenced passes and releases at the end.
+    // the idempotent import loops; mapped rows are skipped. The delta
+    // keeps the lease for its own fenced passes and releases at the end.
     super::import::import_all(
         source,
         target,
@@ -68,13 +68,13 @@ pub async fn apply_delta(
     .await?;
 
     // 2. Changed catalog rows: source LastUpdatedAt newer than the import
-    //    time recorded on the mapping. Authorized updates are display fields
-    //    only; identity (public IDs, relationships) is immutable post-import.
+    // time recorded on the mapping. Authorized updates are display fields
+    // only; identity (public IDs, relationships) is immutable post-import.
     let artists_updated = delta_artists(source, target, run_id, &owner, batch_size).await?;
     let releases_updated = delta_releases(source, target, run_id, &owner, batch_size).await?;
 
     // 3. Deletions: mapped source rows that no longer exist upstream become
-    //    reconciliation issues; the target is never destructively mutated.
+    // reconciliation issues; the target is never destructively mutated.
     let mut deletion_issues = 0_i64;
     for (entity, source_table) in [
         ("artist", "Artists"),

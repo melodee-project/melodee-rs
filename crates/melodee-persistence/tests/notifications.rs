@@ -1,4 +1,4 @@
-//! Phase 9 WP-09 notification persistence acceptance (ADR-0134 §4,
+//! notification persistence acceptance (ADR-0134 §4,
 //! PRD-NOTIF-001/002): migration shape (seeded `en` templates), template
 //! CRUD round-trip, bounds enforcement with the SQL CHECKs as backstop,
 //! locale-keyed PK behavior, the append-only delivery audit, and bounded

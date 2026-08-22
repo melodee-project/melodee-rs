@@ -1,4 +1,4 @@
-//! Structural validation of Phase 3.2 normalized output.
+//! Structural validation of normalized output.
 //!
 //! This boundary treats the stored manifest and work directory as untrusted.
 //! No canonical target path is touched until every planned input has passed
@@ -36,9 +36,7 @@ pub struct ValidatedNormalization {
 /// Fatal inconsistency in a normalized manifest or its work assets.
 #[derive(Debug, Error)]
 pub enum StructuralValidationError {
-    #[error(
-        "manifest schema version {actual} is not the Phase 3.2 normalization version {expected}"
-    )]
+    #[error("manifest schema version {actual} is not the normalization version {expected}")]
     UnsupportedManifestVersion { actual: u16, expected: u16 },
 
     #[error("normalized manifest is incomplete: {0}")]

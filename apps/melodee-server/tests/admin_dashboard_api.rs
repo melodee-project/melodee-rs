@@ -1,4 +1,4 @@
-//! Phase 10 WP-14 dashboard aggregation API integration tests: the
+//! dashboard aggregation API integration tests: the
 //! administrator gate, KPI/attention counts over durable state, the
 //! aggregated subsystem health block, and the 24h activity series.
 
@@ -156,7 +156,7 @@ async fn call(
 }
 
 /// Seeds one cataloged Release and commits a pending Review decision through
-/// the legal policy path (same shape as the WP-12 fixtures).
+/// the legal policy path (same shape as the fixtures).
 async fn seed_pending_review(db: &TestDb, ordinal: u32) -> phase5_common::CatalogedPolicyFixture {
     let fixture = phase5_common::seed_cataloged_release(
         db,

@@ -1,4 +1,4 @@
-//! WP-02 real-feed exercise: closes the Phase 7 limitation "real podcast
+//! real-feed exercise: closes the limitation "real podcast
 //! feeds unexercised". A local, self-contained HTTP fixture serves a
 //! realistic iTunes-namespaced RSS 2.0 feed and three binary enclosures; the
 //! actual refresh + leased download pipeline runs end-to-end and the stored

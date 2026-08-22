@@ -1,5 +1,4 @@
 //! Shared integration-test support: per-test PostgreSQL databases.
-//!
 //! Each test gets a fresh database (`melodee_test_<name>_<uuid>`) created from
 //! the admin connection, migrated from empty, and dropped on completion.
 //! Connection: `MELODEE_TEST_DATABASE_URL` (admin database), defaulting to the

@@ -1,4 +1,4 @@
-//! Phase 7 request/share/preferences PostgreSQL integrity acceptance.
+//! request/share/preferences PostgreSQL integrity acceptance.
 
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 

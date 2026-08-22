@@ -1,28 +1,27 @@
-//! Phase 10 WP-14 dashboard aggregation and WP-17 system/workers/search
+//! dashboard aggregation and system/workers/search
 //! admin API (PRD-API-ADMIN-002, PRD-UI-001, PRD-WORK-002, SPEC §22).
 //!
 //! Everything here is aggregated from durable state with bounded, set-based
 //! queries — no endpoint walks the catalog row-by-row and none of them run
-//! probes beyond what `readyz`/onboarding already perform:
-//!
+//! probes beyond what `readyz`/onboarding already perform: //!
 //! - KPI counts come from the catalog aggregate read and work-item state
-//!   counts; the rolling 24h failure/completion windows and the per-hour
-//!   activity series are set-based `FILTER`/`date_trunc` aggregates over
-//!   `release_work_items`.
+//! counts; the rolling 24h failure/completion windows and the per-hour
+//! activity series are set-based `FILTER`/`date_trunc` aggregates over
+//! `release_work_items`.
 //! - Pool pause/resume is the same lease-coordinated durable control plane
-//!   the CLI uses (`WorkerPoolStore`); workers honor the pool row between
-//!   claim batches, so a pause never strands an in-flight lease.
+//! the CLI uses (`WorkerPoolStore`); workers honor the pool row between
+//! claim batches, so a pause never strands an in-flight lease.
 //! - Pool metrics are reported only where a durable queue table exists
-//!   (policy, podcast); pools without one (discovery maintenance) report
-//!   `metricsAvailable: false` instead of invented zeros. "Running" is
-//!   unexpired-lease evidence, not a worker liveness claim.
+//! (policy, podcast); pools without one (discovery maintenance) report
+//! `metricsAvailable: false` instead of invented zeros. "Running" is
+//! unexpired-lease evidence, not a worker liveness claim.
 //! - Search status/rebuild go through the same `melodee-search` service
-//!   functions as the CLI. Rebuild is *requested* here; the running search
-//!   worker claims and executes the durable job (a second request while one
-//!   is unfinished is `409 rebuild_in_progress`).
+//! functions as the CLI. Rebuild is *requested* here; the running search
+//! worker claims and executes the durable job (a second request while one
+//! is unfinished is `409 rebuild_in_progress`).
 //! - Subsystem health reuses the onboarding preflight checks (storage paths,
-//!   media tools) and the `readyz`-style bounded probes (PostgreSQL
-//!   `SELECT 1`, Tantivy active-generation diagnostic).
+//! media tools) and the `readyz`-style bounded probes (PostgreSQL
+//! `SELECT 1`, Tantivy active-generation diagnostic).
 
 use axum::{
     Json, Router,
@@ -52,13 +51,13 @@ const HEALTH_PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs
 /// Dashboard rolling window for failures/completions/activity.
 const DASHBOARD_WINDOW: time::Duration = time::Duration::hours(24);
 
-/// Shared state for the WP-14/WP-17 surface: the common admin gate plus the
+/// Shared state for the / surface: the common admin gate plus the
 /// configured search projection (absent when the search worker is disabled).
 #[derive(Clone)]
 pub struct AdminSystemState {
     pub admin: AdminAccessState,
     pub search: Option<SearchConfig>,
-    /// R2.4 bounded-resource registry snapshotted into health. Optional so
+    /// bounded-resource registry snapshotted into health. Optional so
     /// tests that construct the state directly stay ungauged.
     pub resource_bounds: Option<std::sync::Arc<crate::resource_bounds::ResourceBounds>>,
 }
@@ -73,7 +72,7 @@ impl AdminSystemState {
         }
     }
 
-    /// Attaches the process bounded-resource registry (R2.4) so
+    /// Attaches the process bounded-resource registry so
     /// `/system/health` reports per-class utilization, queue age, and
     /// saturation. Purely observational; admission behavior is unchanged.
     #[must_use]
@@ -125,10 +124,10 @@ fn store_failure(context: &'static str, error: &impl std::fmt::Display) -> Respo
 /// - `ok` — the subsystem is healthy;
 /// - `degraded` — operating but impaired;
 /// - `disabled` — a deliberately unconfigured optional subsystem;
-/// - `unavailable` — a dependency probe failed or timed out (R2.5);
-/// - `readOnly` — the root exists but is not writable (R2.5);
-/// - `misconfigured` — required configuration is invalid or absent (R2.5);
-/// - `capacityExhausted` — a fixed capacity threshold was crossed (R2.5).
+/// - `unavailable` — a dependency probe failed or timed out;
+/// - `readOnly` — the root exists but is not writable;
+/// - `misconfigured` — required configuration is invalid or absent;
+/// - `capacityExhausted` — a fixed capacity threshold was crossed.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubsystemHealthDto {
@@ -215,28 +214,28 @@ pub struct ApiSurfaceDto {
 #[serde(rename_all = "camelCase")]
 pub struct HealthDto {
     /// `ok` when PostgreSQL is reachable and Tantivy is healthy or disabled
-    /// (the Phase-10 top-level rule, unchanged). R2.5 subsystems report
+    /// (the Phase-10 top-level rule, unchanged). subsystems report
     /// their own statuses without flipping the top-level indicator.
     pub status: &'static str,
     pub postgresql: SubsystemHealthDto,
     pub tantivy: SubsystemHealthDto,
     pub storage: SubsystemHealthDto,
     pub ffmpeg: SubsystemHealthDto,
-    /// R2.5: podcast download storage root (disabled when the podcast worker
+    ///: podcast download storage root (disabled when the podcast worker
     /// is off).
     pub podcast_storage: SubsystemHealthDto,
-    /// R2.5: free-disk headroom across the configured writable roots.
+    ///: free-disk headroom across the configured writable roots.
     pub disk: SubsystemHealthDto,
-    /// R2.5: lease health (stale expired leases) and durable queue age.
+    ///: lease health (stale expired leases) and durable queue age.
     pub workers: SubsystemHealthDto,
     pub api_surfaces: Vec<ApiSurfaceDto>,
-    /// R2.4: point-in-time utilization/saturation of every semaphore-bounded
+    ///: point-in-time utilization/saturation of every semaphore-bounded
     /// resource class registered at startup; empty when the process installed
     /// no registry (unit tests).
     pub resource_bounds: Vec<crate::resource_bounds::ResourceBoundSnapshot>,
 }
 
-/// R2.5 fixed capacity thresholds — no new operator settings.
+/// fixed capacity thresholds — no new operator settings.
 const DISK_FREE_WARN_BYTES: u64 = 1 << 30; // 1 GiB
 const DISK_FREE_WARN_PERCENT: u64 = 5;
 /// An expired lease surviving past this window is a dead/stalled worker,
@@ -255,7 +254,7 @@ async fn postgresql_health(pool: &sqlx::PgPool) -> SubsystemHealthDto {
     }
 }
 
-/// R2.5: podcast download storage root health. Disabled when the podcast
+///: podcast download storage root health. Disabled when the podcast
 /// worker is off; `misconfigured` when a required root is absent or invalid.
 fn podcast_storage_health() -> SubsystemHealthDto {
     match crate::podcast_worker::PodcastConfig::from_env() {
@@ -377,7 +376,7 @@ fn disk_health() -> SubsystemHealthDto {
     }
 }
 
-/// R2.5: lease health and durable queue age across the pools with queue
+///: lease health and durable queue age across the pools with queue
 /// tables. Degraded when stale (long-expired, unrecovered) leases exist or
 /// the oldest queued work exceeds the fixed 24h window.
 async fn workers_health(pool: &sqlx::PgPool, now: OffsetDateTime) -> SubsystemHealthDto {
@@ -467,8 +466,8 @@ async fn aggregate_health(
     let podcast_storage = podcast_storage_health();
     let disk = disk_health();
     let workers = workers_health(pool, OffsetDateTime::now_utc()).await;
-    // Top-level rule unchanged from Phase 10: PostgreSQL reachable and
-    // Tantivy healthy-or-disabled. The R2.5 subsystems (podcastStorage, disk,
+    // Top-level rule unchanged from: PostgreSQL reachable and
+    // Tantivy healthy-or-disabled. The subsystems (podcastStorage, disk,
     // workers) and the pre-existing storage/ffmpeg preflights report their
     // own statuses without flipping the top-level indicator — operators read
     // them individually on the diagnostics surface.
@@ -512,7 +511,7 @@ async fn aggregate_health(
 }
 
 // ---------------------------------------------------------------------------
-// WP-14 dashboard
+// dashboard
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Serialize)]
@@ -569,7 +568,7 @@ pub struct DashboardDto {
 }
 
 // ---------------------------------------------------------------------------
-// WP-17 worker pools
+// worker pools
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Serialize)]
@@ -627,7 +626,7 @@ pub struct FailuresPageDto {
 }
 
 // ---------------------------------------------------------------------------
-// WP-17 search administration
+// search administration
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Serialize)]

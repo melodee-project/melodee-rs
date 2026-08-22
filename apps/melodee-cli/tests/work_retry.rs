@@ -1,4 +1,4 @@
-//! R2.5 CLI evidence: `melodee work retry` requeues a failed or quarantined
+//! CLI evidence: `melodee work retry` requeues a failed or quarantined
 //! work item through the identical operator state-machine arm the Admin UI
 //! reprocess endpoint uses (`failed|quarantined -> ready`,
 //! `TransitionKind::Operator`, audited reason) — PRD-CLI-002: the CLI never

@@ -1,4 +1,4 @@
--- Phase 8 OpenSubsonic adapter state (authority: ADR-0102, ADR-0130).
+-- OpenSubsonic adapter state (authority: ADR-0102, ADR-0130).
 --
 -- This migration is additive. A binary downgrade leaves the tables intact;
 -- schema rollback restores a verified pre-Phase-8 backup into a new database.

@@ -28,14 +28,14 @@ pub struct InspectionStats {
     pub errors: u64,
     pub duration_ms: i64,
     /// Candidates denied by the `directoryProcessingStart` script hook
-    /// (WP-11). Acquisition has already made staging authoritative, so a
+    ///. Acquisition has already made staging authoritative, so a
     /// denied candidate remains staged as a retryable failed work item.
     pub script_skipped: u64,
 }
 
 /// Claims and inspects one bounded batch of Ready work. PostgreSQL owns
 /// exclusivity; the configured batch is also the worker's backpressure bound.
-/// `gate` is the WP-11 scripting hook injection point (None = no hooks).
+/// `gate` is the scripting hook injection point (None = no hooks).
 pub async fn inspect_ready_once(
     ingestion: &IngestionConfig,
     store: &WorkItemStore,
@@ -55,7 +55,7 @@ pub async fn inspect_ready_once(
     };
 
     for item in items {
-        // R2.5: every event inside the item boundary inherits both the
+        //: every event inside the item boundary inherits both the
         // work-item id and the durable correlation id from this span.
         let span = tracing::info_span!(
             "inspect_work_item",
@@ -215,14 +215,14 @@ async fn inspect_one(
         .renew_lease(pool, item.id, worker, work_config.lease_duration, now)
         .await?;
 
-    // WP-11 `directoryProcessingStart` hook: the candidate is stable (the
+    // `directoryProcessingStart` hook: the candidate is stable (the
     // snapshot signature was just re-verified) and about to enter media
     // inspection — the Rust pipeline point equivalent to the legacy
     // pre-plugin-processing gate. The boundary is infallible by contract
     // (fail-degraded allow; ADR-0135 §4). Deny is a retryable failure after
     // durable acquisition: the source remains in staging and is never moved
     // back into the inbound inbox. Physical quarantine moves are deferred
-    // (durable Phase 5 decision contract); legacy `delete` stays rewritten
+    // (durable decision contract); legacy `delete` stays rewritten
     // to deny.
     if let Some(gate) = gate {
         match gate.evaluate(&root, &before).await {
@@ -453,7 +453,7 @@ async fn return_to_settling(
 
 /// Starts a graceful periodic inspection worker. Reconciliation and this loop
 /// share PostgreSQL leases, so a process restart recovers an interrupted claim.
-/// `gate` is the WP-11 scripting hook injection point (None = no hooks).
+/// `gate` is the scripting hook injection point (None = no hooks).
 pub fn start_inspection_loop(
     ingestion: IngestionConfig,
     pool: PgPool,

@@ -102,7 +102,7 @@ impl ImageProcessor {
         let max = max_concurrency.max(1);
         Self {
             permits: Arc::new(Semaphore::new(max)),
-            // R2.4: image processing reports utilization and non-blocking
+            //: image processing reports utilization and non-blocking
             // rejections through the process resource-bounds registry when
             // startup installed one.
             gauge: crate::resource_bounds::ResourceBounds::global()
@@ -156,7 +156,7 @@ impl ImageProcessor {
 struct ImageProcessingError;
 
 /// RAII admission token for the bounded image pipeline: bundles the
-/// concurrency semaphore permit with the optional R2.4 resource-bounds gauge
+/// concurrency semaphore permit with the optional resource-bounds gauge
 /// permit so both release together on drop, including client disconnect while
 /// the response body is still in flight.
 #[derive(Debug)]
@@ -237,7 +237,7 @@ fn process_image(
     Ok(output)
 }
 
-/// Decoded, dimension-bounded, re-encoded avatar bytes for the WP-03 native
+/// Decoded, dimension-bounded, re-encoded avatar bytes for the native
 /// avatar store. Output never exceeds the 1 MiB `native_user_avatars` bound.
 pub(super) async fn normalize_avatar_image(
     input: Vec<u8>,
@@ -390,7 +390,7 @@ async fn load_image(
             }
         }
         ImageKind::User => {
-            // WP-03: `native_user_avatars` is the avatar authority; the
+            //: `native_user_avatars` is the avatar authority; the
             // migration-0010 columns remain the legacy-import fallback.
             let image = sqlx::query_as::<_, (Option<String>, Option<Vec<u8>>)>(
                 "SELECT COALESCE(a.content_type, u.image_mime_type), COALESCE(a.image, u.image_bytes)

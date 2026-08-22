@@ -1,4 +1,4 @@
-//! Phase 9 WP-10 device profile acceptance (ADR-0134 §5,
+//! device profile acceptance (ADR-0134 §5,
 //! PRD-DEVICE-001/002): migration shape, constraint integrity, bounded CRUD,
 //! legacy-parity validation, and the atomic single-default invariant.
 

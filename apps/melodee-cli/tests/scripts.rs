@@ -1,4 +1,4 @@
-//! WP-11 CLI evidence: `melodee scripts list` and `melodee scripts test`
+//! CLI evidence: `melodee scripts list` and `melodee scripts test`
 //! (PRD-SCRIPT-001/004, ADR-0135). Test runs evaluate in the real sandbox
 //! and record honest `script_runs` audit rows — including error outcomes —
 //! instead of failing the command.

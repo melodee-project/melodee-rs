@@ -1,7 +1,6 @@
-//! Repeatable Phase 7 native-API scale evidence.
-//!
+//! Repeatable native-API scale evidence.
 //! The default smoke protects result bounds and catastrophic regressions. The
-//! ignored current-catalog run records the proposed Phase 0 browse/random
+//! ignored current-catalog run records the proposed browse/random
 //! budgets without turning an unratified proposal into a product requirement.
 
 #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]

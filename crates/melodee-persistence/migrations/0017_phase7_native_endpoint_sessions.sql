@@ -1,4 +1,4 @@
--- Phase 7 native PartySessionEndpointRegistry authority (ADR-0123,
+-- native PartySessionEndpointRegistry authority (ADR-0123,
 -- ADR-0127; PRD-PARTY-003..004).
 --
 -- The full Party/Queue controller families remain preserved-negative. These

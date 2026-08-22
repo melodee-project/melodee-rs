@@ -1,11 +1,10 @@
--- Phase 9 notification templates and delivery audit (ADR-0134 §4,
+-- notification templates and delivery audit (ADR-0134 §4,
 -- PRD-NOTIF-001..003).
 --
 -- Additive. A binary downgrade leaves both tables intact; schema rollback
 -- restores a verified pre-Phase-9 backup into a new database.
 --
--- Legacy parity (evidence:
--- design/evidence/phase-9/configuration-inventory.md §14 "Email settings"):
+-- Legacy parity (evidence: design/evidence/phase-9/configuration-inventory.md §14 "Email settings"):
 -- the legacy server seeded only `email.resetPassword.subject` ("Reset your
 -- Melodee password"); both legacy body-template keys were dead (never seeded,
 -- never consumed). The seeds below therefore carry that one captured subject
@@ -17,8 +16,8 @@ CREATE TABLE notification_templates (
     -- Dotted event key (e.g. user.password_reset). Never an identity for
     -- anything outside this table; admins may add keys for future events.
     template_key text NOT NULL,
-    -- BCP-47-ish locale tag (en, en-US, pt-BR, ...). The narrow shape is
-    -- deliberate: Phase 10 localization owns any widening.
+    -- BCP-47-ish locale tag (en, en-US, pt-BR,...). The narrow shape is
+    -- deliberate: localization owns any widening.
     locale text NOT NULL,
     subject text,
     body_text text,
@@ -47,8 +46,8 @@ CREATE TABLE notification_templates (
     CONSTRAINT notification_templates_version_check CHECK (version >= 1)
 );
 
--- Default `en` templates for the wired Phase 9 events. Neutral wording;
--- user-visible text lives here (not in code) so Phase 10 localization can
+-- Default `en` templates for the wired events. Neutral wording;
+-- user-visible text lives here (not in code) so localization can
 -- translate it (PRD-NOTIF-003).
 INSERT INTO notification_templates (template_key, locale, subject, body_text, body_html) VALUES
     (

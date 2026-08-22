@@ -1,5 +1,4 @@
-//! OpenSubsonic conditional endpoint compatibility evidence (Phase 8).
-//!
+//! OpenSubsonic conditional endpoint compatibility evidence.
 //! Asserts the captured shapes for shares, internet radio, scan, users, and
 //! podcast mutations (PRD-API-OS-004/005; golden evidence
 //! `compatibility/opensubsonic/golden/community`, `.../conditional`). The
@@ -662,7 +661,7 @@ async fn get_user_returns_captured_role_model() {
 
 #[tokio::test]
 async fn get_user_avatar_last_changed_reflects_avatar_store() {
-    // WP-03 (ADR-0134 §2): when an avatar row exists, avatarLastChanged is
+    // (ADR-0134 §2): when an avatar row exists, avatarLastChanged is
     // the avatar store's updated_at; otherwise the user row's updated_at as
     // at the captured baseline. Response shape is unchanged.
     let db = common::TestDb::create("os_cond_get_user_avatar_changed").await;

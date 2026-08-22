@@ -1,4 +1,4 @@
-//! WP-02 CLI evidence: `melodee podcasts stuck|recover` lists and recovers
+//! CLI evidence: `melodee podcasts stuck|recover` lists and recovers
 //! stuck/orphaned podcast downloads through the same durable lease predicates
 //! and owned-file reconciliation the podcast worker uses (PRD-CLI-002: a CLI
 //! command never bypasses leases or ownership controls).

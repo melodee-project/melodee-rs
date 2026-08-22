@@ -1,4 +1,4 @@
-//! Runtime integration at the immutable Phase 4 catalog handoff.
+//! Runtime integration at the immutable catalog handoff.
 
 #![allow(clippy::expect_used)]
 

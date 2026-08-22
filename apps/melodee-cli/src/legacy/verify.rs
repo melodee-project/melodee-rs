@@ -1,5 +1,5 @@
 //! `legacy verify`: source/target parity checks with durable mismatch issues
-//! and exact bounded samples (ADR-0148 §D.5, R3.7).
+//! and exact bounded samples (ADR-0148 §D.5).
 
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -442,7 +442,7 @@ pub async fn compute_gate(
     .await
     .map_err(|e| format!("duplicate public id check failed: {e}"))?;
 
-    // R3.7 deep checks: public-ID equality, relationship totals, playlist
+    // Deep checks: public-ID equality, relationship totals, playlist
     // ordering, orphan mappings, and adopted-media references.
     let mut deep = Vec::new();
     let public_id = verify_public_id_equality(source, target, run_id, sample_limit).await?;
@@ -469,7 +469,7 @@ pub async fn compute_gate(
     })
 }
 
-/// One R3.7 deep-check outcome: rows examined, mismatches found, and a
+/// One deep-check outcome: rows examined, mismatches found, and a
 /// bounded human-actionable sample list.
 #[derive(Debug, serde::Serialize)]
 pub struct DeepCheck {

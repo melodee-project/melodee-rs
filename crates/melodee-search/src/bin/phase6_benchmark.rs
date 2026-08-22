@@ -1,4 +1,4 @@
-//! Deterministic Phase 6 synthetic catalog benchmark.
+//! Deterministic synthetic catalog benchmark.
 //!
 //! Usage: `cargo run --release -p melodee-search --bin phase6_benchmark --
 //! --tracks 10000000 --root /absolute/empty/or-owned/search/root`.

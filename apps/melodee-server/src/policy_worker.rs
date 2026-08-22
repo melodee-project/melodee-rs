@@ -1,4 +1,4 @@
-//! Independently bounded Phase 5 policy evaluation over authoritative
+//! Independently bounded policy evaluation over authoritative
 //! PostgreSQL catalog facts. This module never opens source or canonical media.
 
 use std::{

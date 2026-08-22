@@ -1,4 +1,4 @@
--- Durable Phase 3.3 canonical-publication intent and convergence evidence
+-- Durable canonical-publication intent and convergence evidence
 -- (ADR-0116). Authorization and plans are insert-only through the repository;
 -- completion is a separate immutable receipt and progress is append-only.
 

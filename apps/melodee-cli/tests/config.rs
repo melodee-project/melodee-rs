@@ -1,4 +1,4 @@
-//! WP-08 CLI evidence: `melodee config list|validate|export|import`
+//! CLI evidence: `melodee config list|validate|export|import`
 //! (PRD-CONFIG-001/002, PRD-SETUP-001). Secrets are always redacted; import
 //! previews by default and fails closed on redacted markers and unknown
 //! keys.

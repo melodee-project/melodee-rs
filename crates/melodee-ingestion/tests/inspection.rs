@@ -141,7 +141,7 @@ async fn source_change_before_inspection_returns_to_settling_without_manifest() 
     scenario.database.drop().await;
 }
 
-/// WP-11 stub gate: the scripting service implements this trait in the
+/// stub gate: the scripting service implements this trait in the
 /// server; here a stub proves the pipeline wiring (deny → durable staged
 /// retryable failure with no manifest; allow → normal inspection).
 struct StubGate(melodee_ingestion::DirectoryGateOutcome);

@@ -1,4 +1,4 @@
-//! Phase 10 WP-16 Policy Rule API integration tests: the administrator gate,
+//! Policy Rule API integration tests: the administrator gate,
 //! versioned rule CRUD (immutable history, never in-place), safety-rule
 //! protection, enable/disable as version membership, and the audited
 //! test-against-catalog dry run.

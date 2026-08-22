@@ -1,4 +1,4 @@
-//! Phase 9 WP-11 Admin API integration tests: scripting hook administration
+//! Admin API integration tests: scripting hook administration
 //! over the (event, name) upsert identity, the administrator-only gate, the
 //! append-only execution audit listing, and honest operator test-runs in the
 //! real sandbox (PRD-SCRIPT-001/004, ADR-0134 §6, ADR-0135).

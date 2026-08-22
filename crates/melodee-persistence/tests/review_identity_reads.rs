@@ -1,4 +1,4 @@
-//! Phase 10 read-side store coverage: multi-state review queue paging,
+//! read-side store coverage: multi-state review queue paging,
 //! persisted novelty reads, and the Artist identity review reads
 //! (unresolved queue, observation detail, decision feed, public-id lookup).
 

@@ -1,4 +1,4 @@
--- Normalization provenance and claim index (Phase 3.2).
+-- Normalization provenance and claim index.
 --
 -- The manifest_payload JSONB already carries the full NormalizationObservations
 -- including volatile provenance. This migration adds a dedicated provenance

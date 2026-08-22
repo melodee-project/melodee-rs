@@ -1,4 +1,4 @@
-//! Phase 9 WP-11 scripting persistence acceptance (ADR-0134 §6, ADR-0135,
+//! scripting persistence acceptance (ADR-0134 §6, ADR-0135,
 //! PRD-SCRIPT-001..004): migration shape (nothing seeded — scripts are
 //! operator-installed), registry CRUD with version bump on source change
 //! only, bounds enforcement with the SQL CHECKs as backstop, the append-only
@@ -329,7 +329,7 @@ async fn failure_window_counts_only_recent_failures() {
         .expect("create");
 
     // timeout, timeout, allow, timeout (oldest→newest): the 3-run window
-    // holds [allow, timeout, ...] -> not a full-failure window.
+    // holds [allow, timeout,...] -> not a full-failure window.
     for (index, outcome) in [
         ScriptRunOutcome::Timeout,
         ScriptRunOutcome::Timeout,

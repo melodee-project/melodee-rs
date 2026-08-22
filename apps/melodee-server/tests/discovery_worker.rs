@@ -1,4 +1,4 @@
-//! Phase 9 WP-04 scheduled chart/recommendation aggregate maintenance
+//! scheduled chart/recommendation aggregate maintenance
 //! acceptance (PRD-WORK-003).
 
 #![allow(clippy::expect_used)]

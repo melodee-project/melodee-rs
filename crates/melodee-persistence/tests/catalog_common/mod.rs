@@ -1,6 +1,5 @@
-//! Shared Phase 4 catalog integration fixtures.
-//!
-//! These helpers construct the complete durable Phase 3 handoff through the
+//! Shared catalog integration fixtures.
+//! These helpers construct the complete durable handoff through the
 //! public persistence API. Catalog tests can therefore begin at `Published`
 //! without bypassing the manifest, publication-plan, receipt, or lease
 //! invariants that the catalog importer is required to validate.
@@ -22,7 +21,7 @@ use serde_json::json;
 
 use crate::common::{T0, TestDb, seed_ready_item, test_config};
 
-/// Immutable Phase 3 facts that Phase 4 must adopt without rewriting.
+/// Immutable facts that must adopt without rewriting.
 #[derive(Debug, Clone)]
 pub struct PublishedCatalogFixture {
     pub work_item_id: uuid::Uuid,
@@ -115,7 +114,7 @@ pub async fn seed_published_release_with_normalized_hash_and_genre(
 }
 
 /// Complete immutable handoff carrying a real inspection read-error fact for
-/// Phase 5 quarantine acceptance.
+/// quarantine acceptance.
 pub async fn seed_published_release_with_read_error(
     db: &TestDb,
     ordinal: u32,

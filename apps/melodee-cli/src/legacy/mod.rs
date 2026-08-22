@@ -1,4 +1,4 @@
-//! Phase 11 legacy (C#) migration tooling — ADR-0148.
+//! Legacy (C#) migration tooling — ADR-0148.
 //!
 //! The `melodee legacy` command group migrates the frozen C# PostgreSQL model
 //! into the Rust model. The source database is opened strictly read-only, the

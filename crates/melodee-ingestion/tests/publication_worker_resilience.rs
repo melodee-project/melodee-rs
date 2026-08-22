@@ -1,4 +1,4 @@
-//! Regression coverage for unexpected per-item PostgreSQL failures in Phase 3 workers.
+//! Regression coverage for unexpected per-item PostgreSQL failures in workers.
 #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 
 #[path = "../../melodee-persistence/tests/common/mod.rs"]

@@ -1,31 +1,30 @@
-//! Phase 9 WP-08 first-run onboarding preflight (PRD-SETUP-001/002,
+//! first-run onboarding preflight (PRD-SETUP-001/002,
 //! ADR-0134 §3).
 //!
 //! [`evaluate_onboarding`] runs six named checks, each reported with
-//! pass/fail and a remediation hint:
-//!
+//! pass/fail and a remediation hint: //!
 //! 1. `database` (**required**) — PostgreSQL is reachable and compiled
-//!    migrations are fully applied with no recorded failure.
+//! migrations are fully applied with no recorded failure.
 //! 2. `storage_paths` — the four ADR-0145 storage roles are probed and
-//!    reported separately: inbound source roots exist and are readable, the
-//!    durable staging root is set and writable while inbound ingestion is
-//!    enabled, the disposable normalization work area is writable or
-//!    creatable under a writable ancestor, and the canonical storage root
-//!    (when set) is writable. An unconfigured server fails this check with
-//!    configuration guidance; advisory, because media paths can also be
-//!    configured after first run.
+//! reported separately: inbound source roots exist and are readable, the
+//! durable staging root is set and writable while inbound ingestion is
+//! enabled, the disposable normalization work area is writable or
+//! creatable under a writable ancestor, and the canonical storage root
+//! (when set) is writable. An unconfigured server fails this check with
+//! configuration guidance; advisory, because media paths can also be
+//! configured after first run.
 //! 3. `media_tools` — the configured `ffprobe`/`ffmpeg` executables answer
-//!    `-version`. Advisory (conversion/normalization degrade, browsing does
-//!    not).
+//! `-version`. Advisory (conversion/normalization degrade, browsing does
+//! not).
 //! 4. `search_index` — when the search worker is enabled, its root is
-//!    configured and ready (existing directory writable / creatable under a
-//!    writable parent) without creating or claiming anything. Disabled
-//!    search passes vacuously. Advisory.
+//! configured and ready (existing directory writable / creatable under a
+//! writable parent) without creating or claiming anything. Disabled
+//! search passes vacuously. Advisory.
 //! 5. `admin_user` (**required**) — at least one enabled, unlocked
-//!    administrator exists (`melodee-cli users bootstrap-admin` creates the
-//!    first one).
+//! administrator exists (`melodee-cli users bootstrap-admin` creates the
+//! first one).
 //! 6. `email` — layered email settings validate (enabled ⇒ from/host set).
-//!    Advisory (delivery disabled is a valid steady state).
+//! Advisory (delivery disabled is a valid steady state).
 //!
 //! Completion ([`complete_onboarding`]) fails closed while any required
 //! check fails and writes the singleton `onboarding_state` row with the
@@ -35,13 +34,12 @@
 //!
 //! On every status evaluation the report carries `bypassed: true` when the
 //! database shows evidence of an existing (migrated) installation, defined
-//! exactly as:
-//!
+//! exactly as: //!
 //! - `onboarding_state.completed_at` is already set, OR
 //! - the catalog is non-empty (`EXISTS (SELECT 1 FROM releases)` or
-//!   `EXISTS (SELECT 1 FROM artists)`), OR
+//! `EXISTS (SELECT 1 FROM artists)`), OR
 //! - `server_settings` holds at least one known registry key (a legacy
-//!   `Settings` import lands as such rows in Phase 11).
+//! `Settings` import lands as such rows in).
 //!
 //! A bypassed server never requires onboarding completion; completion
 //! remains allowed (idempotent marker rewrite).

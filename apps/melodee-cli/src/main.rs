@@ -40,22 +40,22 @@ enum Commands {
         #[command(subcommand)]
         command: WorkCommands,
     },
-    /// Phase 3 ingestion worker operations and diagnostics.
+    /// Ingestion worker operations and diagnostics.
     Ingest {
         #[command(subcommand)]
         command: IngestCommands,
     },
-    /// Phase 4 PostgreSQL catalog import and diagnostics.
+    /// PostgreSQL catalog import and diagnostics.
     Catalog {
         #[command(subcommand)]
         command: CatalogCommands,
     },
-    /// Phase 5 policy classification, novelty, and dry-run diagnostics.
+    /// Policy classification, novelty, and dry-run diagnostics.
     Policy {
         #[command(subcommand)]
         command: PolicyCommands,
     },
-    /// Phase 6 MQL, Tantivy projection, rebuild, and diagnostics.
+    /// MQL, Tantivy projection, rebuild, and diagnostics.
     Search {
         #[command(subcommand)]
         command: SearchCommands,
@@ -105,9 +105,8 @@ enum Commands {
         #[command(subcommand)]
         command: ConfigCommands,
     },
-    /// Phase 11 legacy (C#) migration tooling: inventory, plan, import,
-    /// verify, delta, and status against a read-only source snapshot
-    /// (ADR-0148).
+    /// Legacy (C#) migration tooling: inventory, plan, import, verify,
+    /// delta, and status against a read-only source snapshot (ADR-0148).
     Legacy {
         #[command(subcommand)]
         command: legacy::LegacyCommands,
@@ -586,15 +585,15 @@ async fn main() {
     match cli.command {
         Commands::Plan => {
             println!("Official roadmap: IMPLEMENTATION.md");
-            println!("Phase 0: complete — see design/evidence/phase-0/PHASE-0-REPORT.md");
-            println!("Phase 1: complete — see design/evidence/phase-1/PHASE-1-REPORT.md");
-            println!("Phase 2: complete — see design/evidence/phase-2/PHASE-2-REPORT.md");
-            println!("Phase 3: complete — see design/evidence/phase-3/PHASE-3-REPORT.md");
-            println!("Phase 4: complete — see design/evidence/phase-4/PHASE-4-REPORT.md");
-            println!("Phase 5: complete — see design/evidence/phase-5/PHASE-5-REPORT.md");
-            println!("Phase 6: complete — see design/evidence/phase-6/PHASE-6-REPORT.md");
-            println!("Phase 7: complete — see design/evidence/phase-7/PHASE-7-REPORT.md");
-            println!("Phase 8: active — see IMPLEMENTATION.md");
+            println!("Foundation complete — see design/evidence/phase-0/PHASE-0-REPORT.md");
+            println!("Ingestion complete — see design/evidence/phase-1/PHASE-1-REPORT.md");
+            println!("Workspace complete — see design/evidence/phase-2/PHASE-2-REPORT.md");
+            println!("Normalization complete — see design/evidence/phase-3/PHASE-3-REPORT.md");
+            println!("Catalog complete — see design/evidence/phase-4/PHASE-4-REPORT.md");
+            println!("Policy complete — see design/evidence/phase-5/PHASE-5-REPORT.md");
+            println!("Search complete — see design/evidence/phase-6/PHASE-6-REPORT.md");
+            println!("Native-v1 complete — see design/evidence/phase-7/PHASE-7-REPORT.md");
+            println!("Current work is active — see IMPLEMENTATION.md");
             println!("Read: PRD.md, SPEC.md, IMPLEMENTATION.md, AGENTS.md");
         }
         Commands::Doctor => {
@@ -1841,7 +1840,7 @@ async fn run_config_command(command: &ConfigCommands) {
 
 /// Notification commands go through the same stores and delivery service as
 /// the server (PRD-CLI-002: never bypass safety), mirroring the admin API
-/// semantics. Email settings resolve through the WP-08 layered sources
+/// semantics. Email settings resolve through layered sources
 /// (env/config-file over `server_settings` over defaults); a disabled
 /// transport records an honest `skipped` delivery instead of failing the
 /// command (PRD-NOTIF-002/003).
@@ -1918,8 +1917,8 @@ async fn run_notification_command(command: &NotificationCommands) {
     }
 }
 
-/// WP-11 scripting hook operations (PRD-SCRIPT-001/004, ADR-0135): DB-direct
-/// over the same stores and sandboxed executor as the admin API. Outcomes —
+/// Scripting hook operations (PRD-SCRIPT-001/004, ADR-0135): DB-direct over
+/// the same stores and sandboxed executor as the admin API. Outcomes —
 /// including error/timeout fail-degraded results — are data, never command
 /// failures (exit 1 is reserved for store failures, exit 2 for usage).
 async fn run_script_command(command: &ScriptCommands) {

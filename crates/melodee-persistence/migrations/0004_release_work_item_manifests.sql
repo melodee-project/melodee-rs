@@ -1,4 +1,4 @@
--- Durable versioned manifest publication and inspection evidence (Phase 3).
+-- Durable versioned manifest publication and inspection evidence.
 
 CREATE TABLE release_work_item_manifests (
     id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

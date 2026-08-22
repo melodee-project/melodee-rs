@@ -1,4 +1,4 @@
--- Phase 7 bounded native playlist import and recommendation projections
+-- bounded native playlist import and recommendation projections
 -- (ADR-0123, ADR-0128; PRD-PLAYLIST-001, PRD-DISCOVERY-002..003).
 --
 -- Additive only. Binary downgrade leaves these rebuildable projections and
@@ -93,7 +93,7 @@ CREATE INDEX native_recommendation_candidates_rank_idx
        (entity_type, popularity DESC, entity_id);
 
 -- Recommendation category probes bind the principal and candidate Track,
--- then apply the recent-listening cutoff. The Phase 7 request window bounds
+-- then apply the recent-listening cutoff. The request window bounds
 -- candidate count; this composite index also bounds work inside each probe.
 CREATE INDEX native_track_plays_user_track_time_idx
     ON native_track_plays (user_id, track_id, played_at DESC);

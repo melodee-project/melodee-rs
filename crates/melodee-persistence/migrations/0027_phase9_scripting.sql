@@ -1,4 +1,4 @@
--- Phase 9 scripting hooks: operator script registry and execution audit
+-- scripting hooks: operator script registry and execution audit
 -- (ADR-0134 §6, ADR-0135, PRD-SCRIPT-001..004).
 --
 -- Additive. A binary downgrade leaves both tables intact; schema rollback

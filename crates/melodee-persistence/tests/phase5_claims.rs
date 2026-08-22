@@ -1,4 +1,4 @@
-//! Deterministic PostgreSQL lease/fencing acceptance for Phase 5 policy work.
+//! Deterministic PostgreSQL lease/fencing acceptance for policy work.
 
 #![allow(clippy::expect_used, clippy::panic)]
 

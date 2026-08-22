@@ -2,32 +2,35 @@ import type {
   DashboardActivityBucket,
   IngestionState,
   WorkItemStateCount,
-} from '../../api/types';
+} from "../../api/types";
 
 /**
- * Pure helpers for the overview dashboard (WP-14): work-item state grouping
+ * Pure helpers for the overview dashboard : work-item state grouping
  * and activity-chart geometry. Kept component-free so they unit-test without
  * a DOM.
  */
 
 /** Inbound: discovered and settling, i.e. arrived but not yet in the pipeline. */
-export const INBOUND_STATES: readonly IngestionState[] = ['discovered', 'settling'];
+export const INBOUND_STATES: readonly IngestionState[] = [
+  "discovered",
+  "settling",
+];
 
 /** Actively moving through the pipeline (excludes terminal states). */
 export const ACTIVE_STATES: readonly IngestionState[] = [
-  'ready',
-  'inspecting',
-  'normalizing',
-  'validating',
-  'staged',
-  'publishing',
-  'published',
-  'cataloging',
-  'indexing',
+  "ready",
+  "inspecting",
+  "normalizing",
+  "validating",
+  "staged",
+  "publishing",
+  "published",
+  "cataloging",
+  "indexing",
 ];
 
 /** Sums the reported counts for the given states. The counts endpoint omits
- *  empty states, so absence means zero. */
+ * empty states, so absence means zero. */
 export function countStates(
   counts: readonly WorkItemStateCount[],
   states: readonly IngestionState[],

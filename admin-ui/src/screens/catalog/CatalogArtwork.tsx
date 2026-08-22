@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState } from "react";
 
-import { catalogImageUrl } from '../../api/admin';
-import { EntityAvatar } from '../../components/EntityAvatar';
+import { catalogImageUrl } from "../../api/admin";
+import { EntityAvatar } from "../../components/EntityAvatar";
 
 /**
  * Catalog artwork via the frozen native `/images/{id}/{size}` endpoint
@@ -14,7 +14,7 @@ export function CatalogArtwork({
   imageId,
   name,
   size = 40,
-  imageSize = 'small',
+  imageSize = "small",
   decorative = false,
   cacheKey,
 }: {
@@ -23,7 +23,7 @@ export function CatalogArtwork({
   /** Pixel box of the avatar. */
   size?: number;
   /** Named size on the native image endpoint. */
-  imageSize?: 'thumbnail' | 'small' | 'medium' | 'large';
+  imageSize?: "thumbnail" | "small" | "medium" | "large";
   decorative?: boolean;
   /**
    * Bumps the query string so a just-mutated override is re-fetched instead
@@ -43,7 +43,7 @@ export function CatalogArtwork({
     >
       <img
         src={cacheKey === undefined ? base : `${base}?v=${cacheKey}`}
-        alt={decorative ? '' : name}
+        alt={decorative ? "" : name}
         loading="lazy"
         onError={() => setFailed(true)}
       />

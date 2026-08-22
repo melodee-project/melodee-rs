@@ -1,4 +1,4 @@
-//! Jellyfin core compatibility evidence (Phase 8 WP4): routing middleware,
+//! Jellyfin core compatibility evidence: routing middleware,
 //! AuthenticateByName, token transports, logout revocation, discovery/system.
 
 #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
@@ -603,7 +603,7 @@ async fn lowercase_jellyfin_routes_match_case_insensitively() {
     let db = common::TestDb::create("jf_case_routing").await;
     let state = state(&db).await;
     // Legacy ASP.NET matched route templates case-insensitively; real clients
-    // (Feishin) call lowercase paths (Phase 8 real-client smoke finding).
+    // (Feishin) call lowercase paths (real-client smoke finding).
     let (status, _) =
         respond_with_case_fallback(state.clone(), get_with_token("/system/info/public", "")).await;
     assert_eq!(status, StatusCode::OK);

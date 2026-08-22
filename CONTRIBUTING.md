@@ -12,9 +12,9 @@
 Use descriptive branches such as:
 
 ```text
-phase0/capture-native-openapi
-phase0/compatibility-harness
-phase1/server-bootstrap
+compat/capture-native-openapi
+compat/differential-harness
+server/bootstrap
 ```
 
 Use conventional commits where practical:

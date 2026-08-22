@@ -1,4 +1,4 @@
-//! Phase 9 WP-10 device/transcoding profile persistence (ADR-0134 §5,
+//! device/transcoding profile persistence (ADR-0134 §5,
 //! PRD-DEVICE-001..003) over `device_profiles` (migration 0026).
 //!
 //! Rows are operator-managed **metadata only**: nothing in this crate feeds
@@ -6,9 +6,7 @@
 //! transcoding (PRD-DEVICE-002). Profile-driven stream selection is
 //! post-parity work requiring its own ADR (PRD-DEVICE-003).
 //!
-//! Preserved legacy preview behavior (evidence:
-//! `design/evidence/phase-9/device-profiles-legacy-inventory.md`):
-//! bounded names, the direct-play/codec/bitrate consistency rules, and the
+//! Preserved legacy preview behavior (evidence: //! `design/evidence/phase-9/device-profiles-legacy-inventory.md`): //! bounded names, the direct-play/codec/bitrate consistency rules, and the
 //! single-default invariant. Unlike the legacy service's load-modify-save,
 //! default flips here are transactional and the at-most-one-default
 //! invariant is additionally fail-closed via a partial unique index.

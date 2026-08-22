@@ -8,16 +8,16 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@carbon/react';
-import { useCallback, useEffect, useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { Link as RouterLink } from 'react-router-dom';
+} from "@carbon/react";
+import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { Link as RouterLink } from "react-router-dom";
 
-import { listLeases } from '../../api/admin';
-import type { Lease } from '../../api/types';
-import { EmptyState } from '../../components/EmptyState';
-import { ProcessingStateTag } from '../../components/ProcessingStateTag';
-import { formatDateTime, formatRelativeTime } from '../../i18n/format';
+import { listLeases } from "../../api/admin";
+import type { Lease } from "../../api/types";
+import { EmptyState } from "../../components/EmptyState";
+import { ProcessingStateTag } from "../../components/ProcessingStateTag";
+import { formatDateTime, formatRelativeTime } from "../../i18n/format";
 
 /**
  * Active (unexpired) lease evidence table, shared by the System → Workers
@@ -31,7 +31,7 @@ import { formatDateTime, formatRelativeTime } from '../../i18n/format';
  */
 export function LeasesPanel({
   refreshKey = 0,
-  headingId = 'system-leases-title',
+  headingId = "system-leases-title",
 }: {
   refreshKey?: number;
   headingId?: string;
@@ -62,20 +62,20 @@ export function LeasesPanel({
   return (
     <section className="melodee-panel" aria-labelledby={headingId}>
       <Heading id={headingId} className="melodee-panel__title">
-        {t('system.leases.title')}
+        {t("system.leases.title")}
       </Heading>
       {leases === null || leases.length === 0 ? (
-        <EmptyState compact title={t('system.leases.empty')} />
+        <EmptyState compact title={t("system.leases.empty")} />
       ) : (
-        <TableContainer title={t('system.leases.caption')}>
-          <Table size="sm" aria-label={t('system.leases.caption')}>
+        <TableContainer title={t("system.leases.caption")}>
+          <Table size="sm" aria-label={t("system.leases.caption")}>
             <TableHead>
               <TableRow>
-                <TableHeader>{t('system.leases.column.workItem')}</TableHeader>
-                <TableHeader>{t('system.leases.column.owner')}</TableHeader>
-                <TableHeader>{t('system.leases.column.state')}</TableHeader>
-                <TableHeader>{t('system.leases.column.acquired')}</TableHeader>
-                <TableHeader>{t('system.leases.column.expires')}</TableHeader>
+                <TableHeader>{t("system.leases.column.workItem")}</TableHeader>
+                <TableHeader>{t("system.leases.column.owner")}</TableHeader>
+                <TableHeader>{t("system.leases.column.state")}</TableHeader>
+                <TableHeader>{t("system.leases.column.acquired")}</TableHeader>
+                <TableHeader>{t("system.leases.column.expires")}</TableHeader>
               </TableRow>
             </TableHead>
             <TableBody>

@@ -1,4 +1,4 @@
-//! Phase 4 PostgreSQL catalog boundary (ADR-0117 and ADR-0118).
+//! PostgreSQL catalog boundary (ADR-0117 and ADR-0118).
 //!
 //! Cataloging consumes only the durable manifest-v3/plan/receipt contract. It
 //! never opens source or canonical media. One fenced PostgreSQL transaction
@@ -357,7 +357,7 @@ impl CatalogStore {
     }
 
     /// Resolves catalog `release_id` bindings for a bounded set of work
-    /// items in one statement (Phase 10 review-queue display). Items without
+    /// items in one statement ( review-queue display). Items without
     /// an import receipt are simply absent from the result.
     pub async fn list_import_release_ids(
         &self,

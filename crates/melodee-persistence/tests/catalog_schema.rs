@@ -1,4 +1,4 @@
-//! Phase 4 migration and cross-release integrity proofs.
+//! migration and cross-release integrity proofs.
 
 #![allow(clippy::expect_used, clippy::panic)]
 

@@ -5,7 +5,7 @@
 //! parameters and is untouched). Templates come from the seeded
 //! `transcoding.command.{aac,mp3,opus}` settings (ADR-0108's designated
 //! mechanism, corrected from the malformed legacy seeds): each holds a JSON
-//! object `{ "format": ..., "bitrate": ..., "command": ... }` whose `command`
+//! object `{ "format":..., "bitrate":..., "command":... }` whose `command`
 //! string is split into an argv array under shell-words rules — no shell is
 //! ever invoked. Placeholders: `%s` → `pipe:0` (the validated, no-follow-opened
 //! asset file is passed as the child's stdin, preserving the dirfd
@@ -18,7 +18,7 @@
 //! exhaustion rejects immediately. Cancellation: `kill_on_drop(true)` kills the
 //! child on client disconnect or shutdown, and tokio's orphan reaping
 //! guarantees the process is reaped; a normally completing stream awaits
-//! `wait()` explicitly and logs a sanitized stderr tail on non-zero exit. No
+//! `wait` explicitly and logs a sanitized stderr tail on non-zero exit. No
 //! wall-clock timeout is imposed on an established stream.
 
 use std::io;
@@ -221,7 +221,7 @@ impl TranscodingService {
     }
 
     /// Attaches the process resource-bounds gauge for the transcoding class
-    /// (R2.4): non-blocking admission failures are counted as rejections and
+    ///: non-blocking admission failures are counted as rejections and
     /// in-flight utilization appears on the admin health surface.
     #[must_use]
     pub fn with_gauge(mut self, gauge: Arc<crate::resource_bounds::ResourceGauge>) -> Self {

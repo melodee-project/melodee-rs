@@ -537,10 +537,9 @@ artist, release date, status, revision), aggregate stats (`trackCount`, `duratio
 `mediaBytes`), the ordered Track list with media format facts (container, codec, byte size)
 and a per-Track `streamUrl` (see [Track detail](#track-detail) below),
 billed Artists with roles and join phrases, contributors, the distinct media files, the
-persisted Phase 5 classification (traits, confidence, classifier version) when policy has
-evaluated the Release, the immutable import provenance (work item, manifest ids and hashes,
-resolver version, import time), an `imageId`, and the audit history. Sub-lists are bounded as
-above.
+persisted classification (traits, confidence, classifier version) when policy has evaluated the
+Release, the immutable import provenance (work item, manifest ids and hashes, resolver version,
+import time), an `imageId`, and the audit history. Sub-lists are bounded as above.
 
 ### Track detail
 

@@ -1,8 +1,14 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter, useLocation } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import { MemoryRouter, useLocation } from "react-router-dom";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError } from '../../api/client';
+import { ApiError } from "../../api/client";
 import type {
   Dashboard,
   Lease,
@@ -10,10 +16,10 @@ import type {
   SystemHealth,
   WorkItem,
   WorkerPool,
-} from '../../api/types';
-import { SystemWorkersScreen } from './SystemWorkersScreen';
+} from "../../api/types";
+import { SystemWorkersScreen } from "./SystemWorkersScreen";
 
-vi.mock('../../api/admin', () => ({
+vi.mock("../../api/admin", () => ({
   getDashboard: vi.fn(),
   getSystemHealth: vi.fn(),
   listLeases: vi.fn(),
@@ -25,7 +31,7 @@ vi.mock('../../api/admin', () => ({
   getSearchStatus: vi.fn(),
 }));
 
-const admin = await import('../../api/admin');
+const admin = await import("../../api/admin");
 const mockGetDashboard = vi.mocked(admin.getDashboard);
 const mockGetSystemHealth = vi.mocked(admin.getSystemHealth);
 const mockListLeases = vi.mocked(admin.listLeases);
@@ -38,12 +44,12 @@ const mockGetSearchStatus = vi.mocked(admin.getSearchStatus);
 
 function makePool(overrides: Partial<WorkerPool> = {}): WorkerPool {
   return {
-    name: 'policy',
+    name: "policy",
     paused: false,
     pausedBy: null,
     pausedAt: null,
     resumeRequestedAt: null,
-    updatedAt: '2026-08-14T12:00:00Z',
+    updatedAt: "2026-08-14T12:00:00Z",
     metricsAvailable: true,
     queued: 7,
     running: 2,
@@ -57,47 +63,53 @@ function makePool(overrides: Partial<WorkerPool> = {}): WorkerPool {
 
 function makeFailure(overrides: Partial<WorkItem> = {}): WorkItem {
   return {
-    id: '11111111-1111-4111-8111-111111111111',
-    apiKey: '33333333-3333-4333-8333-333333333333',
+    id: "11111111-1111-4111-8111-111111111111",
+    apiKey: "33333333-3333-4333-8333-333333333333",
     sourceLibraryId: null,
     targetLibraryId: null,
-    sourcePath: '/library/incoming/Business as Usual',
-    currentPath: '/library/incoming/Business as Usual',
+    sourcePath: "/library/incoming/Business as Usual",
+    currentPath: "/library/incoming/Business as Usual",
     targetPath: null,
     sourceFingerprint: null,
     manifestHash: null,
-    state: 'failed',
+    state: "failed",
     stateReason: null,
     attemptCount: 5,
     nextAttemptAt: null,
     leaseOwner: null,
     leaseAcquiredAt: null,
     leaseExpiresAt: null,
-    lastErrorCode: 'checksum_mismatch',
-    lastErrorMessage: 'checksum mismatch',
-    correlationId: '44444444-4444-4444-8444-444444444444',
-    discoveredAt: '2026-08-14T10:00:00Z',
+    lastErrorCode: "checksum_mismatch",
+    lastErrorMessage: "checksum mismatch",
+    correlationId: "44444444-4444-4444-8444-444444444444",
+    discoveredAt: "2026-08-14T10:00:00Z",
     firstStartedAt: null,
     lastAttemptAt: null,
-    updatedAt: '2026-08-14T10:05:00Z',
-    createdAt: '2026-08-14T10:00:00Z',
+    updatedAt: "2026-08-14T10:05:00Z",
+    createdAt: "2026-08-14T10:00:00Z",
     completedAt: null,
     ...overrides,
   };
 }
 
 const HEALTH: SystemHealth = {
-  status: 'ok',
-  postgresql: { status: 'ok', detail: 'postgresql answered a bounded probe' },
-  tantivy: { status: 'ok', detail: 'active search generation validated' },
-  storage: { status: 'ok', detail: 'storage paths writable' },
-  ffmpeg: { status: 'ok', detail: 'ffmpeg 8.1' },
-  podcastStorage: { status: 'disabled', detail: 'podcast worker disabled' },
-  disk: { status: 'ok', detail: 'tightest of 2 root(s): storage has 512000 MiB free (50%)' },
-  workers: { status: 'ok', detail: 'no stale leases; oldest ready item 0s; 0 ready / 0 claimed' },
+  status: "ok",
+  postgresql: { status: "ok", detail: "postgresql answered a bounded probe" },
+  tantivy: { status: "ok", detail: "active search generation validated" },
+  storage: { status: "ok", detail: "storage paths writable" },
+  ffmpeg: { status: "ok", detail: "ffmpeg 8.1" },
+  podcastStorage: { status: "disabled", detail: "podcast worker disabled" },
+  disk: {
+    status: "ok",
+    detail: "tightest of 2 root(s): storage has 512000 MiB free (50%)",
+  },
+  workers: {
+    status: "ok",
+    detail: "no stale leases; oldest ready item 0s; 0 ready / 0 claimed",
+  },
   apiSurfaces: [
-    { surface: 'native', status: 'serving' },
-    { surface: 'admin', status: 'serving' },
+    { surface: "native", status: "serving" },
+    { surface: "admin", status: "serving" },
   ],
   resourceBounds: [],
 };
@@ -110,31 +122,43 @@ const SEARCH_ENABLED: SearchStatus = {
     leased: 1,
     oldestAvailableAt: null,
     lastProcessedOutboxId: 42,
-    activeGenerationId: '55555555-5555-4555-8555-555555555555',
+    activeGenerationId: "55555555-5555-4555-8555-555555555555",
     latestRebuildStatus: null,
     latestRebuildError: null,
   },
-  generation: { artists: 100, releases: 200, tracks: 300, total: 600, schemaVersion: 1 },
+  generation: {
+    artists: 100,
+    releases: 200,
+    tracks: 300,
+    total: 600,
+    schemaVersion: 1,
+  },
   generationErrorCode: null,
   generationError: null,
 };
 
 const LEASE: Lease = {
-  workItemId: '66666666-6666-4666-8666-666666666666',
-  apiKey: '77777777-7777-4777-8777-777777777777',
-  state: 'inspecting',
-  leaseOwner: 'worker-3',
-  leaseAcquiredAt: '2026-08-14T11:55:00Z',
-  leaseExpiresAt: '2026-08-14T12:05:00Z',
-  lastActivityAt: '2026-08-14T11:56:00Z',
+  workItemId: "66666666-6666-4666-8666-666666666666",
+  apiKey: "77777777-7777-4777-8777-777777777777",
+  state: "inspecting",
+  leaseOwner: "worker-3",
+  leaseAcquiredAt: "2026-08-14T11:55:00Z",
+  leaseExpiresAt: "2026-08-14T12:05:00Z",
+  lastActivityAt: "2026-08-14T11:56:00Z",
 };
 
 function makeDashboard(): Dashboard {
   return {
-    generatedAt: '2026-08-14T12:00:00Z',
-    catalog: { artists: 1, releases: 2, tracks: 3, mediaAssets: 4, pendingSearchOutbox: 0 },
+    generatedAt: "2026-08-14T12:00:00Z",
+    catalog: {
+      artists: 1,
+      releases: 2,
+      tracks: 3,
+      mediaAssets: 4,
+      pendingSearchOutbox: 0,
+    },
     workItems: {
-      countsByState: [{ state: 'failed', count: 1 }],
+      countsByState: [{ state: "failed", count: 1 }],
       failedLast24h: 3,
       completedLast24h: 4231,
     },
@@ -154,7 +178,7 @@ function LocationProbe() {
   return <output data-testid="search-params">{location.search}</output>;
 }
 
-function renderScreen(initialEntry = '/system/workers') {
+function renderScreen(initialEntry = "/system/workers") {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
       <SystemWorkersScreen />
@@ -165,8 +189,10 @@ function renderScreen(initialEntry = '/system/workers') {
 
 /** Carbon keeps closed modals mounted; pick the dialog containing a heading. */
 async function findDialogWithText(text: string): Promise<HTMLElement> {
-  const dialogs = await screen.findAllByRole('dialog');
-  const match = dialogs.find((dialog) => within(dialog).queryByText(text) !== null);
+  const dialogs = await screen.findAllByRole("dialog");
+  const match = dialogs.find(
+    (dialog) => within(dialog).queryByText(text) !== null,
+  );
   if (!match) {
     throw new Error(`no dialog contains "${text}"`);
   }
@@ -176,23 +202,25 @@ async function findDialogWithText(text: string): Promise<HTMLElement> {
 /** The panel trigger, not the (mounted) modal's primary button. */
 function panelButton(name: string): HTMLElement {
   const matches = screen
-    .getAllByRole('button', { name })
+    .getAllByRole("button", { name })
     .filter((element) => element.closest('[role="dialog"]') === null);
   if (matches.length !== 1) {
-    throw new Error(`expected exactly one panel button "${name}", found ${matches.length}`);
+    throw new Error(
+      `expected exactly one panel button "${name}", found ${matches.length}`,
+    );
   }
   const [button] = matches;
   return button as HTMLElement;
 }
 
-describe('SystemWorkersScreen', () => {
+describe("SystemWorkersScreen", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockListWorkerPools.mockResolvedValue({
       items: [
         makePool(),
         makePool({
-          name: 'discovery',
+          name: "discovery",
           metricsAvailable: false,
           queued: null,
           running: null,
@@ -218,109 +246,138 @@ describe('SystemWorkersScreen', () => {
     mockListLeases.mockResolvedValue([LEASE]);
   });
 
-  it('renders KPI cards and the pools table with honest absent metrics', async () => {
+  it("renders KPI cards and the pools table with honest absent metrics", async () => {
     renderScreen();
-    const poolsTable = await screen.findByRole('table', {
-      name: 'Worker pools and queue metrics',
+    const poolsTable = await screen.findByRole("table", {
+      name: "Worker pools and queue metrics",
     });
-    expect(within(poolsTable).getByText('policy')).toBeInTheDocument();
-    expect(within(poolsTable).getByText('discovery')).toBeInTheDocument();
+    expect(within(poolsTable).getByText("policy")).toBeInTheDocument();
+    expect(within(poolsTable).getByText("discovery")).toBeInTheDocument();
     // The discovery pool has no durable queue table: honest absence, not zeros.
-    const discoveryRow = within(poolsTable).getByText('discovery').closest('tr');
+    const discoveryRow = within(poolsTable)
+      .getByText("discovery")
+      .closest("tr");
     expect(discoveryRow).not.toBeNull();
     expect(
-      within(discoveryRow as HTMLElement).getAllByText('Not reported').length,
+      within(discoveryRow as HTMLElement).getAllByText("Not reported").length,
     ).toBeGreaterThan(0);
     // KPI cards: pools total and dashboard 24h windows.
-    expect(screen.getByText('4,231')).toBeInTheDocument();
-    expect(screen.getByText('Completed (24h)')).toBeInTheDocument();
+    expect(screen.getByText("4,231")).toBeInTheDocument();
+    expect(screen.getByText("Completed (24h)")).toBeInTheDocument();
   });
 
-  it('pauses a pool after the confirmation modal and updates the row', async () => {
+  it("pauses a pool after the confirmation modal and updates the row", async () => {
     mockPauseWorkerPool.mockResolvedValue(
-      makePool({ paused: true, pausedBy: 'admin-1', pausedAt: '2026-08-14T12:01:00Z' }),
+      makePool({
+        paused: true,
+        pausedBy: "admin-1",
+        pausedAt: "2026-08-14T12:01:00Z",
+      }),
     );
     renderScreen();
-    const poolsTable = await screen.findByRole('table', {
-      name: 'Worker pools and queue metrics',
+    const poolsTable = await screen.findByRole("table", {
+      name: "Worker pools and queue metrics",
     });
-    const policyRow = within(poolsTable).getByText('policy').closest('tr') as HTMLElement;
-    fireEvent.click(within(policyRow).getByRole('button', { name: 'Pause' }));
+    const policyRow = within(poolsTable)
+      .getByText("policy")
+      .closest("tr") as HTMLElement;
+    fireEvent.click(within(policyRow).getByRole("button", { name: "Pause" }));
 
-    const dialog = await findDialogWithText('Pause pool policy');
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Pause' }));
+    const dialog = await findDialogWithText("Pause pool policy");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Pause" }));
 
-    await waitFor(() => expect(mockPauseWorkerPool).toHaveBeenCalledWith('policy'));
-    expect(await within(policyRow).findByText('Paused')).toBeInTheDocument();
-    expect(within(policyRow).getByText('Paused by admin-1')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(mockPauseWorkerPool).toHaveBeenCalledWith("policy"),
+    );
+    expect(await within(policyRow).findByText("Paused")).toBeInTheDocument();
+    expect(
+      within(policyRow).getByText("Paused by admin-1"),
+    ).toBeInTheDocument();
   });
 
-  it('resumes a paused pool without a confirmation step', async () => {
+  it("resumes a paused pool without a confirmation step", async () => {
     mockListWorkerPools.mockResolvedValue({
-      items: [makePool({ paused: true, pausedBy: 'admin-1' })],
+      items: [makePool({ paused: true, pausedBy: "admin-1" })],
       total: 1,
       limit: 1,
       offset: 0,
     });
     mockResumeWorkerPool.mockResolvedValue(makePool({ paused: false }));
     renderScreen();
-    const poolsTable = await screen.findByRole('table', {
-      name: 'Worker pools and queue metrics',
+    const poolsTable = await screen.findByRole("table", {
+      name: "Worker pools and queue metrics",
     });
-    fireEvent.click(within(poolsTable).getByRole('button', { name: 'Resume' }));
-    await waitFor(() => expect(mockResumeWorkerPool).toHaveBeenCalledWith('policy'));
-    expect(await within(poolsTable).findByText('Active')).toBeInTheDocument();
+    fireEvent.click(within(poolsTable).getByRole("button", { name: "Resume" }));
+    await waitFor(() =>
+      expect(mockResumeWorkerPool).toHaveBeenCalledWith("policy"),
+    );
+    expect(await within(poolsTable).findByText("Active")).toBeInTheDocument();
   });
 
-  it('renders recent failures and navigates to the processing inspector', async () => {
+  it("renders recent failures and navigates to the processing inspector", async () => {
     renderScreen();
-    const failuresTable = await screen.findByRole('table', {
-      name: 'Recent failed work items',
+    const failuresTable = await screen.findByRole("table", {
+      name: "Recent failed work items",
     });
-    expect(within(failuresTable).getByText('checksum mismatch')).toBeInTheDocument();
-    fireEvent.click(within(failuresTable).getByText('/library/incoming/Business as Usual'));
+    expect(
+      within(failuresTable).getByText("checksum mismatch"),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      within(failuresTable).getByText("/library/incoming/Business as Usual"),
+    );
     await waitFor(() =>
-      expect(screen.getByTestId('search-params')).toHaveTextContent(
-        'state=failed&item=11111111-1111-4111-8111-111111111111',
+      expect(screen.getByTestId("search-params")).toHaveTextContent(
+        "state=failed&item=11111111-1111-4111-8111-111111111111",
       ),
     );
   });
 
-  it('renders search status and surfaces a 409 rebuild conflict', async () => {
+  it("renders search status and surfaces a 409 rebuild conflict", async () => {
     mockRequestSearchRebuild.mockRejectedValue(
-      new ApiError(409, 'rebuild_in_progress', 'an unfinished search rebuild already exists', null),
+      new ApiError(
+        409,
+        "rebuild_in_progress",
+        "an unfinished search rebuild already exists",
+        null,
+      ),
     );
     renderScreen();
-    expect(await screen.findByText('Indexed documents')).toBeInTheDocument();
-    expect(screen.getByText('600')).toBeInTheDocument();
+    expect(await screen.findByText("Indexed documents")).toBeInTheDocument();
+    expect(screen.getByText("600")).toBeInTheDocument();
 
-    fireEvent.click(panelButton('Rebuild search index'));
-    const dialog = await findDialogWithText('Rebuild the search index');
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Rebuild search index' }));
+    fireEvent.click(panelButton("Rebuild search index"));
+    const dialog = await findDialogWithText("Rebuild the search index");
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Rebuild search index" }),
+    );
 
     await waitFor(() => expect(mockRequestSearchRebuild).toHaveBeenCalled());
     expect(
-      await screen.findByText('A rebuild is already in progress.'),
+      await screen.findByText("A rebuild is already in progress."),
     ).toBeInTheDocument();
   });
 
-  it('acknowledges a rebuild request with the job id and no fake progress', async () => {
+  it("acknowledges a rebuild request with the job id and no fake progress", async () => {
     mockRequestSearchRebuild.mockResolvedValue({
-      jobId: '88888888-8888-4888-8888-888888888888',
-      status: 'pending',
-      requestedBy: 'admin-1',
+      jobId: "88888888-8888-4888-8888-888888888888",
+      status: "pending",
+      requestedBy: "admin-1",
     });
     renderScreen();
-    await screen.findByText('Indexed documents');
-    fireEvent.click(panelButton('Rebuild search index'));
-    const dialog = await findDialogWithText('Rebuild the search index');
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Rebuild search index' }));
+    await screen.findByText("Indexed documents");
+    fireEvent.click(panelButton("Rebuild search index"));
+    const dialog = await findDialogWithText("Rebuild the search index");
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Rebuild search index" }),
+    );
     expect(
-      await screen.findByText(/Rebuild requested \(job 88888888-8888-4888-8888-888888888888\)/),
+      await screen.findByText(
+        /Rebuild requested \(job 88888888-8888-4888-8888-888888888888\)/,
+      ),
     ).toBeInTheDocument();
   });
 
-  it('disables the rebuild trigger honestly when the search worker is off', async () => {
+  it("disables the rebuild trigger honestly when the search worker is off", async () => {
     mockGetSearchStatus.mockResolvedValue({
       enabled: false,
       projection: null,
@@ -329,33 +386,41 @@ describe('SystemWorkersScreen', () => {
       generationError: null,
     });
     renderScreen();
-    expect(await screen.findByText('Search worker disabled')).toBeInTheDocument();
-    expect(panelButton('Rebuild search index')).toBeDisabled();
+    expect(
+      await screen.findByText("Search worker disabled"),
+    ).toBeInTheDocument();
+    expect(panelButton("Rebuild search index")).toBeDisabled();
   });
 
-  it('renders active lease evidence', async () => {
+  it("renders active lease evidence", async () => {
     renderScreen();
-    const leasesTable = await screen.findByRole('table', { name: 'Active worker leases' });
-    expect(within(leasesTable).getByText('worker-3')).toBeInTheDocument();
+    const leasesTable = await screen.findByRole("table", {
+      name: "Active worker leases",
+    });
+    expect(within(leasesTable).getByText("worker-3")).toBeInTheDocument();
     expect(
-      within(leasesTable).getByRole('link', { name: LEASE.workItemId }),
-    ).toHaveAttribute('href', `/processing?item=${LEASE.workItemId}`);
+      within(leasesTable).getByRole("link", { name: LEASE.workItemId }),
+    ).toHaveAttribute("href", `/processing?item=${LEASE.workItemId}`);
   });
 
-  it('states that logs and performance remain CLI surfaces', async () => {
+  it("states that logs and performance remain CLI surfaces", async () => {
     renderScreen();
     expect(
-      await screen.findByText('Logs and performance remain CLI surfaces'),
+      await screen.findByText("Logs and performance remain CLI surfaces"),
     ).toBeInTheDocument();
   });
 
-  it('renders the subsystem health panel from /system/health', async () => {
+  it("renders the subsystem health panel from /system/health", async () => {
     renderScreen();
     const health = (
-      await screen.findByRole('heading', { name: 'System Health' })
-    ).closest('section');
+      await screen.findByRole("heading", { name: "System Health" })
+    ).closest("section");
     expect(health).not.toBeNull();
-    expect(within(health as HTMLElement).getByText('FFmpeg')).toBeInTheDocument();
-    expect(within(health as HTMLElement).getByText('Melodee API v1')).toBeInTheDocument();
+    expect(
+      within(health as HTMLElement).getByText("FFmpeg"),
+    ).toBeInTheDocument();
+    expect(
+      within(health as HTMLElement).getByText("Melodee API v1"),
+    ).toBeInTheDocument();
   });
 });

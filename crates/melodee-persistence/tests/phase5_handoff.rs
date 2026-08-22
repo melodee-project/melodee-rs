@@ -1,4 +1,4 @@
-//! Phase 5 acceptance at the immutable Phase 4 boundary.
+//! acceptance at the immutable boundary.
 
 #![allow(clippy::expect_used, clippy::panic)]
 

@@ -1,4 +1,4 @@
--- Phase 9 WP-03: native user avatar store (ADR-0134 §2).
+-- native user avatar store (ADR-0134 §2).
 --
 -- One avatar row per user. `updated_at` drives avatarLastChanged semantics for
 -- the OpenSubsonic user model. Group/ACL state is unchanged: migration 0010

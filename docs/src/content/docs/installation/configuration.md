@@ -315,7 +315,7 @@ secret are classified secret and are redacted from every API, export, and log. S
   changing a preference, or startup fails closed on the stored payload conflict.
 - `Review` and `Delete` policy decisions remain pending in `NeedsReview`. `Accept`, `Ignore`, and
   `Quarantine` decisions complete atomically with their non-destructive work-item routing. The
-  Phase 5 worker and CLI do not complete destructive actions or remove media.
+  policy worker and CLI do not complete destructive actions or remove media.
 - `MELODEE_BIND` remains a compatibility fallback for the earlier bootstrap, but
   `MELODEE__SERVER__BIND` is the canonical key.
 - Search never reads audio. Its root is ownership-marked, symlink components and unowned non-empty

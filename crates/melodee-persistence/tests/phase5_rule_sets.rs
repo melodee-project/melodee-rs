@@ -1,4 +1,4 @@
-//! Versioned Phase 5 policy rule-set persistence and fail-closed behavior.
+//! Versioned policy rule-set persistence and fail-closed behavior.
 
 #![allow(clippy::expect_used, clippy::panic)]
 

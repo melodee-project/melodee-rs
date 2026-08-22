@@ -1,4 +1,4 @@
-//! CLI-level Phase 5 dry-run regression against one real catalog handoff.
+//! CLI-level dry-run regression against one real catalog handoff.
 
 #![allow(clippy::expect_used)]
 

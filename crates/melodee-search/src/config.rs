@@ -188,12 +188,11 @@ impl SearchConfig {
 
 /// Validate a candidate search root path.
 ///
-/// Rules (ADR-0121 path safety):
-/// - must be absolute;
+/// Rules (ADR-0121 path safety): /// - must be absolute;
 /// - must not contain symlink components (each ancestor resolved without
-///   following symlinks);
+/// following symlinks);
 /// - the canonicalized directory must be created if missing with restrictive
-///   permissions.
+/// permissions.
 pub fn validate_search_root(path: &Path) -> Result<PathBuf, SearchError> {
     if !path.is_absolute() {
         return Err(SearchError::InvalidRoot(format!(
@@ -217,7 +216,7 @@ pub fn validate_search_root(path: &Path) -> Result<PathBuf, SearchError> {
     }
     // Reject symlink and non-directory components anywhere in the path prefix.
     // Missing components are created one at a time through the descriptor-
-    // relative no-follow boundary.  A path-based create_dir_all here would
+    // relative no-follow boundary. A path-based create_dir_all here would
     // reintroduce a check-to-create race against an operator-managed symlink.
     let mut accum = PathBuf::new();
     for component in path.components() {

@@ -1,4 +1,4 @@
-//! Media normalization, acoustic fingerprinting, and sidecar parsing (Phase 3.2).
+//! Media normalization, acoustic fingerprinting, and sidecar parsing.
 //!
 //! Produces canonical MP3 audio in an isolated work-area staging directory,
 //! Chromaprint fingerprints via `fpcalc`, normalized artwork, and parsed sidecar
@@ -2549,7 +2549,7 @@ mod tests {
         assert!(!is_retainable_mp3(&multiple));
     }
 
-    /// R2.1 missing-duration row: the bundled toolchain cannot be made to
+    /// missing-duration row: the bundled toolchain cannot be made to
     /// report no duration for an on-disk file deterministically, so the
     /// failure mode is pinned here — a source without an observed duration
     /// must fail verification with a typed, actionable error instead of

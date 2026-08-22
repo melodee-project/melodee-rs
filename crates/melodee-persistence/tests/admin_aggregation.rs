@@ -1,4 +1,4 @@
-//! Phase 10 WP-14/WP-16/WP-17 persistence reads for the admin dashboard,
+//! persistence reads for the admin dashboard,
 //! policy-rule, and worker-pool surfaces: rolling-window work-item counts,
 //! the hourly completion series, unresolved-identity and pending-decision
 //! attention counts, rule-set version history, durable rule match counts,

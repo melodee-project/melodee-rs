@@ -1,4 +1,4 @@
-//! `legacy freeze` (ADR-0149 §D.1/D.2, R4.7): proves source write-stillness
+//! `legacy freeze` (ADR-0149 §D.1/D.2): proves source write-stillness
 //! across the final delta window, re-verifies the gate, records the freeze
 //! evidence durably, and — only with `--acknowledge-cutover` — transitions
 //! the run to `cutover-ready`.

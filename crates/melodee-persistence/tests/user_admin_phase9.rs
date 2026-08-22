@@ -1,4 +1,4 @@
-//! Phase 9 WP-03 migration 0022 + user/group/avatar administration integrity
+//! migration 0022 + user/group/avatar administration integrity
 //! tests (ADR-0134 §2): constraint enforcement, cascade, fail-closed group
 //! deletion, ACL predicate effects, and admin user lifecycle.
 

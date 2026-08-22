@@ -1,4 +1,4 @@
-//! Authoritative catalog novelty facts consumed and revalidated by Phase 5.
+//! Authoritative catalog novelty facts consumed and revalidated by.
 
 #![allow(clippy::expect_used, clippy::panic)]
 

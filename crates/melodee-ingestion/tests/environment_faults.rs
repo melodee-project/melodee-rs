@@ -1,13 +1,12 @@
-//! R2.7 environment fault scenarios (PRD-TEST-005, PRD-TEST-007): full
+//! environment fault scenarios (PRD-TEST-005, PRD-TEST-007): full
 //! staging disk during acquisition, slow storage during acquisition, hung
 //! media tool, and media-tool ENOSPC with partial output. Each scenario
 //! proves fail-closed behavior — no lost durable work, no partial
 //! authoritative state, no destructive uncertainty handling — and that the
 //! supported retry path converges after the fault clears.
-//!
 //! Staging-disk and slow-storage faults are injected through the one-shot
 //! `test-support` acquisition write hook (the same restart semantics as the
-//! R0 crash-matrix points). Media-tool faults use wrapper scripts on the
+//! crash-matrix points). Media-tool faults use wrapper scripts on the
 //! configured tool path, which is the documented operator override seam; no
 //! production behavior changes.
 #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
@@ -51,7 +50,7 @@ impl Scenario {
         let mut config = IngestionConfig::with_sources(vec![source]);
         config.settling_quiet_period = Duration::ZERO;
         // `with_sources` derives the staging root as `<inbound-parent>/
-        // .melodee-staging-test`, which is shared by every parallel test
+        //.melodee-staging-test`, which is shared by every parallel test
         // using a /tmp inbound root. Each scenario needs its own staging,
         // staging cleanup, and work roots to stay isolated under `cargo
         // test` parallelism.
@@ -200,7 +199,7 @@ fn write_wrapper(dir: &Path, name: &str, body: &str) -> PathBuf {
     path
 }
 
-/// Claims one ready item, mirroring the R0 crash-matrix driving pattern.
+/// Claims one ready item, mirroring the crash-matrix driving pattern.
 async fn claim_one(
     scenario: &Scenario,
     worker: &WorkerId,
@@ -220,7 +219,7 @@ async fn claim_one(
 }
 
 /// Runs acquisition directly against a claimed item. The same claimed item
-/// (and its held lease) can be reused across attempts, exactly like the R0
+/// (and its held lease) can be reused across attempts, exactly like the
 /// crash matrix: a crashed attempt does not release the worker's lease.
 async fn acquire(
     scenario: &Scenario,
@@ -245,7 +244,7 @@ async fn acquire(
     .await
 }
 
-/// R2.7: a full staging disk fails the verified copy with an ordinary I/O
+/// a full staging disk fails the verified copy with an ordinary I/O
 /// error attributed to the destination; the acquisition fails closed with no
 /// durable receipt, no final authoritative tree, and inbound retained. After
 /// the operator frees space, the supported retry converges with a complete
@@ -293,7 +292,7 @@ async fn full_staging_disk_fails_closed_and_retry_converges() {
     // Fail-closed invariants: intent only, no receipt, no final tree, and
     // inbound untouched. Hidden attempt scratch from the crashed copy may
     // remain; it is attempt-isolated under staging and is reclaimed by the
-    // retried attempt, exactly like an R0 crash boundary.
+    // retried attempt, exactly like an crash boundary.
     let (status, method, tree_hash) = scenario.handoff(item_id).await.expect("durable intent");
     assert_eq!("intent", status);
     assert!(
@@ -332,9 +331,9 @@ async fn full_staging_disk_fails_closed_and_retry_converges() {
     scenario.drop().await;
 }
 
-/// R2.7: slow storage delays every destination write of the verified copy.
+/// slow storage delays every destination write of the verified copy.
 /// Acquisition remains correct — bounded streaming, byte-identical result,
-/// durable receipt, inbound drained — and the delay is observable in wall
+/// durable receipt, inbound drained - and the delay is observable in wall
 /// time. The delay hook is applied on the retried attempt as well to prove
 /// the slow path, not just the fast path, is durable.
 #[cfg(feature = "test-support")]
@@ -399,11 +398,11 @@ async fn slow_storage_acquisition_converges_durably() {
     scenario.drop().await;
 }
 
-/// R2.7: PostgreSQL unavailability (the restart window where connections
+/// PostgreSQL unavailability (the restart window where connections
 /// are refused) fails the handoff attempt closed at a persistence boundary:
 /// no durable intent, no staged tree, inbound retained. After the database
 /// returns, a fresh claim converges with a complete receipt and drained
-/// inbound. Mid-boundary process death is covered by the R0 crash matrix;
+/// inbound. Mid-boundary process death is covered by the crash matrix;
 /// this scenario covers the service-dependency fault itself.
 #[cfg(feature = "test-support")]
 #[tokio::test]
@@ -503,7 +502,7 @@ async fn postgres_unavailable_during_handoff_fails_closed_and_recovers() {
     scenario.drop().await;
 }
 
-/// R2.7: a hung FFmpeg is killed at the configured timeout with an
+/// a hung FFmpeg is killed at the configured timeout with an
 /// actionable, typed failure; no orphan process survives; the durable
 /// staged source is untouched; and the supported operator retry path
 /// (failed -> ready -> inspect -> normalizing) converges to `validating`.
@@ -639,7 +638,7 @@ async fn hung_ffmpeg_times_out_actionably_and_retry_converges() {
     scenario.drop().await;
 }
 
-/// R2.7: FFmpeg reports ENOSPC after writing partial output. The failure is
+/// FFmpeg reports ENOSPC after writing partial output. The failure is
 /// typed and actionable, the partial output never escapes the attempt work
 /// area into any authoritative location, the staged source is untouched, and
 /// the retry converges.

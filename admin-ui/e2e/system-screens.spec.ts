@@ -3,8 +3,8 @@ import { expect, test } from "@playwright/test";
 import { installFixedClock, mockAdminApi, seedPreferences } from "./mockApi";
 
 /**
- * System → Search / Storage / Diagnostics e2e (Phase 10 placeholder
- * residue closeout). The admin API is mocked with page.route() — no live
+ * System → Search / Storage / Diagnostics e2e (placeholder
+ * residue closeout). The admin API is mocked with page.route — no live
  * server is required. Runs at all three canonical viewports (UI-SPEC §8)
  * via the playwright projects. Asserts the screens render real server data
  * (never placeholder copy), that query/per-path/log surfaces stay honestly

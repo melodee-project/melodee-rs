@@ -1,4 +1,4 @@
-//! Phase 9 WP-03 native avatar routes (PRD-USER-001, ADR-0134 §2):
+//! native avatar routes (PRD-USER-001, ADR-0134 §2):
 //! upload validation (magic bytes, declared type, size bounds), round-trip,
 //! delete, and authentication enforcement. Also verifies the OpenSubsonic
 //! getAvatar read path observes the new `native_user_avatars` store.

@@ -104,7 +104,7 @@ async fn normalize_once_with_shutdown(
         let task_worker = worker.clone();
         let task_work_config = *work_config;
         let task_shutdown = shutdown.clone();
-        // R2.5: the spawned task crosses the join-set boundary; the span
+        //: the spawned task crosses the join-set boundary; the span
         // carries the durable ids explicitly so every nested event
         // (including media-tool invocations) inherits them.
         let span = tracing::info_span!(

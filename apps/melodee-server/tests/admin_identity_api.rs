@@ -1,4 +1,4 @@
-//! Phase 10 WP-13 Artist Identity Review API integration tests: the
+//! Artist Identity Review API integration tests: the
 //! administrator gate, the unresolved observation queue, observation detail
 //! with candidate evidence, confirm/create-new/leave-provisional resolution,
 //! do-not-match assertions, the identity decision feed, and the explicit

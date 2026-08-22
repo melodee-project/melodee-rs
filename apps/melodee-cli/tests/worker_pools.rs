@@ -1,4 +1,4 @@
-//! WP-05 CLI evidence: `melodee worker-pools list|pause|resume` operates on
+//! CLI evidence: `melodee worker-pools list|pause|resume` operates on
 //! the same durable `worker_pool_state` rows the server workers honor
 //! (PRD-CLI-002: the CLI never signals or bypasses a worker; PRD-WORK-005:
 //! pause/resume is durable and audited).

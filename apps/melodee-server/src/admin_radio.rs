@@ -1,4 +1,4 @@
-//! Phase 9 WP-06 Admin API: internet radio station administration
+//! Admin API: internet radio station administration
 //! (PRD-RADIO-001/002, ADR-0134 §1).
 //!
 //! These routes extend the Rust-native operator API (`/api/admin/v1`,

@@ -15,11 +15,10 @@ The Rust implementation is a ground-up replacement for the
 The legacy application remains a behavior oracle for compatibility; this repository owns the
 current architecture and implementation.
 
-> **Project status:** implementation phases 0–10 are complete: the core server, catalog and
-> processing pipeline, client adapters, user-domain parity, and admin SPA are present here.
-> Legacy import, production cutover, and rollback rehearsal are Phase 11 work and are **not yet
-> available**. Do not replace a running legacy server with this checkout until that migration
-> release gate has been completed.
+> **Project status:** the core server, catalog and processing pipeline, client adapters,
+> user-domain parity, and admin SPA are implemented here. Legacy import, production cutover,
+> and rollback rehearsal are still planned and are **not yet available**. Do not replace a
+> running legacy server with this checkout until that migration release gate has been completed.
 
 ## Highlights
 

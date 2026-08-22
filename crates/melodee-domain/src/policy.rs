@@ -1,4 +1,4 @@
-//! Phase 5 versioned policy rules, durable decisions, and dry-run/test support
+//! versioned policy rules, durable decisions, and dry-run/test support
 //! (PRD-POLICY-001 through PRD-POLICY-008, SPEC section 15).
 //!
 //! Classification describes what Melodee believes. Policy decides what to do.

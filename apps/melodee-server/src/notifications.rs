@@ -1,17 +1,17 @@
-//! Phase 9 WP-09 notification rendering and delivery (PRD-NOTIF-001..003,
+//! notification rendering and delivery (PRD-NOTIF-001..003,
 //! ADR-0134 §4).
 //!
 //! Templates are stored rows (`notification_templates`, migration 0024)
 //! rendered with a deliberately tiny `{{placeholder}}` substitution grammar
 //! — no logic, no includes — so user-visible text stays externalized for
-//! Phase 10 localization (PRD-NOTIF-003). Delivery uses a single FOSS SMTP
+//! localization (PRD-NOTIF-003). Delivery uses a single FOSS SMTP
 //! transport (lettre, rustls) with no new infrastructure; delivery failures
 //! are recorded in the append-only `notification_deliveries` audit and
 //! logged with secrets redacted, and are **never** propagated to roll back
 //! the operation that triggered the notification (PRD-NOTIF-002).
 //!
 //! Settings come from [`EmailSettings`], a small value struct. It is built
-//! through WP-08's layered settings resolution
+//! through 's layered settings resolution
 //! ([`melodee_persistence::SettingsResolver`]): explicit `MELODEE__EMAIL__*`
 //! environment keys (or the config file) win over DB-backed
 //! `server_settings` rows, which win over the legacy seeded defaults —
@@ -50,7 +50,7 @@ pub const ENV_EMAIL_SMTP_USE_SSL: &str = "MELODEE__EMAIL__SMTP_USE_SSL";
 pub const ENV_EMAIL_SMTP_USE_START_TLS: &str = "MELODEE__EMAIL__SMTP_USE_START_TLS";
 
 /// Locale used for server-wired event notifications until per-user locales
-/// land with Phase 10 localization. Template lookup falls back to it for any
+/// land with localization. Template lookup falls back to it for any
 /// requested locale.
 pub const DEFAULT_LOCALE: &str = "en";
 
@@ -157,8 +157,7 @@ impl EmailSettings {
         Ok(settings)
     }
 
-    /// Builds settings through WP-08 layered resolution (PRD-CONFIG-003):
-    /// `MELODEE__EMAIL__*` environment keys, then the optional config file,
+    /// Builds settings through layered resolution (PRD-CONFIG-003):  /// `MELODEE__EMAIL__*` environment keys, then the optional config file,
     /// then `server_settings` DB rows, then the legacy seeded defaults. The
     /// resolver produces typed values per the inventory classification, so
     /// extraction here never re-parses text. `validate` remains the single
@@ -470,7 +469,7 @@ impl NotificationTransport for NoopTransport {
 pub struct NotificationService {
     pool: PgPool,
     transport: Arc<dyn NotificationTransport>,
-    /// Process bound on concurrent SMTP round-trips (R2.4, PRD-INGEST-009).
+    /// Process bound on concurrent SMTP round-trips (, PRD-INGEST-009).
     /// Dispatches queue on this semaphore instead of spawning an unbounded
     /// number of outbound deliveries; the durable audit row is written by
     /// `send_templated` after the send attempt, so a queued dispatch is never
@@ -479,7 +478,7 @@ pub struct NotificationService {
     gauge: Option<Arc<crate::resource_bounds::ResourceGauge>>,
 }
 
-/// Fixed dispatch capacity for outbound email (R2.4). Four concurrent SMTP
+/// Fixed dispatch capacity for outbound email. Four concurrent SMTP
 /// round-trips (each bounded by `SMTP_TIMEOUT`) cap relay load while keeping
 /// password-reset latency negligible at any realistic dispatch rate.
 const NOTIFICATION_DISPATCH_CONCURRENCY: usize = 4;
@@ -626,7 +625,7 @@ impl NotificationService {
         placeholders: Vec<(String, String)>,
     ) {
         let service = Arc::clone(self);
-        // R2.5: capture the in-flight request's correlation id before the
+        //: capture the in-flight request's correlation id before the
         // spawn crosses the task boundary; never log the recipient's address
         // or template content beyond the stable key.
         let correlation_id = crate::correlation::current();
@@ -640,8 +639,7 @@ impl NotificationService {
         }
         tokio::spawn(
             async move {
-                // Queue on the process dispatch bound before touching the relay:
-                // cancellation of this task while waiting simply never admits.
+                // Queue on the process dispatch bound before touching the relay:  // cancellation of this task while waiting simply never admits.
                 if let Some(gauge) = &service.gauge {
                     gauge.begin_wait();
                 }
@@ -792,7 +790,7 @@ mod tests {
         assert!(rendered.contains("<redacted>"));
     }
 
-    /// R2.5 redaction audit: a failing delivery must never write the SMTP
+    /// redaction audit: a failing delivery must never write the SMTP
     /// password into the log stream, regardless of the transport error text.
     #[tokio::test]
     async fn delivery_failure_logs_never_contain_the_smtp_password() {

@@ -1,4 +1,4 @@
--- ADR-0148: Phase 11 legacy migration contract — durable run model and the
+-- ADR-0148: legacy migration contract — durable run model and the
 -- original-release-date preservation column.
 --
 -- Everything here is additive and backward compatible: a new schema with four
@@ -60,8 +60,8 @@ CREATE TABLE legacy_migration.checkpoints (
 );
 
 -- Public-ID and source-row mappings for non-catalog domains. Catalog
--- artist/release/track mappings live in `legacy_catalog_id_mappings` (Phase 4)
--- with the same per-run uniqueness guarantees; this table keeps the remaining
+-- artist/release/track mappings live in `legacy_catalog_id_mappings` with
+-- the same per-run uniqueness guarantees; this table keeps the remaining
 -- domains (users, playlists, shares, podcasts, radio, …) out of semantic
 -- catalog identity exactly as ADR-0148 §D.2 requires.
 CREATE TABLE legacy_migration.entity_map (

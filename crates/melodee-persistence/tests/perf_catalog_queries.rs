@@ -1,4 +1,4 @@
-//! R2.7 performance evidence: representative PostgreSQL catalog browse
+//! performance evidence: representative PostgreSQL catalog browse
 //! queries at production-shaped cardinality, including planner behavior for
 //! broad low-selectivity searches. Follows the `perf_claims` pattern:
 //! measurements are evidence, not user-facing performance claims; no

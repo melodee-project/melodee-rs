@@ -1,4 +1,4 @@
-//! Phase 7 native-v1 request/share/preferences HTTP and authorization evidence.
+//! native-v1 request/share/preferences HTTP and authorization evidence.
 
 #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 
@@ -951,7 +951,7 @@ async fn native_community_routes_are_owner_fenced_bounded_and_replay_safe() {
     db.drop().await;
 }
 
-/// Phase 9 WP-01: public share Track assembly is set-based (one items
+/// public share Track assembly is set-based (one items
 /// statement per Release/Playlist) and produces a byte-identical shape to the
 /// previous sequential per-Track DTO loads. The repository has no
 /// statement-counting test harness (the `catalog_performance.rs` pattern

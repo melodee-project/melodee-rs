@@ -1,15 +1,14 @@
 //! Annotation endpoint group: star, unstar, setRating, scrobble
 //! (PRD-API-OS-005; golden evidence `compatibility/opensubsonic/golden/annotation`).
 //!
-//! Captured behaviors reproduced here:
-//! - star/unstar accept repeated `id` plus `albumId`/`artistId`; a malformed
-//!   prefixed id answers HTTP 200 with error 44 "Invalid API key.".
+//! Captured behaviors reproduced here: //! - star/unstar accept repeated `id` plus `albumId`/`artistId`; a malformed
+//! prefixed id answers HTTP 200 with error 44 "Invalid API key.".
 //! - setRating takes `id` + `rating` 0-5 (0 clears) and persists to the
-//!   shared `native_*_user_states` tables.
+//! shared `native_*_user_states` tables.
 //! - scrobble with `submission` absent/true records an idempotent play;
-//!   `submission=false` updates now-playing. A repeated `time` list whose
-//!   length differs from the `id` list answers with the captured status-ok +
-//!   error code 0 "Wrong number of timestamps." envelope quirk.
+//! `submission=false` updates now-playing. A repeated `time` list whose
+//! length differs from the `id` list answers with the captured status-ok +
+//! error code 0 "Wrong number of timestamps." envelope quirk.
 //!
 //! This module also owns the shared OpenSubsonic Child song object used by
 //! the bookmarks and play queue groups.
@@ -290,8 +289,7 @@ fn millis_to_timestamp(millis: i64) -> Option<OffsetDateTime> {
     OffsetDateTime::from_unix_timestamp_nanos(i128::from(millis) * 1_000_000).ok()
 }
 
-/// Deterministic idempotency key for one scrobble submission:
-/// `native_track_plays.client_event_id` is UNIQUE(user_id, client_event_id),
+/// Deterministic idempotency key for one scrobble submission: /// `native_track_plays.client_event_id` is UNIQUE(user_id, client_event_id),
 /// so a repeated submission with the same song and time adopts durably.
 fn scrobble_event_id(track_public_id: Uuid, millis: i64) -> String {
     format!("opensubsonic-scrobble:{track_public_id}:{millis}")
@@ -351,7 +349,7 @@ pub async fn scrobble(
             .await
             {
                 Ok(NativeScrobbleResult::Applied) => {
-                    // WP-07: fire-and-record Last.fm dispatch; never blocks
+                    //: fire-and-record Last.fm dispatch; never blocks
                     // or fails the write path, and an adopted idempotent
                     // replay must not double-scrobble Last.fm.
                     crate::lastfm::LastfmDispatch::new(
@@ -514,8 +512,7 @@ fn open_subsonic_path(source_path: Option<&str>) -> String {
     }
 }
 
-/// Legacy `StringExtensions.ToNormalizedString` for contributor pseudo-ids:
-/// upper-case, then keep only alphanumeric characters
+/// Legacy `StringExtensions.ToNormalizedString` for contributor pseudo-ids: /// upper-case, then keep only alphanumeric characters
 /// ("The Phase0 Strings" -> "THEPHASE0STRINGS").
 fn normalized_contributor_name(name: &str) -> String {
     name.chars()
@@ -576,7 +573,7 @@ impl ContributorEntry {
     /// Renders the legacy `ArtistID3` for this contributor. Name-only
     /// contributors are pseudo-artists keyed `contributor_<NORMALIZED>` whose
     /// `coverArt` is caller-scoped: the legacy Child serializer used the
-    /// song's cover-art id, while the album-level `ContributingArtists()`
+    /// song's cover-art id, while the album-level `ContributingArtists`
     /// used the pseudo-id itself.
     fn artist_id3(&self, name_only_cover_art: &str) -> serde_json::Value {
         match &self.subject {
@@ -585,19 +582,19 @@ impl ContributorEntry {
                 name,
                 sort_name,
             } => serde_json::json!({
-                "id": format!("artist_{public_id}"),
-                "name": name,
-                "coverArt": format!("artist_{public_id}"),
-                // The legacy contributor serializer did not hydrate the
-                // catalog aggregate used by standalone Artist DTOs.
-                "albumCount": 0,
-                // Captured: these paths never pass a UserArtist, so the
-                // rating is the `userArtist?.Rating ?? 0` fallback.
-                "userRating": 0,
-                // Literal placeholder preserved from the legacy serializer.
-                "artistImageUrl": "URL",
-                "sortName": sort_name,
-            }),
+                           "id": format!("artist_{public_id}"),
+                           "name": name,
+                           "coverArt": format!("artist_{public_id}"),
+            // The legacy contributor serializer did not hydrate the
+            // catalog aggregate used by standalone Artist DTOs.
+                           "albumCount": 0,
+            // Captured: these paths never pass a UserArtist, so the
+            // rating is the `userArtist?.Rating ?? 0` fallback.
+                           "userRating": 0,
+            // Literal placeholder preserved from the legacy serializer.
+                           "artistImageUrl": "URL",
+                           "sortName": sort_name,
+                       }),
             ContributorSubject::NameOnly { name } => {
                 let id = format!("contributor_{}", normalized_contributor_name(name));
                 serde_json::json!({
@@ -611,7 +608,7 @@ impl ContributorEntry {
         }
     }
 
-    /// Album-level `ContributingArtists()` rendering: name-only contributors
+    /// Album-level `ContributingArtists` rendering: name-only contributors
     /// use their own pseudo-id as `coverArt` there.
     pub(crate) fn album_scoped_artist_id3(&self) -> serde_json::Value {
         match &self.subject {
@@ -744,14 +741,14 @@ fn child_json(
         suffix_from(row.source_path.as_deref()).into(),
     );
     // Captured rule: `starred` is present only when the user row exists and
-    // is starred, and its value is the legacy `Nullable<DateTime>.ToString()`
+    // is starred, and its value is the legacy `Nullable<DateTime>.ToString`
     // artifact — the fixture rows carried no LastUpdatedAt, so the frozen
     // goldens show "" (runtime-starred timestamps are masked volatile in the
     // after-star goldens).
     if row.starred == Some(true) {
         child.insert("starred".to_string(), "".into());
     }
-    // Captured rounding: legacy `Duration.ToSeconds()` rounds half-to-even
+    // Captured rounding: legacy `Duration.ToSeconds` rounds half-to-even
     // (2500 ms -> 2, 2700 ms -> 3, 1800 ms -> 2).
     #[allow(clippy::cast_possible_truncation)]
     let duration_seconds = (row.duration_ms as f64 / 1000.0).round_ties_even() as i64;
@@ -795,7 +792,7 @@ fn child_json(
     }
     // Captured rule: `artists[]` holds performer-type contributors only;
     // name-only contributors render as `contributor_<NORMALIZED>` pseudo
-    // artists whose coverArt is the song id (legacy `song.ToCoverArtId()`).
+    // artists whose coverArt is the song id (legacy `song.ToCoverArtId`).
     let song_cover_art = format!("song_{}", row.track_public_id);
     child.insert(
         "artists".to_string(),
@@ -814,17 +811,17 @@ fn child_json(
     child.insert(
         "albumArtists".to_string(),
         serde_json::json!([{
-            "id": album_artist_id,
-            "name": row.release_artist_name,
-            "coverArt": format!("artist_{}", row.release_artist_public_id),
-            "albumCount": row.release_artist_album_count,
-            // Captured: the child albumArtists entry always carries 0 — the
-            // legacy child serializer never mapped the artist user rating.
-            "userRating": 0,
-            // Literal placeholder preserved from the legacy serializer.
-            "artistImageUrl": "URL",
-            "sortName": row.release_artist_sort_name,
-        }]),
+                   "id": album_artist_id,
+                   "name": row.release_artist_name,
+                   "coverArt": format!("artist_{}", row.release_artist_public_id),
+                   "albumCount": row.release_artist_album_count,
+        // Captured: the child albumArtists entry always carries 0 — the
+        // legacy child serializer never mapped the artist user rating.
+                   "userRating": 0,
+        // Literal placeholder preserved from the legacy serializer.
+                   "artistImageUrl": "URL",
+                   "sortName": row.release_artist_sort_name,
+               }]),
     );
     child.insert(
         "displayAlbumArtist".to_string(),

@@ -1,7 +1,6 @@
-//! Shared cross-slice Phase 5 PostgreSQL fixtures.
-//!
-//! The fixture deliberately reaches `Cataloged` through the public Phase 3/4
-//! handoff and leaves every media path nonexistent. Phase 5 tests can therefore
+//! Shared cross-slice PostgreSQL fixtures.
+//! The fixture deliberately reaches `Cataloged` through the public /4
+//! handoff and leaves every media path nonexistent. tests can therefore
 //! prove policy reads PostgreSQL facts instead of reopening inbound or canonical
 //! media.
 
@@ -29,7 +28,7 @@ use serde_json::json;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-/// One complete catalog handoff ready for Phase 5 policy evaluation.
+/// One complete catalog handoff ready for policy evaluation.
 #[derive(Debug, Clone)]
 pub struct CatalogedPolicyFixture {
     pub published: PublishedCatalogFixture,
@@ -59,7 +58,7 @@ impl CatalogedPolicyFixture {
 
 /// Publishes and catalogs one single-Track Release through public persistence
 /// APIs. The current time is used for catalog leases because PostgreSQL fences
-/// them against `clock_timestamp()`.
+/// them against `clock_timestamp`.
 pub async fn seed_cataloged_release(
     db: &TestDb,
     ordinal: u32,

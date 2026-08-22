@@ -1,5 +1,4 @@
-//! Integration tests for admin SPA static serving (ADR-0138, Phase 10 WP-03).
-//!
+//! Integration tests for admin SPA static serving (ADR-0138,).
 //! Proves: the built SPA is served at `/admin`, client-side deep links fall
 //! back to `index.html`, the mount never shadows the API surface, and a
 //! missing dist directory is not fatal (the server still serves APIs while

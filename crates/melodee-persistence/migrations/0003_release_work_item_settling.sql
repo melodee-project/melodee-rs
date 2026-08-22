@@ -1,4 +1,4 @@
--- Stable settling evidence and source-identity deduplication (Phase 2).
+-- Stable settling evidence and source-identity deduplication.
 --
 -- Settling is a source truth operation; snapshots must be durable and inspectable.
 -- Unique source identity allows concurrent reconcilers to upsert the same candidate

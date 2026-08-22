@@ -364,7 +364,7 @@ fn real_format_matrix_is_verified_source_safe_and_deterministic() {
     );
 }
 
-/// R2.1 content-based detection, mirroring legacy compatibility case
+/// content-based detection, mirroring legacy compatibility case
 /// `not-mp3-named-mp3` (compatibility/media/cases/not-mp3-named-mp3.json):
 /// WAV content wearing `.mp3` filenames must be detected from probed streams
 /// (not the extension) and converted to MP3 — the captured expectation
@@ -463,7 +463,7 @@ fn wav_content_in_mp3_named_files_is_detected_from_content_and_converted() {
     assert_eq!(source_before, file_hashes(&source), "source media changed");
 }
 
-/// R2.1 zero-length fixture: inspection must record an actionable finding
+/// zero-length fixture: inspection must record an actionable finding
 /// and normalization must refuse to publish unverified output.
 #[test]
 fn zero_length_audio_is_an_actionable_finding_and_blocks_normalization() {
@@ -514,7 +514,7 @@ fn zero_length_audio_is_an_actionable_finding_and_blocks_normalization() {
     assert!(manifest.normalization.is_none());
 }
 
-/// R2.1 truncated fixture: a FLAC cut mid-stream still probes (STREAMINFO
+/// truncated fixture: a FLAC cut mid-stream still probes (STREAMINFO
 /// carries the full duration) but must fail normalization actionably — the
 /// encode either errors or decodes short and trips output duration
 /// verification — and nothing is published.
@@ -569,7 +569,7 @@ fn truncated_audio_fails_normalization_without_publishing() {
     assert_eq!(source_before, file_hashes(&source), "source media changed");
 }
 
-/// R2.1 multi-stream fixture: a container with more than one audio stream is
+/// multi-stream fixture: a container with more than one audio stream is
 /// observed with its true stream count and rejected actionably — Melodee
 /// never guesses which stream is the music.
 #[test]
@@ -614,7 +614,7 @@ fn multi_stream_audio_is_observed_and_rejected_actionably() {
     assert!(manifest.normalization.is_none());
 }
 
-/// R2.1 oversized-tag fixture: embedded artwork beyond the configured
+/// oversized-tag fixture: embedded artwork beyond the configured
 /// observation bound is skipped with a structured finding; audio observation
 /// and normalization are unaffected.
 #[test]
@@ -704,7 +704,7 @@ fn oversized_embedded_artwork_is_bounded_and_recorded() {
     assert_eq!(report.artwork_produced, 0);
 }
 
-/// R2.1 unsupported-content fixture: an extension in the audio vocabulary
+/// unsupported-content fixture: an extension in the audio vocabulary
 /// whose probed content carries no audio stream is recorded as unsupported
 /// with an actionable finding and rejected by normalization.
 #[test]
@@ -757,7 +757,7 @@ fn video_only_container_is_recorded_unsupported_and_rejected() {
     assert!(manifest.normalization.is_none());
 }
 
-/// R2.1 per-format normalization-input rows for the remaining matrix
+/// per-format normalization-input rows for the remaining matrix
 /// vocabulary: AAC (ADTS), AC-3, WMA, and Opus sources must be observed from
 /// probed content and converted to verified canonical MP3, with the source
 /// tree byte-identical afterwards.
@@ -1027,7 +1027,7 @@ fn corrupt_audio_is_rejected_by_normalization() {
     assert!(manifest.normalization.is_none());
 }
 
-/// R2.2 / ADR-0146 end-to-end proof, mirroring the frozen legacy capture
+/// ADR-0146 end-to-end proof, mirroring the frozen legacy capture
 /// `compatibility/media/cases/cue-split.json` (one WAV + one CUE sheet → one
 /// album of per-track MP3 segments): a CUE-governed source produces one
 /// verified MP3 segment per CUE track, the whole-file output is suppressed,
@@ -1058,7 +1058,7 @@ fn cue_governed_source_splits_into_verified_per_track_segments() {
         String::from_utf8_lossy(&output.stderr)
     );
     // Quoted FILE, spaces, and a Unicode title cover the sheet-lexing
-    // dimensions of the R2.2 fixture list in the end-to-end path.
+    // dimensions of the fixture list in the end-to-end path.
     fs::write(
         source.join("album.cue"),
         "PERFORMER \"Cue Artist\"\n\

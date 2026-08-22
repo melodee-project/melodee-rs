@@ -1,4 +1,4 @@
-//! Phase 9 WP-06 radio station store integrity tests (PRD-RADIO-001/002,
+//! radio station store integrity tests (PRD-RADIO-001/002,
 //! ADR-0134 §1): round-trip, field-optional update semantics, validation
 //! bounds mirroring the migration 0020 CHECK constraints, deterministic
 //! ordering, and immutable public identity.

@@ -1,4 +1,4 @@
-//! Phase 9 WP-10 Admin API integration tests: device profile CRUD
+//! Admin API integration tests: device profile CRUD
 //! lifecycle, the single-default invariant, legacy-parity validation, and
 //! the administrator-only authorization gate (PRD-DEVICE-001/002,
 //! ADR-0134 §5).

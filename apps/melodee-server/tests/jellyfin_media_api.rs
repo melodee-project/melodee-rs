@@ -1,7 +1,7 @@
-//! Jellyfin media-surface compatibility evidence (Phase 8): browse/items,
+//! Jellyfin media-surface compatibility evidence: browse/items,
 //! genres, user views, similar/instant-mix, favorites/played state, playlists,
-//! images (including Phase 10 catalog artwork overrides), sessions, and audio streaming — against PostgreSQL
-//! fixtures seeded through the public Phase 3–5 catalog handoff, with
+//! images (including catalog artwork overrides), sessions, and audio streaming — against PostgreSQL
+//! fixtures seeded through the public –5 catalog handoff, with
 //! frozen-golden shape comparisons for the captured wire shapes.
 
 #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
@@ -1256,7 +1256,7 @@ async fn playlist_full_lifecycle_and_d4_clean_add() {
 }
 
 // ---------------------------------------------------------------------------
-// Images (captured no-artwork 404 classes and Phase 10 override precedence)
+// Images (captured no-artwork 404 classes and override precedence)
 // ---------------------------------------------------------------------------
 
 #[tokio::test]

@@ -1,4 +1,4 @@
-//! Phase 9 WP-09 event-wiring evidence (PRD-NOTIF-001/002): the native
+//! event-wiring evidence (PRD-NOTIF-001/002): the native
 //! password-reset, share-creation, and request-fulfillment flows dispatch a
 //! fire-and-record notification. With the fixture's disabled (noop)
 //! transport each dispatch is honestly recorded as `skipped`, and the

@@ -1,4 +1,4 @@
-//! Phase 9 WP-09 Admin API integration tests: notification template CRUD
+//! Admin API integration tests: notification template CRUD
 //! over the (key, locale) identity, the administrator-only gate, the
 //! append-only delivery audit listing, and honest test-send recording with
 //! a disabled transport (PRD-NOTIF-001..003, ADR-0134 §4).

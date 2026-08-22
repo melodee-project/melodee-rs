@@ -1,10 +1,10 @@
-//! Phase 10 WP-15 catalog browsing + detail API (PRD-API-ADMIN-002,
+//! catalog browsing + detail API (PRD-API-ADMIN-002,
 //! PRD-UI-005/006/010): server-side paginated catalog browsing for Artists,
 //! Releases, and Tracks, plus the detail reads backing the admin
 //! Artist/Release/Track detail tabs (identity, aliases, stats, releases,
 //! appearances, relationships, images, provenance, classification, history).
 //!
-//! All routes are `AdminPrincipal`-gated reads over the Phase 4 catalog
+//! All routes are `AdminPrincipal`-gated reads over the catalog
 //! schema. The surface uses Rust-native domain vocabulary (`Artist`,
 //! `Release`, `Track`) — never legacy compatibility naming. Public ids are
 //! the operator-safe lookup keys; unknown ids return 404. Image references
@@ -49,7 +49,7 @@ const MAX_LIST_LIMIT: u32 = 500;
 const MAX_ARTWORK_UPLOAD_BYTES: usize = 10 * 1024 * 1024;
 const ARTWORK_BODY_LIMIT_BYTES: usize = MAX_ARTWORK_UPLOAD_BYTES + 1024 * 1024;
 
-/// Shared state for the WP-15 catalog surface: the common admin state (auth
+/// Shared state for the catalog surface: the common admin state (auth
 /// gate, pool) plus the read-only stream URL signer used to offer audio
 /// previews on cataloged Tracks (PRD-UI-007). The signer is the same
 /// cryptographic boundary the native adapter uses; this surface never sees
@@ -586,7 +586,7 @@ pub struct ReleaseProvenanceDto {
     pub imported_at: OffsetDateTime,
 }
 
-/// Persisted Phase 5 classification (traits + evidence) for a Release.
+/// Persisted classification (traits + evidence) for a Release.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReleaseClassificationDto {
@@ -994,7 +994,7 @@ async fn release_detail(
         Ok(None) => return not_found("release", id),
         Err(error) => return store_failure("release detail read failed", &error),
     };
-    // Classification is Phase 5 policy evidence keyed by the internal
+    // Classification is policy evidence keyed by the internal
     // Release id carried by the detail read.
     let classification = match PolicyStore
         .load_classification(
@@ -1104,7 +1104,7 @@ async fn track_detail(
         Ok(None) => return not_found("track", id),
         Err(error) => return store_failure("track detail read failed", &error),
     };
-    // The Phase 4 schema guarantees exactly one `playable` link; the check
+    // The schema guarantees exactly one `playable` link; the check
     // stays defensive so a broken read never produces a preview affordance.
     let has_playable = detail
         .media_assets

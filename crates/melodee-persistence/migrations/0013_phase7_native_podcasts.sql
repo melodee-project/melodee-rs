@@ -1,4 +1,4 @@
--- Phase 7 native-v1 podcast subscriptions and playback state
+-- native-v1 podcast subscriptions and playback state
 -- (ADR-0123; PRD-POD-001..003).
 --
 -- Additive only. Binary downgrade retains these tables. Full schema rollback

@@ -1,4 +1,4 @@
-//! Phase 7 podcast PostgreSQL integrity and tenancy acceptance.
+//! podcast PostgreSQL integrity and tenancy acceptance.
 
 #![allow(clippy::expect_used)]
 

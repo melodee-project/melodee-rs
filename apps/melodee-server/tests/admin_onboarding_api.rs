@@ -1,4 +1,4 @@
-//! Phase 9 WP-08 Admin API integration tests: onboarding status, fail-closed
+//! Admin API integration tests: onboarding status, fail-closed
 //! completion, and the migration-bypass heuristic (PRD-SETUP-001/002,
 //! ADR-0134 §3).
 

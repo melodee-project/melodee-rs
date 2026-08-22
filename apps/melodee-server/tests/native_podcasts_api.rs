@@ -1,4 +1,4 @@
-//! Phase 7 native-v1 podcast route, tenancy, and bounded-input evidence.
+//! native-v1 podcast route, tenancy, and bounded-input evidence.
 
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 

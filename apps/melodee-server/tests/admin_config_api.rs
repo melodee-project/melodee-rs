@@ -1,4 +1,4 @@
-//! Phase 9 WP-08 Admin API integration tests: configuration export with
+//! Admin API integration tests: configuration export with
 //! secret redaction, import preview/apply, unknown-key and redacted-marker
 //! rejection, and the administrator gate (PRD-CONFIG-002, PRD-AUTH-007,
 //! ADR-0134 §3).

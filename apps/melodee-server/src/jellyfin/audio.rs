@@ -2,24 +2,23 @@
 //! download/file, and PlaybackInfo (PRD-API-JF-002/003).
 //!
 //! Reproduced from the frozen baseline (`AudioController.cs` and
-//! `ItemsController.cs`):
-//!
+//! `ItemsController.cs`): //!
 //! - Streaming requires `HasStreamRole` (403 "Streaming permission required.");
-//!   download requires `HasDownloadRole` (403 "Download permission required.").
+//! download requires `HasDownloadRole` (403 "Download permission required.").
 //! - Transcoding requests are honored (ADR-0147, superseding the captured
-//!   400 rejection): `static != true` with a container or bitrate parameter
-//!   streams configured FFmpeg output; `/universal` forces `static=true`
-//!   (unchanged captured direct play).
+//! 400 rejection): `static!= true` with a container or bitrate parameter
+//! streams configured FFmpeg output; `/universal` forces `static=true`
+//! (unchanged captured direct play).
 //! - Range handling is the captured manual parser: 206 with
-//!   `Content-Range: bytes start-end/len`; 416 with the ProblemDetails body;
-//!   `Content-Range: bytes */len` is only attached for out-of-range starts
-//!   and inverted ranges, never for unparseable headers (captured nuance).
+//! `Content-Range: bytes start-end/len`; 416 with the ProblemDetails body;
+//! `Content-Range: bytes */len` is only attached for out-of-range starts
+//! and inverted ranges, never for unparseable headers (captured nuance).
 //! - HEAD returns headers only (200, Content-Type/Content-Length).
 //! - The Last-Modified/ETag the legacy `PhysicalFile` result attached are
-//!   filesystem-volatile (normalized away in the frozen captures) and are not
-//!   reproduced.
+//! filesystem-volatile (normalized away in the frozen captures) and are not
+//! reproduced.
 //! - Lyrics come from the sibling `.lrc` file with the captured timestamp
-//!   regex semantics; missing sidecar → `{"lyrics":[]}` (lowercase keys).
+//! regex semantics; missing sidecar → `{"lyrics":[]}` (lowercase keys).
 
 use axum::{
     Router,
@@ -45,12 +44,12 @@ const MAX_LYRIC_BYTES: u64 = 2 * 1024 * 1024;
 
 pub fn router() -> Router<JfState> {
     Router::new()
-        // axum 0.8 cannot express the legacy `{itemId}/stream.{extension}`
-        // mixed segment, so the resource segment is dispatched manually.
+ // axum 0.8 cannot express the legacy `{itemId}/stream.{extension}`
+ // mixed segment, so the resource segment is dispatched manually.
         .route("/Audio/{id}/{resource}", get(audio_resource).head(audio_resource))
-        // Captured: PlaybackInfo answers GET and POST identically.
+ // Captured: PlaybackInfo answers GET and POST identically.
         .route("/Items/{id}/PlaybackInfo", get(playback_info).post(playback_info))
-        // Legacy registers GET only for Download/File (no HEAD).
+ // Legacy registers GET only for Download/File (no HEAD).
         .route(
             "/Items/{id}/Download",
             axum::routing::on(axum::routing::MethodFilter::GET, download_file),
@@ -454,7 +453,7 @@ async fn lyrics(state: JfState, id: String, headers: HeaderMap, uri: Uri) -> Res
     let Some(direct_play) = state.direct_play.as_ref() else {
         return json_response(json!({"lyrics": []}));
     };
-    // Path.ChangeExtension semantics: replace the final extension with .lrc.
+    // Path.ChangeExtension semantics: replace the final extension with.lrc.
     let lrc_path = match asset.canonical_relative_path.rsplit_once('.') {
         Some((stem, _)) if !stem.is_empty() => format!("{stem}.lrc"),
         _ => format!("{}.lrc", asset.canonical_relative_path),

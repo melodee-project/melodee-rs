@@ -1,28 +1,28 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from "react";
 
-import { ApiError } from '../../api/client';
-import type { CatalogAuditEvent, SortParam } from '../../api/types';
-import type { AuditEvent } from '../../components/AuditTimeline';
-import type { StatusKind } from '../../components/StatusTag';
+import { ApiError } from "../../api/client";
+import type { CatalogAuditEvent, SortParam } from "../../api/types";
+import type { AuditEvent } from "../../components/AuditTimeline";
+import type { StatusKind } from "../../components/StatusTag";
 
 /**
- * Shared helpers for the WP-15 catalog browsing + detail screens.
+ * Shared helpers for the catalog browsing + detail screens.
  * Pure mappings and the detail fetch hook; no rendering.
  */
 
 /** Maps a catalog Artist/Release status onto the §5 status semantics. */
 export function catalogStatusKind(status: string): StatusKind {
   switch (status) {
-    case 'verified':
-    case 'active':
-      return 'success';
-    case 'provisional':
-      return 'provisional';
-    case 'merged':
-    case 'deprecated':
-      return 'neutral';
+    case "verified":
+    case "active":
+      return "success";
+    case "provisional":
+      return "provisional";
+    case "merged":
+    case "deprecated":
+      return "neutral";
     default:
-      return 'neutral';
+      return "neutral";
   }
 }
 
@@ -34,23 +34,29 @@ export function parseCatalogSort(
   if (!raw) {
     return undefined;
   }
-  const [key, direction] = raw.split(':');
-  if (!key || (direction !== 'asc' && direction !== 'desc') || !whitelist.has(key)) {
+  const [key, direction] = raw.split(":");
+  if (
+    !key ||
+    (direction !== "asc" && direction !== "desc") ||
+    !whitelist.has(key)
+  ) {
     return undefined;
   }
   return `${key}:${direction}` as SortParam;
 }
 
 export function parsePageParam(raw: string | null): number {
-  return Math.max(1, Number.parseInt(raw ?? '1', 10) || 1);
+  return Math.max(1, Number.parseInt(raw ?? "1", 10) || 1);
 }
 
 export function parsePageSizeParam(raw: string | null): number {
-  return Math.max(1, Number.parseInt(raw ?? '50', 10) || 50);
+  return Math.max(1, Number.parseInt(raw ?? "50", 10) || 50);
 }
 
 export function toApiError(cause: unknown): ApiError {
-  return cause instanceof ApiError ? cause : new ApiError(0, 'unknown', String(cause), null);
+  return cause instanceof ApiError
+    ? cause
+    : new ApiError(0, "unknown", String(cause), null);
 }
 
 /** Maps a catalog audit event onto the shared audit-timeline shape. */
@@ -81,7 +87,10 @@ export function trackOrdinalLabel(
  * Detail fetch with cancellation: the last error replaces the payload so a
  * failed id shows the retryable error instead of a stale entity.
  */
-export function useCatalogDetail<T>(fetcher: (id: string) => Promise<T>, id: string) {
+export function useCatalogDetail<T>(
+  fetcher: (id: string) => Promise<T>,
+  id: string,
+) {
   const [detail, setDetail] = useState<T | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState(true);

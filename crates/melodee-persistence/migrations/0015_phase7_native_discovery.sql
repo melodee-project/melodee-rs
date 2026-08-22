@@ -1,4 +1,4 @@
--- Phase 7 native discovery, charts, playback backend, and theme authority.
+-- native discovery, charts, playback backend, and theme authority.
 -- (ADR-0123, ADR-0127; PRD-DISCOVERY-001..003, PRD-PARTY-003,
 -- PRD-USER-001, PRD-API-M1-004..006).
 --

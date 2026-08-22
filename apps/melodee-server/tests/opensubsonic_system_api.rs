@@ -1,5 +1,4 @@
-//! OpenSubsonic system/auth/negative compatibility evidence (Phase 8 WP1).
-//!
+//! OpenSubsonic system/auth/negative compatibility evidence.
 //! Bodies and headers asserted here mirror the frozen golden captures in
 //! `compatibility/opensubsonic/golden/{system,auth,negative}` with only the
 //! scenario-declared volatile fields differing.
@@ -148,7 +147,7 @@ fn get(path: &str) -> Request<Body> {
 }
 
 fn enforced_get(path: &str) -> Request<Body> {
-    // Mirrors the Phase 0 enforced-auth capture: a synthetic public client
+    // Mirrors the enforced-auth capture: a synthetic public client
     // address defeats the localhost bypass without touching the server.
     let mut request = get(path);
     request.extensions_mut().insert(ConnectInfo(SocketAddr::new(

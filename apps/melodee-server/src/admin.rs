@@ -5,13 +5,13 @@
 //! Rust-native vocabulary (`Release` work items, not `Album`) and is
 //! independently versioned under `/api/admin/v1`.
 //!
-//! Phase 2 scope: durable-work-item **diagnostics only** — state counts,
+//! scope: durable-work-item **diagnostics only** — state counts,
 //! bounded/paged listing, work-item detail, append-only event history, and
 //! active-lease evidence. It does not expose secrets, arbitrary filesystem
 //! contents, or raw SQLx rows; DTOs are explicit and bounded. No compatibility
 //! route is invented here.
 //!
-//! Phase 10 (ADR-0139): every route in this module is gated behind
+//! (ADR-0139): every route in this module is gated behind
 //! [`AdminPrincipal`] — anonymous requests receive 401, authenticated
 //! non-administrators 403, both with the stable error envelope. `/healthz`
 //! and `/readyz` remain anonymous infrastructure probes and are not routed
@@ -203,7 +203,7 @@ pub struct ListWorkItemsParams {
     /// Zero-based offset for paging.
     #[serde(default)]
     pub offset: u32,
-    /// Whitelisted sort expression `key:asc|desc` (WP-10): `addedAt`,
+    /// Whitelisted sort expression `key:asc|desc`: `addedAt`,
     /// `updatedAt`, `state`, or `attemptCount`. Omitted keeps the historical
     /// newest-first ordering. Unknown keys or directions produce a 400.
     pub sort: Option<String>,
@@ -254,7 +254,7 @@ impl AdminApiErrorKind {
     }
 }
 
-/// One page of work items plus the filter's total row count (WP-10 pagination
+/// One page of work items plus the filter's total row count ( pagination
 /// envelope). `total` respects the `state` filter but ignores `limit`/`offset`.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]

@@ -1,4 +1,4 @@
-//! Phase 5 Track novelty analysis (PRD-POLICY-004, PRD-POLICY-005, SPEC section 15).
+//! Track novelty analysis (PRD-POLICY-004, PRD-POLICY-005, SPEC section 15).
 //!
 //! Novelty answers: "Is this Track genuinely new to the catalog, or do we
 //! already have it?" Classification describes what a Release *is*; novelty

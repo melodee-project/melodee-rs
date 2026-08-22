@@ -1,4 +1,4 @@
-//! Phase 9 WP-11 sandboxed scripting hooks (PRD-SCRIPT-001..005, ADR-0134 §6,
+//! sandboxed scripting hooks (PRD-SCRIPT-001..005, ADR-0134 §6,
 //! ADR-0135).
 //!
 //! Operator-installed JavaScript hooks evaluated in a **capability-less** Boa
@@ -9,16 +9,14 @@
 //! `onDeny`), both registered as globals and passed as the `check(ctx,
 //! scriptConfig)` call arguments.
 //!
-//! Hook contract (legacy-compatible; evidence:
-//! design/evidence/phase-9/script-events-legacy-inventory.md §1a):
-//!
+//! Hook contract (legacy-compatible; evidence: //! design/evidence/phase-9/script-events-legacy-inventory.md §1a): //!
 //! - A script body without a `function check` declaration is auto-wrapped as
-//!   `function check(ctx, scriptConfig) { return (<body>); }` (the legacy
-//!   substring rule is preserved verbatim, including its quirks).
+//! `function check(ctx, scriptConfig) { return (<body>); }` (the legacy
+//! substring rule is preserved verbatim, including its quirks).
 //! - Accepted returns: `true` / `false` / `{ result: bool, message?: string }`.
-//!   Anything else (including a thrown error) is an `error` outcome.
+//! Anything else (including a thrown error) is an `error` outcome.
 //! - All code executes under a `"use strict";` prologue (legacy Jint ran with
-//!   strict mode on).
+//! strict mode on).
 //!
 //! Resource limits (ADR-0135 §3): every execution runs on a dedicated OS
 //! thread with a wall-clock timeout (default 250 ms, per-script override up
@@ -108,7 +106,7 @@ const RUN_RETENTION: Duration = Duration::days(90);
 const MAX_CTX_TAG_PROBES: usize = 4096;
 
 /// The effective deny action for the wired hook. `quarantine` physical moves
-/// are deferred (they require the durable Phase 5 decision/audit contract)
+/// are deferred (they require the durable decision/audit contract)
 /// and the legacy `delete` action stays rewritten to `skip` (inventory §1a,
 /// §5); the registry therefore carries no `onDeny` column yet and the
 /// injected `scriptConfig.onDeny` is this constant.
@@ -698,20 +696,19 @@ impl DirectoryProcessingGate for ScriptingDirectoryGate {
 /// through the media layer; unreadable files logged and skipped).
 ///
 /// Field semantics, mirroring legacy exactly:
-///
 /// - `totalFilesCount` / `totalSizeMegabytes` / `mostRecentModified` cover
-///   **top-level regular files only** (legacy used `SearchOption.
-///   TopDirectoryOnly`); sizes are MiB rounded to 2 decimals; the timestamp
-///   is ISO-8601 UTC (legacy emitted the "O" format — both parse via the
-///   documented `new Date(ctx.*)` idiom).
+/// **top-level regular files only** (legacy used `SearchOption.
+/// TopDirectoryOnly`); sizes are MiB rounded to 2 decimals; the timestamp
+/// is ISO-8601 UTC (legacy emitted the "O" format — both parse via the
+/// documented `new Date(ctx.*)` idiom).
 /// - `mediaFilesCount`, `totalDurationMinutes`, `trackNumbers` (sorted
-///   ascending, duplicates kept) come from successful tag probes of
-///   top-level audio files (the inspection classifier's extension set).
+/// ascending, duplicates kept) come from successful tag probes of
+/// top-level audio files (the inspection classifier's extension set).
 /// - `hasTrackNumberGaps` uses the **shipped** legacy definition: false when
-///   fewer than one media file or two track numbers, otherwise true when any
-///   adjacent sorted pair is non-consecutive — the sequence may start at any
-///   number (inventory §4.7 records the stricter spec-doc definition as a
-///   do-not-preserve ambiguity; decision recorded in the migration guide).
+/// fewer than one media file or two track numbers, otherwise true when any
+/// adjacent sorted pair is non-consecutive — the sequence may start at any
+/// number (inventory §4.7 records the stricter spec-doc definition as a
+/// do-not-preserve ambiguity; decision recorded in the migration guide).
 fn build_directory_processing_context(
     root: &Path,
     snapshot: &CandidateSnapshot,
@@ -953,8 +950,7 @@ mod tests {
 
     #[test]
     fn legacy_directory_processing_start_example_evaluates_identically() {
-        // The documented canonical legacy script (migration guide §3):
-        // identical source text must produce the documented verdicts.
+        // The documented canonical legacy script (migration guide §3):  // identical source text must produce the documented verdicts.
         let source = "function check(ctx, scriptConfig) {\n  if (ctx.mediaFilesCount < 3) {\n    return { result: false, message: \"Release has fewer than three media files.\" };\n  }\n  return true;\n}";
 
         let denied = eval(source, &serde_json::json!({ "mediaFilesCount": 2 }));

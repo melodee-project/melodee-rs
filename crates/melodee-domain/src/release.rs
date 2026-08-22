@@ -10,16 +10,16 @@ use crate::{
 };
 
 impl ReleaseId {
-    /// Reserves the catalog Release identity during Phase 3 publication.
+    /// Reserves the catalog Release identity during publication.
     ///
-    /// Phase 4 catalog construction must adopt this existing ID rather than call this method.
+    /// catalog construction must adopt this existing ID rather than call this method.
     #[must_use]
     pub fn reserve_for_publication() -> Self {
         Self::new()
     }
 }
 
-/// Non-exclusive classification inferred for a Release in Phase 5.
+/// Non-exclusive classification inferred for a Release in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReleaseTrait {

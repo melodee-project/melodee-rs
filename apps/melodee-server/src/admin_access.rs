@@ -1,4 +1,4 @@
-//! Phase 9 WP-03 Admin API: user and library-access-group administration
+//! Admin API: user and library-access-group administration
 //! (PRD-AUTH-003/004, ADR-0134 §2).
 //!
 //! These routes extend the Rust-native operator API (`/api/admin/v1`,
@@ -30,16 +30,16 @@ use crate::native::auth::NativeAuthService;
 /// Upper bound for a client-supplied password on user creation.
 const MAX_PASSWORD_CHARS: usize = 1024;
 
-/// Shared state for the WP-03 admin access surface.
+/// Shared state for the admin access surface.
 #[derive(Clone)]
 pub struct AdminAccessState {
     pub pool: sqlx::PgPool,
     pub auth: Arc<NativeAuthService>,
-    /// Notification render/delivery service for the WP-09 admin surface
+    /// Notification render/delivery service for the admin surface
     /// (test-send). Holds no secrets beyond its transport, whose `Debug`
     /// never prints credentials.
     pub notifications: Arc<crate::notifications::NotificationService>,
-    /// Sandboxed scripting service for the WP-11 admin surface (test-run)
+    /// Sandboxed scripting service for the admin surface (test-run)
     /// and the ingestion gate; the shared handle keeps the process-wide
     /// leaked-thread bound (ADR-0135 §3) accurate.
     pub scripting: Arc<crate::scripting::ScriptingService>,
@@ -281,7 +281,7 @@ pub struct UpdateUserRequest {
     pub roles: Option<Vec<String>>,
 }
 
-/// Query parameters for the paginated user listing (WP-10). All optional.
+/// Query parameters for the paginated user listing. All optional.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ListUsersParams {
@@ -305,7 +305,7 @@ const fn default_user_list_limit() -> u32 {
 /// Upper bound for one user-listing page (same clamp as the ingest listing).
 const MAX_USER_LIST_LIMIT: u32 = 500;
 
-/// One page of users plus the filter's total row count (WP-10 pagination
+/// One page of users plus the filter's total row count ( pagination
 /// envelope). `total` respects the `query` filter but ignores `limit`/`offset`.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -316,7 +316,7 @@ pub struct AdminUserPageDto {
     pub offset: u32,
 }
 
-/// Admin password-set request (WP-10). The clear password is hashed
+/// Admin password-set request. The clear password is hashed
 /// immediately and never stored, logged, or returned (PRD-AUTH-005).
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]

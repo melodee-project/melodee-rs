@@ -1,4 +1,4 @@
-//! Phase 7 user-state, playlist, and scrobble PostgreSQL acceptance.
+//! user-state, playlist, and scrobble PostgreSQL acceptance.
 
 #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 

@@ -348,7 +348,7 @@ impl fmt::Debug for RefreshTokenDigest {
 }
 
 // ---------------------------------------------------------------------------
-// Reversible at-rest secret sealing (ADR-0134 §7, amended 2026-08-14, WP-07)
+// Reversible at-rest secret sealing (ADR-0134 §7, amended 2026-08-14)
 // ---------------------------------------------------------------------------
 
 /// Domain separator for the Last.fm session-key sealing key derivation.

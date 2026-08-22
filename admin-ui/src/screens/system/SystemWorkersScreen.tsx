@@ -1,4 +1,4 @@
-import { Renew } from '@carbon/icons-react';
+import { Renew } from "@carbon/icons-react";
 import {
   ActionableNotification,
   Button,
@@ -7,10 +7,10 @@ import {
   Link,
   Loading,
   Modal,
-} from '@carbon/react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+} from "@carbon/react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import {
   getDashboard,
@@ -19,27 +19,36 @@ import {
   listWorkerPools,
   pauseWorkerPool,
   resumeWorkerPool,
-} from '../../api/admin';
-import { ApiError } from '../../api/client';
+} from "../../api/admin";
+import { ApiError } from "../../api/client";
 import type {
   Page,
   SortParam,
   SystemHealth,
   WorkItem,
   WorkerPool,
-} from '../../api/types';
-import { EmptyState } from '../../components/EmptyState';
-import { EntityTable, type EntityColumn, type EntityRow } from '../../components/EntityTable';
-import { MetricCard } from '../../components/MetricCard';
-import { PageHeader } from '../../components/PageHeader';
-import { StatusTag } from '../../components/StatusTag';
-import { SystemHealthPanel } from '../../components/SystemHealthPanel';
-import { formatDateTime, formatDuration, formatNumber, formatRelativeTime } from '../../i18n/format';
-import { LeasesPanel } from './LeasesPanel';
-import { SearchPanel } from './SearchPanel';
+} from "../../api/types";
+import { EmptyState } from "../../components/EmptyState";
+import {
+  EntityTable,
+  type EntityColumn,
+  type EntityRow,
+} from "../../components/EntityTable";
+import { MetricCard } from "../../components/MetricCard";
+import { PageHeader } from "../../components/PageHeader";
+import { StatusTag } from "../../components/StatusTag";
+import { SystemHealthPanel } from "../../components/SystemHealthPanel";
+import {
+  formatDateTime,
+  formatDuration,
+  formatNumber,
+  formatRelativeTime,
+} from "../../i18n/format";
+import { LeasesPanel } from "./LeasesPanel";
+import { SearchPanel } from "./SearchPanel";
 
 /**
- * System / Workers / Diagnostics (WP-17, PRD-WORK-002, SPEC §22):
+ * System / Workers / Diagnostics (PRD-WORK-002, SPEC §22):
  * durable worker-pool table with lease-coordinated pause/resume, aggregated
  * subsystem health, recent failed work items, search index status with a
  * rebuild trigger, and active lease evidence. The search and lease panels
@@ -55,27 +64,38 @@ import { SearchPanel } from './SearchPanel';
  */
 
 /** Sort whitelist shared with the backend (WorkItemSort::parse). */
-const FAILURE_SORT_KEYS = new Set(['addedAt', 'updatedAt', 'state', 'attemptCount']);
+const FAILURE_SORT_KEYS = new Set([
+  "addedAt",
+  "updatedAt",
+  "state",
+  "attemptCount",
+]);
 
 interface Notice {
-  kind: 'success' | 'error' | 'info' | 'warning';
+  kind: "success" | "error" | "info" | "warning";
   text: string;
 }
 
 function toApiError(cause: unknown): ApiError {
-  return cause instanceof ApiError ? cause : new ApiError(0, 'unknown', String(cause), null);
+  return cause instanceof ApiError
+    ? cause
+    : new ApiError(0, "unknown", String(cause), null);
 }
 
 function parsePage(raw: string | null): number {
-  return Math.max(1, Number.parseInt(raw ?? '1', 10) || 1);
+  return Math.max(1, Number.parseInt(raw ?? "1", 10) || 1);
 }
 
 function parseSort(raw: string | null): SortParam | undefined {
   if (!raw) {
     return undefined;
   }
-  const [key, direction] = raw.split(':');
-  if (!key || (direction !== 'asc' && direction !== 'desc') || !FAILURE_SORT_KEYS.has(key)) {
+  const [key, direction] = raw.split(":");
+  if (
+    !key ||
+    (direction !== "asc" && direction !== "desc") ||
+    !FAILURE_SORT_KEYS.has(key)
+  ) {
     return undefined;
   }
   return `${key}:${direction}` as SortParam;
@@ -86,8 +106,11 @@ function PoolMetric({ value }: { value: number | null }) {
   const { t } = useTranslation();
   if (value === null) {
     return (
-      <span className="melodee-metric-absent" title={t('system.pools.metricsUnavailableHint')}>
-        {t('system.pools.metricsUnavailable')}
+      <span
+        className="melodee-metric-absent"
+        title={t("system.pools.metricsUnavailableHint")}
+      >
+        {t("system.pools.metricsUnavailable")}
       </span>
     );
   }
@@ -99,16 +122,19 @@ export function SystemWorkersScreen() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  const failuresPage = parsePage(searchParams.get('page'));
+  const failuresPage = parsePage(searchParams.get("page"));
   const failuresPageSize = Math.max(
     1,
-    Number.parseInt(searchParams.get('pageSize') ?? '50', 10) || 50,
+    Number.parseInt(searchParams.get("pageSize") ?? "50", 10) || 50,
   );
-  const failuresSort = parseSort(searchParams.get('sort'));
+  const failuresSort = parseSort(searchParams.get("sort"));
 
   const [pools, setPools] = useState<Page<WorkerPool> | null>(null);
   const [poolsError, setPoolsError] = useState<ApiError | null>(null);
-  const [totals, setTotals] = useState<{ completed24h: number; failed24h: number } | null>(null);
+  const [totals, setTotals] = useState<{
+    completed24h: number;
+    failed24h: number;
+  } | null>(null);
   const [health, setHealth] = useState<SystemHealth | null>(null);
   const [healthError, setHealthError] = useState<ApiError | null>(null);
   const [failures, setFailures] = useState<Page<WorkItem> | null>(null);
@@ -199,7 +225,9 @@ export function SystemWorkersScreen() {
       current
         ? {
             ...current,
-            items: current.items.map((item) => (item.name === updated.name ? updated : item)),
+            items: current.items.map((item) =>
+              item.name === updated.name ? updated : item,
+            ),
           }
         : current,
     );
@@ -207,7 +235,9 @@ export function SystemWorkersScreen() {
 
   const changePoolState = (pool: WorkerPool, paused: boolean) => {
     setPoolBusy(pool.name);
-    const request = paused ? pauseWorkerPool(pool.name) : resumeWorkerPool(pool.name);
+    const request = paused
+      ? pauseWorkerPool(pool.name)
+      : resumeWorkerPool(pool.name);
     request
       .then((updated) => {
         applyPoolUpdate(updated);
@@ -216,10 +246,13 @@ export function SystemWorkersScreen() {
       .catch((cause: unknown) => {
         const error = toApiError(cause);
         setNotice({
-          kind: 'error',
-          text: t(paused ? 'system.pools.pauseError' : 'system.pools.resumeError', {
-            message: error.message,
-          }),
+          kind: "error",
+          text: t(
+            paused ? "system.pools.pauseError" : "system.pools.resumeError",
+            {
+              message: error.message,
+            },
+          ),
         });
       })
       .finally(() => {
@@ -230,15 +263,18 @@ export function SystemWorkersScreen() {
 
   const poolColumns: EntityColumn[] = useMemo(
     () => [
-      { key: 'pool', header: t('system.pools.column.pool') },
-      { key: 'status', header: t('system.pools.column.status') },
-      { key: 'running', header: t('system.pools.column.running') },
-      { key: 'queued', header: t('system.pools.column.queued') },
-      { key: 'throughput', header: t('system.pools.column.throughput') },
-      { key: 'completedLastHour', header: t('system.pools.column.completedLastHour') },
-      { key: 'failed24h', header: t('system.pools.column.failed24h') },
-      { key: 'oldestAge', header: t('system.pools.column.oldestAge') },
-      { key: 'actions', header: t('system.pools.column.actions') },
+      { key: "pool", header: t("system.pools.column.pool") },
+      { key: "status", header: t("system.pools.column.status") },
+      { key: "running", header: t("system.pools.column.running") },
+      { key: "queued", header: t("system.pools.column.queued") },
+      { key: "throughput", header: t("system.pools.column.throughput") },
+      {
+        key: "completedLastHour",
+        header: t("system.pools.column.completedLastHour"),
+      },
+      { key: "failed24h", header: t("system.pools.column.failed24h") },
+      { key: "oldestAge", header: t("system.pools.column.oldestAge") },
+      { key: "actions", header: t("system.pools.column.actions") },
     ],
     [t],
   );
@@ -252,17 +288,19 @@ export function SystemWorkersScreen() {
           status: (
             <>
               {pool.paused ? (
-                <StatusTag kind="neutral" label={t('status.paused')} />
+                <StatusTag kind="neutral" label={t("status.paused")} />
               ) : (
-                <StatusTag kind="info" label={t('status.info')} />
+                <StatusTag kind="info" label={t("status.info")} />
               )}
               {pool.paused && pool.pausedBy ? (
                 <span className="melodee-pool-paused-by">
-                  {t('system.pools.pausedBy', { actor: pool.pausedBy })}
+                  {t("system.pools.pausedBy", { actor: pool.pausedBy })}
                 </span>
               ) : null}
               {!pool.paused && pool.resumeRequestedAt ? (
-                <span className="melodee-pool-paused-by">{t('system.pools.resumeRequested')}</span>
+                <span className="melodee-pool-paused-by">
+                  {t("system.pools.resumeRequested")}
+                </span>
               ) : null}
             </>
           ),
@@ -289,7 +327,7 @@ export function SystemWorkersScreen() {
               disabled={poolBusy === pool.name}
               onClick={() => changePoolState(pool, false)}
             >
-              {t('system.pools.resume')}
+              {t("system.pools.resume")}
             </Button>
           ) : (
             <Button
@@ -298,7 +336,7 @@ export function SystemWorkersScreen() {
               disabled={poolBusy === pool.name}
               onClick={() => setPauseTarget(pool)}
             >
-              {t('system.pools.pause')}
+              {t("system.pools.pause")}
             </Button>
           ),
         },
@@ -310,9 +348,13 @@ export function SystemWorkersScreen() {
 
   const failureColumns: EntityColumn[] = useMemo(
     () => [
-      { key: 'workItem', header: t('system.failures.column.workItem') },
-      { key: 'error', header: t('system.failures.column.error') },
-      { key: 'updatedAt', header: t('system.failures.column.time'), sortable: true },
+      { key: "workItem", header: t("system.failures.column.workItem") },
+      { key: "error", header: t("system.failures.column.error") },
+      {
+        key: "updatedAt",
+        header: t("system.failures.column.time"),
+        sortable: true,
+      },
     ],
     [t],
   );
@@ -324,11 +366,13 @@ export function SystemWorkersScreen() {
         cells: {
           workItem: (
             <>
-              <span className="melodee-work-item__title">{item.sourcePath}</span>
+              <span className="melodee-work-item__title">
+                {item.sourcePath}
+              </span>
               <span className="melodee-work-item__id">{item.id}</span>
             </>
           ),
-          error: item.lastErrorMessage ?? t('common.none'),
+          error: item.lastErrorMessage ?? t("common.none"),
           updatedAt: (
             <span title={formatDateTime(item.updatedAt)}>
               {formatRelativeTime(item.updatedAt)}
@@ -339,13 +383,16 @@ export function SystemWorkersScreen() {
     [failures, t],
   );
 
-  const queuedTotal = (pools?.items ?? []).reduce((sum, pool) => sum + (pool.queued ?? 0), 0);
+  const queuedTotal = (pools?.items ?? []).reduce(
+    (sum, pool) => sum + (pool.queued ?? 0),
+    0,
+  );
 
   return (
     <>
       <PageHeader
-        title={t('system.workersTitle')}
-        subtitle={t('system.subtitle')}
+        title={t("system.workersTitle")}
+        subtitle={t("system.subtitle")}
         actions={
           <Button
             kind="ghost"
@@ -358,7 +405,7 @@ export function SystemWorkersScreen() {
               setPanelRefreshKey((key) => key + 1);
             }}
           >
-            {t('actions.refresh')}
+            {t("actions.refresh")}
           </Button>
         }
       />
@@ -373,21 +420,21 @@ export function SystemWorkersScreen() {
       ) : null}
       <div className="melodee-metric-grid">
         <MetricCard
-          label={t('system.kpi.workers')}
-          value={pools ? formatNumber(pools.total) : '—'}
+          label={t("system.kpi.workers")}
+          value={pools ? formatNumber(pools.total) : "—"}
         />
         <MetricCard
-          label={t('system.kpi.queued')}
-          value={pools ? formatNumber(queuedTotal) : '—'}
+          label={t("system.kpi.queued")}
+          value={pools ? formatNumber(queuedTotal) : "—"}
         />
         <MetricCard
-          label={t('system.kpi.completed24h')}
-          value={totals ? formatNumber(totals.completed24h) : '—'}
+          label={t("system.kpi.completed24h")}
+          value={totals ? formatNumber(totals.completed24h) : "—"}
         />
         <MetricCard
-          label={t('system.kpi.failed24h')}
-          value={totals ? formatNumber(totals.failed24h) : '—'}
-          status={totals && totals.failed24h > 0 ? 'error' : undefined}
+          label={t("system.kpi.failed24h")}
+          value={totals ? formatNumber(totals.failed24h) : "—"}
+          status={totals && totals.failed24h > 0 ? "error" : undefined}
         />
       </div>
       <div className="melodee-system-columns">
@@ -397,24 +444,24 @@ export function SystemWorkersScreen() {
               inline
               kind="error"
               lowContrast
-              title={t('system.loadErrorTitle')}
+              title={t("system.loadErrorTitle")}
               subtitle={poolsError.message}
               hideCloseButton
-              actionButtonLabel={t('actions.retry')}
+              actionButtonLabel={t("actions.retry")}
               onActionButtonClick={() => void fetchPools({ cancelled: false })}
             />
           ) : null}
           {pools === null && !poolsError ? (
-            <Loading description={t('common.loading')} withOverlay={false} />
+            <Loading description={t("common.loading")} withOverlay={false} />
           ) : (
             <EntityTable
-              caption={t('system.pools.caption')}
+              caption={t("system.pools.caption")}
               columns={poolColumns}
               rows={poolRows}
               totalRows={pools?.total ?? 0}
               compact
-              emptyTitle={t('system.pools.emptyTitle')}
-              emptyDescription={t('system.pools.emptyDescription')}
+              emptyTitle={t("system.pools.emptyTitle")}
+              emptyDescription={t("system.pools.emptyDescription")}
             />
           )}
 
@@ -423,23 +470,27 @@ export function SystemWorkersScreen() {
               inline
               kind="error"
               lowContrast
-              title={t('system.failures.loadErrorTitle')}
+              title={t("system.failures.loadErrorTitle")}
               subtitle={failuresError.message}
               hideCloseButton
-              actionButtonLabel={t('actions.retry')}
-              onActionButtonClick={() => void fetchFailures({ cancelled: false })}
+              actionButtonLabel={t("actions.retry")}
+              onActionButtonClick={() =>
+                void fetchFailures({ cancelled: false })
+              }
             />
           ) : null}
           <EntityTable
-            caption={t('system.failures.caption')}
+            caption={t("system.failures.caption")}
             columns={failureColumns}
             rows={failureRows}
             totalRows={failures?.total ?? 0}
             compact
-            emptyTitle={t('system.failures.emptyTitle')}
-            emptyDescription={t('system.failures.emptyDescription')}
+            emptyTitle={t("system.failures.emptyTitle")}
+            emptyDescription={t("system.failures.emptyDescription")}
             onRowActivate={(id) =>
-              void navigate(`/processing?state=failed&item=${encodeURIComponent(id)}`)
+              void navigate(
+                `/processing?state=failed&item=${encodeURIComponent(id)}`,
+              )
             }
           />
 
@@ -452,35 +503,45 @@ export function SystemWorkersScreen() {
               inline
               kind="error"
               lowContrast
-              title={t('system.loadErrorTitle')}
+              title={t("system.loadErrorTitle")}
               subtitle={healthError.message}
               hideCloseButton
-              actionButtonLabel={t('actions.retry')}
+              actionButtonLabel={t("actions.retry")}
               onActionButtonClick={() => void fetchHealth({ cancelled: false })}
             />
           ) : null}
           {health ? (
             <SystemHealthPanel
               health={health}
-              title={t('system.health.title')}
+              title={t("system.health.title")}
               headingId="system-health-title"
             />
           ) : null}
 
           <SearchPanel refreshKey={panelRefreshKey} />
 
-          <section className="melodee-panel" aria-labelledby="system-diagnostics-title">
-            <Heading id="system-diagnostics-title" className="melodee-panel__title">
-              {t('system.diagnostics.title')}
+          <section
+            className="melodee-panel"
+            aria-labelledby="system-diagnostics-title"
+          >
+            <Heading
+              id="system-diagnostics-title"
+              className="melodee-panel__title"
+            >
+              {t("system.diagnostics.title")}
             </Heading>
             <p className="melodee-panel__subtitle">
-              <Link href="#system-health-title">{t('system.diagnostics.runCheck')}</Link>
+              <Link href="#system-health-title">
+                {t("system.diagnostics.runCheck")}
+              </Link>
             </p>
-            <p className="melodee-panel__subtitle">{t('system.diagnostics.runCheckDescription')}</p>
+            <p className="melodee-panel__subtitle">
+              {t("system.diagnostics.runCheckDescription")}
+            </p>
             <EmptyState
               compact
-              title={t('system.diagnostics.cliNoteTitle')}
-              description={t('system.diagnostics.cliNote')}
+              title={t("system.diagnostics.cliNoteTitle")}
+              description={t("system.diagnostics.cliNote")}
             />
           </section>
         </div>
@@ -488,9 +549,11 @@ export function SystemWorkersScreen() {
 
       <Modal
         open={pauseTarget !== null}
-        modalHeading={t('system.pools.pauseConfirmTitle', { pool: pauseTarget?.name ?? '' })}
-        primaryButtonText={t('system.pools.pause')}
-        secondaryButtonText={t('actions.cancel')}
+        modalHeading={t("system.pools.pauseConfirmTitle", {
+          pool: pauseTarget?.name ?? "",
+        })}
+        primaryButtonText={t("system.pools.pause")}
+        secondaryButtonText={t("actions.cancel")}
         onRequestClose={() => setPauseTarget(null)}
         onRequestSubmit={() => {
           if (pauseTarget) {
@@ -498,7 +561,7 @@ export function SystemWorkersScreen() {
           }
         }}
       >
-        <p>{t('system.pools.pauseConfirmBody')}</p>
+        <p>{t("system.pools.pauseConfirmBody")}</p>
       </Modal>
     </>
   );

@@ -1,4 +1,4 @@
--- Phase 9 WP-07 external metadata providers and Last.fm account links
+-- external metadata providers and Last.fm account links
 -- (ADR-0134 §7 as amended 2026-08-14, PRD-EXT-001..004, PRD-AUTH-002).
 --
 -- Additive. A binary downgrade leaves both tables intact; schema rollback

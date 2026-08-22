@@ -1,11 +1,11 @@
--- Phase 9 onboarding state and DB-backed server settings (ADR-0134 §3,
+-- onboarding state and DB-backed server settings (ADR-0134 §3,
 -- PRD-SETUP-001/002, PRD-CONFIG-001..003, PRD-AUTH-007).
 --
 -- Additive. A binary downgrade leaves both tables intact; schema rollback
 -- restores a verified pre-Phase-9 backup into a new database.
 --
--- Legacy parity (evidence:
--- design/evidence/phase-9/configuration-inventory.md): the legacy `Settings`
+-- Legacy parity (evidence: design/evidence/phase-9/configuration-inventory.md):
+-- the legacy `Settings`
 -- table stored every value as a string; the Rust store uses typed jsonb so
 -- booleans/numbers validate structurally instead of by parse-at-read
 -- convention. The 190-key classification (kinds, secret flags, seeded

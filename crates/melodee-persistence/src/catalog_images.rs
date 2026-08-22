@@ -1,4 +1,4 @@
-//! Phase 10 catalog artwork override store (accepted ADR-0143; parity
+//! catalog artwork override store (accepted ADR-0143; parity
 //! matrix artwork row, checklist 07).
 //!
 //! `catalog_entity_images` (migration 0030) holds operator-uploaded custom

@@ -1,4 +1,4 @@
-//! Admin SPA static serving (ADR-0138, Phase 10 WP-03).
+//! Admin SPA static serving (ADR-0138).
 //!
 //! The built admin SPA (`admin-ui/dist`) is served at `/admin` via
 //! tower-http's `fs` feature with SPA fallback: any unmatched path under

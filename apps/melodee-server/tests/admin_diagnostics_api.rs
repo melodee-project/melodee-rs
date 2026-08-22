@@ -1,7 +1,6 @@
-//! Integration tests for the Admin diagnostics API (Phase 2 work-package:
-//! "Processing queue/worker diagnostics API"; Phase 10: ADR-0139 gating and
-//! WP-10 pagination envelopes/sort).
-//!
+//! Integration tests for the Admin diagnostics API (work-package:
+//! "Processing queue/worker diagnostics API";: ADR-0139 gating and
+//! pagination envelopes/sort).
 //! These exercise the real Axum router against real PostgreSQL — the store
 //! semantics are not mocked. Covers: admin gating (401 anonymous, 403
 //! non-admin, 200 admin per route), empty queue, state counts, bounded
@@ -671,7 +670,7 @@ async fn active_leases_reflect_claimed_items_only() {
     let id_b = item_b.id;
     store.create(&db.pool, &item_b).await.expect("create b");
 
-    // Claim at the real clock so the lease is active relative to now_utc()
+    // Claim at the real clock so the lease is active relative to now_utc
     // used by the API handler.
     let worker = WorkerId::new();
     store
@@ -728,7 +727,7 @@ async fn expired_lease_not_listed_as_active() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    // list_active_leases uses now_utc(); the T0 claim (lease 300s) is long
+    // list_active_leases uses now_utc; the T0 claim (lease 300s) is long
     // expired relative to the real clock, so it must not appear as active.
     let leases = leases.as_array().expect("array");
     assert!(

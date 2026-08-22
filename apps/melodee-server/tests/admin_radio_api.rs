@@ -1,4 +1,4 @@
-//! Phase 9 WP-06 Admin API radio integration tests (PRD-RADIO-001/002,
+//! Admin API radio integration tests (PRD-RADIO-001/002,
 //! ADR-0134 §1): station CRUD lifecycle, list/read for any authenticated
 //! user, admin gating on mutations matching the captured OpenSubsonic gate,
 //! validation failures, and cross-surface visibility with the OpenSubsonic

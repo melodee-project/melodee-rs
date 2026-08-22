@@ -1,8 +1,8 @@
-import { render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { RouteErrorBoundary } from './RouteErrorBoundary';
+import { RouteErrorBoundary } from "./RouteErrorBoundary";
 
 /**
  * The render-error boundary degrades a throwing screen to the themed
@@ -10,16 +10,16 @@ import { RouteErrorBoundary } from './RouteErrorBoundary';
  */
 
 function Thrower(): never {
-  throw new Error('boom');
+  throw new Error("boom");
 }
 
-describe('RouteErrorBoundary', () => {
+describe("RouteErrorBoundary", () => {
   beforeEach(() => {
     // Expected render errors would otherwise fail the test run's console.
-    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
   });
 
-  it('renders children when nothing throws', () => {
+  it("renders children when nothing throws", () => {
     render(
       <MemoryRouter>
         <RouteErrorBoundary resetKey="/">
@@ -27,10 +27,10 @@ describe('RouteErrorBoundary', () => {
         </RouteErrorBoundary>
       </MemoryRouter>,
     );
-    expect(screen.getByText('healthy screen')).toBeInTheDocument();
+    expect(screen.getByText("healthy screen")).toBeInTheDocument();
   });
 
-  it('renders the localized unexpected-error state when a child throws', () => {
+  it("renders the localized unexpected-error state when a child throws", () => {
     render(
       <MemoryRouter>
         <RouteErrorBoundary resetKey="/">
@@ -38,11 +38,15 @@ describe('RouteErrorBoundary', () => {
         </RouteErrorBoundary>
       </MemoryRouter>,
     );
-    expect(screen.getAllByText('Something went wrong').length).toBeGreaterThan(0);
-    expect(screen.getByRole('link', { name: 'Back to overview' })).toBeInTheDocument();
+    expect(screen.getAllByText("Something went wrong").length).toBeGreaterThan(
+      0,
+    );
+    expect(
+      screen.getByRole("link", { name: "Back to overview" }),
+    ).toBeInTheDocument();
   });
 
-  it('recovers when resetKey changes (navigation)', () => {
+  it("recovers when resetKey changes (navigation)", () => {
     const { rerender } = render(
       <MemoryRouter>
         <RouteErrorBoundary resetKey="/broken">
@@ -50,7 +54,9 @@ describe('RouteErrorBoundary', () => {
         </RouteErrorBoundary>
       </MemoryRouter>,
     );
-    expect(screen.getAllByText('Something went wrong').length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Something went wrong").length).toBeGreaterThan(
+      0,
+    );
 
     rerender(
       <MemoryRouter>
@@ -59,6 +65,6 @@ describe('RouteErrorBoundary', () => {
         </RouteErrorBoundary>
       </MemoryRouter>,
     );
-    expect(screen.getByText('healthy screen')).toBeInTheDocument();
+    expect(screen.getByText("healthy screen")).toBeInTheDocument();
   });
 });

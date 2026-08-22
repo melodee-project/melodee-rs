@@ -25,7 +25,7 @@ use crate::error::WorkStoreError;
 use crate::worker::WorkerId;
 
 /// Rolling-window failure/completion counts for dashboard aggregation
-/// (Phase 10 WP-14). Durable facts only: a "failed in window" item is one
+///. Durable facts only: a "failed in window" item is one
 /// currently in `failed` whose last update is inside the window; a
 /// "completed in window" item carries a `completed_at` inside the window.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,7 +35,7 @@ pub struct WorkItemWindowCounts {
 }
 
 /// One hourly bucket of completed work items for the dashboard activity
-/// series (Phase 10 WP-14).
+/// series.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HourlyCompletionCount {
     pub hour: OffsetDateTime,
@@ -49,7 +49,7 @@ pub struct StateCount {
     pub count: i64,
 }
 
-/// Sort keys accepted by the operator work-item listing (WP-10). Each variant
+/// Sort keys accepted by the operator work-item listing. Each variant
 /// maps to a constant `ORDER BY` fragment over plain indexed columns — the
 /// whitelist is the injection boundary, so client input never reaches SQL.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2349,7 +2349,7 @@ impl WorkItemStore {
     /// Records a processing failure with durable evidence and computes retry
     /// eligibility. Clears the lease. Classification decides the outcome:
     /// retryable (scheduled or exhausted), permanent, or review-required.
-    // Parameters mirror the durable failure record; see transition().
+    // Parameters mirror the durable failure record; see transition.
     #[allow(clippy::too_many_arguments)]
     #[instrument(skip_all, fields(work_item_id = %id, worker_id = %worker, error_code = %code.as_str()))]
     pub async fn record_failure(
@@ -2746,7 +2746,7 @@ impl WorkItemStore {
     /// Lists one page of work items whose state is in `states`, ordered by a
     /// whitelisted sort, bounded — plus the total row count for the filter
     /// (ignoring the page). Read-side companion to [`Self::list_page`] for
-    /// multi-state operator queues (Phase 10 release review). An empty state
+    /// multi-state operator queues ( release review). An empty state
     /// set short-circuits to an empty page without touching the database.
     pub async fn list_page_states(
         &self,

@@ -373,7 +373,7 @@ async fn load_annotations(
 #[derive(Clone)]
 pub struct NativeState {
     pub pool: sqlx::PgPool,
-    /// WP-09 notification render/delivery service. Event wiring dispatches
+    /// notification render/delivery service. Event wiring dispatches
     /// fire-and-record sends; failures are audited, never propagated
     /// (PRD-NOTIF-002).
     pub notifications: Arc<crate::notifications::NotificationService>,
@@ -386,7 +386,7 @@ pub struct NativeState {
     pub direct_play: Option<crate::native_stream::DirectPlayService>,
     pub client_addresses: crate::native_stream::ClientAddressResolver,
     pub auth: Arc<auth::NativeAuthService>,
-    /// Optional Last.fm API base URL for per-test mock servers (R2.6).
+    /// Optional Last.fm API base URL for per-test mock servers.
     /// Production wiring leaves this `None`; it is never an operator setting.
     #[doc(hidden)]
     pub lastfm_api_base_url: Option<String>,

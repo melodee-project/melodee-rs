@@ -117,8 +117,8 @@ impl IngestionState {
                 | Self::Validating
                 | Self::Publishing
                 | Self::Cataloging
-                // Phase 5 policy evaluates an already-cataloged Release under
-                // the same lease/fencing contract before it advances or parks.
+ // policy evaluates an already-cataloged Release under
+ // the same lease/fencing contract before it advances or parks.
                 | Self::Cataloged
                 | Self::Indexing
         )

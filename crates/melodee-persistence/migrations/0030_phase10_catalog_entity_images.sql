@@ -1,5 +1,5 @@
--- Phase 10 catalog artwork overrides (accepted ADR-0143; parity matrix
--- artwork row, Phase 10 checklist 07). Stores operator-uploaded custom
+-- catalog artwork overrides (accepted ADR-0143; parity matrix
+-- artwork row, checklist 07). Stores operator-uploaded custom
 -- Artist/Release artwork that the frozen native GET /images/{id}/{size}
 -- endpoint serves with precedence over publication-plan artwork (ADR-0143
 -- §2). Rows are operator curation data, not canonical library facts: no

@@ -1,8 +1,8 @@
--- Phase 10 admin browse index remediation (ADR-0142; PRD-API-ADMIN-002,
+-- admin browse index remediation (ADR-0142; PRD-API-ADMIN-002,
 -- SPEC §23), closing the index gaps measured in
 -- design/evidence/phase-10/performance-report.md §4.
 --
--- The Phase 7 native browse indexes (migration 0018) are partial
+-- The native browse indexes (migration 0018) are partial
 -- (status-filtered) because native v1 never lists merged/deprecated rows. The
 -- admin listings deliberately include every status, so these indexes are FULL
 -- (non-partial). The partial indexes stay: they are strictly smaller for the

@@ -1,4 +1,4 @@
-//! Phase 9 WP-11 scripting hook persistence (ADR-0134 §6, ADR-0135,
+//! scripting hook persistence (ADR-0134 §6, ADR-0135,
 //! PRD-SCRIPT-001..004) over `script_registry` and `script_runs`
 //! (migration 0027).
 //!

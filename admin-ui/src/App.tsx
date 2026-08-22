@@ -1,77 +1,119 @@
-import { lazy } from 'react';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { lazy } from "react";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
-import { RequireAuth } from './auth/RequireAuth';
-import { ErrorState } from './components/ErrorState';
-import { LoginScreen } from './screens/LoginScreen';
-import { AppShell } from './shell/AppShell';
+import { RequireAuth } from "./auth/RequireAuth";
+import { ErrorState } from "./components/ErrorState";
+import { LoginScreen } from "./screens/LoginScreen";
+import { AppShell } from "./shell/AppShell";
 
-// Route-level code splitting (Phase 10 W4-5 bundle budget): every
-// authenticated screen is a lazy chunk so the initial bundle carries only
-// the shell, auth, and login. LoginScreen stays eager — it is the entry
-// route and must not wait on a second round trip.
+// Route-level code splitting: every authenticated screen is a lazy chunk so
+// the initial bundle carries only the shell, auth, and login. LoginScreen
+// stays eager because it is the entry route and must not wait on a second
+// round trip.
 const ArtistDetailScreen = lazy(() =>
-  import('./screens/catalog/ArtistDetailScreen').then((m) => ({ default: m.ArtistDetailScreen })),
+  import("./screens/catalog/ArtistDetailScreen").then((m) => ({
+    default: m.ArtistDetailScreen,
+  })),
 );
 const ArtistsScreen = lazy(() =>
-  import('./screens/catalog/ArtistsScreen').then((m) => ({ default: m.ArtistsScreen })),
+  import("./screens/catalog/ArtistsScreen").then((m) => ({
+    default: m.ArtistsScreen,
+  })),
 );
 const ReleaseDetailScreen = lazy(() =>
-  import('./screens/catalog/ReleaseDetailScreen').then((m) => ({ default: m.ReleaseDetailScreen })),
+  import("./screens/catalog/ReleaseDetailScreen").then((m) => ({
+    default: m.ReleaseDetailScreen,
+  })),
 );
 const ReleasesScreen = lazy(() =>
-  import('./screens/catalog/ReleasesScreen').then((m) => ({ default: m.ReleasesScreen })),
+  import("./screens/catalog/ReleasesScreen").then((m) => ({
+    default: m.ReleasesScreen,
+  })),
 );
 const TrackDetailScreen = lazy(() =>
-  import('./screens/catalog/TrackDetailScreen').then((m) => ({ default: m.TrackDetailScreen })),
+  import("./screens/catalog/TrackDetailScreen").then((m) => ({
+    default: m.TrackDetailScreen,
+  })),
 );
 const TracksScreen = lazy(() =>
-  import('./screens/catalog/TracksScreen').then((m) => ({ default: m.TracksScreen })),
+  import("./screens/catalog/TracksScreen").then((m) => ({
+    default: m.TracksScreen,
+  })),
 );
 const IdentityReviewScreen = lazy(() =>
-  import('./screens/identity/IdentityReviewScreen').then((m) => ({ default: m.IdentityReviewScreen })),
+  import("./screens/identity/IdentityReviewScreen").then((m) => ({
+    default: m.IdentityReviewScreen,
+  })),
 );
 const OnboardingWizard = lazy(() =>
-  import('./screens/onboarding/OnboardingWizard').then((m) => ({ default: m.OnboardingWizard })),
+  import("./screens/onboarding/OnboardingWizard").then((m) => ({
+    default: m.OnboardingWizard,
+  })),
 );
 const OverviewScreen = lazy(() =>
-  import('./screens/overview/OverviewScreen').then((m) => ({ default: m.OverviewScreen })),
+  import("./screens/overview/OverviewScreen").then((m) => ({
+    default: m.OverviewScreen,
+  })),
 );
 const PoliciesScreen = lazy(() =>
-  import('./screens/policies/PoliciesScreen').then((m) => ({ default: m.PoliciesScreen })),
+  import("./screens/policies/PoliciesScreen").then((m) => ({
+    default: m.PoliciesScreen,
+  })),
 );
 const HistoryScreen = lazy(() =>
-  import('./screens/processing/HistoryScreen').then((m) => ({ default: m.HistoryScreen })),
+  import("./screens/processing/HistoryScreen").then((m) => ({
+    default: m.HistoryScreen,
+  })),
 );
 const ProcessingQueueScreen = lazy(() =>
-  import('./screens/processing/ProcessingQueueScreen').then((m) => ({ default: m.ProcessingQueueScreen })),
+  import("./screens/processing/ProcessingQueueScreen").then((m) => ({
+    default: m.ProcessingQueueScreen,
+  })),
 );
 const QuarantineScreen = lazy(() =>
-  import('./screens/processing/QuarantineScreen').then((m) => ({ default: m.QuarantineScreen })),
+  import("./screens/processing/QuarantineScreen").then((m) => ({
+    default: m.QuarantineScreen,
+  })),
 );
 const ReleaseReviewScreen = lazy(() =>
-  import('./screens/review/ReleaseReviewScreen').then((m) => ({ default: m.ReleaseReviewScreen })),
+  import("./screens/review/ReleaseReviewScreen").then((m) => ({
+    default: m.ReleaseReviewScreen,
+  })),
 );
 const ReviewQueueScreen = lazy(() =>
-  import('./screens/review/ReviewQueueScreen').then((m) => ({ default: m.ReviewQueueScreen })),
+  import("./screens/review/ReviewQueueScreen").then((m) => ({
+    default: m.ReviewQueueScreen,
+  })),
 );
 const SettingsScreen = lazy(() =>
-  import('./screens/settings/SettingsScreen').then((m) => ({ default: m.SettingsScreen })),
+  import("./screens/settings/SettingsScreen").then((m) => ({
+    default: m.SettingsScreen,
+  })),
 );
 const DiagnosticsScreen = lazy(() =>
-  import('./screens/system/DiagnosticsScreen').then((m) => ({ default: m.DiagnosticsScreen })),
+  import("./screens/system/DiagnosticsScreen").then((m) => ({
+    default: m.DiagnosticsScreen,
+  })),
 );
 const SearchScreen = lazy(() =>
-  import('./screens/system/SearchScreen').then((m) => ({ default: m.SearchScreen })),
+  import("./screens/system/SearchScreen").then((m) => ({
+    default: m.SearchScreen,
+  })),
 );
 const StorageScreen = lazy(() =>
-  import('./screens/system/StorageScreen').then((m) => ({ default: m.StorageScreen })),
+  import("./screens/system/StorageScreen").then((m) => ({
+    default: m.StorageScreen,
+  })),
 );
 const SystemWorkersScreen = lazy(() =>
-  import('./screens/system/SystemWorkersScreen').then((m) => ({ default: m.SystemWorkersScreen })),
+  import("./screens/system/SystemWorkersScreen").then((m) => ({
+    default: m.SystemWorkersScreen,
+  })),
 );
 const UsersScreen = lazy(() =>
-  import('./screens/users/UsersScreen').then((m) => ({ default: m.UsersScreen })),
+  import("./screens/users/UsersScreen").then((m) => ({
+    default: m.UsersScreen,
+  })),
 );
 
 /**
@@ -96,13 +138,19 @@ export default function App() {
           <Route index element={<OverviewScreen />} />
           <Route path="processing" element={<ProcessingQueueScreen />} />
           <Route path="processing/review" element={<ReviewQueueScreen />} />
-          <Route path="processing/review/:workItemId" element={<ReleaseReviewScreen />} />
+          <Route
+            path="processing/review/:workItemId"
+            element={<ReleaseReviewScreen />}
+          />
           <Route path="processing/quarantine" element={<QuarantineScreen />} />
           <Route path="processing/history" element={<HistoryScreen />} />
           <Route path="catalog/artists" element={<ArtistsScreen />} />
           <Route path="catalog/artists/:id" element={<ArtistDetailScreen />} />
           <Route path="catalog/releases" element={<ReleasesScreen />} />
-          <Route path="catalog/releases/:id" element={<ReleaseDetailScreen />} />
+          <Route
+            path="catalog/releases/:id"
+            element={<ReleaseDetailScreen />}
+          />
           <Route path="catalog/tracks" element={<TracksScreen />} />
           <Route path="catalog/tracks/:id" element={<TrackDetailScreen />} />
           <Route path="catalog/identity" element={<IdentityReviewScreen />} />

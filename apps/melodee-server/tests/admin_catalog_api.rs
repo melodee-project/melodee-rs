@@ -1,4 +1,4 @@
-//! Phase 10 WP-15 catalog browsing + detail API integration tests: the
+//! catalog browsing + detail API integration tests: the
 //! administrator gate, the paginated Artists/Releases/Tracks browsing
 //! envelopes with filters and whitelist sorts, and the bounded
 //! Artist/Release/Track detail payloads (identity, aliases, stats, releases,

@@ -1,4 +1,4 @@
--- Phase 6 rebuildable search projection lifecycle (ADR-0121).
+-- rebuildable search projection lifecycle (ADR-0121).
 --
 -- PostgreSQL remains authoritative. This migration is additive: it does not
 -- rewrite catalog rows, media references, manifests, or existing outbox work.

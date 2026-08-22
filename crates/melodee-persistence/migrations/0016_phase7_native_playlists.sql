@@ -1,4 +1,4 @@
--- Phase 7 native playlist metadata and smart playlists (ADR-0114, ADR-0127).
+-- native playlist metadata and smart playlists (ADR-0114, ADR-0127).
 
 ALTER TABLE native_playlists
     ADD COLUMN image_mime_type text NULL,

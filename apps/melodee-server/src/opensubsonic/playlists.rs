@@ -1,6 +1,6 @@
 //! OpenSubsonic playlist endpoints (PRD-API-OS-004).
 //!
-//! Playlists reuse the Phase 7 `native_playlists` / `native_playlist_items`
+//! Playlists reuse the `native_playlists` / `native_playlist_items`
 //! tables so a user's library is shared across surfaces; only the OpenSubsonic
 //! wire shape lives here. Captured quirks preserved: `allowedUsers: []`,
 //! `coverArt` = the playlist's own id, `duration` in whole seconds, and the

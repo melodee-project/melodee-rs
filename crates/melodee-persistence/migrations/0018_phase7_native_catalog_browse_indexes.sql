@@ -1,4 +1,4 @@
--- Phase 7 native catalog browse paths (ADR-0123; PRD-API-M1-006).
+-- native catalog browse paths (ADR-0123; PRD-API-M1-006).
 --
 -- These additive indexes keep stable native-v1 pagination index-backed at
 -- current catalog scale. They do not change authoritative catalog identity or

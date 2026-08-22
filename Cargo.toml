@@ -38,7 +38,7 @@ futures-util = "=0.3.33"
 getrandom = "=0.4.3"
 hmac = "=0.13.0"
 jsonwebtoken = { version = "=11.0.0", default-features = false, features = ["aws_lc_rs", "use_pem"] }
-# PRD-NOTIF-002: FOSS SMTP transport for notification delivery (WP-09).
+# PRD-NOTIF-002: FOSS SMTP transport for notification delivery.
 # lettre 0.11.23, MIT, lettre/lettre; no hosted service, no broker. rustls
 # TLS only (no native-tls/OpenSSL linkage) on the tokio1 executor; default
 # features off so no connection pool, sendmail, or file transport is linked.
@@ -48,7 +48,7 @@ lettre = { version = "=0.11.23", default-features = false, features = ["smtp-tra
 # primitive. RustCrypto md-5, MIT/Apache-2.0.
 md-5 = "=0.10.6"
 reqwest = { version = "=0.13.4", default-features = false, features = ["json", "query", "rustls", "stream"] }
-# ADR-0134 §7 (amended 2026-08-14, WP-07): ChaCha20-Poly1305 AEAD sealing of
+# ADR-0134 §7 (amended 2026-08-14): ChaCha20-Poly1305 AEAD sealing of
 # Last.fm session keys at rest. ring 0.17.14 is already in the dependency
 # tree via rustls (Apache-2.0 AND ISC); making it a direct dependency adds
 # no new transitive crates to the lockfile.
@@ -85,10 +85,10 @@ sqlx = { version = "=0.9.0", default-features = false, features = [
   "uuid",
 ] }
 # ADR-0107 (Tantivy as rebuildable search projection) + ADR-0121 (search
-# projection schema and lifecycle). Exact pin recorded at the Phase 0
-# revalidation: tantivy 0.26.1 (2026-04-21), MIT, quickwit-oss, no commercial
-# feature boundary. Unicode-aware simple/lowercase/ASCII-fold tokenizers are
-# used; no proprietary Tantivy features are enabled.
+# projection schema and lifecycle). Exact pin recorded on 2026-04-21:
+# tantivy 0.26.1, MIT, quickwit-oss, no commercial feature boundary.
+# Unicode-aware simple/lowercase/ASCII-fold tokenizers are used; no
+# proprietary Tantivy features are enabled.
 tantivy = "=0.26.1"
 thiserror = "=2.0.19"
 time = { version = "=0.3.55", features = ["formatting", "serde"] }

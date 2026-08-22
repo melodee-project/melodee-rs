@@ -1,4 +1,4 @@
-//! R2.6 SMTP evidence (PRD-NOTIF-002): delivery through a real plaintext
+//! SMTP evidence (PRD-NOTIF-002): delivery through a real plaintext
 //! SMTP round-trip against a disposable per-test listener — the existing
 //! coverage was failure-path-only behind a mock transport. The fake speaks
 //! just enough RFC 5321 for lettre's unencrypted client (banner, EHLO,

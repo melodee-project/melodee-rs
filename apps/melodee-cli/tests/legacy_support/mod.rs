@@ -1,8 +1,8 @@
-//! Shared helpers for the R3 legacy-migration integration suites
-//! (`legacy.rs`, `legacy_faults.rs`). Source databases are seeded from the
-//! frozen legacy DDL fixture; targets are fresh migrated databases; the CLI
-//! under test is spawned as a real binary so coverage includes argument
-//! parsing, fencing, and exit behavior end to end.
+//! Shared helpers for the legacy migration integration suites (`legacy.rs`,
+//! `legacy_faults.rs`). Source databases are seeded from the frozen legacy
+//! DDL fixture; targets are fresh migrated databases; the CLI under test is
+//! spawned as a real binary so coverage includes argument parsing, fencing,
+//! and exit behavior end to end.
 
 #![allow(dead_code, clippy::panic, clippy::expect_used, clippy::unwrap_used)]
 

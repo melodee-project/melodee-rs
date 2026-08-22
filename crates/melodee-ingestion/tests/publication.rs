@@ -1,4 +1,4 @@
-//! Phase 3.3 structural-validation and canonical-filesystem safety contracts.
+//! Structural-validation and canonical-filesystem safety contracts.
 #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 
 use std::{

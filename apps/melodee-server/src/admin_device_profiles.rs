@@ -1,4 +1,4 @@
-//! Phase 9 WP-10 Admin API: device/transcoding profile administration
+//! Admin API: device/transcoding profile administration
 //! (PRD-DEVICE-001/002, ADR-0134 §5).
 //!
 //! These routes extend the Rust-native operator API (`/api/admin/v1`,

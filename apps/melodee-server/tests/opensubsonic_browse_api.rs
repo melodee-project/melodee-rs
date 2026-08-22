@@ -1,8 +1,7 @@
-//! OpenSubsonic browse endpoint group compatibility evidence (Phase 8):
+//! OpenSubsonic browse endpoint group compatibility evidence:
 //! getIndexes, getMusicDirectory, getArtists, getArtist, getArtistInfo,
 //! getArtistInfo2, getAlbum, getAlbumInfo, getAlbumInfo2, getSong, getGenres,
 //! getSimilarSongs, getSimilarSongs2, getTopSongs.
-//!
 //! Asserted behavior mirrors the frozen golden captures in
 //! `compatibility/opensubsonic/golden/browse/`, including the captured quirks:
 //! first-letter index groups with ignoredArticles `THE|EL|LA|LOS|LAS|LE|LES|OS|AS|O|A`
@@ -167,7 +166,7 @@ async fn respond(state: OsState, request: Request<Body>) -> (StatusCode, HeaderM
 }
 
 fn enforced_get(path: &str) -> Request<Body> {
-    // Mirrors the Phase 0 enforced-auth capture: a synthetic public client
+    // Mirrors the enforced-auth capture: a synthetic public client
     // address defeats the localhost bypass without touching the server.
     let mut request = Request::builder()
         .method("GET")
@@ -255,7 +254,7 @@ async fn record_play(db: &common::TestDb, track_public_id: Uuid, played_at: &str
 
 /// Seeds a release and returns (track, release, release-artist) public ids,
 /// applying the requested created timestamps for the release and its single
-/// track. The Phase 5 seeder emits 180000ms duration tracks; tests that need
+/// track. The seeder emits 180000ms duration tracks; tests that need
 /// the captured short durations rewrite them after seeding.
 #[allow(clippy::too_many_arguments)]
 async fn seed_release(
@@ -317,7 +316,7 @@ async fn seed_aurora_fixture(db: &common::TestDb) -> (Uuid, Uuid, Uuid) {
     }
     // The captured fixture rates AND stars the track (os-getsong Polar Veil:
     // userRating 5, starred ""); the "" is the legacy
-    // Nullable<DateTime>.ToString() artifact for fixture-seeded stars. The
+    // Nullable<DateTime>.ToString artifact for fixture-seeded stars. The
     // release and artist are starred.
     for mutation in [
         NativeUserStateMutation::Rating(5),
@@ -549,7 +548,7 @@ async fn get_indexes_matches_the_captured_index_shape() {
     assert!(letters.contains(&"V"), "{letters:?}");
     assert!(letters.contains(&""), "{letters:?}");
 
-    // Aurora Fields lands in A. The Phase 5 seeder resolves release-scope and
+    // Aurora Fields lands in A. The seeder resolves release-scope and
     // track-scope artist observations to separate identities (both named
     // "Aurora Fields"); the rated one carries userRating 5 + userStarred/starred.
     let aurora_artist = seeded
@@ -659,7 +658,7 @@ async fn get_artists_matches_the_captured_shape() {
     assert!(letters.contains(&""), "{letters:?}");
 
     // The D group carries both Dune and Düné (the collision pair as distinct
-    // identities). The Phase 5 seeder emits each name twice (release + track
+    // identities). The seeder emits each name twice (release + track
     // scope), so the contract is that both names appear.
     let d_group = index.iter().find(|g| g["name"] == "D").expect("group D");
     let d_names: Vec<&str> = d_group["artist"]
@@ -960,7 +959,7 @@ async fn get_album_matches_the_captured_rich_shape() {
     assert_eq!(song["artist"], "Aurora Fields");
     assert_eq!(song["userRating"], 5);
     assert_eq!(song["starred"], "");
-    // averageRating deviates from the frozen 0: the Phase 0 oracle seeded
+    // averageRating deviates from the frozen 0: the oracle seeded
     // ratings directly, bypassing the legacy CalculatedRating aggregate; the
     // adapter's uniform average-of-user-ratings rule yields 5. The deviation
     // is registered in the differential KNOWN_DIFFERENCES.

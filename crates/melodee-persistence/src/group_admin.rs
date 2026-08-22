@@ -1,12 +1,11 @@
-//! Operator library-access-group administration over the Phase 7 group
+//! Operator library-access-group administration over the group
 //! schema (migration 0010): `native_library_access_groups`,
 //! `native_user_library_groups`, `native_library_group_libraries`
 //! (PRD-CLI-001, PRD-AUTH-004).
 //!
-//! WP-05 CLI home. WP-03 (admin API) owns the route layer and was assigned
+//! CLI home. (admin API) owns the route layer and was assigned
 //! admin.rs/native routes only; this module is the shared persistence
-//! implementation it can reuse. Semantics mirror the admin API contract:
-//! delete fails closed while the group still has members or library
+//! implementation it can reuse. Semantics mirror the admin API contract: //! delete fails closed while the group still has members or library
 //! bindings, and every mutation is bounded and audit-timestamped.
 
 use sqlx::{FromRow, PgPool};
@@ -59,7 +58,7 @@ pub struct AccessGroupMember {
     pub username: String,
 }
 
-/// Full operator view of one group (WP-03 admin API detail route).
+/// Full operator view of one group ( admin API detail route).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AccessGroupDetail {
     pub group: StoredAccessGroup,
@@ -219,7 +218,7 @@ impl GroupAdminStore {
     }
 
     /// Binds a library to a group. Once any group binds a library, the
-    /// Phase 7 access function requires membership in a bound group — this
+    /// access function requires membership in a bound group — this
     /// is the captured restrictive transition, never a silent widen.
     /// Idempotent: returns `false` when the binding already existed.
     pub async fn bind_library(
@@ -264,7 +263,7 @@ impl GroupAdminStore {
     }
 
     // ------------------------------------------------------------------
-    // WP-03 admin API surface: public-id-addressed variants. HTTP routes
+    // admin API surface: public-id-addressed variants. HTTP routes
     // address groups and users by immutable public ids (names are display
     // values); semantics are identical to the name-addressed CLI methods.
     // ------------------------------------------------------------------

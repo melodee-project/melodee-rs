@@ -1,4 +1,4 @@
-//! Remaining user/operational importers (ADR-0148 §D.8 amendment, R3.5):
+//! Remaining user/operational importers (ADR-0148 §D.8 amendment):
 //! playback settings, equalizer presets, social logins, Last.fm session-key
 //! re-sealing, user pins, requests with comments and seen state, per-user
 //! device profiles (reference-only: the 1.0 target is global), and summary

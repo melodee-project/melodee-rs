@@ -1,4 +1,4 @@
-//! Phase 5 dry-run persistence regressions not covered by the fenced atomic
+//! dry-run persistence regressions not covered by the fenced atomic
 //! evaluation, override, fault, and schema acceptance binaries.
 
 #![allow(clippy::expect_used, clippy::panic)]

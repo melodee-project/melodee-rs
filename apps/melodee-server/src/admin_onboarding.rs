@@ -1,4 +1,4 @@
-//! Phase 9 WP-08 Admin API: first-run onboarding status and completion
+//! Admin API: first-run onboarding status and completion
 //! (PRD-SETUP-001/002, ADR-0134 §3).
 //!
 //! These routes extend the Rust-native operator API (`/api/admin/v1`,
@@ -8,13 +8,13 @@
 //! like every other operator surface.
 //!
 //! - `GET /api/admin/v1/onboarding/status` returns the six preflight checks
-//!   (pass/fail + remediation), the completion marker, the migration-bypass
-//!   heuristic result (see `crate::onboarding` module docs for the exact
-//!   definition), and `canComplete`.
+//! (pass/fail + remediation), the completion marker, the migration-bypass
+//! heuristic result (see `crate::onboarding` module docs for the exact
+//! definition), and `canComplete`.
 //! - `POST /api/admin/v1/onboarding/complete` re-evaluates the checks and
-//!   fails closed with `409` while any required check fails; otherwise it
-//!   writes the singleton `onboarding_state` row with the check evidence
-//!   (never secret material) and returns the fresh status.
+//! fails closed with `409` while any required check fails; otherwise it
+//! writes the singleton `onboarding_state` row with the check evidence
+//! (never secret material) and returns the fresh status.
 
 use axum::{
     Json, Router,

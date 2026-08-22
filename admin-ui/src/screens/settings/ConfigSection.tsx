@@ -1,4 +1,4 @@
-import { Download } from '@carbon/icons-react';
+import { Download } from "@carbon/icons-react";
 import {
   ActionableNotification,
   Button,
@@ -16,18 +16,18 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@carbon/react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useTranslation } from 'react-i18next';
+} from "@carbon/react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
-import { exportConfig, importConfig } from '../../api/admin';
-import { ApiError } from '../../api/client';
-import type { ConfigExport, ConfigImportResult } from '../../api/types';
-import { StatusTag } from '../../components/StatusTag';
-import { formatDateTime, formatNumber } from '../../i18n/format';
+import { exportConfig, importConfig } from "../../api/admin";
+import { ApiError } from "../../api/client";
+import type { ConfigExport, ConfigImportResult } from "../../api/types";
+import { StatusTag } from "../../components/StatusTag";
+import { formatDateTime, formatNumber } from "../../i18n/format";
 
 /**
- * Configuration browser + export/import (WP-19, PRD-CONFIG-001/002).
+ * Configuration browser + export/import (PRD-CONFIG-001/002).
  *
  * Honesty contract: the admin API exposes exactly two configuration
  * mutations — export and the preview-then-apply import flow. There is no
@@ -39,35 +39,39 @@ import { formatDateTime, formatNumber } from '../../i18n/format';
  */
 
 /** Fixed marker substituted for every stored secret (melodee-persistence). */
-const SECRET_REDACTION_MARKER = '__MELODEE_SECRET_REDACTED__';
+const SECRET_REDACTION_MARKER = "__MELODEE_SECRET_REDACTED__";
 
 interface Notice {
-  kind: 'success' | 'error' | 'info' | 'warning';
+  kind: "success" | "error" | "info" | "warning";
   text: string;
 }
 
 function toApiError(cause: unknown): ApiError {
-  return cause instanceof ApiError ? cause : new ApiError(0, 'unknown', String(cause), null);
+  return cause instanceof ApiError
+    ? cause
+    : new ApiError(0, "unknown", String(cause), null);
 }
 
 /** Localized text for the stable import error codes. */
 function importErrorText(
   error: ApiError,
-  t: ReturnType<typeof useTranslation>['t'],
+  t: ReturnType<typeof useTranslation>["t"],
 ): string {
-  if (error.status === 400 && error.code === 'redacted_marker_rejected') {
-    return t('settings.import.error.redactedMarker');
+  if (error.status === 400 && error.code === "redacted_marker_rejected") {
+    return t("settings.import.error.redactedMarker");
   }
-  if (error.status === 400 && error.code === 'invalid_document') {
-    return t('settings.import.error.invalidDocument', { message: error.message });
+  if (error.status === 400 && error.code === "invalid_document") {
+    return t("settings.import.error.invalidDocument", {
+      message: error.message,
+    });
   }
-  if (error.status === 400 && error.code === 'invalid_value') {
-    return t('settings.import.error.invalidValue', { message: error.message });
+  if (error.status === 400 && error.code === "invalid_value") {
+    return t("settings.import.error.invalidValue", { message: error.message });
   }
-  if (error.status === 400 && error.code === 'invalid_key') {
-    return t('settings.import.error.invalidKey', { message: error.message });
+  if (error.status === 400 && error.code === "invalid_key") {
+    return t("settings.import.error.invalidKey", { message: error.message });
   }
-  return t('settings.import.error.generic', { message: error.message });
+  return t("settings.import.error.generic", { message: error.message });
 }
 
 interface SettingRow {
@@ -77,11 +81,13 @@ interface SettingRow {
 }
 
 /** Groups registry keys by their first dotted segment for browsing. */
-function groupSettings(settings: Record<string, unknown>): Map<string, SettingRow[]> {
+function groupSettings(
+  settings: Record<string, unknown>,
+): Map<string, SettingRow[]> {
   const groups = new Map<string, SettingRow[]>();
   for (const key of Object.keys(settings).sort()) {
     const value = settings[key];
-    const group = key.split('.')[0] ?? key;
+    const group = key.split(".")[0] ?? key;
     const row: SettingRow = {
       key,
       value,
@@ -96,9 +102,9 @@ function groupSettings(settings: Record<string, unknown>): Map<string, SettingRo
 
 function renderValue(value: unknown): string {
   if (value === null) {
-    return 'null';
+    return "null";
   }
-  if (typeof value === 'string') {
+  if (typeof value === "string") {
     return value;
   }
   return JSON.stringify(value);
@@ -109,7 +115,7 @@ export function ConfigSection() {
   const [document, setDocument] = useState<ConfigExport | null>(null);
   const [loadError, setLoadError] = useState<ApiError | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
-  const [searchText, setSearchText] = useState('');
+  const [searchText, setSearchText] = useState("");
 
   const [pendingDocument, setPendingDocument] = useState<unknown>(null);
   const [pendingName, setPendingName] = useState<string | null>(null);
@@ -145,11 +151,13 @@ export function ConfigSection() {
     if (!document) {
       return;
     }
-    const blob = new Blob([JSON.stringify(document, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(document, null, 2)], {
+      type: "application/json",
+    });
     const url = URL.createObjectURL(blob);
-    const anchor = window.document.createElement('a');
+    const anchor = window.document.createElement("a");
     anchor.href = url;
-    anchor.download = 'melodee-config-export.json';
+    anchor.download = "melodee-config-export.json";
     anchor.click();
     URL.revokeObjectURL(url);
   };
@@ -163,7 +171,10 @@ export function ConfigSection() {
       })
       .catch((cause: unknown) => {
         setPreview(null);
-        setNotice({ kind: 'error', text: importErrorText(toApiError(cause), t) });
+        setNotice({
+          kind: "error",
+          text: importErrorText(toApiError(cause), t),
+        });
       })
       .finally(() => setImportBusy(false));
   };
@@ -171,7 +182,7 @@ export function ConfigSection() {
   const onFileSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     // Reset the input so selecting the same file twice re-triggers.
-    event.target.value = '';
+    event.target.value = "";
     if (!file) {
       return;
     }
@@ -184,7 +195,10 @@ export function ConfigSection() {
         } catch {
           setPendingDocument(null);
           setPreview(null);
-          setNotice({ kind: 'error', text: t('settings.import.error.notJson') });
+          setNotice({
+            kind: "error",
+            text: t("settings.import.error.notJson"),
+          });
           return;
         }
         setPendingDocument(parsed);
@@ -192,7 +206,9 @@ export function ConfigSection() {
         setAllowUnknown(false);
         runPreview(parsed, false);
       })
-      .catch(() => setNotice({ kind: 'error', text: t('settings.import.error.notJson') }));
+      .catch(() =>
+        setNotice({ kind: "error", text: t("settings.import.error.notJson") }),
+      );
   };
 
   const applyImport = () => {
@@ -203,12 +219,15 @@ export function ConfigSection() {
     importConfig(pendingDocument, { preview: false, allowUnknown })
       .then((result) => {
         setPreview(result);
-        setNotice({ kind: 'success', text: t('settings.import.applied') });
+        setNotice({ kind: "success", text: t("settings.import.applied") });
         // The browser reflects durable state; refresh after an apply.
         void fetchExport({ cancelled: false });
       })
       .catch((cause: unknown) => {
-        setNotice({ kind: 'error', text: importErrorText(toApiError(cause), t) });
+        setNotice({
+          kind: "error",
+          text: importErrorText(toApiError(cause), t),
+        });
       })
       .finally(() => {
         setImportBusy(false);
@@ -244,7 +263,7 @@ export function ConfigSection() {
         <InlineNotification
           kind="warning"
           lowContrast
-          title={t('settings.exportWarningTitle')}
+          title={t("settings.exportWarningTitle")}
           subtitle={document.warning}
           hideCloseButton
         />
@@ -252,8 +271,8 @@ export function ConfigSection() {
       <InlineNotification
         kind="info"
         lowContrast
-        title={t('settings.readOnlyTitle')}
-        subtitle={t('settings.readOnlyNote')}
+        title={t("settings.readOnlyTitle")}
+        subtitle={t("settings.readOnlyNote")}
         hideCloseButton
       />
       {loadError ? (
@@ -261,15 +280,15 @@ export function ConfigSection() {
           inline
           kind="error"
           lowContrast
-          title={t('settings.loadErrorTitle')}
+          title={t("settings.loadErrorTitle")}
           subtitle={loadError.message}
           hideCloseButton
-          actionButtonLabel={t('actions.retry')}
+          actionButtonLabel={t("actions.retry")}
           onActionButtonClick={() => void fetchExport({ cancelled: false })}
         />
       ) : null}
 
-      <div className="melodee-panel__footer" style={{ marginBlock: '1rem' }}>
+      <div className="melodee-panel__footer" style={{ marginBlock: "1rem" }}>
         <Button
           kind="secondary"
           size="sm"
@@ -277,11 +296,11 @@ export function ConfigSection() {
           disabled={!document}
           onClick={downloadExport}
         >
-          {t('settings.exportConfiguration')}
+          {t("settings.exportConfiguration")}
         </Button>
         <FileUploaderButton
-          labelText={t('settings.import.chooseFile')}
-          accept={['application/json', '.json']}
+          labelText={t("settings.import.chooseFile")}
+          accept={["application/json", ".json"]}
           buttonKind="primary"
           size="sm"
           onChange={onFileSelected}
@@ -289,62 +308,77 @@ export function ConfigSection() {
       </div>
 
       {pendingDocument !== null ? (
-        <section className="melodee-panel" aria-labelledby="config-import-preview-title">
-          <Heading id="config-import-preview-title" className="melodee-panel__title">
-            {t('settings.import.previewTitle', { file: pendingName ?? '' })}
+        <section
+          className="melodee-panel"
+          aria-labelledby="config-import-preview-title"
+        >
+          <Heading
+            id="config-import-preview-title"
+            className="melodee-panel__title"
+          >
+            {t("settings.import.previewTitle", { file: pendingName ?? "" })}
           </Heading>
           {importBusy && !preview ? (
-            <Loading description={t('common.loading')} withOverlay={false} />
+            <Loading description={t("common.loading")} withOverlay={false} />
           ) : null}
           {preview ? (
             <>
               <dl className="melodee-fact-list">
                 <div className="melodee-fact">
-                  <dt>{t('settings.import.added')}</dt>
+                  <dt>{t("settings.import.added")}</dt>
                   <dd>{formatNumber(preview.added.length)}</dd>
                 </div>
                 <div className="melodee-fact">
-                  <dt>{t('settings.import.changed')}</dt>
+                  <dt>{t("settings.import.changed")}</dt>
                   <dd>{formatNumber(preview.changed.length)}</dd>
                 </div>
                 <div className="melodee-fact">
-                  <dt>{t('settings.import.unchanged')}</dt>
+                  <dt>{t("settings.import.unchanged")}</dt>
                   <dd>{formatNumber(preview.unchanged.length)}</dd>
                 </div>
                 <div className="melodee-fact">
-                  <dt>{t('settings.import.secretsReentered')}</dt>
+                  <dt>{t("settings.import.secretsReentered")}</dt>
                   <dd>{formatNumber(preview.secretsReentered.length)}</dd>
                 </div>
                 <div className="melodee-fact">
-                  <dt>{t('settings.import.secretsSkipped')}</dt>
+                  <dt>{t("settings.import.secretsSkipped")}</dt>
                   <dd>{formatNumber(preview.secretsSkipped.length)}</dd>
                 </div>
                 <div className="melodee-fact">
-                  <dt>{t('settings.import.unknown')}</dt>
+                  <dt>{t("settings.import.unknown")}</dt>
                   <dd>{formatNumber(preview.unknown.length)}</dd>
                 </div>
               </dl>
-              <PlanKeyList title={t('settings.import.added')} keys={preview.added} />
-              <PlanKeyList title={t('settings.import.changed')} keys={preview.changed} />
               <PlanKeyList
-                title={t('settings.import.secretsSkipped')}
-                keys={preview.secretsSkipped}
-                note={t('settings.import.secretsSkippedNote')}
+                title={t("settings.import.added")}
+                keys={preview.added}
               />
-              <PlanKeyList title={t('settings.import.unknown')} keys={preview.unknown} />
+              <PlanKeyList
+                title={t("settings.import.changed")}
+                keys={preview.changed}
+              />
+              <PlanKeyList
+                title={t("settings.import.secretsSkipped")}
+                keys={preview.secretsSkipped}
+                note={t("settings.import.secretsSkippedNote")}
+              />
+              <PlanKeyList
+                title={t("settings.import.unknown")}
+                keys={preview.unknown}
+              />
               {preview.warnings.length > 0 ? (
                 <InlineNotification
                   kind="warning"
                   lowContrast
-                  title={t('settings.import.warningsTitle')}
-                  subtitle={preview.warnings.join('; ')}
+                  title={t("settings.import.warningsTitle")}
+                  subtitle={preview.warnings.join("; ")}
                   hideCloseButton
                 />
               ) : null}
               {preview.unknown.length > 0 ? (
                 <Checkbox
                   id="config-import-allow-unknown"
-                  labelText={t('settings.import.allowUnknown')}
+                  labelText={t("settings.import.allowUnknown")}
                   checked={allowUnknown}
                   onChange={(_event, { checked }) => {
                     setAllowUnknown(checked);
@@ -359,7 +393,7 @@ export function ConfigSection() {
                   disabled={importBusy || preview.applied}
                   onClick={() => setApplyConfirmOpen(true)}
                 >
-                  {t('settings.import.apply')}
+                  {t("settings.import.apply")}
                 </Button>
                 <Button
                   kind="ghost"
@@ -370,7 +404,7 @@ export function ConfigSection() {
                     setPendingName(null);
                   }}
                 >
-                  {t('settings.import.discard')}
+                  {t("settings.import.discard")}
                 </Button>
               </div>
             </>
@@ -379,20 +413,22 @@ export function ConfigSection() {
       ) : null}
 
       {document === null && !loadError ? (
-        <Loading description={t('common.loading')} withOverlay={false} />
+        <Loading description={t("common.loading")} withOverlay={false} />
       ) : null}
       {document ? (
         <>
           <Search
             size="md"
-            labelText={t('settings.searchLabel')}
-            placeholder={t('settings.searchLabel')}
+            labelText={t("settings.searchLabel")}
+            placeholder={t("settings.searchLabel")}
             value={searchText}
             onChange={(event) => setSearchText(event.target.value)}
-            onClear={() => setSearchText('')}
+            onClear={() => setSearchText("")}
           />
           <p className="melodee-panel__subtitle">
-            {t('settings.exportedAt', { time: formatDateTime(document.exportedAt) })}
+            {t("settings.exportedAt", {
+              time: formatDateTime(document.exportedAt),
+            })}
           </p>
           {[...groups.entries()].map(([group, rows]) => (
             <section key={group} className="melodee-panel" aria-label={group}>
@@ -401,8 +437,8 @@ export function ConfigSection() {
                 <Table size="sm" aria-label={group}>
                   <TableHead>
                     <TableRow>
-                      <TableHeader>{t('settings.column.key')}</TableHeader>
-                      <TableHeader>{t('settings.column.value')}</TableHeader>
+                      <TableHeader>{t("settings.column.key")}</TableHeader>
+                      <TableHeader>{t("settings.column.value")}</TableHeader>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -415,8 +451,8 @@ export function ConfigSection() {
                           {row.redacted ? (
                             <StatusTag
                               kind="neutral"
-                              label={t('settings.redacted')}
-                              description={t('settings.redactedDescription')}
+                              label={t("settings.redacted")}
+                              description={t("settings.redactedDescription")}
                             />
                           ) : (
                             <code>{renderValue(row.value)}</code>
@@ -430,7 +466,7 @@ export function ConfigSection() {
             </section>
           ))}
           {groups.size === 0 ? (
-            <p className="melodee-panel__subtitle">{t('empty.noResults')}</p>
+            <p className="melodee-panel__subtitle">{t("empty.noResults")}</p>
           ) : null}
         </>
       ) : null}
@@ -438,15 +474,15 @@ export function ConfigSection() {
       {applyConfirmOpen ? (
         <Modal
           open
-          modalHeading={t('settings.import.applyConfirmTitle')}
-          primaryButtonText={t('settings.import.apply')}
-          secondaryButtonText={t('actions.cancel')}
+          modalHeading={t("settings.import.applyConfirmTitle")}
+          primaryButtonText={t("settings.import.apply")}
+          secondaryButtonText={t("actions.cancel")}
           primaryButtonDisabled={importBusy}
           onRequestClose={() => setApplyConfirmOpen(false)}
           onRequestSubmit={applyImport}
         >
           <p>
-            {t('settings.import.applyConfirmBody', {
+            {t("settings.import.applyConfirmBody", {
               added: formatNumber(preview?.added.length ?? 0),
               changed: formatNumber(preview?.changed.length ?? 0),
             })}

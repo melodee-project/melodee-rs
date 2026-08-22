@@ -1,4 +1,4 @@
-//! Phase 9 WP-09 Admin API: notification template administration, delivery
+//! Admin API: notification template administration, delivery
 //! audit, and operator test-send (PRD-NOTIF-001..003, ADR-0134 §4).
 //!
 //! These routes extend the Rust-native operator API (`/api/admin/v1`,
@@ -159,7 +159,7 @@ pub struct UpsertTemplateRequest {
 #[serde(rename_all = "camelCase")]
 pub struct TestSendRequest {
     pub template_key: String,
-    /// Defaults to `en` (the server event locale until Phase 10 per-user
+    /// Defaults to `en` (the server event locale until per-user
     /// localization).
     pub locale: Option<String>,
     pub recipient: String,
@@ -185,8 +185,8 @@ pub fn router() -> Router<AdminAccessState> {
             "/api/admin/v1/notifications/test-send",
             axum::routing::post(test_send),
         )
-        // Template bodies are individually bounded at 64 KiB by the store;
-        // the envelope admits subject + both bodies plus JSON overhead.
+ // Template bodies are individually bounded at 64 KiB by the store;
+ // the envelope admits subject + both bodies plus JSON overhead.
         .route_layer(axum::extract::DefaultBodyLimit::max(256 * 1024))
 }
 
@@ -326,7 +326,7 @@ async fn test_send(
     }
     let locale = request.locale.as_deref().unwrap_or(DEFAULT_LOCALE);
     // Operator verification placeholders only: template placeholders that a
-    // wiring site would supply (resetUrl, shareUrl, ...) render verbatim.
+    // wiring site would supply (resetUrl, shareUrl,...) render verbatim.
     let placeholders: Vec<(String, String)> = Vec::new();
     match state
         .notifications

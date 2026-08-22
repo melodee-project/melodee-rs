@@ -1,4 +1,4 @@
-//! Phase 9 WP-07 external provider cache and Last.fm link persistence
+//! external provider cache and Last.fm link persistence
 //! acceptance (ADR-0134 §7 as amended 2026-08-14, PRD-EXT-001..004,
 //! PRD-AUTH-002): migration shape (nothing seeded), provider cache
 //! round-trip/freshness/purge with the enumerated-vocabulary CHECK as
@@ -132,7 +132,7 @@ async fn cache_round_trip_freshness_and_purge() {
             .is_none()
     );
 
-    // ...upsert replaces in place (PK conflict), including refreshing a
+    //...upsert replaces in place (PK conflict), including refreshing a
     // previously expired entry...
     let refreshed = ProviderCacheEntry {
         payload: serde_json::json!({"results": []}),
@@ -146,7 +146,7 @@ async fn cache_round_trip_freshness_and_purge() {
         .expect("refreshed");
     assert_eq!(reloaded.payload["results"], serde_json::json!([]));
 
-    // ...and the bounded purge removes only expired rows.
+    //...and the bounded purge removes only expired rows.
     cache
         .upsert(
             &db.pool,

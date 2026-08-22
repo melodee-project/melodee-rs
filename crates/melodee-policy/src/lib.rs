@@ -1,4 +1,4 @@
-//! Phase 5 policy engine: Release classification, Track novelty analysis,
+//! policy engine: Release classification, Track novelty analysis,
 //! versioned policy evaluation, and dry-run/test-against-catalog support.
 //!
 //! This crate owns the logic that decides what Melodee believes a Release is

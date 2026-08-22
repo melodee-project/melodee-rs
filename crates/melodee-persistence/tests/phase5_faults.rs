@@ -1,4 +1,4 @@
-//! Lease fencing and restart convergence at the Phase 5 transaction boundary.
+//! Lease fencing and restart convergence at the transaction boundary.
 
 #![allow(clippy::expect_used, clippy::panic)]
 

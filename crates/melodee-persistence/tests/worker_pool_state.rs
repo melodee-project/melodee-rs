@@ -1,4 +1,4 @@
-//! Phase 9 WP-05 worker-pool durable pause/resume acceptance (ADR-0134 §8,
+//! worker-pool durable pause/resume acceptance (ADR-0134 §8,
 //! PRD-WORK-005): migration shape, constraint integrity, audited
 //! pause/resume transitions, and the worker-facing pause check.
 

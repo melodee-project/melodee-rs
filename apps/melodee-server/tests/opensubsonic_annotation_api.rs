@@ -1,7 +1,6 @@
 //! OpenSubsonic annotation/bookmarks/play-queue compatibility evidence
-//! (Phase 8): star, unstar, setRating, scrobble, getBookmarks,
+//! star, unstar, setRating, scrobble, getBookmarks,
 //! createBookmark, deleteBookmark, savePlayQueue, getPlayQueue.
-//!
 //! Asserted behavior mirrors the frozen golden captures in
 //! `compatibility/opensubsonic/golden/annotation/` and the `os-bookmarks-*` /
 //! `os-playqueue-*` captures under `compatibility/opensubsonic/golden/playlists/`.
@@ -635,7 +634,7 @@ async fn bookmarks_round_trip_matches_the_captures() {
     assert_eq!(entry["userRating"], 5);
     assert_eq!(entry["playerId"], 0);
     assert_eq!(entry["playCount"], 0);
-    // Captured: song `starred` is the legacy Nullable<DateTime>.ToString()
+    // Captured: song `starred` is the legacy Nullable<DateTime>.ToString
     // artifact — "" in every frozen golden (runtime-set timestamps are masked
     // volatile there).
     assert_eq!(entry["starred"], "");

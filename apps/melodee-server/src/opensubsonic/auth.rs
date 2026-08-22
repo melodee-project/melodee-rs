@@ -3,8 +3,7 @@
 //! Transports: query string or urlencoded form POST. Forms: `u + t + s`
 //! (token = md5(opensubsonic secret + salt), case-insensitive hex) and
 //! `u + p` (plaintext or `enc:` hex) verified against the bcrypt password
-//! hash. The legacy `jwt` parameter is never consulted (ADR-0130 decision 1:
-//! no JWT branch exists), and `apiKey` is advertised but never honored
+//! hash. The legacy `jwt` parameter is never consulted (ADR-0130 decision 1: //! no JWT branch exists), and `apiKey` is advertised but never honored
 //! (ADR-0130 decision 2). The captured localhost / baseUrl / `/images/`
 //! bypass synthesizes no user.
 //!
@@ -87,7 +86,7 @@ fn is_bypass(request: &Request, state: &OsState) -> bool {
     }
     // Captured bypass semantics require the EFFECTIVE client address: the
     // legacy server ran with UseForwardedHeaders, so a trusted proxy's
-    // Forwarded/X-Forwarded-For replaces RemoteIp (the Phase 0 capture
+    // Forwarded/X-Forwarded-For replaces RemoteIp (the capture
     // defeated the bypass exactly this way) and X-Forwarded-Host replaces the
     // Host used for the baseUrl comparison.
     let Some(connect_info) = request

@@ -391,7 +391,7 @@ pub async fn resolve_token(state: &JfState, headers: &HeaderMap, uri: &Uri) -> O
 }
 
 pub(crate) fn extract_token(headers: &HeaderMap, uri: &Uri) -> Option<String> {
-    // Authorization: MediaBrowser ... Token="..."
+    // Authorization: MediaBrowser... Token="..."
     if let Some(auth) = headers
         .get(header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
@@ -399,7 +399,7 @@ pub(crate) fn extract_token(headers: &HeaderMap, uri: &Uri) -> Option<String> {
     {
         return Some(token);
     }
-    // X-Emby-Authorization: ... Token="..."
+    // X-Emby-Authorization:... Token="..."
     if let Some(auth) = headers
         .get("X-Emby-Authorization")
         .and_then(|v| v.to_str().ok())
@@ -418,7 +418,7 @@ pub(crate) fn extract_token(headers: &HeaderMap, uri: &Uri) -> Option<String> {
     // as a legacy fallback; the legacy Melodee server read only `api_key`,
     // which broke real clients that build media URLs with `apiKey` (Feishin's
     // /Download stream URLs). Accepting both is additive: no captured golden
-    // behavior changes (Phase 8 real-client smoke finding).
+    // behavior changes ( real-client smoke finding).
     if let Some(query) = uri.query() {
         for pair in query.split('&') {
             let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
@@ -646,7 +646,7 @@ pub async fn users_list(State(state): State<JfState>, headers: HeaderMap, uri: U
 
 pub async fn users_public(State(state): State<JfState>) -> Response {
     let _ = state;
-    // Captured: no local users are public (`Ok(Array.Empty<JellyfinUser>())`);
+    // Captured: no local users are public (`Ok(Array.Empty<JellyfinUser>)`);
     // clients fall back to username/password login.
     let mut response = (StatusCode::OK, Json(json!([]))).into_response();
     response.headers_mut().insert(

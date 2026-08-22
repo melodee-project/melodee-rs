@@ -27,7 +27,7 @@ The built-in rule set defaults to:
 The safe preference ranges and exact settings are listed in
 [Configuration](../installation/configuration/#policy-evaluation). A `Delete` outcome is never an
 instruction to remove media. It creates a pending decision and routes the Release to
-`NeedsReview`. Phase 5 has no CLI action that completes deletion.
+`NeedsReview`. The policy CLI has no action that completes deletion.
 
 Rule sets are immutable by name and version. If any configured preference changes, increment
 `MELODEE__POLICY__RULE_SET_VERSION`. Reusing a stored version with different rules fails startup

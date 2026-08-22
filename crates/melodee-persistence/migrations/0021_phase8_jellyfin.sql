@@ -1,4 +1,4 @@
--- Phase 8 Jellyfin adapter token state (authority: ADR-0102, ADR-0131).
+-- Jellyfin adapter token state (authority: ADR-0102, ADR-0131).
 --
 -- This migration is additive. A binary downgrade leaves the table intact;
 -- schema rollback restores a verified pre-Phase-8 backup into a new database.

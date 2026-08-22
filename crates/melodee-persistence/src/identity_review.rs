@@ -1,5 +1,5 @@
-//! Phase 10 read-side operator queries over the Artist identity schema
-//! (Phase 4 tables, ADR-0134 parity domain): unresolved observation listing,
+//! read-side operator queries over the Artist identity schema
+//! ( tables, ADR-0134 parity domain): unresolved observation listing,
 //! observation detail with candidate evidence, the identity decision audit
 //! feed, and public-id resolution for merge/split entry points.
 //!
@@ -235,7 +235,7 @@ const OBSERVATION_SELECT: &str = "SELECT o.id, o.release_id, r.public_api_id AS 
 impl CatalogStore {
     /// Counts observed Artists without an authoritative match decision (the
     /// unresolved identity queue depth) without loading any rows — the
-    /// dashboard attention count (Phase 10 WP-14).
+    /// dashboard attention count.
     pub async fn count_unresolved_observations(
         &self,
         pool: &PgPool,

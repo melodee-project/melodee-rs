@@ -1,4 +1,4 @@
-//! Phase 9 WP-05 worker-pool pause/resume runtime acceptance (ADR-0134 §8,
+//! worker-pool pause/resume runtime acceptance (ADR-0134 §8,
 //! PRD-WORK-005): a durably paused pool claims nothing, in-flight leases are
 //! never stranded or stolen, and resume restores claiming.
 

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from "@playwright/test";
 
 /**
  * Shell smoke: renders the canonical IA in English and honors RTL when the
@@ -7,27 +7,41 @@ import { expect, test, type Page } from '@playwright/test';
  */
 
 async function mockAdminApi(page: Page) {
-  await page.route('**/api/**', async (route) => {
+  await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url());
-    if (url.pathname === '/api/admin/v1/system/info') {
+    if (url.pathname === "/api/admin/v1/system/info") {
       await route.fulfill({
         status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ service: 'melodee', version: 'test', status: 'ok' }),
+        contentType: "application/json",
+        body: JSON.stringify({
+          service: "melodee",
+          version: "test",
+          status: "ok",
+        }),
       });
       return;
     }
-    if (url.pathname === '/api/admin/v1/dashboard') {
-      // The shell lands on the overview dashboard (WP-14); an empty catalog
+    if (url.pathname === "/api/admin/v1/dashboard") {
+      // The shell lands on the overview dashboard ; an empty catalog
       // is a valid server response.
-      const subsystem = { status: 'ok', detail: 'ok' };
+      const subsystem = { status: "ok", detail: "ok" };
       await route.fulfill({
         status: 200,
-        contentType: 'application/json',
+        contentType: "application/json",
         body: JSON.stringify({
-          generatedAt: '2026-08-14T12:00:00Z',
-          catalog: { artists: 0, releases: 0, tracks: 0, mediaAssets: 0, pendingSearchOutbox: 0 },
-          workItems: { countsByState: [], failedLast24h: 0, completedLast24h: 0 },
+          generatedAt: "2026-08-14T12:00:00Z",
+          catalog: {
+            artists: 0,
+            releases: 0,
+            tracks: 0,
+            mediaAssets: 0,
+            pendingSearchOutbox: 0,
+          },
+          workItems: {
+            countsByState: [],
+            failedLast24h: 0,
+            completedLast24h: 0,
+          },
           attention: {
             unresolvedIdentities: 0,
             pendingPolicyDecisions: 0,
@@ -35,12 +49,15 @@ async function mockAdminApi(page: Page) {
             quarantined: 0,
           },
           health: {
-            status: 'ok',
+            status: "ok",
             postgresql: subsystem,
             tantivy: subsystem,
             storage: subsystem,
             ffmpeg: subsystem,
-            podcastStorage: { status: 'disabled', detail: 'podcast worker disabled' },
+            podcastStorage: {
+              status: "disabled",
+              detail: "podcast worker disabled",
+            },
             disk: subsystem,
             workers: subsystem,
             apiSurfaces: [],
@@ -52,7 +69,7 @@ async function mockAdminApi(page: Page) {
     }
     await route.fulfill({
       status: 200,
-      contentType: 'application/json',
+      contentType: "application/json",
       body: JSON.stringify({ items: [], total: 0, limit: 50, offset: 0 }),
     });
   });
@@ -62,38 +79,42 @@ test.beforeEach(async ({ page }) => {
   await mockAdminApi(page);
   // Deterministic locale: start every run in English.
   await page.addInitScript(() => {
-    window.localStorage.setItem('melodee.locale', 'en-US');
+    window.localStorage.setItem("melodee.locale", "en-US");
   });
 });
 
-test('renders the shell navigation groups in English', async ({ page }) => {
-  await page.goto('/');
+test("renders the shell navigation groups in English", async ({ page }) => {
+  await page.goto("/");
 
   // UI-SPEC §8: below lg the side nav starts collapsed to icons/overlay;
   // expand it via the header control before asserting labels.
-  const expandButton = page.getByRole('button', { name: 'Expand navigation' }).first();
+  const expandButton = page
+    .getByRole("button", { name: "Expand navigation" })
+    .first();
   if (await expandButton.isVisible()) {
     await expandButton.click();
   }
 
-  const nav = page.getByRole('navigation', { name: 'Main navigation' });
-  await expect(nav.getByText('Overview').first()).toBeVisible();
-  await expect(nav.getByText('Processing').first()).toBeVisible();
-  await expect(nav.getByText('Catalog').first()).toBeVisible();
-  await expect(nav.getByText('Policies').first()).toBeVisible();
-  await expect(nav.getByText('System').first()).toBeVisible();
+  const nav = page.getByRole("navigation", { name: "Main navigation" });
+  await expect(nav.getByText("Overview").first()).toBeVisible();
+  await expect(nav.getByText("Processing").first()).toBeVisible();
+  await expect(nav.getByText("Catalog").first()).toBeVisible();
+  await expect(nav.getByText("Policies").first()).toBeVisible();
+  await expect(nav.getByText("System").first()).toBeVisible();
 
-  await expect(page.locator('html')).toHaveAttribute('dir', 'ltr');
-  await expect(page.locator('html')).toHaveAttribute('lang', 'en-US');
+  await expect(page.locator("html")).toHaveAttribute("dir", "ltr");
+  await expect(page.locator("html")).toHaveAttribute("lang", "en-US");
 });
 
-test('switching to ar-SA sets dir=rtl on the document root', async ({ page }) => {
-  await page.goto('/');
+test("switching to ar-SA sets dir=rtl on the document root", async ({
+  page,
+}) => {
+  await page.goto("/");
 
-  await page.getByRole('button', { name: 'Language', exact: true }).click();
+  await page.getByRole("button", { name: "Language", exact: true }).click();
   // SwitcherItem entries are anchors without href (roleless); click by text.
   await page.getByText(/العربية/).click();
 
-  await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
-  await expect(page.locator('html')).toHaveAttribute('lang', 'ar-SA');
+  await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+  await expect(page.locator("html")).toHaveAttribute("lang", "ar-SA");
 });

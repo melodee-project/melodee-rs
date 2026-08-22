@@ -18,7 +18,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CLI = ROOT / "target" / "debug" / "melodee-cli"
 CLI_COMMANDS: tuple[tuple[str, ...], ...] = (
-    ("plan",),
     ("doctor",),
     ("migrate",),
     ("work",),

@@ -1,4 +1,4 @@
-//! Phase 9 WP-08 settings/onboarding persistence acceptance (ADR-0134 §3,
+//! settings/onboarding persistence acceptance (ADR-0134 §3,
 //! PRD-SETUP-001/002, PRD-CONFIG-001..003, PRD-AUTH-007): migration shape,
 //! round-trip, secret-flag enforcement, redaction behavior of list/get,
 //! singleton enforcement, bounds, layered resolution precedence, and the

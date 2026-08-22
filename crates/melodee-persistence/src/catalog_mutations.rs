@@ -1,4 +1,4 @@
-//! Audited Phase 4 catalog mutations outside the manifest import hot path.
+//! Audited catalog mutations outside the manifest import hot path.
 
 use melodee_domain::{
     Artist, ArtistAlias, ArtistAliasType, ArtistId, ArtistMatchDecision, ArtistMatchEvidence,

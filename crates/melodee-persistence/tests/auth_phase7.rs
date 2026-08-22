@@ -1,4 +1,4 @@
-//! Phase 7 authentication/session/public-ID persistence acceptance tests.
+//! authentication/session/public-ID persistence acceptance tests.
 
 #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 

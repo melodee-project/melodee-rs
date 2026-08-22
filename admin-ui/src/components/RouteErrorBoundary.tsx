@@ -1,6 +1,6 @@
-import { Component, type ReactNode } from 'react';
+import { Component, type ReactNode } from "react";
 
-import { ErrorState } from './ErrorState';
+import { ErrorState } from "./ErrorState";
 
 interface RouteErrorBoundaryProps {
   children: ReactNode;
@@ -31,7 +31,7 @@ export class RouteErrorBoundary extends Component<
   override componentDidCatch(error: unknown): void {
     // The only diagnostics channel available at this layer; the server has
     // its own correlation for API failures.
-    console.error('admin-ui route render failed', error);
+    console.error("admin-ui route render failed", error);
   }
 
   override componentDidUpdate(previous: RouteErrorBoundaryProps): void {
