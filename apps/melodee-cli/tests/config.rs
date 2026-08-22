@@ -1,4 +1,4 @@
-//! CLI evidence: `melodee config list|validate|export|import`
+//! PostgreSQL-backed CLI integration tests for `melodee config list|validate|export|import`.
 //! (PRD-CONFIG-001/002, PRD-SETUP-001). Secrets are always redacted; import
 //! previews by default and fails closed on redacted markers and unknown
 //! keys.

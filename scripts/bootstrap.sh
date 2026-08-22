@@ -28,6 +28,7 @@ if [[ ! -f Cargo.lock ]]; then
 fi
 
 cargo fmt --all --check
-cargo test --workspace --all-features
+echo "Running database-free Rust unit tests (PostgreSQL integration tests excluded)."
+cargo test --workspace --all-features --lib --bins
 
 echo "Bootstrap checks completed."

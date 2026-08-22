@@ -32,6 +32,10 @@ corepack enable
 cargo build --release -p melodee-server -p melodee-cli
 ```
 
+For a database-free checkout validation, run `make bootstrap`. It runs repository checks and Rust
+unit-test targets only. PostgreSQL-backed integration tests are part of the full `make check-full`
+gate and require the development database or an explicitly configured test database.
+
 Copy [`.env.example`](../../../../../.env.example) to a private local `.env`, replace the secret
 placeholders, and configure separate absolute inbound, work, canonical-storage, and search roots.
 Start PostgreSQL (for example `make postgres-up` for the repository's development service), export

@@ -11,15 +11,18 @@ remain later-phase work.
 
 ```bash
 cp .env.example .env
+./scripts/bootstrap.sh
 docker compose -f compose.dev.yaml up -d postgres
 mkdir -p /tmp/melodee-inbound /tmp/melodee-staging /tmp/melodee-work /tmp/melodee-storage
 mkdir -p /tmp/melodee-search
 set -a
 source .env
 set +a
-./scripts/bootstrap.sh
 cargo run -p melodee-server
 ```
+
+Bootstrap is database-free and runs only Rust library and binary unit-test targets. PostgreSQL is
+required for the server and the full integration-test gate, not for checkout bootstrap.
 
 The development compose file allocates 512 MiB of PostgreSQL shared memory so parallel integration
 test migrations do not exhaust Docker's 64 MiB default. If the dev database container predates

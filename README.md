@@ -118,11 +118,11 @@ Node.js 22.12+ and pnpm 11 for the admin UI and documentation.
 git clone https://github.com/melodee-project/melodee-rs.git
 cd melodee-rs
 
-# Start the development PostgreSQL service (host port 5433).
-make postgres-up
+# Run repository validation and database-free Rust unit tests.
+make bootstrap
 
-# Check repository prerequisites, contracts, formatting, and the Rust workspace.
-./scripts/bootstrap.sh
+# PostgreSQL is required to run the server, integration tests, and full gate.
+make postgres-up
 
 # The admin SPA is served from admin-ui/dist at /admin.
 corepack enable
@@ -199,10 +199,11 @@ night and can be started manually from the Actions tab before a release.
 Useful focused commands:
 
 ```bash
+make bootstrap                           # database-free repository and unit-test bootstrap
 make postgres-up                         # development PostgreSQL on localhost:5433
 cargo test -p melodee-domain             # one Rust crate
 make test-smoke                          # workspace Rust library tests only
-make check-full                          # complete local release gate
+make check-full                          # complete local release gate; requires PostgreSQL
 make lint                                # full workspace Clippy gate
 make docs                                # repository/documentation metadata checks
 (cd docs && pnpm check && pnpm check:links && pnpm build)
