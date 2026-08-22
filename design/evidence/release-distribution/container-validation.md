@@ -66,7 +66,7 @@ archive were removed.
 ## Release workflow boundary
 
 `release-container.yml` uses the published GitHub Release event only. Before
-GHCR publication it runs `./scripts/check.sh`, builds and tests the native
+GHCR publication it runs `make check`, builds and tests the native
 amd64 image, scans it with Trivy, and validates required OCI labels. The final
 Buildx publish step creates one `linux/amd64`/`linux/arm64` manifest with SBOM
 metadata and a GitHub OIDC-backed attestation. No image was pushed during this

@@ -149,7 +149,7 @@ per-WP migrations with integrity tests.
 
 - `crates/melodee-persistence/tests/` gains migration/integrity tests per table (round-trip,
   bounds, cascade, redaction) with each WP.
-- `python3 scripts/validate_repository.py` and `cargo deny check` stay green; `./scripts/check.sh`
+- `python3 scripts/validate_repository.py` and `cargo deny check` stay green; `make check`
   passes after every WP migration.
 
 ## References

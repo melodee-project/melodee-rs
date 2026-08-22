@@ -186,10 +186,10 @@ compatibility captures, the Admin UI static gate, and dependency auditing.
 Run the complete gate before merge, release, or changes that affect those omitted areas:
 
 ```bash
-./scripts/check.sh
+make check
 ```
 
-`check.sh` validates the repository and requirement index, runs Python contract tests, the admin
+`make check` validates the repository and requirement index, runs Python contract tests, the admin
 UI type/lint/i18n/unit/build gate when pnpm is available, Rust formatting and Clippy, the full
 Rust test suite, and `cargo deny` when installed. CI supplies PostgreSQL and media tools.
 
@@ -201,6 +201,7 @@ Useful focused commands:
 ```bash
 make bootstrap                           # database-free repository and unit-test bootstrap
 make postgres-up                         # development PostgreSQL on localhost:5433
+make postgres-reset                      # DESTROYS and recreates only the development database
 cargo test -p melodee-domain             # one Rust crate
 make test-unit                           # database-free Rust unit tests
 make test-integration                    # PostgreSQL-backed Rust integration tests

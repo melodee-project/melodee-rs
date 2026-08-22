@@ -42,7 +42,7 @@ The last recorded clean gate was executed 2026-08-10 on the pinned toolchain (ru
 cargo-deny 0.20.2, Python 3.14.6). It predates the final Phase 3.3/3.4 closure diff and therefore
 must not be presented as validation of that diff:
 
-- Command: `./scripts/check.sh`
+- Command: `make check`
 - Result: PASS (exit 0) — repository validation, requirements index check, Python tests,
   `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`,
   `cargo test --workspace --all-features`, and `cargo deny check` all pass.
@@ -57,7 +57,7 @@ Executed 2026-08-10 against the exact final tree after deterministic publication
 support landed:
 
 ```text
-cargo fmt --all && ./scripts/check.sh
+cargo fmt --all && make check
 PASS (exit 0)
 
 Repository validation: 17 ADRs, 8 mockups, 232 requirements

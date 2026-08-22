@@ -31,7 +31,7 @@ dependencies require an ADR or documented dependency decision and must pass the 
   workspace dependency is the only Cargo change — no new crate.
 - **CI:** a path-filtered `admin-ui.yml` workflow modeled on `docs.yml` (pnpm/action-setup,
   setup-node 22, `pnpm install --frozen-lockfile`, typecheck/lint/unit/build, Playwright job), and
-  a local `make admin-ui-check` hook added to `scripts/check.sh` so the JS gate is executable
+  a local `make admin-ui-check` hook added to `make check` so the JS gate is executable
   locally.
 
 ## Alternatives considered
@@ -80,7 +80,7 @@ serving keeps the deployment contract "one server executable" while leaving the 
 
 ## Validation
 
-- `scripts/check.sh` runs the JS gate and fails on typecheck/lint/test/build errors.
+- `make check` runs the JS gate and fails on typecheck/lint/test/build errors.
 - CI `admin-ui.yml` passes on a clean checkout with `--frozen-lockfile`.
 - `GET /admin` serves the SPA and deep links (e.g. `/admin/processing/queue`) return `index.html`;
   API routes are unaffected (route-shadowing test).

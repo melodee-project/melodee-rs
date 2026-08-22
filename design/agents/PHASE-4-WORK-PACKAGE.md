@@ -135,7 +135,7 @@ In precedence order:
   a clear exit decision.
 - Update requirements status/evidence, architecture/runbook/status documentation, the living feature
   parity matrix, changelog, and affected `/docs` content in the same change.
-- Run `cargo fmt --all`, `./scripts/check.sh`, and the documented docs gates.
+- Run `cargo fmt --all`, `make check`, and the documented docs gates.
 
 ## Required acceptance scenarios
 

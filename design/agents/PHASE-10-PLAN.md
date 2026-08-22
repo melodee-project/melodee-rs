@@ -86,7 +86,7 @@ Phase 10 is a **consumer of established backend surfaces**, not a re-platforming
 | Review audio preview | Signed stream URLs exist only for published tracks; nothing streams a work item's pre-publication audio (mockup 03 shows inline preview in Release Review). |
 | Admin user breadth | No `GET /api/admin/v1/users` list (native-only), no admin password set/reset, no delete. |
 | Localization assets | No i18n framework, no string extraction, 20-culture inventory (PRD-I18N-001) unharvested from the legacy Blazor resources. |
-| UI test infrastructure | No Vitest/Playwright/visual-regression tooling; `scripts/check.sh` and the Makefile have no JS step; no admin-ui CI workflow. |
+| UI test infrastructure | No Vitest/Playwright/visual-regression tooling; `make check` and the Makefile have no JS step; no admin-ui CI workflow. |
 
 ### 1.4 Tracking/documentation gaps that block the Phase 10 exit gate
 
@@ -148,7 +148,7 @@ only the normal schema/ADR discipline.
 
 Every WP follows the agent execution protocol (IMPLEMENTATION §16): requirement IDs + ADRs first,
 acceptance tests before implementation, smallest safe slice, `cargo fmt --all` +
-`./scripts/check.sh` green for Rust changes and the new JS gate for UI changes, `/docs` updated in
+`make check` green for Rust changes and the new JS gate for UI changes, `/docs` updated in
 the same change.
 
 ### Wave 0 — Unblock, decide, specify (no screens yet)
@@ -166,7 +166,7 @@ the same change.
 | WP | Scope | Requirements |
 |---|---|---|
 | WP-01 | **Toolchain + scaffold**: `admin-ui/` Vite + React + TypeScript + Carbon package; exact-pinned deps, committed lockfile, `packageManager` pin; ESLint/format config; base routing; `pnpm` scripts; `allowBuilds` treatment for install-script deps | PRD-UI-002, ADR-0109 |
-| WP-02 | **CI + local gate**: path-filtered `.github/workflows/admin-ui.yml` modeled on `docs.yml` (Node 22, pnpm 11, frozen lockfile); `scripts/check.sh`/Makefile JS step (typecheck, lint, unit tests, production build) so the gate is executable locally and in CI | PRD-TEST-008 (partial) |
+| WP-02 | **CI + local gate**: path-filtered `.github/workflows/admin-ui.yml` modeled on `docs.yml` (Node 22, pnpm 11, frozen lockfile); `make check`/Makefile JS step (typecheck, lint, unit tests, production build) so the gate is executable locally and in CI | PRD-TEST-008 (partial) |
 | WP-03 | **Static serving + dev wiring**: per W0-1 decision — embedded `ServeDir` (tower-http `fs` feature, dependency decision) with SPA fallback, or documented proxy config; dev-server proxy for `/api`; CORS posture for admin routes settled | SPEC §6 |
 | WP-04 | **App shell**: persistent collapsible left nav with the canonical IA (Overview; PROCESSING: Processing/Review Queue/Quarantine/History; CATALOG: Artists/Releases/Tracks/Identity Review; POLICIES: Release Rules/Matching Rules; SYSTEM: Storage/Workers/Search/Users & Access/Settings/Diagnostics); header global search entry, user/language/appearance/notifications/server-status controls; routing skeleton with empty states | PRD-UI-001/004/006, DESIGN-SYSTEM.md shell rules |
 | WP-05 | **Auth/session UX**: login screen against native auth; token storage + refresh per W0-1; route guards incl. the legacy auth-mismatch fixes (admin enforcement on users/groups/identity screens); 401/403 handling; logout | PRD-WEB-002, SPEC §20 |
@@ -242,7 +242,7 @@ translated locale, RTL smoke rendering, keyboard navigation, responsive behavior
 - **Testing:** component/story tests for shared components; Playwright e2e for canonical workflows;
   visual regression in light/dark/RTL; API endpoint suites follow the established per-surface test
   file + disposable-PostgreSQL harness (`TestDb`, rebuilt routers, `oneshot`).
-- **Gate discipline:** `cargo fmt --all` + `./scripts/check.sh` for Rust changes; the WP-02 JS gate
+- **Gate discipline:** `cargo fmt --all` + `make check` for Rust changes; the WP-02 JS gate
   (typecheck/lint/unit/build, later + Playwright) for UI changes; both green before any WP is done.
 - **Docs:** `/docs` updated in the same PR for every user-visible WP; mockups never published as
   product screenshots (`docs/AGENTS.md`); real screenshots replace mockups as references once

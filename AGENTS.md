@@ -6,11 +6,11 @@ template.
 
 ## Commands and environment
 
-- **Fast gate: `./scripts/check-fast.sh`** (also `make check-fast`) gives broad feedback:
+- **Fast gate: `make check-fast`** (`python3 scripts/check.py fast`) gives broad feedback:
   repository/doc and requirement-index validation, Rust formatting, workspace Clippy, and Rust
   library tests. It intentionally excludes PostgreSQL integration, compatibility captures, UI
   static builds, and dependency auditing.
-- **Full local gate: `./scripts/check.sh`** (also `make check`). Runs, in
+- **Full local gate: `make check`** (`python3 scripts/check.py full`). Runs, in
   order: repository/doc validation → requirements index check → Python tests → admin-ui gate
   (pnpm install --frozen-lockfile, typecheck, lint, i18n check, unit tests, build; skipped
   locally if pnpm is absent) → `cargo fmt --check` → `clippy -D warnings` →
@@ -18,7 +18,7 @@ template.
   absent; full CI installs both pnpm and cargo-deny). Run this before considering work done.
   Admin UI work additionally runs Playwright e2e/visual tests via `cd admin-ui && pnpm test:e2e`
   (CI: `.github/workflows/admin-ui.yml`).
-- **Run `cargo fmt --all` before `check.sh`.** `fmt --check` is a hard gate and fails on
+- **Run `cargo fmt --all` before `make check`.** `fmt --check` is a hard gate and fails on
   non-canonical formatting.
 - **Focused runs:** `cargo test -p melodee-domain` for one crate; `make test-unit` (database-free
   Rust library and binary unit tests), `make test-integration` (PostgreSQL-backed integration
@@ -74,7 +74,7 @@ the Phase 10 decision log). Phase 10 landed under accepted ADRs 0137 (localizati
 (legacy jukebox/party web-route retirements), 0142 (admin browse indexes), and 0143 (catalog
 artwork overrides with evidenced frozen-endpoint precedence). The full repository gate passes
 (904 Rust tests, 232 JS unit tests, 259 Playwright e2e runs, 140 Python capture tests, zero
-failures); the local gate now includes the admin-ui toolchain (`scripts/check.sh`). Phase 9's
+failures); the local gate now includes the admin-ui toolchain (`make check`). Phase 9's
 evidence is in
 `design/evidence/phase-9/PHASE-9-REPORT.md`: all twelve per-domain parity checklists are green
 (74 rows ✅ with linked test evidence, 4 rows 🚫 waived by accepted ADRs, 2 rows ➡ Phase 10),
@@ -215,7 +215,7 @@ sorting/filtering/paging is server-side.
 3. State assumptions in the issue/PR before coding when they affect behavior.
 4. Add or update tests first when practical.
 5. Implement the smallest coherent change.
-6. Run `./scripts/check-fast.sh` during iteration and `./scripts/check.sh` before merge or
+6. Run `make check-fast` during iteration and `make check` before merge or
    release (or the documented smallest equivalent for the change).
 7. Evaluate user-facing documentation impact and update `/docs` in the same change when
    affected; update internal documentation and traceability.

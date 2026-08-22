@@ -87,4 +87,4 @@ jobs:
         run: cargo install cargo-deny --version 0.20.2 --locked
 
       - name: Run full gate
-        run: ./scripts/check.sh
+        run: python3 scripts/check.py full

@@ -115,7 +115,7 @@ requires its own parity checklist and tests"* (IMPLEMENTATION §12). Blocking ga
 Phase 9 is executed in four waves. Wave 0 is mandatory gating work; Waves 1–3 are domain work
 packages ordered by dependency and risk. Every WP follows the agent execution protocol
 (IMPLEMENTATION §16): requirement IDs + ADRs first, acceptance tests before implementation,
-smallest safe slice, `cargo fmt --all` + `./scripts/check.sh` green, docs updated in the same
+smallest safe slice, `cargo fmt --all` + `make check` green, docs updated in the same
 change.
 
 ### Wave 0 — Unblock and reconcile (no new features)
@@ -195,7 +195,7 @@ change.
   (`scripts/legacy_oracle.py recreate` fails closed on baseline drift).
 - **Docs:** `/docs` updated in the same PR for user-visible behavior; `FEATURE-PARITY-MATRIX.md`,
   `REQUIREMENTS-INDEX.md` (via `extract_requirements.py`), and checklists updated per WP.
-- **Gate discipline:** `cargo fmt --all` then `./scripts/check.sh` before any WP is called done.
+- **Gate discipline:** `cargo fmt --all` then `make check` before any WP is called done.
 
 ## 5. Sequencing summary and critical path
 

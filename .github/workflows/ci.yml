@@ -60,4 +60,4 @@ jobs:
           fpcalc -version
 
       - name: Run fast gate
-        run: ./scripts/check-fast.sh
+        run: python3 scripts/check.py fast

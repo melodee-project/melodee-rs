@@ -237,7 +237,7 @@ compat-layer identity preservation testable in isolation.
   fencing; read-only source enforcement; unsupported-schema fail-closed.
 - Verification compares source/target counts, public IDs, relationships, user state, playlist
   ordering, share state, and media references with exact mismatch samples.
-- Gate: `./scripts/check.sh` plus the migration fixture suites.
+- Gate: `make check` plus the migration fixture suites.
 
 ## References
 

@@ -111,7 +111,7 @@ without a proprietary registry or long-lived publishing secret.
   verified candidate handoff cleanup under ADR-0145, and makes
   owned persistent paths explicit.
 - `.github/workflows/release-container.yml` is release-published-only, validates SemVer/Cargo
-  versions, runs `./scripts/check.sh`, smoke-tests a PostgreSQL-backed image, scans it, builds a
+  versions, runs `make check`, smoke-tests a PostgreSQL-backed image, scans it, builds a
   linux/amd64+linux/arm64 manifest, publishes an SPDX SBOM, and adds GitHub provenance.
 - Public documentation describes image tags, upgrades, source builds, attestation verification,
   persistent state, and the first-time GHCR package-visibility requirement.

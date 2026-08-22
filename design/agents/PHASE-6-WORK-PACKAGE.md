@@ -167,7 +167,7 @@ types. The translator (plan -> Tantivy `Query`) lives only inside `melodee-searc
 | A22 | Legacy compatibility corpus + 4 rejected bugs | compatibility fixtures |
 | A23 | Autocomplete + admin lookup bounded/deterministic | service tests |
 | A24 | **Warm p95 < 50 ms on 10M Tracks** (or ADR revising target) | 10M benchmark |
-| A25 | Full gate: `./scripts/check.sh`, doc/req validation | final validation |
+| A25 | Full gate: `make check`, doc/req validation | final validation |
 
 ## Performance evidence
 
@@ -193,7 +193,7 @@ types. The translator (plan -> Tantivy `Query`) lives only inside `melodee-searc
 ## Exit criteria
 
 - All acceptance-matrix rows A1–A25 are satisfied with recorded evidence.
-- `./scripts/check.sh`, `validate_repository.py`, `extract_requirements.py --check`, docs build, and the
+- `make check`, `validate_repository.py`, `extract_requirements.py --check`, docs build, and the
   10M benchmark all pass (or an accepted ADR revises the p95 target with evidence).
 - Index deletion/rebuild requires no media re-ingestion (A14) and never affects PostgreSQL/media.
 - The Phase 6 report remains **Candidate** until independent review. The completed review returned

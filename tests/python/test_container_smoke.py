@@ -1,15 +1,28 @@
 """Safety checks for the bounded release-image smoke harness."""
 from __future__ import annotations
 
+import importlib.util
+import json
 import os
 import subprocess
+import sys
 import unittest
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = ROOT / "scripts" / "container_smoke.sh"
+SCRIPT = ROOT / "scripts" / "container_smoke.py"
 RELEASE_WORKFLOW = ROOT / ".github" / "workflows" / "release-container.yml"
+
+
+def load_module():
+    spec = importlib.util.spec_from_file_location("container_smoke", SCRIPT)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"unable to load {SCRIPT}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["container_smoke"] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 class ContainerSmokeInputTests(unittest.TestCase):
@@ -25,7 +38,7 @@ class ContainerSmokeInputTests(unittest.TestCase):
         )
         environment.update(updates)
         return subprocess.run(
-            [str(SCRIPT)],
+            [sys.executable, str(SCRIPT)],
             cwd=ROOT,
             env=environment,
             capture_output=True,
@@ -44,19 +57,13 @@ class ContainerSmokeInputTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("between 1024 and 65535", result.stderr)
 
-    def test_script_is_bash_parseable(self) -> None:
-        result = subprocess.run(
-            ["bash", "-n", str(SCRIPT)],
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        self.assertEqual(result.returncode, 0, result.stderr)
+    def test_script_is_importable_python(self) -> None:
+        module = load_module()
+        self.assertTrue(callable(module.main))
 
     def test_help_is_available_without_release_environment(self) -> None:
         result = subprocess.run(
-            [str(SCRIPT), "--help"],
+            [sys.executable, str(SCRIPT), "--help"],
             cwd=ROOT,
             env={"PATH": os.environ["PATH"]},
             capture_output=True,
@@ -64,17 +71,23 @@ class ContainerSmokeInputTests(unittest.TestCase):
             check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("Usage:", result.stdout)
+        self.assertIn("usage:", result.stdout.lower())
         self.assertIn("SMOKE_IMAGE", result.stdout)
         self.assertNotIn("docker", result.stderr.lower())
 
-    def test_script_verifies_release_labels_and_image_id(self) -> None:
-        script = SCRIPT.read_text(encoding="utf-8")
-        self.assertIn("docker image inspect --format '{{.Id}}'", script)
-        self.assertIn('org.opencontainers.image.title"] == "Melodee"', script)
-        self.assertIn('org.opencontainers.image.source"] == "https://github.com/melodee-project/melodee-rs"', script)
-        self.assertIn('org.opencontainers.image.licenses"] == "MIT"', script)
-        self.assertIn('($revision == "" or .["org.opencontainers.image.revision"] == $revision)', script)
+    def test_script_verifies_release_labels(self) -> None:
+        module = load_module()
+        labels = {
+            "org.opencontainers.image.title": "Melodee",
+            "org.opencontainers.image.source": "https://github.com/melodee-project/melodee-rs",
+            "org.opencontainers.image.version": "0.1.0",
+            "org.opencontainers.image.licenses": "MIT",
+            "org.opencontainers.image.revision": "abc123",
+        }
+        module.validate_labels(json.dumps(labels), "0.1.0", "abc123")
+        labels["org.opencontainers.image.licenses"] = "proprietary"
+        with self.assertRaises(module.SmokeError):
+            module.validate_labels(json.dumps(labels), "0.1.0", "abc123")
 
 
 class ReleaseWorkflowTests(unittest.TestCase):
@@ -135,6 +148,11 @@ class ReleaseWorkflowTests(unittest.TestCase):
             "python3 scripts/audit_requirement_overrides.py --require-terminal",
             workflow,
         )
+
+    def test_workflow_invokes_python_smoke_harness(self) -> None:
+        workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("python3 scripts/container_smoke.py", workflow)
+        self.assertNotIn("scripts/container_smoke.sh", workflow)
 
 
 if __name__ == "__main__":

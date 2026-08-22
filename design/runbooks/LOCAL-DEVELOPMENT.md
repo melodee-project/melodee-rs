@@ -11,7 +11,7 @@ remain later-phase work.
 
 ```bash
 cp .env.example .env
-./scripts/bootstrap.sh
+make bootstrap
 docker compose -f compose.dev.yaml up -d postgres
 mkdir -p /tmp/melodee-inbound /tmp/melodee-staging /tmp/melodee-work /tmp/melodee-storage
 mkdir -p /tmp/melodee-search

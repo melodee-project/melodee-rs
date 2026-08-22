@@ -38,15 +38,15 @@ The installed app was pointed at the disposable Rust fixture through emulator ho
 
 The reusable instrumentation source and clean-checkout runner are committed as
 `compatibility/clients/android/Phase7RealServerAndroidAutoTest.kt` and
-`scripts/run_phase7_android_auto_probe.sh`. The runner verifies the pinned client commit and a
+`scripts/run_android_auto_probe.py`. The runner verifies the pinned client commit and a
 clean checkout, copies the probe into the external Android project for the build, supplies only the
 disposable fixture URL/credentials as instrumentation arguments, and removes the copied source on
 exit. It exercises the shipping exported MediaBrowser/MediaSession service rather than a mock
 server or copied protocol implementation:
 
 ```text
-MELODEE_PHASE7_CLIENT_BASE_URL=http://10.0.2.2:<fixture-port> \
-  scripts/run_phase7_android_auto_probe.sh
+MELODEE_ANDROID_CLIENT_BASE_URL=http://10.0.2.2:<fixture-port> \
+  python3 scripts/run_android_auto_probe.py
 ```
 
 Result:

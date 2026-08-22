@@ -182,7 +182,7 @@ changes until the route-specific implementation evidence is registered.
 
 - Rust: `cargo fmt --all`, `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo check --workspace --all-features`, `cargo test --workspace --all-features`.
 - Repo/doc gates: `python3 scripts/validate_repository.py`, `python3 scripts/extract_requirements.py --check`, `python3 scripts/build_native_inventory.py --check`, `python3 scripts/build_phase7_route_matrix.py --check`.
-- `./scripts/check.sh` and `git diff --check`.
+- `make check` and `git diff --check`.
 - Docs (if docs changed): `cd docs && pnpm install --frozen-lockfile && pnpm check && pnpm check:links && pnpm build`.
 
 ### Client validation gates

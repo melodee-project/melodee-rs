@@ -43,7 +43,7 @@ Every PR should identify:
 Run:
 
 ```bash
-./scripts/check.sh
+make check
 ```
 
 The first dependency-resolving change must generate and commit `Cargo.lock`.

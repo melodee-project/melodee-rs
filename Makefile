@@ -1,13 +1,13 @@
-.PHONY: bootstrap check check-fast fmt lint test test-unit test-integration docs deny postgres-up postgres-down capture-baseline admin-ui-check
+.PHONY: bootstrap check check-fast fmt lint test test-unit test-integration docs deny postgres-up postgres-down postgres-reset capture-baseline admin-ui-check
 
 bootstrap:
-	./scripts/bootstrap.sh
+	python3 scripts/bootstrap.py
 
 check:
-	./scripts/check.sh
+	python3 scripts/check.py full
 
 check-fast:
-	./scripts/check-fast.sh
+	python3 scripts/check.py fast
 
 fmt:
 	cargo fmt --all
@@ -39,6 +39,9 @@ postgres-up:
 
 postgres-down:
 	docker compose -f compose.dev.yaml down
+
+postgres-reset:
+	python3 scripts/reset_dev_database.py
 
 capture-baseline:
 	python3 scripts/capture_baseline.py

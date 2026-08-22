@@ -50,8 +50,8 @@ MELODEE_MIGRATED_DATABASE_URL='<redacted isolated URL>' \
     --existing-storage-root /isolated/canonical-root
 
 # Frozen Android client checkout and Android Auto-mode instrumentation probe
-MELODEE_PHASE7_CLIENT_BASE_URL=http://10.0.2.2:<disposable-fixture-port> \
-  scripts/run_phase7_android_auto_probe.sh
+MELODEE_ANDROID_CLIENT_BASE_URL=http://10.0.2.2:<disposable-fixture-port> \
+  python3 scripts/run_android_auto_probe.py
 ```
 
 For a release candidate, use the existing-target form after the target has been produced by

@@ -18,7 +18,7 @@ These issue descriptions are designed to be copied into GitHub after the reposit
 
 ### Acceptance
 
-- `./scripts/check.sh` passes.
+- `make check` passes.
 - `/healthz` responds from the bootstrap server.
 - Domain tests pass.
 - Lockfile is committed.

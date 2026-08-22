@@ -8,7 +8,7 @@
       "design/adr/ADR-0104-start-as-a-modular-monolith.md"
     ],
     "tests": [
-      "scripts/check.sh (workspace-wide compile, lint, and test gate)",
+      "make check (workspace-wide compile, lint, and test gate)",
       "crates/melodee-domain/tests/dependency_boundary.rs (pinned dependency allow-list; no web/SQL/framework crates; no sibling path dependencies)"
     ],
     "note": "The one-server/one-PostgreSQL modular monolith composes ingestion, catalog, policy, search, and all three compatibility adapters. Boundaries are enforced by the compile-time dependency graph and an executable domain-crate boundary test, per ADR-0104."
@@ -21,7 +21,7 @@
       "design/adr/ADR-0104-start-as-a-modular-monolith.md"
     ],
     "tests": [
-      "scripts/check.sh (cargo clippy and cargo test across the complete workspace graph)"
+      "make check (cargo clippy and cargo test across the complete workspace graph)"
     ],
     "note": "Capability boundaries are Rust crates within one deployable server; no deployable microservice boundary has been introduced."
   },
@@ -81,7 +81,7 @@
       "crates/melodee-search (embedded Tantivy projection; no search service or broker)"
     ],
     "tests": [
-      "scripts/check.sh (dependency policy and complete workspace gate)"
+      "make check (dependency policy and complete workspace gate)"
     ],
     "note": "The implemented server requires no RabbitMQ, Kafka, Redis, Elasticsearch, OpenSearch, or Kubernetes. Any later addition still requires measured evidence and an ADR."
   },
@@ -944,7 +944,7 @@
   "PRD-SEC-006": {
     "status": "tested",
     "implementation": [
-      "deny.toml and scripts/check.sh (RustSec advisory, license, ban, and source policy)",
+      "deny.toml and make check (RustSec advisory, license, ban, and source policy)",
       ".github/workflows/admin-ui.yml and .github/workflows/docs.yml (production pnpm audits)",
       ".github/workflows/security.yml (fail-closed Gitleaks secret scan)",
       ".github/workflows/codeql.yml (Rust, TypeScript/JavaScript, and Python SAST)",
@@ -1411,7 +1411,7 @@
       "design/adr/ADR-0111-do-not-require-broker-or-redis-initially.md"
     ],
     "tests": [
-      "cargo deny check and scripts/check.sh"
+      "cargo deny check and make check"
     ],
     "note": "No proprietary observability service is required; operators retain local logs, PostgreSQL evidence, readiness, and CLI diagnostics."
   },
@@ -2183,7 +2183,7 @@
       "design/requirements/TECHNOLOGY-BASELINE.md and design/adr/ADR-0103 (FOSS gate)"
     ],
     "tests": [
-      "cargo deny check via scripts/check.sh and CI (advisories, bans, licenses, sources)",
+      "cargo deny check via make check and CI (advisories, bans, licenses, sources)",
       ".github/workflows/release-container.yml (SBOM and provenance attestation for release images)"
     ],
     "note": "Every production dependency passes the FOSS gate; no proprietary SDKs, hosted-only services, or Pro UI features exist in the stack. The benign license-not-encountered warning is documented in AGENTS.md."

@@ -50,7 +50,7 @@ Apply these rules to every work package:
 - Update public documentation in the same change as user-visible behavior.
 - Update requirement traceability through the repository generator. Do not hand-edit generated
   requirement indexes.
-- Run the smallest relevant checks during implementation and `./scripts/check.sh` before a work
+- Run the smallest relevant checks during implementation and `make check` before a work
   package is presented as complete.
 
 ## 2. Definition of the 1.0 scope
@@ -161,7 +161,7 @@ accepted decision, or `superseded` by an identified requirement.
 
 - ~~ADR-0145 code has landed, but the corrective work does not yet have a fresh, complete release
   gate and final acceptance report from the current commit.~~ **Resolved in R0** —
-  `design/evidence/r0/README.md`; full `./scripts/check.sh` green (933 Rust tests, 140 Python
+  `design/evidence/r0/README.md`; full `make check` green (933 Rust tests, 140 Python
   tests, admin-ui gate, cargo deny).
 - ~~Stale pre-staging inspection test assumptions.~~ **Resolved in R0** —
   `script_gate_deny_retains_staged_candidate_for_retry` and
@@ -248,10 +248,10 @@ phase to `In progress`.
 | R4.8 — Backup/cutover/rollback rehearsal | **Partial** | Local target backup/restore and failed-target retention pass; the synthetic drill now validates the backup before restore and compares restored authoritative catalog counts plus media file/byte totals with the target; production-equivalent traffic switch, restore, and operator rollback remain |
 | R5.1 — Data-loss threat-model review | **Partial** | Local operation inventory is recorded; inbound/partial-staging cleanup, owned podcast cleanup, and search-generation manifest retirement now use fail-closed symlink checks, with descriptor-relative `NOFOLLOW`/`unlinkat` deletion and external-target regressions; acquisition source copy/hash reopen through the no-follow boundary after metadata checks, reject raced non-regular files without blocking, and staging destinations use exclusive no-follow file creation plus no-follow directory creation; media inspection/normalization reads and retained copies now use the same no-follow boundary, reject raced non-regular files without blocking, generated outputs reject existing destinations and use ffmpeg `-n`, and media source/destination/parent-symlink/FIFO regressions preserve external sentinels; search-root startup creation now uses descriptor-relative no-follow directory creation and verifies canonical-path identity, rejecting regular-file roots and replacement races; search generation manifests, pending-manifest, and activation writes now use descriptor-relative no-follow opens/rename and directory sync, redundant path-based permission rewrites are removed, and unsupported filesystem fallbacks fail closed; the bounded backup probes now open path components and backup leaves through held no-follow descriptors, reject FIFOs/special files before reads, and pass the held descriptor to `pg_restore`; the rehearsal harness also rejects symlinked canonical-root ancestors and malformed Rust-equivalent library-path maps before target creation, validates the redacted baseline artifact schema, validates synthetic seed playlist and user-state pairs without duplicate source identities, and checks complete restored catalog/media content; topology comparison reuses the held canonical and backup device facts without a second pathname lookup; podcast-root ownership initialization now creates and inspects directories through descriptor-relative no-follow walks, podcast download publication and cleanup reuse that component-by-component root descriptor, and onboarding write probes create/unlink through one held parent descriptor; the CLI config export writes a new file through a held no-follow parent with atomic no-replace rename and refuses existing destinations; the settings config-file layer and CLI chart/config/script inputs now read regular files through held no-follow parent descriptors with bounded buffers and reject symlink/special-file replacement; pending manifests avoid pre-existing links, and legacy delta deletion reconciliation, verification issue recording, final catalog projection rebuilding, excluded-table issue summarization, and composite multi-user state import now refresh/verify ownership or target identity before writes; actual approximately 5 TB topology and restore-target review remain |
 | R5.2 — Security/FOSS gate | **Partial** | Local dependency/docs checks and an isolated Gitleaks v8.30.0 archive scan pass; historical Trixie amd64 and arm64 prototype images were smoke-tested, scanned, and SBOMed, but both report 8 critical/187 high findings, while the current guarded Bookworm amd64 image reports 11 critical/193 high findings and fails the current critical-vulnerability policy. The source Dockerfile retains the accepted Bookworm runtime until ADR-0151 is accepted. Current Bookworm metadata, Trivy report, SPDX 2.3 SBOM, and checksums are under `design/evidence/r5/artifacts/local-20260820/`; the decision package is recorded at `design/evidence/r5/adr-0151-decision-package.md` while the ADR remains Proposed |
-| R5.3 — Full correctness matrix | **Partial** | `check.sh` and docs gates pass locally after the recorded scheduler-flake correction; the separate Admin UI Playwright matrix now passes all 289 executed tests from 351 scheduled tests with 62 intentional configuration skips, including accessibility, localization/RTL, responsive, and visual suites. The latest exact-tree `./scripts/check.sh` passed 217 Python tests, Admin UI 44 files/248 unit tests, the complete workspace/PostgreSQL Rust and doctest matrix, formatting, workspace Clippy with `-D warnings`, and cargo-deny. Candidate-SHA Playwright, security, container, compatibility, and external gates remain |
-| R5.4 — Flake/scheduled-run closure | **Not started** | The current local Playwright matrix is repeatable and has zero unexplained failures after correcting stale health fixtures and three resulting System Workers baselines. The scheduled Full validation workflow exists; its latest observed run (`32330365945`, current HEAD `2877e2c`) failed the CLI search-root safety assertion because the test relied on a local `.env` staging value absent on the runner. The test now supplies isolated staging and work-area roots and passes ten consecutive local runs. The latest isolated exact-tree `./scripts/check.sh` passed 217 Python tests, 248 Admin UI unit tests, the workspace/PostgreSQL matrix, formatting, Clippy, doctests, and cargo-deny; the separate smoke gate also passed. The first attempt's Jellyfin failures were local PostgreSQL shared-memory exhaustion, then the affected suite passed 18/18 in an isolated database. The earlier scheduled run (`32214289862`, SHA `207054b`) remains recorded as failure history. No successful scheduled/nightly run from a release-candidate SHA is recorded |
+| R5.3 — Full correctness matrix | **Partial** | `make check` and docs gates pass locally after the recorded scheduler-flake correction; the separate Admin UI Playwright matrix now passes all 289 executed tests from 351 scheduled tests with 62 intentional configuration skips, including accessibility, localization/RTL, responsive, and visual suites. The latest exact-tree `make check` passed 217 Python tests, Admin UI 44 files/248 unit tests, the complete workspace/PostgreSQL Rust and doctest matrix, formatting, workspace Clippy with `-D warnings`, and cargo-deny. Candidate-SHA Playwright, security, container, compatibility, and external gates remain |
+| R5.4 — Flake/scheduled-run closure | **Not started** | The current local Playwright matrix is repeatable and has zero unexplained failures after correcting stale health fixtures and three resulting System Workers baselines. The scheduled Full validation workflow exists; its latest observed run (`32330365945`, current HEAD `2877e2c`) failed the CLI search-root safety assertion because the test relied on a local `.env` staging value absent on the runner. The test now supplies isolated staging and work-area roots and passes ten consecutive local runs. The latest isolated exact-tree `make check` passed 217 Python tests, 248 Admin UI unit tests, the workspace/PostgreSQL matrix, formatting, Clippy, doctests, and cargo-deny; the separate fast gate also passed. The first attempt's Jellyfin failures were local PostgreSQL shared-memory exhaustion, then the affected suite passed 18/18 in an isolated database. The earlier scheduled run (`32214289862`, SHA `207054b`) remains recorded as failure history. No successful scheduled/nightly run from a release-candidate SHA is recorded |
 | R5.5 — Requirement/release-gate closure | **Partial** | Individual Gate A–I evaluation is recorded in `design/evidence/r5/release-gate-report.md`; the structural override audit now covers all 239 requirements, strict terminal mode fails closed on the 12 current in-progress requirements, and the published-release workflow enforces that strict check before the architecture matrix; the gates do not yet all pass |
-| R5.6 — Release-candidate artifacts | **Partial** | Reproducible bounded `scripts/container_smoke.sh` is covered by shell/Python checks and has a dependency-free `--help` path. Historical local Trixie amd64 (`sha256:1a8551faf7b973aa78f6cbdcef3be7364eae07c98935a971ef977359e9eea552`) and arm64 (`sha256:73ab8baaffaa79c4986873df0f6ce35ae770408f9fc41db9d297af2d88f3204b`) prototypes passed smoke but failed the current policy with 8 critical/187 high findings; the current guarded Bookworm amd64 image (`sha256:2eb48219e152cd959b96e897a71d0d6fa3ef98bc53aba99df9e4da64746b649a`) also passed smoke but reports 11 critical/193 high findings. The historical and guarded local Trivy, SPDX 2.3 SBOM, metadata, and SHA256 evidence remain under `design/evidence/r5/artifacts/local-20260820/`. A new candidate image is deferred until ADR-0151 is accepted, after which the release workflow must build, smoke, scan, and attest both architectures. No accepted RC, final provenance, or publication exists |
+| R5.6 — Release-candidate artifacts | **Partial** | Reproducible bounded `scripts/container_smoke.py` is covered by Python checks and has a dependency-free `--help` path. Historical local Trixie amd64 (`sha256:1a8551faf7b973aa78f6cbdcef3be7364eae07c98935a971ef977359e9eea552`) and arm64 (`sha256:73ab8baaffaa79c4986873df0f6ce35ae770408f9fc41db9d297af2d88f3204b`) prototypes passed smoke but failed the current policy with 8 critical/187 high findings; the current guarded Bookworm amd64 image (`sha256:2eb48219e152cd959b96e897a71d0d6fa3ef98bc53aba99df9e4da64746b649a`) also passed smoke but reports 11 critical/193 high findings. The historical and guarded local Trivy, SPDX 2.3 SBOM, metadata, and SHA256 evidence remain under `design/evidence/r5/artifacts/local-20260820/`. A new candidate image is deferred until ADR-0151 is accepted, after which the release workflow must build, smoke, scan, and attest both architectures. No accepted RC, final provenance, or publication exists |
 | R6.1–R6.5 | **Not started (0/5)** | R6 depends on accepted R5 completion; no version, tag, images, GitHub Release, or final reports exist |
 
 R5.1 latest local correction: canonical-media adoption validation now uses a component-by-component
@@ -404,7 +404,7 @@ staging. Crash recovery, path reuse, delayed cleanup, and stale leases must be s
 
 - Focused inspection, same-filesystem, forced cross-filesystem, crash, lease-loss, path-reuse,
   delayed-cleanup, restart, review-retention, and 200-release tests pass.
-- The complete `./scripts/check.sh` gate passes from the current commit.
+- The complete `make check` gate passes from the current commit.
 - A fresh scheduled workflow passes or any scheduler-only failure is corrected and rerun.
 - `PRD-INGEST-005` and directly governed requirements have truthful terminal evidence.
 - Inbound contains zero successfully acquired historical candidates.
@@ -519,7 +519,7 @@ proves it wrong, but must record the evidence and may not silently reduce scope.
 **Status:** Complete (2026-08-17; 7/7 work packages plus all R2 security follow-ups). The R2.7
 performance/fault evidence includes the catalog planner benchmark, Tantivy 1M measurement,
 200-release repeated-termination vertical, and five-scenario environment fault suite. Full
-`./scripts/check.sh` green; see `design/evidence/r2/README.md`. \
+`make check` green; see `design/evidence/r2/README.md`. \
 **Depends on:** R1  
 **Primary requirements:** `PRD-INGEST-009`, `PRD-MEDIA-001`, `PRD-MEDIA-006`,
 `PRD-STREAM-002`, `PRD-OBS-001`, `PRD-OBS-002`, `PRD-PERF-003`, `PRD-PERF-004`,
@@ -660,7 +660,7 @@ fault fixtures.
 - Health covers every authoritative or substantial runtime storage/dependency role.
 - Performance and fault reports close their assigned requirements without unexplained regressions.
 - Native, OpenSubsonic, Jellyfin, Admin UI, ingestion, and media suites remain green.
-- `./scripts/check.sh` passes.
+- `make check` passes.
 - Public media, streaming, configuration, diagnostics, and troubleshooting docs match behavior.
 
 ---
@@ -827,7 +827,7 @@ and rollback. Once accepted, coding agents implement it literally.
 - Repeated execution and crash recovery are idempotent.
 - Source database and source media remain read-only.
 - PostgreSQL integration and migration fixture suites pass without ignored correctness tests.
-- `./scripts/check.sh` passes.
+- `make check` passes.
 - Phase 11 tooling is ready for a production-sized rehearsal but is not yet called cutover-ready.
 
 ---
@@ -974,7 +974,7 @@ tooling, not production-integration acceptance.
 - Production-intended OIDC, Last.fm, SMTP, podcast, storage, proxy, and backup integrations pass.
 - Final delta/write-freeze and rollback are rehearsed and timed.
 - Cutover and rollback runbooks can be followed by an operator who did not write the code.
-- `./scripts/check.sh` passes from the rehearsal candidate commit.
+- `make check` passes from the rehearsal candidate commit.
 
 ---
 
@@ -1035,7 +1035,7 @@ requirements, repeatable official artifacts, and complete operational evidence.
 - Run requirements drift and repository validation.
 - Run `cargo deny check`, secret scan, container/Compose validation, image smoke, and vulnerability
   scan.
-- Run `./scripts/check.sh` last from a clean release-candidate tree.
+- Run `make check` last from a clean release-candidate tree.
 - Keep correctness tests active. Only benchmarks may be ignored.
 
 ### 10.5 Work package R5.4 — Flake and scheduled-run closure

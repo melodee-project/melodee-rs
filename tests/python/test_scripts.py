@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
+import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -36,13 +39,37 @@ class RequirementExtractionTests(unittest.TestCase):
 
 
 class DeveloperCommandTests(unittest.TestCase):
-    def test_bootstrap_runs_unit_targets_without_postgresql_integration_tests(self) -> None:
-        lines = (ROOT / "scripts" / "bootstrap.sh").read_text().splitlines()
-        cargo_test_lines = [line.strip() for line in lines if line.strip().startswith("cargo test ")]
-        self.assertEqual(
-            cargo_test_lines,
-            ["cargo test --workspace --all-features --lib --bins"],
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.bootstrap = load_module("bootstrap", ROOT / "scripts" / "bootstrap.py")
+        cls.check = load_module("check", ROOT / "scripts" / "check.py")
+        cls.reset = load_module(
+            "reset_dev_database", ROOT / "scripts" / "reset_dev_database.py"
         )
+        cls.android_probe = load_module(
+            "run_android_auto_probe", ROOT / "scripts" / "run_android_auto_probe.py"
+        )
+
+    def test_bootstrap_runs_unit_targets_without_postgresql_integration_tests(self) -> None:
+        self.assertEqual(
+            self.bootstrap.UNIT_TEST_COMMAND,
+            ("cargo", "test", "--workspace", "--all-features", "--lib", "--bins"),
+        )
+
+    def test_check_modes_preserve_database_scope(self) -> None:
+        with mock.patch.object(self.check, "run") as run:
+            self.check.run_checks("fast")
+        commands = [call.args[0] for call in run.call_args_list]
+        self.assertIn(list(self.bootstrap.UNIT_TEST_COMMAND), commands)
+        self.assertNotIn(["cargo", "test", "--workspace", "--all-features"], commands)
+
+        with (
+            mock.patch.object(self.check, "run") as run,
+            mock.patch.object(self.check.shutil, "which", return_value=None),
+        ):
+            self.check.run_checks("full")
+        commands = [call.args[0] for call in run.call_args_list]
+        self.assertIn(["cargo", "test", "--workspace", "--all-features"], commands)
 
     def test_makefile_uses_explicit_check_and_test_scope_names(self) -> None:
         lines = (ROOT / "Makefile").read_text().splitlines()
@@ -64,12 +91,65 @@ class DeveloperCommandTests(unittest.TestCase):
                 "fmt",
                 "lint",
                 "postgres-down",
+                "postgres-reset",
                 "postgres-up",
                 "test",
                 "test-integration",
                 "test-unit",
             },
         )
+
+    def test_postgres_reset_is_scoped_to_the_development_database(self) -> None:
+        self.assertEqual(self.reset.PROJECT_NAME, "melodee-rs-dev")
+        self.assertEqual(self.reset.EXPECTED_SERVICES, ["postgres"])
+        self.assertEqual(self.reset.EXPECTED_VOLUMES, ["melodee_pg_data"])
+        self.assertEqual(
+            self.reset.compose_command("down", "--volumes", "--remove-orphans")[-3:],
+            ["down", "--volumes", "--remove-orphans"],
+        )
+        self.assertEqual(
+            self.reset.compose_command("up", "-d", "--wait", "postgres")[-4:],
+            ["up", "-d", "--wait", "postgres"],
+        )
+
+    def test_postgres_reset_help_needs_no_docker_access(self) -> None:
+        result = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "reset_dev_database.py"), "--help"],
+            cwd=ROOT,
+            env={"PATH": os.environ["PATH"]},
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("permanently deletes", result.stdout)
+
+    def test_developer_orchestration_defaults_to_python(self) -> None:
+        self.assertEqual(list((ROOT / "scripts").glob("*.sh")), [])
+        makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+        for script in ("bootstrap.py", "check.py", "reset_dev_database.py"):
+            with self.subTest(script=script):
+                self.assertIn(f"python3 scripts/{script}", makefile)
+
+    def test_android_probe_uses_platform_appropriate_defaults(self) -> None:
+        self.assertEqual(
+            self.android_probe.default_client_root(),
+            ROOT.parent / "melodee-player",
+        )
+        client_source = ROOT / "synthetic-client"
+        self.assertEqual(
+            self.android_probe.gradle_wrapper(client_source, "posix").name,
+            "gradlew",
+        )
+        self.assertEqual(
+            self.android_probe.gradle_wrapper(client_source, "nt").name,
+            "gradlew.bat",
+        )
+        script = (ROOT / "scripts" / "run_android_auto_probe.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("/home/", script)
+        self.assertNotIn("MELODEE_PHASE7", script)
 
 
 class CaptureSafetyTests(unittest.TestCase):

@@ -145,7 +145,7 @@ jobs:
         run: cargo install cargo-deny --version 0.20.2 --locked
 
       - name: Run complete repository gate
-        run: ./scripts/check.sh
+        run: python3 scripts/check.py full
 
       - name: Require terminal requirement dispositions
         run: python3 scripts/audit_requirement_overrides.py --require-terminal
@@ -198,7 +198,7 @@ jobs:
           SMOKE_IMAGE: melodee-release-smoke:${{ github.run_id }}-${{ matrix.architecture }}
           RELEASE_VERSION: ${{ needs.validate-release.outputs.version }}
           RELEASE_REVISION: ${{ needs.validate-release.outputs.revision }}
-        run: SMOKE_RUN_ID="github-${GITHUB_RUN_ID}-${{ matrix.architecture }}" SMOKE_PORT="${{ matrix.smoke_port }}" ./scripts/container_smoke.sh
+        run: SMOKE_RUN_ID="github-${GITHUB_RUN_ID}-${{ matrix.architecture }}" SMOKE_PORT="${{ matrix.smoke_port }}" python3 scripts/container_smoke.py
 
       - name: Prepare per-architecture evidence directory
         if: always()

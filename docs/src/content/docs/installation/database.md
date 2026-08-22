@@ -23,3 +23,22 @@ against an unknown schema.
 
 Back up PostgreSQL before every image upgrade. The [upgrade guide](./upgrading/) gives the
 container-oriented backup, validation, and rollback sequence.
+
+## Reset the development database
+
+:::danger
+`make postgres-reset` permanently deletes the `melodee-rs-dev_melodee_pg_data` development volume.
+It removes all users, catalog data, settings, and audit state stored there. It does not delete media
+directories or compatibility captures. Never use it for a database containing data you need.
+:::
+
+From the repository root, reset PostgreSQL to a new empty database with the current schema:
+
+```bash
+make postgres-reset
+```
+
+The command verifies that `compose.dev.yaml` contains only the expected `postgres` service and
+`melodee_pg_data` volume before deleting anything. It then starts PostgreSQL, waits for its health
+check, and applies every current migration. The resulting application database has no administrator;
+create the first administrator before running `melodee-cli config validate`.
