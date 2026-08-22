@@ -131,7 +131,9 @@ corepack enable
 
 Copy [`.env.example`](.env.example) to `.env`, replace both authentication-secret placeholders,
 and set the inbound, staging, work, canonical-storage, and (when enabled) search roots to distinct absolute
-paths. The example is deliberately local-development-only; it must not contain real credentials.
+paths. `MELODEE__LOGGING__LEVEL` controls server verbosity; optionally set
+`MELODEE__LOGGING__DIRECTORY` to append console-equivalent output to `melodee.log` in that
+directory. The example is deliberately local-development-only; it must not contain real credentials.
 
 ```bash
 cp .env.example .env

@@ -17,7 +17,7 @@ use melodee_domain::{
 };
 use sqlx::{FromRow, PgPool, Postgres, Transaction};
 use time::OffsetDateTime;
-use tracing::{debug, info, instrument};
+use tracing::{debug, info, instrument, warn};
 use uuid::Uuid;
 
 use crate::config::WorkEngineConfig;
@@ -2448,11 +2448,14 @@ impl WorkItemStore {
             .await?;
         }
         tx.commit().await?;
-        info!(
+        warn!(
             work_item_id = %id,
             attempt_count,
             next_attempt_at = ?next_attempt_at,
-            "failure recorded"
+            failure_class = ?class,
+            error_code = %code.as_str(),
+            error_message = ?message,
+            "work item failure recorded"
         );
         ReleaseWorkItem::try_from(row)
     }

@@ -18,19 +18,8 @@ use melodee_server::{
 use tokio::sync::oneshot;
 use tower_http::trace::TraceLayer;
 use tracing::info;
-use tracing_subscriber::EnvFilter;
 
-fn init_tracing() -> Result<(), Box<dyn Error + Send + Sync>> {
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("melodee_server=debug,tower_http=info"));
-
-    tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        .with_target(true)
-        .try_init()?;
-
-    Ok(())
-}
+mod logging;
 
 async fn wait_for_shutdown_signal() {
     #[cfg(unix)]
@@ -193,7 +182,7 @@ fn deterministic_jellyfin_library_id(name: &str) -> uuid::Uuid {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let _ = dotenvy::dotenv();
-    init_tracing()?;
+    logging::init()?;
 
     // install the process bounded-resource registry before any
     // instrumented service is constructed (several resolve the global

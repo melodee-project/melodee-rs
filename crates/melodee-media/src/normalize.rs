@@ -1522,7 +1522,10 @@ fn run_fpcalc(input: &Path, options: &NormalizationOptions) -> Result<String, No
     let stdout_output = stdout_reader
         .and_then(|h| h.join().ok())
         .and_then(|result| result.ok())
-        .map(|b| crate::truncate_bytes(&b))
+        // fpcalc fingerprints routinely make the JSON response longer than
+        // the 512-byte diagnostic preview. The reader already enforces the
+        // configured output bound, so parsing must use the complete capture.
+        .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
         .unwrap_or_default();
     let stderr_output = stderr_reader
         .and_then(|h| h.join().ok())
@@ -3084,6 +3087,19 @@ mod tests {
         };
         let fingerprint = fingerprint_file(&input, "-- leading 音楽.flac", &options).unwrap();
         assert_eq!(fingerprint.fingerprint, "abc");
+        assert_eq!(fingerprint.duration_ms, 12_500);
+
+        let long_fingerprint = "1234567890,".repeat(80);
+        let long_success = write_script(
+            &temp,
+            "fp-long-success",
+            &format!(
+                "printf '%s' '{{\"duration\":12.5,\"fingerprint\":\"{long_fingerprint}\"}}'\nexit 0"
+            ),
+        );
+        options.fpcalc_path = long_success;
+        let fingerprint = fingerprint_file(&input, "-- leading 音楽.flac", &options).unwrap();
+        assert_eq!(fingerprint.fingerprint, long_fingerprint);
         assert_eq!(fingerprint.duration_ms, 12_500);
 
         options.fpcalc_path = failure;

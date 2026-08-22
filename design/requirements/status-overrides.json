@@ -1365,10 +1365,13 @@
       "apps/melodee-server/src/admin.rs and native adapters (error-envelope correlationId sourced from the request task-local across all 16 envelope sites)",
       "apps/melodee-server/src/scrobbler.rs and notifications.rs (spawned provider/notification dispatches capture the in-flight request correlation id and instrument the spawned future)",
       "apps/melodee-server/src/workers (per-item ingestion/normalize/publication/policy spans carry work_item_id and the durable correlation_id; search outbox pass-level span)",
+      "apps/melodee-server/src/logging.rs (validated MELODEE__LOGGING__LEVEL filtering plus optional console-and-file logging under MELODEE__LOGGING__DIRECTORY)",
+      "crates/melodee-persistence/src/work_items.rs (failure warning events include the durable failure class, error code, and actionable error message)",
       "crates/melodee-media/src/lib.rs (ToolInvocation drop-guard logs tool, outcome, and duration with file-name-only arguments for ffmpeg/ffprobe/fpcalc)"
     ],
     "tests": [
       "apps/melodee-server/tests/admin_system_api.rs (error envelope sources the request correlation header; captured traffic without the header stays byte-identical)",
+      "apps/melodee-server/src/logging.rs (log-level validation and append-preserving log-file tests)",
       "apps/melodee-server/src/notifications.rs (redaction audit: delivery-failure logs never contain the SMTP password)"
     ],
     "note": "Correlation identifiers propagate across every PRD-listed boundary: API request (middleware + envelope sourcing), ingestion item (durable correlation_id), worker actions (per-item spans), external provider calls (last.fm dispatch spans; further providers remain deferred under ADR-0136), and media processing (tool-invocation drop-guard)."
@@ -1535,7 +1538,7 @@
     ],
     "tests": [
       "crates/melodee-media/tests/normalization_real.rs (real fpcalc across FLAC/OGG/WAV/M4A/MP3 and deterministic fingerprints)",
-      "crates/melodee-media/src/normalize.rs (fpcalc success, malformed/failure, timeout, cancellation, Unicode and leading-dash paths)"
+      "crates/melodee-media/src/normalize.rs (fpcalc success including JSON fingerprints longer than the diagnostic preview, malformed/failure, timeout, cancellation, Unicode and leading-dash paths)"
     ],
     "note": "fpcalc is the preferred initial fingerprint tool (ADR-0108). Fingerprints are computed from source audio, not normalized output."
   },

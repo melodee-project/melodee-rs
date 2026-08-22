@@ -77,7 +77,7 @@ The example declares these paths intentionally:
 | Canonical media | `melodee_library` → `/var/lib/melodee/library` | Verified immutable Release bundles. |
 | Normalization work and retained attempt evidence | `melodee_work` → `/var/lib/melodee/work` | Non-authoritative, separate from inbound and canonical storage. |
 | Tantivy | `melodee_search` → `/var/lib/melodee/search` | Rebuildable projection, but persist it to avoid unnecessary rebuilds. |
-| Logs | container stdout/stderr | Collect with your container runtime; no file-log volume is required. |
+| Logs | stdout/stderr; optional `melodee_logs` → `/var/log/melodee` | Console collection remains the default. Set `MELODEE_LOGGING_DIRECTORY=/var/log/melodee` in the Compose `.env` to additionally append `/var/log/melodee/melodee.log`; configure external rotation. |
 
 The `initialize-storage` service changes ownership of only the named-volume owned roots to the
 image's non-root UID `10001`. It does not recursively modify your media. If you replace named

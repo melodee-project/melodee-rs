@@ -68,6 +68,8 @@ redacted export can never overwrite a stored secret. The admin API equivalent is
 | Key | Default | Effect |
 | --- | --- | --- |
 | `MELODEE__SERVER__BIND` | `127.0.0.1:8080` | HTTP listener address. |
+| `MELODEE__LOGGING__LEVEL` | `info` | Server log verbosity: `trace`, `debug`, `info`, `warn`, or `error` (case-insensitive). When this setting is absent, a valid advanced `RUST_LOG` filter is honored for compatibility. The Melodee setting takes precedence when both are present. |
+| `MELODEE__LOGGING__DIRECTORY` | — (console only) | Optional directory for an append-only `melodee.log`. Melodee creates the directory, continues writing the same events to the console, and fails startup if the directory or file cannot be opened. Melodee does not rotate this file; configure external rotation and restrict access because operational logs can contain media paths and account identifiers. |
 | `MELODEE__DATABASE__URL` | — (required) | PostgreSQL connection URL. |
 | `MELODEE__DATABASE__MAX_CONNECTIONS` | `32` | Maximum database pool connections. |
 | `MELODEE__DATABASE__MIN_CONNECTIONS` | `2` | Minimum idle database pool connections. |

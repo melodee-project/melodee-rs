@@ -4,6 +4,26 @@
 //! products. Their headers therefore remain untouched here; the new Admin API
 //! and SPA have their own browser security policy and can adopt defensive
 //! headers without changing those captured contracts.
+//!
+//! # HTTP Security Headers
+//!
+//! This module implements a defensive header policy for browser-facing Admin
+//! API and SPA routes only. The policy includes:
+//!
+//! - **Content-Security-Policy (CSP):** Same-origin `self` only, `data:` for
+//!   images/fonts, `blob:` for inline data, `object-src: 'none'`, and
+//!   `form-action: 'self'`.
+//! - **X-Content-Type-Options:** `nosniff` to prevent MIME sniffing.
+//! - **X-Frame-Options:** `DENY` to prevent clickjacking.
+//! - **Referrer-Policy:** `no-referrer` to avoid sending full URLs.
+//! - **Permissions-Policy:** Restricts camera, geolocation, and microphone.
+//!
+//! # TLS / HSTS
+//!
+//! HSTS (Strict-Transport-Security) must be configured at the TLS-terminating
+//! reverse proxy. The admin API documentation at
+//! `/docs/src/content/docs/api/admin-api.md` includes this requirement.
+//!
 
 use axum::{
     body::Body,
