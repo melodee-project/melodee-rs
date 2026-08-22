@@ -82,7 +82,15 @@ async fn valid_evaluation_commits_facts_decision_audit_and_state_atomically() {
         committed.decision.completion_state,
         DecisionCompletionState::Pending
     );
-    assert_eq!(committed.set_based_mutation_statement_count, 7);
+    assert_eq!(committed.set_based_mutation_statement_count, 8);
+    assert_eq!(
+        sqlx::query_scalar::<_, String>("SELECT status FROM releases WHERE id = $1")
+            .bind(fixture.release_id().into_uuid())
+            .fetch_one(&db.pool)
+            .await
+            .expect("reviewed Release status"),
+        "deprecated"
+    );
 
     let counts: (i64, i64, i64, i64, i64, i64) = sqlx::query_as(
         "SELECT
@@ -306,6 +314,14 @@ async fn immutable_media_read_error_routes_quarantine_atomically_without_reopeni
     assert_eq!(
         committed.decision.completion_state,
         DecisionCompletionState::Completed
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, String>("SELECT status FROM releases WHERE id = $1")
+            .bind(fixture.release_id().into_uuid())
+            .fetch_one(&db.pool)
+            .await
+            .expect("quarantined Release status"),
+        "deprecated"
     );
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT count(*) FROM policy_decision_audit")

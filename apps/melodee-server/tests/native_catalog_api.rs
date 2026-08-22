@@ -1110,6 +1110,32 @@ async fn deprecated_releases_disappear_from_every_native_track_read_surface() {
         );
     }
 
+    let release_public_id: Uuid =
+        sqlx::query_scalar("SELECT public_api_id FROM releases WHERE id=$1")
+            .bind(fixture.release_id().into_uuid())
+            .fetch_one(&db.pool)
+            .await
+            .expect("Release public ID");
+    assert_eq!(
+        response_json(
+            state.clone(),
+            principal,
+            &format!("/api/v1/albums/{release_public_id}"),
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    let (status, releases) = response_json(
+        state.clone(),
+        principal,
+        "/api/v1/albums?page=1&pageSize=50",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(releases["data"], serde_json::json!([]));
+    assert_eq!(releases["meta"]["totalCount"], 0);
+
     for path in [
         "/api/v1/songs?page=1&pageSize=50",
         "/api/v1/songs/recent?limit=50",

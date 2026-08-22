@@ -98,6 +98,14 @@ async fn pending_review_accepts_only_an_explicit_audited_operator_outcome() {
         accepted.decision.completion_state,
         DecisionCompletionState::Completed
     );
+    assert_eq!(
+        sqlx::query_scalar::<_, String>("SELECT status FROM releases WHERE id = $1")
+            .bind(fixture.release_id().into_uuid())
+            .fetch_one(&db.pool)
+            .await
+            .expect("accepted Release status"),
+        "active"
+    );
     assert!(matches!(
         accepted.decision.actor,
         melodee_domain::PolicyActor::Administrator { ref actor }

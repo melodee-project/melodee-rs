@@ -763,7 +763,7 @@ async fn two_hundred_releases_converge_across_bounded_worker_passes() {
         .saturating_sub(failures)
         .saturating_sub(released);
     assert_eq!(lost_claims, 0);
-    assert_eq!(set_based_mutation_statement_count, 7 * 200);
+    assert_eq!(set_based_mutation_statement_count, 8 * 200);
     let counts: (i64, i64, i64, i64, i64, i64, i64, i64) = sqlx::query_as(
         "SELECT
             (SELECT count(*) FROM policy_decisions),

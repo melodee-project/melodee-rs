@@ -281,7 +281,7 @@ async fn crash_after_durable_decision_before_state_is_adopted_exactly_once() {
         .await
         .expect("adopt identical durable facts and decision");
     assert!(!adopted.inserted);
-    assert_eq!(adopted.set_based_mutation_statement_count, 2);
+    assert_eq!(adopted.set_based_mutation_statement_count, 3);
     assert_eq!(adopted.item.state, IngestionState::NeedsReview);
     let counts: (i64, i64, i64, i64, i64) = sqlx::query_as(
         "SELECT

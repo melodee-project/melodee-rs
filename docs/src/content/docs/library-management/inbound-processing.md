@@ -62,6 +62,12 @@ For each discovered candidate the queue uses these states:
 - `Ignored` — a non-destructive `Ignore` policy decision completed.
 - `Quarantined` — a non-destructive `Quarantine` policy decision completed.
 
+Only an accepted Release remains active on the native Melodee, OpenSubsonic, and Jellyfin client
+surfaces. Review, quarantine, ignore, and delete dispositions remove the Release and its Tracks
+from client browse, search, artwork, playlist hydration, and playback results. An administrator's
+later audited Accept decision restores client visibility; quarantine remains available in the
+admin processing and review surfaces.
+
 The `transition` table is durable and persisted in PostgreSQL, so restart and missed scans recover correctly.
 
 ## Release boundary

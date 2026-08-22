@@ -599,7 +599,9 @@ async fn release_detail_payload_includes_classification_provenance_history() {
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["title"], "Detail Release");
     assert_eq!(body["releaseDate"], "2007-08-09");
-    assert_eq!(body["status"], "active");
+    // The admin surface retains reviewed releases for diagnosis, while client
+    // adapters exclude them through the shared non-active catalog status.
+    assert_eq!(body["status"], "deprecated");
     assert_eq!(body["trackCount"], 1);
     assert!(body["mediaBytes"].as_i64().expect("mediaBytes") > 0);
     assert_eq!(body["durationMs"], 180_000);

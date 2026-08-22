@@ -1230,6 +1230,8 @@ impl PolicyStore {
         };
 
         let (to, clear_lease) = policy_target(stored.disposition);
+        set_release_client_status_tx(&mut tx, stored.release_id, stored.disposition, request.now)
+            .await?;
         item.state
             .ensure_transition(to, TransitionKind::Worker)
             .map_err(WorkStoreError::from)?;
@@ -1284,7 +1286,7 @@ impl PolicyStore {
             item: ReleaseWorkItem::try_from(row)?,
             decision: stored,
             inserted,
-            set_based_mutation_statement_count: if inserted { 7 } else { 2 },
+            set_based_mutation_statement_count: if inserted { 8 } else { 3 },
         })
     }
 
@@ -1635,6 +1637,8 @@ impl PolicyStore {
         stored.completed_at = completed_at;
         stored.matched_rule_ids = matched_rule_ids;
         stored.evidence_summary = evidence_summary;
+        set_release_client_status_tx(&mut tx, stored.release_id, stored.disposition, request.now)
+            .await?;
         let (to, _) = policy_target(request.chosen_disposition);
         let row = route_operator_item_tx(&mut tx, &item, to, request.now).await?;
         tx.commit().await?;
@@ -1642,7 +1646,7 @@ impl PolicyStore {
             item: ReleaseWorkItem::try_from(row)?,
             decision: stored,
             inserted: false,
-            set_based_mutation_statement_count: 2,
+            set_based_mutation_statement_count: 3,
         })
     }
 
@@ -2647,6 +2651,30 @@ fn policy_target(disposition: Disposition) -> (IngestionState, bool) {
         Disposition::Ignore => (IngestionState::Ignored, true),
         Disposition::Quarantine => (IngestionState::Quarantined, true),
     }
+}
+
+async fn set_release_client_status_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    release_id: melodee_domain::ReleaseId,
+    disposition: Disposition,
+    now: OffsetDateTime,
+) -> Result<(), PolicyStoreError> {
+    let status = if disposition == Disposition::Accept {
+        "active"
+    } else {
+        "deprecated"
+    };
+    sqlx::query(
+        "UPDATE releases
+            SET status = $2, revision = revision + 1, updated_at = $3
+          WHERE id = $1 AND status IS DISTINCT FROM $2",
+    )
+    .bind(release_id.into_uuid())
+    .bind(status)
+    .bind(now)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
 }
 
 fn validate_decision_rule(

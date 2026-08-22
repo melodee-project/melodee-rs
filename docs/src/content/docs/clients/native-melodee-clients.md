@@ -31,4 +31,6 @@ be reached.
 
 Native clients can browse and search Artists, Albums, and Songs; manage ratings and favorites;
 use playlists; and submit now-playing/played scrobbles. Results and signed stream URLs are limited
-to the authenticated user's library-group access.
+to accepted Releases within the authenticated user's library-group access. Releases awaiting
+review or carrying quarantine, ignore, or delete dispositions remain available to administrators
+but are not returned to API clients.
