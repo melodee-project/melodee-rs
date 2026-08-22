@@ -102,7 +102,7 @@ fn level_directive(value: &str) -> Result<String, LoggingError> {
             value: value.to_owned(),
         });
     }
-    Ok(format!("melodee={level},tower_http=info"))
+    Ok(format!("melodee={level},tower_http={level}"))
 }
 
 fn open_log_file(directory: &Path) -> Result<(File, PathBuf), LoggingError> {
@@ -133,11 +133,11 @@ mod tests {
     fn logging_level_accepts_documented_values_case_insensitively() {
         assert_eq!(
             level_directive("debug").unwrap(),
-            "melodee=debug,tower_http=info"
+            "melodee=debug,tower_http=debug"
         );
         assert_eq!(
             level_directive(" WARN ").unwrap(),
-            "melodee=warn,tower_http=info"
+            "melodee=warn,tower_http=warn"
         );
         assert!(level_directive("verbose").is_err());
         assert!(level_directive("").is_err());
