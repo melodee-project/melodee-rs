@@ -1,11 +1,13 @@
 use std::{
     env,
     fs::{self, File, OpenOptions},
+    io::Write,
     path::{Path, PathBuf},
     sync::Mutex,
 };
 
 use thiserror::Error;
+use time::{Date, OffsetDateTime};
 use tracing_subscriber::{
     EnvFilter,
     fmt::writer::{BoxMakeWriter, MakeWriterExt},
@@ -15,7 +17,6 @@ pub(crate) const ENV_LOGGING_DIRECTORY: &str = "MELODEE__LOGGING__DIRECTORY";
 pub(crate) const ENV_LOGGING_LEVEL: &str = "MELODEE__LOGGING__LEVEL";
 
 const DEFAULT_LOGGING_LEVEL: &str = "info";
-const LOG_FILE_NAME: &str = "melodee.log";
 
 #[derive(Debug, Error)]
 pub(crate) enum LoggingError {
@@ -67,7 +68,7 @@ pub(crate) fn init() -> Result<(), LoggingError> {
         .map(PathBuf::from);
     let (writer, log_file) = match directory {
         Some(directory) => {
-            let (file, path) = open_log_file(&directory)?;
+            let (file, path) = DailyLogWriter::new(&directory)?;
             (
                 BoxMakeWriter::new(std::io::stderr.and(Mutex::new(file))),
                 Some(path),
@@ -105,21 +106,65 @@ fn level_directive(value: &str) -> Result<String, LoggingError> {
     Ok(format!("melodee={level},tower_http={level}"))
 }
 
-fn open_log_file(directory: &Path) -> Result<(File, PathBuf), LoggingError> {
-    fs::create_dir_all(directory).map_err(|source| LoggingError::CreateDirectory {
-        path: directory.to_path_buf(),
-        source,
-    })?;
-    let path = directory.join(LOG_FILE_NAME);
-    let file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&path)
-        .map_err(|source| LoggingError::OpenFile {
+struct DailyLogWriter {
+    directory: PathBuf,
+    date: Date,
+    file: File,
+}
+
+impl DailyLogWriter {
+    fn new(directory: &Path) -> Result<(Self, PathBuf), LoggingError> {
+        Self::new_for_date(directory, OffsetDateTime::now_utc().date())
+    }
+
+    fn new_for_date(directory: &Path, date: Date) -> Result<(Self, PathBuf), LoggingError> {
+        fs::create_dir_all(directory).map_err(|source| LoggingError::CreateDirectory {
+            path: directory.to_path_buf(),
+            source,
+        })?;
+        let path = daily_log_path(directory, date);
+        let file = open_append(&path).map_err(|source| LoggingError::OpenFile {
             path: path.clone(),
             source,
         })?;
-    Ok((file, path))
+        Ok((
+            Self {
+                directory: directory.to_path_buf(),
+                date,
+                file,
+            },
+            path,
+        ))
+    }
+
+    fn write_for_date(&mut self, date: Date, buffer: &[u8]) -> std::io::Result<usize> {
+        if self.date != date {
+            let path = daily_log_path(&self.directory, date);
+            let file = open_append(&path)?;
+            self.file = file;
+            self.date = date;
+        }
+        self.file.write_all(buffer)?;
+        Ok(buffer.len())
+    }
+}
+
+impl Write for DailyLogWriter {
+    fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
+        self.write_for_date(OffsetDateTime::now_utc().date(), buffer)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.file.flush()
+    }
+}
+
+fn daily_log_path(directory: &Path, date: Date) -> PathBuf {
+    directory.join(format!("{date}.log"))
+}
+
+fn open_append(path: &Path) -> std::io::Result<File> {
+    OpenOptions::new().create(true).append(true).open(path)
 }
 
 #[cfg(test)]
@@ -144,19 +189,38 @@ mod tests {
     }
 
     #[test]
-    fn log_file_is_created_and_appended() {
+    fn daily_log_file_is_created_and_appended() {
         let temp = tempfile::tempdir().unwrap();
         let directory = temp.path().join("nested").join("logs");
+        let date = Date::from_calendar_date(2026, time::Month::August, 22).unwrap();
 
-        let (mut first, path) = open_log_file(&directory).unwrap();
+        let (mut first, path) = DailyLogWriter::new_for_date(&directory, date).unwrap();
         writeln!(first, "first").unwrap();
         drop(first);
 
-        let (mut second, second_path) = open_log_file(&directory).unwrap();
+        let (mut second, second_path) = DailyLogWriter::new_for_date(&directory, date).unwrap();
         writeln!(second, "second").unwrap();
         drop(second);
 
         assert_eq!(path, second_path);
+        assert_eq!(path.file_name().unwrap(), "2026-08-22.log");
         assert_eq!(fs::read_to_string(path).unwrap(), "first\nsecond\n");
+    }
+
+    #[test]
+    fn daily_log_file_rotates_when_the_utc_date_changes() {
+        let temp = tempfile::tempdir().unwrap();
+        let first_date = Date::from_calendar_date(2026, time::Month::August, 22).unwrap();
+        let second_date = Date::from_calendar_date(2026, time::Month::August, 23).unwrap();
+        let (mut writer, first_path) =
+            DailyLogWriter::new_for_date(temp.path(), first_date).unwrap();
+
+        writer.write_for_date(first_date, b"first\n").unwrap();
+        writer.write_for_date(second_date, b"second\n").unwrap();
+        writer.flush().unwrap();
+
+        let second_path = daily_log_path(temp.path(), second_date);
+        assert_eq!(fs::read_to_string(first_path).unwrap(), "first\n");
+        assert_eq!(fs::read_to_string(second_path).unwrap(), "second\n");
     }
 }

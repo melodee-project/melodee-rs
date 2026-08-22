@@ -64,3 +64,20 @@ by an accepted ADR and release gate.
 - Canonical Carbon admin UI reference mockups.
 - Astro Starlight public documentation platform under `/docs`, with GitHub Pages deployment,
   PR validation, and documentation-impact rules in the Definition of Done.
+
+### Operational (R6: Hardening & Closure)
+
+- `melodee doctor --deep`: extended health probe with PostgreSQL connectivity + SELECT 1
+  verification, migration currency check (applied vs. available), catalog entity counts sanity
+  check, Tantivy search index generation diagnostic, and bounded readiness probe. The original
+  `melodee doctor` (basic mode) is unchanged — media tools and configuration checks only.
+- `melodee rollback status`: inspects the current cutover state — whether a migration run exists
+  in a terminal state, its freeze evidence, PostgreSQL reachability, and migration currency. Outputs
+  machine-readable JSON plus human-readable readiness assessment. Does not modify system state.
+- `melodee rollback runbook --confirm`: generates a five-step rollback procedure as JSON: verify
+  prerequisites, stop v1.0 server, revert reverse-proxy routing, verify legacy responsiveness,
+  record audit evidence. The tool documents infrastructure steps; the operator executes them
+  manually. Idempotent and never destructive.
+- `design/runbooks/CUTOVER-ROLLBACK.md`: cutover and rollback runbook with pre/post checks, full
+  rollback procedure with manual infrastructure steps, and design decisions documenting why the
+  rollback tool is guidance-only (never modifies proxy config or reverses imports).

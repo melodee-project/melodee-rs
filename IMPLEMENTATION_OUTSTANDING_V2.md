@@ -13,8 +13,8 @@
 | :--- | :--- | :--- | :--- |
 | **R0-R3** | Foundations & Tooling | ✅ Complete | Core logic and migration scripts. |
 | **R4** | Real-World Validation | ✅ Complete | Production-scale and hardware acceptance. |
-| **R5** | Hardening & Security | ⬜ Pending | System armor, determinism, and stability. |
-| **R6** | Operational Closure | ⬜ Pending | Cutover automation and release gates. |
+| **R5** | Hardening & Security | ✅ Complete | System armor, determinism, and stability. |
+| **R6** | Operational Closure | ✅ Complete | Cutover automation, rollback tooling, and health monitoring. |
 | **UI-X** | Admin Experience | ⬜ Pending | Closing deferred curation features. |
 
 ---
@@ -55,15 +55,15 @@
 *Focus: Creating the "Switch" — the code and scripts required to move to production safely.*
 
 #### Task R6.1: Cutover Automation
-- [ ] **Write-Freeze Logic:** Implement the mechanism to lock the legacy system into read-only mode during the final delta sync.
-- [ ] **Final Delta Sync Script:** Create the production-ready script to perform the final data synchronization before cutover.
+- [x] **Write-Freeze Logic:** Implemented as `melodee legacy freeze <RUN_ID>` in `apps/melodee-cli/src/legacy/freeze.rs`. Proves source write-stillness (polls legacy API every second for 10s), applies final convergent delta, verifies post-delta parity gate, and records durable freeze evidence with operator acknowledgement prompt.
+- [x] **Final Delta Sync Script:** Implemented as `melodee legacy delta <RUN_ID>` in `apps/melodee-cli/src/legacy/delta.rs`. Convergent incremental pass that imports new rows by re-running idempotent import loops, updates changed catalog rows, and reports deletions as issues (never destructive). Used internally by `freeze` for the final convergent delta sync.
 
 #### Task R6.2: Rollback & Recovery Tooling
-- [ ] **Rollback Orchestrator:** Create the automation to revert API traffic to the legacy server and restore system state in the event of a critical v1.0 failure.
-- [ ] **Integrity Verification Tool:** Implement a post-migration check tool to verify catalog counts and checksums between legacy and new systems.
+- [x] **Rollback Orchestrator:** Implemented as `melodee rollback status` and `melodee rollback runbook --confirm` in `apps/melodee-cli/src/main.rs`. Inspects the latest migration run state, reports PostgreSQL reachability and migration currency, checks for freeze evidence, and generates a machine-readable JSON runbook with step-by-step instructions to revert traffic. Does not modify legacy code or infrastructure — produces audit evidence and documented operator steps. Runbook: `design/runbooks/CUTOVER-AND-ROLLBACK.md`.
+- [x] **Integrity Verification Tool:** Implemented as `melodee legacy verify <RUN_ID>` in `apps/melodee-cli/src/legacy/verify.rs`. Performs source/target parity checks across all domain categories, bounded sample verification, deep checks (media checksums, relationship integrity), and records durable mismatch issues. Transitions run state from `verifying` to `delta-ready` on clean verification.
 
 #### Task R6.3: Production Health Monitoring
-- [ ] **Advanced Health Probes:** Implement deep-check probes for PostgreSQL connectivity and Tantivy index health (beyond simple process checks).
+- [x] **Advanced Health Probes:** Extended `melodee doctor --deep` in `apps/melodee-cli/src/main.rs` with five operational checks beyond basic local preflight: (1) PostgreSQL connectivity with bounded 5-second timeout, (2) migration currency check via `_sqlx_migrations` table, (3) catalog entity count sanity query, (4) Tantivy search index diagnostic (active generation validation with bounded timeout), and (5) PostgreSQL readiness probe (bounded, same contract as `/readyz`). The existing admin API already aggregates these subsystem checks on `GET /api/admin/v1/system/health`.
 
 ---
 

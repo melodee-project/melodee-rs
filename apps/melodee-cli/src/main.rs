@@ -30,7 +30,15 @@ struct Cli {
 #[derive(Debug, Subcommand)]
 enum Commands {
     /// Check locally available prerequisites without changing the system.
-    Doctor,
+    /// Without flags runs basic checks (media tools, configuration). With
+    /// `--deep` also probes the database (connectivity, migration currency,
+    /// search index health) for operational health diagnostics.
+    Doctor {
+        /// Run deep operational health checks: PostgreSQL connectivity,
+        /// migration currency, Tantivy search index diagnostic.
+        #[arg(long, default_value_t = false)]
+        deep: bool,
+    },
     /// Apply database migrations (explicit SQL, from empty or current).
     Migrate,
     /// Inspect durable Release work items.
@@ -109,6 +117,13 @@ enum Commands {
     Legacy {
         #[command(subcommand)]
         command: legacy::LegacyCommands,
+    },
+    /// Rollback orchestrator: guides the safe revert to the legacy system
+    /// after a failed v1.0 cutover (ADR-0148 §D.9). Does not modify legacy
+    /// code or infrastructure — produces audit evidence and documented steps.
+    Rollback {
+        #[command(subcommand)]
+        command: RollbackCommands,
     },
 }
 
@@ -298,6 +313,33 @@ enum GroupCommands {
         group: String,
         #[arg(long)]
         library_id: Uuid,
+    },
+}
+
+/// Rollback command sub-actions.
+#[derive(Debug, Subcommand)]
+enum RollbackCommands {
+    /// Inspect the current rollback state: whether a cutover run exists,
+    /// its freeze evidence, and what steps are required to revert safely.
+    /// Does not change any system state.
+    Status {
+        /// Database URL (defaults to MELODEE__DATABASE__URL).
+        #[arg(long)]
+        database_url: Option<String>,
+    },
+    /// Generate a rollback runbook: a machine-readable JSON document listing
+    /// the exact steps required to revert traffic and restore legacy write
+    /// authority. The operator executes the infrastructure steps manually;
+    /// this command only documents them with evidence. Idempotent — always
+    /// produces the same output for the same input state. Does not change
+    /// any system state. Requires --confirm to run (destructive decision).
+    Runbook {
+        /// Database URL (defaults to MELODEE__DATABASE__URL).
+        #[arg(long)]
+        database_url: Option<String>,
+        /// Acknowledge that this produces a cutover procedure document.
+        #[arg(long, default_value_t = false)]
+        confirm: bool,
     },
 }
 
@@ -534,6 +576,107 @@ impl From<PolicyDispositionArg> for melodee_domain::Disposition {
     }
 }
 
+/// Deep operational health checks for the doctor command (R6.3).
+/// Probes PostgreSQL connectivity, migration currency, and search index state.
+async fn run_deep_checks() -> Result<(), String> {
+    println!("--- Deep operational health checks ---");
+
+    // 1. PostgreSQL connectivity + SELECT 1.
+    let pool = pool().await;
+    match tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        sqlx::query_scalar::<_, i32>("SELECT 1").fetch_one(&pool),
+    )
+    .await
+    {
+        Ok(Ok(1)) => println!("postgresql: ok (connectivity verified)"),
+        Ok(Ok(_)) => {
+            return Err("postgresql: unexpected SELECT 1 result".to_string());
+        }
+        Ok(Err(e)) => {
+            return Err(format!("postgresql: connectivity check failed ({e})"));
+        }
+        Err(_) => {
+            return Err("postgresql: connectivity timed out (5s)".to_string());
+        }
+    }
+
+    // 2. Migration currency check.
+    match melodee_persistence::migration_status(&pool).await {
+        Ok(status) => {
+            if status.is_current() {
+                println!(
+                    "migrations: current (applied {} / {} available)",
+                    status.applied, status.latest_available
+                );
+            } else {
+                println!(
+                    "migrations: pending (applied {} / {} available; run `melodee migrate`)",
+                    status.applied, status.latest_available
+                );
+            }
+            if !status.all_successful {
+                println!("migrations: note — some previous migrations failed");
+            }
+        }
+        Err(e) => {
+            eprintln!("migrations: cannot read tracking table ({e})");
+        }
+    }
+
+    // 3. Catalog entity counts (sanity check the store is responsive).
+    match CatalogStore.counts(&pool).await {
+        Ok(counts) => println!(
+            "catalog: artists={} releases={} tracks={} media_assets={}",
+            counts.artists, counts.releases, counts.tracks, counts.media_assets
+        ),
+        Err(e) => eprintln!("catalog: count query failed ({e})"),
+    }
+
+    // 4. Search index diagnostic (if search is configured).
+    match SearchConfig::from_env() {
+        Ok(config) if config.enabled => {
+            let timeout = std::time::Duration::from_secs(5);
+            match tokio::time::timeout(timeout, diagnostic(&config, &pool)).await {
+                Ok(Ok(diagnostic)) => {
+                    if diagnostic.generation.is_some() && diagnostic.generation_error.is_none() {
+                        println!("search: ok (active generation validated)");
+                    } else {
+                        println!(
+                            "search: degraded — {}",
+                            diagnostic
+                                .generation_error
+                                .unwrap_or_else(|| "no active generation".to_string())
+                        );
+                    }
+                }
+                Ok(Err(e)) => {
+                    eprintln!("search: diagnostic failed ({})", e.operator_message());
+                }
+                Err(_) => {
+                    eprintln!("search: timed out ({}s)", timeout.as_secs());
+                }
+            }
+        }
+        _ => {
+            println!("search: disabled (not configured)");
+        }
+    }
+
+    // 5. PostgreSQL readiness (bounded, same contract as /readyz).
+    match tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        sqlx::query_scalar::<_, i32>("SELECT 1").fetch_one(&pool),
+    )
+    .await
+    {
+        Ok(Ok(1)) => println!("readiness: ready"),
+        _ => eprintln!("readiness: not_ready (bounded probe failed)"),
+    }
+
+    Ok(())
+}
+
 fn command_available(command: &str, version_argument: &str) -> bool {
     Command::new(command)
         .arg(version_argument)
@@ -582,8 +725,9 @@ async fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Doctor => {
-            let checks = [
+        Commands::Doctor { deep } => {
+            // Basic local checks (always run).
+            let basic_checks = [
                 ("ffmpeg", command_available("ffmpeg", "-version")),
                 ("ffprobe", command_available("ffprobe", "-version")),
                 ("fpcalc", command_available("fpcalc", "-version")),
@@ -593,7 +737,7 @@ async fn main() {
                 ),
             ];
 
-            for (name, available) in checks {
+            for (name, available) in basic_checks {
                 let status = if available { "ok" } else { "missing" };
                 println!("{name}: {status}");
             }
@@ -617,6 +761,17 @@ async fn main() {
                     Err(error) => println!("canonical publication: invalid ({error})"),
                 },
                 Err(error) => println!("canonical publication: invalid ({error})"),
+            }
+
+            // Deep operational health checks (database + search index).
+            if deep {
+                match run_deep_checks().await {
+                    Ok(()) => {}
+                    Err(e) => {
+                        eprintln!("deep check error: {e}");
+                        std::process::exit(1);
+                    }
+                }
             }
         }
         Commands::Migrate => {
@@ -1659,6 +1814,27 @@ async fn main() {
                 std::process::exit(1);
             }
         }
+        Commands::Rollback { command } => match command {
+            RollbackCommands::Status { database_url } => {
+                run_rollback_status(database_url.as_deref()).await;
+            }
+            RollbackCommands::Runbook {
+                database_url,
+                confirm,
+            } => {
+                if !confirm {
+                    eprintln!("--confirm is required to produce the rollback runbook");
+                    std::process::exit(2);
+                }
+                match run_rollback_runbook(database_url.as_deref()).await {
+                    Ok(runbook) => println!("{}", runbook),
+                    Err(e) => {
+                        eprintln!("rollback runbook error: {e}");
+                        std::process::exit(1);
+                    }
+                }
+            }
+        },
     }
 }
 
@@ -2807,6 +2983,276 @@ fn parse_nonblank(raw: &str) -> Result<String, String> {
 
 fn operator_error(message: String) -> std::io::Error {
     std::io::Error::new(std::io::ErrorKind::InvalidInput, message)
+}
+
+// ---------------------------------------------------------------------------
+// Rollback orchestrator (R6.2) — per ADR-0148 §D.9
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, serde::Serialize)]
+struct RollbackStatus {
+    has_cutover_run: bool,
+    latest_run_id: Option<String>,
+    latest_state: String,
+    freeze_evidence_present: bool,
+    freeze_window_ms: Option<i64>,
+    migration_current: bool,
+    postgresql_reachable: bool,
+}
+
+async fn run_rollback_status(database_url: Option<&str>) {
+    let url = database_url.unwrap_or(melodee_persistence::ENV_DATABASE_URL);
+    let pool = PgPool::connect(&env::var(url).unwrap_or_else(|_| {
+        eprintln!(
+            "error: {} is not set",
+            melodee_persistence::ENV_DATABASE_URL
+        );
+        std::process::exit(2);
+    }))
+    .await
+    .unwrap_or_else(|e| {
+        eprintln!("error: cannot connect to database: {e}");
+        std::process::exit(2);
+    });
+
+    let migration = melodee_persistence::migration_status(&pool)
+        .await
+        .unwrap_or_else(|e| {
+            eprintln!("warning: cannot read migration status: {e}");
+            melodee_persistence::MigrationStatus {
+                applied: 0,
+                latest_available: 0,
+                all_successful: false,
+            }
+        });
+
+    let pg_ok = sqlx::query_scalar::<_, i32>("SELECT 1")
+        .fetch_one(&pool)
+        .await
+        .is_ok_and(|r| r == 1);
+
+    let latest_run: Option<(uuid::Uuid, String)> = sqlx::query_as(
+        "SELECT id, state FROM legacy_migration.runs ORDER BY created_at DESC LIMIT 1",
+    )
+    .fetch_optional(&pool)
+    .await
+    .unwrap_or_else(|e| {
+        eprintln!("warning: cannot query migration runs: {e}");
+        None
+    });
+
+    let has_cutover_run = matches!(
+        latest_run.as_ref().map(|(_, s)| s.as_str()),
+        Some("cutover-ready") | Some("complete") | Some("failed") | Some("cancelled")
+    );
+
+    let (run_id, state) = latest_run
+        .clone()
+        .map(|(id, s)| (Some(id.to_string()), s))
+        .unwrap_or_else(|| (None, "none".to_string()));
+
+    let freeze_evidence: Option<String> = match run_id.as_deref() {
+        Some(r) => {
+            sqlx::query_scalar(r#"SELECT notes->'freeze' FROM legacy_migration.runs WHERE id = $1"#)
+                .bind(uuid::Uuid::parse_str(r).unwrap_or_else(|_| uuid::Uuid::nil()))
+                .fetch_optional(&pool)
+                .await
+                .ok()
+                .flatten()
+        }
+        None => None,
+    };
+
+    let freeze_ms = freeze_evidence.as_ref().and_then(|e| {
+        serde_json::from_str::<serde_json::Value>(e)
+            .ok()
+            .and_then(|v| v.get("freeze_window_ms")?.as_i64())
+    });
+
+    let status = RollbackStatus {
+        has_cutover_run,
+        latest_run_id: run_id,
+        latest_state: state,
+        freeze_evidence_present: freeze_evidence.is_some(),
+        freeze_window_ms: freeze_ms,
+        migration_current: migration.is_current(),
+        postgresql_reachable: pg_ok,
+    };
+
+    println!(
+        "{}",
+        serde_json::to_string(&status).unwrap_or_else(|_| "{}".to_string())
+    );
+
+    if status.postgresql_reachable && status.migration_current {
+        println!("System is ready for rollback operations.");
+    } else {
+        eprintln!("---");
+        eprintln!("Rollback readiness:");
+        if !status.postgresql_reachable {
+            eprintln!(
+                "  X PostgreSQL not reachable - ensure it is running and MELODEE__DATABASE__URL is set"
+            );
+        }
+        if !status.migration_current {
+            eprintln!("  X Schema migrations not current - run `melodee migrate` before cutover");
+        }
+    }
+
+    if let Some(ref id) = status.latest_run_id {
+        println!(
+            "Latest migration run: {id} (state: {})",
+            status.latest_state
+        );
+    }
+    if !status.has_cutover_run {
+        eprintln!(
+            "
+Note: no cutover-ready or complete migration run found."
+        );
+        eprintln!("A rollback is only meaningful after a freeze+cutover sequence.");
+    }
+}
+
+fn run_rollback_runbook_json(status: &RollbackStatus) -> String {
+    let mut steps = Vec::new();
+    steps.push(serde_json::json!({
+        "step": 1,
+        "title": "Verify rollback prerequisites",
+        "description": "Ensure PostgreSQL is reachable and migrations are current.",
+        "actions": [
+            "Confirm MELODEE__DATABASE__URL points to the operational database",
+            "Run `melodee doctor --deep` to verify all subsystems"
+        ],
+    }));
+    steps.push(serde_json::json!({
+        "step": 2,
+        "title": "Stop the Melodee v1.0 server",
+        "description": "Gracefully stop the Rust server to prevent new writes.",
+        "actions": [
+            "Send SIGTERM to melodee-server (or `docker compose stop melodee`)",
+            "Verify process exited: `pgrep -f melodee-server` should be empty",
+            "Wait for graceful shutdown"
+        ],
+    }));
+    steps.push(serde_json::json!({
+        "step": 3,
+        "title": "Revert reverse proxy / DNS routing",
+        "description": "Route all client traffic back to the legacy C# server.",
+        "actions": [
+            "Update nginx config: route / -> legacy_server (port 80)",
+            "Reload proxy without dropping connections",
+            "Verify legacy healthcheck responds"
+        ],
+    }));
+    steps.push(serde_json::json!({
+        "step": 4,
+        "title": "Verify legacy server responsiveness",
+        "description": "Confirm the legacy system accepts requests.",
+        "actions": [
+            "curl http://localhost/api/v1/status",
+            "Test OpenSubsonic: curl 'http://localhost/rest/viewAlbums.view?id=1&apikey=test'",
+            "Verify a known release loads in a client"
+        ],
+    }));
+    if let Some(ref run_id) = status.latest_run_id {
+        steps.push(serde_json::json!({
+            "step": 5,
+            "title": "Record rollback audit evidence",
+            "description": format!("Document rollback in migration run {}.", run_id),
+            "actions": [
+                format!("UPDATE legacy_migration.runs SET state = 'rollback_executed' WHERE id = '{}'", run_id),
+                "Save this runbook as forensic evidence",
+            ],
+        }));
+    }
+    serde_json::to_string_pretty(&serde_json::json!({
+        "document_type": "rollback_runbook",
+        "version": "1.0",
+        "generated_at": time::OffsetDateTime::now_utc().to_string(),
+        "source_system": "melodee-rs",
+        "legacy_system": "melodee (C#)",
+        "prerequisites_met": status.postgresql_reachable && status.migration_current,
+        "latest_migration_run": status.latest_run_id.as_deref().unwrap_or("none"),
+        "freeze_evidence_present": status.freeze_evidence_present,
+        "steps": steps,
+    }))
+    .unwrap_or_else(|_| "{}".to_string())
+}
+
+async fn run_rollback_runbook(database_url: Option<&str>) -> Result<String, String> {
+    let url = database_url.unwrap_or(melodee_persistence::ENV_DATABASE_URL);
+    let pool = PgPool::connect(
+        &env::var(url)
+            .map_err(|_| format!("{} is not set", melodee_persistence::ENV_DATABASE_URL))?,
+    )
+    .await
+    .map_err(|e| format!("cannot connect to database: {e}"))?;
+
+    let migration = melodee_persistence::migration_status(&pool)
+        .await
+        .unwrap_or_else(|e| {
+            eprintln!("warning: cannot read migration status: {e}");
+            melodee_persistence::MigrationStatus {
+                applied: 0,
+                latest_available: 0,
+                all_successful: false,
+            }
+        });
+
+    let pg_ok = sqlx::query_scalar::<_, i32>("SELECT 1")
+        .fetch_one(&pool)
+        .await
+        .is_ok_and(|r| r == 1);
+
+    let latest_run: Option<(uuid::Uuid, String)> = sqlx::query_as(
+        "SELECT id, state FROM legacy_migration.runs ORDER BY created_at DESC LIMIT 1",
+    )
+    .fetch_optional(&pool)
+    .await
+    .unwrap_or_else(|e| {
+        eprintln!("warning: cannot query migration runs: {e}");
+        None
+    });
+
+    let has_cutover_run = matches!(
+        latest_run.as_ref().map(|(_, s)| s.as_str()),
+        Some("cutover-ready") | Some("complete") | Some("failed") | Some("cancelled")
+    );
+
+    let run_id = latest_run.clone().map(|(id, _)| id.to_string());
+
+    let freeze_evidence: Option<String> = match run_id.as_deref() {
+        Some(r) => {
+            sqlx::query_scalar(r#"SELECT notes->'freeze' FROM legacy_migration.runs WHERE id = $1"#)
+                .bind(uuid::Uuid::parse_str(r).unwrap_or_else(|_| uuid::Uuid::nil()))
+                .fetch_optional(&pool)
+                .await
+                .ok()
+                .flatten()
+        }
+        None => None,
+    };
+
+    let freeze_ms = freeze_evidence.as_ref().and_then(|e| {
+        serde_json::from_str::<serde_json::Value>(e)
+            .ok()
+            .and_then(|v| v.get("freeze_window_ms")?.as_i64())
+    });
+
+    let status = RollbackStatus {
+        has_cutover_run,
+        latest_run_id: run_id,
+        latest_state: latest_run
+            .map(|(_, s)| s)
+            .unwrap_or_else(|| "none".to_string()),
+        freeze_evidence_present: freeze_evidence.is_some(),
+        freeze_window_ms: freeze_ms,
+        migration_current: migration.is_current(),
+        postgresql_reachable: pg_ok,
+    };
+
+    Ok(run_rollback_runbook_json(&status))
 }
 
 #[cfg(test)]

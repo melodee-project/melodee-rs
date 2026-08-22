@@ -34,7 +34,10 @@ docker compose ps
 ```
 
 Use `openssl rand -base64 48` for both Melodee secrets. Do not commit `.env`. If the PostgreSQL
-password contains reserved URL characters, percent-encode it in `MELODEE_DATABASE_URL`.
+password contains reserved URL characters, percent-encode it in `MELODEE_DATABASE_URL`. The
+example permits the exact local origins used by MeloAmp through
+`MELODEE_NATIVE_CORS_ALLOWED_ORIGINS`; remove an origin only if clients at that origin do not need
+the native API.
 
 The Compose example binds the HTTP port only to `127.0.0.1` by default. Put a TLS-terminating
 reverse proxy in front of it and set `MELODEE__NATIVE__PUBLIC_ORIGIN` to that public HTTPS origin.
@@ -77,7 +80,7 @@ The example declares these paths intentionally:
 | Canonical media | `melodee_library` → `/var/lib/melodee/library` | Verified immutable Release bundles. |
 | Normalization work and retained attempt evidence | `melodee_work` → `/var/lib/melodee/work` | Non-authoritative, separate from inbound and canonical storage. |
 | Tantivy | `melodee_search` → `/var/lib/melodee/search` | Rebuildable projection, but persist it to avoid unnecessary rebuilds. |
-| Logs | stdout/stderr; optional `melodee_logs` → `/var/log/melodee` | Console collection remains the default. Set `MELODEE_LOGGING_DIRECTORY=/var/log/melodee` in the Compose `.env` to additionally append `/var/log/melodee/melodee.log`; configure external rotation. |
+| Logs | stdout/stderr; optional `melodee_logs` → `/var/log/melodee` | Console collection remains the default. Set `MELODEE_LOGGING_DIRECTORY=/var/log/melodee` in the Compose `.env` to additionally append daily UTC files named `/var/log/melodee/YYYY-MM-DD.log`; configure external retention for older files. |
 
 The `initialize-storage` service changes ownership of only the named-volume owned roots to the
 image's non-root UID `10001`. It does not recursively modify your media. If you replace named

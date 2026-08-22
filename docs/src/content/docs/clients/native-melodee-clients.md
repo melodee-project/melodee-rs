@@ -20,6 +20,15 @@ proxy must set `MELODEE__NATIVE__PUBLIC_ORIGIN` to the externally reachable `htt
 origin. If the proxy terminates client connections, also configure only its exact address or CIDR
 in `MELODEE__NATIVE__TRUSTED_PROXIES`; untrusted forwarding headers are ignored.
 
+MeloAmp accepts either the server origin, such as `http://127.0.0.1:8080`, or the complete native
+API base, such as `http://127.0.0.1:8080/api/v1`. Its browser renderer calls the server from a
+different origin, so that renderer must be in `MELODEE__NATIVE__CORS__ALLOWED_ORIGINS`. The current
+source UI uses `http://localhost:3000`; the packaged desktop application uses
+`http://localhost:3001`. Both repository environment examples include those exact local origins.
+Restart Melodee after changing the allowlist. A browser-level `Failed to fetch` during MeloAmp's
+version check usually means the renderer origin is absent from the allowlist or the server cannot
+be reached.
+
 Native clients can browse and search Artists, Albums, and Songs; manage ratings and favorites;
 use playlists; and submit now-playing/played scrobbles. Results and signed stream URLs are limited
 to the authenticated user's library-group access.

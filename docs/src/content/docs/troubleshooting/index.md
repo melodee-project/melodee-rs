@@ -13,10 +13,11 @@ the relevant feature or configuration documentation.
 - Melodee always writes server logs to the console. Set `MELODEE__LOGGING__LEVEL` to `trace`,
   `debug`, `info`, `warn`, or `error` to choose the verbosity.
 - Set `MELODEE__LOGGING__DIRECTORY` to additionally append the same events to
-  `<directory>/melodee.log`. The server creates the directory and reports the active filter and
-  file path at startup. The file is not rotated by Melodee; use the host or container platform's
-  rotation policy and limit file access because logs can contain media paths and account
-  identifiers. See [Configuration](../installation/configuration/#core-runtime).
+  `<directory>/YYYY-MM-DD.log`. The date is UTC; the server creates the directory,
+  reports the current file at startup, and switches files after UTC midnight. Older files are
+  retained, so configure host or container retention according to available space. Limit file
+  access because logs can contain media paths and account identifiers. See
+  [Configuration](../installation/configuration/#core-runtime).
 - A failed Release keeps its exact error code and message in PostgreSQL. Open **Processing →
   Failed**, read the **Last error** column, select the row for its inspector/history, or run
   `melodee-cli work show <id>`. Worker warning events also include the durable error code and
