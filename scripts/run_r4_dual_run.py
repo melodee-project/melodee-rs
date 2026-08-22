@@ -200,6 +200,13 @@ def migrate_fresh(
     sequence. One migration run per replay seed mirrors the oracle reseed."""
     psql(f'DROP DATABASE IF EXISTS "{TARGET_DB}" WITH (FORCE);')
     psql(f'CREATE DATABASE "{TARGET_DB}";')
+    # Legacy fixture paths are absolute (container capture layout, e.g.
+    # /app/inbound/). The import validates that the mapped library root
+    # exists; when running as root the directory is created here, and under
+    # an unprivileged operator an existing empty directory is sufficient.
+    # Canonical media adoption reads the generated storage root instead.
+    if library_path.startswith("/") and os.geteuid() == 0:
+        Path(library_path).mkdir(parents=True, exist_ok=True)
     subprocess.run(
         [str(CLI), "migrate"],
         check=True,
@@ -247,14 +254,17 @@ def migrate_fresh(
             "MELODEE__SEARCH__ENABLED": "true",
             "MELODEE__SEARCH__ROOT": str(search_root),
             "MELODEE__INGEST__ENABLED": "false",
-            "MELODEE__INGEST__WORK_AREA_BASE": str(work_area),
+            "MELODEE__NORMALIZATION__WORK_AREA": str(work_area),
             "MELODEE__STORAGE__ROOT": str(canonical_root),
             "MELODEE__INGEST__SOURCES_JSON": json.dumps(
                 [{"id": str(harness.FIXTURE_LIBRARY_ID), "root": str(inbound_root),
                   "name": library_name}]
             ),
         },
-        cwd=ROOT,
+        # Keep the CLI out of the repository root so dotenvy cannot re-load the
+        # developer .env and override the replay-only search/ingest config
+        # (same protection start_server already gets).
+        cwd=search_root.parent,
     )
 
 
@@ -309,7 +319,7 @@ def main() -> None:
             "MELODEE__SERVER__BIND": f"127.0.0.1:{port}",
             "MELODEE__STORAGE__ROOT": str(storage_root),
             "MELODEE__INGEST__ENABLED": "false",
-            "MELODEE__INGEST__WORK_AREA_BASE": str(work_dir / "work"),
+            "MELODEE__NORMALIZATION__WORK_AREA": str(work_dir / "work"),
             "MELODEE__SEARCH__ENABLED": "true",
             "MELODEE__SEARCH__ROOT": str(search_root),
             "MELODEE__NATIVE__PUBLIC_ORIGIN": base_url,

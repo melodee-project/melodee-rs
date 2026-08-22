@@ -227,13 +227,10 @@ pub async fn import_tracks(
                 .unwrap_or_else(|| title.clone());
             let track_number = Some(row.get::<i32, _>("SongNumber"));
             let ordinal: i64 = row.get("ordinal");
-            // Frozen EF data stores Song.Duration in milliseconds; the
-            // legacy MQL layer converts it to seconds only for query input.
-            // Preserve the persisted unit at the Rust boundary.
-            let duration_ms = row
-                .get::<Option<f64>, _>("Duration")
-                .filter(|duration| *duration > 0.0)
-                .map(|duration| duration.round() as i64);
+            // Frozen legacy data stores the tag reader's seconds value in the
+            // millisecond-declared Songs.Duration field; normalize to target
+            // milliseconds through the shared bounded heuristic.
+            let duration_ms = map::legacy_duration_ms(row.get("Duration"));
             let created: time::OffsetDateTime = row.get("CreatedAt");
             let updated = map::clamp_updated(created, row.get("LastUpdatedAt"));
 

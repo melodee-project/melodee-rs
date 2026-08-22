@@ -168,6 +168,26 @@ async fn full_import_covers_all_domains_and_preserves_identity() {
         bitrate_bps, 900_000,
         "legacy bitrate is represented in Rust bps"
     );
+    // The frozen legacy unit defect: Songs.Duration stores the tag reader's
+    // seconds value (545.0) despite the millisecond declaration. The target
+    // must expose true milliseconds (545000), not the raw seconds value.
+    let (track_duration_ms, asset_duration_ms): (i64, i64) = sqlx::query_as(
+        "SELECT track.duration_ms, media.duration_ms
+         FROM tracks track
+         JOIN media_assets media ON media.id = track.playable_media_asset_id
+         ORDER BY track.public_api_id LIMIT 1",
+    )
+    .fetch_one(&target.pool)
+    .await
+    .expect("migrated durations");
+    assert_eq!(
+        track_duration_ms, 545_000,
+        "legacy seconds value is normalized to target milliseconds"
+    );
+    assert_eq!(
+        asset_duration_ms, 545_000,
+        "media asset carries the same value"
+    );
     assert_eq!(
         tempo,
         Some(0.0),

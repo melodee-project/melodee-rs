@@ -222,6 +222,27 @@ pub fn legacy_bitrate_bps(value: Option<i32>) -> Option<i64> {
     })
 }
 
+/// Normalizes the frozen legacy `Songs.Duration` value into target milliseconds.
+///
+/// The legacy model declares the field in milliseconds, but the tag reader
+/// reports seconds and the frozen fixture data was written with that value.
+/// Values below the plausibility ceiling (1,000 — no real song shorter than
+/// one second is expected) are seconds and are converted to milliseconds;
+/// values at or above the ceiling are already milliseconds and are preserved.
+pub fn legacy_duration_ms(value: Option<f64>) -> Option<i64> {
+    value.filter(|value| *value > 0.0).and_then(|value| {
+        let seconds = value as i64;
+        if seconds < 1 {
+            // Sub-second values are truncated to zero; treat as absent.
+            None
+        } else if seconds < 1_000 {
+            Some(seconds * 1_000)
+        } else {
+            Some(seconds)
+        }
+    })
+}
+
 /// Returns the existing media-container label that can be derived without
 /// opening or rewriting a legacy media file. Unknown values remain absent;
 /// migration must not pretend that an arbitrary MIME value proves a codec.
@@ -271,7 +292,7 @@ pub fn adopt_or_sentinel_hash(legacy: Option<String>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{legacy_bitrate_bps, legacy_container};
+    use super::{legacy_bitrate_bps, legacy_container, legacy_duration_ms};
 
     #[test]
     fn legacy_bitrate_conversion_preserves_captured_units() {
@@ -305,5 +326,23 @@ mod tests {
             None
         );
         assert_eq!(legacy_container(None, None), None);
+    }
+
+    #[test]
+    fn legacy_duration_converts_seconds_and_preserves_milliseconds() {
+        // Values below the ceiling are seconds (tag-reader unit) → ×1000.
+        assert_eq!(legacy_duration_ms(Some(2.4)), Some(2400));
+        assert_eq!(legacy_duration_ms(Some(545.0)), Some(545_000));
+        assert_eq!(legacy_duration_ms(Some(999.0)), Some(999_000));
+        // Plausibility ceiling: values >= 1000 are already milliseconds.
+        assert_eq!(legacy_duration_ms(Some(1_000.0)), Some(1_000));
+        assert_eq!(legacy_duration_ms(Some(1800.0)), Some(1800));
+        assert_eq!(legacy_duration_ms(Some(200_000.0)), Some(200_000));
+        assert_eq!(legacy_duration_ms(Some(6_500_000.0)), Some(6_500_000));
+        // Boundary: just below the ceiling is still seconds.
+        assert_eq!(legacy_duration_ms(Some(999.9)), Some(999_000));
+        // Zero and missing are absent, not fabricated.
+        assert_eq!(legacy_duration_ms(Some(0.0)), None);
+        assert_eq!(legacy_duration_ms(None), None);
     }
 }

@@ -269,7 +269,13 @@ impl SearchProjectionStore {
             Err(error) if is_unique_violation(&error) => {
                 Err(SearchStoreError::RebuildConflict(search_root.to_string()))
             }
-            Err(error) => Err(error.into()),
+            Err(error) => {
+                // Surface the database root cause for operator diagnostics;
+                // the durable error boundary already maps this to a generic
+                // message for API consumers.
+                tracing::error!(%error, "search rebuild job request failed");
+                Err(error.into())
+            }
         }
     }
 
