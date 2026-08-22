@@ -86,7 +86,10 @@ def reset_database() -> None:
         env=environment,
         check=True,
     )
-    print("Development database reset complete. The schema is current and contains no administrator.")
+    print(
+        "Development database reset complete. "
+        "The schema is current and contains no administrator."
+    )
     print("Create the first administrator before running 'melodee-cli config validate'.")
 
 

@@ -12,6 +12,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ADMIN_UI = ROOT / "admin-ui"
+DOCS = ROOT / "docs"
+
+
+class CheckError(RuntimeError):
+    """A requested validation mode cannot run in the current environment."""
 
 
 def run(command: list[str], *, cwd: Path = ROOT) -> None:
@@ -46,10 +51,13 @@ def run_python_checks(*, include_tests: bool) -> None:
         )
 
 
-def run_admin_ui_checks() -> None:
+def run_admin_ui_checks(*, required: bool = False) -> None:
     pnpm = shutil.which("pnpm")
     if pnpm is None:
-        print("pnpm not installed; skipping local admin-ui gate (CI installs it).", file=sys.stderr)
+        message = "pnpm not installed; cannot run the admin-ui gate"
+        if required:
+            raise CheckError(message)
+        print(f"{message}; skipping locally (CI installs it).", file=sys.stderr)
         return
 
     run([pnpm, "install", "--frozen-lockfile"], cwd=ADMIN_UI)
@@ -57,9 +65,35 @@ def run_admin_ui_checks() -> None:
         run([pnpm, command], cwd=ADMIN_UI)
 
 
+def run_docs_site_checks() -> None:
+    pnpm = shutil.which("pnpm")
+    if pnpm is None:
+        raise CheckError("pnpm not installed; cannot run the documentation-site gate")
+    run([pnpm, "install", "--frozen-lockfile"], cwd=DOCS)
+    for command in ("check", "check:links", "build"):
+        run([pnpm, command], cwd=DOCS)
+
+
+def run_admin_ui_e2e() -> None:
+    pnpm = shutil.which("pnpm")
+    if pnpm is None:
+        raise CheckError("pnpm not installed; cannot run the admin-ui end-to-end gate")
+    run([pnpm, "install", "--frozen-lockfile"], cwd=ADMIN_UI)
+    run([pnpm, "test:e2e"], cwd=ADMIN_UI)
+
+
 def run_checks(mode: str) -> None:
-    if mode not in {"fast", "full"}:
+    if mode not in {"admin-ui", "admin-ui-e2e", "docs", "fast", "full"}:
         raise ValueError(f"unsupported check mode: {mode}")
+    if mode == "admin-ui":
+        run_admin_ui_checks(required=True)
+        return
+    if mode == "admin-ui-e2e":
+        run_admin_ui_e2e()
+        return
+    if mode == "docs":
+        run_docs_site_checks()
+        return
 
     full = mode == "full"
     run_python_checks(include_tests=full)
@@ -105,7 +139,9 @@ def run_checks(mode: str) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("fast", "full"))
+    parser.add_argument(
+        "mode", choices=("admin-ui", "admin-ui-e2e", "docs", "fast", "full")
+    )
     return parser.parse_args()
 
 
@@ -113,6 +149,9 @@ def main() -> int:
     args = parse_args()
     try:
         run_checks(args.mode)
+    except CheckError as error:
+        print(str(error), file=sys.stderr)
+        return 1
     except subprocess.CalledProcessError as error:
         return error.returncode
     return 0

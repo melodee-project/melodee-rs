@@ -208,9 +208,13 @@ make test-integration                    # PostgreSQL-backed Rust integration te
 make check                               # complete local release gate; requires PostgreSQL
 make lint                                # full workspace Clippy gate
 make docs                                # repository/documentation metadata checks
-(cd docs && pnpm check && pnpm check:links && pnpm build)
-(cd admin-ui && pnpm test:e2e)           # Playwright end-to-end and visual tests
+make admin-ui-check                      # Admin UI static checks, unit tests, and build
+make admin-ui-e2e                        # Playwright end-to-end and visual tests
+make docs-site-check                     # documentation-site checks, links, and build
 ```
+
+Make uses `python3` by default for repository orchestration. On systems where Python 3 is
+installed as `python`, use `make PYTHON=python <target>`.
 
 Read [AGENTS.md](AGENTS.md) before changing this repository. It defines the authority order,
 dependency boundaries, data-safety rules, compatibility process, documentation expectations, and

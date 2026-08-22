@@ -16,7 +16,7 @@ template.
   locally if pnpm is absent) → `cargo fmt --check` → `clippy -D warnings` →
   `cargo test --workspace --all-features` → `cargo deny check` (skipped locally if cargo-deny is
   absent; full CI installs both pnpm and cargo-deny). Run this before considering work done.
-  Admin UI work additionally runs Playwright e2e/visual tests via `cd admin-ui && pnpm test:e2e`
+  Admin UI work additionally runs Playwright e2e/visual tests via `make admin-ui-e2e`
   (CI: `.github/workflows/admin-ui.yml`).
 - **Run `cargo fmt --all` before `make check`.** `fmt --check` is a hard gate and fails on
   non-canonical formatting.

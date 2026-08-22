@@ -7,8 +7,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from unittest import mock
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -82,12 +82,14 @@ class DeveloperCommandTests(unittest.TestCase):
             targets,
             {
                 "admin-ui-check",
+                "admin-ui-e2e",
                 "bootstrap",
                 "capture-baseline",
                 "check",
                 "check-fast",
                 "deny",
                 "docs",
+                "docs-site-check",
                 "fmt",
                 "lint",
                 "postgres-down",
@@ -129,7 +131,51 @@ class DeveloperCommandTests(unittest.TestCase):
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
         for script in ("bootstrap.py", "check.py", "reset_dev_database.py"):
             with self.subTest(script=script):
-                self.assertIn(f"python3 scripts/{script}", makefile)
+                self.assertIn(f"$(PYTHON) scripts/{script}", makefile)
+        self.assertNotIn("\tcd ", makefile)
+
+    def test_admin_ui_make_mode_is_python_orchestrated_and_required(self) -> None:
+        with (
+            mock.patch.object(self.check, "run") as run,
+            mock.patch.object(self.check.shutil, "which", return_value="pnpm"),
+        ):
+            self.check.run_checks("admin-ui")
+        self.assertEqual(len(run.call_args_list), 6)
+        self.assertTrue(
+            all(
+                call.kwargs["cwd"] == self.check.ADMIN_UI
+                for call in run.call_args_list
+            )
+        )
+
+        with mock.patch.object(self.check.shutil, "which", return_value=None):
+            with self.assertRaises(self.check.CheckError):
+                self.check.run_checks("admin-ui")
+
+    def test_docs_site_make_mode_is_python_orchestrated(self) -> None:
+        with (
+            mock.patch.object(self.check, "run") as run,
+            mock.patch.object(self.check.shutil, "which", return_value="pnpm"),
+        ):
+            self.check.run_checks("docs")
+        self.assertEqual(len(run.call_args_list), 4)
+        self.assertTrue(
+            all(call.kwargs["cwd"] == self.check.DOCS for call in run.call_args_list)
+        )
+
+    def test_admin_ui_e2e_make_mode_is_python_orchestrated(self) -> None:
+        with (
+            mock.patch.object(self.check, "run") as run,
+            mock.patch.object(self.check.shutil, "which", return_value="pnpm"),
+        ):
+            self.check.run_checks("admin-ui-e2e")
+        self.assertEqual(len(run.call_args_list), 2)
+        self.assertTrue(
+            all(
+                call.kwargs["cwd"] == self.check.ADMIN_UI
+                for call in run.call_args_list
+            )
+        )
 
     def test_android_probe_uses_platform_appropriate_defaults(self) -> None:
         self.assertEqual(

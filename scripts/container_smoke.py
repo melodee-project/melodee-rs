@@ -267,13 +267,22 @@ class SmokeHarness:
                 "-p",
                 f"127.0.0.1:{port}:8080",
                 "-e",
-                f"MELODEE__DATABASE__URL=postgres://melodee:melodee-test@{self.database}:5432/melodee",
+                (
+                    "MELODEE__DATABASE__URL=postgres://melodee:melodee-test@"
+                    f"{self.database}:5432/melodee"
+                ),
                 "-e",
                 f"MELODEE__NATIVE__PUBLIC_ORIGIN=http://127.0.0.1:{port}",
                 "-e",
-                "MELODEE__NATIVE__AUTH__JWT_KEY=release-smoke-native-jwt-key-at-least-thirty-two-bytes",
+                (
+                    "MELODEE__NATIVE__AUTH__JWT_KEY="
+                    "release-smoke-native-jwt-key-at-least-thirty-two-bytes"
+                ),
                 "-e",
-                "MELODEE__JELLYFIN__TOKEN_PEPPER=release-smoke-jellyfin-pepper-at-least-thirty-two-bytes",
+                (
+                    "MELODEE__JELLYFIN__TOKEN_PEPPER="
+                    "release-smoke-jellyfin-pepper-at-least-thirty-two-bytes"
+                ),
                 "-e",
                 "MELODEE__INGEST__ENABLED=false",
                 self.config.image,
@@ -288,7 +297,10 @@ class SmokeHarness:
         if health.get("status") != "ok" or health.get("version") != self.config.release_version:
             raise SmokeError("health response does not match the release image")
         readiness = json.loads(fetch(f"{origin}/readyz"))
-        if readiness.get("status") != "ready" or readiness.get("version") != self.config.release_version:
+        if (
+            readiness.get("status") != "ready"
+            or readiness.get("version") != self.config.release_version
+        ):
             raise SmokeError("readiness response does not match the release image")
         admin_html = fetch(f"{origin}/admin/").decode("utf-8")
         if '<div id="root"' not in admin_html:
