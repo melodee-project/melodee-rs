@@ -49,6 +49,30 @@ template.
   drift from `design/requirements/`; regenerate by running it without `--check` and committing
   the updated index.
 
+## Repository automation language — Python is mandatory
+
+- **All new or replacement repository scripts MUST be Python 3.** Do not add executable Bash,
+  POSIX-shell, PowerShell, or other platform-specific orchestration scripts. In particular, do
+  not add files under `scripts/` with `.sh`, `.bash`, or `.ps1` extensions.
+- **Make and CI definitions MUST remain thin entry points.** A recipe or workflow step may invoke
+  one external command directly. Any sequencing, branching, validation, retries, cleanup,
+  environment construction, or destructive-operation safety logic belongs in an importable,
+  tested Python module under `scripts/`.
+- Use `pathlib`, `subprocess` with argument lists and `shell=False`, `shutil.which`, `argparse`,
+  and explicit working directories. Never depend on Unix-only helpers such as `awk`, `sed`,
+  `grep`, `curl`, `jq`, `ss`, or shell pipelines when Python's standard library can perform the
+  operation. Never embed a developer-specific absolute path.
+- Invoke child Python processes with `sys.executable`. Make targets use the configurable
+  `PYTHON` variable (default `python3`) so environments where Python is named `python` can use
+  `make PYTHON=python <target>`.
+- Every Python entry point MUST provide safe `--help` behavior without contacting external
+  services or performing mutations. Destructive commands MUST validate exact targets, fail
+  closed on topology drift, and have unit coverage proving their scope.
+- A non-Python script is permitted only when Python cannot provide the required platform
+  integration. The agent MUST stop, explain the concrete technical limitation, and obtain
+  explicit user approval before adding it. Familiarity, brevity, or convenience is not a valid
+  exception.
+
 ## Authority and instruction precedence
 
 1. Accepted ADRs in `design/adr/`
