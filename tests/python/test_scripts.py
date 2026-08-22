@@ -35,13 +35,40 @@ class RequirementExtractionTests(unittest.TestCase):
         self.assertNotIn("unmapped", {item["phase"] for item in requirements})
 
 
-class BootstrapScriptTests(unittest.TestCase):
+class DeveloperCommandTests(unittest.TestCase):
     def test_bootstrap_runs_unit_targets_without_postgresql_integration_tests(self) -> None:
         lines = (ROOT / "scripts" / "bootstrap.sh").read_text().splitlines()
         cargo_test_lines = [line.strip() for line in lines if line.strip().startswith("cargo test ")]
         self.assertEqual(
             cargo_test_lines,
             ["cargo test --workspace --all-features --lib --bins"],
+        )
+
+    def test_makefile_uses_explicit_check_and_test_scope_names(self) -> None:
+        lines = (ROOT / "Makefile").read_text().splitlines()
+        targets = {
+            line.removesuffix(":")
+            for line in lines
+            if line and not line.startswith((".", "\t", " ")) and line.endswith(":")
+        }
+        self.assertEqual(
+            targets,
+            {
+                "admin-ui-check",
+                "bootstrap",
+                "capture-baseline",
+                "check",
+                "check-fast",
+                "deny",
+                "docs",
+                "fmt",
+                "lint",
+                "postgres-down",
+                "postgres-up",
+                "test",
+                "test-integration",
+                "test-unit",
+            },
         )
 
 

@@ -11,4 +11,4 @@ python3 scripts/audit_requirement_overrides.py
 python3 scripts/validate_client_acceptance.py
 cargo fmt --all --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo test --workspace --all-features --lib
+cargo test --workspace --all-features --lib --bins

@@ -33,8 +33,9 @@ cargo build --release -p melodee-server -p melodee-cli
 ```
 
 For a database-free checkout validation, run `make bootstrap`. It runs repository checks and Rust
-unit-test targets only. PostgreSQL-backed integration tests are part of the full `make check-full`
-gate and require the development database or an explicitly configured test database.
+unit-test targets only. PostgreSQL-backed integration tests are available through
+`make test-integration` and are part of the full `make check` gate. They require the development
+database or an explicitly configured test database.
 
 Copy [`.env.example`](../../../../../.env.example) to a private local `.env`, replace the secret
 placeholders, and configure separate absolute inbound, work, canonical-storage, and search roots.
@@ -51,6 +52,6 @@ The server applies SQLx migrations at startup. In another terminal, use
 `MELODEE__CLI__BOOTSTRAP_ADMIN_PASSWORD` supplied through the environment. The admin SPA is served
 from `admin-ui/dist` by default; set `MELODEE__ADMIN_UI__DIST` if you deploy it elsewhere.
 
-Run `cargo fmt --all && make smoke` while iterating and `./scripts/check.sh` before submitting a
+Run `cargo fmt --all && make check-fast` while iterating and `make check` before submitting a
 change. See [Configuration](./configuration/) and [Storage](./storage/) for the safety-critical
 runtime settings.
