@@ -22,7 +22,7 @@ current architecture and implementation.
 
 ## Highlights
 
-- **Safe, durable ingestion.** Inbound is a transient mailbox: bytes remain immutable while
+- **Safe, durable ingestion.** Inbound is a transient filesystem drop directory: bytes remain immutable while
   evaluated, then a verified handoff drains the candidate into durable Melodee-owned staging. PostgreSQL-backed,
   lease-based Release work items drive discovery, inspection, normalization, validation, and
   publication, so a failure in one Release does not block the rest of the library.
@@ -48,7 +48,7 @@ current architecture and implementation.
 ## Architecture at a glance
 
 ```text
-transient inbound mailbox
+transient inbound directory
         │
         ▼
 durable staging source ──► inspection / normalization / validation

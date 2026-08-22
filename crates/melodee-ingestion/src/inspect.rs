@@ -221,7 +221,7 @@ async fn inspect_one(
     // pre-plugin-processing gate. The boundary is infallible by contract
     // (fail-degraded allow; ADR-0135 §4). Deny is a retryable failure after
     // durable acquisition: the source remains in staging and is never moved
-    // back into the inbound inbox. Physical quarantine moves are deferred
+    // back into the inbound directory. Physical quarantine moves are deferred
     // (durable decision contract); legacy `delete` stays rewritten
     // to deny.
     if let Some(gate) = gate {

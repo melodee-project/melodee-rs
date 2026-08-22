@@ -637,7 +637,7 @@ async fn delayed_cleanup_after_path_reuse_preserves_new_occurrence() {
     let crashed = scenario.acquire(&worker, &claimed, now).await;
     assert!(crashed.is_err(), "receipt persisted before the crash");
 
-    // Occurrence B replaces the same inbox path with different bytes while
+    // Occurrence B replaces the same inbound path with different bytes while
     // A's cleanup is still delayed.
     fs::remove_dir_all(scenario.root.join("reused")).expect("replace inbound");
     fs::create_dir_all(scenario.root.join("reused")).expect("recreate");

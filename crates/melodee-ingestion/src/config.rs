@@ -144,7 +144,7 @@ impl IngestionConfig {
         if enabled && !sources.is_empty() && staging_root.is_none() {
             return Err(IngestionSourceParseError {
                 detail: format!(
-                    "{ENV_STAGING_ROOT} is required when inbound ingestion has configured source roots; inbound is a transient inbox, not processing storage"
+                    "{ENV_STAGING_ROOT} is required when inbound ingestion has configured source roots; the inbound directory is transient, not processing storage"
                 ),
             });
         }

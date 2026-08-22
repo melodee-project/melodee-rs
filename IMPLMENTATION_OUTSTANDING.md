@@ -311,7 +311,7 @@ staging. Crash recovery, path reuse, delayed cleanup, and stale leases must be s
   a Melodee-owned acquisition/work-item identity.
 - Verify source library ID, source library name, source-root identity, and original relative path
   are retained as provenance without placing configured absolute roots into semantic identity.
-- Verify a completed occurrence releases any uniqueness reservation on the historical inbox path.
+- Verify a completed occurrence releases any uniqueness reservation on the historical inbound path.
 - Verify a second occurrence at the same relative path always creates a distinct acquisition.
 - Verify the resolver has one authoritative rule: use inbound before acquisition and staging after
   durable acquisition. Do not scatter conditional path construction through processing modules.
@@ -1207,7 +1207,7 @@ implemented defaults and validation. At minimum the final report must include:
 
 | Purpose | Configuration key | Required | Durable | Writable | 1.0 rule |
 |---|---|---|---|---|---|
-| Inbound inbox | `MELODEE__INGEST__SOURCE_ROOT` or supported multi-source form | When ingestion uses filesystem sources | No | Yes for candidate rename/removal | Drained after verified acquisition |
+| Inbound directory | `MELODEE__INGEST__SOURCE_ROOT` or supported multi-source form | When ingestion uses filesystem sources | No | Yes for candidate rename/removal | Drained after verified acquisition |
 | Durable staging | `MELODEE__INGEST__STAGING_ROOT` | With configured inbound ingestion | Yes | Yes | Never defaults to temporary storage |
 | Normalization work | `MELODEE__NORMALIZATION__WORK_AREA` | When normalization/transcoding requires files | No | Yes | Attempt-isolated and disposable |
 | Canonical library | `MELODEE__STORAGE__ROOT` | For media publication/serving | Yes | Yes for publication | Release-centric authoritative media |

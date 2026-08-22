@@ -594,7 +594,7 @@ impl WorkItemStore {
     }
 
     /// Creates the work item if no active inbound occurrence owns this path.
-    /// A successful handoff releases the path for a later inbox arrival.
+    /// A successful handoff releases the path for a later inbound occurrence.
     #[instrument(
         skip_all,
         fields(work_item_id = %item.id, source_path = %item.source_path)

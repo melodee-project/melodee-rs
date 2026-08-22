@@ -11,9 +11,10 @@
 
 ADR-0116 correctly defines immutable Release IDs and convergent canonical publication, but its
 inbound-retention rule treats an externally supplied source path as long-lived storage. That makes
-reconciliation cost grow with every processed Release and prevents reuse of an inbox path.
+reconciliation cost grow with every processed Release and prevents reuse of an inbound path.
 
-Melodee needs four distinct storage responsibilities: inbound is a transient external mailbox;
+Melodee needs four distinct storage responsibilities: inbound is a transient external filesystem
+drop directory;
 staging is durable Melodee-owned original source storage; the normalization work area is disposable
 attempt scratch; canonical storage is the long-term published library. Physical staging is not the
 logical ingestion state `Staged`.
@@ -38,13 +39,13 @@ logical ingestion state `Staged`.
    after acquisition. NeedsReview, Quarantined, Failed, and Published source retention are
    non-destructive; post-publication staging retention is a separate policy decision.
 7. The `(source library, relative path)` uniqueness guard applies only while an inbound occurrence
-   remains active. Once ownership is complete, the same inbox path creates a new work item.
+   remains active. Once ownership is complete, the same inbound path creates a new work item.
 
 ## Alternatives considered
 
 ### Retain inbound indefinitely
 
-Rejected because it makes the mailbox a second, unbounded library and forces every reconciliation
+Rejected because it makes inbound a second, unbounded library and forces every reconciliation
 to traverse historical candidates.
 
 ### Use normalization work area as staging

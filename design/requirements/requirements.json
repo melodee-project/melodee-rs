@@ -376,7 +376,7 @@
   },
   {
     "id": "PRD-INGEST-005",
-    "title": "Source safety and durable inbox acquisition",
+    "title": "Source safety and durable inbound acquisition",
     "phase": "2",
     "source": "PRD.md",
     "line": 520,

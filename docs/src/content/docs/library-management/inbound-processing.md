@@ -78,7 +78,7 @@ extensions or names as identity by themselves.
 
 ## Safety constraints
 
-- Inbound is an external mailbox. Discovery and settling read it without mutating bytes; after a
+- Inbound is an external filesystem drop directory. Discovery and settling read it without mutating bytes; after a
   durable verified staging receipt, Melodee removes the acquired candidate directory.
 - Inspection and normalization read only the staged source. They never rewrite tags, artwork, or
   sidecars in inbound or staging.

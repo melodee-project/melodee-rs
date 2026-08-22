@@ -359,7 +359,7 @@ pub async fn acquire_owned_source(
     }
 
     // A final directory can exist after a crash between finalization and the
-    // durable receipt. Adopt it only when the still-present inbox occurrence
+    // durable receipt. Adopt it only when the still-present inbound occurrence
     // proves the exact same tree; otherwise a deterministic-path conflict is
     // never overwritten or misattributed.
     if destination.is_dir() && inbound.exists() {

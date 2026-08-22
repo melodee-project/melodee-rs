@@ -72,7 +72,7 @@ The example declares these paths intentionally:
 | State | Compose location | Notes |
 | --- | --- | --- |
 | PostgreSQL | `melodee_postgres` | Authoritative catalog, identity, users, settings, templates, themes, user images, and audit state. |
-| Inbound media | `${MELODEE_INBOUND_PATH}` → `/mnt/inbound` | External mailbox. Media bytes are immutable; the runtime must be able to rename/remove a successfully acquired candidate directory. |
+| Inbound media | `${MELODEE_INBOUND_PATH}` → `/mnt/inbound` | External filesystem drop directory. Media bytes are immutable; the runtime must be able to rename/remove a successfully acquired candidate directory. |
 | Durable staging | `melodee_staging` → `/var/lib/melodee/staging` | Persistent Melodee-owned original source for processing, review, quarantine, and recovery. |
 | Canonical media | `melodee_library` → `/var/lib/melodee/library` | Verified immutable Release bundles. |
 | Normalization work and retained attempt evidence | `melodee_work` → `/var/lib/melodee/work` | Non-authoritative, separate from inbound and canonical storage. |

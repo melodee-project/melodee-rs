@@ -517,9 +517,9 @@ Suggested algorithm:
 
 An optional explicit `.melodee-ready` marker may allow immediate readiness.
 
-### PRD-INGEST-005 — Source safety and durable inbox acquisition
+### PRD-INGEST-005 — Source safety and durable inbound acquisition
 
-Inbound is a transient externally supplied mailbox, not long-term storage. Content bytes must be
+Inbound is a transient externally supplied filesystem directory, not long-term storage. Content bytes must be
 treated as immutable while Melodee settles and acquires a Release: do not rewrite audio, tags,
 artwork, sidecars, or partially mutate a candidate tree. After a durable verified staging handoff,
 Melodee must remove the acquired candidate directory from inbound. Do not rename source directories
@@ -2447,7 +2447,7 @@ Reference self-hosted deployment should work with FOSS Docker Engine/Moby + Dock
 Persist and document volumes/directories for:
 
 - PostgreSQL.
-- Inbound (transient inbox mount; not durable authority, but writable for candidate rename/removal).
+- Inbound (transient filesystem drop mount; not durable authority, but writable for candidate rename/removal).
 - Durable staging (Melodee-owned original source; review/quarantine retention).
 - Normalization work area (disposable attempt scratch).
 - Canonical media.

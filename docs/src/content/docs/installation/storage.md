@@ -11,7 +11,7 @@ Melodee uses four separate storage roles. They are not interchangeable.
 
 | Role | Configuration | Lifecycle | Permission |
 | --- | --- | --- | --- |
-| Inbound | `MELODEE__INGEST__SOURCE_ROOT` / `MELODEE__INGEST__SOURCES_JSON` | External transient mailbox; drained after verified acquisition. | Read plus rename/remove of acquired candidate directories; never rewrite media bytes. |
+| Inbound | `MELODEE__INGEST__SOURCE_ROOT` / `MELODEE__INGEST__SOURCES_JSON` | External transient filesystem drop directory; drained after verified acquisition. | Read plus rename/remove of acquired candidate directories; never rewrite media bytes. |
 | Staging | `MELODEE__INGEST__STAGING_ROOT` | Durable Melodee-owned original source for processing, review, quarantine, and failed recovery. | Writable and persistent. |
 | Work area | `MELODEE__NORMALIZATION__WORK_AREA` | Disposable attempt-isolated generated output. | Writable; never staging. |
 | Canonical library | `MELODEE__STORAGE__ROOT` | Long-term immutable published Release bundles. | Writable for publication. |

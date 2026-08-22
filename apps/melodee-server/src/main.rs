@@ -221,7 +221,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let policy_worker_config = PolicyWorkerConfig::from_env()?;
     let discovery_worker_config = DiscoveryWorkerConfig::from_env()?;
     // Validate all configured storage roles even when canonical publication is
-    // disabled. Inbound is an inbox and must never overlap staging, work, or
+    // disabled. The inbound directory must never overlap staging, work, or
     // canonical roots.
     let storage_roots = ingestion_config.storage_roots()?;
     let publication_roots = ingestion_config.publication_roots()?;
@@ -517,8 +517,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         notifications: notifications.clone(),
         scripting: scripting.clone(),
     };
-    // review previews use Melodee-owned staging, never the transient inbox.
-    // inbox. Containment is re-validated per request.
+    // review previews use Melodee-owned staging, never the transient inbound
+    // directory. Containment is re-validated per request.
     let admin_review_state = melodee_server::admin_review::AdminReviewState::new(
         admin_access_state.clone(),
         storage_roots

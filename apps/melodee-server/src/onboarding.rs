@@ -333,7 +333,7 @@ fn storage_paths_check(config: &IngestionConfig) -> PreflightCheck {
         );
     }
     // ADR-0145 diagnostics: report each storage role separately so operators
-    // see the transient inbox, durable staging, disposable work area, and
+    // see the transient inbound directory, durable staging, disposable work area, and
     // canonical library as distinct roots.
     PreflightCheck::pass(
         "storage_paths",

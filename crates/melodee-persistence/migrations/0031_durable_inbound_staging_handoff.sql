@@ -1,4 +1,4 @@
--- ADR-0145: a source path is a transient inbox occurrence, not permanent
+-- ADR-0145: a source path is a transient inbound occurrence, not permanent
 -- Release identity. PostgreSQL records each durable filesystem handoff.
 
 ALTER TABLE release_work_items
