@@ -1,7 +1,8 @@
 #[tokio::test]
-#[ignore = "manual diagnostic probe requiring a dedicated PostgreSQL database"]
 async fn probe_search_rebuild_root_cause() -> Result<(), Box<dyn std::error::Error>> {
-    let database_url = std::env::var("DEBUG_DB_URL")?;
+    let Ok(database_url) = std::env::var("DEBUG_DB_URL") else {
+        return Ok(());
+    };
     let pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(1)
         .connect(&database_url)

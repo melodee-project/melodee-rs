@@ -1652,7 +1652,15 @@ mod tests {
         bytes.extend(std::iter::repeat_n(0_u8, data_size as usize));
         fs::write(&wav, bytes).expect("wav");
         let wrapper = root.join("slow-ffprobe.sh");
-        fs::write(&wrapper, b"#!/bin/sh\nsleep 1\n").expect("wrapper");
+        // Keep the version probe fast, then block the media probe using only
+        // shell builtins. Calling an external `sleep` can itself fail to fork
+        // under a highly parallel workspace test run and turn the expected
+        // timeout into a process-failure finding.
+        fs::write(
+            &wrapper,
+            b"#!/bin/sh\nif [ \"$1\" = \"-version\" ]; then\n  echo 'ffprobe test wrapper'\n  exit 0\nfi\nwhile :; do :; done\n",
+        )
+        .expect("wrapper");
         fs::set_permissions(&wrapper, fs::Permissions::from_mode(0o755)).expect("permissions");
         let options = InspectionOptions {
             ffprobe_path: wrapper,

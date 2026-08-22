@@ -230,17 +230,18 @@ pub fn legacy_bitrate_bps(value: Option<i32>) -> Option<i64> {
 /// one second is expected) are seconds and are converted to milliseconds;
 /// values at or above the ceiling are already milliseconds and are preserved.
 pub fn legacy_duration_ms(value: Option<f64>) -> Option<i64> {
-    value.filter(|value| *value > 0.0).and_then(|value| {
-        let seconds = value as i64;
-        if seconds < 1 {
-            // Sub-second values are truncated to zero; treat as absent.
-            None
-        } else if seconds < 1_000 {
-            Some(seconds * 1_000)
-        } else {
-            Some(seconds)
-        }
-    })
+    value
+        .filter(|value| value.is_finite() && *value > 0.0)
+        .and_then(|value| {
+            if value < 1.0 {
+                // Sub-second values are truncated to zero; treat as absent.
+                None
+            } else if value < 1_000.0 {
+                Some((value * 1_000.0).round() as i64)
+            } else {
+                Some(value.round() as i64)
+            }
+        })
 }
 
 /// Returns the existing media-container label that can be derived without
@@ -340,9 +341,11 @@ mod tests {
         assert_eq!(legacy_duration_ms(Some(200_000.0)), Some(200_000));
         assert_eq!(legacy_duration_ms(Some(6_500_000.0)), Some(6_500_000));
         // Boundary: just below the ceiling is still seconds.
-        assert_eq!(legacy_duration_ms(Some(999.9)), Some(999_000));
+        assert_eq!(legacy_duration_ms(Some(999.9)), Some(999_900));
         // Zero and missing are absent, not fabricated.
         assert_eq!(legacy_duration_ms(Some(0.0)), None);
+        assert_eq!(legacy_duration_ms(Some(f64::NAN)), None);
+        assert_eq!(legacy_duration_ms(Some(f64::INFINITY)), None);
         assert_eq!(legacy_duration_ms(None), None);
     }
 }

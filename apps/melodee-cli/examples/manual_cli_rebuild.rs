@@ -14,15 +14,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("requested: {:?}", job.job_id);
             job
         }
-        Err(e) => {
-            println!("request_rebuild ERROR: {e:?}");
+        Err(error) => {
+            println!("request_rebuild error: {error:?}");
             return Ok(());
         }
     };
-    let result = run_rebuild_once(&config, &pool).await;
-    match result {
+    match run_rebuild_once(&config, &pool).await {
         Ok(id) => println!("rebuild done: {id:?}"),
-        Err(e) => println!("run_rebuild_once ERROR: {e:?}"),
+        Err(error) => println!("run_rebuild_once error: {error:?}"),
     }
     Ok(())
 }
