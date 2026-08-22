@@ -106,13 +106,85 @@ class DeveloperCommandTests(unittest.TestCase):
         self.assertEqual(self.reset.EXPECTED_SERVICES, ["postgres"])
         self.assertEqual(self.reset.EXPECTED_VOLUMES, ["melodee_pg_data"])
         self.assertEqual(
-            self.reset.compose_command("down", "--volumes", "--remove-orphans")[-3:],
-            ["down", "--volumes", "--remove-orphans"],
-        )
-        self.assertEqual(
             self.reset.compose_command("up", "-d", "--wait", "postgres")[-4:],
             ["up", "-d", "--wait", "postgres"],
         )
+        self.assertEqual(
+            self.reset.postgres_command(
+                "dropdb",
+                "--if-exists",
+                "--force",
+                "--username",
+                "melodee",
+                "--maintenance-db",
+                "postgres",
+                "melodee",
+            )[-8:],
+            [
+                "dropdb",
+                "--if-exists",
+                "--force",
+                "--username",
+                "melodee",
+                "--maintenance-db",
+                "postgres",
+                "melodee",
+            ],
+        )
+        script = (ROOT / "scripts" / "reset_dev_database.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn('compose_command("down"', script)
+        self.assertNotIn('"volume", "rm"', script)
+
+    def test_postgres_reset_recreates_database_before_migrating(self) -> None:
+        with (
+            mock.patch.object(
+                self.reset,
+                "capture_lines",
+                side_effect=[
+                    self.reset.EXPECTED_SERVICES,
+                    self.reset.EXPECTED_VOLUMES,
+                ],
+            ),
+            mock.patch.object(self.reset, "run_command") as run,
+            mock.patch("builtins.print"),
+        ):
+            self.reset.reset_database()
+
+        commands = [call.args[0] for call in run.call_args_list]
+        self.assertEqual(
+            commands[0],
+            [
+                "docker",
+                "volume",
+                "ls",
+                "--quiet",
+                "--filter",
+                "name=melodee-rs-dev_melodee_pg_data",
+            ],
+        )
+        self.assertEqual(
+            commands[1],
+            self.reset.compose_command("up", "-d", "--wait", "postgres"),
+        )
+        self.assertEqual(commands[2][-1], "melodee")
+        self.assertIn("dropdb", commands[2])
+        self.assertEqual(commands[3][-1], "melodee")
+        self.assertIn("createdb", commands[3])
+        self.assertEqual(
+            commands[4],
+            ["cargo", "run", "--locked", "-p", "melodee-cli", "--", "migrate"],
+        )
+
+    def test_postgres_reset_fails_fast_when_docker_volume_api_is_stuck(self) -> None:
+        timeout = subprocess.TimeoutExpired(["docker", "volume", "ls"], 10)
+        with mock.patch.object(self.reset, "run_command", side_effect=timeout):
+            with self.assertRaisesRegex(
+                self.reset.ResetRefusedError,
+                "restart Docker Engine or Docker Desktop",
+            ):
+                self.reset.require_responsive_docker_volume_api()
 
     def test_postgres_reset_help_needs_no_docker_access(self) -> None:
         result = subprocess.run(
@@ -124,7 +196,7 @@ class DeveloperCommandTests(unittest.TestCase):
             check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("permanently deletes", result.stdout)
+        self.assertIn("drops and recreates", result.stdout)
 
     def test_developer_orchestration_defaults_to_python(self) -> None:
         self.assertEqual(list((ROOT / "scripts").glob("*.sh")), [])

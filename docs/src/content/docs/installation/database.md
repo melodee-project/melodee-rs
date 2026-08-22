@@ -27,8 +27,9 @@ container-oriented backup, validation, and rollback sequence.
 ## Reset the development database
 
 :::danger
-`make postgres-reset` permanently deletes the `melodee-rs-dev_melodee_pg_data` development volume.
-It removes all users, catalog data, settings, and audit state stored there. It does not delete media
+`make postgres-reset` permanently drops and recreates the `melodee` application database in the
+fixed local development PostgreSQL container. It removes all users, catalog data, settings, and
+audit state stored in that database. It preserves the Docker volume and does not delete media
 directories or compatibility captures. Never use it for a database containing data you need.
 :::
 
@@ -39,6 +40,11 @@ make postgres-reset
 ```
 
 The command verifies that `compose.dev.yaml` contains only the expected `postgres` service and
-`melodee_pg_data` volume before deleting anything. It then starts PostgreSQL, waits for its health
-check, and applies every current migration. The resulting application database has no administrator;
-create the first administrator before running `melodee-cli config validate`.
+`melodee_pg_data` volume. It then starts PostgreSQL, waits for its health check, force-closes
+connections to the development application database, recreates that database, and applies every
+current migration. It does not stop the Compose project or ask Docker to delete a volume. The
+resulting application database has no administrator; create the first administrator before running
+`melodee-cli config validate`.
+
+If Docker volume operations are unresponsive, the command stops after ten seconds without changing
+the database and asks you to restart Docker Engine or Docker Desktop before retrying.
