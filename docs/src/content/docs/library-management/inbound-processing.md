@@ -61,12 +61,15 @@ For each discovered candidate the queue uses these states:
   projection worker.
 - `Ignored` — a non-destructive `Ignore` policy decision completed.
 - `Quarantined` — a non-destructive `Quarantine` policy decision completed.
+- `Deleted` — an administrator-confirmed deletion removed the canonical bundle and retained staged
+  source; catalog and audit tombstones remain for integrity and diagnosis.
 
 Only an accepted Release remains active on the native Melodee, OpenSubsonic, and Jellyfin client
 surfaces. Review, quarantine, ignore, and delete dispositions remove the Release and its Tracks
-from client browse, search, artwork, playlist hydration, and playback results. An administrator's
-later audited Accept decision restores client visibility; quarantine remains available in the
-admin processing and review surfaces.
+from client browse, search, artwork, playlist hydration, and playback results. A later audited
+Accept decision can restore review, quarantine, or ignore outcomes. Completed deletion is terminal
+because its managed media has been removed; its audit tombstone remains available through the work
+history.
 
 The `transition` table is durable and persisted in PostgreSQL, so restart and missed scans recover correctly.
 

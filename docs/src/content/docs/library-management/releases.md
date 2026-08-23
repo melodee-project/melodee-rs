@@ -21,5 +21,9 @@ Detail is **read-only**: metadata edit forms do not exist in this build; the cur
 are the audited decisions in [Release Review](./release-review/) (including reprocess) and the
 [Policies](../admin/policies/) rule set.
 
+An administrator-confirmed deletion removes the Release from this listing and deletes its
+canonical and retained staged media. Immutable identifiers and audit evidence remain as a
+non-browsable tombstone; see [Release Review](./release-review/#deciding).
+
 The same routes are available over
 [Admin API — Catalog browsing and detail](../api/admin-api/#catalog-browsing-and-detail).

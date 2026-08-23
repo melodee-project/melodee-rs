@@ -279,7 +279,7 @@ describe('ReleaseReviewScreen', () => {
     expect(
       within(dialog).getByText(/quarantine or ignore keeps the content recoverable/),
     ).toBeInTheDocument();
-    const confirmButton = screen.getByRole('button', { name: 'Authorize delete' });
+    const confirmButton = screen.getByRole('button', { name: 'Delete Release' });
     expect(confirmButton).toBeDisabled();
     fireEvent.change(screen.getByLabelText('Reason'), {
       target: { value: 'Duplicate of catalog content.' },
@@ -297,6 +297,7 @@ describe('ReleaseReviewScreen', () => {
         override: true,
       }),
     );
+    expect(await screen.findByText('Release and managed media deleted.')).toBeInTheDocument();
   });
 
   it('surfaces a 409 illegal transition as an inline notification', async () => {

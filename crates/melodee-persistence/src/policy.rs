@@ -162,6 +162,12 @@ pub struct PolicyDestructiveCompletion {
     pub actor: String,
     pub reason: String,
     pub source_fingerprint: String,
+    /// Durable publication directory that was removed below the configured
+    /// canonical root. This remains audit evidence after catalog tombstoning.
+    pub canonical_relative_path: String,
+    /// Durable source directory removed below the configured staging root,
+    /// when this Release originated in the current ingestion pipeline.
+    pub staging_relative_path: Option<String>,
     pub completed_at: OffsetDateTime,
 }
 
@@ -1686,6 +1692,14 @@ impl PolicyStore {
         }
         verify_current_fingerprint_tx(&mut tx, request.work_item_id, &request.source_fingerprint)
             .await?;
+        if request.canonical_relative_path.trim().is_empty()
+            || request
+                .staging_relative_path
+                .as_deref()
+                .is_some_and(|path| path.trim().is_empty())
+        {
+            return Err(PolicyStoreError::AuthorizationRequired);
+        }
         let changed = sqlx::query(
             r#"UPDATE policy_decisions
                   SET completion_state = 'completed', completed_at = $2
@@ -1701,6 +1715,80 @@ impl PolicyStore {
         }
         stored.completion_state = DecisionCompletionState::Completed;
         stored.completed_at = Some(request.completed_at);
+        let release_revision = sqlx::query_scalar::<_, i64>(
+            "UPDATE releases
+                SET status = 'deleted', revision = revision + 1, updated_at = $2
+              WHERE id = $1
+              RETURNING revision",
+        )
+        .bind(stored.release_id.into_uuid())
+        .bind(request.completed_at)
+        .fetch_one(&mut *tx)
+        .await?;
+        sqlx::query(
+            "UPDATE tracks
+                SET revision = revision + 1, updated_at = $2
+              WHERE release_id = $1",
+        )
+        .bind(stored.release_id.into_uuid())
+        .bind(request.completed_at)
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query(
+            "INSERT INTO catalog_projection_outbox (
+                projection_name, entity_type, entity_id, operation,
+                entity_revision, available_at, attempt_count, created_at
+             ) VALUES ('tantivy.catalog','release',$1,'delete',$2,$3,0,$3)
+             ON CONFLICT (projection_name, entity_type, entity_id, entity_revision)
+             DO NOTHING",
+        )
+        .bind(stored.release_id.into_uuid())
+        .bind(release_revision)
+        .bind(request.completed_at)
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query(
+            "INSERT INTO catalog_projection_outbox (
+                projection_name, entity_type, entity_id, operation,
+                entity_revision, available_at, attempt_count, created_at
+             )
+             SELECT 'tantivy.catalog','track', track.id, 'delete',
+                    track.revision, $2, 0, $2
+               FROM tracks track WHERE track.release_id = $1
+             ON CONFLICT (projection_name, entity_type, entity_id, entity_revision)
+             DO NOTHING",
+        )
+        .bind(stored.release_id.into_uuid())
+        .bind(request.completed_at)
+        .execute(&mut *tx)
+        .await?;
+        recompute_artist_aggregates_after_release_deletion(
+            &mut tx,
+            stored.release_id.into_uuid(),
+            request.completed_at,
+        )
+        .await?;
+        sqlx::query(
+            "INSERT INTO catalog_audit_events (
+                event_id, entity_type, entity_id, event_type, actor, reason,
+                payload, created_at
+             ) VALUES ($1,'release',$2,'release_deleted',$3,$4,$5,$6)",
+        )
+        .bind(Uuid::now_v7())
+        .bind(stored.release_id.into_uuid())
+        .bind(&request.actor)
+        .bind(&request.reason)
+        .bind(serde_json::json!({
+            "work_item_id": request.work_item_id,
+            "decision_id": request.decision_id.into_uuid(),
+            "source_fingerprint": request.source_fingerprint,
+            "canonical_relative_path": request.canonical_relative_path,
+            "staging_relative_path": request.staging_relative_path,
+            "retained_catalog_tombstone": true
+        }))
+        .bind(request.completed_at)
+        .execute(&mut *tx)
+        .await?;
         item.state
             .ensure_transition(IngestionState::Deleted, TransitionKind::Operator)
             .map_err(WorkStoreError::from)?;
@@ -1727,7 +1815,12 @@ impl PolicyStore {
             Some(&request.actor),
             item.correlation_id,
             request.completed_at,
-            Some(serde_json::json!({ "decision_id": request.decision_id.into_uuid() })),
+            Some(serde_json::json!({
+                "decision_id": request.decision_id.into_uuid(),
+                "release_id": stored.release_id.into_uuid(),
+                "canonical_relative_path": request.canonical_relative_path,
+                "staging_relative_path": request.staging_relative_path
+            })),
         )
         .await?;
         tx.commit().await?;
@@ -1735,7 +1828,7 @@ impl PolicyStore {
             item: ReleaseWorkItem::try_from(row)?,
             decision: stored,
             inserted: false,
-            set_based_mutation_statement_count: 2,
+            set_based_mutation_statement_count: 9,
         })
     }
 
@@ -2671,6 +2764,56 @@ async fn set_release_client_status_tx(
     )
     .bind(release_id.into_uuid())
     .bind(status)
+    .bind(now)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+async fn recompute_artist_aggregates_after_release_deletion(
+    tx: &mut Transaction<'_, Postgres>,
+    release_id: Uuid,
+    now: OffsetDateTime,
+) -> Result<(), PolicyStoreError> {
+    sqlx::query(
+        "WITH affected AS (
+            SELECT artist_id FROM release_artists WHERE release_id = $1
+            UNION
+            SELECT billing.artist_id
+              FROM track_artists billing
+              JOIN tracks track ON track.id = billing.track_id
+             WHERE track.release_id = $1
+            UNION
+            SELECT artist_id FROM contributions WHERE release_id = $1
+         ), recalculated AS (
+            SELECT affected.artist_id,
+                   count(DISTINCT track.release_id)
+                       FILTER (WHERE release.status = 'active') AS release_count,
+                   count(DISTINCT association.track_id)
+                       FILTER (WHERE release.status = 'active') AS billed_track_count,
+                   count(DISTINCT association.track_id)
+                       FILTER (WHERE release.status = 'active'
+                               AND association.is_performance) AS performance_track_count,
+                   count(DISTINCT association.track_id)
+                       FILTER (WHERE release.status = 'active') AS all_credit_track_count
+              FROM affected
+              LEFT JOIN artist_track_associations association
+                ON association.artist_id = affected.artist_id
+              LEFT JOIN tracks track ON track.id = association.track_id
+              LEFT JOIN releases release ON release.id = track.release_id
+             GROUP BY affected.artist_id
+         )
+         UPDATE artist_catalog_aggregates aggregate
+            SET release_count = recalculated.release_count,
+                billed_track_count = recalculated.billed_track_count,
+                performance_track_count = recalculated.performance_track_count,
+                all_credit_track_count = recalculated.all_credit_track_count,
+                revision = aggregate.revision + 1,
+                updated_at = $2
+           FROM recalculated
+          WHERE aggregate.artist_id = recalculated.artist_id",
+    )
+    .bind(release_id)
     .bind(now)
     .execute(&mut **tx)
     .await?;

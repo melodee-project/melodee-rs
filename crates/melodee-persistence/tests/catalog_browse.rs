@@ -90,21 +90,21 @@ async fn artist_listing_filters_by_name_and_alias_and_paginates() {
     )
     .await;
 
-    // The import creates one provisional Artist per resolution, so each
-    // Release contributes a release-scoped and a track-scoped Artist.
+    // Each Release contributes one provisional Artist identity. The raw
+    // release/Track observations remain separate behind that identity.
     let (items, total) = CatalogStore
         .list_catalog_artists(&db.pool, None, 50, 0, CatalogArtistSort::NameAsc)
         .await
         .expect("list artists");
-    assert_eq!(total, 4);
-    assert_eq!(items.len(), 4);
+    assert_eq!(total, 2);
+    assert_eq!(items.len(), 2);
     assert!(
         items
             .iter()
             .all(|item| matches!(item.canonical_name.as_str(), "Alpha Artist" | "Beta Artist"))
     );
     assert_eq!(items[0].canonical_name, "Alpha Artist");
-    assert_eq!(items[3].canonical_name, "Beta Artist");
+    assert_eq!(items[1].canonical_name, "Beta Artist");
     assert!(
         items
             .iter()
@@ -117,7 +117,7 @@ async fn artist_listing_filters_by_name_and_alias_and_paginates() {
         .list_catalog_artists(&db.pool, Some("%alpha%"), 50, 0, CatalogArtistSort::NameAsc)
         .await
         .expect("filter artists");
-    assert_eq!(total, 2);
+    assert_eq!(total, 1);
     assert!(
         items
             .iter()
@@ -181,7 +181,7 @@ async fn artist_listing_filters_by_name_and_alias_and_paginates() {
         .list_catalog_artists(&db.pool, None, 1, 1, CatalogArtistSort::NameAsc)
         .await
         .expect("paged");
-    assert_eq!(total, 4);
+    assert_eq!(total, 2);
     assert_eq!(items.len(), 1);
 
     // Sort whitelist parsing is strict.

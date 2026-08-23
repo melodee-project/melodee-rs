@@ -348,9 +348,12 @@ A non-blank `reason` is required and audited. The work item must be in `needs_re
 When the Release has a pending policy decision, the decision applies the durable override path:
 `accept` resumes the pipeline (the work item moves to `indexing`), `quarantine`, `ignore`, and
 `delete` record the corresponding disposition. `delete` additionally requires the explicit
-`"override": true` acknowledgement (`400 override_required` otherwise) and only records the
-destructive authorization — the response carries `pendingExecution: true` and execution remains
-with the durable pipeline. For items parked before cataloging (no policy decision),
+`"override": true` acknowledgement (`400 override_required` otherwise). The server commits the
+authorization, removes the exact canonical and retained staging directories, and then atomically
+marks the Release/work item deleted, appends audit evidence, and schedules search removal. Success
+returns `pendingExecution: false` and `workItem.state: "deleted"`. A filesystem/configuration error
+returns `500 delete_execution_failed` or `503 delete_storage_unavailable`; the authorization remains
+pending and the confirmed action is safe to retry. For items parked before cataloging (no policy decision),
 `quarantine` and `ignore` park the work item directly; `accept` and `delete` are unavailable in
 that state (`409`).
 

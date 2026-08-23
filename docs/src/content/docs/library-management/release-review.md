@@ -22,8 +22,8 @@ melodee-cli policy decide <release-id> review \
 
 The override requires the exact current sealed-manifest fingerprint and records the administrator
 and reason in append-only audit history. Use `accept`, `ignore`, or `quarantine` to complete and
-route a non-destructive decision. Choosing `delete` leaves the Release pending in `NeedsReview`;
-Melodee does not execute deletion or access media from this flow. See
+route a non-destructive decision. The CLI can record a pending `delete` authorization but does not
+remove media; complete destructive deletion through the Admin UI workflow below. See
 [Policies](../admin/policies/) for the full command and safety contract.
 
 ## Review Queue and Release Review workspace
@@ -53,12 +53,14 @@ presents evidence first and choices last:
 The decision rail offers the ordered actions **Accept**, **Quarantine**, **Ignore**, and
 **Delete**. Every decision requires an operator-supplied **reason**, recorded in the audit with
 the acting administrator. `Accept`, `Quarantine`, and `Ignore` complete the non-destructive
-decision and route the work item. **Delete** is destructive-class: it opens an impact dialog
-that states what deletion authorizes, requires typed confirmation, and sends the decision with
-an explicit override flag. Even then, `Delete` records the authorized decision and leaves the
-Release pending — no media is accessed, moved, or removed by the review flow. Illegal state
-transitions and stale-fingerprint conflicts surface as localized inline errors rather than
-silent failures.
+decision and route the work item. **Delete** is destructive-class: it opens an impact dialog,
+requires typed confirmation plus a reason, and sends an explicit override flag. Melodee first
+records that authorization, then removes the Release's canonical bundle and retained staged source.
+Only after both removals succeed does it mark the Release deleted and retire it from catalog,
+search, artwork, and playback surfaces. Catalog identifiers and audit evidence remain as
+non-browsable tombstones. A storage, path-safety, or stale-fingerprint failure leaves the deletion
+pending and surfaces an error; inspect the server log, correct the problem, and repeat the confirmed
+action.
 
 **Reprocess** re-queues the Release for another processing pass, with an optional reason.
 

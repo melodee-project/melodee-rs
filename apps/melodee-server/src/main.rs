@@ -516,6 +516,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             .map(|root| vec![melodee_server::admin_review::PreviewSourceRoot { id: None, root }])
             .unwrap_or_default(),
         ingestion_config.work_area_base.clone(),
+        storage_roots.storage_root.clone(),
     );
     // dashboard + system/workers/search surface: the configured
     // search projection handle lets health/status/rebuild report honestly

@@ -7,6 +7,7 @@
 
 mod acquisition;
 mod config;
+mod deletion;
 mod error;
 mod gate;
 mod inspect;
@@ -36,6 +37,7 @@ pub use config::{
     ENV_SOURCES_JSON, ENV_STAGING_ROOT, ENV_STORAGE_ROOT, ENV_VALIDATION_CONCURRENCY,
     ENV_WORK_AREA_BASE, IngestionConfig, IngestionSourceParseError, PublicationRoots, StorageRoots,
 };
+pub use deletion::{DeletedReleasePaths, ReleaseDeletionError, delete_release_storage};
 
 pub use error::{IngestionError, Result};
 pub use gate::{DirectoryGateFuture, DirectoryGateOutcome, DirectoryProcessingGate};

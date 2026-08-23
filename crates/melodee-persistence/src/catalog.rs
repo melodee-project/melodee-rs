@@ -698,6 +698,7 @@ struct PreparedAsset {
 #[derive(Clone)]
 struct PreparedResolution {
     artist_id: Uuid,
+    reused_release_artist: bool,
     observation_id: Uuid,
     evidence_id: Uuid,
     decision_id: Uuid,
@@ -908,12 +909,21 @@ impl PreparedImport {
         for (index, raw) in release_artists.iter().enumerate() {
             resolutions.push(PreparedResolution::new(
                 None,
+                None,
                 i32::try_from(index + 1).map_err(|_| CatalogStoreError::NumericOverflow)?,
                 raw,
                 format!("/release_observation/artists/{index}"),
                 serde_json::json!({ "value": raw }),
             ));
         }
+        let matching_release_artist = if release_artists.len() == 1 {
+            release_artists
+                .first()
+                .zip(resolutions.first())
+                .map(|(raw, resolution)| (normalize_lookup(raw), resolution.artist_id))
+        } else {
+            None
+        };
         for (index, (manifest_track, prepared_track)) in
             manifest.tracks.iter().zip(tracks.iter()).enumerate()
         {
@@ -923,7 +933,13 @@ impl PreparedImport {
                 .and_then(|metadata| metadata.artist.as_ref())
                 .filter(|value| !value.trim().is_empty())
             {
+                let normalized = normalize_lookup(raw);
+                let release_artist_id = matching_release_artist
+                    .as_ref()
+                    .filter(|(release_normalized, _)| release_normalized == &normalized)
+                    .map(|(_, artist_id)| *artist_id);
                 resolutions.push(PreparedResolution::new(
+                    release_artist_id,
                     Some(prepared_track.id),
                     1,
                     raw,
@@ -1030,6 +1046,7 @@ impl PreparedImport {
 
 impl PreparedResolution {
     fn new(
+        artist_id: Option<Uuid>,
         track_id: Option<Uuid>,
         source_ordinal: i32,
         raw: &str,
@@ -1037,7 +1054,8 @@ impl PreparedResolution {
         source_payload: serde_json::Value,
     ) -> Self {
         Self {
-            artist_id: Uuid::now_v7(),
+            artist_id: artist_id.unwrap_or_else(Uuid::now_v7),
+            reused_release_artist: artist_id.is_some(),
             observation_id: Uuid::now_v7(),
             evidence_id: Uuid::now_v7(),
             decision_id: Uuid::now_v7(),
@@ -1229,13 +1247,20 @@ async fn persist_prepared_import(
     });
     link_query.build().execute(&mut **tx).await?;
 
+    let artist_identities = prepared.resolutions.iter().fold(
+        BTreeMap::<Uuid, &PreparedResolution>::new(),
+        |mut rows, resolution| {
+            rows.entry(resolution.artist_id).or_insert(resolution);
+            rows
+        },
+    );
     let mut artist_query: QueryBuilder<Postgres> = QueryBuilder::new(
         "INSERT INTO artists (
             id, public_api_id, canonical_name, normalized_name, sort_name,
             artist_type, status, revision, created_at, updated_at
          ) ",
     );
-    artist_query.push_values(&prepared.resolutions, |mut row, resolution| {
+    artist_query.push_values(artist_identities.values(), |mut row, resolution| {
         row.push_bind(resolution.artist_id)
             .push_bind(resolution.artist_id)
             .push_bind(&resolution.raw_value)
@@ -1287,11 +1312,16 @@ async fn persist_prepared_import(
             .push_bind(resolution.artist_id)
             .push_bind("release_context")
             .push_bind("supports")
-            .push_bind(6000_i32)
+            .push_bind(if resolution.reused_release_artist {
+                9000_i32
+            } else {
+                6000_i32
+            })
             .push_bind("manifest-v3")
             .push_bind(serde_json::json!({
                 "source_pointer": resolution.source_pointer,
-                "provisional_bias": true
+                "provisional_bias": !resolution.reused_release_artist,
+                "same_release_identity": resolution.reused_release_artist
             }))
             .push_bind(now);
     });
@@ -1309,8 +1339,16 @@ async fn persist_prepared_import(
             .push_bind(resolution.artist_id)
             .push_bind("confirmed")
             .push_bind("automated")
-            .push_bind(6000_i32)
-            .push_bind("created a distinct provisional identity from manifest context")
+            .push_bind(if resolution.reused_release_artist {
+                9000_i32
+            } else {
+                6000_i32
+            })
+            .push_bind(if resolution.reused_release_artist {
+                "resolved to the sole matching Release Artist from manifest context"
+            } else {
+                "created a distinct provisional identity from manifest context"
+            })
             .push_bind(false)
             .push_bind(serde_json::json!({
                 "resolver_version": prepared.resolver_version,
@@ -1517,10 +1555,10 @@ async fn persist_prepared_import(
     let mut outbox_rows = vec![("release", release_id)];
     outbox_rows.extend(prepared.tracks.iter().map(|track| ("track", track.id)));
     outbox_rows.extend(
-        prepared
-            .resolutions
-            .iter()
-            .map(|resolution| ("artist", resolution.artist_id)),
+        artist_identities
+            .keys()
+            .copied()
+            .map(|artist_id| ("artist", artist_id)),
     );
     let mut outbox_query: QueryBuilder<Postgres> = QueryBuilder::new(
         "INSERT INTO catalog_projection_outbox (
@@ -1594,7 +1632,7 @@ async fn persist_prepared_import(
             "catalog_import_id": prepared.import_id,
             "overlay_id": prepared.overlay.id(),
             "track_count": prepared.tracks.len(),
-            "artist_count": prepared.resolutions.len(),
+            "artist_count": artist_identities.len(),
             "media_asset_count": prepared.assets.len(),
         })),
     )
@@ -1606,7 +1644,7 @@ async fn persist_prepared_import(
         overlay_id: prepared.overlay.id(),
         track_count: u32::try_from(prepared.tracks.len())
             .map_err(|_| CatalogStoreError::NumericOverflow)?,
-        artist_count: u32::try_from(prepared.resolutions.len())
+        artist_count: u32::try_from(artist_identities.len())
             .map_err(|_| CatalogStoreError::NumericOverflow)?,
         media_asset_count: u32::try_from(prepared.assets.len())
             .map_err(|_| CatalogStoreError::NumericOverflow)?,

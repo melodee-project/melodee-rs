@@ -98,8 +98,7 @@ async fn schema_rejects_impossible_states() {
 /// ADR-0142 / migration 0029 data integrity: every admin browse index exists
 /// as a FULL (non-partial) index on the intended table, the two nullable sort
 /// columns carry the stores' DESC NULLS LAST ordering, and the browse stores
-/// still return correct, complete results (merged/deprecated rows included)
-/// once the indexes are present.
+/// still return correct active-identity results once the indexes are present.
 #[tokio::test]
 async fn admin_browse_indexes_are_full_and_browse_results_stay_correct() {
     let db = TestDb::create("migrations_admin_browse_indexes").await;
@@ -166,9 +165,8 @@ async fn admin_browse_indexes_are_full_and_browse_results_stay_correct() {
         );
     }
 
-    // Store-level correctness: the unfiltered admin listing must include
-    // non-active rows (the reason the partial indexes could not serve it) and
-    // order by sort_name with the id tiebreak.
+    // Store-level correctness: the unfiltered admin listing excludes retired
+    // identity tombstones and orders by sort_name with the id tiebreak.
     let now = time::OffsetDateTime::now_utc();
     let seed = |canonical: &str, status: melodee_domain::ArtistStatus| {
         melodee_domain::Artist::new(melodee_domain::NewArtist {
@@ -205,9 +203,9 @@ async fn admin_browse_indexes_are_full_and_browse_results_stay_correct() {
         )
         .await
         .expect("list catalog artists");
-    assert_eq!(total, 3, "deprecated/provisional rows must be listed");
+    assert_eq!(total, 2, "deprecated Artist tombstones are not browse rows");
     let names: Vec<&str> = rows.iter().map(|row| row.canonical_name.as_str()).collect();
-    assert_eq!(names, ["Alpha", "Beta", "Gamma"]);
+    assert_eq!(names, ["Beta", "Gamma"]);
 
     db.drop().await;
 }
@@ -589,6 +587,196 @@ async fn migration_0032_forward_from_prior_schema_preserves_existing_data() {
     .await
     .expect("artist after upgrade");
     assert_eq!(artist_name, "Forward Artist");
+
+    db.drop().await;
+}
+
+/// ADR-0153 / migration 0034: an existing importer-created Track Artist
+/// identity is redirected to the sole exact matching Release Artist without
+/// discarding either raw observation or the prior append-only decision.
+#[tokio::test]
+async fn migration_0034_repairs_only_the_same_release_artist_identity() {
+    use melodee_persistence::MIGRATOR;
+    use sqlx::migrate::Migrator;
+    use std::borrow::Cow;
+
+    let db = TestDb::create_unmigrated("migrations_forward_0034_artist_repair").await;
+    let prior: Vec<sqlx::migrate::Migration> = MIGRATOR
+        .migrations
+        .iter()
+        .filter(|migration| migration.version <= 33)
+        .cloned()
+        .collect();
+    assert_eq!(prior.len(), 33, "expected migrations 0001..=0033");
+    Migrator {
+        migrations: Cow::Owned(prior),
+        ..Migrator::DEFAULT
+    }
+    .run(&db.pool)
+    .await
+    .expect("apply pre-0034 schema");
+
+    sqlx::raw_sql(sqlx::AssertSqlSafe(
+        r#"
+        DO $$
+        DECLARE
+            release_id uuid := uuidv7();
+            target_artist_id uuid := uuidv7();
+            source_artist_id uuid := uuidv7();
+            audio_id uuid := uuidv7();
+            media_id uuid := uuidv7();
+            track_id uuid := uuidv7();
+            release_observation_id uuid := uuidv7();
+            track_observation_id uuid := uuidv7();
+            release_artist_row_id uuid := uuidv7();
+            track_artist_row_id uuid := uuidv7();
+            release_decision_id uuid := uuidv7();
+            track_decision_id uuid := uuidv7();
+        BEGIN
+            INSERT INTO artists (
+                id, public_api_id, canonical_name, normalized_name, sort_name,
+                artist_type, status, revision, created_at, updated_at
+            ) VALUES
+                (target_artist_id, uuidv7(), 'Exact Artist', 'exact artist',
+                 'Exact Artist', 'group', 'provisional', 1, now(), now()),
+                (source_artist_id, uuidv7(), 'Exact Artist', 'exact artist',
+                 'Exact Artist', 'group', 'provisional', 1, now(), now());
+            INSERT INTO releases (
+                id, public_api_id, title, normalized_title, sort_title,
+                status, revision, created_at, updated_at
+            ) VALUES (
+                release_id, uuidv7(), 'Repair Release', 'repair release',
+                'Repair Release', 'active', 1, now(), now()
+            );
+            INSERT INTO audio_identities (
+                id, status, revision, created_at, updated_at
+            ) VALUES (audio_id, 'provisional', 1, now(), now());
+            INSERT INTO media_assets (
+                id, canonical_relative_path, byte_hash, byte_size, mime_type, created_at
+            ) VALUES (
+                media_id, 'releases/repair/track.flac', repeat('a', 64), 1,
+                'audio/flac', now()
+            );
+            INSERT INTO tracks (
+                id, public_api_id, release_id, audio_identity_id,
+                playable_media_asset_id, ordinal, title, normalized_title,
+                sort_title, revision, created_at, updated_at
+            ) VALUES (
+                track_id, uuidv7(), release_id, audio_id, media_id, 1,
+                'Repair Track', 'repair track', 'Repair Track', 1, now(), now()
+            );
+            INSERT INTO track_media_assets (
+                track_id, media_asset_id, purpose, ordinal, created_at
+            ) VALUES (track_id, media_id, 'playable', 1, now());
+            INSERT INTO observed_artists (
+                id, release_id, track_id, scope, source_ordinal, raw_value,
+                normalized_value, display_value, source_pointer, source_payload, created_at
+            ) VALUES
+                (release_observation_id, release_id, NULL, 'release', 1,
+                 'Exact Artist', 'exact artist', 'Exact Artist',
+                 '/release_observation/artists/0', '{}'::jsonb, now()),
+                (track_observation_id, release_id, track_id, 'track', 1,
+                 'Exact Artist', 'exact artist', 'Exact Artist',
+                 '/tracks/0/artist', '{}'::jsonb, now());
+            INSERT INTO release_artists (
+                id, release_id, artist_id, observed_artist_id, role,
+                presentation_order, display_value, join_phrase, created_at
+            ) VALUES (
+                release_artist_row_id, release_id, target_artist_id,
+                release_observation_id, 'primary', 1, 'Exact Artist', '', now()
+            );
+            INSERT INTO track_artists (
+                id, track_id, artist_id, observed_artist_id, role,
+                presentation_order, display_value, join_phrase, created_at
+            ) VALUES (
+                track_artist_row_id, track_id, source_artist_id,
+                track_observation_id, 'primary', 1, 'Exact Artist', '', now()
+            );
+            INSERT INTO artist_match_decisions (
+                id, observed_artist_id, artist_id, outcome, authority,
+                confidence, reason, is_locked, payload, created_at
+            ) VALUES
+                (release_decision_id, release_observation_id, target_artist_id,
+                 'confirmed', 'automated', 6000,
+                 'created a distinct provisional identity from manifest context',
+                 false, '{}'::jsonb, now()),
+                (track_decision_id, track_observation_id, source_artist_id,
+                 'confirmed', 'automated', 6000,
+                 'created a distinct provisional identity from manifest context',
+                 false, '{}'::jsonb, now());
+            INSERT INTO artist_match_current (
+                observed_artist_id, decision_id, updated_at
+            ) VALUES
+                (release_observation_id, release_decision_id, now()),
+                (track_observation_id, track_decision_id, now());
+            INSERT INTO artist_track_associations (
+                artist_id, track_id, association_type, participation_kind,
+                source_key, source_artist_id, confidence, is_performance, created_at
+            ) VALUES (
+                source_artist_id, track_id, 'primary', 'direct',
+                track_artist_row_id, NULL, 6000, true, now()
+            );
+        END $$;
+        "#,
+    ))
+    .execute(&db.pool)
+    .await
+    .expect("seed pre-0034 importer identity split");
+
+    migrate(&db.pool).await.expect("forward migration to 0034");
+
+    let rows: Vec<(uuid::Uuid, String, Option<uuid::Uuid>)> =
+        sqlx::query_as("SELECT id, status, merged_into_artist_id FROM artists ORDER BY status, id")
+            .fetch_all(&db.pool)
+            .await
+            .expect("read repaired Artists");
+    assert_eq!(rows.len(), 2, "the audit tombstone is retained");
+    let source = rows
+        .iter()
+        .find(|(_, status, _)| status == "merged")
+        .expect("merged source Artist");
+    let target = rows
+        .iter()
+        .find(|(_, status, _)| status == "provisional")
+        .expect("visible target Artist");
+    assert_eq!(source.2, Some(target.0));
+    assert_eq!(
+        sqlx::query_scalar::<_, uuid::Uuid>("SELECT artist_id FROM track_artists")
+            .fetch_one(&db.pool)
+            .await
+            .expect("Track Artist identity"),
+        target.0
+    );
+    let current: (uuid::Uuid, String) = sqlx::query_as(
+        "SELECT decision.artist_id, decision.reason
+           FROM observed_artists observed
+           JOIN artist_match_current current_match
+             ON current_match.observed_artist_id = observed.id
+           JOIN artist_match_decisions decision ON decision.id = current_match.decision_id
+          WHERE observed.scope = 'track'",
+    )
+    .fetch_one(&db.pool)
+    .await
+    .expect("repaired current match");
+    assert_eq!(current.0, target.0);
+    assert_eq!(
+        current.1,
+        "resolved to the sole matching Release Artist from manifest context"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM observed_artists")
+            .fetch_one(&db.pool)
+            .await
+            .expect("observations retained"),
+        2
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM artist_match_decisions")
+            .fetch_one(&db.pool)
+            .await
+            .expect("decision history retained"),
+        3
+    );
 
     db.drop().await;
 }

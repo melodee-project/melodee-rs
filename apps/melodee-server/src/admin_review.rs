@@ -5,12 +5,11 @@
 //! reprocess, and a gated pre-publication audio preview.
 //!
 //! All routes are `AdminPrincipal`-gated. Decisions are driven through the
-//! durable policy store (`apply_admin_override`) when a pending
-//! durable decision exists, and through the operator arm of the work-item
-//! state machine otherwise. `delete` only ever *records* the durable
-//! administrator authorization; destructive execution stays with the
-//! existing pipeline (`complete_destructive_action` after external
-//! execution evidence) and is never performed by this surface.
+//! durable policy store (`apply_admin_override`) when a pending durable
+//! decision exists, and through the operator arm of the work-item state
+//! machine otherwise. A confirmed `delete` removes the exact durable staging
+//! and canonical directories before `complete_destructive_action` records the
+//! catalog tombstone and completed audit evidence.
 //!
 //! The preview endpoint never trusts client-supplied paths: the track file
 //! is located from the durable manifest and the configured staging/work
@@ -30,9 +29,9 @@ use melodee_domain::{
     DecisionCompletionState, Disposition, IngestionState, ReleaseManifest, TransitionKind,
 };
 use melodee_persistence::{
-    CatalogStore, PolicyAdminOverrideRequest, PolicyStore, PolicyStoreError,
-    StoredNoveltyEvaluation, StoredPolicyDecision, StoredReleaseClassification, WorkItemSort,
-    WorkItemStore, WorkStoreError,
+    CatalogStore, PolicyAdminOverrideRequest, PolicyDestructiveCompletion, PolicyStore,
+    PolicyStoreError, StoredNoveltyEvaluation, StoredPolicyDecision, StoredReleaseClassification,
+    WorkItemSort, WorkItemStore, WorkStoreError,
 };
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -90,6 +89,13 @@ impl ReviewPreview {
 pub struct AdminReviewState {
     pub admin: AdminAccessState,
     pub preview: Arc<ReviewPreview>,
+    deletion: Arc<ReviewDeletion>,
+}
+
+#[derive(Debug)]
+struct ReviewDeletion {
+    staging_root: Option<PathBuf>,
+    canonical_root: Option<PathBuf>,
 }
 
 impl AdminReviewState {
@@ -98,10 +104,16 @@ impl AdminReviewState {
         admin: AdminAccessState,
         source_roots: Vec<PreviewSourceRoot>,
         work_area_base: PathBuf,
+        canonical_root: Option<PathBuf>,
     ) -> Self {
+        let staging_root = source_roots.first().map(|root| root.root.clone());
         Self {
             admin,
             preview: Arc::new(ReviewPreview::new(source_roots, work_area_base)),
+            deletion: Arc::new(ReviewDeletion {
+                staging_root,
+                canonical_root,
+            }),
         }
     }
 }
@@ -628,7 +640,7 @@ async fn review_decision(
         decision.filter(|decision| decision.completion_state == DecisionCompletionState::Pending);
 
     if let Some(pending) = pending_decision {
-        return apply_policy_override(&item, &pending, action, reason, &admin, pool, now).await;
+        return apply_policy_override(&state, &item, &pending, action, reason, &admin, now).await;
     }
 
     // Validation-parked items predate catalog import and have no durable
@@ -686,14 +698,15 @@ async fn review_decision(
 }
 
 async fn apply_policy_override(
+    state: &AdminReviewState,
     item: &melodee_domain::ReleaseWorkItem,
     pending: &StoredPolicyDecision,
     action: ReviewAction,
     reason: &str,
     admin: &AdminPrincipal,
-    pool: &sqlx::PgPool,
     now: OffsetDateTime,
 ) -> Response {
+    let pool = &state.admin.pool;
     let disposition = action.disposition();
     let request = PolicyAdminOverrideRequest {
         work_item_id: item.id,
@@ -714,14 +727,118 @@ async fn apply_policy_override(
                 reason,
                 "admin policy override applied"
             );
+            if disposition == Disposition::Delete {
+                return execute_release_deletion(state, result.decision).await;
+            }
             Json(ReviewDecisionResultDto {
                 work_item: WorkItemDto::from(result.item),
                 decision: Some(decision_dto(&result.decision)),
-                pending_execution: disposition.is_destructive(),
+                pending_execution: false,
             })
             .into_response()
         }
         Err(error) => policy_error(item.id, error),
+    }
+}
+
+async fn execute_release_deletion(
+    state: &AdminReviewState,
+    decision: StoredPolicyDecision,
+) -> Response {
+    let Some(canonical_root) = state.deletion.canonical_root.as_deref() else {
+        return review_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "delete_storage_unavailable",
+            "delete authorization is pending because canonical storage is not configured",
+        );
+    };
+    let publication = match WorkItemStore
+        .get_publication(&state.admin.pool, decision.work_item_id)
+        .await
+    {
+        Ok(Some(publication)) => publication,
+        Ok(None) => {
+            return review_error(
+                StatusCode::CONFLICT,
+                "delete_publication_missing",
+                "delete authorization is pending because canonical publication evidence is missing",
+            );
+        }
+        Err(error) => return store_failure("publication read failed", &error),
+    };
+    let handoff = match WorkItemStore
+        .staging_handoff(&state.admin.pool, decision.work_item_id)
+        .await
+    {
+        Ok(handoff) => handoff,
+        Err(error) => return store_failure("staging handoff read failed", &error),
+    };
+    let staging_relative_path = handoff
+        .as_ref()
+        .map(|handoff| handoff.staging_relative_path.as_str());
+    let deleted = match melodee_ingestion::delete_release_storage(
+        canonical_root,
+        &publication.plan.target_relative_path,
+        state.deletion.staging_root.as_deref(),
+        staging_relative_path,
+    )
+    .await
+    {
+        Ok(deleted) => deleted,
+        Err(error) => {
+            tracing::error!(
+                work_item = %decision.work_item_id,
+                release_id = %decision.release_id,
+                error = ?error,
+                "confirmed Release deletion failed; authorization remains pending"
+            );
+            return review_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "delete_execution_failed",
+                "Release deletion failed and remains pending; inspect the server log and retry",
+            );
+        }
+    };
+    let (actor, reason) = match (&decision.actor, decision.override_reason.as_deref()) {
+        (melodee_domain::PolicyActor::Administrator { actor }, Some(reason)) => {
+            (actor.clone(), reason.to_owned())
+        }
+        _ => {
+            return review_error(
+                StatusCode::CONFLICT,
+                "delete_authorization_invalid",
+                "delete authorization is not an administrator-confirmed decision",
+            );
+        }
+    };
+    let completion = PolicyDestructiveCompletion {
+        work_item_id: decision.work_item_id,
+        decision_id: decision.id,
+        actor,
+        reason,
+        source_fingerprint: decision.source_fingerprint.clone(),
+        canonical_relative_path: deleted.canonical_relative_path,
+        staging_relative_path: deleted.staging_relative_path,
+        completed_at: OffsetDateTime::now_utc(),
+    };
+    match PolicyStore
+        .complete_destructive_action(&state.admin.pool, &completion)
+        .await
+    {
+        Ok(result) => {
+            tracing::info!(
+                work_item = %result.item.id,
+                release_id = %result.decision.release_id,
+                "confirmed Release deletion completed"
+            );
+            Json(ReviewDecisionResultDto {
+                work_item: WorkItemDto::from(result.item),
+                decision: Some(decision_dto(&result.decision)),
+                pending_execution: false,
+            })
+            .into_response()
+        }
+        Err(error) => policy_error(decision.work_item_id, error),
     }
 }
 

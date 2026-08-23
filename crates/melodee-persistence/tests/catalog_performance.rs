@@ -46,9 +46,9 @@ async fn two_hundred_manifests_catalog_exactly_once_with_bounded_queries_and_no_
                 u32::try_from(ordinal).expect("fixture ordinal fits u32"),
                 CatalogFixturePresentation {
                     release_title: &format!("Catalog Release {ordinal:04}"),
-                    release_artist: &format!("Catalog Artist {ordinal:04}"),
+                    release_artist: "Same Name Across Releases",
                     track_title: &format!("Catalog Track {ordinal:04}"),
-                    track_artist: &format!("Catalog Artist {ordinal:04}"),
+                    track_artist: "Same Name Across Releases",
                     release_date: "2004-05-06",
                 },
             )
@@ -116,7 +116,7 @@ async fn two_hundred_manifests_catalog_exactly_once_with_bounded_queries_and_no_
     assert_eq!(results.len(), RELEASE_COUNT);
     assert!(results.iter().all(|result| result.inserted));
     assert!(results.iter().all(|result| result.track_count == 1));
-    assert!(results.iter().all(|result| result.artist_count == 2));
+    assert!(results.iter().all(|result| result.artist_count == 1));
     assert!(results.iter().all(|result| result.media_asset_count == 1));
     let set_based_statement_counts = results
         .iter()
@@ -163,7 +163,7 @@ async fn two_hundred_manifests_catalog_exactly_once_with_bounded_queries_and_no_
     assert_eq!(counts.releases, RELEASE_COUNT as i64);
     assert_eq!(counts.tracks, RELEASE_COUNT as i64);
     assert_eq!(counts.media_assets, RELEASE_COUNT as i64);
-    assert_eq!(counts.artists, (RELEASE_COUNT * 2) as i64);
+    assert_eq!(counts.artists, RELEASE_COUNT as i64);
     assert_eq!(counts.imports, RELEASE_COUNT as i64);
     let states = WorkItemStore
         .counts_by_state(&db.pool)
@@ -216,7 +216,7 @@ async fn two_hundred_manifests_catalog_exactly_once_with_bounded_queries_and_no_
     .sum::<i64>();
     assert_eq!(
         core_authoritative_rows_reconciled,
-        RELEASE_COUNT as i64 * 13
+        RELEASE_COUNT as i64 * 12
     );
     let derived_and_evidence_rows: (i64, i64, i64, i64, i64, i64, i64, i64, i64) = sqlx::query_as(
         "SELECT
@@ -248,7 +248,7 @@ async fn two_hundred_manifests_catalog_exactly_once_with_bounded_queries_and_no_
         ]
         .into_iter()
         .sum::<i64>();
-    assert_eq!(catalog_rows_written, RELEASE_COUNT as i64 * 30);
+    assert_eq!(catalog_rows_written, RELEASE_COUNT as i64 * 27);
     let peak_rss =
         peak_test_process_rss_kib().map_or_else(|| "null".to_owned(), |value| value.to_string());
 

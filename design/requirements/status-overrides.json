@@ -1797,11 +1797,13 @@
     "status": "tested",
     "implementation": [
       "crates/melodee-catalog/src/resolver.rs (bounded evidence scoring retains provisional identity on weak or ambiguous input)",
-      "crates/melodee-persistence/src/catalog.rs (manifest import creates observation-scoped provisional Artists)"
+      "crates/melodee-persistence/src/catalog.rs (manifest import keeps observation-scoped evidence while reusing only an exact singleton Release-context Artist identity)",
+      "design/adr/ADR-0153-reuse-unambiguous-release-artist-identity-for-matching-tracks.md"
     ],
     "tests": [
       "crates/melodee-catalog/src/resolver.rs (same-name ambiguity and weak-name provisional tests)",
-      "crates/melodee-persistence/tests/catalog_import.rs (equal raw names are not merged)"
+      "crates/melodee-persistence/tests/catalog_import.rs (same-Release singleton equality shares identity while observations remain distinct)",
+      "crates/melodee-persistence/tests/catalog_performance.rs (same names across Releases remain separate without N+1 lookup)"
     ]
   },
   "PRD-ARTIST-012": {
@@ -1830,7 +1832,8 @@
     "status": "tested",
     "implementation": [
       "crates/melodee-domain/src/identity.rs (accepted evidence dimensions and polarity)",
-      "crates/melodee-catalog/src/resolver.rs (deterministic scoring across name, alias, external ID, release/track, type/date/area/membership, and provider evidence)"
+      "crates/melodee-catalog/src/resolver.rs (deterministic scoring across name, alias, external ID, release/track, type/date/area/membership, and provider evidence)",
+      "crates/melodee-persistence/src/catalog.rs (exact singleton Release context is structured co-resolution evidence)"
     ],
     "tests": [
       "crates/melodee-catalog/src/resolver.rs (alias/context, external ID, conflict, ambiguity, and provider cases)"
@@ -1840,7 +1843,8 @@
     "status": "tested",
     "implementation": [
       "crates/melodee-domain/src/identity.rs (automatic name-only confirmation invariant)",
-      "crates/melodee-catalog/src/resolver.rs (name-only evidence cannot confirm)"
+      "crates/melodee-catalog/src/resolver.rs (name-only evidence cannot confirm)",
+      "crates/melodee-persistence/src/catalog.rs (identity reuse is bounded to one immutable Release context rather than global name equality)"
     ],
     "tests": [
       "crates/melodee-domain/tests/phase4_domain.rs",
@@ -2276,13 +2280,15 @@
     "implementation": [
       "crates/melodee-domain/src/ingestion.rs (Disposition enum: Accept, Review, Ignore, Quarantine, Delete)",
       "crates/melodee-policy/src/engine.rs (validated PolicyEngine maps classification + complete novelty facts to disposition)",
-      "apps/melodee-server/src/policy_worker.rs (durable worker state routing)"
+      "apps/melodee-server/src/policy_worker.rs (durable worker state routing)",
+      "apps/melodee-server/src/admin_review.rs and crates/melodee-ingestion/src/deletion.rs (confirmed administrator Delete execution)"
     ],
     "tests": [
       "crates/melodee-policy/tests/policy_acceptance.rs",
-      "apps/melodee-server/tests/policy_worker.rs"
+      "apps/melodee-server/tests/policy_worker.rs",
+      "apps/melodee-server/tests/admin_review_api.rs (confirmed deletion removes managed media and completes the work item)"
     ],
-    "note": "All five typed dispositions are evaluated and the non-destructive worker state routes are tested; Delete remains a pending authorization and is not a filesystem operation."
+    "note": "All five typed dispositions are evaluated. Delete remains pending until typed administrator confirmation, then removes the exact managed staging/canonical trees and commits audited tombstones."
   },
   "PRD-POLICY-002": {
     "status": "tested",
@@ -2355,13 +2361,16 @@
       "crates/melodee-domain/src/policy.rs (ReleasePolicyDecision with durable fields)",
       "crates/melodee-persistence/src/policy.rs (atomic commit_evaluation, apply_admin_override, and complete_destructive_action)",
       "crates/melodee-persistence/migrations/0008_phase5_policy.sql (exact decision-to-facts foreign keys and append-only audit)",
-      "crates/melodee-policy/src/engine.rs (validated decision before any state route)"
+      "crates/melodee-policy/src/engine.rs (validated decision before any state route)",
+      "crates/melodee-ingestion/src/deletion.rs (no-follow idempotent removal below configured roots)",
+      "design/adr/ADR-0152-execute-confirmed-release-deletion-with-audited-tombstones.md"
     ],
     "tests": [
       "crates/melodee-persistence/tests/phase5_commit.rs, phase5_override.rs, and phase5_faults.rs",
-      "apps/melodee-server/tests/policy_worker.rs (crash adoption and no duplicate facts)"
+      "apps/melodee-server/tests/policy_worker.rs (crash adoption and no duplicate facts)",
+      "crates/melodee-ingestion/src/deletion.rs and apps/melodee-server/tests/admin_review_api.rs (safe path removal, retry idempotency, catalog tombstone, and audit)"
     ],
-    "note": "Facts, decision, audit, event, and state commit atomically. Delete is pending until an explicit fingerprint-bound administrator override and separate matching completion; Phase 5 performs no deletion."
+    "note": "Facts, authorization, filesystem execution, completion, audit, tombstone status, search deletion, and state are separated safely. A confirmed Delete completes only after both managed directory removals succeed."
   },
   "PRD-SEARCH-001": {
     "status": "tested",

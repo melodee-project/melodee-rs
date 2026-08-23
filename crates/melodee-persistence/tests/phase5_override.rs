@@ -180,6 +180,8 @@ async fn delete_requires_override_then_separate_matching_completion_evidence() {
                 actor: " ".to_string(),
                 reason: "completed externally".to_string(),
                 source_fingerprint: fixture.published.sealed_manifest_hash.clone(),
+                canonical_relative_path: "releases/aa/bb/rel_test".to_string(),
+                staging_relative_path: Some("releases/test".to_string()),
                 completed_at: complete_at,
             },
         )
@@ -197,6 +199,8 @@ async fn delete_requires_override_then_separate_matching_completion_evidence() {
                 actor: "destructive-admin".to_string(),
                 reason: "completed externally".to_string(),
                 source_fingerprint: "f".repeat(64),
+                canonical_relative_path: "releases/aa/bb/rel_test".to_string(),
+                staging_relative_path: Some("releases/test".to_string()),
                 completed_at: complete_at,
             },
         )
@@ -227,6 +231,8 @@ async fn delete_requires_override_then_separate_matching_completion_evidence() {
                 actor: "destructive-admin".to_string(),
                 reason: "Confirmed redundant and authorized removal".to_string(),
                 source_fingerprint: fixture.published.sealed_manifest_hash.clone(),
+                canonical_relative_path: "releases/aa/bb/rel_test".to_string(),
+                staging_relative_path: Some("releases/test".to_string()),
                 completed_at: complete_at,
             },
         )
@@ -236,6 +242,14 @@ async fn delete_requires_override_then_separate_matching_completion_evidence() {
     assert_eq!(
         completed.decision.completion_state,
         DecisionCompletionState::Completed
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, String>("SELECT status FROM releases WHERE id = $1")
+            .bind(fixture.release_id().into_uuid())
+            .fetch_one(&db.pool)
+            .await
+            .expect("read Release tombstone"),
+        "deleted"
     );
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT count(*) FROM policy_decision_audit WHERE id = $1",)

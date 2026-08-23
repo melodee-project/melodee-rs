@@ -26,7 +26,10 @@ use melodee_auth::{NativeAccessClaims, PasswordHashAlgorithm, SecretString, issu
 use melodee_domain::{
     Disposition, FailureClass, IngestionState, PolicyRuleSetId, TransitionKind, WorkErrorCode,
 };
-use melodee_persistence::{AuthStore, NativeUserImport, PolicyStore, WorkItemStore, WorkerId};
+use melodee_persistence::{
+    AuthStore, CatalogReleaseSort, CatalogStore, CatalogTrackSort, NativeUserImport, PolicyStore,
+    WorkItemStore, WorkerId,
+};
 use melodee_server::admin_access::AdminAccessState;
 use melodee_server::admin_review::{AdminReviewState, PreviewSourceRoot};
 use serde_json::Value;
@@ -107,9 +110,19 @@ fn token_for(public_api_id: Uuid, username: &str) -> String {
 
 fn build_app(
     pool: sqlx::PgPool,
-    source_roots: Vec<PreviewSourceRoot>,
+    mut source_roots: Vec<PreviewSourceRoot>,
     work_area: &std::path::Path,
 ) -> axum::Router {
+    let canonical_root = work_area.join("library");
+    std::fs::create_dir_all(&canonical_root).expect("canonical test root");
+    if source_roots.is_empty() {
+        let staging_root = work_area.join("staging");
+        std::fs::create_dir_all(&staging_root).expect("staging test root");
+        source_roots.push(PreviewSourceRoot {
+            id: None,
+            root: staging_root,
+        });
+    }
     let admin = AdminAccessState {
         notifications: Arc::new(melodee_server::notifications::NotificationService::noop(
             pool.clone(),
@@ -127,6 +140,7 @@ fn build_app(
         admin,
         source_roots,
         work_area.to_path_buf(),
+        Some(canonical_root),
     ))
 }
 
@@ -526,6 +540,35 @@ async fn review_decision_accept_and_delete_flows() {
 
     // Delete requires the explicit destructive acknowledgement.
     let delete_fixture = seed_pending_review(&db, 4).await;
+    let publication = WorkItemStore
+        .get_publication(&db.pool, delete_fixture.work_item_id())
+        .await
+        .expect("read deletion publication")
+        .expect("deletion publication exists");
+    let canonical_release = work_area
+        .path()
+        .join("library")
+        .join(&publication.plan.target_relative_path);
+    std::fs::create_dir_all(&canonical_release).expect("canonical Release tree");
+    std::fs::write(canonical_release.join("track.mp3"), b"canonical").expect("canonical media");
+    let staging_relative = format!("releases/{}", delete_fixture.work_item_id());
+    let staging_release = work_area.path().join("staging").join(&staging_relative);
+    std::fs::create_dir_all(&staging_release).expect("staged Release tree");
+    std::fs::write(staging_release.join("track.flac"), b"source").expect("staged media");
+    sqlx::query(
+        "INSERT INTO release_work_item_staging_handoffs (
+            work_item_id, staging_relative_path, source_generation, status,
+            method, tree_hash, intended_at, staged_at, inbound_removed_at
+         ) VALUES ($1,$2,'test-generation','inbound_removed','verified_copy',
+                   $3,$4,$4,$4)",
+    )
+    .bind(delete_fixture.work_item_id())
+    .bind(&staging_relative)
+    .bind("a".repeat(64))
+    .bind(time::OffsetDateTime::now_utc())
+    .execute(&db.pool)
+    .await
+    .expect("seed staging handoff");
     let delete_path = format!(
         "/api/admin/v1/review/{}/decision",
         delete_fixture.work_item_id()
@@ -557,9 +600,57 @@ async fn review_decision_accept_and_delete_flows() {
     .await;
     assert_eq!(response.status, StatusCode::OK, "{}", response.body);
     assert_eq!(response.body["decision"]["disposition"], "delete");
+    assert_eq!(response.body["pendingExecution"], false);
+    assert_eq!(response.body["workItem"]["state"], "deleted");
+    assert!(!canonical_release.exists(), "canonical media is removed");
+    assert!(
+        !staging_release.exists(),
+        "retained source media is removed"
+    );
     assert_eq!(
-        response.body["pendingExecution"], true,
-        "delete authorization records pending execution"
+        sqlx::query_scalar::<_, String>("SELECT status FROM releases WHERE id = $1")
+            .bind(delete_fixture.release_id().into_uuid())
+            .fetch_one(&db.pool)
+            .await
+            .expect("read deleted Release tombstone"),
+        "deleted"
+    );
+    let deleted_release_public_id: Uuid =
+        sqlx::query_scalar("SELECT public_api_id FROM releases WHERE id = $1")
+            .bind(delete_fixture.release_id().into_uuid())
+            .fetch_one(&db.pool)
+            .await
+            .expect("read deleted Release public id");
+    let (visible_releases, release_total) = CatalogStore
+        .list_catalog_releases(&db.pool, None, None, 50, 0, CatalogReleaseSort::TitleAsc)
+        .await
+        .expect("browse Releases after deletion");
+    assert_eq!(release_total, 1, "the accepted fixture remains visible");
+    assert!(
+        visible_releases
+            .iter()
+            .all(|release| release.public_api_id != deleted_release_public_id)
+    );
+    let (visible_tracks, track_total) = CatalogStore
+        .list_catalog_tracks(&db.pool, None, None, 50, 0, CatalogTrackSort::TitleAsc)
+        .await
+        .expect("browse Tracks after deletion");
+    assert_eq!(track_total, 1, "the accepted fixture Track remains visible");
+    assert!(
+        visible_tracks
+            .iter()
+            .all(|track| track.release_public_api_id != deleted_release_public_id)
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM catalog_audit_events
+              WHERE entity_id = $1 AND event_type = 'release_deleted'",
+        )
+        .bind(delete_fixture.release_id().into_uuid())
+        .fetch_one(&db.pool)
+        .await
+        .expect("read deletion audit"),
+        1
     );
 
     // Blank reason and unknown action are rejected before any state reads.

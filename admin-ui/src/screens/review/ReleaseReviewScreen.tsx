@@ -291,7 +291,9 @@ export function ReleaseReviewScreen() {
       .then((result) => {
         setNotice({
           kind: 'success',
-          text: result.pendingExecution
+          text: action === 'delete' && !result.pendingExecution
+            ? t('review.decision.deleteSuccess')
+            : result.pendingExecution
             ? t('review.decision.deletePending')
             : t('review.decision.success'),
         });

@@ -286,8 +286,8 @@ async fn artist_browsing_envelope_filters_and_whitelist_sort() {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    // One release-scoped and one track-scoped provisional Artist.
-    assert_eq!(body["total"], 2);
+    // Release and matching Track observations share one provisional Artist.
+    assert_eq!(body["total"], 1);
     assert_eq!(body["limit"], 50);
     assert_eq!(body["offset"], 0);
     let item = body["items"]
@@ -711,8 +711,8 @@ async fn track_detail_payload_and_not_found() {
     );
     assert!(body["audioIdentityId"].is_string());
 
-    // The manifest observed a track-scoped artist, so the track-level billing
-    // is a distinct provisional Artist from the release-level one.
+    // The manifest retains track-scoped billing while the matching release
+    // and track observations share one Artist identity.
     let artists = body["artists"].as_array().expect("artists");
     assert_eq!(artists.len(), 1);
     assert_eq!(artists[0]["name"], "Track Artist");

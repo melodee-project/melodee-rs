@@ -238,9 +238,9 @@ fn nf(id: Uuid) -> String {
 }
 
 async fn catalog_ids(db: &common::TestDb, release_id: ReleaseId, artist_name: &str) -> CatalogIds {
-    // The fixture resolves release and track billing strings into separate
-    // Artist identities (a string is never an Artist identity); the
-    // release-primary artist is the addressable one for billing-scoped tests.
+    // The fixture's sole release and track billing observations resolve to
+    // the same Artist identity. A string still is not an identity: each
+    // observation and its resolution evidence remain durable and distinct.
     let artist: Uuid = sqlx::query_scalar(
         "SELECT artist.public_api_id FROM release_artists billing \
          JOIN artists artist ON artist.id = billing.artist_id \
@@ -315,8 +315,8 @@ async fn artists_list_matches_frozen_shape_and_etags() {
             "../../../compatibility/jellyfin/golden/browse/jf-artists-genres-artists-list.json"
         )),
     );
-    // The fixture yields two Artist identities (release and track billing).
-    assert_eq!(json["TotalRecordCount"], 2);
+    // Matching release and track billing observations share one Artist.
+    assert_eq!(json["TotalRecordCount"], 1);
     assert_eq!(json["Items"][0]["Name"], "Aurora Fields");
     assert_eq!(json["Items"][0]["Type"], "MusicArtist");
 
@@ -345,7 +345,7 @@ async fn artists_list_matches_frozen_shape_and_etags() {
     let (status, _, bytes) =
         respond(&fixture.state, get("/Artists/AlbumArtists", &fixture.token)).await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(json_body(&bytes)["TotalRecordCount"], 2);
+    assert_eq!(json_body(&bytes)["TotalRecordCount"], 1);
 }
 
 #[tokio::test]
@@ -433,7 +433,7 @@ async fn artist_detail_and_search_term_folding() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(json_body(&bytes)["TotalRecordCount"], 2);
+    assert_eq!(json_body(&bytes)["TotalRecordCount"], 1);
     let (status, _, bytes) = respond(
         &fixture.state,
         get("/Artists?searchTerm=nomatch", &fixture.token),
@@ -455,8 +455,8 @@ async fn items_dispatch_include_item_types_and_parent_probe() {
     .await;
     assert_eq!(status, StatusCode::OK);
     let json = json_body(&bytes);
-    // Two Artist identities: release billing and track billing are separate.
-    assert_eq!(json["TotalRecordCount"], 2);
+    // Matching release and track billing observations share one Artist.
+    assert_eq!(json["TotalRecordCount"], 1);
     assert_eq!(json["Items"][0]["Type"], "MusicArtist");
     assert_eq!(json["Items"][0]["CanDownload"], true);
 

@@ -1235,16 +1235,15 @@ async fn search_matches_the_normalized_name_collision_pair() {
         assert_eq!(headers.get("x-total-count").unwrap(), "0", "{endpoint}");
         let env = envelope(&body);
         let result = env[&key].clone();
-        // Both collision identities match one query (captured Dune/Düné).
-        // The fixture resolves release-scope and track-scope artist
-        // observations to separate identities, so each name appears twice;
-        // the captured contract is that one folded query matches both names.
+        // Both distinct Artist identities match one folded query (captured
+        // Dune/Düné). Each identity owns separate release- and track-scoped
+        // observations for its Release.
         let artists = result["artist"].as_array().expect("artists");
         let names: Vec<&str> = artists
             .iter()
             .map(|artist| artist["name"].as_str().expect("name"))
             .collect();
-        assert_eq!(names, ["Dune", "Dune", "Düné", "Düné"], "{endpoint}");
+        assert_eq!(names, ["Dune", "Düné"], "{endpoint}");
         let ids: Vec<&str> = artists
             .iter()
             .map(|artist| artist["id"].as_str().expect("id"))
@@ -1406,11 +1405,11 @@ async fn search_empty_and_unicode_queries_match_the_captured_shapes() {
     );
 
     // The offset rounds down to a page boundary (legacy page = offset/count+1);
-    // with the dual-identity fixture, offset 2 lands on the first Düné row.
+    // with one identity per Release, offset 1 lands on the Düné row.
     let (_, _, body) = respond(
         state.clone(),
         enforced_get(&authed(
-            "/rest/search3.view?f=json&query=Dune&artistCount=1&artistOffset=2&albumCount=0&songCount=0",
+            "/rest/search3.view?f=json&query=Dune&artistCount=1&artistOffset=1&albumCount=0&songCount=0",
         )),
     )
     .await;

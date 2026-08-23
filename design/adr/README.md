@@ -82,6 +82,11 @@ python3 scripts/new_adr.py "short title"
 - [ADR-0150: Legacy media metadata dispositions for Phase 11 migration](ADR-0150-legacy-media-metadata-dispositions-for-phase-11-migration.md)
 - [ADR-0151: Use Debian Trixie runtime base for release images](ADR-0151-use-debian-trixie-runtime-base-for-release-images.md)
 
+## Product correctness decisions
+
+- [ADR-0152: Execute confirmed Release deletion with audited tombstones](ADR-0152-execute-confirmed-release-deletion-with-audited-tombstones.md)
+- [ADR-0153: Reuse unambiguous Release Artist identity for matching Tracks](ADR-0153-reuse-unambiguous-release-artist-identity-for-matching-tracks.md)
+
 ## ADR quality rules
 
 - State the decision, not merely the chosen technology.

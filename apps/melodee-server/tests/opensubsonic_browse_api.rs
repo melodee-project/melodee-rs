@@ -549,9 +549,9 @@ async fn get_indexes_matches_the_captured_index_shape() {
     assert!(letters.contains(&"V"), "{letters:?}");
     assert!(letters.contains(&""), "{letters:?}");
 
-    // Aurora Fields lands in A. The seeder resolves release-scope and
-    // track-scope artist observations to separate identities (both named
-    // "Aurora Fields"); the rated one carries userRating 5 + userStarred/starred.
+    // Aurora Fields lands in A. Its release- and track-scoped observations
+    // share one Artist identity, which carries userRating 5 +
+    // userStarred/starred.
     let aurora_artist = seeded
         .iter()
         .find(|(name, _, _)| name == "Aurora Fields")
@@ -1199,10 +1199,9 @@ async fn get_music_directory_artist_lists_albums_as_directory_children() {
     assert_eq!(directory["starred"], "2026-08-07T00:00:00Z");
     assert_eq!(directory["userRating"], 5);
     assert_eq!(directory["averageRating"], 0.0);
-    // Captured directory playCount is the artist-level user play count
-    // (legacy UserArtists.PlayedCount); this fixture has no artist-level play
-    // state, so 0.
-    assert_eq!(directory["playCount"], 0);
+    // Artist playCount aggregates the four plays recorded against the Track
+    // now that release and track billing share one Artist identity.
+    assert_eq!(directory["playCount"], 4);
 
     let child = &directory["child"][0];
     assert_eq!(child["isDir"], true);

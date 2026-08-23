@@ -70,6 +70,8 @@ The following outcomes are release-blocking:
   migrated without mandatory re-encoding or relocation.
 - Native v1, OpenSubsonic, Jellyfin, Admin UI, and supported real-client gates remain green.
 - Backup, restore, search rebuild, failure diagnosis, retry, and rollback are proven.
+- An explicitly confirmed administrator Release deletion removes canonical and retained staged
+  media while preserving an audited catalog tombstone (ADR-0152).
 - Repository, requirements, Rust, Python, Admin UI, docs, dependency, container, security, and
   release gates pass from the release commit.
 - The repository and public docs describe an initial code-complete application rather than an
@@ -90,7 +92,7 @@ existing optional requirement boundary:
 | Metadata edit forms in the Admin UI | Excluded from the initial release closure | Phase 10 decision log |
 | Interactive API explorer | Excluded from the initial release closure | Phase 10 decision log |
 | Automatic staged-source deletion after publication | Excluded; retain staged source | ADR-0145 |
-| New operator-delete semantics for staged bytes | Excluded; do not broaden deletion | ADR-0145 |
+| Automatic or policy-only deletion of staged bytes | Excluded; only the explicit administrator-confirmed Release deletion in ADR-0152 may remove them | ADR-0145, ADR-0152 |
 | Optional generated filesystem views | Excluded unless an accepted release decision makes them mandatory | `PRD-STORAGE-003`, ADR-0106 |
 | Physical duplicate-media reclamation | Excluded; logical duplicate evidence remains authoritative | Existing ingestion/storage decisions |
 | Filesystem watcher acceleration | Optional; reconciliation remains authoritative | Existing ingestion architecture |

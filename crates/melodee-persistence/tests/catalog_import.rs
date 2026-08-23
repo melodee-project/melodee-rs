@@ -125,8 +125,8 @@ async fn import_adopts_reserved_release_id_is_idempotent_and_never_rewrites_v3()
     assert_eq!(imported.track_count, 1);
     assert_eq!(imported.media_asset_count, 1);
     assert_eq!(
-        imported.artist_count, 2,
-        "equal raw names are separate provisional observations, not name-merged"
+        imported.artist_count, 1,
+        "the sole matching Track observation reuses the Release Artist identity"
     );
     assert!(imported.set_based_mutation_statement_count > 0);
 
@@ -139,7 +139,20 @@ async fn import_adopts_reserved_release_id_is_idempotent_and_never_rewrites_v3()
     let counts_after_first = catalog.counts(&db.pool).await.expect("catalog counts");
     assert_eq!(counts_after_first.releases, 1);
     assert_eq!(counts_after_first.tracks, 1);
-    assert_eq!(counts_after_first.artists, 2);
+    assert_eq!(counts_after_first.artists, 1);
+    let identity_rows: Vec<(uuid::Uuid, uuid::Uuid, String)> = sqlx::query_as(
+        "SELECT decision.artist_id, observed.id, observed.scope
+           FROM observed_artists observed
+           JOIN artist_match_current current ON current.observed_artist_id = observed.id
+           JOIN artist_match_decisions decision ON decision.id = current.decision_id
+          ORDER BY observed.scope",
+    )
+    .fetch_all(&db.pool)
+    .await
+    .expect("read resolved Artist observations");
+    assert_eq!(identity_rows.len(), 2, "raw observations remain distinct");
+    assert_eq!(identity_rows[0].0, identity_rows[1].0);
+    assert_ne!(identity_rows[0].1, identity_rows[1].1);
     assert_eq!(counts_after_first.media_assets, 1);
     assert_eq!(counts_after_first.imports, 1);
 

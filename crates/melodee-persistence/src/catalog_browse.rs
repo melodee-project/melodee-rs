@@ -541,7 +541,8 @@ impl CatalogStore {
         sort: CatalogArtistSort,
     ) -> Result<(Vec<CatalogArtistListRow>, i64), CatalogStoreError> {
         let total = sqlx::query_scalar::<_, i64>(sqlx::AssertSqlSafe(format!(
-            "SELECT COUNT(*)::bigint FROM artists a WHERE {ARTIST_QUERY_FILTER}"
+            "SELECT COUNT(*)::bigint FROM artists a
+              WHERE a.status IN ('provisional','verified') AND {ARTIST_QUERY_FILTER}"
         )))
         .bind(search)
         .fetch_one(pool)
@@ -557,7 +558,7 @@ impl CatalogStore {
                     a.created_at, a.updated_at
                FROM artists a
                LEFT JOIN artist_catalog_aggregates aggregate ON aggregate.artist_id = a.id
-              WHERE {ARTIST_QUERY_FILTER}
+              WHERE a.status IN ('provisional','verified') AND {ARTIST_QUERY_FILTER}
               ORDER BY {}
               LIMIT $2 OFFSET $3",
             sort.order_by()
@@ -583,7 +584,8 @@ impl CatalogStore {
     ) -> Result<(Vec<CatalogReleaseListRow>, i64), CatalogStoreError> {
         let total = sqlx::query_scalar::<_, i64>(sqlx::AssertSqlSafe(format!(
             "SELECT COUNT(*)::bigint FROM releases r
-              WHERE {RELEASE_QUERY_FILTER} AND {RELEASE_ARTIST_FILTER}"
+              WHERE r.status <> 'deleted'
+                AND {RELEASE_QUERY_FILTER} AND {RELEASE_ARTIST_FILTER}"
         )))
         .bind(search)
         .bind(artist_public_id)
@@ -597,7 +599,8 @@ impl CatalogStore {
                     r.created_at, r.updated_at
                FROM releases r
                LEFT JOIN release_catalog_aggregates aggregate ON aggregate.release_id = r.id
-              WHERE {RELEASE_QUERY_FILTER} AND {RELEASE_ARTIST_FILTER}
+              WHERE r.status <> 'deleted'
+                AND {RELEASE_QUERY_FILTER} AND {RELEASE_ARTIST_FILTER}
               ORDER BY {}
               LIMIT $3 OFFSET $4",
             sort.order_by()
@@ -624,7 +627,8 @@ impl CatalogStore {
     ) -> Result<(Vec<CatalogTrackListRow>, i64), CatalogStoreError> {
         let total = sqlx::query_scalar::<_, i64>(sqlx::AssertSqlSafe(format!(
             "SELECT COUNT(*)::bigint FROM tracks t JOIN releases r ON r.id = t.release_id
-              WHERE {TRACK_QUERY_FILTER} AND {TRACK_RELEASE_FILTER}"
+              WHERE r.status <> 'deleted'
+                AND {TRACK_QUERY_FILTER} AND {TRACK_RELEASE_FILTER}"
         )))
         .bind(search)
         .bind(release_public_id)
@@ -637,7 +641,8 @@ impl CatalogStore {
                     t.created_at
                FROM tracks t
                JOIN releases r ON r.id = t.release_id
-              WHERE {TRACK_QUERY_FILTER} AND {TRACK_RELEASE_FILTER}
+              WHERE r.status <> 'deleted'
+                AND {TRACK_QUERY_FILTER} AND {TRACK_RELEASE_FILTER}
               ORDER BY {}
               LIMIT $3 OFFSET $4",
             sort.order_by()
