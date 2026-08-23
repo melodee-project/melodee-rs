@@ -19,8 +19,9 @@ import {
 } from '@carbon/react';
 import { useTranslation } from 'react-i18next';
 import { Link as RouterLink, useParams } from 'react-router-dom';
+import { useState } from 'react';
 
-import { getCatalogArtist } from '../../api/admin';
+import { getCatalogArtist, updateArtistMetadata } from '../../api/admin';
 import type { ArtistContribution, ArtistDetail } from '../../api/types';
 import { AuditTimeline } from '../../components/AuditTimeline';
 import { EmptyState } from '../../components/EmptyState';
@@ -32,6 +33,7 @@ import { formatDate, formatDateTime, formatNumber } from '../../i18n/format';
 import { catalogStatusKind, toCatalogAuditEvent, useCatalogDetail } from './catalog';
 import { ArtworkManager } from './ArtworkManager';
 import { CatalogArtwork } from './CatalogArtwork';
+import { EditPanel } from './EditPanel';
 
 /**
  * Artist Detail workspace (PRD-UI-006): identity facts and catalog
@@ -155,6 +157,7 @@ function ArtistHeaderFacts({ detail }: { detail: ArtistDetail }) {
 export function ArtistDetailScreen() {
   const { t } = useTranslation();
   const { id = '' } = useParams();
+  const [editing, setEditing] = useState(false);
   const { detail, error, loading, retry } = useCatalogDetail(getCatalogArtist, id);
 
   if (loading && detail === null) {
@@ -188,6 +191,28 @@ export function ArtistDetailScreen() {
       ) : null}
       {detail ? (
         <>
+          <p>
+            <Link as="button" onClick={() => setEditing((prev) => !prev)}>
+              {editing ? t('catalog.edit.cancel') : t('catalog.edit')}
+            </Link>
+          </p>
+          {editing ? (
+            <EditPanel
+              title={t('catalog.artist.edit.title')}
+              fields={[
+                { name: 'name', label: t('catalog.artist.edit.name'), type: 'string', value: detail.name },
+                { name: 'sortName', label: t('catalog.artist.edit.sortName'), type: 'string', value: detail.sortName },
+                { name: 'country', label: t('catalog.artist.edit.country'), type: 'string', value: detail.disambiguation ?? null },
+              ]}
+              buildPatch={(state) => ({
+                name: state['name'] !== undefined && String(state['name']).trim() !== '' ? String(state['name']) : null,
+                sortName: state['sortName'] !== undefined && String(state['sortName']).trim() !== '' ? String(state['sortName']) : null,
+                country: state['country'] !== undefined && String(state['country']).trim() !== '' ? String(state['country']) : null,
+              })}
+              onSave={(patch) => updateArtistMetadata(id, patch)}
+              refresh={retry}
+            />
+          ) : null}
           <div className="melodee-review-card">
             <div className="melodee-review-header">
               <CatalogArtwork imageId={detail.imageId} name={detail.name} size={96} decorative />

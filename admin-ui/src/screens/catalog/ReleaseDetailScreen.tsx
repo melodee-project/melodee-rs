@@ -18,9 +18,11 @@ import {
   Tag,
 } from '@carbon/react';
 import { useTranslation } from 'react-i18next';
+import { useState } from 'react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
 
 import { getCatalogRelease } from '../../api/admin';
+import { updateReleaseMetadata } from '../../api/admin';
 import type { ReleaseDetail } from '../../api/types';
 import { AudioPreview } from '../../components/AudioPreview';
 import { AuditTimeline } from '../../components/AuditTimeline';
@@ -38,6 +40,7 @@ import {
 import { catalogStatusKind, toCatalogAuditEvent, trackOrdinalLabel, useCatalogDetail } from './catalog';
 import { ArtworkManager } from './ArtworkManager';
 import { CatalogArtwork } from './CatalogArtwork';
+import { EditPanel } from './EditPanel';
 
 /**
  * Release Detail workspace (PRD-UI-006): header artwork/title/status
@@ -104,6 +107,7 @@ function ReleaseFacts({ detail }: { detail: ReleaseDetail }) {
 export function ReleaseDetailScreen() {
   const { t } = useTranslation();
   const { id = '' } = useParams();
+  const [editing, setEditing] = useState(false);
   const { detail, error, loading, retry } = useCatalogDetail(getCatalogRelease, id);
 
   if (loading && detail === null) {
@@ -137,6 +141,34 @@ export function ReleaseDetailScreen() {
       ) : null}
       {detail ? (
         <>
+          <p>
+            <Link as="button" onClick={() => setEditing((prev) => !prev)}>
+              {editing ? t('catalog.edit.cancel') : t('catalog.edit')}
+            </Link>
+          </p>
+          {editing ? (
+            <EditPanel
+              title={t('catalog.release.edit.title')}
+              fields={[
+                { name: 'title', label: t('catalog.release.edit.title'), type: 'string', value: detail.title },
+                { name: 'sortTitle', label: t('catalog.release.edit.sortTitle'), type: 'string', value: detail.sortTitle },
+                { name: 'releaseYear', label: t('catalog.release.edit.year'), type: 'number', value: detail.releaseYear },
+                { name: 'releaseDate', label: t('catalog.release.edit.date'), type: 'string', value: detail.releaseDate ?? '' },
+                { name: 'country', label: t('catalog.release.edit.country'), type: 'string', value: detail.country },
+                { name: 'type', label: t('catalog.release.edit.type'), type: 'string', value: detail.type },
+              ]}
+              buildPatch={(state) => ({
+                title: state['title'] !== undefined && String(state['title']).trim() !== '' ? String(state['title']) : null,
+                sortTitle: state['sortTitle'] !== undefined && String(state['sortTitle']).trim() !== '' ? String(state['sortTitle']) : null,
+                releaseYear: state['releaseYear'] as number | undefined,
+                releaseDate: state['releaseDate'] !== undefined && String(state['releaseDate']).trim() !== '' ? String(state['releaseDate']) : null,
+                country: state['country'] !== undefined && String(state['country']).trim() !== '' ? String(state['country']) : null,
+                type: state['type'] !== undefined && String(state['type']).trim() !== '' ? String(state['type']) : null,
+              })}
+              onSave={(patch) => updateReleaseMetadata(id, patch)}
+              refresh={retry}
+            />
+          ) : null}
           <div className="melodee-review-card">
             <div className="melodee-review-header">
               <CatalogArtwork imageId={detail.imageId} name={detail.title} size={96} decorative />

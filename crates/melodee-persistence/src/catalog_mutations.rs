@@ -933,14 +933,274 @@ impl CatalogStore {
         Ok(())
     }
 
-    /// Records an immutable, verified legacy public-ID mapping.
-    pub async fn record_legacy_catalog_id_mapping(
+    /// Updates editable Release metadata fields (title, sort_title, display_artist,
+    /// release_date, release_date_text). All fields are optional — only `Some`
+    /// values are written. Recomputes normalized/sort columns when title changes.
+    /// Records an audit event and bumps the revision.
+    pub async fn update_release_metadata(
         &self,
         pool: &PgPool,
-        mapping: &LegacyCatalogIdMapping,
+        release_id: Uuid,
+        title: Option<&str>,
+        sort_title: Option<&str>,
+        display_artist: Option<&str>,
+        release_date: Option<time::Date>,
+        release_date_text: Option<&str>,
+        actor: &str,
     ) -> Result<(), CatalogStoreError> {
-        self.record_legacy_catalog_id_mappings(pool, std::slice::from_ref(mapping))
-            .await
+        let mut tx = pool.begin().await?;
+
+        // Verify the release exists first.
+        let (current_sort_title, old_title) = sqlx::query_as::<_, (String, String)>(
+            "SELECT sort_title, COALESCE(title, '') FROM releases WHERE id = $1",
+        )
+        .bind(release_id)
+        .fetch_one(&mut *tx)
+        .await?;
+
+        let title_changed = title.is_some() && title.map_or(false, |t| t != old_title);
+
+        // Build the dynamic UPDATE with only non-null fields.
+        let mut builder = QueryBuilder::new(
+            "UPDATE releases SET updated_at = CURRENT_TIMESTAMP",
+        );
+        builder.push(" ,revision = revision + 1");
+
+        if title.is_some() {
+            let new_title = title.unwrap();
+            let computed_sort_title = if title_changed {
+                compute_sort_key(new_title)
+            } else {
+                current_sort_title.clone()
+            };
+            builder.push(" ,title = ");
+            builder.push_bind(new_title);
+            let sort_to_set = match sort_title {
+                Some(s) => s,
+                None => &computed_sort_title,
+            };
+            builder.push(" ,sort_title = ");
+            builder.push_bind(sort_to_set);
+        } else if sort_title.is_some() {
+            builder.push(" ,sort_title = ");
+            builder.push_bind(sort_title.unwrap());
+        }
+
+        if display_artist.is_some() {
+            builder.push(" ,display_artist = ");
+            builder.push_bind(display_artist.unwrap());
+        }
+
+        if release_date.is_some() {
+            builder.push(" ,release_date = ");
+            builder.push_bind(release_date.unwrap());
+        }
+
+        if release_date_text.is_some() {
+            builder.push(" ,release_date_text = ");
+            builder.push_bind(release_date_text.unwrap());
+        }
+
+        builder.push(" WHERE id = ");
+        builder.push_bind(release_id);
+
+        builder
+            .build()
+            .execute(&mut *tx)
+            .await?;
+
+        audit_event(
+            &mut tx,
+            "release",
+            release_id,
+            "release_metadata_updated",
+            actor,
+            "Release metadata updated",
+            serde_json::json!({
+                "title": title,
+                "sort_title": sort_title,
+                "display_artist": display_artist,
+                "release_date": release_date.as_ref().map(|d| format!("{:04}-{:02}-{:02}", d.year(), u8::from(d.month()), d.day())),
+                "release_date_text": release_date_text,
+            }),
+            OffsetDateTime::now_utc(),
+        )
+        .await?;
+
+        tx.commit().await?;
+        Ok(())
+    }
+
+    /// Updates editable Artist metadata fields (canonical_name, sort_name, artist_type).
+    /// All fields are optional — only `Some` values are written. Recomputes
+    /// normalized_name and sort_name when canonical_name changes.
+    pub async fn update_artist_metadata(
+        &self,
+        pool: &PgPool,
+        artist_id: Uuid,
+        canonical_name: Option<&str>,
+        sort_name: Option<&str>,
+        artist_type: Option<&str>,
+        actor: &str,
+    ) -> Result<(), CatalogStoreError> {
+        let mut tx = pool.begin().await?;
+
+        // Verify the artist exists first.
+        let (current_canonical_name,) = sqlx::query_as::<_, (String,)>(
+            "SELECT COALESCE(canonical_name, '') FROM artists WHERE id = $1",
+        )
+        .bind(artist_id)
+        .fetch_one(&mut *tx)
+        .await?;
+
+        let name_changed = canonical_name.is_some()
+            && canonical_name.map_or(false, |n| n != current_canonical_name);
+
+        // Build the dynamic UPDATE with only non-null fields.
+        let mut builder = QueryBuilder::new(
+            "UPDATE artists SET updated_at = CURRENT_TIMESTAMP",
+        );
+        builder.push(" ,revision = revision + 1");
+
+        if canonical_name.is_some() {
+            let new_name = canonical_name.unwrap();
+            let computed_normalized = compute_normalized(new_name);
+            // Compute sort from current name when unchanged, else from new name.
+            let computed_sort = if name_changed {
+                compute_sort_key(new_name)
+            } else {
+                compute_sort_key(&current_canonical_name)
+            };
+            builder.push(" ,canonical_name = ");
+            builder.push_bind(new_name);
+            // Use computed values only when the field wasn't explicitly set.
+            let sort_to_set = match sort_name {
+                Some(s) => s,
+                None => &computed_sort,
+            };
+            builder.push(" ,sort_name = ");
+            builder.push_bind(sort_to_set);
+            builder.push(" ,normalized_name = ");
+            builder.push_bind(computed_normalized);
+        } else if sort_name.is_some() {
+            builder.push(" ,sort_name = ");
+            builder.push_bind(sort_name.unwrap());
+        }
+
+        if artist_type.is_some() {
+            builder.push(" ,artist_type = ");
+            builder.push_bind(artist_type.unwrap());
+        }
+
+        builder.push(" WHERE id = ");
+        builder.push_bind(artist_id);
+
+        builder
+            .build()
+            .execute(&mut *tx)
+            .await?;
+
+        // Insert into catalog_projection_outbox so the search projection refreshes.
+        let now = OffsetDateTime::now_utc();
+        sqlx::query(
+            "INSERT INTO catalog_projection_outbox (\n                projection_name, entity_type, entity_id, operation,\n                entity_revision, available_at, attempt_count, created_at\n             ) VALUES ('tantivy.catalog','artist',$1,$4,$2,$3,0,$3)",
+        )
+        .bind(artist_id)
+        .bind(1_i64) // revision placeholder; consumer reads latest.
+        .bind(now)
+        .bind("upsert")
+        .execute(&mut *tx)
+        .await?;
+
+        audit_event(
+            &mut tx,
+            "artist",
+            artist_id,
+            "artist_metadata_updated",
+            actor,
+            "Artist metadata updated",
+            serde_json::json!({
+                "canonical_name": canonical_name,
+                "sort_name": sort_name,
+                "artist_type": artist_type,
+            }),
+            now,
+        )
+        .await?;
+
+        tx.commit().await?;
+        Ok(())
+    }
+
+    /// Updates editable Track metadata fields (title, sort_title, display_artist, ordinal).
+    pub async fn update_track_metadata(
+        &self,
+        pool: &PgPool,
+        track_id: Uuid,
+        title: Option<&str>,
+        sort_title: Option<&str>,
+        display_artist: Option<&str>,
+        ordinal: Option<i32>,
+        actor: &str,
+    ) -> Result<(), CatalogStoreError> {
+        let mut tx = pool.begin().await?;
+
+        // Verify the track exists first.
+        sqlx::query("SELECT id FROM tracks WHERE id = $1")
+            .bind(track_id)
+            .fetch_one(&mut *tx)
+            .await?;
+
+        // Build the dynamic UPDATE with only non-null fields.
+        let mut builder = QueryBuilder::new(
+            "UPDATE tracks SET updated_at = CURRENT_TIMESTAMP",
+        );
+        builder.push(" ,revision = revision + 1");
+
+        if title.is_some() {
+            builder.push(" ,title = ");
+            builder.push_bind(title.unwrap());
+        }
+        if sort_title.is_some() {
+            builder.push(" ,sort_title = ");
+            builder.push_bind(sort_title.unwrap());
+        }
+        if display_artist.is_some() {
+            builder.push(" ,display_artist = ");
+            builder.push_bind(display_artist.unwrap());
+        }
+        if ordinal.is_some() {
+            builder.push(" ,ordinal = ");
+            builder.push_bind(ordinal.unwrap());
+        }
+
+        builder.push(" WHERE id = ");
+        builder.push_bind(track_id);
+
+        builder
+            .build()
+            .execute(&mut *tx)
+            .await?;
+
+        audit_event(
+            &mut tx,
+            "track",
+            track_id,
+            "track_metadata_updated",
+            actor,
+            "Track metadata updated",
+            serde_json::json!({
+                "title": title,
+                "sort_title": sort_title,
+                "display_artist": display_artist,
+                "ordinal": ordinal,
+            }),
+            OffsetDateTime::now_utc(),
+        )
+        .await?;
+
+        tx.commit().await?;
+        Ok(())
     }
 
     /// Validates and inserts a bounded legacy mapping batch in constant statements.
@@ -2016,6 +2276,20 @@ fn legacy_entity_name(value: LegacyCatalogEntityType) -> &'static str {
         LegacyCatalogEntityType::Release => "release",
         LegacyCatalogEntityType::Track => "track",
     }
+}
+
+fn compute_sort_key(display: &str) -> String {
+    let lower = display.to_lowercase();
+    for prefix in ["the ", "a ", "an "] {
+        if let Some(rest) = lower.strip_prefix(prefix) {
+            return rest.trim_start().to_string();
+        }
+    }
+    lower
+}
+
+fn compute_normalized(value: &str) -> String {
+    value.to_lowercase().trim().to_string()
 }
 
 fn candidate_rows(

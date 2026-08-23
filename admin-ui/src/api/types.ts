@@ -11,6 +11,32 @@ export interface ApiErrorBody {
   correlationId: string;
 }
 
+// ---- Catalog metadata patch types (PUT /api/admin/v1/catalog/{entity}/{id}/metadata) ----
+
+export interface ReleaseMetadataPatch {
+  title?: string | null;
+  sortTitle?: string | null;
+  releaseYear?: number | null;
+  releaseDate?: string | null;
+  country?: string | null;
+  type?: string | null;
+}
+
+export interface ArtistMetadataPatch {
+  name?: string | null;
+  sortName?: string | null;
+  country?: string | null;
+}
+
+export interface TrackMetadataPatch {
+  title?: string | null;
+  sortTitle?: string | null;
+  trackNumber?: number | null;
+  durationMs?: number | null;
+  bpm?: number | null;
+  key?: string | null;
+}
+
 /** Server-side pagination envelope shared by list endpoints. */
 export interface Page<T> {
   items: T[];

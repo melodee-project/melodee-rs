@@ -249,6 +249,37 @@ pub struct TrackListParams {
     pub release_id: Option<Uuid>,
 }
 
+/// Request body for updating editable Release metadata fields.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReleaseMetadataUpdate {
+    pub title: Option<String>,
+    pub sort_title: Option<String>,
+    pub display_artist: Option<String>,
+    /// ISO date string "YYYY-MM-DD".
+    pub release_date: Option<String>,
+    pub release_date_text: Option<String>,
+}
+
+/// Request body for updating editable Artist metadata fields.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtistMetadataUpdate {
+    pub canonical_name: Option<String>,
+    pub sort_name: Option<String>,
+    pub artist_type: Option<String>,
+}
+
+/// Request body for updating editable Track metadata fields.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrackMetadataUpdate {
+    pub title: Option<String>,
+    pub sort_title: Option<String>,
+    pub display_artist: Option<String>,
+    pub ordinal: Option<i32>,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PageDto<T> {
@@ -688,6 +719,12 @@ pub fn router() -> Router<AdminCatalogState> {
                 .delete(delete_release_image)
                 .layer(DefaultBodyLimit::max(ARTWORK_BODY_LIMIT_BYTES)),
         )
+        .route(
+            "/api/admin/v1/catalog/releases/{id}",
+            put(update_release_metadata),
+        )
+        .route("/api/admin/v1/catalog/artists/{id}", put(update_artist_metadata))
+        .route("/api/admin/v1/catalog/tracks/{id}", put(update_track_metadata))
 }
 
 /// GET /api/admin/v1/catalog/artists — server-side Artist browsing.
@@ -1405,4 +1442,133 @@ async fn delete_release_image(
     body: Bytes,
 ) -> Response {
     delete_entity_image(&state, &admin, RELEASE_ARTWORK, id, body).await
+}
+
+// ---------------------------------------------------------------------------
+// Metadata update handlers (UI-X: catalog metadata edit forms)
+// ---------------------------------------------------------------------------
+
+/// PUT /api/admin/v1/catalog/releases/{id} — update editable Release metadata.
+async fn update_release_metadata(
+    State(state): State<AdminCatalogState>,
+    admin: AdminPrincipal,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<ReleaseMetadataUpdate>,
+) -> Response {
+    // Resolve public_api_id → internal id.
+    let internal_id: Uuid = match sqlx::query_scalar(
+        "SELECT id FROM releases WHERE public_api_id = $1",
+    )
+    .bind(id)
+    .fetch_one(&state.admin.pool)
+    .await
+    {
+        Ok(id) => id,
+        Err(_) => return not_found("release", id),
+    };
+
+    // Parse release_date if provided.
+    let release_date = match payload
+        .release_date
+        .as_deref()
+        .filter(|s| !s.is_empty())
+    {
+        None => None,
+        Some(raw) => match Date::parse(raw, &time::format_description::well_known::Iso8601::DEFAULT) {
+            Ok(d) => Some(d),
+            Err(_) => {
+                return catalog_error(
+                    StatusCode::BAD_REQUEST,
+                    "invalid_request",
+                    "releaseDate must be a valid ISO 8601 date (YYYY-MM-DD)",
+                );
+            }
+        },
+    };
+
+    let actor = admin.public_api_id.to_string();
+    match CatalogStore.update_release_metadata(
+        &state.admin.pool,
+        internal_id,
+        payload.title.as_deref(),
+        payload.sort_title.as_deref(),
+        payload.display_artist.as_deref(),
+        release_date,
+        payload.release_date_text.as_deref(),
+        &actor,
+    )
+    .await
+    {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(error) => store_failure("release metadata update failed", &error),
+    }
+}
+
+/// PUT /api/admin/v1/catalog/artists/{id} — update editable Artist metadata.
+async fn update_artist_metadata(
+    State(state): State<AdminCatalogState>,
+    admin: AdminPrincipal,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<ArtistMetadataUpdate>,
+) -> Response {
+    let internal_id: Uuid = match sqlx::query_scalar(
+        "SELECT id FROM artists WHERE public_api_id = $1",
+    )
+    .bind(id)
+    .fetch_one(&state.admin.pool)
+    .await
+    {
+        Ok(id) => id,
+        Err(_) => return not_found("artist", id),
+    };
+
+    let actor = admin.public_api_id.to_string();
+    match CatalogStore.update_artist_metadata(
+        &state.admin.pool,
+        internal_id,
+        payload.canonical_name.as_deref(),
+        payload.sort_name.as_deref(),
+        payload.artist_type.as_deref(),
+        &actor,
+    )
+    .await
+    {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(error) => store_failure("artist metadata update failed", &error),
+    }
+}
+
+/// PUT /api/admin/v1/catalog/tracks/{id} — update editable Track metadata.
+async fn update_track_metadata(
+    State(state): State<AdminCatalogState>,
+    admin: AdminPrincipal,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<TrackMetadataUpdate>,
+) -> Response {
+    let internal_id: Uuid = match sqlx::query_scalar(
+        "SELECT id FROM tracks WHERE public_api_id = $1",
+    )
+    .bind(id)
+    .fetch_one(&state.admin.pool)
+    .await
+    {
+        Ok(id) => id,
+        Err(_) => return not_found("track", id),
+    };
+
+    let actor = admin.public_api_id.to_string();
+    match CatalogStore.update_track_metadata(
+        &state.admin.pool,
+        internal_id,
+        payload.title.as_deref(),
+        payload.sort_title.as_deref(),
+        payload.display_artist.as_deref(),
+        payload.ordinal,
+        &actor,
+    )
+    .await
+    {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(error) => store_failure("track metadata update failed", &error),
+    }
 }

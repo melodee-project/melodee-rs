@@ -1,8 +1,9 @@
 import { apiFetch, buildQuery } from './client';
-import type {
+export type {
   AccessGroup,
   AccessGroupDetail,
   AdminScript,
+  ArtistMetadataPatch,
   ArtistDetail,
   CatalogArtistListItem,
   CatalogReleaseListItem,
@@ -29,6 +30,7 @@ import type {
   PolicyTestRequest,
   PolicyTestRun,
   RadioStation,
+  ReleaseMetadataPatch,
   ReleaseDetail,
   ResolveObservationResult,
   ReviewDecisionResult,
@@ -44,6 +46,7 @@ import type {
   SystemHealth,
   SystemInfo,
   TrackDetail,
+  TrackMetadataPatch,
   UnresolvedObservation,
   UserCreateRequest,
   UserSummary,
@@ -768,4 +771,30 @@ export function setDefaultDeviceProfile(id: string): Promise<DeviceProfile> {
   return apiFetch<DeviceProfile>(`${ADMIN}/device-profiles/${encodeURIComponent(id)}/default`, {
     method: 'POST',
   });
+}
+
+// ---- Catalog metadata updates (PUT /api/admin/v1/catalog/{entity}/{id}/metadata) ----
+
+export function updateReleaseMetadata(
+  releaseId: string,
+  patch: ReleaseMetadataPatch,
+): Promise<void> {
+  return apiFetch<void>(
+    `${ADMIN}/catalog/releases/${encodeURIComponent(releaseId)}/metadata`,
+    { method: 'PUT', body: patch },
+  );
+}
+
+export function updateArtistMetadata(artistId: string, patch: ArtistMetadataPatch): Promise<void> {
+  return apiFetch<void>(
+    `${ADMIN}/catalog/artists/${encodeURIComponent(artistId)}/metadata`,
+    { method: 'PUT', body: patch },
+  );
+}
+
+export function updateTrackMetadata(trackId: string, patch: TrackMetadataPatch): Promise<void> {
+  return apiFetch<void>(
+    `${ADMIN}/catalog/tracks/${encodeURIComponent(trackId)}/metadata`,
+    { method: 'PUT', body: patch },
+  );
 }

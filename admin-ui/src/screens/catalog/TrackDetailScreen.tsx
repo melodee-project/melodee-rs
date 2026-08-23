@@ -13,8 +13,9 @@ import {
 } from '@carbon/react';
 import { useTranslation } from 'react-i18next';
 import { Link as RouterLink, useParams } from 'react-router-dom';
+import { useState } from 'react';
 
-import { getCatalogTrack } from '../../api/admin';
+import { getCatalogTrack, updateTrackMetadata } from '../../api/admin';
 import { AudioPreview } from '../../components/AudioPreview';
 import { EmptyState } from '../../components/EmptyState';
 import { ArtistLink, ReleaseLink } from '../../components/EntityLink';
@@ -23,6 +24,7 @@ import { StatusTag } from '../../components/StatusTag';
 import { formatBytes, formatDateTime, formatDuration, formatNumber } from '../../i18n/format';
 import { catalogStatusKind, trackOrdinalLabel, useCatalogDetail } from './catalog';
 import { CatalogArtwork } from './CatalogArtwork';
+import { EditPanel } from './EditPanel';
 
 /**
  * Track Detail (PRD-UI-006/007): identity facts, the Release linkage,
@@ -33,6 +35,7 @@ import { CatalogArtwork } from './CatalogArtwork';
 export function TrackDetailScreen() {
   const { t } = useTranslation();
   const { id = '' } = useParams();
+  const [editing, setEditing] = useState(false);
   const { detail, error, loading, retry } = useCatalogDetail(getCatalogTrack, id);
 
   if (loading && detail === null) {
@@ -66,6 +69,30 @@ export function TrackDetailScreen() {
       ) : null}
       {detail ? (
         <>
+          <p>
+            <Link as="button" onClick={() => setEditing((prev) => !prev)}>
+              {editing ? t('catalog.edit.cancel') : t('catalog.edit')}
+            </Link>
+          </p>
+          {editing ? (
+            <EditPanel
+              title={t('catalog.track.edit.title')}
+              fields={[
+                { name: 'title', label: t('catalog.track.edit.titleField'), type: 'string', value: detail.title },
+                { name: 'sortTitle', label: t('catalog.track.edit.sortTitle'), type: 'string', value: detail.sortTitle },
+                { name: 'trackNumber', label: t('catalog.track.edit.number'), type: 'number', value: detail.trackNumber ?? undefined },
+                { name: 'durationMs', label: t('catalog.track.edit.duration'), type: 'number', value: detail.durationMs ?? undefined },
+              ]}
+              buildPatch={(state) => ({
+                title: state['title'] !== undefined && String(state['title']).trim() !== '' ? String(state['title']) : null,
+                sortTitle: state['sortTitle'] !== undefined && String(state['sortTitle']).trim() !== '' ? String(state['sortTitle']) : null,
+                trackNumber: (state['trackNumber'] as number | undefined) ?? undefined,
+                durationMs: (state['durationMs'] as number | undefined) ?? undefined,
+              })}
+              onSave={(patch) => updateTrackMetadata(id, patch)}
+              refresh={retry}
+            />
+          ) : null}
           <div className="melodee-review-card">
             <div className="melodee-review-header">
               <CatalogArtwork imageId={detail.imageId} name={detail.title} size={96} decorative />
