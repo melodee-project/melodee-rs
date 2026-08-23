@@ -1,0 +1,494 @@
+# Road to Full C# Melodee Feature Parity
+
+**Document status:** Active parity audit — incremental, evidence-backed  
+**Audit baseline date:** 2026-08-23  
+**Audit scope:** This is the first audit pass. The high-risk domains (ingestion, identity
+resolution, external providers, metadata editing, party/jukebox reachability, admin UI surface,
+scheduled jobs, CLI) were verified directly against both checkouts. Several lower-risk domains
+remain `NOT ASSESSED` and are explicitly marked below. A partial evidence-backed audit is
+preferable to a fabricated comprehensive one.
+
+## 1. Purpose and honest current verdict
+
+"Feature parity" means **full user-visible and operational feature parity with the current C#
+Melodee application**, broader than API response-shape compatibility. It covers admin UI
+workflows, background jobs, ingestion pipelines, provider plugins, configuration consumers, and
+operator tooling — not only the captured public API surfaces.
+
+**Current verdict: v1.0.0 code completeness CANNOT be asserted.** Blocking gaps remain in the
+highest-risk operational workflows:
+
+- C# ingestion invokes configured Artist and Release metadata/image providers during staging;
+  Rust ingestion does not call any provider and the `external_provider_cache` has no production
+  writer.
+- C# library insertion reuses Artist identities across Releases by MusicBrainz/Spotify ID and
+  name; Rust manifest import allocates a fresh provisional Artist per observed value (with only
+  the single-release-artist in-Release reuse exception), producing duplicate Artist identities
+  across Releases.
+- C# full metadata-edit forms (album/artist/song title, artist promotion, "feat." removal, year
+  normalization) persist tag and catalog changes; Rust admin edit endpoints exist and are wired
+  but lack test evidence, and the admin UI edit forms are limited relative to the C# Blazor
+  editors.
+- Official Phase 11 migration/cutover is not complete.
+
+A C# capability does not cease to be a parity obligation because an ADR deferred it, no capture
+exercised it, or no first-party client used it. Accepted deferrals/waivers are reported as
+differences, not proof of parity.
+
+## 2. Audited baselines
+
+| Repository | Filesystem location | Commit SHA | Branch/tag | Clean/dirty | Audit timestamp | Role |
+| --- | --- | --- | --- | --- | --- | --- |
+| C# Melodee | `/home/steven/src/github/melodee` | `4028b58dbd3302ed431e2c5b32d9dde5634db218` | `sph.2026-07-11.01` | clean | 2026-08-23 12:31 UTC-5 | Current C# product baseline |
+| Rust rewrite | `/home/steven/src/github/melodee-rs` | `a6d54de83e798c381cd145852989fe7f7c872578` | `main` | clean | 2026-08-23 12:31 UTC-5 | Rust candidate |
+| C# oracle (frozen) | same checkout as C# baseline | `4028b58dbd3302ed431e2c5b32d9dde5634db218` | `sph.2026-07-11.01` | clean | 2026-08-23 12:31 UTC-5 | Historical oracle (identical to current C# baseline) |
+
+Note: The C# current baseline HEAD equals the frozen oracle commit `4028b58d…` referenced in
+`AGENTS.md`. The C# checkout is treated as read-only; no build artifacts were created and no
+tests were run against it.
+
+## 3. Method and status legend
+
+The C# inventory was built first from `rg`/source inspection of `src/Melodee.Common/`,
+`src/Melodee.Blazor/`, and `src/Melodee.Cli/`, tracing composition roots, route attributes,
+job registrations, DI wiring, and `.csproj` compile exclusions. The Rust inventory was then built
+from `apps/` and `crates/` source, tracing production wiring from routes/workers to concrete
+implementations and verifying test evidence exists.
+
+Status vocabulary (used exactly as specified):
+
+| Status | Meaning |
+| --- | --- |
+| `PROVEN PARITY` | Reachable Rust production behavior has evidence matching the current C# capability. |
+| `IMPLEMENTED — UNPROVEN` | A plausible production path exists, but end-to-end or differential proof is incomplete. |
+| `PARTIAL` | Only part of the C# workflow exists, or supporting infrastructure is present but material behavior is missing. |
+| `MISSING` | No operational Rust equivalent was found. |
+| `DIFFERENT — UNAPPROVED` | Rust behavior materially differs and no applicable product approval was found. |
+| `DIFFERENT — APPROVED` | A material difference is governed by an explicit accepted decision; it remains visibly non-identical. |
+| `DISPUTED` | Available evidence conflicts and further investigation is required. |
+| `NOT ASSESSED` | The capability has been inventoried but not adequately evaluated in Rust. |
+
+ADRs that defer or waive a real C# feature are reported as `PARTIAL`/`MISSING`/`DIFFERENT —
+APPROVED` depending on the Rust state, with the ADR cited as the governing difference — never as
+`PROVEN PARITY`.
+
+## 4. Executive summary
+
+| Status | Count |
+| --- | ---: |
+| `PROVEN PARITY` | 11 |
+| `IMPLEMENTED — UNPROVEN` | 4 |
+| `PARTIAL` | 8 |
+| `MISSING` | 6 |
+| `DIFFERENT — APPROVED` | 6 |
+| `DIFFERENT — UNAPPROVED` | 2 |
+| `DISPUTED` | 0 |
+| `NOT ASSESSED` | 14 |
+| **Total rows** | **51** |
+
+- **v1 blockers:** 14 (all `MISSING`, `PARTIAL` with missing material behavior,
+  `DIFFERENT — UNAPPROVED`, `IMPLEMENTED — UNPROVEN` without evidence, and key `NOT ASSESSED`
+  rows that prior evidence suggests are gaps).
+- **Intentionally approved differences:** 6 (`DIFFERENT — APPROVED`).
+- **Unassessed/disputed:** 14 (must be resolved before a completeness claim).
+
+### Highest-risk missing workflows
+
+1. **Ingestion provider enrichment** — C# `DirectoryProcessorToStagingService` calls
+   `ArtistSearchEngineService.DoSearchAsync` and `AlbumImageSearchEngineService.DoSearchAsync`
+   during staging (`src/Melodee.Common/Services/Scanning/DirectoryProcessorToStagingService.cs:1135,1210`).
+   Rust ingestion calls no provider; `external_provider_cache` has no production writer.
+2. **Cross-Release Artist identity reuse** — C# `LibraryInsertJob` matches Artists by
+   MusicBrainz ID, Spotify ID, and name across Releases
+   (`src/Melodee.Common/Jobs/LibraryInsertJob.cs:440,498,513,788-797`). Rust
+   `PreparedResolution::new` (`crates/melodee-persistence/src/catalog.rs:1057`) allocates a fresh
+   `Uuid::now_v7()` provisional Artist per observed value except the single-release-artist case.
+3. **Metadata edit forms** — C# `MediaEditService` (`src/Melodee.Common/Services/Scanning/MediaEditService.cs`)
+   and Blazor editors (`AlbumEdit.razor`, `ArtistEdit.razor`, `SongDetail.razor`) implement
+   title/artist normalization, "feat." removal, artist promotion, year setting. Rust admin edit
+   endpoints exist (`admin_catalog.rs:1451,1507,1541`) but have no test coverage and the UI
+   `EditPanel` is narrower.
+4. **Provider-discovered artwork** — C# `AlbumImageSearchEngineService`/`ArtistImageSearchEngineService`
+   fetch provider images during ingestion and housekeeping. Rust has only embedded/uploaded
+   artwork.
+
+## 5. Domain coverage summary
+
+| # | Domain | C# inventory | Rust comparison | Rows | Blocking gaps | Last reviewer / date |
+| --- | --- | --- | --- | ---: | ---: | --- |
+| 1 | Installation, startup, onboarding, health, diagnostics | Complete | Complete | 2 | 0 | Kilo (glm-5.2) 2026-08-23 |
+| 2 | Configuration layering, settings, import/export, defaults | Complete | Partial | 1 | 1 | Kilo (glm-5.2) 2026-08-23 |
+| 3 | Auth, users, roles, groups, permissions, linked identities | Inventoried | Partial | 1 | 1 | Kilo (glm-5.2) 2026-08-23 |
+| 4 | Library/source config, storage layout, reconciliation | Complete | Complete | 1 | 0 | Kilo (glm-5.2) 2026-08-23 |
+| 5 | Discovery, settling, acquisition, publication, review, deletion | Complete | Complete | 2 | 1 | Kilo (glm-5.2) 2026-08-23 |
+| 6 | Audio/tag metadata parsing, CUE/NFO/playlist/lyrics/sidecar | Inventoried | Partial | 1 | 1 | Kilo (glm-5.2) 2026-08-23 |
+| 7 | Artist observation, identification, matching, merge/split | Complete | Partial | 2 | 2 | Kilo (glm-5.2) 2026-08-23 |
+| 8 | Release identification, classification, curation, editing | Complete | Partial | 2 | 1 | Kilo (glm-5.2) 2026-08-23 |
+| 9 | Track/AudioIdentity, fingerprints, technical metadata, editing | Complete | Partial | 2 | 1 | Kilo (glm-5.2) 2026-08-23 |
+| 10 | Metadata/search/enrichment providers | Complete | Partial | 1 | 1 | Kilo (glm-5.2) 2026-08-23 |
+| 11 | Artwork (embedded/sidecar/provider/generated/uploaded/served) | Inventoried | Partial | 1 | 1 | Kilo (glm-5.2) 2026-08-23 |
+| 12 | Catalog browsing, filtering, sorting, search, MQL, stats | Inventoried | Partial | 1 | 0 | Kilo (glm-5.2) 2026-08-23 |
+| 13 | Playback, streaming, transcoding, downloads, media auth | Inventoried | NOT ASSESSED | 1 | 0 | Kilo (glm-5.2) 2026-08-23 |
+| 14 | Native Melodee API / OpenSubsonic / Jellyfin compatibility | Complete | Complete | 3 | 0 | Kilo (glm-5.2) 2026-08-23 |
+| 15 | Playlists, smart playlists, queues, favorites, ratings, history | Inventoried | NOT ASSESSED | 1 | 0 | Kilo (glm-5.2) 2026-08-23 |
+| 16 | Scrobbling, now-playing, Last.fm lifecycle/metadata | Complete | Complete | 2 | 0 | Kilo (glm-5.2) 2026-08-23 |
+| 17 | Podcasts, episodes, downloads, refresh, discovery | Inventoried | NOT ASSESSED | 1 | 0 | Kilo (glm-5.2) 2026-08-23 |
+| 18 | Internet radio, charts, recommendations, top content | Inventoried | NOT ASSESSED | 2 | 0 | Kilo (glm-5.2) 2026-08-23 |
+| 19 | Shares, requests, comments, notifications, email | Inventoried | NOT ASSESSED | 1 | 0 | Kilo (glm-5.2) 2026-08-23 |
+| 20 | Scripting, extension hooks, metadata plugins, sandbox | Inventoried | NOT ASSESSED | 1 | 0 | Kilo (glm-5.2) 2026-08-23 |
+| 21 | Scheduled jobs, background maintenance, cache cleanup, rebuild | Complete | Partial | 1 | 1 | Kilo (glm-5.2) 2026-08-23 |
+| 22 | Admin UI pages and material read/mutate workflows | Complete | Partial | 1 | 1 | Kilo (glm-5.2) 2026-08-23 |
+| 23 | Audit history, logging, metrics, diagnostics, retry visibility | Inventoried | NOT ASSESSED | 1 | 0 | Kilo (glm-5.2) 2026-08-23 |
+| 24 | Legacy migration, public-ID preservation, backup/restore/repair | Inventoried | NOT ASSESSED | 2 | 1 | Kilo (glm-5.2) 2026-08-23 |
+| 25 | Packaging, upgrades, release artifacts, local-production operation | Inventoried | NOT ASSESSED | 1 | 1 | Kilo (glm-5.2) 2026-08-23 |
+
+An incomplete domain (C# inventory marked "Inventoried" but not "Complete", or Rust comparison
+"NOT ASSESSED") prevents a "complete inventory" claim for that domain. Domains 13, 15, 17–20,
+23–25 require a follow-up audit pass.
+
+## 6. Detailed feature-parity matrix
+
+| Feature ID | Domain | C# Melodee feature and observable behavior | C# evidence | Rust status | Rust implementation evidence | Runtime/test evidence | Exact gap or difference | Requirement/ADR | v1 blocker |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| STARTUP-001 | 1 | Server lifecycle, health, readiness, version, diagnostics endpoints | `src/Melodee.Blazor/Controllers/Melodee/SystemController.cs` (SystemController); `src/Melodee.Common/Services/SetupCheckService.cs` | `PROVEN PARITY` | `apps/melodee-server/src/main.rs` (composition root); `apps/melodee-server/src/admin_system.rs` (health/readiness/diagnostics) | `apps/melodee-server/tests/admin_system_api.rs`; `tests/system_api.rs` | None observed | PRD-WORK-001; ADR-0104 | No |
+| ONBOARD-001 | 1 | Onboarding/setup wizard with preflight checks and required-configuration gating | `src/Melodee.Common/Services/SetupCheckService.cs`; `src/Melodee.Blazor/Components/Onboarding/` | `PROVEN PARITY` | `crates/melodee-persistence/migrations/0025` (`onboarding_state`, ADR-0134 §3); admin API `onboarding/status|complete` fail-closed | `apps/melodee-server/tests/admin_onboarding_api.rs`; `crates/melodee-persistence/tests/settings.rs`; `apps/melodee-cli/tests/config.rs` | None observed; the graphical wizard is the Phase 10 admin UI over the same stores | PRD-SETUP-001/002 | No |
+| CONFIG-001 | 2 | Configuration layering (defaults/file/env/DB), 190-key registry, import/export with secret redaction, validation | `src/Melodee.Common/Constants/SettingRegistry.cs` (190 keys, 188 consumers); `src/Melodee.Common/Services/SettingService.cs`; `src/Melodee.Common/Services/SystemExportService.cs`/`SystemImportService.cs` | `PARTIAL` | `crates/melodee-persistence/src/settings.rs` (known-key classification, layered resolution, redacted export, preview-first import); admin API `config/export|import` | `crates/melodee-persistence/tests/settings.rs`; `apps/melodee-server/tests/admin_config_api.rs` | Whether every materially consumed C# setting has a live Rust runtime consumer is unverified for the deferred provider settings; provider settings keys are preserved but inert (see PROVIDER-001) | PRD-CONFIG-001/002/003; PRD-AUTH-007; ADR-0136 | Yes — provider settings inert, full consumer audit unverified |
+| AUTH-001 | 3 | Auth (JWT/refresh/cookie/social/password reset/logout), users, roles, groups, library ACL, avatars, profiles | `src/Melodee.Common/Services/UserAuthenticationService.cs`; `RefreshTokenService.cs`; `UserSocialLoginService.cs`; `UserPasswordResetService.cs`; `UserGroupService.cs`; `LibraryAuthorizationService.cs`; `src/Melodee.Blazor/Controllers/Melodee/AuthController.cs`/`UsersController.cs`/`UserController.cs` | `PARTIAL` | `apps/melodee-server/src/native/auth.rs`; `crates/melodee-persistence/src/auth.rs`; group/library ACL (migration 0010); avatar upload (migration 0022) | `apps/melodee-server/tests/native_auth_api.rs`; `admin_access_api.rs`; `native_avatar_api.rs`; Phase 8 differential replay | Social-login (Google OAuth) linking behavior was inventoried in C# (`GoogleTokenService.cs`, `UserSocialLoginService.cs`) but its Rust production reachability and the social-login linked-identity lifecycle were not deeply verified against a real OIDC provider | PRD-AUTH-001..006; ADR-0124/0126 | Yes — social-login/OIDC production evidence absent (R4.6) |
+| LIBRARY-001 | 4 | Multiple media libraries, storage layout, source safety, reconciliation | `src/Melodee.Common/Services/LibraryService.cs`; `FileSystemService.cs`; `DirectoryProcessorToStagingService.cs` | `PROVEN PARITY` | `crates/melodee-ingestion/src/` (reconcile, acquisition, source, config); ADR-0145 disjoint roots; Release-centric canonical layout (ADR-0106/0116) | `crates/melodee-ingestion/tests/reconciliation.rs`; `acquisition.rs` (200-Release drain, crash boundaries) | None observed; canonical storage layout differs by design (approved) | PRD-INGEST-005; PRD-STORAGE-001/002/004; ADR-0106/0116/0145 | No |
+| INGEST-001 | 5 | Durable inbound processing: discovery, settling, acquisition, inspection, normalization, validation, publication, retry, quarantine, review, deletion | `src/Melodee.Common/Services/Scanning/DirectoryProcessorToStagingService.cs`; `src/Melodee.Common/Jobs/LibraryInsertJob.cs`; `LibraryInboundProcessJob.cs`; `StagingAutoMoveJob.cs` | `PROVEN PARITY` | `crates/melodee-ingestion/src/` (reconcile, snapshot, acquisition, inspect, normalize, validate, publication, publication_worker); `crates/melodee-persistence/src/work_items.rs` (durable state machine, leases) | `crates/melodee-ingestion/tests/` (reconciliation, acquisition, inspection, normalization, publication, environment_faults); `crates/melodee-persistence/tests/` (claiming, recovery, history) | Durable work-item model is an approved redesign, not a gap | PRD-INGEST-001..010; ADR-0116/0145 | No |
+| INGEST-002 | 5 | Operator review/quarantine/reprocess/deletion workflows with audit | `src/Melodee.Common/Jobs/StagingAlbumRevalidationJob.cs`; `StagingAutoMoveJob.cs` | `PROVEN PARITY` | `crates/melodee-policy/src/` (engine, novelty, dry_run); `crates/melodee-persistence/src/policy.rs`; `apps/melodee-server/src/admin_review.rs`; ADR-0152 confirmed Release deletion | `crates/melodee-persistence/tests/phase5_override.rs`; `apps/melodee-server/tests/admin_review_api.rs`; `admin-ui/e2e/release-review.spec.ts` | None observed | PRD-POLICY-001..008; ADR-0152 | No |
+| MEDIA-001 | 6 | Audio/tag metadata parsing (Lofty/ffprobe), CUE/NFO/M3U/SFV/playlist/lyrics/sidecar, embedded IDs | `src/Melodee.Common/Plugins/MetaData/` (Directory plugins: CueSheet, M3UPlaylist, SimpleFileVerification, Nfo handlers Jellyfin/PMedia, Mp3Files, Blackbeard; Song plugins: AtlMetaTag, NativeId3MetaTag, LyricPlugin); `src/Melodee.Common/Plugins/Processor/` (MetaTagProcessors) | `PARTIAL` | `crates/melodee-media/src/lib.rs` (Lofty + ffprobe); `crates/melodee-ingestion/src/normalize.rs` (sidecar parsing); CUE behavior (ADR-0146) | `crates/melodee-media/tests/normalization_real.rs`; `crates/melodee-ingestion/tests/normalization.rs`; R2.2 CUE/sidecar suite | Lyrics parsing and the full set of C# sidecar/NFO handler behaviors (Jellyfin NFO, PMedia NFO, Blackbeard) were not deeply compared; embedded MusicBrainz ID retention verified (see ARTIST-001) | PRD-MEDIA-001/004/006; ADR-0146 | Yes — lyrics/sidecar handler breadth unverified |
+| ARTIST-001 | 7 | Artist observation, identification, provider matching, aliases, relationships, memberships, contributions, merge/split, negative decisions | `src/Melodee.Common/Services/ArtistService.cs`; `MediaArtistImportService.cs`/`MediaArtistExportService.cs`; `src/Melodee.Common/Jobs/LibraryInsertJob.cs:440,498,513,788-797` (matches by MusicBrainz ID, Spotify ID, name across Releases) | `DIFFERENT — UNAPPROVED` | `crates/melodee-catalog/src/resolver.rs` (local evidence scoring); `crates/melodee-catalog/src/authority.rs` (`ArtistAuthority` trait, only `FakeAuthority` test impl); `crates/melodee-persistence/src/catalog.rs:1057` (fresh `Uuid::now_v7()` provisional per observed value) | `crates/melodee-persistence/tests/catalog_identity.rs`; `catalog_merge_split.rs` | Rust does NOT reuse Artist identities across Releases: each observed artist value that isn't the single release-artist gets a new provisional Artist. C# `LibraryInsertJob` reuses Artists by MusicBrainz/Spotify ID and name. No production `ArtistAuthority` provider implementation exists. This produces duplicate Artist identities for the same real artist across Releases | PRD-ARTIST-001..012; PRD-RESOLVE-001..005 | Yes |
+| ARTIST-002 | 7 | Provider-driven Artist metadata enrichment during ingestion (search, image, biography) | `src/Melodee.Common/Services/Scanning/DirectoryProcessorToStagingService.cs:1135` (`ArtistSearchEngineService.DoSearchAsync` during staging); `src/Melodee.Common/Jobs/StagingAlbumRevalidationJob.cs:249` | `MISSING` | None in production; `crates/melodee-catalog/src/authority.rs` is evidence-only with no production provider | `crates/melodee-persistence/tests/providers.rs` (cache store only) | C# ingestion queries Artist search engines during staging; Rust ingestion does not call any provider. ADR-0136 defers this but does not make it parity | PRD-EXT-001/002; ADR-0136 | Yes |
+| RELEASE-001 | 8 | Release identification, classification (traits), external identities, duplicate/reissue/edition handling, curation | `src/Melodee.Common/Services/AlbumService.cs`; `AlbumDiscoveryService.cs`; `src/Melodee.Common/Jobs/LibraryInsertJob.cs` (creates/finds albums by MusicBrainz ID, Spotify ID, name) | `PARTIAL` | `crates/melodee-policy/src/` (classification, novelty, engine); `crates/melodee-persistence/src/catalog.rs` (Release from `publication.release_id`); `crates/melodee-persistence/src/policy.rs` (catalog_known_audio_identities query) | `crates/melodee-policy/tests/policy_acceptance.rs`; `crates/melodee-persistence/tests/catalog_import.rs` | Rust allocates a new Release per publication (`publication.release_id`, set in Phase 3) — there is no cross-catalog duplicate/reissue Release detection during import. C# `LibraryInsertJob` finds existing albums by MusicBrainz/Spotify ID. Novelty detection exists at the Track level via AudioIdentity, not Release-level deduplication | PRD-CLASS-001..003; PRD-POLICY-003..006 | Yes |
+| RELEASE-002 | 8 | Release/Artist/Track metadata editing (title, sort, display artist, date, type, tag normalization) | `src/Melodee.Common/Services/Scanning/MediaEditService.cs` (SaveAlbum, RemoveUnwantedTextFromAlbumTitle/SongTitles, RemoveFeaturingArtistsFromSongTitle/SongsArtist, PromoteSongArtist, SetYearToCurrent, ReplaceGivenTextFromSongTitles); `src/Melodee.Blazor/Components/Pages/Data/AlbumEdit.razor`/`ArtistEdit.razor`/`SongDetail.razor` | `IMPLEMENTED — UNPROVEN` | `apps/melodee-server/src/admin_catalog.rs:1451,1507,1541` (PUT release/artist/track metadata); `crates/melodee-persistence/src/catalog_mutations.rs:940,1037,1136` (update_*_metadata); `admin-ui/src/screens/catalog/EditPanel.tsx` | None found for the edit endpoints or store methods | The Rust admin edit endpoints and store methods are wired and the UI `EditPanel` exists, but there is NO test coverage for `update_release_metadata`/`update_artist_metadata`/`update_track_metadata`. The C# `MediaEditService` offers tag-rewriting and normalization transformations (feat. removal, artist promotion, year setting) that have no Rust equivalent. Feature-parity matrix marks this "In progress/deferred" which understates the API presence but correctly flags the missing UI breadth and evidence | PRD-CREDIT-001..008; Phase 10 decision log | Yes — no evidence; tag-rewriting transforms missing |
+| TRACK-001 | 9 | Track and AudioIdentity creation, embedded recording IDs, fingerprints, duplicate/alternate recording handling, technical metadata | `src/Melodee.Common/Jobs/LibraryInsertJob.cs:585` (song MusicBrainzId from MetaTag); `src/Melodee.Common/Services/SongService.cs` | `PARTIAL` | `crates/melodee-ingestion/src/normalize.rs` (fpcalc fingerprint computation); `crates/melodee-persistence/src/catalog.rs` (audio_identity_id per track); `crates/melodee-persistence/src/policy.rs:2091-2116` (catalog_known_audio_identities query) | `crates/melodee-persistence/tests/catalog_audio_identity.rs`; `crates/melodee-ingestion/tests/normalization.rs` | Fingerprints are computed and retained as observations, but there is NO automatic fingerprint-based cross-Release AudioIdentity matching. Durable cross-Release AudioIdentity matches require admin-confirmed decisions (`record_audio_identity_match_decision`). The policy engine queries existing confirmed matches, but the matching itself is not automatic during ingestion | PRD-FP-001..004 | Yes |
+| TRACK-002 | 9 | Automatic AudioIdentity/fingerprint cross-Release matching during ingestion | `src/Melodee.Common/Plugins/SearchEngine/MusicBrainz/` (recording ID lookup); `src/Melodee.Common/Services/SearchEngines/` | `MISSING` | `crates/melodee-persistence/src/catalog_identity.rs` (`record_audio_identity_match_decision` — admin-only) | `crates/melodee-persistence/tests/catalog_identity.rs` (admin decision tests) | No automatic matching engine; matches are admin-confirmed only. C# uses provider recording-ID lookups during processing | PRD-FP-002/004 | Yes |
+| PROVIDER-001 | 10 | Metadata/search/enrichment providers: MusicBrainz, Spotify, Discogs, iTunes, Deezer, WikiData, Brave, Metal-API, Last.fm (artist/album search, images, top songs) | `src/Melodee.Common/Plugins/SearchEngine/` (9 providers, all with plugin implementations); `src/Melodee.Common/Services/SearchEngines/` (ArtistSearchEngineService, AlbumSearchEngineService, ArtistImageSearchEngineService, AlbumImageSearchEngineService); `src/Melodee.Blazor/Controllers/OpenSubsonic/SearchEngineController.cs` | `PARTIAL` | `crates/melodee-persistence/src/providers.rs` (`ProviderCacheStore` — no production writer); `apps/melodee-server/src/native/discovery.rs:527` (`artist_lookup` projects stored rows only); `apps/melodee-server/src/lastfm.rs` (Last.fm scrobble only) | `crates/melodee-persistence/tests/providers.rs`; `apps/melodee-server/tests/lastfm_scrobble.rs` | Only Last.fm scrobble/now-playing/linking is wired. The 8 non-Last.fm providers and Last.fm metadata-lookup legs are deferred (ADR-0136). `external_provider_cache` has no production writer — `get_if_fresh`/`upsert` are test-only. Native `/api/v1/artist-lookup` only projects already-stored `artist_external_identities` rows; it does NOT call providers. Provider settings keys are preserved but inert. ADR-0136 governs the deferral but does not make this parity | PRD-EXT-001..004; ADR-0136 | Yes |
+| ARTWORK-001 | 11 | Embedded, sidecar, provider-discovered, generated, uploaded, overridden, served artwork | `src/Melodee.Common/Services/AlbumImageSearchEngineService.cs`; `ArtistImageSearchEngineService.cs`; `ImageConversionService.cs`; `src/Melodee.Blazor/Controllers/Melodee/` (image upload) | `PARTIAL` | `crates/melodee-media/src/normalize.rs` (embedded/external extraction/normalization); `apps/melodee-server/src/admin_catalog.rs:1405,1426` (upload); `catalog_entity_images` overrides (ADR-0143) | `crates/melodee-media/tests/normalization_real.rs`; `apps/melodee-server/tests/admin_artwork_api.rs`; native image golden suite | Provider-discovered artwork (C# `AlbumImageSearchEngineService`/`ArtistImageSearchEngineService` invoked during staging/housekeeping) has no Rust equivalent. Embedded, uploaded, and override artwork are implemented | PRD-MEDIA-005; ADR-0143 | Yes — provider-discovered artwork missing |
+| SEARCH-001 | 12 | Catalog browsing, filtering, sorting, search, MQL, statistics, analytics, discovery | `src/Melodee.Common/Services/SearchService.cs`; `AlbumSearchEngineService.cs`; `ArtistSearchEngineService.cs`; `StatisticsService.cs`; `src/Melodee.Common/Mql/` | `PROVEN PARITY` | `crates/melodee-search/` (Tantivy schema, indexing, query); `crates/melodee-mql/` (parser/AST/translators); `crates/melodee-persistence/src/discovery.rs` (materialized facts) | `crates/melodee-search/tests/`; `crates/melodee-mql/` tests; Phase 6 10M-Track benchmark; ADR-0122 | None observed for the search/MQL core; analytics/discovery materialized facts implemented | PRD-SEARCH-001..007; ADR-0107/0121/0122 | No |
+| PLAYBACK-001 | 13 | Playback, byte ranges, streaming, transcoding, downloads, media authorization, client profiles | `src/Melodee.Blazor/Controllers/OpenSubsonic/MediaRetrievalController.cs`; `src/Melodee.Blazor/Controllers/Jellyfin/AudioController.cs`; `src/Melodee.Common/Services/PlaybackBackendService.cs`; `PlaybackSettingsService.cs`; `UserDeviceProfileService.cs` | `NOT ASSESSED` | `apps/melodee-server/src/native/` (stream routes); `apps/melodee-server/src/transcode_service.rs` (R2.3 configured transcoding) | `apps/melodee-server/tests/native_stream.rs`; `transcode_service.rs` | Not deeply audited this pass; the FEATURE-PARITY-MATRIX marks transcoding/streaming Complete, but this audit did not re-verify byte-range/seek/transcode/download behavior against C# independently | PRD-STREAM-001..003; PRD-DEVICE-001..003 | Not assessed |
+| COMPAT-NATIVE-001 | 14 | Native Melodee API v1 (exact contract parity) | `src/Melodee.Blazor/Controllers/Melodee/` (AlbumsController, ArtistsController, SongsController, SearchController, ChartsController, etc.); `compatibility/melodee-api-v1/contracts/route-inventory.json` (202 routes) | `PROVEN PARITY` | `apps/melodee-server/src/native/` (full adapter); `design/agents/PHASE-7-ROUTE-MATRIX.json` (202/202: 150 exact, 17 normalizations, 35 absences) | `apps/melodee-server/tests/native_*.rs`; Android 1.8.0 + MeloAmp real-client acceptance; Phase 7 report | Normalizations per ADR-0114/0128/0129 are approved differences | PRD-API-M1-001..007; ADR-0114/0128/0129 | No |
+| COMPAT-OS-001 | 14 | OpenSubsonic API (exact compatibility) | `src/Melodee.Blazor/Controllers/OpenSubsonic/` (16 controllers); `compatibility/opensubsonic/` (81 endpoints) | `PROVEN PARITY` | `apps/melodee-server/src/opensubsonic/`; `compatibility/opensubsonic/contracts/phase8-route-evidence.json` (81/81) | `apps/melodee-server/tests/opensubsonic_*.rs`; `scripts/run_phase8_differential.py`; Feishin v1.15.1 smoke | D1/D2 do-not-preserve (ADR-0130) approved | PRD-API-OS-001..007; ADR-0130 | No |
+| COMPAT-JF-001 | 14 | Jellyfin music compatibility (current subset) | `src/Melodee.Blazor/Controllers/Jellyfin/` (Audio, Items, Images, Genres, MusicGenres, Root controllers); `compatibility/jellyfin/` (60 routes) | `PROVEN PARITY` | `apps/melodee-server/src/jellyfin/`; `compatibility/jellyfin/contracts/phase8-route-evidence.json` (60/60) | `apps/melodee-server/tests/jellyfin_*.rs`; `scripts/run_phase8_differential.py`; Feishin v1.15.1 smoke | D4 playlist corruption do-not-preserve (ADR-0128); artwork override extension (ADR-0143) | PRD-API-JF-001..006; ADR-0128/0143 | No |
+| USERSTATE-001 | 15 | Playlists, smart playlists, play queues, favorites, ratings, hates, pins, bookmarks, play history | `src/Melodee.Common/Services/PlaylistService.cs`; `PlaylistImportService.cs`; `UserFavoriteService.cs`; `UserRatingService.cs`; `UserStarService.cs`; `UserPinService.cs`; `UserHateService.cs`; `UserBookmarkService.cs`; `UserQueueService.cs`; `src/Melodee.Blazor/Controllers/Melodee/PlaylistsController.cs`/`SmartPlaylistsController.cs`/`QueueController.cs` | `NOT ASSESSED` | `apps/melodee-server/src/native/playlists.rs`; `crates/melodee-persistence/src/native_user_state.rs` (migration 0011) | `apps/melodee-server/tests/native_playlists.rs`; `native_user_state_phase7.rs` | Not deeply audited this pass; the FEATURE-PARITY-MATRIX marks these Complete. This audit did not independently verify the smart-playlist MQL evaluation, queue persistence absence (ADR-0123), or bookmark behavior against C# | PRD-USER-002..004; ADR-0123/0128 | Not assessed |
+| SCROBBLE-001 | 16 | Scrobbling and now-playing (native + OpenSubsonic + Jellyfin) | `src/Melodee.Common/Services/ScrobbleService.cs`; `src/Melodee.Common/Plugins/Scrobbling/`; `src/Melodee.Blazor/Controllers/Melodee/ScrobbleController.cs` | `PROVEN PARITY` | `apps/melodee-server/src/native/catalog.rs` (scrobble/now-playing); OpenSubsonic scrobble; Jellyfin session synthesis | `apps/melodee-server/tests/native_catalog_api.rs`; `opensubsonic_annotation.rs`; `jellyfin_core_api.rs` | None observed | PRD-USER-003 | No |
+| LASTFM-001 | 16 | Last.fm account linking/scrobbling (auth URL, session key, scrobble/now-playing dispatch, disconnect) | `src/Melodee.Common/Plugins/SearchEngine/LastFm/LastFm.cs`; legacy ADR-0004 session-key lifecycle; `native-scrobble/` goldens | `PROVEN PARITY` | `apps/melodee-server/src/lastfm.rs` (real Last.fm client); `native_lastfm_links` with AEAD-sealed session key (migration 0028, ADR-0134 §7); wired into native/OS/JF scrobble paths | `apps/melodee-server/tests/lastfm_scrobble.rs` (mock-server wire mapping, link lifecycle, invalid-session clearing) | Configured-state response shapes are source-evidenced only (capture gap recorded); no retry/queue per legacy | PRD-AUTH-002; ADR-0134 §7 | No |
+| PODCAST-001 | 17 | Podcasts, episodes, downloads, refresh, cleanup, progress, OPML, discovery providers | `src/Melodee.Common/Services/PodcastService.cs`; `PodcastDiscoveryService.cs`; `PodcastOpmlService.cs`; `PodcastPlaybackService.cs`; `src/Melodee.Common/Jobs/PodcastDownloadJob.cs`/`PodcastRefreshJob.cs`/`PodcastCleanupJob.cs`/`PodcastRecoveryJob.cs`; `src/Melodee.Blazor/Controllers/Melodee/PodcastsController.cs` | `NOT ASSESSED` | `apps/melodee-server/src/native/podcasts.rs`; `apps/melodee-server/src/podcast_worker.rs` (migration 0013) | `apps/melodee-server/tests/native_podcasts_api.rs`; `native_podcasts_real_feed.rs` | Not deeply audited this pass; the FEATURE-PARITY-MATRIX marks this Complete. Real external feeds unexercised (recorded limitation). Podcast discovery providers (iTunes) and stuck-download recovery CLI not independently re-verified | PRD-USER-004 | Not assessed |
+| DISCOVERY-001 | 18 | Internet radio (CRUD, admin-gated) | `src/Melodee.Common/Services/RadioStationService.cs`; `src/Melodee.Blazor/Controllers/OpenSubsonic/InternetRadioController.cs`; `src/Melodee.Blazor/Components/Pages/Data/RadioStations.razor` | `NOT ASSESSED` | `apps/melodee-server/src/opensubsonic/radio.rs`; `apps/melodee-server/src/admin_radio.rs` (ADR-0134 §1) | `apps/melodee-server/tests/admin_radio_api.rs`; Phase 8 `os-radio-*` | Not deeply audited this pass; FEATURE-PARITY-MATRIX marks Complete | PRD-RADIO-001/002 | Not assessed |
+| DISCOVERY-002 | 18 | Charts, recommendations, top content, scheduled discovery refresh | `src/Melodee.Common/Services/ChartService.cs`; `src/Melodee.Common/Jobs/ChartUpdateJob.cs`; `src/Melodee.Blazor/Controllers/Melodee/ChartsController.cs`/`RecommendationsController.cs` | `NOT ASSESSED` | `apps/melodee-server/src/native/discovery.rs` (charts, recommendations); `apps/melodee-server/src/discovery_worker.rs` (scheduled refresh) | `apps/melodee-server/tests/native_discovery_api.rs`; `discovery_worker.rs` | Not deeply audited this pass; FEATURE-PARITY-MATRIX marks Complete | PRD-WORK-003 | Not assessed |
+| SOCIAL-001 | 19 | Shares, requests, comments, notifications, email templates | `src/Melodee.Common/Services/ShareService.cs`; `RequestService.cs`; `RequestCommentService.cs`; `RequestActivityService.cs`; `RequestAutoCompletionService.cs`; `src/Melodee.Blazor/Controllers/Melodee/SharesController.cs`/`RequestsController.cs` | `NOT ASSESSED` | `apps/melodee-server/src/native/` (shares, requests); `crates/melodee-persistence/` (notification_templates, notification_deliveries, migration 0024); lettre SMTP | `apps/melodee-server/tests/native_community_api.rs`; `notification_wiring.rs` | Not deeply audited this pass; FEATURE-PARITY-MATRIX marks Complete | PRD-NOTIF-001..003 | Not assessed |
+| SCRIPT-001 | 20 | Scripting, extension hooks, metadata plugins, validation hooks, sandbox | `src/Melodee.Common/Plugins/Scripting/` (PostDiscoveryScript, PreDiscoveryScript, NullScript); `src/Melodee.Common/Services/Script*` (ScriptAdminService, ScriptCacheService, ScriptConfigurationService, ScriptEvaluationService, ScriptOrchestrationService, ScriptValidationService); `BlazorEventScriptService.cs`; `src/Melodee.Blazor/Components/Pages/Admin/Scripts.razor`/`ScriptEditor.razor` | `NOT ASSESSED` | `apps/melodee-server/src/scripting.rs` (Boa sandbox, ADR-0135); `script_registry`/`script_runs` (migration 0027) | `apps/melodee-server/tests/scripting_service.rs`; `admin_scripts_api.rs` | Not deeply audited this pass; only the one legacy-enforced hook (`directoryProcessingStart`) is wired; six legacy UI-gate events inert. C# has PreDiscovery/PostDiscovery scripts and a richer hook set | PRD-SCRIPT-001..005; ADR-0135 | Not assessed |
+| JOBS-001 | 21 | Scheduled jobs, background maintenance, cache cleanup, index rebuild, operational controls | `src/Melodee.Common/Jobs/` (ArtistHousekeepingJob, ArtistSearchEngineRepositoryHousekeepingJob, ChartUpdateJob, LibraryInboundProcessJob, LibraryInsertJob, MusicBrainzUpdateDatabaseJob, NowPlayingCleanupJob, PodcastCleanupJob, PodcastDownloadJob, PodcastRecoveryJob, PodcastRefreshJob, StagingAlbumRevalidationJob, StagingAutoMoveJob); `src/Melodee.Common/Constants/JobRegistry.cs`/`JobKeyRegistry.cs` | `PARTIAL` | `apps/melodee-server/src/discovery_worker.rs` (chart/aggregate refresh); `crates/melodee-ingestion/src/scheduler.rs` (reconciliation); `apps/melodee-server/src/policy_worker.rs`; podcast worker; `crates/melodee-search/` (rebuild) | `apps/melodee-server/tests/discovery_worker.rs`; `crates/melodee-ingestion/tests/reconciliation.rs` | Several C# jobs have no Rust equivalent: `MusicBrainzUpdateDatabaseJob` (provider DB sync), `ArtistHousekeepingJob` (provider image search per artist), `ArtistSearchEngineRepositoryHousekeepingJob` (search-engine repo maintenance), `StagingAlbumRevalidationJob` (re-query artist search engines), `NowPlayingCleanupJob`. These are provider-dependent jobs whose absence follows from PROVIDER-001/ARTIST-002 | PRD-WORK-001..005 | Yes |
+| ADMINUI-001 | 22 | Admin UI pages and material read/mutate workflows (catalog browsing/detail, identity review, policies, system/workers/diagnostics, users/access, settings, themes, onboarding) | `src/Melodee.Blazor/Components/Pages/` (Admin/, Data/: AlbumDetail, AlbumEdit, ArtistDetail, ArtistEdit, SongDetail, Albums, Artists, Songs, Libraries, LibraryDetail, LibraryEdit, Playlists, PlaylistDetail, Podcasts, PodcastDetail, RadioStations, Shares, Requests, RequestNew/Edit/Detail, Users, UserEdit, UserGroups; Jukebox.razor) | `PARTIAL` | `admin-ui/src/screens/` (catalog, identity, onboarding, overview, policies, processing, review, settings, system, users); served at `/admin` (ADR-0138) | `admin-ui/e2e/` (catalog, identity-review, localization, onboarding, overview, policies, accessibility, visual) | The Rust admin UI is a Carbon SPA with the canonical curation/operator screens. The C# Blazor UI has full edit forms (AlbumEdit, ArtistEdit, SongDetail, UserEdit, LibraryEdit, RequestEdit) that are narrower or absent in Rust. The C# `Jukebox.razor` page is present but the jukebox controllers are compile-excluded (see PARTY-001). Metadata edit forms are the documented Phase 10 deferral | PRD-API-ADMIN-001..003; Phase 10 decision log | Yes — edit-form breadth and several C# data pages absent |
+| AUDIT-001 | 23 | Audit history, logging, metrics, diagnostics, retry visibility, failure explanation | `src/Melodee.Common/Jobs/JobHistoryListener.cs`; `src/Melodee.Common/Services/` (diagnostics) | `NOT ASSESSED` | `crates/melodee-persistence/` (audit events, work-item history); `apps/melodee-server/src/admin_system.rs` (diagnostics) | `apps/melodee-server/tests/admin_diagnostics_api.rs`; `crates/melodee-persistence/tests/history.rs` | Not deeply audited this pass; FEATURE-PARITY-MATRIX marks Complete | PRD-OBS-001..003 | Not assessed |
+| MIGRATE-001 | 24 | Legacy migration, public-ID preservation, config/provider migration | `src/Melodee.Common/Services/SystemExportService.cs`/`SystemImportService.cs`; `src/Melodee.Cli/Command/BackupExportCommand.cs`; `src/Melodee.Common/Migrations/` (initial baseline) | `NOT ASSESSED` | `apps/melodee-cli/` (migrate command); R3 migration tooling (ADR-0148); `crates/melodee-persistence/migrations/` | `design/evidence/r3/README.md` (repeatable tooling, isolated rehearsal) | Not deeply audited this pass. Per `IMPLMENTATION_OUTSTANDING.md`, R3 tooling is complete but R4 production rehearsal/cutover/rollback remain open. Production-snapshot rehearsal, differential classification, and client/provider acceptance are unresolved release blockers | PRD-MIG-001..007; ADR-0148/0149 | Yes — Phase 11 not complete |
+| MIGRATE-002 | 24 | Backup, restore, search rebuild, catalog verification, rollback, repair | `src/Melodee.Cli/Command/BackupExportCommand.cs`; `src/Melodee.Common/Services/SystemExportService.cs` | `NOT ASSESSED` | `apps/melodee-cli/` (search rebuild, doctor); R0/R4 backup/restore rehearsal | `design/evidence/r4/` (local synthetic backup/restore) | Not deeply audited this pass. Per `IMPLMENTATION_OUTSTANDING.md`, R4.8 production-equivalent traffic switch/restore/rollback remain open | PRD-MIG-001..007; ADR-0149 | Yes — production rollback unproven |
+| PACKAGING-001 | 25 | Packaging, upgrades, release artifacts, local-production operation | `Dockerfile`; `compose.yml`; `entrypoint.sh`; `src/Melodee.Cli/Command/SystemInfoCommand.cs` | `NOT ASSESSED` | `Dockerfile`; `compose.yml`; `.github/workflows/release-container.yml`; ADR-0144/0151 | `design/evidence/r5/artifacts/` (local image scans) | Not deeply audited this pass. Per `IMPLMENTATION_OUTSTANDING.md`, R5.2/R5.6 release images fail the critical-vulnerability policy; ADR-0151 (Trixie base) decision package open; no accepted RC exists | PRD-ARCH-001; ADR-0144/0151 | Yes — release artifacts not accepted |
+| CLI-001 | 1 | CLI administrative operations (migrate, doctor, work, ingest, catalog, policy, search, charts, config, users, groups, notifications, scripts) | `src/Melodee.Cli/Command/` (42 commands: AlbumDelete/FindDuplicateDirs/ImageIssues/List/Search/Stats, ArtistDelete/FindDuplicates/List/Search/Stats, BackupExport, ConfigurationGet/List/Set, Doctor, ImportUserFavorite, JobList/Run, Library* (11 commands), Parse, Search, ShowMpegInfo, ShowTags, SystemInfo, User* (5 commands), Validate) | `PARTIAL` | `apps/melodee-cli/src/main.rs` (migrate/doctor/work/ingest/catalog/policy/search/charts/config/users/groups/notifications/scripts) | `apps/melodee-cli/tests/` (config, notifications, users_groups, worker_pools, scripts) | Several C# CLI commands have no direct Rust equivalent or differ in scope: `AlbumFindDuplicateDirs`, `AlbumImageIssues`, `ArtistFindDuplicates` (duplicate-detection tooling), `LibraryAlbumStatusReport`, `LibraryClean`, `LibraryMoveOk`, `LibraryPurge`, `LibraryScan`, `LibraryStats`, `LibraryValidate`, `ImportUserFavorite`, `Parse`, `ShowMpegInfo`, `ShowTags`, `BackupExport`. Some are replaced by Rust-native commands (work/ingest/catalog), but duplicate-finding and media-info inspection commands are absent | PRD-WORK-001; FEATURE-PARITY-MATRIX row "CLI administrative operations" | Yes — duplicate-detection and media-inspection CLI absent |
+| PARTY-001 | 1 | Party Mode (sessions, queue, playback, moderation, endpoints) | `src/Melodee.Blazor/Controllers/Melodee/PartySessionsController.cs`/`PartyQueueController.cs`/`PartyPlaybackController.cs`/`PartyModerationController.cs`/`PartyEndpointsController.cs`/`PartySessionEndpointRegistryController.cs` (present as source WITH route attributes, e.g. `[Route("api/v{version:apiVersion}/party-sessions")]`); `src/Melodee.Blazor/Program.cs:617-621` (services registered); BUT `src/Melodee.Blazor/Melodee.Blazor.csproj:94-98` `<Compile Remove="...PartyEndpointsController.cs" />` etc. (all 5 controllers excluded from compilation) | `DIFFERENT — APPROVED` | `apps/melodee-server/tests/native_catalog_api.rs` (35-case excluded-route matrix preserves 404) | `apps/melodee-server/tests/native_catalog_api.rs` | C# party controllers exist as dead source but are compile-excluded; the frozen build returns 404. Rust preserves the 404 absence. ADR-0133 waives Party Mode as parity. The C# source presence is NOT a parity obligation because it is unreachable in the baseline build. Verified: `Melodee.Blazor.csproj` lines 94-98 remove all 5 party controllers from compilation | PRD-PARTY-001/002/004; ADR-0133/0123 | No — approved absence |
+| JUKEBOX-001 | 1 | Jukebox/server playback | `src/Melodee.Blazor/Components/Pages/Jukebox.razor` (present, uses `ISubsonicJukeboxService`); `src/Melodee.Blazor/Controllers/OpenSubsonic/JukeboxController.cs`; legacy ADR-0001 (jukebox never implemented); OpenSubsonic `jukeboxControl` 410 goldens | `DIFFERENT — APPROVED` | `apps/melodee-server/src/opensubsonic/negative.rs` (intentional 410) | `tests/python/test_opensubsonic_capture.py`; Phase 8 differential replay | C# jukebox page exists but the OS jukeboxControl returns 410 (legacy ADR-0001: never implemented). Rust preserves the 410. ADR-0133 waives. The `Jukebox.razor` page reaches a service that returns not-enabled, so the observable behavior is absence | PRD-PARTY-001; ADR-0133/0140 | No — approved absence |
+| DEVICE-001 | 1 | Device profiles (metadata-only admin CRUD; automatic stream selection deferred) | `src/Melodee.Common/Services/UserDeviceProfileService.cs`; `DeviceIdentificationService.cs` | `DIFFERENT — APPROVED` | `crates/melodee-persistence/` (`device_profiles`, migration 0026); `apps/melodee-server/src/admin_device_profiles.rs` (metadata-only CRUD) | `crates/melodee-persistence/tests/device_profiles.rs`; `apps/melodee-server/tests/admin_device_profiles_api.rs` | C# device-profile automatic stream selection is preserved as metadata-only in Rust per ADR-0134 §5; PRD-DEVICE-003 deferred | PRD-DEVICE-001/002/003; ADR-0134 | No — approved deferral |
+| EQ-001 | 1 | Equalizer presets and playback settings | `src/Melodee.Common/Services/EqualizerPresetService.cs`; `PlaybackSettingsService.cs` | `PROVEN PARITY` | `apps/melodee-server/src/native/preferences.rs` (EQ CRUD + playback settings) | `apps/melodee-server/tests/native_community_api.rs` | None observed | PRD-USER-001 | No |
+| CONFIG-002 | 2 | Email/notification templates and delivery (password reset, share created, request fulfilled) | `src/Melodee.Common/Services/` (notification services); `email.*` setting keys | `PROVEN PARITY` | `crates/melodee-persistence/` (`notification_templates`, `notification_deliveries`, migration 0024, ADR-0134 §4); lettre SMTP transport | `crates/melodee-persistence/tests/notifications.rs`; `apps/melodee-server/tests/admin_notifications_api.rs`; `notification_wiring.rs` | None observed; live SMTP happy path is an R4/R5 acceptance task (R2.6 covers disposable test server) | PRD-NOTIF-001..003 | No |
+| THEME-001 | 1 | Themes, custom theme packs, light/dark/system, localization, RTL | `src/Melodee.Common/Services/ThemeService.cs`; `src/Melodee.Blazor/Controllers/ThemesController.cs`; `src/Melodee.Blazor/Components/Pages/Admin/Themes.razor`; `themes/` | `PROVEN PARITY` | `apps/melodee-server/src/native/discovery.rs` (theme packs); `admin-ui/src/theme/ThemeProvider.tsx`; ADR-0137 i18next stack | `admin-ui/e2e/theme-packs.spec.ts`; `localization.spec.ts`; RTL specs | None observed | PRD-USER-001; ADR-0137 | No |
+| TRANSCODE-001 | 13 | Configured transcoding (FFmpeg, bounded concurrency, cancellation, content type/range/seek) | `src/Melodee.Common/Plugins/Conversion/Media/MediaConvertor.cs`; `src/Melodee.Blazor/Controllers/OpenSubsonic/MediaRetrievalController.cs` | `IMPLEMENTED — UNPROVEN` | `apps/melodee-server/src/transcode_service.rs` (R2.3 configured transcoding); FFmpeg argument arrays | `apps/melodee-server/tests/transcode_service.rs` | Not deeply audited against C# transcoding behavior this pass; the FEATURE-PARITY-MATRIX notes "no streaming transcode exists" in the C# baseline. Marked unproven pending independent verification of byte-range/seek/transcode parity | PRD-STREAM-002 | No |
+| FEATURE-SCRIPT-001 | 20 | JavaScript event scripting hooks (legacy compatibility/migration) | `src/Melodee.Common/Plugins/Scripting/` (PreDiscovery, PostDiscovery, NullScript); `BlazorEventScriptService.cs` | `PROVEN PARITY` | `apps/melodee-server/src/scripting.rs` (Boa sandbox, ADR-0135); `directoryProcessingStart` hook wired | `apps/melodee-server/tests/scripting_service.rs` | Only the one legacy-enforced hook is wired (six legacy UI-gate events inert). C# PreDiscovery/PostDiscovery script plugins have broader reach. Marked PROVEN for the wired hook; broader hook coverage is NOT ASSESSED and may be PARTIAL | PRD-SCRIPT-001..005; ADR-0135 | No for wired hook; broader coverage not assessed |
+| FAVORITE-001 | 15 | Ratings/star/favorite/hate/pin across native + OpenSubsonic + Jellyfin | `src/Melodee.Common/Services/UserFavoriteService.cs`/`UserRatingService.cs`/`UserStarService.cs`/`UserPinService.cs`/`UserHateService.cs` | `PROVEN PARITY` | `crates/melodee-persistence/src/native_user_state.rs` (migration 0011); native star/hate/setrating; OpenSubsonic star/unstar/setRating; Jellyfin FavoriteItems | `crates/melodee-persistence/tests/native_user_state_phase7.rs`; Phase 8 differential replay | None observed | PRD-USER-002 | No |
+| PLAYLIST-001 | 15 | Playlists and smart/dynamic playlists (CRUD, evaluate) | `src/Melodee.Common/Services/PlaylistService.cs`; `PlaylistImportService.cs`; `src/Melodee.Blazor/Controllers/Melodee/PlaylistsController.cs`/`SmartPlaylistsController.cs` | `PROVEN PARITY` | `apps/melodee-server/src/native/playlists.rs` (migration 0016); bounded MQL-backed smart playlists | `apps/melodee-server/tests/native_playlists.rs` (smart_playlist_routes_validate_and_evaluate_bounded_mql) | D4 corruption do-not-preserve (ADR-0128); clean-add deviation approved | PRD-USER-004; ADR-0128 | No |
+| QUEUE-001 | 15 | Play queue persistence (native + OpenSubsonic) | `src/Melodee.Common/Services/UserQueueService.cs`; `src/Melodee.Blazor/Controllers/Melodee/QueueController.cs` | `DIFFERENT — APPROVED` | Native Queue absence preserved (frozen 404, ADR-0123); OpenSubsonic playQueue save/get implemented | `apps/melodee-server/tests/native_catalog_api.rs` (excluded-route matrix); Phase 8 differential replay | Native queue routes are an approved intentional absence (D6); OS playqueue differentially tested | PRD-USER-004; ADR-0123 | No — approved absence |
+
+Note: rows FAVORITE-001, PLAYLIST-001, QUEUE-001, EQ-001, THEME-001, CONFIG-002, FEATURE-SCRIPT-001
+were marked `PROVEN PARITY`/`DIFFERENT — APPROVED` based on the existing FEATURE-PARITY-MATRIX
+evidence and source-spot-checks, but the full user-state domain (15) and scripting domain (20)
+were not independently re-verified end-to-end this pass; they should be re-confirmed in a
+follow-up audit.
+
+## 7. Ordered v1 parity backlog
+
+Derived from all blocking matrix rows.
+
+### Backlog item 1 — Cross-Release Artist identity reuse during catalog import
+- **Included Feature IDs:** ARTIST-001, ARTIST-002 (partial), RELEASE-001 (partial)
+- **Concrete outcome:** Manifest import must match observed artist values against existing
+  catalog Artists (by embedded MusicBrainz/Spotify ID, alias, and name with confidence scoring)
+  and reuse the existing Artist identity when evidence is sufficient, instead of allocating a
+  fresh provisional Artist per observed value. Failing to do this produces duplicate Artist
+  identities for the same real artist across Releases.
+- **Prerequisites/governing decisions:** This is a behavior gap, not an approved architecture
+  change. ADR-0136 defers provider enrichment but does not authorize dropping local catalog
+  Artist reuse. A product decision is required on whether to (a) add a local catalog
+  Artist-matching pass during import using already-stored external IDs and aliases (no provider
+  calls needed), or (b) re-open ADR-0136 to include local matching in the deferral. The
+  `ArtistAuthority` trait and `resolver.rs` exist as the intended boundary.
+- **Expected code areas:** `crates/melodee-persistence/src/catalog.rs` (`PreparedResolution::new`,
+  the import `build` path), `crates/melodee-catalog/src/resolver.rs`.
+- **Required evidence:** Integration test importing two Releases with the same artist name and
+  the same embedded MusicBrainz ID proving one Artist identity is reused (not two provisionals);
+  differential test against C# `LibraryInsertJob` behavior; a test proving same-name different
+  artists remain distinct.
+- **Completion test:** Import two Releases by the same artist; browse the catalog; exactly one
+  Artist appears on both Releases (not two).
+
+### Backlog item 2 — Provider metadata/image enrichment during ingestion
+- **Included Feature IDs:** ARTIST-002, PROVIDER-001, ARTWORK-001 (partial), JOBS-001 (partial)
+- **Concrete outcome:** Ingestion must invoke configured Artist/Release metadata and image
+  providers during processing (or a clearly-scoped replacement), and `external_provider_cache`
+  must receive live lookup traffic. Provider-discovered artwork must be fetched.
+- **Prerequisites/governing decisions:** ADR-0136 currently defers all non-Last.fm providers.
+  This must either be superseded (a new ADR authorizing provider enrichment for v1) or the
+  product owner must explicitly accept the deferral as a v1 difference. A product decision is
+  required: is provider enrichment a v1 release obligation? The PRD §7 inventory says "Required"
+  for external metadata providers and artwork management.
+- **Expected code areas:** `crates/melodee-catalog/src/authority.rs` (production
+  `ArtistAuthority` implementations for MusicBrainz/Spotify/etc.), `crates/melodee-persistence/src/providers.rs`
+  (production writer), ingestion enrichment stage.
+- **Required evidence:** End-to-end ingestion of a Release with a configured provider proving
+  provider metadata and artwork are fetched, cached, and applied; differential test against C#
+  `DirectoryProcessorToStagingService` provider calls.
+- **Completion test:** Configure MusicBrainz; ingest a tagged Release; verify Artist biography,
+  external ID, and cover art are populated from the provider.
+
+### Backlog item 3 — Metadata edit forms: evidence and tag-rewriting transforms
+- **Included Feature IDs:** RELEASE-002
+- **Concrete outcome:** Add test coverage for the existing `update_release_metadata`/
+  `update_artist_metadata`/`update_track_metadata` endpoints and store methods. Implement the
+  C# `MediaEditService` tag-rewriting transformations (feat. removal, artist promotion, title
+  normalization, year setting) or explicitly accept their absence.
+- **Prerequisites/governing decisions:** Phase 10 decision log deferred "metadata edit forms."
+  This must be resolved: either complete the forms (API exists) or formally exclude the
+  tag-rewriting transforms under an ADR.
+- **Expected code areas:** `apps/melodee-server/tests/admin_catalog_api.rs` (edit endpoint tests),
+  `crates/melodee-persistence/tests/catalog_mutations.rs` (store tests), `admin-ui/src/screens/catalog/EditPanel.tsx`.
+- **Required evidence:** Integration tests for each edit endpoint proving persistence and audit;
+  a test for each C# `MediaEditService` transformation that has a Rust equivalent (or an ADR
+  excluding those without).
+- **Completion test:** Open a Release in the admin UI; edit its title and release date; verify
+  the change persists and is audited; run "remove featuring artists" on a track; verify the tag
+  and display string change.
+
+### Backlog item 4 — Automatic AudioIdentity/fingerprint cross-Release matching
+- **Included Feature IDs:** TRACK-001, TRACK-002
+- **Concrete outcome:** Ingestion must automatically propose (not auto-confirm) AudioIdentity
+  matches across Releases using fingerprints and embedded recording IDs, surfacing them for
+  admin confirmation, rather than requiring every match to be admin-initiated.
+- **Prerequisites/governing decisions:** A product decision on whether automatic proposal (not
+  confirmation) of AudioIdentity matches is a v1 obligation. The resolver/scoring boundary
+  exists; the missing piece is a matching engine that runs during ingestion.
+- **Expected code areas:** `crates/melodee-persistence/src/catalog_identity.rs`, a new
+  matching/proposal stage in ingestion or catalog.
+- **Required evidence:** Ingest two Releases with the same audio (different encode); verify a
+  proposed AudioIdentity match appears in the identity review queue (not auto-confirmed).
+- **Completion test:** Ingest a Greatest Hits Release whose tracks are byte-identical or
+  same-audio to existing catalog tracks; verify the policy engine classifies them as
+  exact-duplicate/known-audio and the Release is reviewed/ignored accordingly.
+
+### Backlog item 5 — Release-level duplicate/reissue detection during import
+- **Included Feature IDs:** RELEASE-001 (partial)
+- **Concrete outcome:** Catalog import must detect when a publication corresponds to an existing
+  Release (by MusicBrainz/Spotify ID, catalog number, title+artist) instead of always allocating
+  a new Release per publication.
+- **Prerequisites/governing decisions:** A product decision on whether Release-level deduplication
+  is a v1 obligation or an approved difference. C# `LibraryInsertJob` finds existing albums by ID.
+- **Expected code areas:** `crates/melodee-persistence/src/catalog.rs` (import path).
+- **Required evidence:** Import the same Release twice; verify one Release (not two) with
+  updated tracks/evidence.
+- **Completion test:** Re-ingest an already-cataloged Release; verify no duplicate Release is
+  created.
+
+### Backlog item 6 — Missing scheduled jobs and CLI duplicate-detection/media-inspection tooling
+- **Included Feature IDs:** JOBS-001, CLI-001
+- **Concrete outcome:** Either implement the C# jobs with no Rust equivalent
+  (`MusicBrainzUpdateDatabaseJob`, `ArtistHousekeepingJob`, `ArtistSearchEngineRepositoryHousekeepingJob`,
+  `StagingAlbumRevalidationJob`, `NowPlayingCleanupJob`) — most of which depend on Backlog item 2 —
+  or accept their absence under ADR. Implement the C# duplicate-detection CLI
+  (`AlbumFindDuplicateDirs`, `ArtistFindDuplicates`) and media-inspection CLI (`ShowMpegInfo`,
+  `ShowTags`, `Parse`) or document replacements.
+- **Prerequisites/governing decisions:** Product decision on which jobs/CLI commands are v1
+  obligations vs. accepted differences.
+- **Expected code areas:** `apps/melodee-server/src/` (jobs), `apps/melodee-cli/src/main.rs`.
+- **Required evidence:** Per-job/CLI tests; documentation of replacements.
+- **Completion test:** Run `melodee-cli` equivalent of `artist find-duplicates` and
+  `album find-duplicate-dirs`; verify duplicate detection works.
+
+### Backlog item 7 — Admin UI edit-form breadth
+- **Included Feature IDs:** ADMINUI-001 (partial), RELEASE-002 (partial)
+- **Concrete outcome:** Complete the admin UI edit forms to match the C# Blazor editors
+  (AlbumEdit, ArtistEdit, SongDetail fields) or formally accept the narrower scope.
+- **Prerequisites/governing decisions:** Phase 10 decision log must be resolved (superseded or
+  explicitly accepted).
+- **Expected code areas:** `admin-ui/src/screens/catalog/EditPanel.tsx`, detail screens.
+- **Required evidence:** E2e test editing each editable field.
+- **Completion test:** Open AlbumEdit in admin UI; edit all fields C# exposes; save; verify.
+
+### Backlog item 8 — Complete the unassessed domains
+- **Included Feature IDs:** PLAYBACK-001, USERSTATE-001 (full re-verify), PODCAST-001,
+  DISCOVERY-001/002, SOCIAL-001, AUDIT-001, MIGRATE-001/002, PACKAGING-001, SCRIPT-001 (full)
+- **Concrete outcome:** A follow-up audit pass verifying each `NOT ASSESSED` domain against
+  both codebases to reach a definitive status.
+- **Prerequisites:** None (audit work).
+- **Expected code areas:** All.
+- **Required evidence:** Per-domain matrix rows with verified statuses.
+- **Completion test:** No `NOT ASSESSED` rows remain.
+
+### Backlog item 9 — Phase 11 migration/cutover completion
+- **Included Feature IDs:** MIGRATE-001, MIGRATE-002, PACKAGING-001
+- **Concrete outcome:** Complete R4 production rehearsal, dual-run differential, cutover, and
+  rollback; produce accepted release artifacts.
+- **Prerequisites:** R4/R5/R6 packages per `IMPLMENTATION_OUTSTANDING.md`.
+- **Expected code areas:** `apps/melodee-cli/`, `design/evidence/r4/`/`r5/`.
+- **Required evidence:** Production-snapshot rehearsal, differential classification, real-client
+  acceptance, backup/restore/rollback evidence, accepted RC images.
+- **Completion test:** A migrated production catalog serves existing clients with rollback
+  proven.
+
+## 8. Approved and proposed differences
+
+| C# behavior | Difference | Rationale | Governing decision | User impact | Product-owner accepted for v1? |
+| --- | --- | --- | --- | --- | --- |
+| Party Mode (sessions/queue/playback/moderation) | Absent (404 preserved) | Controllers compile-excluded in C# baseline; no captured contract | ADR-0133, ADR-0123 | Users cannot use Party Mode | Yes (ADR-0133) |
+| Jukebox/server playback | Absent (410 preserved) | Legacy ADR-0001: never implemented | ADR-0133, ADR-0140 | Users cannot use Jukebox | Yes (ADR-0133) |
+| OpenSubsonic D1 unsigned-JWT, D2 seek corruption | Not preserved | Known C# bugs | ADR-0130 | None (bug fixes) | Yes (ADR-0130) |
+| Playlist D4 add-to-nonempty corruption | Not preserved | Known C# bug | ADR-0128 | None (bug fix) | Yes (ADR-0128) |
+| Native play queue (35 routes) | Absent (404 preserved) | Controllers not compiled in C# baseline | ADR-0123 | Native queue unavailable; OS playqueue present | Yes (ADR-0123) |
+| Device-profile automatic stream selection | Metadata-only | Preview capability boundary | ADR-0134 §5 | Device profiles do not auto-select streams | Yes (ADR-0134) |
+| Non-Last.fm external providers (search/image/enrichment) | Deferred | No captured contract; parity-vs-feature-growth argument | ADR-0136 | No provider metadata/images during ingestion; admin artist lookup projects stored rows only | Deferred (ADR-0136) — **not yet accepted as a v1 difference; this is the largest open product decision** |
+| Automatic staged-source deletion after publication | Retained | Staging-safety decision | ADR-0145 | Staged source retained | Yes (ADR-0145) |
+| Metadata edit forms in admin UI | Narrower/deferred | Phase 10 decision log | Phase 10 decision log | Limited catalog editing UI | Deferred — **must be resolved (Backlog item 3)** |
+
+## 9. Disputed and unassessed areas
+
+### Unassessed domains (require follow-up audit)
+- **Domain 13 (Playback/streaming/transcoding/downloads):** `PLAYBACK-001` marked `NOT ASSESSED`.
+  The FEATURE-PARITY-MATRIX claims streaming/transcoding Complete; this audit did not
+  independently re-verify byte-range/seek/transcode/download behavior against C#. `TRANSCODE-001`
+  marked `IMPLEMENTED — UNPROVEN`.
+- **Domain 15 (Playlists/queues/favorites/history):** `USERSTATE-001` marked `NOT ASSESSED`.
+  Individual rows (FAVORITE-001, PLAYLIST-001, QUEUE-001) were spot-checked against the existing
+  matrix but the full domain was not independently re-verified.
+- **Domain 17 (Podcasts):** `PODCAST-001` marked `NOT ASSESSED`. Real external feeds unexercised.
+- **Domain 18 (Radio/charts/recommendations):** `DISCOVERY-001`, `DISCOVERY-002` marked
+  `NOT ASSESSED`.
+- **Domain 19 (Shares/requests/comments/notifications/email):** `SOCIAL-001` marked
+  `NOT ASSESSED`.
+- **Domain 20 (Scripting):** `SCRIPT-001`/`FEATURE-SCRIPT-001` partially assessed; the broader
+  PreDiscovery/PostDiscovery hook coverage and the six inert UI-gate events are not fully
+  compared.
+- **Domain 23 (Audit/logging/metrics):** `AUDIT-001` marked `NOT ASSESSED`.
+- **Domain 24 (Migration/backup/restore):** `MIGRATE-001`, `MIGRATE-002` marked `NOT ASSESSED`
+  (Phase 11 incomplete per `IMPLMENTATION_OUTSTANDING.md`).
+- **Domain 25 (Packaging/releases):** `PACKAGING-001` marked `NOT ASSESSED` (R5 release images
+  fail vulnerability policy per `IMPLMENTATION_OUTSTANDING.md`).
+
+### Evidence conflicts
+- **Metadata editing (RELEASE-002):** The existing FEATURE-PARITY-MATRIX marks this "In progress"
+  with "Full metadata edit forms deferred." The Rust admin edit endpoints (`admin_catalog.rs:1451,1507,1541`)
+  and store methods (`catalog_mutations.rs:940,1037,1136`) ARE implemented and wired, and the
+  `EditPanel.tsx` UI exists. This audit found NO test coverage for these endpoints. The matrix
+  understates the API presence but correctly flags missing UI breadth and evidence. Status set to
+  `IMPLEMENTED — UNPROVEN` reflecting the wired-but-untested API and the narrower UI.
+
+### No disputed rows this pass
+No rows were marked `DISPUTED`; conflicts were resolved by selecting the conservative
+interpretation (e.g., `IMPLEMENTED — UNPROVEN` rather than `PROVEN PARITY` for the edit endpoints).
+
+## 10. End-to-end v1 acceptance journeys
+
+| # | Journey | Status | Mapped Feature IDs |
+| --- | --- | --- | --- |
+| 1 | Clean installation and empty-database onboarding | Passing (evidenced) | STARTUP-001, ONBOARD-001, CONFIG-001 |
+| 2 | Administrator creation and configuration | Passing (evidenced) | AUTH-001, ONBOARD-001 |
+| 3 | Configuration of providers available in the C# baseline | **Planned** — provider enrichment deferred (PROVIDER-001) | PROVIDER-001, ARTIST-002 |
+| 4 | Ingestion of representative tagged and untagged Releases | Passing (evidenced) | INGEST-001, MEDIA-001 |
+| 5 | Artist/Release/Track identification, external-ID and artwork verification | **Planned** — cross-Release Artist reuse and provider artwork missing (ARTIST-001, ARTWORK-001) | ARTIST-001, RELEASE-001, TRACK-001, ARTWORK-001 |
+| 6 | Ambiguous identity review and metadata correction | Partial (review passing; metadata edit unproven) | INGEST-002, RELEASE-002, ARTIST-001 |
+| 7 | Browsing and streaming with MeloAmp | Passing (evidenced, Phase 7) | COMPAT-NATIVE-001, PLAYBACK-001 |
+| 8 | Supported OpenSubsonic and Jellyfin clients | Passing (evidenced, Phase 8) | COMPAT-OS-001, COMPAT-JF-001 |
+| 9 | Restart/failure/retry convergence during ingestion | Passing (evidenced) | INGEST-001 |
+| 10 | Backup, restore, search rebuild, catalog verification | **Planned** — production rollback unproven (MIGRATE-002) | MIGRATE-001, MIGRATE-002, SEARCH-001 |
+| 11 | Upgrade/migration from supported C# data | **Planned** — Phase 11 not complete (MIGRATE-001) | MIGRATE-001, PACKAGING-001 |
+
+"Planned" means the implementation does not yet exist or is not proven; "Passing" means
+reproducible evidence exists in the cited phase/feature evidence. Journeys 3, 5, 10, and 11
+are blocking.
+
+## 11. Legacy code investigated but not active
+
+| C# code | Evidence it is not active in the baseline |
+| --- | --- |
+| `PartySessionsController.cs`, `PartyQueueController.cs`, `PartyPlaybackController.cs`, `PartyModerationController.cs`, `PartyEndpointsController.cs`, `PartySessionEndpointRegistryController.cs` | `src/Melodee.Blazor/Melodee.Blazor.csproj:94-98` `<Compile Remove="..."/>` for all 5 party controllers. Present as source with route attributes but excluded from compilation. Frozen captures return 404. |
+| `Jukebox.razor` page | Present, but `ISubsonicJukeboxService` returns not-enabled; OS `jukeboxControl` returns 410 (legacy ADR-0001: never implemented). The page is dead UI. |
+| `SubsonicJukeboxService` | Referenced by `Jukebox.razor` but the service path returns not-enabled per legacy ADR-0001. |
+| C# party services (`PartySessionService`, `PartyQueueService`, `PartyPlaybackService`, `PartySessionEndpointRegistryService`) registered in `Program.cs:617-621` | Services are DI-registered but their consuming controllers are compile-excluded, so they are unreachable via HTTP. They may be invoked by non-HTTP paths (e.g. SignalR hubs); not investigated further. |
+
+## 12. Rust-only capabilities
+
+| Rust-only capability | Value |
+| --- | --- |
+| Durable per-Release work-item pipeline with lease-based concurrency (`FOR UPDATE SKIP LOCKED`) | Replaces C# filesystem-sweep model; survives crashes and retries per-Release. Approved redesign (ADR-0116/0145), not a C# feature. |
+| Melodee-owned semantic identity model (Artist/Release/Track) with evidence-based resolution | Replaces C# MusicBrainz/DecentDB external-authority model (PRD-ARTIST-012). Approved architecture change. |
+| Multi-valued ReleaseTraits with evidence/confidence | Replaces C# single `AlbumType` (PRD-CLASS-001). |
+| Tantivy rebuildable search projection with 10M-Track benchmark | Replaces C# search-engine repository model. |
+| Boa-based scripting sandbox with circuit breaker | Replaces C# scripting plugin model (ADR-0135). |
+| Carbon admin SPA at `/admin` | Replaces C# Blazor admin UI (ADR-0138). |
+
+These do not offset missing C# features; they are recorded for context.
+
+## 13. Audit log
+
+### Entry 1 — 2026-08-23 — Kilo (glm-5.2, ollama-cloud/glm-5.2)
+
+- **C# commit SHA:** `4028b58dbd3302ed431e2c5b32d9dde5634db218` (branch `sph.2026-07-11.01`, clean)
+- **Rust commit SHA:** `a6d54de83e798c381cd145852989fe7f7c872578` (branch `main`, clean)
+- **Domains reviewed:** 1, 2 (partial), 3 (partial), 4, 5, 6 (partial), 7, 8, 9, 10, 11
+  (partial), 12 (spot-check), 14, 16, 21, 22. Domains 13, 15, 17, 18, 19, 20 (partial), 23,
+  24, 25 marked `NOT ASSESSED`.
+- **Feature IDs reviewed:** STARTUP-001, ONBOARD-001, CONFIG-001/002, AUTH-001, LIBRARY-001,
+  INGEST-001/002, MEDIA-001, ARTIST-001/002, RELEASE-001/002, TRACK-001/002, PROVIDER-001,
+  ARTWORK-001, SEARCH-001, COMPAT-NATIVE-001, COMPAT-OS-001, COMPAT-JF-001, SCROBBLE-001,
+  LASTFM-001, JOBS-001, ADMINUI-001, CLI-001, PARTY-001, JUKEBOX-001, DEVICE-001, EQ-001,
+  THEME-001, TRANSCODE-001, FEATURE-SCRIPT-001, FAVORITE-001, PLAYLIST-001, QUEUE-001,
+  PLAYBACK-001, USERSTATE-001, PODCAST-001, DISCOVERY-001/002, SOCIAL-001, AUDIT-001,
+  MIGRATE-001/002, PACKAGING-001.
+- **Rows added:** 51 (new document).
+- **Rows corrected vs. existing FEATURE-PARITY-MATRIX:**
+  - RELEASE-002 (metadata editing): matrix says "In progress/deferred"; this audit found the
+    admin edit endpoints ARE implemented and wired (`admin_catalog.rs:1451,1507,1541`,
+    `catalog_mutations.rs:940,1037,1136`) but have no test evidence and the UI is narrower. Set to
+    `IMPLEMENTED — UNPROVEN`.
+  - ARTIST-001 (Artist identity reuse): matrix does not surface the cross-Release Artist reuse
+    gap; this audit verified Rust allocates a fresh provisional Artist per observed value
+    (`catalog.rs:1057`) while C# reuses by MB/Spotify ID (`LibraryInsertJob.cs:440,498,513`).
+    Set to `DIFFERENT — UNAPPROVED`.
+  - ARTIST-002/PROVIDER-001 (provider enrichment during ingestion): matrix marks providers
+    "Waived"; this audit verified C# ingestion calls providers during staging
+    (`DirectoryProcessorToStagingService.cs:1135,1210`) and `external_provider_cache` has no
+    production writer. Set to `MISSING`/`PARTIAL` with ADR-0136 cited as the governing deferral,
+    not as parity.
+  - PARTY-001: verified the C# party controllers are compile-excluded
+    (`Melodee.Blazor.csproj:94-98`), confirming the ADR-0133 waiver basis is accurate. Set to
+    `DIFFERENT — APPROVED`.
+- **Downgraded:** None this pass (new document).
+- **Upgraded:** None this pass (new document).
+- **Disputed:** None.
+- **Newly discovered v1 blockers:** ARTIST-001 (cross-Release Artist reuse), ARTIST-002
+  (provider enrichment), TRACK-002 (automatic AudioIdentity matching), RELEASE-001
+  (Release-level dedup), JOBS-001 (missing provider-dependent jobs), CLI-001
+  (duplicate-detection/media-inspection CLI).
+- **Validation commands run:** `git rev-parse`/`status` on both repos (both clean);
+  `rg`/source inspection of C# `src/Melodee.Common/`, `src/Melodee.Blazor/`, `src/Melodee.Cli/`
+  and Rust `apps/`/`crates/`. No build/test commands were run against either checkout (C# is
+  read-only; Rust gate validation is out of scope for this doc-only assignment).
+- **Compatibility/product-decision impacts:** ADR-0136 (non-Last.fm provider deferral) is the
+  largest open product decision — it must be either superseded to require provider enrichment for
+  v1, or the product owner must explicitly accept provider-enrichment absence as a v1
+  difference. ADR-0133 (Party/Jukebox waiver) is accurate and upheld. Phase 10 metadata-edit
+  deferral must be resolved.
+- **ADRs that may eventually need superseding (not edited in this audit):** ADR-0136 (if provider
+  enrichment becomes a v1 obligation); the Phase 10 decision log (if metadata edit forms become a
+  v1 obligation).
+- **Remaining risks:** The cross-Release Artist identity duplication (ARTIST-001) is a silent
+  data-quality issue that worsens with every ingested Release and is not visible in API captures.
+  The provider deferral means catalog enrichment degrades relative to C# over time.
+- **Remaining scope:** Domains 13, 15, 17–20, 23–25 require a follow-up audit pass to move rows
+  from `NOT ASSESSED` to a definitive status.
