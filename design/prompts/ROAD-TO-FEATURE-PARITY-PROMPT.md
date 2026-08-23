@@ -18,7 +18,7 @@ Do not ask the user to manually enumerate features. Discover the feature set fro
 composition roots, UI, configuration, jobs, tests, and documentation, then independently discover
 the operational feature set in the Rust rewrite and compare them.
 
-This assignment may modify only `design/ROAD_TO_FEATURE_PARITY.md`. Do not implement missing
+This assignment may modify only `design/ROAD-TO-FEATURE-PARITY.md`. Do not implement missing
 features, change requirements, edit ADRs, or adjust completion statuses elsewhere. Do not modify
 the C# repository under any circumstances.
 
