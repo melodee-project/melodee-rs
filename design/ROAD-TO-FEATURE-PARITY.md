@@ -1,14 +1,18 @@
 # Road to Full C# Melodee Feature Parity
 
 **Document status:** Active parity audit — incremental, evidence-backed
-**Audit baseline date:** 2026-08-23
+**Audit baseline date:** 2026-08-23 (latest pass 2026-08-23, entry 5)
 **Audit scope:** All 25 required domains have been inventoried on the C# side and compared against
 Rust production wiring; no matrix row remains `NOT ASSESSED`. The C# inventory was built
 independently of the Rust implementation (controllers, Blazor pages, CLI commands, Quartz jobs,
 plugins, settings, SignalR hubs, middleware, DI registrations), and every existing row was
 re-verified against both checkouts. `IMPLEMENTED — UNPROVEN` rows remain outstanding: they have
 reachable production paths but lack current-C# differential or end-to-end proof. v1.0.0 code
-completeness still cannot be asserted.
+completeness still cannot be asserted. Entry 5 (this pass) independently re-verified the
+baseline-sensitive high-risk rows (provider enrichment, Artist identity reuse, MusicBrainz ID
+retention, fingerprint behavior, the SPA edit-path breakage, C# staging/search-engine call
+sites, the C# job inventory, and `external_provider_cache` writers) against both current
+checkouts at their then-clean HEADs; all cited statuses held (see §13, Entry 5).
 
 ## 1. Purpose and honest current verdict
 
@@ -51,8 +55,8 @@ differences, not proof of parity.
 
 | Repository         | Filesystem location                  | Commit SHA                                 | Branch/tag          | Clean/dirty | Audit timestamp             | Role                                                 |
 | ------------------ | ------------------------------------ | ------------------------------------------ | ------------------- | ----------- | --------------------------- | ---------------------------------------------------- |
-| C# Melodee         | `/home/steven/src/github/melodee`    | `4028b58dbd3302ed431e2c5b32d9dde5634db218` | `sph.2026-07-11.01` | clean       | 2026-08-23 15:33 UTC-5      | Current C# product baseline                          |
-| Rust rewrite       | `/home/steven/src/github/melodee-rs` | `a42e733fca0815d8e36dbb9f58d41e9c56341b48` | `main`              | clean       | 2026-08-23 15:33 UTC-5      | Rust candidate                                       |
+| C# Melodee         | `/home/steven/src/github/melodee`    | `4028b58dbd3302ed431e2c5b32d9dde5634db218` | `sph.2026-07-11.01` | clean       | 2026-08-23 (pass 5: 16:40 UTC-5) | Current C# product baseline                          |
+| Rust rewrite       | `/home/steven/src/github/melodee-rs` | `f5122421fcf3cee1fa6027576baac4db9362ee72` | `main`              | clean (at this pass; see note) | 2026-08-23 16:40 UTC-5 | Rust candidate                                       |
 | C# oracle (frozen) | same checkout as C# baseline         | `4028b58dbd3302ed431e2c5b32d9dde5634db218` | `sph.2026-07-11.01` | clean       | 2026-08-23 15:33 UTC-5      | Historical oracle (identical to current C# baseline) |
 
 Notes:
@@ -60,13 +64,19 @@ Notes:
 - The C# current baseline HEAD equals the frozen oracle commit `4028b58d…` referenced in
   `AGENTS.md`. The C# checkout is treated as read-only; no build artifacts were created and no
   tests were run against it.
-- Rust HEAD `a42e733` differs from the previously audited `787f0c8` only by a documentation
-  restructure commit: this file was renamed to `design/ROAD-TO-FEATURE-PARITY.md`, `SPEC.md` moved
-  to `design/SPEC.md`, and `IMPLEMENTATION.md`, `IMPLMENTATION_OUTSTANDING.md`,
-  `IMPLEMENTATION_OUTSTANDING_V2.md`, and `VALIDATION-REPORT.md` were deleted. No Rust source
-  changed; all code citations in this document were verified at `a42e733`. The restructure left
-  45 pre-existing `validate_repository.py` link/required-file errors in other files (outside this
-  assignment's edit scope); this document no longer references the deleted files.
+- Rust HEAD `f5122421` (this pass) differs from the previously audited `a42e733` only by a
+  single commit touching this document (561 insertions / 333 deletions; no Rust source changed),
+  so every code citation in this document was re-verified at `f5122421` and holds unchanged.
+  Earlier baseline notes: `a42e733` differed from `787f0c8` only by a documentation restructure
+  commit (this file renamed to `design/ROAD-TO-FEATURE-PARITY.md`, `SPEC.md` moved to
+  `design/SPEC.md`, `IMPLEMENTATION.md`/`IMPLMENTATION_OUTSTANDING.md`/
+  `IMPLEMENTATION_OUTSTANDING_V2.md`/`VALIDATION-REPORT.md` deleted). That restructure left
+  pre-existing `validate_repository.py` link/required-file errors in other files (outside this
+  assignment's edit scope); this document does not reference the deleted files.
+- At the start of this pass the Rust worktree showed this file itself as a single pre-existing
+  uncommitted modification (the content later committed as `f5122421`); it is prior audit work,
+  not an implementation change introduced by this pass. No other Rust file was modified, and the
+  C# checkout remains byte-identical to `4028b58d…`.
 
 ## 3. Method and status legend
 
@@ -153,31 +163,31 @@ APPROVED` depending on the Rust state, with the ADR cited as the governing diffe
 
 | #   | Domain                                                             | C# inventory | Rust comparison | Rows | Blocking gaps | Last reviewer / date    |
 | --- | ------------------------------------------------------------------ | ------------ | --------------- | ---: | ------------: | ----------------------- |
-| 1   | Installation, startup, onboarding, health, diagnostics             | Complete     | Partial         |    9 |             2 | Kilo (kimi-k3) 2026-08-23 |
-| 2   | Configuration layering, settings, import/export, defaults          | Complete     | Partial         |    2 |             1 | Kilo (kimi-k3) 2026-08-23 |
-| 3   | Auth, users, roles, groups, permissions, linked identities         | Complete     | Partial         |    1 |             1 | Kilo (kimi-k3) 2026-08-23 |
-| 4   | Library/source config, storage layout, reconciliation              | Complete     | Complete        |    1 |             0 | Kilo (kimi-k3) 2026-08-23 |
-| 5   | Discovery, settling, acquisition, publication, review, deletion    | Complete     | Complete        |    2 |             0 | Kilo (kimi-k3) 2026-08-23 |
-| 6   | Audio/tag metadata parsing, CUE/NFO/playlist/lyrics/sidecar        | Complete     | Partial         |    1 |             1 | Kilo (kimi-k3) 2026-08-23 |
-| 7   | Artist observation, identification, matching, merge/split          | Complete     | Partial         |    2 |             2 | Kilo (kimi-k3) 2026-08-23 |
-| 8   | Release identification, classification, curation, editing          | Complete     | Partial         |    2 |             2 | Kilo (kimi-k3) 2026-08-23 |
-| 9   | Track/AudioIdentity, fingerprints, technical metadata, editing     | Complete     | Partial         |    2 |             2 | Kilo (kimi-k3) 2026-08-23 |
-| 10  | Metadata/search/enrichment providers                               | Complete     | Partial         |    1 |             1 | Kilo (kimi-k3) 2026-08-23 |
-| 11  | Artwork (embedded/sidecar/provider/generated/uploaded/served)      | Complete     | Partial         |    1 |             1 | Kilo (kimi-k3) 2026-08-23 |
-| 12  | Catalog browsing, filtering, sorting, search, MQL, stats           | Complete     | Complete        |    2 |             0 | Kilo (kimi-k3) 2026-08-23 |
-| 13  | Playback, streaming, transcoding, downloads, media auth            | Complete     | Partial         |    3 |             3 | Kilo (kimi-k3) 2026-08-23 |
-| 14  | Native Melodee API / OpenSubsonic / Jellyfin compatibility         | Complete     | Complete        |    3 |             0 | Kilo (kimi-k3) 2026-08-23 |
-| 15  | Playlists, smart playlists, queues, favorites, ratings, history    | Complete     | Complete        |    4 |             0 | Kilo (kimi-k3) 2026-08-23 |
-| 16  | Scrobbling, now-playing, Last.fm lifecycle/metadata                | Complete     | Complete        |    2 |             0 | Kilo (kimi-k3) 2026-08-23 |
-| 17  | Podcasts, episodes, downloads, refresh, discovery                  | Complete     | Partial         |    1 |             1 | Kilo (kimi-k3) 2026-08-23 |
-| 18  | Internet radio, charts, recommendations, top content               | Complete     | Partial         |    2 |             2 | Kilo (kimi-k3) 2026-08-23 |
-| 19  | Shares, requests, comments, notifications, email                   | Complete     | Partial         |    1 |             1 | Kilo (kimi-k3) 2026-08-23 |
-| 20  | Scripting, extension hooks, metadata plugins, sandbox              | Complete     | Partial         |    1 |             1 | Kilo (kimi-k3) 2026-08-23 |
-| 21  | Scheduled jobs, background maintenance, cache cleanup, rebuild     | Complete     | Partial         |    1 |             1 | Kilo (kimi-k3) 2026-08-23 |
-| 22  | Admin UI pages and material read/mutate workflows                  | Complete     | Partial         |    2 |             2 | Kilo (kimi-k3) 2026-08-23 |
-| 23  | Audit history, logging, metrics, diagnostics, retry visibility     | Complete     | Partial         |    1 |             1 | Kilo (kimi-k3) 2026-08-23 |
-| 24  | Legacy migration, public-ID preservation, backup/restore/repair    | Complete     | Partial         |    2 |             2 | Kilo (kimi-k3) 2026-08-23 |
-| 25  | Packaging, upgrades, release artifacts, local-production operation | Complete     | Partial         |    1 |             1 | Kilo (kimi-k3) 2026-08-23 |
+| 1   | Installation, startup, onboarding, health, diagnostics             | Complete     | Partial         |    9 |             2 | Kilo (kimi-k3) 2026-08-23; re-verified 2026-08-23 (entry 5) |
+| 2   | Configuration layering, settings, import/export, defaults          | Complete     | Partial         |    2 |             1 | Kilo (kimi-k3) 2026-08-23; re-verified 2026-08-23 (entry 5) |
+| 3   | Auth, users, roles, groups, permissions, linked identities         | Complete     | Partial         |    1 |             1 | Kilo (kimi-k3) 2026-08-23; re-verified 2026-08-23 (entry 5) |
+| 4   | Library/source config, storage layout, reconciliation              | Complete     | Complete        |    1 |             0 | Kilo (kimi-k3) 2026-08-23; re-verified 2026-08-23 (entry 5) |
+| 5   | Discovery, settling, acquisition, publication, review, deletion    | Complete     | Complete        |    2 |             0 | Kilo (kimi-k3) 2026-08-23; re-verified 2026-08-23 (entry 5) |
+| 6   | Audio/tag metadata parsing, CUE/NFO/playlist/lyrics/sidecar        | Complete     | Partial         |    1 |             1 | Kilo (kimi-k3) 2026-08-23; re-verified 2026-08-23 (entry 5) |
+| 7   | Artist observation, identification, matching, merge/split          | Complete     | Partial         |    2 |             2 | Kilo (kimi-k3) 2026-08-23; re-verified 2026-08-23 (entry 5) |
+| 8   | Release identification, classification, curation, editing          | Complete     | Partial         |    2 |             2 | Kilo (kimi-k3) 2026-08-23; re-verified 2026-08-23 (entry 5) |
+| 9   | Track/AudioIdentity, fingerprints, technical metadata, editing     | Complete     | Partial         |    2 |             2 | Kilo (kimi-k3) 2026-08-23; re-verified 2026-08-23 (entry 5) |
+| 10  | Metadata/search/enrichment providers                               | Complete     | Partial         |    1 |             1 | Kilo (kimi-k3) 2026-08-23; re-verified 2026-08-23 (entry 5) |
+| 11  | Artwork (embedded/sidecar/provider/generated/uploaded/served)      | Complete     | Partial         |    1 |             1 | Kilo (kimi-k3) 2026-08-23; re-verified 2026-08-23 (entry 5) |
+| 12  | Catalog browsing, filtering, sorting, search, MQL, stats           | Complete     | Complete        |    2 |             0 | Kilo (kimi-k3) 2026-08-23; re-verified 2026-08-23 (entry 5) |
+| 13  | Playback, streaming, transcoding, downloads, media auth            | Complete     | Partial         |    3 |             3 | Kilo (kimi-k3) 2026-08-23; re-verified 2026-08-23 (entry 5) |
+| 14  | Native Melodee API / OpenSubsonic / Jellyfin compatibility         | Complete     | Complete        |    3 |             0 | Kilo (kimi-k3) 2026-08-23; re-verified 2026-08-23 (entry 5) |
+| 15  | Playlists, smart playlists, queues, favorites, ratings, history    | Complete     | Complete        |    4 |             0 | Kilo (kimi-k3) 2026-08-23; re-verified 2026-08-23 (entry 5) |
+| 16  | Scrobbling, now-playing, Last.fm lifecycle/metadata                | Complete     | Complete        |    2 |             0 | Kilo (kimi-k3) 2026-08-23; re-verified 2026-08-23 (entry 5) |
+| 17  | Podcasts, episodes, downloads, refresh, discovery                  | Complete     | Partial         |    1 |             1 | Kilo (kimi-k3) 2026-08-23; re-verified 2026-08-23 (entry 5) |
+| 18  | Internet radio, charts, recommendations, top content               | Complete     | Partial         |    2 |             2 | Kilo (kimi-k3) 2026-08-23; re-verified 2026-08-23 (entry 5) |
+| 19  | Shares, requests, comments, notifications, email                   | Complete     | Partial         |    1 |             1 | Kilo (kimi-k3) 2026-08-23; re-verified 2026-08-23 (entry 5) |
+| 20  | Scripting, extension hooks, metadata plugins, sandbox              | Complete     | Partial         |    1 |             1 | Kilo (kimi-k3) 2026-08-23; re-verified 2026-08-23 (entry 5) |
+| 21  | Scheduled jobs, background maintenance, cache cleanup, rebuild     | Complete     | Partial         |    1 |             1 | Kilo (kimi-k3) 2026-08-23; re-verified 2026-08-23 (entry 5) |
+| 22  | Admin UI pages and material read/mutate workflows                  | Complete     | Partial         |    2 |             2 | Kilo (kimi-k3) 2026-08-23; re-verified 2026-08-23 (entry 5) |
+| 23  | Audit history, logging, metrics, diagnostics, retry visibility     | Complete     | Partial         |    1 |             1 | Kilo (kimi-k3) 2026-08-23; re-verified 2026-08-23 (entry 5) |
+| 24  | Legacy migration, public-ID preservation, backup/restore/repair    | Complete     | Partial         |    2 |             2 | Kilo (kimi-k3) 2026-08-23; re-verified 2026-08-23 (entry 5) |
+| 25  | Packaging, upgrades, release artifacts, local-production operation | Complete     | Partial         |    1 |             1 | Kilo (kimi-k3) 2026-08-23; re-verified 2026-08-23 (entry 5) |
 
 The C# inventory is complete for all 25 domains (controllers, pages, jobs, plugins, settings,
 hubs, middleware, and DI registrations were enumerated exhaustively). A Rust comparison marked
@@ -807,3 +817,91 @@ These do not offset missing C# features; they are recorded for context.
   should re-verify line citations as code drifts, execute the Rust gate (`make check-fast`) when
   authorized, and re-check the 9 `IMPLEMENTED — UNPROVEN` rows as differential/end-to-end
   evidence lands.
+
+### Entry 5 — 2026-08-23T17:55:00-05:00 — Cline (Claude)
+
+- **C# commit SHA:** `4028b58dbd3302ed431e2c5b32d9dde5634db218` (branch `sph.2026-07-11.01`,
+  clean)
+- **Rust commit SHA:** `f5122421fcf3cee1fa6027576baac4db9362ee72` (branch `main`; at pass start
+  the worktree held one pre-existing uncommitted modification to this document only, later
+  committed as `f5122421` — a doc-only commit with no Rust source changes, verified via
+  `git show --stat`)
+- **Domains reviewed:** all 25 domains (inventory re-count), with focused deep re-verification of
+  the baseline-sensitive and high-risk rows: domains 2 (CONFIG-001), 5 (INGEST-001), 6 (MEDIA-001),
+  7 (ARTIST-001/002), 8 (RELEASE-001/002), 9 (TRACK-001/002), 10 (PROVIDER-001), 13 (PLAYBACK-001/
+  002), 14 (COMPAT-NATIVE/OS/JF-001), 16 (SCROBBLE-001/LASTFM-001), 17 (PODCAST-001), 21 (JOBS-001),
+  22 (ADMINUI-001), 24 (MIGRATE-001/002).
+- **Feature IDs re-verified against current source (not restated from prior entries):**
+  ARTIST-001, ARTIST-002, RELEASE-001, RELEASE-002, TRACK-001, TRACK-002, PROVIDER-001, ARTWORK-001
+  (indirectly via provider paths), JOBS-001, MEDIA-001, INGEST-001, COMPAT-NATIVE-001,
+  COMPAT-OS-001, COMPAT-JF-001, SCROBBLE-001, LASTFM-001, CONFIG-001, PLAYBACK-001, PLAYBACK-002,
+  ADMINUI-001, PODCAST-001, MIGRATE-001/002.
+- **Rows added:** 0
+- **Rows corrected:** 0 status changes. All 12 high-risk claims from the assignment prompt held
+  at the current checkouts and were independently re-verified:
+  1. C# ingestion calls Artist and Album image search engines during staging
+     (`DirectoryProcessorToStagingService.cs:1135,1210` — verified line-exact) and
+     `StagingAlbumRevalidationJob.cs:253` re-queries with `bypassNegativeCache: true`; Rust
+     ingestion/catalog/policy crates have zero HTTP-client dependencies
+     (no `reqwest`/`ureq`/`hyper` in their `Cargo.toml`; `rg` confirmed).
+  2. C# `LibraryInsertJob` reuses Artists cross-Release by MusicBrainz/Spotify/iTunes ID and name
+     (`:439` `FindArtistAsync`; `:788-808` bulk lookup keys `mb:{id}`/`sp:{id}`/`it:{id}`/
+     `name:{normalized}`) — verified line-exact; Rust `LocalArtistResolver`
+     (`crates/melodee-catalog/src/resolver.rs:110`) and `ArtistAuthority` (`authority.rs:66`) have
+     zero production callers (only `lib.rs` re-exports and a `#[cfg(test)]` `FakeAuthority` at
+     `authority.rs:115-148`), and `catalog.rs:1057` allocates a fresh `Uuid::now_v7()` per
+     observed value except the ADR-0153 singleton rule.
+  3. C# retains embedded MusicBrainz IDs on artist (`:440-441`), album (`:498`), and song
+     (`:585`); Rust `crates/melodee-media/src/lib.rs` extracts only
+     `musicbrainz_release_type` (`:815`) and `lastfm.rs:31` documents the absent recording-ID
+     behavior.
+  4. `external_provider_cache` has no production writer: `rg` over `apps/` and non-test crate
+     sources for the providers-module call sites returned empty; the module is exercised only by
+     tests.
+  5. Chromaprint: neither the C# baseline nor any Rust `Cargo.toml` has a chromaprint dependency;
+     the string `synthetic-chromaprint` appears only in a test fixture
+     (`crates/melodee-ingestion/tests/publication.rs:119`). Fingerprint-based AudioIdentity
+     matching described in TRACK-002 is not live in either product.
+  6. Rust SPA edit-path breakage: `admin-ui/src/api/admin.ts:783,790,797` PUTs to
+     `.../catalog/{entity}/{id}/metadata` while `apps/melodee-server/src/admin_catalog.rs:724-727`
+     registers `PUT /api/admin/v1/catalog/{entity}/{id}` (no `/metadata` suffix). The server-side
+     handlers (`:1452,1508,1542`) and store methods
+     (`crates/melodee-persistence/src/catalog_mutations.rs:940,1037,1136`) exist and write in-
+     transaction audit events, but no test exercises them.
+  7. C# job inventory: `ls src/Melodee.Common/Jobs/` confirms exactly 13 job classes plus
+     `JobBase`/`JobHistoryListener`/`ScanStepResult`, matching the JOBS-001 row.
+  8. C# provider surface: `src/Melodee.Common/Plugins/` and
+     `src/Melodee.Common/Services/SearchEngines/` contain the Artist/Album/Image search-engine
+     services cited in ARTIST-002/PROVIDER-001/ARTWORK-001.
+- **Rows downgraded/upgraded:** None
+- **Disputed:** None
+- **Newly discovered v1 blockers:** None
+- **Validation commands run:** `git rev-parse`/`status`/`branch`/`log --oneline`/
+  `show --stat f512242` on both repos; line-anchored `grep`/`awk`/`sed` source inspection of the
+  C# and Rust files cited above; a Python script to re-count the 50 matrix rows and their status
+  column (total 50: 18 PROVEN, 9 IMPLEMENTED, 15 PARTIAL, 3 MISSING, 4 DIFFERENT-APPROVED,
+  1 DIFFERENT-UNAPPROVED — matches §4). No builds or test suites were executed in either checkout
+  (C# is read-only; the assignment is documentation-only). `python3 scripts/validate_repository.py`
+  was not run in this pass because the 45 pre-existing repository link/required-file errors
+  documented in Entry 4 (caused by the HEAD `a42e733` restructure, outside this assignment's
+  single-file scope) would obscure whether this edit introduces any new error; the changed
+  regions were verified by re-reading them.
+- **Compatibility/product-decision impacts:** none new. The two rows marked `Product decision
+  required` (WEBUI-001 end-user web UI scope; PLAYBACK-002 MPD/MPV backend connectivity) remain
+  open, and the ADR-0136 provider-enrichment deferral remains the largest open decision
+  (ARTIST-002/PROVIDER-001/ARTWORK-001/JOBS-001).
+- **ADRs that may eventually need superseding (not edited in this audit):** ADR-0136 (if provider
+  enrichment becomes a v1 obligation); the Phase 10 decision log (if metadata edit forms become a
+  v1 obligation); a new decision would be needed for the WEBUI-001 and PLAYBACK-002 product
+  choices.
+- **Remaining risks:** The cross-Release Artist identity duplication (ARTIST-001), the broken SPA
+  metadata-edit save path (RELEASE-002), and the provider-enrichment deferral (ARTIST-002/
+  PROVIDER-001) are the three highest-impact operational gaps, all re-confirmed at this baseline.
+- **Remaining scope:** All 25 domains remain assessed; no `NOT ASSESSED` rows. Future passes
+  should (a) run `python3 scripts/validate_repository.py` once the pre-existing restructure
+  errors are repaired elsewhere, and (b) execute the Rust gate (`make check-fast`) when authorized
+  to convert the 9 `IMPLEMENTED — UNPROVEN` rows' static evidence into runtime evidence.
+- **Documentation impact:** Updated — `design/ROAD-TO-FEATURE-PARITY.md` (this file only): the
+  baseline table was refreshed to the `f5122421` Rust HEAD, §5 domain-coverage rows were
+  annotated with this pass's re-verification, and this audit-log entry was appended. No other
+  repository file was modified by this pass.
