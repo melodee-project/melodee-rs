@@ -79,11 +79,44 @@ template.
 2. `SPEC.md` technical invariants and interface contracts
 3. `PRD.md` product requirements
 4. `IMPLEMENTATION.md` phase scope and exit criteria
-5. The assigned issue/work package
+5. The assigned phase, issue, or work package
 6. Existing implementation patterns in this repository
 7. Legacy C# code — evidence of behavior, **not** an architecture template
 
 Do not silently resolve a material conflict; record it in the PR and propose an ADR when needed.
+
+## Coding-agent assignment granularity
+
+The assignment unit and the implementation unit are different:
+
+- **Phase-level requests produce phase-level assignments.** When the repository has a
+  phase-structured roadmap and the user asks for a coding-agent prompt for "the next phase",
+  "what should be worked on next", or equivalent without naming a single issue, default to the
+  next complete phase or program milestone. Do not reinterpret that request as permission to
+  return only the first task, prerequisite, bug fix, or workstream in the phase.
+- A phase-level prompt delegates the end-to-end outcome: resolve or surface its entry decisions,
+  decompose and order its internal workstreams, implement every in-scope requirement, run the
+  required compatibility and validation gates, update public documentation and traceability, and
+  produce phase-closeout evidence. The receiving coding agent owns that decomposition and should
+  continue across workstreams without requiring a new user prompt for each one.
+- Work packages, waves, issues, and "smallest coherent changes" are execution and review units
+  *inside* a phase. They keep commits understandable and dependencies ordered; they do not reduce
+  the scope of a phase assignment.
+- Return a single-issue or single-workstream prompt only when the user explicitly asks for that
+  granularity, or when a concrete external decision makes the rest of the phase impossible to
+  execute safely. A prerequisite that the agent can complete is part of the phase, not a reason
+  to stop after the prerequisite.
+- "Awaiting next phase assignment" prevents unsolicited feature work. An explicit user request
+  to create a prompt that accomplishes the next phase is direction to select and frame the whole
+  phase. An explicit request to implement or proceed with that phase assigns it for execution,
+  subject to the authority hierarchy and destructive/external approval gates above.
+- If more than one phase could reasonably be next, recommend the best complete phase and state
+  the dependency reasoning. Do not silently fall back to a microtask merely because the roadmap
+  needs reconciliation; include safe reconciliation as the phase's entry wave.
+
+Use [the phase implementation prompt](design/prompts/IMPLEMENT-PHASE.md) as the default template
+for phase-level coding-agent assignments. The issue template is reserved for explicitly assigned
+issues.
 
 ## Current phase boundary: Phase 10 complete — awaiting next phase assignment
 
@@ -100,14 +133,7 @@ artwork overrides with evidenced frozen-endpoint precedence). The full repositor
 (904 Rust tests, 232 JS unit tests, 259 Playwright e2e runs, 140 Python capture tests, zero
 failures); the local gate now includes the admin-ui toolchain (`make check`). Phase 9's
 evidence is in
-`design/evidence/phase-9/PHASE-9-REPORT.md`: all twelve per-domain parity checklists are green. The
-forward-looking proposal in `design/ROAD-TO-FEATURE-COMPLETION.md` is non-authorizing, but its
-Phase 1 "Quick wins" block (stage names are proposal-stage names, not canonical phases) is the
-authorized exception: the **W0 workstream (the `RELEASE-002` P0 metadata-edit contract and
-save-path fix, including its tests and docs) is allowed to proceed now** — it is a bug fix and
-contract correction to existing behavior, not a new product capability. The remaining Phase 1
-quick wins (the `IMPLEMENTED — UNPROVEN` evidence rows, `TRACK-001`/`002`) and all later blocks
-(W1–W9, proposal-stage Phases 0–6) remain unassigned.
+`design/evidence/phase-9/PHASE-9-REPORT.md`: all twelve per-domain parity checklists are green
 (74 rows ✅ with linked test evidence, 4 rows 🚫 waived by accepted ADRs, 2 rows ➡ Phase 10),
 all 61 Phase-9-tagged requirements are terminal (52 tested, 2 implemented, 7 deferred under
 ADRs 0133/0136 or the Phase 10 boundary), the feature-parity matrix carries no unapproved gaps,
@@ -120,11 +146,22 @@ Phase 10 entry criteria) and ADR-0132. Phase 8's accepted adapter evidence is in
 routes, zero-diff replay, Feishin 12/12 real-client acceptance); Phase 7's accepted native-v1
 evidence is in `design/evidence/phase-7/PHASE-7-REPORT.md`.
 
-Allowed: nothing new until the next phase is assigned; fixes to existing evidence and
-documentation corrections only.
+The post-Phase-10 **W0 workstream** (`RELEASE-002` metadata-edit contract and save-path fix) is
+implemented at `cd0256a`, including server/store tests and public API documentation. The remaining
+quick wins and W1–W9 in `design/ROAD-TO-FEATURE-COMPLETION.md` are still planning inputs, not
+individually assigned tasks. When the user assigns the next phase, use them as internal
+workstreams of a complete phase-level assignment rather than prompting for them one at a time.
 
-Forbidden: Phase 11 migration/import completion (unassigned); merging native-v1, OpenSubsonic,
-or Jellyfin wire DTOs; redesigning captured
+Allowed without new user direction: fixes to existing evidence and documentation corrections.
+An explicit user request for the next phase or for a coding-agent prompt that accomplishes it is
+the phase-level direction described above; it must not be narrowed to a documentation cleanup or
+single workstream merely because the repository was previously awaiting assignment.
+
+Not authorized by the current repository state alone: Phase 11 migration/import completion. A
+direct user assignment may authorize that phase, but production rehearsal, cutover, rollback, and
+other destructive or external legs still require their documented operator approvals.
+
+Forbidden: merging native-v1, OpenSubsonic, or Jellyfin wire DTOs; redesigning captured
 external contracts without compatibility evidence, a product decision, an accepted ADR, and a
 migration/client plan; any database schema without an accepted schema ADR; message brokers,
 Redis, Elasticsearch/OpenSearch, GraphQL, microservices; copying C# service/class boundaries
@@ -239,13 +276,18 @@ gap. All visible text localized; light/dark/system/custom themes and RTL preserv
 data. Destructive actions show impact, reason, and confirmation. Catalog-scale
 sorting/filtering/paging is server-side.
 
-## Required workflow for every task
+## Required workflow for every assigned unit
+
+For a phase assignment, apply this workflow across every internal workstream and continue until
+the phase exit criteria are satisfied. Do not stop after the first passing issue and ask the user
+to assign the next issue.
 
 1. Read the assigned requirement IDs and linked ADRs.
 2. Inspect existing tests and legacy behavior where relevant.
 3. State assumptions in the issue/PR before coding when they affect behavior.
 4. Add or update tests first when practical.
-5. Implement the smallest coherent change.
+5. Implement each smallest coherent change needed to complete the assigned unit. This constrains
+   implementation and commit boundaries, not the breadth of a phase-level assignment.
 6. Run `make check-fast` during iteration and `make check` before merge or
    release (or the documented smallest equivalent for the change).
 7. Evaluate user-facing documentation impact and update `/docs` in the same change when
@@ -256,6 +298,6 @@ sorting/filtering/paging is server-side.
 
 ## Definition of done
 
-`design/agents/DEFINITION-OF-DONE.md`. A task is not done because code compiles — it is done
-when requirements, tests, compatibility, observability, documentation, and operational behavior
-are addressed at the level appropriate to the phase.
+`design/agents/DEFINITION-OF-DONE.md`. An issue or phase is not done because one slice compiles —
+it is done when all applicable requirements, tests, compatibility, observability, documentation,
+operational behavior, and phase exit criteria are addressed.

@@ -1,6 +1,21 @@
 # Definition of Done
 
-A task is done when all applicable items below are satisfied.
+An assigned issue, work package, or phase is done when all applicable items below are satisfied.
+For a phase-level assignment, this checklist applies to the whole phase as well as to its internal
+implementation slices. Completing one slice does not complete the assignment.
+
+## Phase ownership
+
+- [ ] The phase objective, in-scope requirements, entry conditions, and exit criteria are named.
+- [ ] The agent decomposed and ordered the phase's internal workstreams without requiring a new
+      user prompt for each workstream.
+- [ ] Every in-scope workstream is implemented and evidenced, or has an explicit terminal
+      disposition authorized by the applicable product decision or ADR.
+- [ ] Prerequisite cleanup, ADR drafting, tests, documentation, traceability, and closeout evidence
+      were treated as parts of the phase rather than reasons to reduce the assignment to a
+      microtask.
+- [ ] The phase report records the exit decision and any genuinely external follow-up; it does not
+      present a passing intermediate checkpoint as phase completion.
 
 ## Requirements and scope
 

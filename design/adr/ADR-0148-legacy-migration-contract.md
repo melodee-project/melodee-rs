@@ -243,6 +243,9 @@ compat-layer identity preservation testable in isolation.
 
 - [PRD.md](../../PRD.md)
 - [SPEC.md](../../SPEC.md)
-- [IMPLMENTATION_OUTSTANDING.md](../../IMPLMENTATION_OUTSTANDING.md) §8 (R3)
+- [IMPLEMENTATION.md](../../IMPLEMENTATION.md) §14 (Phase 11) — the release-closure ledger
+  (`IMPLMENTATION_OUTSTANDING.md` §8, R3) was removed in the `a42e733` restructure; it remains
+  available in git history at `ce3f0cd`. R3 completion evidence:
+  [design/evidence/r4/adr-0149-decision-package.md](../evidence/r4/adr-0149-decision-package.md)
 - Phase 0 legacy baseline: `design/evidence/phase-0/legacy-baseline.md`
 - ADR-0133, ADR-0136, ADR-0140, ADR-0141, ADR-0145

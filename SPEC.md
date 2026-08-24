@@ -405,6 +405,26 @@ These are separate axes:
 A structurally valid obscure/private Release may enter the catalog with provisional identities.
 External provider failure must not automatically block it.
 
+Curation includes editing display metadata. The implemented contract (W0, `RELEASE-002`,
+2026-08-23) is:
+
+- Metadata edits are **catalog-row only**: they never rewrite media files, embedded tags,
+  canonical assets, or semantic identity relationships (merges/splits remain decision actions
+  under their own contract).
+- Edits are **partial patches** over the admin API
+  (`PUT /api/admin/v1/catalog/{releases|artists|tracks}/{id}/metadata`): absent or `null`
+  fields are left unchanged; present fields must be valid (non-blank where required,
+  well-formed dates, positive track ordinals, non-negative durations, known artist types).
+- Every edit is a single transaction that writes the field patch, appends an immutable audit
+  event (`catalog_audit_events`), and bumps the entity revision so the search projection
+  refreshes.
+- Concurrency is last-write-wins at the catalog row: each write atomically increments the row
+  revision; there is no client-supplied expected-revision guard on metadata edits.
+- The editable field set is migration-backed: only columns that exist in the accepted schema
+  are exposed (Release: `title`, `sortTitle`, `displayArtist`, `releaseDate`,
+  `releaseDateText`; Artist: `canonicalName`, `sortName`, `artistType`; Track: `title`,
+  `sortTitle`, `displayArtist`, `ordinal`, `durationMs`).
+
 ## 13. Release manifests
 
 Normalization produces a versioned manifest that includes:

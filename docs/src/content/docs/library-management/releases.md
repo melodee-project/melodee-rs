@@ -17,8 +17,16 @@ sorted, and paged server-side, with the view state in the URL. Selecting a Relea
 provenance, and history — including the recorded policy decision and its evidence where one
 exists. The Tracks tab lists each Track with its format facts and, when the Track has a
 playable media file and your administrator account may stream it, an audio preview.
-Detail is **read-only**: metadata edit forms do not exist in this build; the curation actions
-are the audited decisions in [Release Review](./release-review/) (including reprocess) and the
+The detail view also offers an **Edit** panel with the editable metadata fields: title,
+sort title, display artist, release date, and release date text. Saves are partial updates
+(only changed fields are written), validated server-side (blank values and malformed dates are
+rejected with `400`), recorded as an audit event in the entity's history, and applied with
+last-write-wins semantics — each save bumps the row revision so the search projection
+refreshes, and a concurrent edit by another administrator simply wins if it lands last; the
+other editor sees the current values on refresh. Edits change catalog metadata only: they
+never touch media files, canonical
+identifiers, or identity relationships. The remaining curation actions are the audited
+decisions in [Release Review](./release-review/) (including reprocess) and the
 [Policies](../admin/policies/) rule set.
 
 An administrator-confirmed deletion removes the Release from this listing and deletes its

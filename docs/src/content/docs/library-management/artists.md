@@ -27,9 +27,15 @@ Open **Catalog → Artists** (`/admin/catalog/artists`) in the admin UI. The lis
 sorted, and paged server-side — the search box binds to the backend query filter, sorting is
 restricted to the backend whitelist, and the view state lives in the URL so it can be shared.
 Selecting an Artist opens the **detail view** with tabs for overview, Releases, appearances,
-contributions, relationships, identity, images, and history (the audit timeline). Catalog detail in this build is **read-only**: curation happens through
-the decision surfaces — [Identity Review](../admin/identity-review/) for confirm/create-new/
-never-match and merge/split — not through metadata edit forms, which do not exist yet.
+contributions, relationships, identity, images, and history (the audit timeline). The detail
+view also offers an **Edit** panel with the editable metadata fields: name, sort name, and
+artist type. Saves are partial updates validated server-side (blank names and unknown artist
+types are rejected with `400`), recorded as an audit event in the entity's history, and applied
+with last-write-wins semantics — each save bumps the row revision, and a concurrent edit by
+another administrator simply wins if it lands last; the other editor sees the current values on
+refresh. Edits change display metadata only: they never alter
+Artist identity, and merges and splits remain decision actions in
+[Identity Review](../admin/identity-review/) (confirm/create-new/never-match and merge/split).
 
 The same browsing and detail routes are available over
 [Admin API — Catalog browsing and detail](../api/admin-api/#catalog-browsing-and-detail).

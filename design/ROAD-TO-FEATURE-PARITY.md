@@ -37,10 +37,11 @@ gaps:
 - C# retains embedded MusicBrainz IDs (including the song recording ID) on catalog rows; Rust
   retains no MusicBrainz GUIDs at all (only the `musicbrainz_release_type` tag used for trait
   classification).
-- C# full metadata-edit forms and `MediaEditService` tag-rewriting transforms persist tag and
-  catalog changes; the Rust admin edit API exists but has zero tests, and the admin SPA save path
-  is wired to nonexistent routes (`/metadata` suffix and field-name mismatches), so the UI edit
-  workflow is broken end-to-end.
+- C# `MediaEditService` tag-rewriting transforms (feat. removal, artist promotion, year setting,
+  renumbering, mapping) have no Rust equivalent — a deliberate post-parity exclusion. (W0,
+  2026-08-23: the audit's broken admin-SPA save path and zero-test findings are closed — the
+  `PUT /metadata` routes, field alignment, and server + store tests now exist; see RELEASE-002
+  row and the 2026-08-23 (W0) audit entry.)
 - The C# Blazor app is a full end-user web UI (dashboard, MQL search, music player, stats,
   public share landing, account flows); Rust serves only the admin SPA. No accepted decision
   covers this product-surface absence.
@@ -210,7 +211,7 @@ in this audit (previously `NOT ASSESSED`).
 | ARTIST-001 | 7 | Artist observation, identification, provider matching, aliases, relationships, memberships, contributions, merge/split, negative decisions | `src/Melodee.Common/Services/ArtistService.cs:30`<br>`MediaArtistImportService.cs:8`/`MediaArtistExportService.cs:9`<br>`src/Melodee.Common/Jobs/LibraryInsertJob.cs:439` (`FindArtistAsync` by dbId, id, normalized name, MusicBrainzId, SpotifyId, ItunesId) and `:786-823` (bulk artist lookup keyed `mb:{id}` etc.) — cross-Release reuse | `DIFFERENT — UNAPPROVED` | `crates/melodee-catalog/src/resolver.rs:110` (`LocalArtistResolver` — zero production callers; re-export only)<br>`crates/melodee-catalog/src/authority.rs:66` (`ArtistAuthority` trait; only `FakeAuthority` :134-148 in `#[cfg(test)]`)<br>`crates/melodee-persistence/src/catalog.rs:1057` (fresh `Uuid::now_v7()` provisional per observed value; `reused_release_artist` :1058 implements only the ADR-0153 singleton rule :919-940, scoped to one Release import) | `crates/melodee-persistence/tests/catalog_identity.rs`<br>`catalog_merge_split.rs`<br>No test imports two Releases with the same artist name (`catalog_import.rs` covers fixture/idempotency/lease-fencing/retry only) | Rust does NOT reuse Artist identities across Releases: each observed artist value that isn't the single release-artist gets a new provisional Artist; no existing-`artists` lookup exists anywhere in import. C# reuses by MB/Spotify/iTunes ID and name. The resolver/authority boundary cited as the intended fix is production-dead library code. ADR-0153's own Context records the duplication symptom ("three-Release catalog … displayed 25 Artists"). No accepted decision approves the divergence | PRD-ARTIST-001..012<br>PRD-RESOLVE-001..005<br>ADR-0117/0153 | Yes |
 | ARTIST-002 | 7 | Provider-driven Artist metadata enrichment during ingestion (search, image, biography) | `src/Melodee.Common/Services/Scanning/DirectoryProcessorToStagingService.cs:1135` (`ArtistSearchEngineService.DoSearchAsync` during staging — verified exact :1135-1139)<br>`src/Melodee.Common/Jobs/StagingAlbumRevalidationJob.cs:249` (re-query with `bypassNegativeCache: true` — verified exact) | `MISSING` | None in production<br>`crates/melodee-catalog/src/authority.rs` is evidence-only with no production provider | `crates/melodee-persistence/tests/providers.rs` (cache store only) | C# ingestion queries Artist search engines during staging; Rust ingestion does not call any provider (zero HTTP-client usage in ingestion/catalog/policy crates, verified against source and Cargo manifests). ADR-0136 defers this but does not make it parity | PRD-EXT-001/002<br>ADR-0136 | Yes |
 | RELEASE-001 | 8 | Release identification, classification (traits), external identities, duplicate/reissue/edition handling, curation | `src/Melodee.Common/Services/AlbumService.cs:34`<br>`src/Melodee.Common/Services/Scanning/AlbumDiscoveryService.cs:24` (corrected path)<br>`src/Melodee.Common/Jobs/LibraryInsertJob.cs:469` (`FindAlbumAsync`), `:498` (album MusicBrainzId), `:511-514` (in-batch dupe check by artist+normalized name / MB ID / Spotify ID) | `PARTIAL` | `crates/melodee-policy/src/` (classification, novelty, engine)<br>`crates/melodee-persistence/src/catalog.rs:954` (adopts `publication.release_id`)<br>`apps/melodee-server/src/publication_worker.rs:272` (`ReleaseId::new()` per publication bundle)<br>`crates/melodee-persistence/src/policy.rs` (`catalog_known_audio_identities` query) | `crates/melodee-policy/tests/policy_acceptance.rs`<br>`crates/melodee-persistence/tests/catalog_import.rs` (`import_adopts_reserved_release_id_is_idempotent` :75) | Rust allocates a new Release per publication; import idempotency is keyed on `work_item_id` only (`catalog.rs:611-613`) — there is no cross-catalog Release matching by MB/Spotify ID, catalog number, or title+artist. C# `LibraryInsertJob` finds existing albums by ID. Novelty detection exists at the Track level via AudioIdentity, not Release-level deduplication | PRD-CLASS-001..003<br>PRD-POLICY-003..006 | Yes |
-| RELEASE-002 | 8 | Release/Artist/Track metadata editing (title, sort, display artist, date, type, tag normalization) | `src/Melodee.Common/Services/Scanning/MediaEditService.cs:30` (`SaveAlbum` :272, `SaveImageUrlAsCoverAsync` :72, `RemoveUnwantedTextFromAlbumTitle` :326, `RemoveUnwantedTextFromSongTitles` :366, `RemoveFeaturingArtistsFromSongTitle` :411, `RemoveFeaturingArtistsFromSongsArtist` :454, `PromoteSongArtist` :494, `SetYearToCurrent` :531, `ReplaceGivenTextFromSongTitles` :569, `RenumberSongsAsync` :706/`RenumberSongs` :737, `UpdateArtistForAlbumsAsync` :958, `UpdateArtistsByMappingAsync` :1028)<br>`src/Melodee.Blazor/Components/Pages/Data/AlbumEdit.razor`/`ArtistEdit.razor`/`SongDetail.razor` (fields incl. external IDs, biography, notes, lock flags) | `PARTIAL` | Server side exists and is wired: routes `apps/melodee-server/src/admin_catalog.rs:723-727` (PUT release/artist/track), handlers `:1452,1508,1542`; store `crates/melodee-persistence/src/catalog_mutations.rs:940,1037,1136` with in-transaction audit events (`release_metadata_updated` :1012, artist :1115, track :1185). UI: `admin-ui/src/screens/catalog/EditPanel.tsx` | None: zero tests reference `update_release_metadata`/`update_artist_metadata`/`update_track_metadata` in `apps/melodee-server/tests/`, `crates/*/tests/`, or `admin-ui/` (verified by `rg`) | Downgraded from `IMPLEMENTED — UNPROVEN`: (a) no test coverage for the edit endpoints/store methods; (b) the SPA save path is broken — the client PUTs `/api/admin/v1/catalog/{entity}/{id}/metadata` (`admin-ui/src/api/admin.ts:783,790,797`) but the server registers `PUT /api/admin/v1/catalog/{entity}/{id}` with no `/metadata` suffix, and field names mismatch (UI `name` vs server `canonicalName`; UI `trackNumber` vs server `ordinal`; UI `releaseYear/country/type/durationMs` have no server fields); (c) the 12+ C# `MediaEditService` tag-rewriting transforms (feat. removal, artist promotion, year setting, renumbering, mapping) have no Rust equivalent | PRD-CREDIT-001..008<br>Phase 10 decision log | Yes — tag transforms missing, UI field alignment pending |
+| RELEASE-002 | 8 | Release/Artist/Track metadata editing (title, sort, display artist, date, type, tag normalization) | `src/Melodee.Common/Services/Scanning/MediaEditService.cs:30` (`SaveAlbum` :272, `SaveImageUrlAsCoverAsync` :72, `RemoveUnwantedTextFromAlbumTitle` :326, `RemoveUnwantedTextFromSongTitles` :366, `RemoveFeaturingArtistsFromSongTitle` :411, `RemoveFeaturingArtistsFromSongsArtist` :454, `PromoteSongArtist` :494, `SetYearToCurrent` :531, `ReplaceGivenTextFromSongTitles` :569, `RenumberSongsAsync` :706/`RenumberSongs` :737, `UpdateArtistForAlbumsAsync` :958, `UpdateArtistsByMappingAsync` :1028)<br>`src/Melodee.Blazor/Components/Pages/Data/AlbumEdit.razor`/`ArtistEdit.razor`/`SongDetail.razor` (fields incl. external IDs, biography, notes, lock flags) | `IMPLEMENTED — UNPROVEN` | W0 (2026-08-23) closed the audit's (a)/(b): server registers `PUT /api/admin/v1/catalog/{releases|artists|tracks}/{id}/metadata` (routes `apps/melodee-server/src/admin_catalog.rs:723-727`), partial-patch handlers with field validation; store `crates/melodee-persistence/src/catalog_mutations.rs` with in-transaction audit events (`release_metadata_updated`, `artist_metadata_updated`, `track_metadata_updated`) and row-revision bump for the search outbox. UI: `admin-ui/src/screens/catalog/EditPanel.tsx` | `apps/melodee-server/tests/admin_catalog_api.rs::metadata_update_routes_auth_success_and_errors` (auth, success, 400 validation, 404); `crates/melodee-persistence/tests/catalog_metadata.rs` (7 store-level tests) | Re-verified 2026-08-23 (W0): (a) and (b) are closed — the save path is fixed, field names align, and server + store tests exist. (c) remains: the 12+ C# `MediaEditService` tag-rewriting transforms (feat. removal, artist promotion, year setting, renumbering, mapping) have no Rust equivalent and are a deliberate post-parity exclusion (Phase 10 decision log; recorded in FEATURE-PARITY-MATRIX.md Metadata editing row) | PRD-CREDIT-001..008<br>Phase 10 decision log | Yes — tag transforms missing (deliberate exclusion) |
 | TRACK-001 | 9 | Track and AudioIdentity creation, embedded recording IDs, fingerprints, duplicate/alternate recording handling, technical metadata | `src/Melodee.Common/Jobs/LibraryInsertJob.cs:585` (song `MusicBrainzId` retained from `MetaTag` — verified exact)<br>`src/Melodee.Common/Services/SongService.cs:20` | `PARTIAL` | `crates/melodee-ingestion/src/normalize.rs:250-251` (fpcalc fingerprint computation)<br>`crates/melodee-persistence/src/policy.rs:1999-2006` (fingerprints persisted in the sealed manifest), `:2091-2116` (`catalog_known_audio_identities` query — verified exact)<br>`crates/melodee-persistence/src/catalog.rs:672` (`audio_identity_id` per track; fresh v7 per track :878) | `crates/melodee-persistence/tests/catalog_audio_identity.rs`<br>`crates/melodee-ingestion/tests/normalization.rs` | Fingerprints are computed and retained as observations but dropped before novelty evaluation (`novelty.rs:82-91` `NoveltyTrackFact` has no fingerprint field; nothing in `melodee-policy` compares fingerprint values). Embedded MusicBrainz recording/release/artist GUIDs are NOT extracted or retained in Rust (only `musicbrainz_release_type`, `melodee-media/src/lib.rs:815`; `lastfm.rs:31` documents the recording-ID absence) while C# retains them on Song/Album/Artist rows | PRD-FP-001..004 | Yes |
 | TRACK-002 | 9 | Automatic AudioIdentity/fingerprint cross-Release matching during ingestion | Corrected C# evidence: NO provider recording-ID lookup exists in the baseline — `src/Melodee.Common/Plugins/SearchEngine/MusicBrainz/IMusicBrainzRepository.cs:21-34` exposes only `GetAlbumByMusicBrainzId`, `SearchArtist`, `ImportData`. C# automatic identity reuse rests on embedded tag IDs read at insert (`LibraryInsertJob.cs:585`) plus artist/album matching (:439, :469, :511-514, :786-823); C# has no fingerprint system | `MISSING` | `crates/melodee-persistence/src/catalog_identity.rs:70` (`record_audio_identity_match_decision` — admin-only) | `crates/melodee-persistence/tests/catalog_identity.rs` (admin decision tests) | No automatic matching/proposal engine exists in Rust: matches are admin-confirmed only (`audio_identity_match_decisions`, `audio_identity_alternate_recordings`, `audio_identity_catalog_assertions` feed `policy.rs:2091-2116`). Because C# matching depends on retained embedded MB IDs and Rust retains none (TRACK-001), the evidenced C# behavior cannot occur in Rust at all | PRD-FP-002/004 | Yes |
 | PROVIDER-001 | 10 | Metadata/search/enrichment providers: MusicBrainz (incl. local DecentDB replica), Spotify, Discogs, iTunes, Deezer, WikiData, Brave, Metal-API, Last.fm, plus self-search — artist/album search, images, top songs | `src/Melodee.Common/Plugins/SearchEngine/` (9 external provider folders + `MelodeeArtistSearchEnginePlugin.cs:16` self-search + `MusicBrainz/Data/` DecentDB local replica: importer, schema init, warmup)<br>`src/Melodee.Common/Services/SearchEngines/` (ArtistSearchEngineService.cs:36, AlbumSearchEngineService.cs:14, ArtistImageSearchEngineService.cs:22, AlbumImageSearchEngineService.cs:28)<br>`src/Melodee.Blazor/Controllers/Melodee/ArtistLookupController.cs:23-24` (POST :51, `providers` :125)<br>`src/Melodee.Blazor/Controllers/OpenSubsonic/SearchEngineController.cs:15`<br>`src/Melodee.Blazor/Program.cs:172` (`MusicBrainzDecentDbWarmupHostedService`) | `PARTIAL` | `crates/melodee-persistence/src/providers.rs:134` (`ProviderCacheStore`; `get_if_fresh` :145, `upsert` :169, `purge_expired` :208 — all test-only callers, verified)<br>`apps/melodee-server/src/native/discovery.rs:527-591` (`artist_lookup` projects stored `artist_external_identities` rows only; hardcoded provider capability list :455-464; `image_url`/`thumbnail_url` always `None` :570-571; `has_partial_failures` hardcoded `false` :588)<br>`apps/melodee-server/src/lastfm.rs` (Last.fm scrobble only) | `crates/melodee-persistence/tests/providers.rs`<br>`apps/melodee-server/tests/lastfm_scrobble.rs` | Only Last.fm scrobble/now-playing/linking is wired. The 8 non-Last.fm external providers, the self-search plugin, the DecentDB local MusicBrainz replica, and the Last.fm metadata-lookup legs are deferred (ADR-0136). `external_provider_cache` has no production writer/reader/cleaner. Native `/api/v1/artist-lookup` does NOT call providers. Provider settings keys are preserved but inert (CONFIG-001). C# also backs `/rest/searchForArtist*` with provider search; the frozen captures only record the unauthenticated 302 redirect, which Rust reproduces exactly (`opensubsonic/lists.rs:1520-1545`) | PRD-EXT-001..004<br>ADR-0136 | Yes |
@@ -347,13 +348,11 @@ Derived mechanically from the 28 blocking matrix rows (anything not `PROVEN PARI
 ### Backlog item 5 — Metadata edit forms: repair wiring, add evidence, decide tag transforms
 
 - **Included Feature IDs:** RELEASE-002, ADMINUI-001 (partial)
-- **Concrete outcome:** Fix the broken SPA save path (client PUTs `/metadata`-suffixed routes and
-  mismatched field names — `admin-ui/src/api/admin.ts:783,790,797` vs server
-  `admin_catalog.rs:723-727`), add test coverage for `update_release_metadata`/
-  `update_artist_metadata`/`update_track_metadata` (API, store, audit event), and either implement
-  the C# `MediaEditService` tag-rewriting transforms or formally exclude them under an ADR.
-- **Prerequisites/governing decisions:** The Phase 10 decision-log deferral must be resolved:
-  complete the forms or formally exclude the tag transforms.
+- **Concrete outcome:** (W0, 2026-08-23 — items (a) and (b) below are DONE: the SPA save path
+  is fixed and server + store tests exist.) Remaining: either implement the C#
+  `MediaEditService` tag-rewriting transforms or formally exclude them under an ADR.
+- **Prerequisites/governing decisions:** The Phase 10 decision-log deferral of the tag transforms
+  must be resolved: implement them or formally exclude them (see RELEASE-002 row and Entry 7).
 - **Expected code areas:** `apps/melodee-server/tests/admin_catalog_api.rs` (new edit-endpoint
   tests), `crates/melodee-persistence/tests/` (store tests), `admin-ui/src/screens/catalog/EditPanel.tsx`,
   `admin-ui/src/api/admin.ts`.
@@ -513,10 +512,12 @@ None. All 25 domains have been inventoried (C#) and compared (Rust); no matrix r
   (`opensubsonic/bookmarks.rs`) with golden round-trip evidence, and native podcast-episode
   bookmarks; C# exposes general bookmarks only via OpenSubsonic. Corrected to `PROVEN PARITY`.
 - **RELEASE-002 (metadata editing):** the FEATURE-PARITY-MATRIX "In progress/deferred" note and
-  the prior `IMPLEMENTED — UNPROVEN` verdict both understated the problem. The server API and
-  store exist with in-transaction audit events, but there is zero test coverage and the SPA save
-  path targets nonexistent `/metadata`-suffixed routes with mismatched field names. Resolved
-  conservatively to `PARTIAL`.
+  the prior `IMPLEMENTED — UNPROVEN` verdict both understated the problem at the time of this
+  pass. The server API and store existed with in-transaction audit events, but there was zero
+  test coverage and the SPA save path targeted nonexistent `/metadata`-suffixed routes with
+  mismatched field names. Resolved conservatively to `PARTIAL`. (W0, 2026-08-23 — the zero-test
+  and broken-save-path findings are now closed; the row remains `IMPLEMENTED — UNPROVEN` for the
+  C# tag-rewriting transforms, which are a deliberate post-parity exclusion.)
 - **TRACK-002:** the prior claim that C# uses "provider recording-ID lookups during processing"
   is not evidenced — `IMusicBrainzRepository.cs:21-34` has no recording-level lookup. C#
   automatic identity reuse rests on retained embedded MB IDs; the row was rewritten accordingly.
@@ -555,7 +556,7 @@ interpretation.
 | 3   | Configuration of providers available in the C# baseline                   | **Planned** — provider enrichment deferred (PROVIDER-001); settings inert (CONFIG-001)          | PROVIDER-001, ARTIST-002, CONFIG-001            |
 | 4   | Ingestion of representative tagged and untagged Releases                  | Passing (evidenced)                                                                             | INGEST-001, MEDIA-001                           |
 | 5   | Artist/Release/Track identification, external-ID and artwork verification | **Planned** — cross-Release Artist reuse, MB-ID retention, and provider artwork missing         | ARTIST-001, RELEASE-001, TRACK-001, TRACK-002, ARTWORK-001 |
-| 6   | Ambiguous identity review and metadata correction                         | Partial (review passing; metadata edit API untested and SPA save path broken)                   | INGEST-002, RELEASE-002, ARTIST-001             |
+| 6   | Ambiguous identity review and metadata correction                         | Partial (review passing; metadata edit API tested end-to-end post-W0; C# tag transforms excluded) | INGEST-002, RELEASE-002, ARTIST-001             |
 | 7   | Browsing and streaming with MeloAmp                                       | Implemented; proof incomplete for direct-play/download/range/transcode parity                   | COMPAT-NATIVE-001, PLAYBACK-001, TRANSCODE-001, DISCOVERY-003 |
 | 8   | Supported OpenSubsonic and Jellyfin clients                               | Passing (evidenced, Phase 8; one uncaptured stored-artwork resize difference recorded in §8)    | COMPAT-OS-001, COMPAT-JF-001                    |
 | 9   | Restart/failure/retry convergence during ingestion                        | Passing (evidenced)                                                                             | INGEST-001, AUDIT-001                           |
@@ -905,3 +906,40 @@ These do not offset missing C# features; they are recorded for context.
   baseline table was refreshed to the `f5122421` Rust HEAD, §5 domain-coverage rows were
   annotated with this pass's re-verification, and this audit-log entry was appended. No other
   repository file was modified by this pass.
+
+### Entry 7 — 2026-08-23 — Cline (W0: RELEASE-002 re-verification)
+
+- **C# commit SHA:** `4028b58dbd3302ed431e2c5b32d9dde5634db218` (unchanged, read-only)
+- **Rust commit SHA:** post-`f5122421` W0 working tree (W0 landed the RELEASE-002
+  metadata-edit contract and save-path fix)
+- **Domains reviewed:** 8 (Metadata editing) only.
+- **Rows corrected:** RELEASE-002 re-verified against the W0 implementation:
+  - (a) zero-test finding is closed: `apps/melodee-server/tests/admin_catalog_api.rs`
+    (route auth, success, 400 validation, 404) and
+    `crates/melodee-persistence/tests/catalog_metadata.rs` (7 store-level tests) now exist.
+  - (b) broken SPA save path is closed: the server registers
+    `PUT /api/admin/v1/catalog/{releases|artists|tracks}/{id}/metadata`
+    (`admin_catalog.rs:723-727`), field names align with
+    `admin-ui/src/screens/catalog/EditPanel.tsx` (`name`, `trackNumber`,
+    `releaseYear`, `country`, `type`, `durationMs` are accepted), and the store path
+    (`catalog_mutations.rs`) emits the `release_metadata_updated` /
+    `artist_metadata_updated` / `track_metadata_updated` audit events with an in-transaction
+    row-revision bump for the search outbox.
+  - (c) remains open and is a deliberate post-parity exclusion, not an audit failure: the 12+
+    C# `MediaEditService` tag-rewriting transforms (feat. removal, artist promotion, year
+    setting, renumbering, mapping) have no Rust equivalent.
+  - Status set to `IMPLEMENTED — UNPROVEN` → remains `IMPLEMENTED — UNPROVEN` for the (c) tag
+    transforms, but the (a)/(b) gap cells are updated to reflect the closed save path and
+    test coverage. The §1 verdict bullet that listed the broken save path as a highest-risk
+    operational gap was updated to state only the (c) tag-transform exclusion.
+- **Downgraded:** None.
+- **Upgraded:** RELEASE-002 evidence cells (a) and (b) closed; the (c) exclusion is now
+  explicitly labelled as a deliberate post-parity decision (Phase 10 decision log;
+  FEATURE-PARITY-MATRIX "Metadata editing" row).
+- **Disputed:** None.
+- **Remaining risks:** (c) tag-transform gap remains the only open parity item for
+  RELEASE-002. It is not a v1 blocker in the same sense as ARTIST-001/ARTIST-002/TRACK-002
+  because the admin SPA edit workflow is now functional end-to-end and the transforms are
+  bulk curation operations that can be addressed by a future post-parity workstream.
+- **Documentation impact:** Updated — `design/ROAD-TO-FEATURE-PARITY.md` (this file only):
+  §1 verdict bullet, §6 RELEASE-002 row status/evidence/gap cells, and this audit-log entry.

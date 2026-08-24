@@ -45,6 +45,21 @@ Rust-idiomatic way rather than ported line-for-line. It is a proposal for *what 
 authorization may ask for, in what order, and under which accepted decisions* — not an order to
 do it.
 
+### Coding-agent delegation unit
+
+This roadmap's workstreams and waves are internal decomposition, not the intended size of separate
+coding-agent prompts. This document alone remains non-authorizing, but when the user explicitly
+asks for a coding-agent prompt to accomplish the next phase, the prompt must delegate the complete
+next authorized phase or program milestone described here. It must include all of that phase's
+entry decisions, workstreams, implementation, tests, public documentation, traceability, evidence,
+and exit review.
+
+Do not turn a phase request into a prompt for only the first open row, W-number, quick win,
+documentation repair, or ADR. Put safe prerequisites in the phase's first wave and let the
+receiving agent decompose and execute the work end to end. Use a single-workstream prompt only when
+the user explicitly requests task-level granularity or a reserved external decision genuinely
+blocks every other safe part of the phase.
+
 ## 1. Scope and framing
 
 - **Feature-complete means:** the same *user-visible features and behaviors* as the C# Melodee
@@ -333,7 +348,7 @@ Related documents:
 - [ROAD-TO-FEATURE-PARITY.md](ROAD-TO-FEATURE-PARITY.md) — current-state audit and risk register.
 - [FEATURE-PARITY-MATRIX.md](requirements/FEATURE-PARITY-MATRIX.md) — the 50-row matrix (SSOT).
 - [REQUIREMENTS-INDEX.md](requirements/REQUIREMENTS-INDEX.md) — requirement status traceability.
-- [SPEC.md](SPEC.md) — technical invariants and interface contracts.
+- [SPEC.md](../SPEC.md) — technical invariants and interface contracts.
 - [ADR-0136](adr/ADR-0136-defer-non-last-fm-external-provider-integrations-to-post-parity.md) —
   the deferral this program supersedes (ADR 1 of Phase 0).
 - [ADR-0135](adr/ADR-0135-boa-javascript-runtime-and-sandboxing-for-scripting-hooks.md) —
@@ -347,4 +362,3 @@ Related documents:
   baseline).
 - [PHASE-9-REPORT.md](evidence/phase-9/PHASE-9-REPORT.md) — current provider/parity state (Phase 2
   baseline).
-

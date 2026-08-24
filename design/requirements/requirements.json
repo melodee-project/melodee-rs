@@ -1068,11 +1068,14 @@
     "status": "tested",
     "implementation": [
       "crates/melodee-domain/src/credit.rs (exact DisplayArtist plus ordered structured associations and join phrases)",
-      "crates/melodee-persistence/src/catalog.rs (raw billing display persisted separately)"
+      "crates/melodee-persistence/src/catalog.rs (raw billing display persisted separately)",
+      "crates/melodee-persistence/src/catalog_mutations.rs (metadata edit: display/sort fields with in-transaction audit events and row-revision bump)"
     ],
     "tests": [
       "crates/melodee-domain/tests/phase4_domain.rs (exact display text independent of structured billing)",
-      "crates/melodee-persistence/tests/catalog_import.rs"
+      "crates/melodee-persistence/tests/catalog_import.rs",
+      "crates/melodee-persistence/tests/catalog_metadata.rs (display/sort field edits, audit event, revision bump)",
+      "apps/melodee-server/tests/admin_catalog_api.rs (PUT /metadata route: auth, success, 400 validation, 404)"
     ]
   },
   {
@@ -2013,10 +2016,13 @@
     "line": 1414,
     "status": "tested",
     "implementation": [
-      "admin.rs, admin_review.rs, admin_identity.rs, admin_policies.rs, admin_system.rs, admin_catalog.rs, admin_access.rs, admin_config.rs, admin_onboarding.rs, admin_notifications.rs, admin_scripts.rs, admin_radio.rs, admin_device_profiles.rs (work items, evidence, decisions, policies, queues, workers, health, identities, Releases, Tracks, users, config, audit)"
+      "admin.rs, admin_review.rs, admin_identity.rs, admin_policies.rs, admin_system.rs, admin_catalog.rs, admin_access.rs, admin_config.rs, admin_onboarding.rs, admin_notifications.rs, admin_scripts.rs, admin_radio.rs, admin_device_profiles.rs (work items, evidence, decisions, policies, queues, workers, health, identities, Releases, Tracks, users, config, audit)",
+      "catalog_mutations.rs (metadata edit endpoints: release/artist/track metadata update with audit events)"
     ],
     "tests": [
-      "apps/melodee-server/tests/ (all admin suites green; full workspace gate)"
+      "apps/melodee-server/tests/ (all admin suites green; full workspace gate)",
+      "apps/melodee-server/tests/admin_catalog_api.rs (metadata update routes: auth, success, 400 validation, 404)",
+      "crates/melodee-persistence/tests/catalog_metadata.rs (7 store-level tests)"
     ]
   },
   {

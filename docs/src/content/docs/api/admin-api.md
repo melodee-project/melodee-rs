@@ -473,13 +473,15 @@ row identity of the selected link.
 
 ## Catalog browsing and detail
 
-These routes back the catalog browsing tables and the Artist/Release/Track detail views. All
-routes are read-only, require an administrator's native access token, and use Melodee's own
-vocabulary (`Artist`, `Release`, `Track`) with public ids as lookup keys; unknown ids return
-`404 not_found`. Every listing uses the shared pagination envelope (`items`, `total`, `limit`,
-`offset`; `limit` defaults to 50 and clamps to 500) and a strict `key:asc|desc` sort whitelist
-(`400 unknown_sort` otherwise). The optional `query` parameter is a bounded case-insensitive
-substring filter (overlong queries return `400 invalid_query`).
+These routes back the catalog browsing tables and the Artist/Release/Track detail views. They
+require an administrator's native access token and use Melodee's own vocabulary (`Artist`,
+`Release`, `Track`) with public ids as lookup keys; unknown ids return `404 not_found`. Every
+listing uses the shared pagination envelope (`items`, `total`, `limit`, `offset`; `limit`
+defaults to 50 and clamps to 500) and a strict `key:asc|desc` sort whitelist (`400
+unknown_sort` otherwise). The optional `query` parameter is a bounded case-insensitive
+substring filter (overlong queries return `400 invalid_query`). Browse and read routes are
+read-only; the one write surface in this section is [Catalog metadata editing](#catalog-metadata-editing),
+which updates the display-metadata fields of an existing entity.
 
 ### Browse Artists
 
@@ -642,7 +644,8 @@ All three routes return `204 No Content` on success. Unknown entity ids return
 unknown artist type) return `400 invalid_request`. Every successful edit writes a
 `catalog_audit_events` row (event types `release_metadata_updated`,
 `artist_metadata_updated`, `track_metadata_updated`) and bumps the entity revision so the
-search projection refreshes.
+search projection refreshes. Concurrency is last-write-wins: there is no client-supplied
+revision guard, so two concurrent edits both succeed and the later one's values win.
 
 
 ## Dashboard
