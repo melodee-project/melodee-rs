@@ -194,12 +194,20 @@ mod tests {
         let directory = temp.path().join("nested").join("logs");
         let date = Date::from_calendar_date(2026, time::Month::August, 22).unwrap();
 
+        // Write through `write_for_date` with the *fixed* date under test, not the
+        // `Write::write` impl: that impl resolves today's UTC date and would route
+        // these bytes into `<today>.log`, leaving the asserted `2026-08-22.log`
+        // empty while every call still returns `Ok`. Flushing before reading mirrors
+        // the production `tracing_subscriber` path and makes the on-disk assertion
+        // deterministic regardless of the wall-clock date.
         let (mut first, path) = DailyLogWriter::new_for_date(&directory, date).unwrap();
-        writeln!(first, "first").unwrap();
+        first.write_for_date(date, b"first\n").unwrap();
+        first.flush().unwrap();
         drop(first);
 
         let (mut second, second_path) = DailyLogWriter::new_for_date(&directory, date).unwrap();
-        writeln!(second, "second").unwrap();
+        second.write_for_date(date, b"second\n").unwrap();
+        second.flush().unwrap();
         drop(second);
 
         assert_eq!(path, second_path);

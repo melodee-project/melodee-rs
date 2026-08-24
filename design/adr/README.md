@@ -87,6 +87,16 @@ python3 scripts/new_adr.py "short title"
 - [ADR-0152: Execute confirmed Release deletion with audited tombstones](ADR-0152-execute-confirmed-release-deletion-with-audited-tombstones.md)
 - [ADR-0153: Reuse unambiguous Release Artist identity for matching Tracks](ADR-0153-reuse-unambiguous-release-artist-identity-for-matching-tracks.md)
 
+## Feature Completion Program decisions
+
+- [ADR-0154: External-provider enrichment scope and runtime architecture](ADR-0154-external-provider-enrichment-scope-and-runtime.md) (supersedes [ADR-0136](ADR-0136-defer-non-last-fm-external-provider-integrations-to-post-parity.md))
+- [ADR-0155: End-user web UI product surface and architecture](ADR-0155-end-user-web-ui-surface-and-architecture.md)
+- [ADR-0156: MPD/MPV playback backend connectivity and lifecycle](ADR-0156-mpd-mpv-backend-connectivity-and-lifecycle.md)
+- [ADR-0157: Metadata transformation contract and safe file rewrites](ADR-0157-metadata-transformation-and-safe-rewrite.md)
+- [ADR-0158: Scheduled-job run history and operator visibility](ADR-0158-scheduled-job-run-history-storage.md)
+- [ADR-0159: OpenSubsonic stored-artwork sizing](ADR-0159-opensubsonic-stored-artwork-sizing.md)
+- [ADR-0160: Cross-Release Artist/Release identity reuse and disposition](ADR-0160-cross-release-artist-release-identity-reuse.md)
+
 ## ADR quality rules
 
 - State the decision, not merely the chosen technology.

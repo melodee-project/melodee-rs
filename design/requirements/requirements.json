@@ -2756,7 +2756,8 @@
       "design/evidence/phase-9/lastfm-provider-evidence.md section 9 (enumerated legacy provider inventory: lastfm, musicbrainz, spotify, discogs, wikidata, itunes, deezer, brave, metalapi; AMG has no legacy implementation)",
       "apps/melodee-server/src/lastfm.rs (Last.fm scrobble/now-playing client + session lifecycle; the only provider wired in Phase 9 WP-07)",
       "crates/melodee-persistence/src/settings.rs (legacy provider settings keys preserved verbatim, including the capital-E scrobbling.lastFm.Enabled / searchEngine.lastFm.Enabled quirk)",
-      "design/adr/ADR-0136-defer-non-last-fm-external-provider-integrations-to-post-parity.md (approved deferral of the remaining provider legs)"
+      "design/adr/ADR-0136-defer-non-last-fm-external-provider-integrations-to-post-parity.md (superseded by ADR-0154)",
+      "design/adr/ADR-0154-external-provider-enrichment-scope-and-runtime.md (accepted: full active legacy provider set is a v1 obligation, optional and fail-degraded, behind a Rust-native provider boundary)"
     ],
     "tests": [
       "apps/melodee-server/tests/lastfm_scrobble.rs (linking, scrobble/now-playing wire mapping, failure semantics against a local mock server)"
@@ -2788,7 +2789,8 @@
       "crates/melodee-persistence/migrations/0028_phase9_external_providers.sql (external_provider_cache: bounded jsonb payload, hashed request key, fetched_at/expires_at)",
       "crates/melodee-persistence/src/providers.rs (ProviderCacheStore get-if-fresh/upsert/purge-expired)",
       "apps/melodee-server/src/lastfm.rs (single-attempt scrobble submission with 10 s timeout; failures degrade and drop the scrobble, never the ingestion/playback work — evidence doc section 5)",
-      "design/adr/ADR-0136-defer-non-last-fm-external-provider-integrations-to-post-parity.md (approved deferral of the provider-lookup caching legs)"
+      "design/adr/ADR-0136-defer-non-last-fm-external-provider-integrations-to-post-parity.md (superseded by ADR-0154)",
+      "design/adr/ADR-0154-external-provider-enrichment-scope-and-runtime.md (accepted: the enrichment worker caches provider responses and writes provenance on external_provider_cache)"
     ],
     "tests": [
       "crates/melodee-persistence/tests/providers.rs (cache round-trip, freshness/expiry, bounded purge, SQL CHECK backstops)",
@@ -2805,7 +2807,8 @@
     "implementation": [
       "crates/melodee-persistence/migrations/0028_phase9_external_providers.sql (external_provider_cache payload jsonb is the provenance/evidence home; provider payloads never become catalog identity per PRD-ARTIST-012)",
       "crates/melodee-persistence/src/providers.rs (ProviderCacheStore)",
-      "design/adr/ADR-0136-defer-non-last-fm-external-provider-integrations-to-post-parity.md (approved deferral of the provider-metadata provenance legs)"
+      "design/adr/ADR-0136-defer-non-last-fm-external-provider-integrations-to-post-parity.md (superseded by ADR-0154)",
+      "design/adr/ADR-0154-external-provider-enrichment-scope-and-runtime.md (accepted: enrichment writes provider-scoped provenance/evidence rows on external_provider_cache)"
     ],
     "tests": [
       "crates/melodee-persistence/tests/providers.rs"

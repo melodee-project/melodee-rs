@@ -1,12 +1,12 @@
 # ADR-0136: Defer non-Last.fm external provider integrations to post-parity
 
 - **Date:** 2026-08-14
-- **Status:** Accepted
+- **Status:** Superseded
 - **Decision owners:** Phase 9 work package (delegated phase decision per the
   `design/agents/PHASE-9-PLAN.md` §3 decision-bundle pattern; ADR-0133 is the precedent for an
   accepted, phase-scoped waiver/deferral ADR recorded by the executing agent)
 - **Supersedes:** None
-- **Superseded by:** None
+- **Superseded by:** [ADR-0154](ADR-0154-external-provider-enrichment-scope-and-runtime.md)
 - **Related requirements:** PRD-EXT-001, PRD-EXT-002, PRD-EXT-003, PRD-EXT-004
 
 ## Context

@@ -34,9 +34,13 @@
 >   names** ("decision gate", "stage", "workstream") and are explicitly *not* the canonical Phase
 >   0–6 numbering. They do not override the authority order in
 >   [AGENTS.md](../AGENTS.md).
-> - Several rows below are **open product decisions** (e.g. `WEBUI-001`, `PLAYBACK-002`, provider
->   breadth). Until those decisions are made and accepted (by product + ADR where required), this
->   document cannot authorize the corresponding workstreams.
+> - Several rows below reference **product decisions** (`WEBUI-001`, `PLAYBACK-002`, provider
+>   breadth, scheduled-job run history, OS `?size=`). **These are resolved**: the Phase 0 ADRs
+>   (ADR-0154…0160) are accepted and recorded in
+>   [ADR-0154](adr/ADR-0154-external-provider-enrichment-scope-and-runtime.md) and the
+>   [ADR index](adr/README.md). No product decision blocks the Phase 0 ADRs any longer. The
+>   *implementation* of the affected workstreams (W3, W5, W6, etc.) is still not started until the
+>   next phase is assigned and authorized.
 
 This is the **forward-looking proposal** for taking Melodee from "most features ported and proven"
 to **v1.0.0 feature-complete** — every *in-scope* capability of the C# Melodee application
@@ -196,33 +200,44 @@ Per feature, the C# approach and the Rust-native replacement this program target
 | Provider enrichment at ingestion | Hardwired search-engine services, inline, blocking in staging | A **separate, bounded, fail-degraded enrichment worker** on the durable work-item engine — *not* part of catalog import. Providers sit behind the provider-neutral `ArtistAuthority` boundary; results are recorded as cache/provenance evidence in `external_provider_cache` and **schedule local re-resolution** without ever blocking catalog entry (PRD-EXT-002). Acceptance concerns are explicit: cancellation, bounded concurrency, per-provider rate limiting, retries/backoff, idempotency, and operator-visible failure behavior. |
 | MusicBrainz/external ID retention | Opaque MB-ID columns on catalog rows | Structured **external-ID evidence** per Melodee identity (never a string identity key), under the accepted schema decision ADR-0117 (`artist_external_identities`, `tracks`, `media_assets`, `audio_identity`). Feeds the resolver; no new schema is assumed. |
 | Metadata edit forms + tag rewrite | `MediaEditService` 12 transforms | Idempotent transactional catalog mutations with in-transaction audit (already in `catalog_mutations.rs`), field-level validation, SPA save-path fix + full test coverage. The **route/field contract is a single decision** owned by the W0 workstream — it is not simultaneously "an ADR decision" and "no ADR needed". |
-| End-user web UI | Blazor server-rendered + SignalR | Modern SPA on the ADR-0138/0139 stack, consuming native-v1 over WebSocket/SSE (no SignalR), Carbon components, localized + RTL. **Gated on the WEBUI-001 product decision.** |
-| Scheduled jobs | Quartz, per-job `JobHistories` | Keep the durable work-item engine as the runtime (crash-safe, lease-based — stronger than Quartz); add a per-scheduled-job **run-history** projection for operator visibility. **Gated on the scheduled-job run-history decision.** |
+| End-user web UI | Blazor server-rendered + SignalR | Modern SPA on the ADR-0138/0139 stack, consuming native-v1 over WebSocket/SSE (no SignalR), Carbon components, localized + RTL. **Gated on [ADR-0155](adr/ADR-0155-end-user-web-ui-surface-and-architecture.md) (accepted).** |
+| Scheduled jobs | Quartz, per-job `JobHistories` | Keep the durable work-item engine as the runtime (crash-safe, lease-based — stronger than Quartz); add a per-scheduled-job **run-history** projection for operator visibility. **Gated on [ADR-0158](adr/ADR-0158-scheduled-job-run-history-storage.md) (accepted).** |
 | Rate limiting / middleware | Named policies | Per-surface token-bucket middleware with documented budgets + differential evidence |
 
 ## 5. Stages (proposal, not canonical phases)
 
 ### Phase 0 — Architecture ADRs (no code; prerequisite)
 
-Lock the "better" design choices so each build block has an accepted design. Each is drafted with
-`python3 scripts/new_adr.py "short title"` and reviewed before the dependent phase starts.
+Lock the "better" design choices so each build block has an accepted design. Each was drafted with
+`python3 scripts/new_adr.py "short title"` and accepted. **All seven ADRs are accepted** (recorded
+in the [ADR index](adr/README.md) under "Feature Completion Program decisions"):
 
-1. **Supersede ADR-0136** — provider enrichment is a **v1 obligation** (build, not waive). Defines
-   the provider adapter boundary, the enrichment worker, cache/provenance/rate-limit design on
+1. **[ADR-0154](adr/ADR-0154-external-provider-enrichment-scope-and-runtime.md)** — supersedes
+   ADR-0136; provider enrichment is a **v1 obligation** (build, not waive). Defines the provider
+   adapter boundary, the enrichment worker, cache/provenance/rate-limit design on
    `external_provider_cache`, and the fail-degraded contract.
-2. **ADR: end-user web UI surface** — SPA architecture, route/serving, session strategy (extend
-   ADR-0139), realtime channel (WebSocket vs SSE), component reuse from the admin SPA.
-3. **ADR: MPD/MPV playback backends** — backend abstraction + endpoint registry; parity scope for
-   C# backend connectivity.
-4. **ADR: metadata-edit forms scope** — resolves the Phase 10 deferral: full edit forms, which C#
-   tag-rewrite transforms are in-scope, plus the SPA route/field contract.
-5. **ADR: scheduled-job run history** — work-item history as source of truth + a per-scheduled-job
-   run-history projection (the "better than `JobHistories`" design).
-6. **ADR: OS stored-artwork `?size=`** — capture C# behavior, then decide match-vs-native-resize
-   (capture-backed, per the compatibility rules in
-   [ROAD-TO-FEATURE-PARITY.md](ROAD-TO-FEATURE-PARITY.md) §2.4).
+2. **[ADR-0155](adr/ADR-0155-end-user-web-ui-surface-and-architecture.md)** — end-user web UI
+   surface: a separate SPA served at `/` on the ADR-0138/0139 stack, consuming native-v1, with an
+   SSE/WebSocket push channel (replacing SignalR) and the public share landing.
+3. **[ADR-0156](adr/ADR-0156-mpd-mpv-backend-connectivity-and-lifecycle.md)** — MPD/MPV playback
+   backends: a `PlaybackBackend` trait + MPD (TCP) / MPV (IPC socket) adapters, singleton cache,
+   fail-degraded availability, and additive native playback-control routes.
+4. **[ADR-0157](adr/ADR-0157-metadata-transformation-and-safe-rewrite.md)** — metadata
+   transformation contract: a dry-run/apply/revert `MediaEditOperation` trait with an
+   `media_edit_audit` trail, atomic tag rewrites, and the admin metadata-edit forms (the Phase 10
+   deferral). Resolves the W0/RELEASE-002 route/field contract.
+5. **[ADR-0158](adr/ADR-0158-scheduled-job-run-history-storage.md)** — scheduled-job run history:
+   a `job_run_history` table + in-process tokio scheduler over the existing `worker_pool_state`
+   pause seam, with admin run-history routes (the "better than `JobHistories`" design).
+6. **[ADR-0159](adr/ADR-0159-opensubsonic-stored-artwork-sizing.md)** — OS stored-artwork
+   `?size=`: resize stored artwork to the requested size (capture-backed), with a size-scoped ETag
+   and a bounded in-process cache.
+7. **[ADR-0160](adr/ADR-0160-cross-release-artist-release-identity-reuse.md)** — cross-Release
+   Artist/Release identity reuse: a promotion policy (external-ID evidence primary, conflict-gated
+   name evidence secondary, admin decision) that generalizes ADR-0153 across Releases, audited and
+   reversible.
 
-**Exit:** all six ADRs accepted (or the decision owner has explicitly deferred one, recorded).
+**Exit:** all seven ADRs accepted — **satisfied** (ADR-0154…0160 accepted; ADR-0136 superseded).
 
 ### Phase 1 — Quick wins + the P0 bug (start immediately; no ADR needed)
 
@@ -324,14 +339,26 @@ Phase 0 (ADRs 1-6) ──┬─► Phase 1 (quick wins + RELEASE-002 bug; indepe
 4. **Phase 1 — quick wins.** Mostly test/evidence work; fast wins; the RELEASE-002 bug is urgent.
 5. **Phase 5 — migration / packaging.** Operator-heavy; on the critical path.
 
-## 8. Open items before Phase 0 ADRs can be accepted
+## 8. Open items (resolved in Phase 0)
 
-- **Provider enrichment (ADR 1):** full C# provider set (all 8 + Last.fm lookup) vs a Rust-native
-  "better" default (e.g. MusicBrainz + Last.fm + one image source first, rest behind the same
-  adapter boundary). Decision owner: product.
-- **End-user web UI (ADR 2):** confirm the "modern SPA on native-v1 API" direction and first-class
-  v1 status. Decision owner: product.
-- **MPD/MPV (ADR 3):** confirm which backends ship in v1. Decision owner: product.
+The three open product decisions below were resolved by the accepted Phase 0 ADRs
+([ADR-0154](adr/ADR-0154-external-provider-enrichment-scope-and-runtime.md),
+[ADR-0155](adr/ADR-0155-end-user-web-ui-surface-and-architecture.md),
+[ADR-0156](adr/ADR-0156-mpd-mpv-backend-connectivity-and-lifecycle.md)):
+
+- **Provider enrichment (ADR-0154):** the **full active legacy provider set** (MusicBrainz incl.
+  DecentDB, Discogs, Spotify, iTunes, Deezer, Wikidata, Brave, Metal-API + Last.fm metadata-lookup
+  legs) is in v1 scope, optional and fail-degraded, behind a single Rust-native provider boundary.
+- **End-user web UI (ADR-0155):** a **separate SPA served at `/`** on the ADR-0138/0139 stack,
+  consuming native-v1 over an SSE/WebSocket push channel — a **first-class v1 surface**.
+- **MPD/MPV (ADR-0156):** **both MPD and MPV** ship in v1 as configuration-selected backends,
+  fail-degraded when the backend process is unavailable.
+
+The two remaining "gated on a decision" notes in the §4 reference table (scheduled-job run history,
+OS `?size=`) are also resolved by [ADR-0158](adr/ADR-0158-scheduled-job-run-history-storage.md) and
+[ADR-0159](adr/ADR-0159-opensubsonic-stored-artwork-sizing.md); cross-Release identity is resolved
+by [ADR-0160](adr/ADR-0160-cross-release-artist-release-identity-reuse.md). No product decision
+blocks a Phase 0 ADR any longer.
 
 ## 9. Definition of done (program-level)
 
