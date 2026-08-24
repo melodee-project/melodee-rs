@@ -1,21 +1,42 @@
-# Feature-Completion Phase 1 Plan — MusicBrainz ID Retention & AudioIdentity Proposal Wiring
+# Feature-Completion Phase 1 Plan — Quick Wins + the P0 Bug (complete phase)
 
-Status: Planned (Phase 1 of `design/ROAD-TO-FEATURE-COMPLETION.md`, W0/W1 scope)
-Authority: ADR-0117 (external identifier retention), ADR-0118 (audio identity evidence model),
-ADR-0160 (resolver proposal contract), `SPEC.md` manifest/identity invariants.
+Status: In execution (the "Phase 1 — Quick wins + the P0 bug" milestone of
+`design/ROAD-TO-FEATURE-COMPLETION.md` §5). User-assigned 2026-08-23; execution continues
+through implementation, tests, compatibility evidence, documentation, traceability, full
+validation, and the phase report at
+`design/evidence/feature-completion/phase-1/PHASE-1-REPORT.md`.
 
-## Objective
+> **Authority note.** D1–D5 in the Track workstream section below are *implementation
+> hypotheses*, not accepted decisions. They must remain consistent with `PRD.md`
+> (PRD-FP-001..005), `SPEC.md`, and the accepted ADRs listed below. They are not a source of
+> authority.
+>
+> **ADR scope correction (vs. the earlier draft of this plan):** ADR-0160 governs
+> **cross-Release Artist/Release identity promotion** (Feature-Completion Phase 2); it does
+> **not** govern AudioIdentity match proposals. TRACK-001/TRACK-002 are primarily governed by
+> **PRD-FP-001..005 and ADR-0117/ADR-0118** (AudioIdentity and the catalog identity schema).
 
-1. **TRACK-001** — `melodee-media` retains MusicBrainz IDs (track/recording, release/album,
-   release group, artist, release artist, work) as raw strings through `ObservedMetadata`
-   into the durable manifest, without altering any semantic-manifest identity for existing
-   fixtures.
-2. **TRACK-002** — The catalog import path proposes durable `AudioIdentity` evidence for
-   each ingested Track (byte hash, fingerprint, duration, external identifier, catalog
-   context) and creates idempotent `AudioIdentityMatchDecision` proposals where two or more
-   provisional identities carry overlapping supporting evidence.
-3. Close the local parity gap: C# `LibraryInsertJob`/`MetaTagIdentifier` stored MusicBrainz
-   IDs as raw strings on `Song`/`Album`; the Rust pipeline currently discards them.
+## Scope (complete Phase 1 — all workstreams)
+
+| Workstream | Roadmap row | Contents |
+|---|---|---|
+| **A — RELEASE-002 (P0) metadata editing proof** | `RELEASE-002` | Inspect the work already landed at `cd0256a`/`a937b81`; verify Release/Artist/Track UI field names vs. server patch DTOs; Playwright coverage (edit → save → reload → persisted values); validation failures visible and non-mutating; revision/search-refresh + audit proof; retain last-write-wins; parity/roadmap wording distinguishes catalog metadata editing from the Phase 4 ADR-0157 tag-transformation/rewrite capability (which is **not** implemented here) |
+| **B — TRACK-001/002 external-ID retention + AudioIdentity wiring** | `TRACK-001`, `TRACK-002` | Retain embedded MusicBrainz recording/release/release-group/Artist/release-Artist/work IDs through media inspection into the durable manifest; malformed IDs preserved as observations; format-appropriate unit/media fixtures + end-to-end manifest proof; durable AudioIdentity evidence from import-time facts; bounded, conflict-safe, idempotent **Proposed** match decisions (never automatic `Confirmed`); no fabricated no-match assertions; atomicity/retry/pair-dedup/cross-Release proof; existing ID-free fixtures and semantic hashes unchanged; document why no migration is required (or stop on a schema gap) |
+| **C1 — Nine UNPROVEN rows, service behaviors** | `PLAYBACK-001`, `TRANSCODE-001`, `PODCAST-001`, `DISCOVERY-001`, `DISCOVERY-002`, `SOCIAL-001` | Differential captures vs. the frozen C# oracle, golden tests, integration tests, and end-to-end lifecycle journeys covering success, authorization, validation, ordering, failure, cancellation/retry, stale-data, cleanup, and recovery where applicable; fix in-scope defects found; preserve separate native-v1 / OpenSubsonic / Jellyfin wire contracts |
+| **C2 — OPS-001 + MIGRATE-001/002 evidence** | `OPS-001`, `MIGRATE-001`, `MIGRATE-002` | OPS-001: locally reproducible security headers, correlation, and native/OpenSubsonic/Jellyfin rate-limit behavior; distinguish accepted party/jukebox exclusions (ADR-0133) from unproven middleware; no external/production-scale rate-limit claims. MIGRATE-001/002: consolidate + validate existing synthetic/rehearsal evidence (idempotent resume, public-ID preservation, backup/restore validation, verification, search rebuild, rollback tooling); add missing local regression evidence; **do not** touch the real library or run rehearsal/cutover/rollback — record those operator-authorized legs precisely as external residuals |
+| **D — Evidence, documentation, closeout** | — | Update `design/ROAD-TO-FEATURE-COMPLETION.md`, `design/ROAD-TO-FEATURE-PARITY.md`, `design/requirements/FEATURE-PARITY-MATRIX.md`, requirement status/evidence files, `/docs` for changed user-visible behavior, and release notes where applicable; create `design/evidence/feature-completion/phase-1/PHASE-1-REPORT.md` with a truthful terminal disposition for every workstream and all nine unproven rows |
+
+**Reconciled roadmap language (entry corrections):**
+
+- ADR-0157 (metadata transformation & safe rewrite) is an accepted **Phase 4** design
+  (ADR-0157 §scope, Phase 10 deferral of admin metadata-edit forms). Phase 1 must prove the
+  *existing* catalog metadata save path only, and must not claim the complete legacy
+  `MediaEditService` tag-rewriting capability is proven.
+- External / operator-authorized R4 legs (real Google OIDC, per-surface production
+  rate-limit, 5 TB-library rehearsal/cutover/rollback) are **not** ordinary Phase 1 local
+  work; they are recorded as external residuals.
+- Real Google OIDC, physical-client acceptance, production integrations, the real
+  ~5 TB library, production cutover, and destructive rollback remain outside this phase.
 
 ## Design decisions
 
@@ -155,6 +176,63 @@ bounded by `WHERE kind = 'external_identifier' AND value = ANY($ids)` (the
 4. No new ADR required (ADR-0117/0118 already cover the mechanism); record D1–D5 in the
    phase decision log. If the `raw`-key contract in D1 later becomes a public wire
    contract, supersede with an ADR.
+
+## Workstream A — RELEASE-002 metadata editing proof
+
+- Inspect (do not recreate) `cd0256a` (server routes + patch DTOs + validation) and `a937b81`
+  (domain structs + UI forms): `apps/melodee-server/src/admin_catalog.rs`
+  (`PUT /api/admin/v1/catalog/{releases|artists|tracks}/{id}/metadata`),
+  `crates/melodee-persistence/src/catalog_mutations.rs`,
+  `admin-ui/src/screens/catalog/EditPanel.tsx`, `admin-ui/src/api/admin.ts`.
+- Verify every Release/Artist/Track UI field name matches the server patch DTOs exactly.
+- Playwright: edit metadata → save → reload the entity → persisted values are observed
+  (Release, Artist, Track). Validation failure: visible in UI, request rejected with 400,
+  catalog state unchanged (read back before/after). Revision bump + search-index refresh and
+  audit event (`release_metadata_updated` / `artist_metadata_updated` / `track_metadata_updated`)
+  proven where applicable.
+- Retain the current **last-write-wins** contract (no optimistic concurrency) unless higher
+  authority says otherwise.
+- Parity/roadmap wording: distinguish "catalog metadata field editing (proven in W0 + this
+  phase)" from "legacy C# MediaEditService tag-rewriting transforms (ADR-0157, Phase 4 — not
+  implemented here)".
+
+## Workstream C — close the nine IMPLEMENTED — UNPROVEN rows (local evidence)
+
+Per the 2026-08-23 audit (`design/ROAD-TO-FEATURE-PARITY.md` §6 rows), the nine rows and
+their exact remaining gaps:
+
+- **PLAYBACK-001** (`native_stream.rs`, `native_stream_acl.rs`, OpenSubsonic `download`/`stream`,
+  Jellyfin stream routes): missing proof = current-C# differential/e2e journey for download,
+  seek/range, transcode failure/cancellation, client-profile selection across native /
+  OpenSubsonic / Jellyfin. ADR-0147 (streaming architecture) is the accepted design.
+- **TRANSCODE-001** (`apps/melodee-server/src/transcode.rs`, `transcode_service.rs`): missing
+  proof = request mapping, template failure, cancellation, seek behavior (ADR-0147).
+- **PODCAST-001** (refresh/download/cleanup/recovery legs in `podcast_worker.rs`,
+  `native_podcasts_api.rs`, `native_podcasts_real_feed.rs`): missing proof = end-to-end
+  lifecycle (refresh → download → cleanup → recovery; OPML import; progress) vs. C# behavior.
+- **DISCOVERY-001 / DISCOVERY-002** (`native_discovery_api.rs`, `discovery_worker.rs`):
+  missing proof = discovery surfaces (charts/recommendations as audited) e2e journey +
+  worker refresh cycles vs. C# `ChartUpdate` behavior.
+- **SOCIAL-001** (`native/community.rs`, `native_community_api.rs`,
+  `notification_wiring.rs`): missing proof = request auto-completion, email delivery
+  degradation, public-share authorization journey vs. C#.
+- **OPS-001** (`security_headers.rs`, `correlation.rs`, ADR-0126 rate limiting): prove locally
+  reproducible security headers, `x-request-id` correlation, and native / OpenSubsonic /
+  Jellyfin rate-limit behavior. The three party-specific C# policies are moot (party/jukebox
+  controllers excluded by accepted ADR-0133) — record that as an accepted exclusion, not as
+  unproven middleware. Do **not** claim external/production-scale rate-limit proof.
+- **MIGRATE-001 / MIGRATE-002** (R3/R4 evidence in `design/evidence/r3/`, `r4/`): consolidate
+  and re-validate the existing synthetic/rehearsal evidence — idempotent resume, public-ID
+  preservation, backup/restore validation (pg dump/restore + verify + rollback drill),
+  search rebuild, `melodee legacy verify`. Add missing local regression evidence where
+  practical. **External residuals (explicit, not completed):** production-equivalent
+  backup/restore, traffic switch, rehearsal, cutover, and rollback on the real ~5 TB library
+  (R4.7/R4.8) — operator-authorized, Phase 11 domain.
+
+Method: differential captures against the frozen C# oracle where the wire/behavior contract
+is externally facing (OpenSubsonic/Jellyfin/native), plus integration + e2e lifecycle tests
+for the Rust surfaces. Fix in-scope defects discovered; preserve separate wire contracts
+(native-v1 / OpenSubsonic / Jellyfin are separate products — no shared DTOs).
 
 ## Test / validation plan
 
