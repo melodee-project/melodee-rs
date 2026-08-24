@@ -100,7 +100,14 @@ artwork overrides with evidenced frozen-endpoint precedence). The full repositor
 (904 Rust tests, 232 JS unit tests, 259 Playwright e2e runs, 140 Python capture tests, zero
 failures); the local gate now includes the admin-ui toolchain (`make check`). Phase 9's
 evidence is in
-`design/evidence/phase-9/PHASE-9-REPORT.md`: all twelve per-domain parity checklists are green
+`design/evidence/phase-9/PHASE-9-REPORT.md`: all twelve per-domain parity checklists are green. The
+forward-looking proposal in `design/ROAD-TO-FEATURE-COMPLETION.md` is non-authorizing, but its
+Phase 1 "Quick wins" block (stage names are proposal-stage names, not canonical phases) is the
+authorized exception: the **W0 workstream (the `RELEASE-002` P0 metadata-edit contract and
+save-path fix, including its tests and docs) is allowed to proceed now** — it is a bug fix and
+contract correction to existing behavior, not a new product capability. The remaining Phase 1
+quick wins (the `IMPLEMENTED — UNPROVEN` evidence rows, `TRACK-001`/`002`) and all later blocks
+(W1–W9, proposal-stage Phases 0–6) remain unassigned.
 (74 rows ✅ with linked test evidence, 4 rows 🚫 waived by accepted ADRs, 2 rows ➡ Phase 10),
 all 61 Phase-9-tagged requirements are terminal (52 tested, 2 implemented, 7 deferred under
 ADRs 0133/0136 or the Phase 10 boundary), the feature-parity matrix carries no unapproved gaps,

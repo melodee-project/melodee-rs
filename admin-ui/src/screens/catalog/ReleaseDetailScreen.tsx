@@ -152,16 +152,18 @@ export function ReleaseDetailScreen() {
               fields={[
                 { name: 'title', label: t('catalog.release.edit.title'), type: 'string', value: detail.title },
                 { name: 'sortTitle', label: t('catalog.release.edit.sortTitle'), type: 'string', value: detail.sortTitle },
-                { name: 'releaseYear', label: t('catalog.release.edit.year'), type: 'number', value: detail.releaseYear },
+                { name: 'displayArtist', label: t('catalog.column.artist'), type: 'string', value: detail.displayArtist ?? '' },
                 { name: 'releaseDate', label: t('catalog.release.edit.date'), type: 'string', value: detail.releaseDate ?? '' },
-                { name: 'country', label: t('catalog.release.edit.country'), type: 'string', value: detail.country },
-                { name: 'type', label: t('catalog.release.edit.type'), type: 'string', value: detail.type },
+                { name: 'releaseDateText', label: t('catalog.release.edit.dateText'), type: 'string', value: detail.releaseDateText ?? '' },
+                { name: 'country', label: t('catalog.release.edit.country'), type: 'string', value: detail.country ?? null },
+                { name: 'type', label: t('catalog.release.edit.type'), type: 'string', value: detail.type ?? null },
               ]}
               buildPatch={(state) => ({
                 title: state['title'] !== undefined && String(state['title']).trim() !== '' ? String(state['title']) : null,
                 sortTitle: state['sortTitle'] !== undefined && String(state['sortTitle']).trim() !== '' ? String(state['sortTitle']) : null,
-                releaseYear: state['releaseYear'] as number | undefined,
+                displayArtist: state['displayArtist'] !== undefined && String(state['displayArtist']).trim() !== '' ? String(state['displayArtist']) : null,
                 releaseDate: state['releaseDate'] !== undefined && String(state['releaseDate']).trim() !== '' ? String(state['releaseDate']) : null,
+                releaseDateText: state['releaseDateText'] !== undefined && String(state['releaseDateText']).trim() !== '' ? String(state['releaseDateText']) : null,
                 country: state['country'] !== undefined && String(state['country']).trim() !== '' ? String(state['country']) : null,
                 type: state['type'] !== undefined && String(state['type']).trim() !== '' ? String(state['type']) : null,
               })}

@@ -1197,19 +1197,17 @@
   "catalog.edit.error": "The metadata change could not be completed.",
   "catalog.release.edit.title": "Release title",
   "catalog.release.edit.sortTitle": "Sort title",
-  "catalog.release.edit.year": "Year",
   "catalog.release.edit.date": "Release date",
   "catalog.release.edit.country": "Country",
   "catalog.release.edit.type": "Type",
   "catalog.artist.edit.title": "Artist name",
   "catalog.artist.edit.name": "Name",
   "catalog.artist.edit.sortName": "Sort name",
-  "catalog.artist.edit.country": "Country",
   "catalog.track.edit.title": "Track title",
   "catalog.track.edit.titleField": "Title",
   "catalog.track.edit.sortTitle": "Sort title",
   "catalog.track.edit.number": "Track number",
   "catalog.track.edit.duration": "Duration (ms)",
-  "catalog.track.edit.bpm": "BPM",
-  "catalog.track.edit.key": "Key"
+  "catalog.release.edit.dateText": "Release date text",
+  "catalog.artist.edit.type": "Type"
 }

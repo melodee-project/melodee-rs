@@ -80,13 +80,13 @@ export function TrackDetailScreen() {
               fields={[
                 { name: 'title', label: t('catalog.track.edit.titleField'), type: 'string', value: detail.title },
                 { name: 'sortTitle', label: t('catalog.track.edit.sortTitle'), type: 'string', value: detail.sortTitle },
-                { name: 'trackNumber', label: t('catalog.track.edit.number'), type: 'number', value: detail.trackNumber ?? undefined },
+                { name: 'ordinal', label: t('catalog.track.edit.number'), type: 'number', value: detail.ordinal },
                 { name: 'durationMs', label: t('catalog.track.edit.duration'), type: 'number', value: detail.durationMs ?? undefined },
               ]}
               buildPatch={(state) => ({
                 title: state['title'] !== undefined && String(state['title']).trim() !== '' ? String(state['title']) : null,
                 sortTitle: state['sortTitle'] !== undefined && String(state['sortTitle']).trim() !== '' ? String(state['sortTitle']) : null,
-                trackNumber: (state['trackNumber'] as number | undefined) ?? undefined,
+                ordinal: (state['ordinal'] as number | undefined) ?? undefined,
                 durationMs: (state['durationMs'] as number | undefined) ?? undefined,
               })}
               onSave={(patch) => updateTrackMetadata(id, patch)}

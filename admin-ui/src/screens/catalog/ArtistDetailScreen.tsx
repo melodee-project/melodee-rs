@@ -200,14 +200,14 @@ export function ArtistDetailScreen() {
             <EditPanel
               title={t('catalog.artist.edit.title')}
               fields={[
-                { name: 'name', label: t('catalog.artist.edit.name'), type: 'string', value: detail.name },
+                { name: 'canonicalName', label: t('catalog.artist.edit.name'), type: 'string', value: detail.name },
                 { name: 'sortName', label: t('catalog.artist.edit.sortName'), type: 'string', value: detail.sortName },
-                { name: 'country', label: t('catalog.artist.edit.country'), type: 'string', value: detail.disambiguation ?? null },
+                { name: 'artistType', label: t('catalog.artist.edit.type'), type: 'string', value: detail.artistType },
               ]}
               buildPatch={(state) => ({
-                name: state['name'] !== undefined && String(state['name']).trim() !== '' ? String(state['name']) : null,
+                canonicalName: state['canonicalName'] !== undefined && String(state['canonicalName']).trim() !== '' ? String(state['canonicalName']) : null,
                 sortName: state['sortName'] !== undefined && String(state['sortName']).trim() !== '' ? String(state['sortName']) : null,
-                country: state['country'] !== undefined && String(state['country']).trim() !== '' ? String(state['country']) : null,
+                artistType: state['artistType'] !== undefined && String(state['artistType']).trim() !== '' ? String(state['artistType']) : null,
               })}
               onSave={(patch) => updateArtistMetadata(id, patch)}
               refresh={retry}

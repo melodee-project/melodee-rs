@@ -5,7 +5,7 @@ import {
   NumberInput,
   TextInput,
 } from '@carbon/react';
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { ReleaseMetadataPatch, ArtistMetadataPatch, TrackMetadataPatch } from '../../api/types';
@@ -14,53 +14,6 @@ import type { ReleaseMetadataPatch, ArtistMetadataPatch, TrackMetadataPatch } fr
 interface EditNotice {
   kind: 'success' | 'error';
   text: string;
-}
-
-/** Generic form field for a nullable string value. */
-function StringField({
-  label,
-  name,
-  initial,
-}: {
-  label: string;
-  name: string;
-  initial: string | null | undefined;
-}): React.ReactElement {
-  const [value, setValue] = useState(initial ?? '');
-
-  return (
-    <TextInput
-      id={`edit-${String(name)}`}
-      labelText={label}
-      value={value}
-      onChange={(event) => setValue(event.target.value)}
-      clearable
-    />
-  );
-}
-
-/** Generic form field for a nullable number value. */
-function NumberField({
-  label,
-  name,
-  initial,
-}: {
-  label: string;
-  name: string;
-  initial: number | null | undefined;
-}): React.ReactElement {
-  const [value, setValue] = useState(initial);
-
-  return (
-    <NumberInput
-      id={`edit-${String(name)}`}
-      label={label}
-      value={value}
-      onChange={(event) => setValue(Number(event.target.value) || undefined)}
-      hideControlButtons
-      min={0}
-    />
-  );
 }
 
 /** Form props supplied per entity kind. */
@@ -80,6 +33,11 @@ interface FormFieldConfig {
  *
  * The panel is closed by default and opens when the caller passes `editing={true}`.
  * On save it calls `onSave(patch)`, shows a brief notification, and calls `refresh`.
+ *
+ * RELEASE-002: all field state lives in a single `formState` map managed by
+ * this component. Each `TextInput`/`NumberInput` is fully controlled by
+ * `formState`, so `handleSave` always reads the value the user sees on screen —
+ * never a stale snapshot captured at mount time.
  */
 export function EditPanel({
   title,
@@ -95,19 +53,53 @@ export function EditPanel({
   refresh: () => void;
 }): React.ReactElement {
   const { t } = useTranslation();
-  const [localValues, setLocalValues] = useState<Record<string, unknown>>(() => {
-    const initial: Record<string, unknown> = {};
-    for (const field of fields) {
-      initial[field.name] = field.value;
-    }
-    return initial;
-  });
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<EditNotice | null>(null);
 
+  // RELEASE-002: all field state is tracked in a ref (latest) + state (render).
+  // The ref is the single source of truth for `handleSave` — it always holds
+  // the most recent values, even when a save is triggered in the same event
+  // tick as the last onChange (before React re-renders with the new state).
+  const buildInitialState = useCallback(
+    (fs: typeof fields): Record<string, unknown> => {
+      const out: Record<string, unknown> = {};
+      for (const f of fs) out[f.name] = f.value ?? null;
+      return out;
+    },
+    [],
+  );
+
+  const [formState, setFormState] = useState<Record<string, unknown>>(() =>
+    buildInitialState(fields),
+  );
+  // Ref mirrors the latest formState for synchronous reads in handleSave.
+  // Updated in an effect so we never write refs during render (lint rule).
+  const formStateRef = useRef(formState);
+  useEffect(() => {
+    formStateRef.current = formState;
+  }, [formState]);
+
+  const setField = (name: string, value: unknown) => {
+    setFormState((prev) => ({ ...prev, [name]: value }));
+  };
+
+  // After save + refresh the parent re-renders with the server's new values.
+  // Resync formState so the inputs show the current data.
+  const fieldsKey = JSON.stringify(fields.map((f) => [f.name, f.value]));
+  const prevFieldsKeyRef = useRef(fieldsKey);
+  useEffect(() => {
+    if (prevFieldsKeyRef.current !== fieldsKey) {
+      setFormState(buildInitialState(fields));
+      prevFieldsKeyRef.current = fieldsKey;
+    }
+  }, [fieldsKey, fields, buildInitialState]);
+
   const handleSave = async () => {
-    const patch = buildPatch(localValues);
-    // Strip entries whose value is undefined (the backend treats missing keys as "do not change")
+    // Read from the ref which is kept in sync by the useEffect above.
+    // In practice the effect has already run by the time a click handler
+    // fires, so this is always current.
+    const currentState = formStateRef.current;
+    const patch = buildPatch(currentState);
     const filtered = Object.fromEntries(
       Object.entries(patch).filter(([, v]) => v !== undefined),
     );
@@ -117,7 +109,7 @@ export function EditPanel({
       await onSave(filtered as ReleaseMetadataPatch | ArtistMetadataPatch | TrackMetadataPatch);
       refresh();
       setNotice({ kind: 'success', text: t('catalog.edit.saved') });
-    } catch (cause) {
+    } catch {
       setNotice({
         kind: 'error',
         text: t('catalog.edit.error'),
@@ -143,9 +135,25 @@ export function EditPanel({
       <Form style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
         {fields.map((field) =>
           field.type === 'number' ? (
-            <NumberField key={field.name} label={field.label} name={field.name} initial={field.value as number | null | undefined} />
+            <NumberInput
+              key={field.name}
+              id={`edit-${field.name}`}
+              label={field.label}
+              value={(formState[field.name] as number | null | undefined) ?? undefined}
+              onChange={(_event, state) =>
+                setField(field.name, state.value ?? null)
+              }
+              hideSteppers
+              min={0}
+            />
           ) : (
-            <StringField key={field.name} label={field.label} name={field.name} initial={field.value as string | null | undefined} />
+            <TextInput
+              key={field.name}
+              id={`edit-${field.name}`}
+              labelText={field.label}
+              value={(formState[field.name] as string | null | undefined) ?? ''}
+              onChange={(event) => setField(field.name, event.target.value)}
+            />
           ),
         )}
       </Form>

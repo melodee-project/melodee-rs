@@ -934,8 +934,8 @@ impl CatalogStore {
     }
 
     /// Updates editable Release metadata fields (title, sort_title, display_artist,
-    /// release_date, release_date_text). All fields are optional — only `Some`
-    /// values are written. Recomputes normalized/sort columns when title changes.
+    /// release_date, release_date_text, country, release_type). All fields are optional —
+    /// only `Some` values are written. Recomputes normalized/sort columns when title changes.
     /// Records an audit event and bumps the revision.
     pub async fn update_release_metadata(
         &self,
@@ -946,6 +946,8 @@ impl CatalogStore {
         display_artist: Option<&str>,
         release_date: Option<time::Date>,
         release_date_text: Option<&str>,
+        country: Option<&str>,
+        release_type: Option<&str>,
         actor: &str,
     ) -> Result<(), CatalogStoreError> {
         let mut tx = pool.begin().await?;
@@ -1001,6 +1003,16 @@ impl CatalogStore {
             builder.push_bind(release_date_text.unwrap());
         }
 
+        if country.is_some() {
+            builder.push(" ,country = ");
+            builder.push_bind(country.unwrap());
+        }
+
+        if release_type.is_some() {
+            builder.push(" ,release_type = ");
+            builder.push_bind(release_type.unwrap());
+        }
+
         builder.push(" WHERE id = ");
         builder.push_bind(release_id);
 
@@ -1022,6 +1034,8 @@ impl CatalogStore {
                 "display_artist": display_artist,
                 "release_date": release_date.as_ref().map(|d| format!("{:04}-{:02}-{:02}", d.year(), u8::from(d.month()), d.day())),
                 "release_date_text": release_date_text,
+                "country": country,
+                "release_type": release_type,
             }),
             OffsetDateTime::now_utc(),
         )
@@ -1132,7 +1146,8 @@ impl CatalogStore {
         Ok(())
     }
 
-    /// Updates editable Track metadata fields (title, sort_title, display_artist, ordinal).
+    /// Updates editable Track metadata fields (title, sort_title, display_artist, ordinal,
+    /// duration_ms). All fields are optional — only `Some` values are written.
     pub async fn update_track_metadata(
         &self,
         pool: &PgPool,
@@ -1141,6 +1156,7 @@ impl CatalogStore {
         sort_title: Option<&str>,
         display_artist: Option<&str>,
         ordinal: Option<i32>,
+        duration_ms: Option<i64>,
         actor: &str,
     ) -> Result<(), CatalogStoreError> {
         let mut tx = pool.begin().await?;
@@ -1173,6 +1189,10 @@ impl CatalogStore {
             builder.push(" ,ordinal = ");
             builder.push_bind(ordinal.unwrap());
         }
+        if duration_ms.is_some() {
+            builder.push(" ,duration_ms = ");
+            builder.push_bind(duration_ms.unwrap());
+        }
 
         builder.push(" WHERE id = ");
         builder.push_bind(track_id);
@@ -1194,6 +1214,7 @@ impl CatalogStore {
                 "sort_title": sort_title,
                 "display_artist": display_artist,
                 "ordinal": ordinal,
+                "duration_ms": duration_ms,
             }),
             OffsetDateTime::now_utc(),
         )

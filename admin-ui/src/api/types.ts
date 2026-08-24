@@ -16,25 +16,26 @@ export interface ApiErrorBody {
 export interface ReleaseMetadataPatch {
   title?: string | null;
   sortTitle?: string | null;
-  releaseYear?: number | null;
+  displayArtist?: string | null;
+  /** ISO date `YYYY-MM-DD`. */
   releaseDate?: string | null;
+  releaseDateText?: string | null;
   country?: string | null;
   type?: string | null;
 }
 
 export interface ArtistMetadataPatch {
-  name?: string | null;
+  canonicalName?: string | null;
   sortName?: string | null;
-  country?: string | null;
+  artistType?: string | null;
 }
 
 export interface TrackMetadataPatch {
   title?: string | null;
   sortTitle?: string | null;
-  trackNumber?: number | null;
+  displayArtist?: string | null;
+  ordinal?: number | null;
   durationMs?: number | null;
-  bpm?: number | null;
-  key?: string | null;
 }
 
 /** Server-side pagination envelope shared by list endpoints. */

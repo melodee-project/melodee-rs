@@ -250,6 +250,9 @@ pub struct TrackListParams {
 }
 
 /// Request body for updating editable Release metadata fields.
+/// `country` and `type` are operator-facing curation facts added by the W0
+/// contract fix (2026-08-23); they map to additive `releases.country` /
+/// `releases.release_type` columns.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReleaseMetadataUpdate {
@@ -259,6 +262,8 @@ pub struct ReleaseMetadataUpdate {
     /// ISO date string "YYYY-MM-DD".
     pub release_date: Option<String>,
     pub release_date_text: Option<String>,
+    pub country: Option<String>,
+    pub release_type: Option<String>,
 }
 
 /// Request body for updating editable Artist metadata fields.
@@ -271,6 +276,8 @@ pub struct ArtistMetadataUpdate {
 }
 
 /// Request body for updating editable Track metadata fields.
+/// `duration_ms` was added by the W0 contract fix (2026-08-23) for the
+/// operator-facing Track edit form.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TrackMetadataUpdate {
@@ -278,6 +285,7 @@ pub struct TrackMetadataUpdate {
     pub sort_title: Option<String>,
     pub display_artist: Option<String>,
     pub ordinal: Option<i32>,
+    pub duration_ms: Option<i64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -720,11 +728,17 @@ pub fn router() -> Router<AdminCatalogState> {
                 .layer(DefaultBodyLimit::max(ARTWORK_BODY_LIMIT_BYTES)),
         )
         .route(
-            "/api/admin/v1/catalog/releases/{id}",
+            "/api/admin/v1/catalog/releases/{id}/metadata",
             put(update_release_metadata),
         )
-        .route("/api/admin/v1/catalog/artists/{id}", put(update_artist_metadata))
-        .route("/api/admin/v1/catalog/tracks/{id}", put(update_track_metadata))
+        .route(
+            "/api/admin/v1/catalog/artists/{id}/metadata",
+            put(update_artist_metadata),
+        )
+        .route(
+            "/api/admin/v1/catalog/tracks/{id}/metadata",
+            put(update_track_metadata),
+        )
 }
 
 /// GET /api/admin/v1/catalog/artists — server-side Artist browsing.
@@ -1448,7 +1462,10 @@ async fn delete_release_image(
 // Metadata update handlers (UI-X: catalog metadata edit forms)
 // ---------------------------------------------------------------------------
 
-/// PUT /api/admin/v1/catalog/releases/{id} — update editable Release metadata.
+/// PUT /api/admin/v1/catalog/releases/{id}/metadata — update editable Release metadata.
+///
+/// The `/metadata` suffix is the W0 contract (2026-08-23, RELEASE-002): the admin SPA
+/// has always PUT to `…/{id}/metadata`, so the route — not the client — was the bug.
 async fn update_release_metadata(
     State(state): State<AdminCatalogState>,
     admin: AdminPrincipal,
@@ -1495,6 +1512,8 @@ async fn update_release_metadata(
         payload.display_artist.as_deref(),
         release_date,
         payload.release_date_text.as_deref(),
+        payload.country.as_deref(),
+        payload.release_type.as_deref(),
         &actor,
     )
     .await
@@ -1504,7 +1523,7 @@ async fn update_release_metadata(
     }
 }
 
-/// PUT /api/admin/v1/catalog/artists/{id} — update editable Artist metadata.
+/// PUT /api/admin/v1/catalog/artists/{id}/metadata — update editable Artist metadata.
 async fn update_artist_metadata(
     State(state): State<AdminCatalogState>,
     admin: AdminPrincipal,
@@ -1538,7 +1557,7 @@ async fn update_artist_metadata(
     }
 }
 
-/// PUT /api/admin/v1/catalog/tracks/{id} — update editable Track metadata.
+/// PUT /api/admin/v1/catalog/tracks/{id}/metadata — update editable Track metadata.
 async fn update_track_metadata(
     State(state): State<AdminCatalogState>,
     admin: AdminPrincipal,
@@ -1564,6 +1583,7 @@ async fn update_track_metadata(
         payload.sort_title.as_deref(),
         payload.display_artist.as_deref(),
         payload.ordinal,
+        payload.duration_ms,
         &actor,
     )
     .await

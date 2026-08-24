@@ -1,11 +1,49 @@
 # Road to Feature Completion
 
-Status: DRAFT (pending the Phase 0 architecture ADRs). Last updated: 2026-08-23.
+**Document status:** DRAFT planning proposal — **non-authorizing**. Last updated: 2026-08-23.
 
-This is the **forward-looking plan** for taking Melodee from "most features ported and proven" to
-**v1.0.0 feature-complete** — every capability of the C# Melodee application available in this
-Rust implementation, each implemented in a more modern, performant, Rust-idiomatic way rather than
-ported line-for-line.
+> ## Revision note (2026-08-23)
+>
+> The committed Phase 1 draft of this document ("Road to Feature Parity: 50-Row Audit + Work
+> Plan") described a hypothetical 50-row v2 re-audit and a Phase 0–5 renumbered plan. The current
+> working copy supersedes that draft with the **2026-08-23 audit** recorded in
+> [ROAD-TO-FEATURE-PARITY.md](ROAD-TO-FEATURE-PARITY.md) (28 of 50 canonical-matrix rows block
+> v1.0.0; RELEASE-002 is a genuine P0 bug) and the W0–W9 workstream ownership in §3.1. Where the
+> two disagree, the 2026-08-23 audit text is the plan of record.
+>
+> **Authorized scope inside this non-authorizing document:** per the Phase-boundary update in
+> [AGENTS.md](../AGENTS.md), the **W0 workstream (the `RELEASE-002` P0 metadata-edit contract and
+> save-path fix — server routes, field contract, SPA save path, and its server/store/UI tests and
+> docs) is authorized to proceed now** as a bug fix to existing behavior. Everything else in this
+> document (the remaining Phase 1 quick wins, W1–W9, the six proposal-stage "Phase 0" ADRs, and
+> all later blocks) remains unassigned and non-authorizing.
+
+> ## ⚠️ Authorization status (read first)
+>
+> - This document is a **DRAFT planning proposal only**. It does **not** assign, authorize, or
+>   schedule the next canonical repository phase. It is not a work assignment, and no block below
+>   may be treated as permission to begin implementation.
+> - **Canonical Phases 0–10 are complete.** Their evidence is recorded in
+>   [ROAD-TO-FEATURE-PARITY.md](ROAD-TO-FEATURE-PARITY.md) and the phase reports linked below.
+>   The **next canonical repository phase remains unassigned** and may only be started after an
+>   explicit phase assignment and operator authorization.
+> - **Migration/cutover is the existing, unassigned Phase 11 domain** (ADR-0148/0149/0150). It is
+>   *not* a newly numbered phase, and its production legs (rehearsal, cutover, rollback, release
+>   acceptance) belong to that existing Phase 11 scope.
+> - Where this document uses the words "phase" for its own build order, they are **proposal-stage
+>   names** ("decision gate", "stage", "workstream") and are explicitly *not* the canonical Phase
+>   0–6 numbering. They do not override the authority order in
+>   [AGENTS.md](../AGENTS.md).
+> - Several rows below are **open product decisions** (e.g. `WEBUI-001`, `PLAYBACK-002`, provider
+>   breadth). Until those decisions are made and accepted (by product + ADR where required), this
+>   document cannot authorize the corresponding workstreams.
+
+This is the **forward-looking proposal** for taking Melodee from "most features ported and proven"
+to **v1.0.0 feature-complete** — every *in-scope* capability of the C# Melodee application
+available in this Rust implementation, each implemented in a more modern, performant,
+Rust-idiomatic way rather than ported line-for-line. It is a proposal for *what the next
+authorization may ask for, in what order, and under which accepted decisions* — not an order to
+do it.
 
 ## 1. Scope and framing
 
@@ -13,10 +51,22 @@ ported line-for-line.
   application (the frozen oracle at commit `4028b58d`, see
   [ROAD-TO-FEATURE-PARITY.md](ROAD-TO-FEATURE-PARITY.md) §2.2), implemented in Rust and proven
   against that baseline.
-- **All C# features are in scope for v1.** Nothing is waived. This program closes every blocking
-  row by either implementing the feature in Rust (proven) or — only where an accepted ADR already
-  records a deliberate, *approved* difference — leaving that row as `DIFFERENT — APPROVED`. No
-  further product-scope reductions are assumed.
+- **Scope is four distinct sets, not one blanket claim.** Do not conflate:
+  1. **The complete C# capability inventory** — every user-visible feature in the frozen oracle
+     (the 50-row matrix in [ROAD-TO-FEATURE-PARITY.md](ROAD-TO-FEATURE-PARITY.md) §6).
+  2. **Accepted `DIFFERENT — APPROVED` outcomes** — rows where an *accepted* ADR already records a
+     deliberate, approved difference (e.g. the Party/jukebox waiver ADR-0133, the retired web
+     routes ADR-0140/0141, the deferred non-Last.fm provider integrations ADR-0136). These are
+     *accepted waivers/deferrals*, not parity proof.
+  3. **Proposed v1 obligations** — the rows this program would close by implementing them in Rust
+     (proven) once the next phase is authorized.
+  4. **Post-v1 or still-undecided capabilities** — capabilities whose v1 inclusion is itself an
+     open product decision (`WEBUI-001`, `PLAYBACK-002`, provider breadth) or explicitly deferred
+     to post-parity work (ADR-0136).
+  The program does **not** claim "nothing is waived": it accepts the existing accepted
+  waivers/deferrals, and it assumes **no *further* product-scope reductions** beyond those already
+  recorded in accepted ADRs — unless a future phase explicitly proposes and accepts a superseding
+  ADR.
 - **"Done better" is a real requirement, not an exception.** Where the C# architecture is
   architecturally inferior (string-keyed identity lookup, inline blocking enrichment, Quartz job
   scheduling, SignalR coupling, server-rendered Blazor UI), the Rust implementation is allowed —
@@ -60,13 +110,66 @@ actually require:
 - **Unwired "better" design (high leverage):** ARTIST-001 (cross-Release identity reuse),
   PROVIDER-001 / ARTIST-002 / ARTWORK-001 / JOBS-001 (provider enrichment), CONFIG-001 (settings
   inert), TRACK-001/002 (external-ID retention + AudioIdentity matching).
-- **Evidence, not code (the 9 UNPROVEN rows):** AUTH-001, OPS-001, MIGRATE-001, MIGRATE-002,
-  PLAYBACK-001, PODCAST-001, DISCOVERY-001, DISCOVERY-002, SOCIAL-001 — mostly differential
-  captures + e2e/golden tests + R4 production legs.
-- **Net-new surfaces (largest effort):** WEBUI-001 (end-user web UI), ADMINUI-001 (admin UI
-  completion + edit forms), PLAYBACK-002 (MPD/MPV backends).
-- **Smaller PARTIAL/MISSING:** MEDIA-001, RADIO-001/002, RELEASE-001, CLI-001, AUDIT-001,
-  SCRIPT-001, PACKAGING-001.
+- **Evidence, not code (the 9 `IMPLEMENTED — UNPROVEN` rows):** OPS-001, MIGRATE-001, MIGRATE-002,
+  PLAYBACK-001, TRANSCODE-001, PODCAST-001, DISCOVERY-001, DISCOVERY-002, SOCIAL-001. These have a
+  reachable production path but lack proof. Ordinary evidence (differential captures vs the frozen
+  oracle, e2e/golden tests) can be prepared now. The **external R4 production legs** (real Google
+  OIDC, physical clients, production integrations, the real ~5 TB library) are operator-authorized
+  and belong after implementation/schema freeze (§5, Stage 6) — they are not part of ordinary
+  evidence work.
+- **`PARTIAL` rows:** CONFIG-001, AUTH-001 (real-provider OIDC e2e + roles/profiles depth),
+  MEDIA-001 (NFO fields, `.txt` lyrics, Blackbeard provenance), RELEASE-001, RELEASE-002,
+  TRACK-001/002, PROVIDER-001, ARTWORK-001, JOBS-001, SCRIPT-001, AUDIT-001, ADMINUI-001,
+  CLI-001, PACKAGING-001, and the two product-decision rows PLAYBACK-002 / WEBUI-001.
+  `AUTH-001` is `PARTIAL`, not `IMPLEMENTED — UNPROVEN`: its Google OIDC flow exists and is
+  loopback-tested; what is missing is real-provider proof plus roles/profiles depth.
+- **Net-new surfaces (largest effort):** WEBUI-001 (end-user web UI — product decision),
+  ADMINUI-001 (admin UI completion + edit forms), PLAYBACK-002 (MPD/MPV backends — product
+  decision).
+
+### 3.1 The 28 v1.0.0 blockers — exactly one primary owning workstream each
+
+Each of the 28 blocking rows is assigned to **exactly one primary owning workstream**. Rows that
+depend on other workstreams list those as *secondary dependencies* only; a secondary dependency is
+never a second primary owner. A workstream below is a **proposal** — it is not started until the
+next phase is assigned and authorized. The statuses shown are the audited 2026-08-23 statuses
+(24 `PARTIAL`/`IMPLEMENTED — UNPROVEN`/`MISSING`/`DIFFERENT — UNAPPROVED` + 3 open product
+decisions; the two product-decision rows and MIGRATE-002's phrasing are exactly as audited).
+
+| Feature ID (status) | Primary owning workstream | Secondary dependencies |
+|---|---|---|
+| `RELEASE-002` (`PARTIAL`, P0 bug) | W0 — metadata-edit contract & save-path fix | — |
+| `TRACK-001` (`PARTIAL`) | W1 — external-ID retention & AudioIdentity | Schema decision ADR-0117; W2 (resolver consumes the evidence) |
+| `TRACK-002` (`PARTIAL`) | W1 — external-ID retention & AudioIdentity | W0 (same ADR-0117 schema decision) |
+| `ARTIST-001` (`DIFFERENT — UNAPPROVED`) | W2 — local Artist/Release/AudioIdentity resolution | W1 (external-ID evidence); W3 (enrichment worker feeds candidates) |
+| `CONFIG-001` (`PARTIAL`) | W3 — provider enrichment worker | Decision gate (provider scope); ADR-0118/0147 where transcode/settings overlap |
+| `PROVIDER-001` (`PARTIAL`) | W3 — provider enrichment worker | Decision gate (provider scope); W2 (resolver) |
+| `ARTIST-002` (`PARTIAL`) | W3 — provider enrichment worker | W2 (resolver consumes provider evidence) |
+| `JOBS-001` (`PARTIAL`) | W3 — provider enrichment worker | Decision gate (scheduled-job run history) |
+| `ARTWORK-001` (`PARTIAL`) | W4 — provider-discovered artwork & OS stored-artwork `?size=` | W3 (enrichment); Decision gate (OS `?size=`); ADR-0143 |
+| `WEBUI-001` (product decision) | W5 — end-user web UI | Decision gate (WEBUI-001); ADR-0138/0139 stack |
+| `PLAYBACK-002` (product decision) | W6 — playback backends (MPD/MPV) | Decision gate (MPD/MPV scope) |
+| `AUTH-001` (`PARTIAL`) | W7 — auth/roles/profiles closure | R4 external leg (real Google OIDC) after freeze |
+| `MEDIA-001` (`PARTIAL`) | W7 — remaining PARTIAL closure | ADR-0117/0118 (metadata schema) |
+| `RELEASE-001` (`PARTIAL`) | W7 — remaining PARTIAL closure | W2 (Release resolution) |
+| `CLI-001` (`PARTIAL`) | W7 — remaining PARTIAL closure | W3/W2 (catalog query CLI consumes resolver results) |
+| `AUDIT-001` (`PARTIAL`) | W7 — remaining PARTIAL closure | Decision gate (scheduled-job run history) |
+| `SCRIPT-001` (`PARTIAL`) | W7 — remaining PARTIAL closure | ADR-0135 (scripting boundary) |
+| `PACKAGING-001` (`PARTIAL`) | W8 — migration/cutover/packaging (Phase 11) | ADR-0144/0149/0151; R5 release acceptance |
+| `OPS-001` (`IMPLEMENTED — UNPROVEN`) | W8 — migration/cutover/packaging (Phase 11) | R4 external legs (per-surface rate-limit proof) |
+| `MIGRATE-001` (`IMPLEMENTED — UNPROVEN`) | W8 — migration/cutover/packaging (Phase 11) | R4/R5 external legs; ADR-0148/0149/0150 |
+| `MIGRATE-002` (`IMPLEMENTED — UNPROVEN`) | W8 — migration/cutover/packaging (Phase 11) | R4/R5 external legs; ADR-0149 |
+| `PLAYBACK-001` (`IMPLEMENTED — UNPROVEN`) | W9 — ordinary differential/golden evidence | — |
+| `TRANSCODE-001` (`IMPLEMENTED — UNPROVEN`) | W9 — ordinary differential/golden evidence | ADR-0147 |
+| `PODCAST-001` (`IMPLEMENTED — UNPROVEN`) | W9 — ordinary differential/golden evidence | — |
+| `DISCOVERY-001` (`IMPLEMENTED — UNPROVEN`) | W9 — ordinary differential/golden evidence | — |
+| `DISCOVERY-002` (`IMPLEMENTED — UNPROVEN`) | W9 — ordinary differential/golden evidence | — |
+| `SOCIAL-001` (`IMPLEMENTED — UNPROVEN`) | W9 — ordinary differential/golden evidence | — |
+
+**Ownership invariants (binary):** (a) every one of the 28 rows appears exactly once in the
+"Primary owning workstream" column; (b) no row appears in that column twice; (c) a row's secondary
+dependencies never make it owned by a second workstream. If two workstreams both *touch* a row,
+exactly one of them is primary and the other is listed only under "Secondary dependencies".
 
 ## 4. "Done better" reference table
 
@@ -74,15 +177,15 @@ Per feature, the C# approach and the Rust-native replacement this program target
 
 | C# feature | C# approach (behavioral evidence only) | Rust-native "better" target |
 |---|---|---|
-| Cross-Release Artist identity | `LibraryInsertJob.cs` string-keyed `mb:`/`sp:`/`it:`/`name:` dict lookup | Wire `LocalArtistResolver` + `ArtistAuthority` into import: evidence scoring, confidence thresholds, provisional-on-ambiguity, durable decision + negative assertions, audit outbox (extends ADR-0153) |
-| Provider enrichment at ingestion | Hardwired search-engine services, inline, blocking in staging | Asynchronous enrichment **worker** on the durable work-item engine; providers behind the `ArtistAuthority`/provider traits; cached + provenance-recorded in `external_provider_cache`; **fail-degraded** (never blocks catalog entry — PRD-EXT-002 invariant); per-provider rate limiting |
-| MusicBrainz/external ID retention | Opaque MB-ID columns on catalog rows | Structured **external-ID evidence** per Melodee identity (never a string identity key), feeding the resolver |
-| Metadata edit forms + tag rewrite | `MediaEditService` 12 transforms | Idempotent transactional catalog mutations with in-transaction audit (already in `catalog_mutations.rs`), field-level validation, SPA save-path fix + full test coverage |
-| End-user web UI | Blazor server-rendered + SignalR | Modern SPA on the ADR-0138/0139 stack, consuming native-v1 over WebSocket/SSE (no SignalR), Carbon components, localized + RTL |
-| Scheduled jobs | Quartz, per-job `JobHistories` | Keep the durable work-item engine as the runtime (crash-safe, lease-based — stronger than Quartz); add a per-scheduled-job **run-history** projection for operator visibility |
+| Cross-Release Artist identity | `LibraryInsertJob.cs` string-keyed `mb:`/`sp:`/`it:`/`name:` dict lookup | Initial catalog import stays **local-only** (already-durable evidence; PRD-EXT-002). `LocalArtistResolver` generalizes the ADR-0153 single-release-artist pattern to cross-Release using *trusted external identity* evidence — **never name alone**. External provider candidates enter via the W3 enrichment worker as **evidence only**, never as a merge trigger during import. Convergence requires a shared trusted external identity plus non-conflicting local evidence; conflicting external identities or a locked/negative decision block it. Bias against false merges per PRD-ARTIST-001/011, PRD-RESOLVE-003, ADR-0117, ADR-0153. |
+| Provider enrichment at ingestion | Hardwired search-engine services, inline, blocking in staging | A **separate, bounded, fail-degraded enrichment worker** on the durable work-item engine — *not* part of catalog import. Providers sit behind the provider-neutral `ArtistAuthority` boundary; results are recorded as cache/provenance evidence in `external_provider_cache` and **schedule local re-resolution** without ever blocking catalog entry (PRD-EXT-002). Acceptance concerns are explicit: cancellation, bounded concurrency, per-provider rate limiting, retries/backoff, idempotency, and operator-visible failure behavior. |
+| MusicBrainz/external ID retention | Opaque MB-ID columns on catalog rows | Structured **external-ID evidence** per Melodee identity (never a string identity key), under the accepted schema decision ADR-0117 (`artist_external_identities`, `tracks`, `media_assets`, `audio_identity`). Feeds the resolver; no new schema is assumed. |
+| Metadata edit forms + tag rewrite | `MediaEditService` 12 transforms | Idempotent transactional catalog mutations with in-transaction audit (already in `catalog_mutations.rs`), field-level validation, SPA save-path fix + full test coverage. The **route/field contract is a single decision** owned by the W0 workstream — it is not simultaneously "an ADR decision" and "no ADR needed". |
+| End-user web UI | Blazor server-rendered + SignalR | Modern SPA on the ADR-0138/0139 stack, consuming native-v1 over WebSocket/SSE (no SignalR), Carbon components, localized + RTL. **Gated on the WEBUI-001 product decision.** |
+| Scheduled jobs | Quartz, per-job `JobHistories` | Keep the durable work-item engine as the runtime (crash-safe, lease-based — stronger than Quartz); add a per-scheduled-job **run-history** projection for operator visibility. **Gated on the scheduled-job run-history decision.** |
 | Rate limiting / middleware | Named policies | Per-surface token-bucket middleware with documented budgets + differential evidence |
 
-## 5. Phases
+## 5. Stages (proposal, not canonical phases)
 
 ### Phase 0 — Architecture ADRs (no code; prerequisite)
 

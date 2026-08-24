@@ -215,6 +215,7 @@ const TRACK_DETAIL = {
 async function mockAdminApi(page: Page, options: { artworkUploadFails?: boolean } = {}) {
   const listRequests: string[] = [];
   const artworkRequests: { method: string; body: string }[] = [];
+  const metadataRequests: { pathname: string; body: unknown }[] = [];
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
     const { pathname } = url;
@@ -273,6 +274,20 @@ async function mockAdminApi(page: Page, options: { artworkUploadFails?: boolean 
       await json(TRACK_DETAIL);
       return;
     }
+    // W0 metadata save path (RELEASE-002): the SPA PUTs to `…/{id}/metadata`;
+    // the mock records the raw body so the save-flow tests can assert the exact
+    // field names the server DTOs expect.
+    const metadataMatch =
+      pathname.match(
+        new RegExp(
+          '^/api/admin/v1/catalog/(artists|releases|tracks)/[^/]+/metadata$',
+        ),
+      ) ?? null;
+    if (method === 'PUT' && metadataMatch) {
+      metadataRequests.push({ pathname, body: JSON.parse(route.request().postData() ?? 'null') });
+      await json({ message: 'Metadata updated', updatedAt: '2026-08-14T12:00:00Z' });
+      return;
+    }
     await json({ code: 'not_found', message: 'not found', correlationId: ARTIST_ID }, 404);
   });
   // Absent artwork: the native endpoint answers an undecodable empty 200;
@@ -280,7 +295,7 @@ async function mockAdminApi(page: Page, options: { artworkUploadFails?: boolean 
   await page.route('**/images/**', async (route) => {
     await route.fulfill({ status: 200, body: '' });
   });
-  return { listRequests, artworkRequests };
+  return { listRequests, artworkRequests, metadataRequests };
 }
 
 test.beforeEach(async ({ page }) => {
@@ -478,4 +493,96 @@ test('rtl smoke: ar-SA renders the artist detail with dir=rtl', async ({ page })
   // Data stays visible; untranslated catalog keys fall back to English.
   await expect(page.getByRole('heading', { name: 'The Nomads' })).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Overview' })).toBeVisible();
+});
+
+// W0 metadata save-path regression (RELEASE-002): the edit forms must PUT to
+// `…/{id}/metadata` with exactly the field names the server DTOs accept.
+test('release metadata save PUTs canonical fields to the /metadata route', async ({ page }) => {
+  const api = await mockAdminApi(page);
+  await page.goto(`catalog/releases/${RELEASE_ID}`);
+  await expect(page.getByRole('heading', { name: 'Into the Night' })).toBeVisible();
+
+  // First save: change only the title. The request must carry exactly the
+  // fields the server DTO models, with canonical field names.
+  await page.getByRole('button', { name: 'Edit' }).click();
+  await page.locator('#edit-title').fill('Into the Night (Remastered)');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect
+    .poll(() => api.metadataRequests.some((entry) => entry.pathname.endsWith('/metadata')))
+    .toBe(true);
+  const first = api.metadataRequests.find(
+    (entry) => entry.pathname.endsWith('/metadata'),
+  ) as { pathname: string; body: Record<string, unknown> };
+  await expect(page.getByText('Metadata saved.')).toBeVisible();
+  expect(first.pathname).toBe(`/api/admin/v1/catalog/releases/${RELEASE_ID}/metadata`);
+  expect(first.body).toMatchObject({
+    title: 'Into the Night (Remastered)',
+    displayArtist: 'The Nomads',
+    releaseDate: '1986-05-12',
+  });
+  // Fields the server DTO does not model must not be sent.
+  expect(first.body).not.toHaveProperty('releaseYear');
+  expect(first.body).not.toHaveProperty('name');
+  expect(first.body).not.toHaveProperty('trackNumber');
+
+  // Second save: clearing the title sends an explicit null (clear, not skip).
+  await page.locator('#edit-title').fill('');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect
+    .poll(() => api.metadataRequests.filter((entry) => entry.pathname.endsWith('/metadata')).length)
+    .toBe(2);
+  const second = api.metadataRequests.filter(
+    (entry) => entry.pathname.endsWith('/metadata'),
+  )[1] as { pathname: string; body: Record<string, unknown> };
+  expect(second.body).toMatchObject({ title: null });
+});
+
+test('track metadata save PUTs ordinal, not trackNumber', async ({ page }) => {
+  const api = await mockAdminApi(page);
+  await page.goto(`catalog/tracks/${TRACK_ID}`);
+  await expect(page.getByRole('heading', { name: 'Down Under' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Edit' }).click();
+  const ordinalInput = page.locator('#edit-ordinal');
+  await ordinalInput.click();
+  await ordinalInput.press('Control+a');
+  await ordinalInput.press('7');
+  await page.getByRole('button', { name: 'Save' }).click();
+
+  await expect
+    .poll(() => api.metadataRequests.some((entry) => entry.pathname.endsWith('/metadata')))
+    .toBe(true);
+  const request = api.metadataRequests.find(
+    (entry) => entry.pathname.endsWith('/metadata'),
+  ) as { pathname: string; body: Record<string, unknown> };
+  expect(request.pathname).toBe(`/api/admin/v1/catalog/tracks/${TRACK_ID}/metadata`);
+  expect(request.body).toMatchObject({ ordinal: 7 });
+  expect(request.body).not.toHaveProperty('trackNumber');
+  expect(request.body).not.toHaveProperty('bpm');
+  expect(request.body).not.toHaveProperty('key');
+});
+
+test('artist metadata save PUTs canonicalName and artistType', async ({ page }) => {
+  const api = await mockAdminApi(page);
+  await page.goto(`catalog/artists/${ARTIST_ID}`);
+  await expect(page.getByRole('heading', { name: 'The Nomads' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Edit' }).click();
+  await page.locator('#edit-sortName').fill('Nomads, The (remastered)');
+  await page.getByRole('button', { name: 'Save' }).click();
+
+  await expect
+    .poll(() => api.metadataRequests.some((entry) => entry.pathname.endsWith('/metadata')))
+    .toBe(true);
+  const request = api.metadataRequests.find(
+    (entry) => entry.pathname.endsWith('/metadata'),
+  ) as { pathname: string; body: Record<string, unknown> };
+  expect(request.pathname).toBe(`/api/admin/v1/catalog/artists/${ARTIST_ID}/metadata`);
+  expect(request.body).toMatchObject({
+    canonicalName: 'The Nomads',
+    sortName: 'Nomads, The (remastered)',
+    artistType: 'group',
+  });
+  expect(request.body).not.toHaveProperty('name');
+  expect(request.body).not.toHaveProperty('country');
 });
