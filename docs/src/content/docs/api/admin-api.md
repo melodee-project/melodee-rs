@@ -596,6 +596,55 @@ optional JSON body `{"reason": "…"}` is recorded in the audit event. Every upl
 is audit-logged (`catalog_audit_events`, event types `image_override_set` /
 `image_override_removed`) with the acting administrator id.
 
+### Catalog metadata editing
+
+Operators can edit the display metadata for a Release, Artist, or Track. All three routes use
+a **partial-patch** model: every field in the JSON body is optional; `null` or absent means
+"leave unchanged". An empty or whitespace-only string for a name field is rejected with
+`400 invalid_request`.
+
+```http
+PUT /api/admin/v1/catalog/releases/{id}/metadata
+PUT /api/admin/v1/catalog/artists/{id}/metadata
+PUT /api/admin/v1/catalog/tracks/{id}/metadata
+```
+
+**Release fields** (camelCase JSON):
+
+| Field | Type | Notes |
+|---|---|---|
+| `title` | string | non-blank when present; recomputes `sortTitle` if not overridden |
+| `sortTitle` | string | operator-supplied sort key wins over the computed value |
+| `displayArtist` | string | non-blank when present |
+| `releaseDate` | string (ISO-8601 date) | e.g. `2008-01-15` |
+| `releaseDateText` | string | free-form display text |
+
+**Artist fields**:
+
+| Field | Type | Notes |
+|---|---|---|
+| `canonicalName` | string | non-blank when present; recomputes `sortName` if not overridden |
+| `sortName` | string | operator-supplied sort key wins |
+| `artistType` | string | one of: `person`, `group`, `orchestra`, `ensemble`, `choir`, `character`, `other`, `unknown` |
+
+**Track fields**:
+
+| Field | Type | Notes |
+|---|---|---|
+| `title` | string | non-blank when present |
+| `sortTitle` | string | operator-supplied sort key |
+| `displayArtist` | string | non-blank when present |
+| `ordinal` | integer | must be positive when present |
+| `durationMs` | integer | must be non-negative when present |
+
+All three routes return `204 No Content` on success. Unknown entity ids return
+`404 not_found`. Validation failures (blank names, non-positive ordinal, negative duration,
+unknown artist type) return `400 invalid_request`. Every successful edit writes a
+`catalog_audit_events` row (event types `release_metadata_updated`,
+`artist_metadata_updated`, `track_metadata_updated`) and bumps the entity revision so the
+search projection refreshes.
+
+
 ## Dashboard
 
 ```http

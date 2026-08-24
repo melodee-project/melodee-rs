@@ -23,11 +23,12 @@ use axum::{
     routing::put,
 };
 use melodee_persistence::{
-    ArtistCatalogDetail, BilledArtistRow, BoundedSection, CatalogArtistSort, CatalogAuditEventRow,
-    CatalogBrowseError, CatalogImageAudit, CatalogImageEntity, CatalogImageError,
-    CatalogImageStore, CatalogReleaseSort, CatalogStore, CatalogTrackSort, ContributionRow,
-    MediaAssetRow, PolicyStore, ReleaseCatalogDetail, StoredReleaseClassification,
-    TrackCatalogDetail, contains_pattern,
+    ArtistCatalogDetail, ArtistMetadataPatch, BilledArtistRow, BoundedSection, CatalogArtistSort,
+    CatalogAuditEventRow, CatalogBrowseError, CatalogImageAudit, CatalogImageEntity,
+    CatalogImageError, CatalogImageStore, CatalogReleaseSort, CatalogStore, CatalogStoreError,
+    CatalogTrackSort, ContributionRow, MediaAssetRow, PolicyStore, ReleaseCatalogDetail,
+    ReleaseMetadataPatch, StoredReleaseClassification, TrackCatalogDetail, TrackMetadataPatch,
+    contains_pattern,
 };
 use serde::{Deserialize, Serialize};
 use time::{Date, OffsetDateTime, format_description::well_known::Rfc3339};
@@ -114,6 +115,27 @@ fn catalog_error(status: StatusCode, code: &'static str, message: impl Into<Stri
 fn store_failure(context: &'static str, error: &impl std::fmt::Display) -> Response {
     tracing::error!(%error, context, "admin catalog store failure");
     catalog_error(StatusCode::INTERNAL_SERVER_ERROR, "store_error", context)
+}
+
+/// Maps a `CatalogStoreError` to the admin API envelope. `InvalidRequest` is a
+/// caller-supplied validation failure (400 `invalid_request`); anything else is an
+/// unexpected store fault (500 `store_error`).
+fn metadata_update_failure(kind: &'static str, error: CatalogStoreError) -> Response {
+    match error {
+        CatalogStoreError::InvalidRequest => catalog_error(
+            StatusCode::BAD_REQUEST,
+            "invalid_request",
+            format!("invalid {kind} metadata update payload"),
+        ),
+        other => {
+            tracing::error!(%other, context = kind, "admin catalog metadata update failure");
+            catalog_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "store_error",
+                format!("{kind} metadata update failed"),
+            )
+        }
+    }
 }
 
 fn not_found(kind: &'static str, id: Uuid) -> Response {
@@ -250,9 +272,12 @@ pub struct TrackListParams {
 }
 
 /// Request body for updating editable Release metadata fields.
-/// `country` and `type` are operator-facing curation facts added by the W0
-/// contract fix (2026-08-23); they map to additive `releases.country` /
-/// `releases.release_type` columns.
+///
+/// Partial-update semantics: only fields present in the body are written. The
+/// `country` and `releaseType` fields from the original W0 draft are intentionally
+/// absent — they never existed in any migration and were removed from the
+/// RELEASE-002 contract (2026-08-23) in favor of the additive, migration-backed
+/// fields that actually exist on the `releases` table.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReleaseMetadataUpdate {
@@ -262,8 +287,6 @@ pub struct ReleaseMetadataUpdate {
     /// ISO date string "YYYY-MM-DD".
     pub release_date: Option<String>,
     pub release_date_text: Option<String>,
-    pub country: Option<String>,
-    pub release_type: Option<String>,
 }
 
 /// Request body for updating editable Artist metadata fields.
@@ -1473,53 +1496,47 @@ async fn update_release_metadata(
     Json(payload): Json<ReleaseMetadataUpdate>,
 ) -> Response {
     // Resolve public_api_id → internal id.
-    let internal_id: Uuid = match sqlx::query_scalar(
-        "SELECT id FROM releases WHERE public_api_id = $1",
-    )
-    .bind(id)
-    .fetch_one(&state.admin.pool)
-    .await
-    {
-        Ok(id) => id,
-        Err(_) => return not_found("release", id),
-    };
+    let internal_id: Uuid =
+        match sqlx::query_scalar("SELECT id FROM releases WHERE public_api_id = $1")
+            .bind(id)
+            .fetch_one(&state.admin.pool)
+            .await
+        {
+            Ok(id) => id,
+            Err(_) => return not_found("release", id),
+        };
 
     // Parse release_date if provided.
-    let release_date = match payload
-        .release_date
-        .as_deref()
-        .filter(|s| !s.is_empty())
-    {
+    let release_date = match payload.release_date.as_deref().filter(|s| !s.is_empty()) {
         None => None,
-        Some(raw) => match Date::parse(raw, &time::format_description::well_known::Iso8601::DEFAULT) {
-            Ok(d) => Some(d),
-            Err(_) => {
-                return catalog_error(
-                    StatusCode::BAD_REQUEST,
-                    "invalid_request",
-                    "releaseDate must be a valid ISO 8601 date (YYYY-MM-DD)",
-                );
+        Some(raw) => {
+            match Date::parse(raw, &time::format_description::well_known::Iso8601::DEFAULT) {
+                Ok(d) => Some(d),
+                Err(_) => {
+                    return catalog_error(
+                        StatusCode::BAD_REQUEST,
+                        "invalid_request",
+                        "releaseDate must be a valid ISO 8601 date (YYYY-MM-DD)",
+                    );
+                }
             }
-        },
+        }
     };
 
     let actor = admin.public_api_id.to_string();
-    match CatalogStore.update_release_metadata(
-        &state.admin.pool,
-        internal_id,
-        payload.title.as_deref(),
-        payload.sort_title.as_deref(),
-        payload.display_artist.as_deref(),
+    let patch = ReleaseMetadataPatch {
+        title: payload.title,
+        sort_title: payload.sort_title,
+        display_artist: payload.display_artist,
         release_date,
-        payload.release_date_text.as_deref(),
-        payload.country.as_deref(),
-        payload.release_type.as_deref(),
-        &actor,
-    )
-    .await
+        release_date_text: payload.release_date_text,
+    };
+    match CatalogStore
+        .update_release_metadata(&state.admin.pool, internal_id, &patch, &actor)
+        .await
     {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(error) => store_failure("release metadata update failed", &error),
+        Err(error) => metadata_update_failure("release", error),
     }
 }
 
@@ -1530,30 +1547,28 @@ async fn update_artist_metadata(
     Path(id): Path<Uuid>,
     Json(payload): Json<ArtistMetadataUpdate>,
 ) -> Response {
-    let internal_id: Uuid = match sqlx::query_scalar(
-        "SELECT id FROM artists WHERE public_api_id = $1",
-    )
-    .bind(id)
-    .fetch_one(&state.admin.pool)
-    .await
-    {
-        Ok(id) => id,
-        Err(_) => return not_found("artist", id),
-    };
+    let internal_id: Uuid =
+        match sqlx::query_scalar("SELECT id FROM artists WHERE public_api_id = $1")
+            .bind(id)
+            .fetch_one(&state.admin.pool)
+            .await
+        {
+            Ok(id) => id,
+            Err(_) => return not_found("artist", id),
+        };
 
     let actor = admin.public_api_id.to_string();
-    match CatalogStore.update_artist_metadata(
-        &state.admin.pool,
-        internal_id,
-        payload.canonical_name.as_deref(),
-        payload.sort_name.as_deref(),
-        payload.artist_type.as_deref(),
-        &actor,
-    )
-    .await
+    let patch = ArtistMetadataPatch {
+        canonical_name: payload.canonical_name,
+        sort_name: payload.sort_name,
+        artist_type: payload.artist_type,
+    };
+    match CatalogStore
+        .update_artist_metadata(&state.admin.pool, internal_id, &patch, &actor)
+        .await
     {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(error) => store_failure("artist metadata update failed", &error),
+        Err(error) => metadata_update_failure("artist", error),
     }
 }
 
@@ -1564,31 +1579,29 @@ async fn update_track_metadata(
     Path(id): Path<Uuid>,
     Json(payload): Json<TrackMetadataUpdate>,
 ) -> Response {
-    let internal_id: Uuid = match sqlx::query_scalar(
-        "SELECT id FROM tracks WHERE public_api_id = $1",
-    )
-    .bind(id)
-    .fetch_one(&state.admin.pool)
-    .await
-    {
-        Ok(id) => id,
-        Err(_) => return not_found("track", id),
-    };
+    let internal_id: Uuid =
+        match sqlx::query_scalar("SELECT id FROM tracks WHERE public_api_id = $1")
+            .bind(id)
+            .fetch_one(&state.admin.pool)
+            .await
+        {
+            Ok(id) => id,
+            Err(_) => return not_found("track", id),
+        };
 
     let actor = admin.public_api_id.to_string();
-    match CatalogStore.update_track_metadata(
-        &state.admin.pool,
-        internal_id,
-        payload.title.as_deref(),
-        payload.sort_title.as_deref(),
-        payload.display_artist.as_deref(),
-        payload.ordinal,
-        payload.duration_ms,
-        &actor,
-    )
-    .await
+    let patch = TrackMetadataPatch {
+        title: payload.title,
+        sort_title: payload.sort_title,
+        display_artist: payload.display_artist,
+        ordinal: payload.ordinal,
+        duration_ms: payload.duration_ms,
+    };
+    match CatalogStore
+        .update_track_metadata(&state.admin.pool, internal_id, &patch, &actor)
+        .await
     {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(error) => store_failure("track metadata update failed", &error),
+        Err(error) => metadata_update_failure("track", error),
     }
 }

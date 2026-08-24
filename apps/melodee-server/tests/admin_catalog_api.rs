@@ -32,7 +32,7 @@ use melodee_server::admin_catalog::AdminCatalogState;
 use melodee_server::native::stream::DatabaseStreamUrlSigner;
 use melodee_server::native::{NativeState, PostgresNativeUserStateReader};
 use melodee_server::native_stream::{CanonicalAssetRoot, ClientAddressResolver, DirectPlayService};
-use serde_json::Value;
+use serde_json::{Value, json};
 use time::OffsetDateTime;
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -733,6 +733,214 @@ async fn track_detail_payload_and_not_found() {
     )
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["code"], "not_found");
+
+    db.drop().await;
+}
+
+/// The three `/metadata` PUT routes are admin-gated, return 204 on a valid
+/// partial patch, 400 on invalid or unknown-payload input, and 404 on unknown
+/// public ids (W0 / RELEASE-002 metadata-edit contract).
+#[tokio::test]
+async fn metadata_update_routes_auth_success_and_errors() {
+    let db = TestDb::create("wp15_metadata_routes").await;
+    let fixture = seed_users(&db).await;
+    let admin = token_for(fixture.admin_public, "wp15-admin");
+    let plain = token_for(fixture.plain_public, "wp15-plain");
+    let release = seed_release(&db, 9, "Meta Release", "Meta Artist", "Meta Track").await;
+    let (release_public, artist_public, track_public) =
+        public_ids(&db, release.release_id().into_uuid()).await;
+    let app = app(db.pool.clone());
+
+    // ---- Auth gating: 401 unauthenticated, 403 non-admin. -----------------
+    for path in [
+        &format!("/api/admin/v1/catalog/releases/{release_public}/metadata"),
+        &format!("/api/admin/v1/catalog/artists/{artist_public}/metadata"),
+        &format!("/api/admin/v1/catalog/tracks/{track_public}/metadata"),
+    ] {
+        let (status, _) = call(app.clone(), "PUT", path, Some(json!({})), None).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED, "{path}");
+        let (status, _) = call(app.clone(), "PUT", path, Some(json!({})), Some(&plain)).await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{path}");
+    }
+
+    // ---- Release: valid partial patch → 204, persisted, revision bumped,
+    //      audit event recorded. -------------------------------------------
+    let before = call(
+        app.clone(),
+        "GET",
+        &format!("/api/admin/v1/catalog/releases/{release_public}"),
+        None,
+        Some(&admin),
+    )
+    .await;
+    let release_revision = before.1["revision"].as_i64().expect("revision");
+
+    let (status, _) = call(
+        app.clone(),
+        "PUT",
+        &format!("/api/admin/v1/catalog/releases/{release_public}/metadata"),
+        Some(json!({
+            "displayArtist": "Meta Artist (live)",
+            "releaseDateText": "August 2007"
+        })),
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "valid release patch");
+
+    let (status, body) = call(
+        app.clone(),
+        "GET",
+        &format!("/api/admin/v1/catalog/releases/{release_public}"),
+        None,
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    // Partial patch: only supplied fields changed.
+    assert_eq!(body["displayArtist"], "Meta Artist (live)");
+    assert_eq!(body["releaseDateText"], "August 2007");
+    assert_eq!(body["title"], "Meta Release"); // untouched
+    assert_eq!(body["releaseDate"], "2007-08-09"); // untouched
+    // Revision bumped and audit event recorded.
+    assert_eq!(body["revision"], release_revision + 1);
+    let history = body["history"]["items"].as_array().expect("history items");
+    assert!(
+        history
+            .iter()
+            .any(|e| e["eventType"] == "release_metadata_updated"),
+        "release audit event"
+    );
+
+    // ---- Release: blank name rejected (400 invalid_request). --------------
+    let (status, body) = call(
+        app.clone(),
+        "PUT",
+        &format!("/api/admin/v1/catalog/releases/{release_public}/metadata"),
+        Some(json!({ "title": "   " })),
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(body["code"], "invalid_request");
+
+    // ---- Release: unknown public id → 404 not_found. -----------------------
+    let (status, body) = call(
+        app.clone(),
+        "PUT",
+        &format!("/api/admin/v1/catalog/releases/{}/metadata", Uuid::now_v7()),
+        Some(json!({ "title": "Ghost" })),
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+    assert_eq!(body["code"], "not_found");
+
+    // ---- Artist: valid partial patch → 204, persisted, audit. -------------
+    let (status, _) = call(
+        app.clone(),
+        "PUT",
+        &format!("/api/admin/v1/catalog/artists/{artist_public}/metadata"),
+        Some(json!({ "canonicalName": "Meta Artist", "artistType": "group" })),
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "valid artist patch");
+
+    let (status, body) = call(
+        app.clone(),
+        "GET",
+        &format!("/api/admin/v1/catalog/artists/{artist_public}"),
+        None,
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["name"], "Meta Artist");
+    assert_eq!(body["artistType"], "group");
+    let history = body["history"]["items"].as_array().expect("history items");
+    assert!(
+        history
+            .iter()
+            .any(|e| e["eventType"] == "artist_metadata_updated"),
+        "artist audit event"
+    );
+
+    // ---- Artist: blank canonical name rejected (400). ---------------------
+    let (status, body) = call(
+        app.clone(),
+        "PUT",
+        &format!("/api/admin/v1/catalog/artists/{artist_public}/metadata"),
+        Some(json!({ "canonicalName": "" })),
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(body["code"], "invalid_request");
+
+    // ---- Track: valid patch (ordinal + duration) → 204, persisted. --------
+    let (status, _) = call(
+        app.clone(),
+        "PUT",
+        &format!("/api/admin/v1/catalog/tracks/{track_public}/metadata"),
+        Some(json!({
+            "ordinal": 2,
+            "durationMs": 240_000,
+            "displayArtist": "Meta Artist"
+        })),
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "valid track patch");
+
+    let (status, body) = call(
+        app.clone(),
+        "GET",
+        &format!("/api/admin/v1/catalog/tracks/{track_public}"),
+        None,
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["ordinal"], 2);
+    assert_eq!(body["durationMs"], 240_000);
+    assert_eq!(body["displayArtist"], "Meta Artist");
+
+    // ---- Track: non-positive ordinal rejected (400). ----------------------
+    let (status, body) = call(
+        app.clone(),
+        "PUT",
+        &format!("/api/admin/v1/catalog/tracks/{track_public}/metadata"),
+        Some(json!({ "ordinal": 0 })),
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(body["code"], "invalid_request");
+
+    // ---- Track: negative duration rejected (400). -------------------------
+    let (status, body) = call(
+        app.clone(),
+        "PUT",
+        &format!("/api/admin/v1/catalog/tracks/{track_public}/metadata"),
+        Some(json!({ "durationMs": -1 })),
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(body["code"], "invalid_request");
+
+    // ---- Track: unknown public id → 404. ----------------------------------
+    let (status, body) = call(
+        app.clone(),
+        "PUT",
+        &format!("/api/admin/v1/catalog/tracks/{}/metadata", Uuid::now_v7()),
+        Some(json!({ "title": "Ghost" })),
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
     assert_eq!(body["code"], "not_found");
 
     db.drop().await;

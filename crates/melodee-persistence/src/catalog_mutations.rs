@@ -9,8 +9,8 @@ use melodee_domain::{
     NewCatalogSemanticOverlay, ObservedArtistId, OverlayArtistResolution, OverlayAudioIdentityLink,
     OverlayDisplayArtist, OverlayReferences, ReleaseArtistId, ReleaseId, TrackArtistId, TrackId,
 };
-use sqlx::{PgPool, Postgres, QueryBuilder, Transaction};
-use time::OffsetDateTime;
+use sqlx::{PgPool, Postgres, QueryBuilder, Row, Transaction};
+use time::{Date, OffsetDateTime};
 use uuid::Uuid;
 
 use crate::{
@@ -19,6 +19,48 @@ use crate::{
     MAX_CATALOG_CORRECTION_RELEASES, MAX_CATALOG_CORRECTION_TRACKS, ProviderNegativeAssertion,
     StoredArtistCandidate,
 };
+
+/// Operator-supplied editable Release metadata patch.
+///
+/// Every field is optional: a `None` leaves the corresponding column untouched,
+/// while a `Some(value)` updates it. `title`, `sort_title`, and `display_artist`
+/// must be non-blank when present. `release_date` is a parsed ISO-8601 date.
+/// `country` and `release_type` were removed from the W0 contract (2026-08-23):
+/// the corresponding `releases` columns do not exist in any migration, so the
+/// wire contract no longer exposes them.
+#[derive(Debug, Clone, Default)]
+pub struct ReleaseMetadataPatch {
+    pub title: Option<String>,
+    pub sort_title: Option<String>,
+    pub display_artist: Option<String>,
+    pub release_date: Option<Date>,
+    pub release_date_text: Option<String>,
+}
+
+/// Operator-supplied editable Artist metadata patch.
+///
+/// Every field is optional: a `None` leaves the corresponding column untouched.
+/// `canonical_name` must be non-blank when present.
+#[derive(Debug, Clone, Default)]
+pub struct ArtistMetadataPatch {
+    pub canonical_name: Option<String>,
+    pub sort_name: Option<String>,
+    pub artist_type: Option<String>,
+}
+
+/// Operator-supplied editable Track metadata patch.
+///
+/// Every field is optional: a `None` leaves the corresponding column untouched.
+/// `title`, `sort_title`, and `display_artist` must be non-blank when present.
+/// `ordinal` must be strictly positive; `duration_ms` must be non-negative.
+#[derive(Debug, Clone, Default)]
+pub struct TrackMetadataPatch {
+    pub title: Option<String>,
+    pub sort_title: Option<String>,
+    pub display_artist: Option<String>,
+    pub ordinal: Option<i32>,
+    pub duration_ms: Option<i64>,
+}
 
 impl CatalogStore {
     /// Looks up canonical/alias candidates without turning a name into identity.
@@ -934,22 +976,25 @@ impl CatalogStore {
     }
 
     /// Updates editable Release metadata fields (title, sort_title, display_artist,
-    /// release_date, release_date_text, country, release_type). All fields are optional —
-    /// only `Some` values are written. Recomputes normalized/sort columns when title changes.
-    /// Records an audit event and bumps the revision.
+    /// release_date, release_date_text). All patch fields are optional — only `Some`
+    /// values are written. Recomputes `normalized_title`/`sort_title` when the title
+    /// changes, and preserves an explicitly supplied `sort_title`. Records an audit
+    /// event and bumps the revision.
+    ///
+    /// Returns `CatalogStoreError::InvalidRequest` when a present-but-blank
+    /// editable field or an unknown Release id is supplied; the surrounding
+    /// transaction is rolled back before the error is returned.
     pub async fn update_release_metadata(
         &self,
         pool: &PgPool,
         release_id: Uuid,
-        title: Option<&str>,
-        sort_title: Option<&str>,
-        display_artist: Option<&str>,
-        release_date: Option<time::Date>,
-        release_date_text: Option<&str>,
-        country: Option<&str>,
-        release_type: Option<&str>,
+        patch: &ReleaseMetadataPatch,
         actor: &str,
     ) -> Result<(), CatalogStoreError> {
+        require_non_blank(patch.title.as_deref())?;
+        require_non_blank(patch.sort_title.as_deref())?;
+        require_non_blank(patch.display_artist.as_deref())?;
+
         let mut tx = pool.begin().await?;
 
         // Verify the release exists first.
@@ -957,19 +1002,20 @@ impl CatalogStore {
             "SELECT sort_title, COALESCE(title, '') FROM releases WHERE id = $1",
         )
         .bind(release_id)
-        .fetch_one(&mut *tx)
-        .await?;
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or(CatalogStoreError::InvalidRequest)?;
 
-        let title_changed = title.is_some() && title.map_or(false, |t| t != old_title);
+        let title_changed = match patch.title.as_deref() {
+            Some(new_title) => new_title != old_title,
+            None => false,
+        };
 
-        // Build the dynamic UPDATE with only non-null fields.
-        let mut builder = QueryBuilder::new(
-            "UPDATE releases SET updated_at = CURRENT_TIMESTAMP",
-        );
+        // Build the dynamic UPDATE with only supplied fields.
+        let mut builder = QueryBuilder::new("UPDATE releases SET updated_at = CURRENT_TIMESTAMP");
         builder.push(" ,revision = revision + 1");
 
-        if title.is_some() {
-            let new_title = title.unwrap();
+        if let Some(new_title) = patch.title.as_deref() {
             let computed_sort_title = if title_changed {
                 compute_sort_key(new_title)
             } else {
@@ -977,49 +1023,38 @@ impl CatalogStore {
             };
             builder.push(" ,title = ");
             builder.push_bind(new_title);
-            let sort_to_set = match sort_title {
+            builder.push(" ,normalized_title = ");
+            builder.push_bind(compute_normalized(new_title));
+            let sort_to_set = match patch.sort_title.as_deref() {
                 Some(s) => s,
                 None => &computed_sort_title,
             };
             builder.push(" ,sort_title = ");
             builder.push_bind(sort_to_set);
-        } else if sort_title.is_some() {
+        } else if let Some(sort_title) = patch.sort_title.as_deref() {
             builder.push(" ,sort_title = ");
-            builder.push_bind(sort_title.unwrap());
+            builder.push_bind(sort_title);
         }
 
-        if display_artist.is_some() {
+        if let Some(display_artist) = patch.display_artist.as_deref() {
             builder.push(" ,display_artist = ");
-            builder.push_bind(display_artist.unwrap());
+            builder.push_bind(display_artist);
         }
 
-        if release_date.is_some() {
+        if let Some(release_date) = patch.release_date {
             builder.push(" ,release_date = ");
-            builder.push_bind(release_date.unwrap());
+            builder.push_bind(release_date);
         }
 
-        if release_date_text.is_some() {
+        if let Some(release_date_text) = patch.release_date_text.as_deref() {
             builder.push(" ,release_date_text = ");
-            builder.push_bind(release_date_text.unwrap());
-        }
-
-        if country.is_some() {
-            builder.push(" ,country = ");
-            builder.push_bind(country.unwrap());
-        }
-
-        if release_type.is_some() {
-            builder.push(" ,release_type = ");
-            builder.push_bind(release_type.unwrap());
+            builder.push_bind(release_date_text);
         }
 
         builder.push(" WHERE id = ");
         builder.push_bind(release_id);
 
-        builder
-            .build()
-            .execute(&mut *tx)
-            .await?;
+        builder.build().execute(&mut *tx).await?;
 
         audit_event(
             &mut tx,
@@ -1029,13 +1064,11 @@ impl CatalogStore {
             actor,
             "Release metadata updated",
             serde_json::json!({
-                "title": title,
-                "sort_title": sort_title,
-                "display_artist": display_artist,
-                "release_date": release_date.as_ref().map(|d| format!("{:04}-{:02}-{:02}", d.year(), u8::from(d.month()), d.day())),
-                "release_date_text": release_date_text,
-                "country": country,
-                "release_type": release_type,
+                "title": patch.title,
+                "sort_title": patch.sort_title,
+                "display_artist": patch.display_artist,
+                "release_date": patch.release_date.as_ref().map(|d| format!("{:04}-{:02}-{:02}", d.year(), u8::from(d.month()), d.day())),
+                "release_date_text": patch.release_date_text,
             }),
             OffsetDateTime::now_utc(),
         )
@@ -1046,49 +1079,45 @@ impl CatalogStore {
     }
 
     /// Updates editable Artist metadata fields (canonical_name, sort_name, artist_type).
-    /// All fields are optional — only `Some` values are written. Recomputes
-    /// normalized_name and sort_name when canonical_name changes.
+    /// All patch fields are optional — only `Some` values are written. Recomputes
+    /// `normalized_name` and `sort_name` when `canonical_name` changes, preserving an
+    /// explicitly supplied `sort_name`. Records an audit event, enqueues the tantivy
+    /// projection, and bumps the revision.
+    ///
+    /// Returns `CatalogStoreError::InvalidRequest` when a present-but-blank name or an
+    /// unknown Artist id is supplied; the surrounding transaction is rolled back before
+    /// the error is returned.
     pub async fn update_artist_metadata(
         &self,
         pool: &PgPool,
         artist_id: Uuid,
-        canonical_name: Option<&str>,
-        sort_name: Option<&str>,
-        artist_type: Option<&str>,
+        patch: &ArtistMetadataPatch,
         actor: &str,
     ) -> Result<(), CatalogStoreError> {
+        require_non_blank(patch.canonical_name.as_deref())?;
+        valid_artist_type(patch.artist_type.as_deref())?;
+
         let mut tx = pool.begin().await?;
 
-        // Verify the artist exists first.
-        let (current_canonical_name,) = sqlx::query_as::<_, (String,)>(
-            "SELECT COALESCE(canonical_name, '') FROM artists WHERE id = $1",
-        )
-        .bind(artist_id)
-        .fetch_one(&mut *tx)
-        .await?;
+        // Verify the artist exists first (unknown ids surface as InvalidRequest → 400).
+        sqlx::query("SELECT id FROM artists WHERE id = $1")
+            .bind(artist_id)
+            .fetch_optional(&mut *tx)
+            .await?
+            .map(|_| ())
+            .ok_or(CatalogStoreError::InvalidRequest)?;
 
-        let name_changed = canonical_name.is_some()
-            && canonical_name.map_or(false, |n| n != current_canonical_name);
-
-        // Build the dynamic UPDATE with only non-null fields.
-        let mut builder = QueryBuilder::new(
-            "UPDATE artists SET updated_at = CURRENT_TIMESTAMP",
-        );
+        // Build the dynamic UPDATE with only supplied fields.
+        let mut builder = QueryBuilder::new("UPDATE artists SET updated_at = CURRENT_TIMESTAMP");
         builder.push(" ,revision = revision + 1");
 
-        if canonical_name.is_some() {
-            let new_name = canonical_name.unwrap();
+        if let Some(new_name) = patch.canonical_name.as_deref() {
             let computed_normalized = compute_normalized(new_name);
-            // Compute sort from current name when unchanged, else from new name.
-            let computed_sort = if name_changed {
-                compute_sort_key(new_name)
-            } else {
-                compute_sort_key(&current_canonical_name)
-            };
+            // Compute sort from the new name; an operator-supplied sort wins.
+            let computed_sort = compute_sort_key(new_name);
             builder.push(" ,canonical_name = ");
             builder.push_bind(new_name);
-            // Use computed values only when the field wasn't explicitly set.
-            let sort_to_set = match sort_name {
+            let sort_to_set = match patch.sort_name.as_deref() {
                 Some(s) => s,
                 None => &computed_sort,
             };
@@ -1096,23 +1125,26 @@ impl CatalogStore {
             builder.push_bind(sort_to_set);
             builder.push(" ,normalized_name = ");
             builder.push_bind(computed_normalized);
-        } else if sort_name.is_some() {
+        } else if let Some(sort_name) = patch.sort_name.as_deref() {
             builder.push(" ,sort_name = ");
-            builder.push_bind(sort_name.unwrap());
+            builder.push_bind(sort_name);
         }
 
-        if artist_type.is_some() {
+        if let Some(artist_type) = patch.artist_type.as_deref() {
             builder.push(" ,artist_type = ");
-            builder.push_bind(artist_type.unwrap());
+            builder.push_bind(artist_type);
         }
 
         builder.push(" WHERE id = ");
         builder.push_bind(artist_id);
+        builder.push(" RETURNING revision");
 
-        builder
+        let new_revision: i64 = builder
             .build()
-            .execute(&mut *tx)
-            .await?;
+            .fetch_one(&mut *tx)
+            .await?
+            .try_get("revision")
+            .map_err(|_| CatalogStoreError::InvalidRequest)?;
 
         // Insert into catalog_projection_outbox so the search projection refreshes.
         let now = OffsetDateTime::now_utc();
@@ -1120,7 +1152,7 @@ impl CatalogStore {
             "INSERT INTO catalog_projection_outbox (\n                projection_name, entity_type, entity_id, operation,\n                entity_revision, available_at, attempt_count, created_at\n             ) VALUES ('tantivy.catalog','artist',$1,$4,$2,$3,0,$3)",
         )
         .bind(artist_id)
-        .bind(1_i64) // revision placeholder; consumer reads latest.
+        .bind(new_revision)
         .bind(now)
         .bind("upsert")
         .execute(&mut *tx)
@@ -1134,9 +1166,9 @@ impl CatalogStore {
             actor,
             "Artist metadata updated",
             serde_json::json!({
-                "canonical_name": canonical_name,
-                "sort_name": sort_name,
-                "artist_type": artist_type,
+                "canonical_name": patch.canonical_name,
+                "sort_name": patch.sort_name,
+                "artist_type": patch.artist_type,
             }),
             now,
         )
@@ -1147,60 +1179,72 @@ impl CatalogStore {
     }
 
     /// Updates editable Track metadata fields (title, sort_title, display_artist, ordinal,
-    /// duration_ms). All fields are optional — only `Some` values are written.
+    /// duration_ms). All patch fields are optional — only `Some` values are written.
+    /// Records an audit event and bumps the revision.
+    ///
+    /// Returns `CatalogStoreError::InvalidRequest` when a present-but-blank editable
+    /// field, a non-positive ordinal, a negative duration, or an unknown Track id is
+    /// supplied; the surrounding transaction is rolled back before the error is returned.
     pub async fn update_track_metadata(
         &self,
         pool: &PgPool,
         track_id: Uuid,
-        title: Option<&str>,
-        sort_title: Option<&str>,
-        display_artist: Option<&str>,
-        ordinal: Option<i32>,
-        duration_ms: Option<i64>,
+        patch: &TrackMetadataPatch,
         actor: &str,
     ) -> Result<(), CatalogStoreError> {
+        require_non_blank(patch.title.as_deref())?;
+        require_non_blank(patch.sort_title.as_deref())?;
+        require_non_blank(patch.display_artist.as_deref())?;
+        if let Some(ordinal) = patch.ordinal
+            && ordinal <= 0
+        {
+            return Err(CatalogStoreError::InvalidRequest);
+        }
+        if let Some(duration_ms) = patch.duration_ms
+            && duration_ms < 0
+        {
+            return Err(CatalogStoreError::InvalidRequest);
+        }
+
         let mut tx = pool.begin().await?;
 
         // Verify the track exists first.
         sqlx::query("SELECT id FROM tracks WHERE id = $1")
             .bind(track_id)
-            .fetch_one(&mut *tx)
-            .await?;
+            .fetch_optional(&mut *tx)
+            .await?
+            .map(|_| ())
+            .ok_or(CatalogStoreError::InvalidRequest)?;
 
-        // Build the dynamic UPDATE with only non-null fields.
-        let mut builder = QueryBuilder::new(
-            "UPDATE tracks SET updated_at = CURRENT_TIMESTAMP",
-        );
+        // Build the dynamic UPDATE with only supplied fields.
+        let mut builder = QueryBuilder::new("UPDATE tracks SET updated_at = CURRENT_TIMESTAMP");
         builder.push(" ,revision = revision + 1");
 
-        if title.is_some() {
+        if let Some(title) = patch.title.as_deref() {
             builder.push(" ,title = ");
-            builder.push_bind(title.unwrap());
+            builder.push_bind(title);
         }
-        if sort_title.is_some() {
+        if let Some(sort_title) = patch.sort_title.as_deref() {
             builder.push(" ,sort_title = ");
-            builder.push_bind(sort_title.unwrap());
+            builder.push_bind(sort_title);
         }
-        if display_artist.is_some() {
+        if let Some(display_artist) = patch.display_artist.as_deref() {
             builder.push(" ,display_artist = ");
-            builder.push_bind(display_artist.unwrap());
+            builder.push_bind(display_artist);
         }
-        if ordinal.is_some() {
+        if let Some(ordinal) = patch.ordinal {
             builder.push(" ,ordinal = ");
-            builder.push_bind(ordinal.unwrap());
+            builder.push_bind(ordinal);
         }
-        if duration_ms.is_some() {
+        if let Some(duration_ms) = patch.duration_ms {
             builder.push(" ,duration_ms = ");
-            builder.push_bind(duration_ms.unwrap());
+            builder.push_bind(duration_ms);
         }
 
         builder.push(" WHERE id = ");
         builder.push_bind(track_id);
 
-        builder
-            .build()
-            .execute(&mut *tx)
-            .await?;
+        builder.build().execute(&mut *tx).await?;
 
         audit_event(
             &mut tx,
@@ -1210,11 +1254,11 @@ impl CatalogStore {
             actor,
             "Track metadata updated",
             serde_json::json!({
-                "title": title,
-                "sort_title": sort_title,
-                "display_artist": display_artist,
-                "ordinal": ordinal,
-                "duration_ms": duration_ms,
+                "title": patch.title,
+                "sort_title": patch.sort_title,
+                "display_artist": patch.display_artist,
+                "ordinal": patch.ordinal,
+                "duration_ms": patch.duration_ms,
             }),
             OffsetDateTime::now_utc(),
         )
@@ -2311,6 +2355,40 @@ fn compute_sort_key(display: &str) -> String {
 
 fn compute_normalized(value: &str) -> String {
     value.to_lowercase().trim().to_string()
+}
+
+/// Rejects a present-but-blank editable metadata field before it can reach the
+/// database (whose `btrim(title) <> ''` checks would otherwise surface as an
+/// opaque constraint failure).
+fn require_non_blank(field: Option<&str>) -> Result<(), CatalogStoreError> {
+    match field {
+        Some(value) if !value.trim().is_empty() => Ok(()),
+        Some(_) => Err(CatalogStoreError::InvalidRequest),
+        None => Ok(()),
+    }
+}
+
+fn valid_artist_type(field: Option<&str>) -> Result<(), CatalogStoreError> {
+    match field {
+        Some(value) => {
+            const VALID: &[&str] = &[
+                "person",
+                "group",
+                "orchestra",
+                "ensemble",
+                "choir",
+                "character",
+                "other",
+                "unknown",
+            ];
+            if VALID.contains(&value) {
+                Ok(())
+            } else {
+                Err(CatalogStoreError::InvalidRequest)
+            }
+        }
+        None => Ok(()),
+    }
 }
 
 fn candidate_rows(

@@ -213,7 +213,12 @@ Lock the "better" design choices so each build block has an accepted design. Eac
 
 - **RELEASE-002 (P0):** fix the broken SPA save path — register the `/metadata` route server-side
   *or* fix `admin-ui/src/api/admin.ts:783,790,797` + the field-name mismatches; add the zero-test
-  server + store integration tests and an admin-ui e2e save test.
+  server + store integration tests and an admin-ui e2e save test. **Done (2026-08-23):** server
+  registers `PUT /api/admin/v1/catalog/{entity}/{id}/metadata`; phantom `country`/`release_type`
+  fields removed from the contract; patch-struct API with validation (`InvalidRequest`→400);
+  server API test (`metadata_update_routes_auth_success_and_errors`) and 4 store integration
+  tests (`catalog_metadata.rs`) added. Remaining: UI field-name alignment + tag-rewriting
+  transforms.
 - **Close the 9 `IMPLEMENTED — UNPROVEN` rows** — evidence, not code: differential captures vs the
   frozen oracle (`python3 scripts/legacy_oracle.py capture`), e2e/golden tests, and R4
   production-integration legs (AUTH-001 real Google OIDC, OPS-001 per-surface rate-limit,

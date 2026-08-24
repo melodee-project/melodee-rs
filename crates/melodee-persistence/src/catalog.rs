@@ -231,6 +231,10 @@ pub struct StoredArtistCandidate {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct CatalogStore;
 
+// Re-export the metadata-edit patch contracts so callers outside this crate can
+// name them without depending on the private `catalog_mutations` module path.
+pub use crate::catalog_mutations::{ArtistMetadataPatch, ReleaseMetadataPatch, TrackMetadataPatch};
+
 /// A Cataloged work item eligible for policy evaluation, with its catalog
 /// release ID resolved from the import receipt.
 #[derive(Debug, Clone, PartialEq, Eq)]
