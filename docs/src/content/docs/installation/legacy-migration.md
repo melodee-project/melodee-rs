@@ -1,6 +1,6 @@
 ---
 title: Legacy C# migration tooling
-description: Inventory, plan, baseline, import, verify, delta, freeze, and status commands for migrating a frozen C# Melodee database to the Rust server.
+description: Inventory, plan, baseline, import, verify, delta, freeze, validate, and status commands for migrating a frozen C# Melodee database to the Rust server.
 sidebar:
   order: 6
 ---
@@ -185,6 +185,31 @@ melodee-cli legacy verify --run <uuid> \
   --canonical-root /srv/melodee/canonical
 ```
 
+### `legacy validate`
+
+Validates adopted media for a run under an existing absolute canonical root. It is read-only by
+default and emits stable JSON counts plus path digests, never private paths:
+
+```bash
+melodee-cli legacy validate --run <uuid> \
+  --canonical-root /srv/melodee/canonical --json
+```
+
+If a regular file is present but target `byte_size` metadata is stale, review the deterministic
+plan and apply only that derived metadata repair explicitly:
+
+```bash
+melodee-cli legacy validate --run <uuid> \
+  --canonical-root /srv/melodee/canonical \
+  --fix --confirm --actor migration-operator --json
+```
+
+Repair is allowed only before cutover on a `delta-ready` run. A no-follow descriptor observation
+updates target `media_assets.byte_size` only when the planned path and old value still match. It
+never writes media, changes paths/hashes/identities/relationships, deletes files, or modifies the
+C# source. Missing, unsafe, changed, or inaccessible files remain durable issues. Run the
+read-only command first; `--fix` always requires `--confirm`.
+
 ### `legacy delta`
 
 Applies an incremental delta for a verified run: imports new source rows, applies authorized
@@ -223,6 +248,11 @@ melodee-cli legacy freeze --run <uuid> \
 The acknowledgement is an operator decision, not a scripted default. Keep the recorded note with
 the rehearsal report and perform traffic switching only through the approved deployment runbook.
 
+`freeze` does not freeze the C# server itself. The operator must obtain and record the external
+write-freeze approval before supplying `--acknowledge-cutover`. The marker check proves that the
+approved source snapshot remained still during the final delta; it does not authorize traffic or
+release publication.
+
 ## Inspect and resolve issues
 
 Every anomaly the tooling encounters — unrepresentable rows, conflicts, deletions, media
@@ -244,11 +274,15 @@ mapping, and resolved rows import normally.
 - Never writes to the source database or source media.
 - Never moves, re-encodes, re-hashes, fingerprints, or deletes canonical media.
 - Never deletes target rows to reconcile source deletions (deletions are reported issues).
+- Never repairs target media metadata without an explicit, reviewed `legacy validate --fix
+  --confirm` plan.
 - Never migrates retired Party/Jukebox behavior as an enabled feature, and never copies the
   legacy search index as authority.
 
 ## See also
 
 - [Database setup and backup](./database/)
+- [Container deployment and release artifacts](./docker/)
 - [Storage roles: inbound, staging, work, canonical](./storage/)
 - [Upgrading a Rust deployment](./upgrading/)
+- [Operational troubleshooting](../troubleshooting/)

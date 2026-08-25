@@ -25,6 +25,10 @@ updates unless you intentionally accept each new stable release automatically. P
 5. Keep the named volumes for PostgreSQL, canonical media, work, and search. Do not recreate or
    delete volumes as part of an image upgrade.
 
+Keep the pre-upgrade image digest, PostgreSQL dump, configuration/secret-store version
+identifiers, and persistent-volume inventory for the full acceptance window. A backup that has
+not passed `pg_restore --list` and an isolated restore check is not a rollback asset.
+
 ## Upgrade
 
 Set `MELODEE_IMAGE_TAG=X.Y.Z` in `.env`, then pull and recreate only the application service:
@@ -44,6 +48,11 @@ curl --fail http://127.0.0.1:8080/readyz
 docker compose exec melodee melodee-cli config validate
 ```
 
+Also run `docker compose exec melodee melodee-cli doctor --deep`, verify search status, and run a
+representative public-ID lookup, artwork request, range stream, and client journey. `/healthz`
+proves process liveness; `/readyz` proves PostgreSQL and the configured search generation are
+usable.
+
 ## Rollback
 
 An image rollback and a database-schema rollback are different operations. The current migrations
@@ -56,6 +65,10 @@ into a new or emptied database instance, point the deployment at that recovered 
 previous image tag, and validate migration history, catalog counts, `/readyz`, and representative
 client playback before returning traffic. Keep the failed database and original backup until the
 restored service is verified.
+
+For a C# to Rust migration, use the [cutover and rollback runbook](https://github.com/melodee-project/melodee-rs/blob/main/design/runbooks/CUTOVER-AND-ROLLBACK.md).
+The Rust `rollback` commands generate topology-bound instructions and record durable audit
+evidence; they do not switch traffic, restore C# state, or delete the failed Rust target.
 
 ## Legacy C# migration
 

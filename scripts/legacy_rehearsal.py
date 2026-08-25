@@ -713,8 +713,20 @@ def cli_plain(target: str, args: list[str], extra_env: dict[str, str] | None = N
     return stdout
 
 
+def cli_top(target: str, args: list[str], extra_env: dict[str, str] | None = None) -> str:
+    """Run a top-level CLI command against the disposable target database."""
+    env = dict(os.environ)
+    env["MELODEE__DATABASE__URL"] = db_url(target)
+    if extra_env:
+        env.update(extra_env)
+    stdout, metrics = _run_cli_process([str(CLI), *args], env)
+    cli_top.last_metrics = metrics
+    return stdout
+
+
 cli.last_metrics = {}
 cli_plain.last_metrics = {}
+cli_top.last_metrics = {}
 
 
 def seed_source(songs: int) -> dict:
@@ -840,7 +852,9 @@ def make_canonical_root(workdir: Path, songs: int) -> Path:
     for track in range(1, sample + 1):
         artist = ((track - 1) % max(50, songs // 24)) + 1
         release = ((track - 1) % max(100, songs // 12)) + 1
-        path = root / "library" / f"artist{artist}" / f"release{release}" / f"track{track}.flac"
+        # The legacy importer composes Artist.Directory and Album.Directory;
+        # the synthetic Album.Directory already begins with artistN.
+        path = root / "library" / f"artist{artist}" / f"artist{artist}" / f"release{release}" / f"track{track}.flac"
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("wb") as handle:
             handle.truncate(1_000_000)
@@ -997,6 +1011,17 @@ def drill(
         evidence["steps"]["create_target"]["disk"] = filesystem_metrics(workdir)
 
         step = time.monotonic()
+        inventory = json.loads(
+            cli(TARGET_DB, ["inventory", "--source-db", source_database, "--json"])
+        )
+        evidence["steps"]["inventory"] = {
+            "wall_s": round(time.monotonic() - step, 2),
+            "table_count": inventory["schema"]["table_count"],
+            "media_file_count": inventory["media"]["file_count"],
+            "media_total_bytes": inventory["media"]["total_bytes"],
+        }
+
+        step = time.monotonic()
         plan_args = ["plan", "--source-db", source_database]
         for path_map in path_maps:
             plan_args.extend(["--library-path-map", path_map])
@@ -1010,6 +1035,11 @@ def drill(
         )
         baseline = validate_baseline_artifact(json.loads(out))
         evidence["baseline"] = baseline
+        # `legacy inventory` deliberately contains only inventory facts. The
+        # source session boundary is emitted by `legacy baseline`; retain the
+        # validated fact alongside the inventory step without duplicating an
+        # unsupported inventory field.
+        evidence["steps"]["inventory"]["source_read_only"] = baseline["source_read_only"]
 
         # --- R4.2: import + verify --------------------------------------
         step = time.monotonic()
@@ -1040,6 +1070,36 @@ def drill(
         }
         assert verify_report["total_mismatch_gaps"] == 0, verify_report
         assert verify_report["duplicate_public_ids"] == 0, verify_report
+
+        # The validator is intentionally exercised against the same bounded
+        # canonical tree. Synthetic drills expect the remaining generated
+        # files to be reported missing; snapshot drills preserve those counts
+        # without ever mutating the operator-owned tree.
+        step = time.monotonic()
+        validation = json.loads(
+            cli_top(
+                TARGET_DB,
+                [
+                    "legacy",
+                    "validate",
+                    "--run",
+                    run_id,
+                    "--canonical-root",
+                    str(canonical),
+                    "--json",
+                ],
+            )
+        )
+        evidence["steps"]["media_validate"] = {
+            "wall_s": round(time.monotonic() - step, 2),
+            "checked": validation["checked"],
+            "valid": validation["valid"],
+            "missing": validation["missing"],
+            "size_mismatch": validation["size_mismatch"],
+            "unsafe": validation["unsafe"],
+            "repair_rows": len(validation["repair_plan"]),
+            "read_only": True,
+        }
 
         target_counts = {
             "artists": int(psql("SELECT COUNT(*) FROM artists", TARGET_DB)),
@@ -1277,6 +1337,28 @@ def drill(
         else:
             evidence["steps"]["freeze"]["pre_marker_write_injected"] = False
 
+        if not snapshot_mode:
+            # This records the synthetic rollback audit path only. It is not
+            # evidence that external traffic moved in either direction.
+            cli_top(
+                TARGET_DB,
+                [
+                    "rollback",
+                    "record",
+                    "--database-url",
+                    db_url(TARGET_DB),
+                    "--run",
+                    run_id,
+                    "--legacy-target",
+                    "synthetic-legacy",
+                    "--by",
+                    "phase11-rehearsal",
+                    "--note",
+                    "synthetic target failure; traffic-return procedure exercised",
+                    "--confirm",
+                ],
+            )
+
         # --- R4.8: rollback drill ----------------------------------------
         # Inject a cutover-blocking failure (target made unavailable), then
         # roll back: legacy source must be byte-identical and authoritative.
@@ -1300,6 +1382,8 @@ def drill(
             "decision_window_seconds": 300,
             "forensic_target": TARGET_DB,
             "source_mutated_by_harness": False,
+            "audit_recorded": not snapshot_mode,
+            "audit_scope": "synthetic durable audit only" if not snapshot_mode else "external operator leg not executed",
         }
         canonical_after = fingerprint(canonical)
         evidence["steps"]["rollback"]["canonical_tree_unchanged"] = (

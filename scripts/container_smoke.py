@@ -126,7 +126,12 @@ def fetch_when_ready(url: str, attempts: int = 30) -> bytes:
     for _ in range(attempts):
         try:
             return fetch(url)
-        except (urllib.error.URLError, TimeoutError):
+        except (
+            urllib.error.URLError,
+            TimeoutError,
+            ConnectionResetError,
+            ConnectionRefusedError,
+        ):
             time.sleep(1)
     raise SmokeError(f"service did not become ready at {url}")
 
@@ -137,9 +142,11 @@ class SmokeHarness:
         self.network = f"melodee-release-smoke-{config.run_id}"
         self.database = f"{self.network}-postgres"
         self.server = f"{self.network}-server"
+        self.volume = f"{self.network}-postgres-data"
         self.network_created = False
         self.database_created = False
         self.server_created = False
+        self.volume_created = False
 
     def validate_names_and_environment(self) -> None:
         if any(len(name) > 63 for name in (self.network, self.database, self.server)):
@@ -152,6 +159,9 @@ class SmokeHarness:
         networks = set(captured(["docker", "network", "ls", "--format", "{{.Name}}"]).splitlines())
         if self.network in networks:
             raise SmokeError(f"refusing to reuse existing Docker network: {self.network}")
+        volumes = set(captured(["docker", "volume", "ls", "--format", "{{.Name}}"]).splitlines())
+        if self.volume in volumes:
+            raise SmokeError(f"refusing to reuse existing Docker volume: {self.volume}")
         ensure_port_available(self.config.port)
 
     def cleanup(self) -> None:
@@ -161,6 +171,8 @@ class SmokeHarness:
             run(["docker", "rm", "-f", self.database], quiet=True, check=False)
         if self.network_created:
             run(["docker", "network", "rm", self.network], quiet=True, check=False)
+        if self.volume_created:
+            run(["docker", "volume", "rm", self.volume], quiet=True, check=False)
 
     def wait_for_database(self) -> None:
         command = [
@@ -199,9 +211,7 @@ class SmokeHarness:
         run(["docker", "image", "inspect", self.config.image], quiet=True)
         return image_id
 
-    def start_database(self) -> None:
-        run(["docker", "network", "create", self.network], quiet=True)
-        self.network_created = True
+    def start_database_container(self) -> None:
         run(
             [
                 "docker",
@@ -211,6 +221,8 @@ class SmokeHarness:
                 self.database,
                 "--network",
                 self.network,
+                "-v",
+                f"{self.volume}:/var/lib/postgresql",
                 "-e",
                 "POSTGRES_USER=melodee",
                 "-e",
@@ -223,6 +235,58 @@ class SmokeHarness:
         )
         self.database_created = True
         self.wait_for_database()
+
+    def start_database(self) -> None:
+        run(["docker", "network", "create", self.network], quiet=True)
+        self.network_created = True
+        run(["docker", "volume", "create", self.volume], quiet=True)
+        self.volume_created = True
+        self.start_database_container()
+
+    def validate_database_persistence(self) -> None:
+        marker = f"{self.config.run_id}-persisted"
+        sql = (
+            "CREATE TABLE IF NOT EXISTS release_smoke_persistence (id integer PRIMARY KEY, value text NOT NULL); "
+            f"INSERT INTO release_smoke_persistence (id, value) VALUES (1, '{marker}') "
+            "ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value;"
+        )
+        run(
+            [
+                "docker",
+                "exec",
+                self.database,
+                "psql",
+                "-U",
+                "melodee",
+                "-d",
+                "melodee",
+                "-v",
+                "ON_ERROR_STOP=1",
+                "-c",
+                sql,
+            ],
+            quiet=True,
+        )
+        run(["docker", "rm", "-f", self.database], quiet=True)
+        self.database_created = False
+        self.start_database_container()
+        observed = captured(
+            [
+                "docker",
+                "exec",
+                self.database,
+                "psql",
+                "-At",
+                "-U",
+                "melodee",
+                "-d",
+                "melodee",
+                "-c",
+                "SELECT value FROM release_smoke_persistence WHERE id = 1",
+            ]
+        )
+        if observed != marker:
+            raise SmokeError("PostgreSQL persistent-volume restart lost the smoke marker")
 
     def validate_runtime_tools(self) -> None:
         user_id = captured(
@@ -320,6 +384,7 @@ class SmokeHarness:
             self.start_database()
             self.validate_runtime_tools()
             self.start_and_validate_server()
+            self.validate_database_persistence()
         finally:
             self.cleanup()
         print(

@@ -130,6 +130,22 @@ pub fn run_legacy_failing(target_url: &str, args: &[String]) -> String {
     String::from_utf8(output.stderr).expect("stderr is UTF-8")
 }
 
+/// Runs a top-level CLI command successfully; used for rollback commands
+/// which are intentionally outside the `legacy` subcommand.
+pub fn run_cli(database_url: &str, args: &[String]) -> String {
+    let output = Command::new(env!("CARGO_BIN_EXE_melodee-cli"))
+        .args(args)
+        .env(melodee_persistence::ENV_DATABASE_URL, database_url)
+        .output()
+        .expect("spawn melodee cli");
+    assert!(
+        output.status.success(),
+        "args {args:?} failed; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout).expect("stdout is UTF-8")
+}
+
 pub fn source_args(source_url: &str) -> Vec<String> {
     vec!["--source-db".to_string(), source_url.to_string()]
 }

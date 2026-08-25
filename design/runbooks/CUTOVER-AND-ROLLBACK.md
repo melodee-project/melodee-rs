@@ -1,156 +1,242 @@
-# Cutover and Rollback Procedures (R6: Operational Closure)
+# Cutover and Rollback Runbook
 
-## Overview
+This is the operator procedure for moving an existing C# Melodee installation to the Rust
+server and returning traffic to C# if acceptance fails. It explicitly separates migration
+proof from infrastructure actions that require an operator and approver.
 
-This runbook documents the procedures for safely transitioning from the legacy C# Melodee
-server to the Rust rewrite (v1.0), and reverting if necessary. These procedures are part of
-**Phase R6 — Operational Closure**.
+The migration source and its media are read-only. The Rust target is retained for forensic
+inspection after a failed cutover. No command here deletes a source, target, backup, snapshot,
+or rollback asset.
 
-All tooling referenced here lives in `melodee-cli`. The commands never modify legacy C# code,
-infrastructure, or external service configuration — they produce audit evidence and documented
-steps the operator executes manually.
+References: [ADR-0148](../adr/ADR-0148-legacy-migration-contract.md),
+[ADR-0149](../adr/ADR-0149-phase-11-rehearsal-freeze-cutover-and-rollback-procedures.md), and the
+[public migration guide](../../docs/src/content/docs/installation/legacy-migration.md).
 
-Reference: [ADR-0148](../adr/ADR-0148-legacy-migration-contract.md) section D (migration lifecycle).
+## Roles and approval gates
 
-## Prerequisites
+Name these roles in the change record:
 
-Before initiating any cutover:
+- **Migration operator** — runs inventory, import, verification, backup, and diagnostics.
+- **Data owner** — confirms the source snapshot, path mappings, domains, and issue dispositions.
+- **Release owner** — confirms the Rust image, Cargo/CLI version, digest, and release evidence.
+- **Client/compatibility owner** — runs native-v1, OpenSubsonic, Jellyfin, and MeloAmp checks.
+- **Approver** — authorizes production access, write freeze, final delta, traffic change,
+  rollback activation, and rollback-asset cleanup.
+
+Production database/media access, production-sized rehearsal, live provider/OIDC/registry use,
+C# write freeze, final production delta, traffic switching, production rollback, release/GHCR
+publication, and deletion of temporary or rollback assets each require a separate approval.
+
+## Variables and safety rules
+
+Set these only in the protected operator environment, never in committed evidence or shell
+history:
+
+```text
+LEGACY_SOURCE_DATABASE_URL=<approved read-only snapshot URL>
+RUST_DATABASE_URL=<approved Rust target URL>
+CANONICAL_ROOT=<approved absolute mounted media root>
+PATH_MAP=/legacy/library=root-relative-prefix
+RUN_ID=<migration run UUID>
+RUST_TARGET=<exact Rust service/container identifier>
+LEGACY_TARGET=<exact C# service/container identifier>
+TRAFFIC_TARGET=<exact proxy/load-balancer/DNS control identifier>
+BACKUP_DIR=<approved backup directory>
+MIGRATION_OPERATOR=<stable operator identity>
+```
+
+Before every externally visible or destructive step, verify the exact target, expected impact,
+approval record, and topology. Stop if the target, database identity, snapshot marker, canonical
+root, or backup differs from the change record. Redact URLs, credentials, private paths, hashes,
+tokens, and session keys from saved output.
+
+## 1. Preflight and source baseline
+
+Against the approved isolated snapshot and Rust target, run:
 
 ```bash
-# Verify all subsystems are healthy
-melodee doctor --deep
-
-# Ensure database migrations are current
 melodee migrate
-
-# Verify the catalog import has completed
-melodee catalog status
-
-# Confirm all legacy migration runs are clean
-melodee legacy verify <RUN_ID>
-```
-
-## Phase 1: Pre-Cutover Freeze
-
-### 1.1 Inspect Legacy Migration State
-
-Check that the latest migration run is in a state where freeze is possible:
-
-```bash
-melodee legacy status
-```
-
-Look for a run in `importing`, `verifying`, or `delta-ready` state. The freeze command will
-refuse to proceed if no import has been completed, or if another process holds the run lease.
-
-### 1.2 Execute Freeze
-
-The freeze sequence performs:
-
-1. **Source write-stillness proof** — polls legacy API endpoints every second for 10 seconds,
-   confirming no writes occur. If a write is detected, the freeze fails and the operator must
-   identify the source of the write before retrying.
-2. **Final convergent delta sync** — applies any records changed during the stillness window
-   using the legacy `delta` command (idempotent: new rows imported, changed rows updated, deletions
-   reported as issues but never destructive).
-3. **Post-delta verification gate** — re-runs full domain parity checks. If mismatches are found,
-   freeze fails with detailed gap reporting.
-4. **Durable freeze evidence recording** — stores the freeze timestamp, stillness window duration,
-   and delta results in `legacy_migration.runs.notes.freeze`.
-
-```bash
-melodee legacy freeze <RUN_ID>
-```
-
-This command prompts for operator acknowledgement before proceeding. It exits non-zero if any step
-fails.
-
-### 1.3 Verify Freeze Evidence
-
-After a successful freeze:
-
-```bash
-melodee legacy status
-# The run state should now be "cutover-ready"
-```
-
-## Phase 2: Cutover Execution
-
-When ready, the operator executes these infrastructure steps (documented by the rollback runbook):
-
-1. Stop accepting writes on the legacy system (if not already done via write-stillness freeze)
-2. Switch reverse proxy or load balancer routing to v1.0 Rust server
-3. Verify client applications can authenticate and browse the catalog
-4. Monitor health endpoints for anomalies
-
-```bash
-# During cutover, verify Rust server health
 melodee doctor --deep
-curl http://localhost:8080/healthz  # liveness
-curl http://localhost:8080/readyz   # readiness (PostgreSQL + search)
-curl http://localhost:8080/api/admin/v1/system/health  # full diagnostics
+melodee legacy inventory --source-db "$LEGACY_SOURCE_DATABASE_URL" --json > inventory.json
+melodee legacy plan --source-db "$LEGACY_SOURCE_DATABASE_URL" \
+  --library-path-map "$PATH_MAP" --json > plan.json
+melodee legacy baseline --source-db "$LEGACY_SOURCE_DATABASE_URL" --json > baseline.json
 ```
 
-## Phase 3: Rollback Procedure
-
-If critical issues are discovered during v1.0 operation, follow these steps in order:
-
-### 3.1 Inspect Current State
+Confirm the schema fingerprint, source identity, snapshot marker, all persistent domains, path
+mappings, and issue dispositions with the data owner. An unexpected fingerprint or identity fails
+closed. Back up and validate the source snapshot before creating or changing a Rust target:
 
 ```bash
-melodee rollback status
+mkdir -p -- "$BACKUP_DIR"
+pg_dump --dbname="$LEGACY_SOURCE_DATABASE_URL" --format=custom \
+  --file="$BACKUP_DIR/legacy-source.dump"
+pg_restore --list "$BACKUP_DIR/legacy-source.dump" > "$BACKUP_DIR/legacy-source.list"
 ```
 
-This command reads the latest migration run state and reports whether PostgreSQL is reachable,
-whether migrations are current, the latest cutover-ready/complete/failed/cancelled run ID, and
-whether freeze evidence exists.
+A failed or incomplete backup blocks cutover. The source remains read-only.
 
-### 3.2 Generate Rollback Runbook
+## 2. Initial import and verification
+
+Create the run from the plan, or resume the named run after an interruption:
 
 ```bash
-melodee rollback runbook --confirm > rollback-runbook.json
+melodee legacy import --source-db "$LEGACY_SOURCE_DATABASE_URL" \
+  --library-path-map "$PATH_MAP" --canonical-root "$CANONICAL_ROOT" \
+  --batch-size 500
+melodee legacy status --run "$RUN_ID" --json
+melodee legacy verify --run "$RUN_ID" --source-db "$LEGACY_SOURCE_DATABASE_URL" \
+  --canonical-root "$CANONICAL_ROOT" --json > verify-initial.json
 ```
 
-This produces a machine-readable JSON document containing step-by-step instructions to revert
-traffic to the legacy system, prerequisite verification checks, and audit evidence recording steps.
+If the process stops, inspect the lease/checkpoint state and resume with
+`legacy import --run "$RUN_ID"` using the same source identity, path map, and canonical root.
+Never start a second run to hide an unresolved issue. Review every durable issue, including
+unsupported credentials, secret reseal failures, media mismatches, exclusions, and
+unrepresentable fields.
 
-### 3.3 Execute Rollback Steps
+The media validator is read-only by default and emits path digests, not private paths:
 
-1. **Verify prerequisites** — Ensure PostgreSQL is reachable and migrations are current (the runbook validates these).
-2. **Stop the Melodee v1.0 server** — Send SIGTERM to melodee-server or use `docker compose stop melodee`. Verify the process has exited before proceeding. The server's graceful shutdown handler will wait for in-flight requests to complete (bounded by the configured timeout).
-3. **Revert reverse proxy routing** — Update nginx or equivalent configuration to route all traffic back to the legacy C# server (typically `localhost:80`). Reload without dropping active connections.
-4. **Verify legacy responsiveness** — Test native API and OpenSubsonic endpoints on the legacy system. Verify a known release loads correctly in a client application.
-5. **Record audit evidence** — Update the migration run state to `rollback_executed` and save the generated runbook as forensic evidence alongside other migration artifacts.
+```bash
+melodee legacy validate --run "$RUN_ID" --canonical-root "$CANONICAL_ROOT" --json \
+  > media-validation.json
+```
 
-## Design Decisions
+Only a `delta-ready` run may receive the narrow derived-metadata repair, after reviewing the
+deterministic plan:
 
-### Why no destructive database operations during rollback?
+```bash
+melodee legacy validate --run "$RUN_ID" --canonical-root "$CANONICAL_ROOT" \
+  --fix --confirm --actor "$MIGRATION_OPERATOR" --json > media-repair.json
+```
 
-The rollback orchestrator never attempts to roll back individual database migrations or delete
-imported catalog data:
+This changes target `media_assets.byte_size` only when a no-follow regular-file observation still
+matches the plan. It never changes media bytes, paths, hashes, identities, relationships, or
+source state and never deletes uncertain media.
 
-1. **Data integrity risk** — partial rollback could leave the database in an inconsistent state
-   (e.g., Release records with orphaned media assets).
-2. **Legacy compatibility** — the legacy C# server already owns this data; deleting it would be
-   unnecessary and potentially destructive.
-3. **Simplicity** — rolling back traffic routing is sufficient to restore service; the Rust-side
-   data simply coexists with the legacy system until manual reconciliation occurs later.
+Rebuild search from PostgreSQL, then verify again:
 
-### Why is freeze evidence required for rollback?
+```bash
+melodee search rebuild
+melodee legacy verify --run "$RUN_ID" --source-db "$LEGACY_SOURCE_DATABASE_URL" \
+  --canonical-root "$CANONICAL_ROOT" --json > verify-search.json
+```
 
-Freeze evidence confirms that the system has completed at least one cutover sequence (freeze,
-delta sync, verification). Without it, the rollback runbook is still generated but warns the
-operator that no meaningful cutover has been recorded — the rollback would simply be "never cut
-over, just start the legacy server."
+## 3. Rust backup and isolated restore
 
-### How does rollback differ from legacy migration?
+Before a final delta or traffic decision, back up the exact Rust target and record protected
+configuration/secret-store version identifiers:
 
-- **Migration** (`melodee legacy import/verify/delta`) moves data FROM legacy TO Rust.
-- **Rollback** (`melodee rollback status/runbook`) only documents how to revert traffic routing;
-  it does not move data back or delete imported records.
+```bash
+pg_dump --dbname="$RUST_DATABASE_URL" --format=custom \
+  --file="$BACKUP_DIR/rust-target-${RUN_ID}.dump"
+pg_restore --list "$BACKUP_DIR/rust-target-${RUN_ID}.dump" \
+  > "$BACKUP_DIR/rust-target-${RUN_ID}.list"
+```
 
-## References
+Restore into a separately named isolated database and verify catalog counts, users, settings,
+public IDs, media references, `/healthz`, `/readyz`, search rebuild, compatibility probes, and a
+representative client stream. Do not point production traffic at the restore database.
 
-- [ADR-0148: Legacy Migration Contract](../adr/ADR-0148-legacy-migration-contract.md) section D
-- [Implementation Plan](../../IMPLEMENTATION.md) — Phase R6 section
-- `apps/melodee-cli/src/legacy/` — freeze, delta, verify implementations
+Tantivy is not backup authority. Restore PostgreSQL first and rebuild Tantivy from restored
+PostgreSQL state. A failed backup, restore, search rebuild, or compatibility probe blocks cutover.
+
+## 4. Delta and freeze gate
+
+Run the ordinary delta until the run is clean and `delta-ready`:
+
+```bash
+melodee legacy delta --run "$RUN_ID" --source-db "$LEGACY_SOURCE_DATABASE_URL" \
+  --library-path-map "$PATH_MAP" --canonical-root "$CANONICAL_ROOT"
+melodee legacy verify --run "$RUN_ID" --source-db "$LEGACY_SOURCE_DATABASE_URL" \
+  --canonical-root "$CANONICAL_ROOT" --json
+```
+
+The approver now authorizes the C# write freeze and records the exact C# target, freeze start,
+operator, and expected impact. After that external freeze is confirmed, run:
+
+```bash
+melodee legacy freeze --run "$RUN_ID" --source-db "$LEGACY_SOURCE_DATABASE_URL" \
+  --library-path-map "$PATH_MAP" --canonical-root "$CANONICAL_ROOT" \
+  --json --acknowledge-cutover \
+  --note "approved freeze change <ID>; C# writes frozen by <operator>"
+```
+
+`freeze` performs the final delta, verifies marker stillness and parity, records freeze evidence,
+and enters `cutover-ready` only with `--acknowledge-cutover` and `--note`. It does not freeze C#
+writes and does not switch traffic. A changed source marker, failed verification, missing backup,
+or unresolved release blocker leaves the run non-ready.
+
+## 5. Cutover acceptance and traffic switch
+
+The release and compatibility owners verify the exact image digest, health/readiness, diagnostics,
+search status, native-v1/OpenSubsonic/Jellyfin differential results, and available MeloAmp/client
+journeys. Record approved differences and unexpected differences separately.
+
+The approver explicitly authorizes the traffic change. The operator changes only the named
+`TRAFFIC_TARGET` to the named `RUST_TARGET`, records the control-plane audit event, and verifies:
+
+```bash
+melodee doctor --deep
+melodee rollback status --database-url "$RUST_DATABASE_URL"
+# Probe /healthz, /readyz, native-v1, OpenSubsonic, Jellyfin, ranges, artwork,
+# search, and the approved client journeys at the exact Rust endpoint.
+```
+
+Monitor errors, latency, database growth, migration issues, search status, job/provider failures,
+and client reports throughout the rollback decision window. Do not mark the run complete or delete
+source, backups, restored databases, or rollback assets before acceptance signoff.
+
+## 6. Rollback decision and execution
+
+Rollback criteria include authentication or public-ID loss, catalog/relationship corruption,
+unsafe media behavior, failed readiness, sustained compatibility/client failure, data loss, or an
+unresolved security/operational fault inside the decision window. The approver authorizes rollback
+and records the objective trigger.
+
+Generate the topology-bound procedure; generation changes no state:
+
+```bash
+melodee rollback status --database-url "$RUST_DATABASE_URL"
+melodee rollback runbook --database-url "$RUST_DATABASE_URL" \
+  --rust-target "$RUST_TARGET" --legacy-target "$LEGACY_TARGET" \
+  --traffic-target "$TRAFFIC_TARGET" --confirm > rollback-runbook.json
+```
+
+Execute the generated steps through the reviewed deployment control plane:
+
+1. Confirm and stop the exact Rust target gracefully; retain it for forensics.
+2. Change the exact `TRAFFIC_TARGET` back to the exact `LEGACY_TARGET`; record the audit event.
+3. Verify C# health, native-v1, OpenSubsonic, Jellyfin, public-ID lookup, and a known client
+   journey before accepting writes.
+4. After traffic is confirmed on C#, append the durable rollback record to the still-
+   `cutover-ready` Rust run:
+
+   ```bash
+   melodee rollback record --database-url "$RUST_DATABASE_URL" --run "$RUN_ID" \
+     --legacy-target "$LEGACY_TARGET" --by "$MIGRATION_OPERATOR" \
+     --note "<approved objective rollback trigger>" --confirm
+   ```
+
+`rollback record` requires `cutover-ready`, records the exact target/operator/reason as a durable
+redacted issue and run note, and never changes migration state or deletes target data. It must not
+be used to claim production rollback when the external traffic switch did not occur.
+
+## 7. Acceptance, retention, and cleanup
+
+The data, release, and compatibility owners plus the approver sign the acceptance record with the
+run ID, source marker, target/image digest, backup validation, verification, client results,
+monitoring window, and approved differences. Retain the C# source/snapshot, Rust target, backups,
+persistent-volume backups, restored test database, search evidence, and rollback runbook until
+signoff plus the documented retention period.
+
+Cleanup is a separate approved destructive action. Before cleanup, verify signed acceptance,
+retention expiry, backup readability, and that no incident or rollback decision remains. Name each
+exact object to remove; topology drift fails closed.
+
+## What this runbook does not claim
+
+Synthetic and isolated rehearsal tooling and local release validation do not prove production-sized
+migration, physical-client acceptance, live provider behavior, traffic cutover, production
+rollback, or release publication. Any unexecuted external leg remains a release blocker or an
+explicitly approved release disposition.

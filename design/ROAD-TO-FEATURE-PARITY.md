@@ -61,6 +61,25 @@ public-contract change.
 No listener-facing `web-ui/` application is in this scope. MeloAmp remains the listener product
 under ADR-0161.
 
+## Canonical Phase 11 current assessment (2026-08-25)
+
+The current Phase 11 plan and evidence are [PHASE-11-PLAN.md](agents/PHASE-11-PLAN.md) and
+[PHASE-11-REPORT.md](evidence/phase-11/PHASE-11-REPORT.md). Safe local closure now includes a
+preview-first media validation/repair command, topology-bound rollback orchestration and durable
+rollback audit records, and a reproducible 12,000-Track synthetic migration drill with source
+read-only verification, public-ID/relationship checks, search rebuild, backup/restore, freeze,
+and retained failed-target evidence. A current local amd64 production image passed its
+PostgreSQL-backed non-root smoke, including FFmpeg, ffprobe, fpcalc, the CLI, and Admin UI assets.
+
+The migration and packaging rows remain `In progress` for release readiness: no production or
+private snapshot/media access, production-sized rehearsal, C# write freeze, final delta, traffic
+switch, production rollback, live provider/OIDC validation, current candidate SBOM/vulnerability
+scan, arm64 build execution, provenance attestation, registry publication, or rollback-asset
+cleanup was executed. Existing differential and real-client evidence remains valid for its stated
+fixtures and clients but does not substitute for migrated-production acceptance. Historical table
+notes saying Phase 11 was unstarted are superseded by this dated addendum; historical reports are
+not rewritten.
+
 ADR-0161 records `WEBUI-001` as `DIFFERENT — APPROVED` with MeloAmp as the replacement listener
 surface. The duplicate server listener SPA is removed from the active backlog; historical audit
 rows below remain unchanged and are interpreted under the superseding ADR.

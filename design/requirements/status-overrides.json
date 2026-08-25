@@ -2080,14 +2080,17 @@
       "apps/melodee-cli/src/legacy/freeze.rs and import.rs (acknowledged freeze, final delta, cutover-ready state, and source-read-only migration contract)",
       "scripts/legacy_rehearsal.py (isolated backup/restore, freeze, failed-target retention, and rollback drill)",
       "design/evidence/r4/README.md and design/evidence/r4/rehearsal-drill-12000.json (production-shaped local rollback evidence)",
-      "design/adr/ADR-0149-phase-11-rehearsal-freeze-cutover-and-rollback-procedures.md (accepted operator procedure)"
+      "design/adr/ADR-0149-phase-11-rehearsal-freeze-cutover-and-rollback-procedures.md (accepted operator procedure)",
+      "apps/melodee-cli/src/main.rs (topology-bound rollback runbook plus explicit durable rollback audit record)",
+      "apps/melodee-cli/src/legacy/validate.rs (preview-first, confirmation-gated target metadata repair)"
     ],
     "tests": [
       "apps/melodee-cli/tests/legacy_freeze.rs (freeze acknowledgement, source-write abort, and immutable baseline)",
       "apps/melodee-cli/tests/legacy.rs (source read-only, canonical media preservation, and repeatable migration)",
-      "scripts/legacy_rehearsal.py drill --songs 12000 (isolated backup/restore, final delta, freeze, and retained failed target)"
+      "apps/melodee-cli/tests/legacy.rs (read-only media validation, confirmation refusal, and idempotent repair)",
+      "scripts/legacy_rehearsal.py drill --songs 12000 --output design/evidence/phase-11/rehearsal-drill-12000.json (isolated backup/restore, final delta, freeze, cutover-ready state, and retained failed target)"
     ],
-    "note": "Local isolated rollback evidence is complete, but the requirement remains in progress until the production-shaped snapshot, traffic switch, operator rollback, and post-rollback legacy-authority checks pass in R4."
+    "note": "Local isolated rollback evidence is current and source/media mutation is disproven by the rehearsal. The requirement remains in progress until the operator-authorized production snapshot, traffic switch, rollback, and post-rollback legacy-authority checks pass."
   },
   "PRD-OBS-004": {
     "status": "tested",
@@ -2982,9 +2985,10 @@
     ],
     "tests": [
       "local Docker build and PostgreSQL-backed runtime smoke test",
-      ".github/workflows/release-container.yml (native image smoke before publication; multi-platform Buildx publication)"
+      ".github/workflows/release-container.yml (native image smoke before publication; multi-platform Buildx publication)",
+      "scripts/container_smoke.py (current local amd64 image: non-root, media tools, CLI, Admin UI, readiness, and graceful stop)"
     ],
-    "note": "Official release distribution is GHCR OCI only. Stable releases produce X.Y.Z, X.Y, and latest; GitHub prereleases produce their exact tag only. Native source builds remain available but are not official release artifacts."
+    "note": "Official release distribution is GHCR OCI only. Stable releases produce X.Y.Z, X.Y, and latest; GitHub prereleases produce their exact tag only. Native source builds remain available but are not official release artifacts. The current local amd64 image is not a published release; Syft/Trivy are unavailable in this environment, so current candidate scan results are not claimed."
   },
   "PRD-DEPLOY-002": {
     "status": "tested",

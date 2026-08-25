@@ -113,3 +113,21 @@ For container-specific checks, image tags, attestation verification, and persist
 schema fingerprints, durable issue codes, resume after interruption, and media adoption
 validation — see [Legacy C# migration tooling](../installation/legacy-migration/); it is not
 part of a Rust container upgrade.
+
+## Migration and rollback diagnostics
+
+- `melodee-cli legacy status --run <uuid> --json` reports durable state, checkpoints, lease
+  ownership, and issue totals. A live lease is database evidence, not proof that the owner process
+  is healthy; wait for its bounded lease or investigate before starting another owner.
+- `melodee-cli legacy validate --run <uuid> --canonical-root <absolute-root> --json` is the safe
+  first response to missing, moved, unsafe, or size-mismatched adopted media. Review its
+  path-digest plan before any `--fix --confirm`; repair changes only target byte-size metadata.
+- If verification remains in `verifying`, inspect every durable issue and rerun the same run after
+  correcting the approved source snapshot or path mapping. Do not create a new run to conceal a
+  mismatch.
+- `melodee-cli rollback status --database-url "$MELODEE__DATABASE__URL"` distinguishes database
+  reachability, current migrations, freeze evidence, and a cutover-ready run. The generated
+  rollback runbook is an auditable procedure, not an automatic traffic switch.
+- After an approved external traffic return to C#, run `melodee-cli rollback record ... --confirm`
+  against the still `cutover-ready` run. Retain the Rust target and backups; never mark rollback
+  complete by deleting forensic evidence.

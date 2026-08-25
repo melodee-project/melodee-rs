@@ -23,6 +23,12 @@ FROM rust:${RUST_VERSION}-bookworm AS rust-build
 
 WORKDIR /src
 
+# pg_query's pinned bindgen build requires libclang in the builder. Keep this
+# build-only dependency out of the Debian Trixie runtime image.
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y clang libclang-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY . ./
 RUN cargo build --locked --release -p melodee-server -p melodee-cli
 

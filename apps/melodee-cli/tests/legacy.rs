@@ -11,6 +11,7 @@ use legacy_support::{
     SEED_MIXED, count, create_source, create_target, drop_db, map_arg, run_legacy,
     run_legacy_failing, source_args,
 };
+use melodee_auth::{PasswordHashAlgorithm, hash_password, verify_password};
 
 #[tokio::test]
 async fn inventory_reports_counts_anomalies_and_fingerprint() {
@@ -125,6 +126,17 @@ async fn plan_records_planned_run_without_target_writes() {
 async fn full_import_covers_all_domains_and_preserves_identity() {
     let source = create_source("import", SEED_MIXED).await;
     let target = create_target("import").await;
+    let supported_hash =
+        hash_password(b"phase11-migrated-password").expect("fixture password hash");
+    sqlx::query(
+        r#"UPDATE "Users"
+              SET "PasswordHash" = $1, "PasswordHashAlgorithm" = 'bcrypt'
+            WHERE "UserName" = 'mel'"#,
+    )
+    .bind(supported_hash)
+    .execute(&source.pool)
+    .await
+    .expect("update supported credential fixture");
 
     let mut args = vec!["import".to_string()];
     args.extend(source_args(&source.url));
@@ -250,9 +262,13 @@ async fn full_import_covers_all_domains_and_preserves_identity() {
     assert_eq!(hashes[0].0, "legacy");
     assert!(hashes[0].1.starts_with("$2"), "reset placeholder is bcrypt");
     assert_eq!(hashes[1].0, "mel");
-    assert_eq!(
-        hashes[1].1,
-        "$2a$10$abcdefghijklmnopqrstuuV5k7oW1O0Z1m8H0S1m8H0S1m8H0S1m8H0S"
+    assert!(
+        verify_password(
+            b"phase11-migrated-password",
+            PasswordHashAlgorithm::Bcrypt,
+            &hashes[1].1,
+        )
+        .expect("verify migrated supported credential")
     );
     let (is_admin, is_editor): (bool, bool) =
         sqlx::query_as("SELECT is_admin, is_editor FROM native_users WHERE username = 'mel'")
@@ -540,6 +556,153 @@ UPDATE "Songs" SET "AlbumId" = 2 WHERE "Id" = 4;
     drop_db(&target.name).await;
     std::fs::remove_dir_all(&root).expect("cleanup root");
     std::fs::remove_dir_all(&outside).expect("cleanup outside");
+}
+
+/// `legacy validate` is read-only until explicitly confirmed, emits only
+/// redacted deterministic repair details, and repairs derived target size
+/// metadata from a safely held regular-file observation without touching the
+/// adopted media tree.
+#[tokio::test]
+async fn validate_media_is_preview_first_and_confirmed_repair_is_idempotent() {
+    let canonical = tempfile::tempdir().expect("canonical root");
+    let album_dir = canonical
+        .path()
+        .join("library/Miles Davis/miles/kind of blue");
+    std::fs::create_dir_all(&album_dir).expect("create canonical fixture dir");
+    let first = album_dir.join("01 So What.flac");
+    let second = album_dir.join("02 Freddie Freeloader.flac");
+    std::fs::File::create(&first)
+        .expect("first media")
+        .set_len(1_234_567)
+        .expect("first size");
+    std::fs::File::create(&second)
+        .expect("second media")
+        .set_len(2_345_678)
+        .expect("second size");
+
+    let source = create_source("validate", SEED_MIXED).await;
+    let target = create_target("validate").await;
+    let mut import = vec!["import".to_string()];
+    import.extend(source_args(&source.url));
+    import.extend([
+        "--library-path-map".to_string(),
+        map_arg(),
+        "--canonical-root".to_string(),
+        canonical.path().to_string_lossy().to_string(),
+    ]);
+    run_legacy(&target.url, &import);
+
+    let run_id: String = sqlx::query_scalar("SELECT id::text FROM legacy_migration.runs LIMIT 1")
+        .fetch_one(&target.pool)
+        .await
+        .expect("run id");
+    let mut verify = vec![
+        "verify".to_string(),
+        "--run".to_string(),
+        run_id.clone(),
+        "--json".to_string(),
+    ];
+    verify.extend(source_args(&source.url));
+    verify.push("--canonical-root".to_string());
+    verify.push(canonical.path().to_string_lossy().to_string());
+    run_legacy(&target.url, &verify);
+
+    let mut validate = vec![
+        "validate".to_string(),
+        "--run".to_string(),
+        run_id.clone(),
+        "--canonical-root".to_string(),
+        canonical.path().to_string_lossy().to_string(),
+        "--json".to_string(),
+    ];
+    let preview: serde_json::Value =
+        serde_json::from_str(&run_legacy(&target.url, &validate)).expect("validation JSON");
+    assert_eq!(preview["checked"].as_i64(), Some(2));
+    assert_eq!(preview["valid"].as_i64(), Some(2));
+    assert_eq!(preview["repair_plan"].as_array().map(Vec::len), Some(0));
+
+    sqlx::query(
+        "UPDATE media_assets
+            SET byte_size = 1
+          WHERE canonical_relative_path = 'library/Miles Davis/miles/kind of blue/01 So What.flac'",
+    )
+    .execute(&target.pool)
+    .await
+    .expect("corrupt target metadata");
+
+    let mismatch: serde_json::Value =
+        serde_json::from_str(&run_legacy(&target.url, &validate)).expect("mismatch JSON");
+    assert_eq!(mismatch["size_mismatch"].as_i64(), Some(1));
+    assert_eq!(mismatch["repair_plan"].as_array().map(Vec::len), Some(1));
+    let mismatch_text = mismatch.to_string();
+    assert!(!mismatch_text.contains("01 So What.flac"));
+    assert!(mismatch["repair_plan"][0]["path_sha256"].is_string());
+
+    validate.extend(["--fix".to_string()]);
+    let no_confirmation = run_legacy_failing(&target.url, &validate);
+    assert!(no_confirmation.contains("--fix requires --confirm"));
+    let unchanged: i64 = sqlx::query_scalar(
+        "SELECT byte_size FROM media_assets
+          WHERE canonical_relative_path = 'library/Miles Davis/miles/kind of blue/01 So What.flac'",
+    )
+    .fetch_one(&target.pool)
+    .await
+    .expect("unchanged metadata");
+    assert_eq!(unchanged, 1);
+
+    validate.extend([
+        "--confirm".to_string(),
+        "--actor".to_string(),
+        "phase11-test".to_string(),
+    ]);
+    let applied: serde_json::Value =
+        serde_json::from_str(&run_legacy(&target.url, &validate)).expect("repair JSON");
+    assert_eq!(applied["applied"].as_bool(), Some(true));
+    assert_eq!(applied["applied_rows"].as_i64(), Some(1));
+    let repaired: i64 = sqlx::query_scalar(
+        "SELECT byte_size FROM media_assets
+          WHERE canonical_relative_path = 'library/Miles Davis/miles/kind of blue/01 So What.flac'",
+    )
+    .fetch_one(&target.pool)
+    .await
+    .expect("repaired metadata");
+    assert_eq!(repaired, 1_234_567);
+    assert_eq!(
+        count(
+            &target.pool,
+            "legacy_migration.issues WHERE code = 'media.repair_applied'"
+        )
+        .await,
+        1
+    );
+    let issue_detail: serde_json::Value = sqlx::query_scalar(
+        "SELECT detail FROM legacy_migration.issues WHERE code = 'media.repair_applied' LIMIT 1",
+    )
+    .fetch_one(&target.pool)
+    .await
+    .expect("repair detail");
+    assert!(!issue_detail.to_string().contains("01 So What.flac"));
+
+    // A second confirmed pass sees no mismatch and therefore cannot create a
+    // second repair or mutate the source media.
+    let second_pass: serde_json::Value =
+        serde_json::from_str(&run_legacy(&target.url, &validate)).expect("second repair JSON");
+    assert_eq!(second_pass["size_mismatch"].as_i64(), Some(0));
+    assert_eq!(
+        count(
+            &target.pool,
+            "legacy_migration.issues WHERE code = 'media.repair_applied'"
+        )
+        .await,
+        1
+    );
+    assert_eq!(
+        std::fs::metadata(&first).expect("source media").len(),
+        1_234_567
+    );
+
+    drop_db(&source.name).await;
+    drop_db(&target.name).await;
 }
 
 /// without --canonical-root the adoption is metadata-only and the run

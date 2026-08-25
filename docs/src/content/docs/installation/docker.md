@@ -102,6 +102,18 @@ SPA, CA certificates, timezone data, and Debian-packaged `ffmpeg`, `ffprobe`, an
 workflow and vary only with the selected supported Debian base package set; the project requires
 compatible tools, not a developer-machine version.
 
+The migration CLI is included in the same image. Check availability without opening a source or
+changing a database:
+
+```bash
+docker compose exec melodee melodee-cli legacy --help
+docker compose exec melodee melodee-cli rollback --help
+```
+
+Use the [legacy migration guide](./legacy-migration/) and the [cutover/rollback runbook](https://github.com/melodee-project/melodee-rs/blob/main/design/runbooks/CUTOVER-AND-ROLLBACK.md)
+for source read-only enforcement, public-ID preservation, backups, final delta, and approval
+gates. A local image smoke test is not production cutover evidence.
+
 The container health check calls `/healthz`, which intentionally proves only that the HTTP process
 is live. Use `/readyz` for an orchestration readiness check: it requires PostgreSQL and, when
 search is enabled, a usable Tantivy generation. See [Troubleshooting](../troubleshooting/) for the
@@ -128,3 +140,8 @@ package-specific copyright and license notices are available in the image under 
 After the first release, an organization administrator may need to set the GHCR package to
 **public** and confirm its repository linkage. This is GitHub package policy, not a setting that a
 safe release workflow can override.
+
+Release publication is intentionally release-event-only. A candidate can be built and scanned
+locally, but the official GHCR image, immutable semantic-version tag, stable floating tags, SBOM,
+vulnerability result, and provenance are not claimed until the release workflow completes with an
+approved GitHub Release.

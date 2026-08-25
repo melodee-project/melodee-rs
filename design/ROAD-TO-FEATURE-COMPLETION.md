@@ -49,6 +49,24 @@
 > rehearsal, cutover, rollback, and production-library validation are the only planned
 > implementation milestone after this closeout.
 
+> ## Canonical Phase 11 current assessment (2026-08-25)
+>
+> Canonical Phase 11 has now been assigned and its safe local work is in execution. The current
+> plan and authoritative evidence are [PHASE-11-PLAN.md](agents/PHASE-11-PLAN.md) and
+> [PHASE-11-REPORT.md](evidence/phase-11/PHASE-11-REPORT.md). The migration CLI now has a
+> preview-first `legacy validate` surface with confirmation-gated, idempotent target metadata
+> repair; the rollback runbook emits topology-bound steps and records durable audit evidence; and
+> the 12,000-Track synthetic drill covers inventory, baseline, import, verification, media
+> validation, search rebuild, backup/restore, freeze, cutover-ready fencing, and retained-target
+> rollback mechanics. A current local amd64 Trixie image also passed the PostgreSQL-backed
+> non-root/container-tool/Admin UI/CLI smoke.
+>
+> This is not production completion. Production/private snapshot and media access, production-
+> sized rehearsal, final delta/write freeze/traffic switch, production rollback, live-provider and
+> OIDC checks, current candidate SBOM/vulnerability scan, arm64 execution, provenance attestation,
+> registry publication, and rollback-asset cleanup remain explicit operator gates. Historical
+> Phase 11 planning text below is retained; this addendum and the Phase 11 report are current.
+
 > Historical Phase 1 revision text:
 >
 > Workstreams A–D were RELEASE-002 metadata-editing proof, TRACK-001/002 MusicBrainz-ID

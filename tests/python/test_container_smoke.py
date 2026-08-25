@@ -89,6 +89,37 @@ class ContainerSmokeInputTests(unittest.TestCase):
         with self.assertRaises(module.SmokeError):
             module.validate_labels(json.dumps(labels), "0.1.0", "abc123")
 
+    def test_readiness_retries_connection_reset_during_startup(self) -> None:
+        module = load_module()
+        attempts = 0
+
+        def flaky_fetch(_url: str) -> bytes:
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise ConnectionResetError("disposable server is still starting")
+            return b"ready"
+
+        original_fetch = module.fetch
+        module.fetch = flaky_fetch
+        try:
+            self.assertEqual(module.fetch_when_ready("http://127.0.0.1:1/readyz", attempts=2), b"ready")
+        finally:
+            module.fetch = original_fetch
+
+    def test_smoke_harness_uses_a_run_scoped_postgres_volume(self) -> None:
+        module = load_module()
+        config = module.SmokeConfig(
+            image="synthetic/melodee:local",
+            release_version="0.1.0",
+            release_revision="phase11",
+            run_id="python-test",
+            port=18099,
+            postgres_image="postgres:18.4-alpine",
+        )
+        harness = module.SmokeHarness(config)
+        self.assertEqual(harness.volume, "melodee-release-smoke-python-test-postgres-data")
+
 
 class ReleaseWorkflowTests(unittest.TestCase):
     def test_prepublication_gate_builds_and_scans_both_architectures(self) -> None:

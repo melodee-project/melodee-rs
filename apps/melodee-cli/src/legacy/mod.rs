@@ -23,6 +23,7 @@ mod map;
 mod media;
 mod runs;
 mod source;
+mod validate;
 mod verify;
 
 use clap::{Args, Subcommand};
@@ -58,6 +59,9 @@ pub enum LegacyCommands {
     /// final delta, re-verify the gate, record freeze evidence, and only with
     /// `--acknowledge-cutover` transition the run to `cutover-ready`.
     Freeze(LegacyFreezeArgs),
+    /// Validate migrated media under a supplied canonical root; optionally
+    /// apply only explicitly confirmed target byte-size metadata repairs.
+    Validate(LegacyValidateArgs),
 }
 
 #[derive(Debug, Args)]
@@ -162,6 +166,29 @@ pub struct LegacyStatusArgs {
     /// Run to inspect; omitted lists all runs.
     #[arg(long)]
     run: Option<uuid::Uuid>,
+    #[arg(long)]
+    json: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct LegacyValidateArgs {
+    /// Imported migration run whose mapped media is being checked.
+    #[arg(long)]
+    run: uuid::Uuid,
+    /// Existing canonical media root. It is opened read-only and must not
+    /// contain symlink components.
+    #[arg(long)]
+    canonical_root: std::path::PathBuf,
+    /// Print the deterministic repair plan and apply target metadata repairs.
+    #[arg(long)]
+    fix: bool,
+    /// Required with --fix. This acknowledges target metadata mutation only;
+    /// source media is never modified.
+    #[arg(long)]
+    confirm: bool,
+    /// Stable operator identity recorded in repair issues.
+    #[arg(long, default_value = "legacy-validate")]
+    actor: String,
     #[arg(long)]
     json: bool,
 }
@@ -348,6 +375,18 @@ pub async fn run(command: LegacyCommands, target: PgPool) -> Result<(), String> 
                 args.acknowledge_cutover,
                 args.note.as_deref(),
                 args.source.json,
+            )
+            .await
+        }
+        LegacyCommands::Validate(args) => {
+            validate::validate(
+                &target,
+                args.run,
+                &args.canonical_root,
+                args.fix,
+                args.confirm,
+                args.json,
+                &args.actor,
             )
             .await
         }

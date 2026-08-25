@@ -8,8 +8,8 @@
 mod legacy_support;
 
 use legacy_support::{
-    SEED_MIXED, create_source, create_target, drop_db, map_arg, run_legacy, run_legacy_failing,
-    source_args,
+    SEED_MIXED, create_source, create_target, drop_db, map_arg, run_cli, run_legacy,
+    run_legacy_failing, source_args,
 };
 
 /// Imports the mixed source and verifies to `delta-ready`; returns the run id.
@@ -204,6 +204,75 @@ async fn freeze_gates_on_state_and_acknowledgement() {
         Some("rehearsal drill: freeze verified by operator")
     );
     assert!(notes["freeze"]["snapshot_marker"].as_str().is_some());
+
+    // Rollback is topology-bound and auditable: generating the procedure is
+    // read-only, while recording it requires the run to remain cutover-ready.
+    let runbook = run_cli(
+        &target.url,
+        &[
+            "rollback".to_string(),
+            "runbook".to_string(),
+            "--database-url".to_string(),
+            target.url.clone(),
+            "--rust-target".to_string(),
+            "rust-service".to_string(),
+            "--legacy-target".to_string(),
+            "csharp-service".to_string(),
+            "--traffic-target".to_string(),
+            "proxy-route".to_string(),
+            "--confirm".to_string(),
+        ],
+    );
+    let runbook_json: serde_json::Value = serde_json::from_str(&runbook).expect("runbook JSON");
+    assert_eq!(runbook_json["document_type"], "rollback_runbook");
+    assert!(
+        runbook_json["steps"]
+            .as_array()
+            .is_some_and(|steps| steps.iter().all(|step| {
+                step["target"].is_string()
+                    && step["expected_impact"].is_string()
+                    && step["confirmation"].is_string()
+            }))
+    );
+    assert!(!runbook.contains("curl") && !runbook.contains("pgrep"));
+
+    run_cli(
+        &target.url,
+        &[
+            "rollback".to_string(),
+            "record".to_string(),
+            "--database-url".to_string(),
+            target.url.clone(),
+            "--run".to_string(),
+            run_id.clone(),
+            "--legacy-target".to_string(),
+            "csharp-service".to_string(),
+            "--by".to_string(),
+            "phase11-test".to_string(),
+            "--note".to_string(),
+            "synthetic acceptance failure".to_string(),
+            "--confirm".to_string(),
+        ],
+    );
+    let rollback: serde_json::Value = sqlx::query_scalar(
+        "SELECT notes->'rollback' FROM legacy_migration.runs WHERE id = $1::uuid",
+    )
+    .bind(&run_id)
+    .fetch_one(&target.pool)
+    .await
+    .expect("rollback audit note");
+    assert_eq!(rollback["status"], "executed");
+    assert_eq!(rollback["legacy_target"], "csharp-service");
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM legacy_migration.issues WHERE run_id = $1::uuid AND code = 'rollback.executed'",
+        )
+        .bind(&run_id)
+        .fetch_one(&target.pool)
+        .await
+        .expect("rollback issue"),
+        1
+    );
 
     // A cutover-ready run no longer accepts deltas (monotonicity).
     let mut delta_args = vec!["delta".to_string(), "--run".to_string(), run_id.clone()];

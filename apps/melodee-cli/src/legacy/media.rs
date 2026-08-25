@@ -109,6 +109,15 @@ pub enum MediaCheck {
     Unsafe,
 }
 
+/// Result of a no-follow media observation. The size is returned only for a
+/// held regular-file descriptor, so a repair cannot be based on a pathname
+/// that changed after validation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MediaObservation {
+    pub check: MediaCheck,
+    pub actual_size: Option<i64>,
+}
+
 /// Precomputed canonical root for per-file validation.
 pub struct CanonicalRootValidator {
     canonical_root: PathBuf,
@@ -118,6 +127,33 @@ impl CanonicalRootValidator {
     /// # Errors
     /// Returns an actionable message when the root does not exist.
     pub fn new(root: &Path) -> Result<Self, String> {
+        if !root.is_absolute() {
+            return Err(format!(
+                "--canonical-root must be an absolute path: {}",
+                root.display()
+            ));
+        }
+        let mut current = PathBuf::from("/");
+        for component in root.components() {
+            let Component::Normal(name) = component else {
+                if matches!(component, Component::ParentDir | Component::Prefix(_)) {
+                    return Err(format!(
+                        "--canonical-root contains traversal or an unsupported prefix: {}",
+                        root.display()
+                    ));
+                }
+                continue;
+            };
+            current.push(name);
+            let metadata = std::fs::symlink_metadata(&current)
+                .map_err(|e| format!("cannot inspect --canonical-root {}: {e}", root.display()))?;
+            if metadata.file_type().is_symlink() {
+                return Err(format!(
+                    "--canonical-root contains a symlink component: {}",
+                    root.display()
+                ));
+            }
+        }
         let canonical_root = root
             .canonicalize()
             .map_err(|e| format!("cannot resolve --canonical-root {}: {e}", root.display()))?;
@@ -134,6 +170,14 @@ impl CanonicalRootValidator {
 
     /// Read-only validation of one adopted canonical-relative path.
     pub fn check(&self, relative: &str, expected_size: Option<i64>) -> MediaCheck {
+        self.inspect(relative, expected_size).check
+    }
+
+    /// Observes one adopted path and returns the size of the held regular file
+    /// when it was safely opened. This is the only observation accepted by the
+    /// legacy validation repair path; it never follows a symlink or mutates
+    /// the source media tree.
+    pub fn inspect(&self, relative: &str, expected_size: Option<i64>) -> MediaObservation {
         let mut components = Vec::new();
         for component in Path::new(relative).components() {
             match component {
@@ -144,11 +188,19 @@ impl CanonicalRootValidator {
                 Component::CurDir
                 | Component::ParentDir
                 | Component::RootDir
-                | Component::Prefix(_) => return MediaCheck::Unsafe,
+                | Component::Prefix(_) => {
+                    return MediaObservation {
+                        check: MediaCheck::Unsafe,
+                        actual_size: None,
+                    };
+                }
             }
         }
         let Some(leaf) = components.pop() else {
-            return MediaCheck::Unsafe;
+            return MediaObservation {
+                check: MediaCheck::Unsafe,
+                actual_size: None,
+            };
         };
 
         #[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
@@ -156,9 +208,17 @@ impl CanonicalRootValidator {
             let directory = match secure_media::open_absolute_directory(&self.canonical_root) {
                 Ok(directory) => directory,
                 Err(error) if error.kind() == io::ErrorKind::NotFound => {
-                    return MediaCheck::Missing;
+                    return MediaObservation {
+                        check: MediaCheck::Missing,
+                        actual_size: None,
+                    };
                 }
-                Err(_) => return MediaCheck::Unsafe,
+                Err(_) => {
+                    return MediaObservation {
+                        check: MediaCheck::Unsafe,
+                        actual_size: None,
+                    };
+                }
             };
             let mut directory = directory;
             for component in components {
@@ -173,31 +233,56 @@ impl CanonicalRootValidator {
                 ) {
                     Ok(directory) => directory,
                     Err(error) if error == rustix::io::Errno::NOENT => {
-                        return MediaCheck::Missing;
+                        return MediaObservation {
+                            check: MediaCheck::Missing,
+                            actual_size: None,
+                        };
                     }
-                    Err(_) => return MediaCheck::Unsafe,
+                    Err(_) => {
+                        return MediaObservation {
+                            check: MediaCheck::Unsafe,
+                            actual_size: None,
+                        };
+                    }
                 };
             }
             match secure_media::open_regular_file(&directory, leaf) {
                 Ok(size) => size,
                 Err(error) if error.kind() == io::ErrorKind::NotFound => {
-                    return MediaCheck::Missing;
+                    return MediaObservation {
+                        check: MediaCheck::Missing,
+                        actual_size: None,
+                    };
                 }
-                Err(_) => return MediaCheck::Unsafe,
+                Err(_) => {
+                    return MediaObservation {
+                        check: MediaCheck::Unsafe,
+                        actual_size: None,
+                    };
+                }
             }
         };
 
         #[cfg(not(any(target_os = "linux", target_os = "android", target_vendor = "apple")))]
         let actual = {
             let _ = (&components, leaf);
-            return MediaCheck::Unsafe;
+            return MediaObservation {
+                check: MediaCheck::Unsafe,
+                actual_size: None,
+            };
         };
 
-        if let Some(expected) = expected_size.filter(|e| *e >= 0)
-            && i64::try_from(actual).unwrap_or(i64::MAX) != expected
-        {
-            return MediaCheck::SizeMismatch;
+        let actual_size = i64::try_from(actual).unwrap_or(i64::MAX);
+        let check = if expected_size.filter(|e| *e >= 0) == Some(actual_size) {
+            MediaCheck::Ok
+        } else if expected_size.filter(|e| *e >= 0).is_some() {
+            MediaCheck::SizeMismatch
+        } else {
+            MediaCheck::Ok
+        };
+        MediaObservation {
+            check,
+            actual_size: Some(actual_size),
         }
-        MediaCheck::Ok
     }
 }
