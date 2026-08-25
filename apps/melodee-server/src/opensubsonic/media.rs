@@ -670,32 +670,62 @@ async fn catalog_artwork_override(
 ) -> Result<Option<(Vec<u8>, String)>, sqlx::Error> {
     let (query, public_id) = match entity {
         EntityRef::Artist(id) => (
-            "SELECT image.image_bytes, image.image_mime_type
-             FROM catalog_entity_images image
-             JOIN artists artist ON artist.id = image.artist_id
-             WHERE image.entity_type = 'artist' AND artist.public_api_id = $1",
+            "SELECT COALESCE(image.image_bytes, provider.image_bytes),
+                    COALESCE(image.image_mime_type, provider.image_mime_type)
+             FROM artists artist
+             LEFT JOIN catalog_entity_images image
+               ON image.entity_type='artist' AND image.artist_id=artist.id
+             LEFT JOIN LATERAL (
+                 SELECT image_bytes, image_mime_type
+                 FROM catalog_provider_images
+                 WHERE entity_type='artist' AND entity_id=artist.id
+                 ORDER BY confidence DESC, observed_at DESC, id DESC LIMIT 1
+             ) provider ON true
+             WHERE artist.public_api_id=$1 AND artist.status NOT IN ('merged','deprecated')",
             id,
         ),
         EntityRef::Release(id) => (
-            "SELECT image.image_bytes, image.image_mime_type
-             FROM catalog_entity_images image
-             JOIN releases release ON release.id = image.release_id
-             WHERE image.entity_type = 'release' AND release.public_api_id = $1",
+            "SELECT COALESCE(image.image_bytes, provider.image_bytes),
+                    COALESCE(image.image_mime_type, provider.image_mime_type)
+             FROM releases release
+             LEFT JOIN catalog_entity_images image
+               ON image.entity_type='release' AND image.release_id=release.id
+             LEFT JOIN LATERAL (
+                 SELECT image_bytes, image_mime_type
+                 FROM catalog_provider_images
+                 WHERE entity_type='release' AND entity_id=release.id
+                 ORDER BY confidence DESC, observed_at DESC, id DESC LIMIT 1
+             ) provider ON true
+             WHERE release.public_api_id=$1 AND release.status='active'",
             id,
         ),
         EntityRef::Track(id) => (
-            "SELECT image.image_bytes, image.image_mime_type
-             FROM catalog_entity_images image
-             JOIN releases release ON release.id = image.release_id
-             JOIN tracks track ON track.release_id = release.id
-             WHERE image.entity_type = 'release' AND track.public_api_id = $1",
+            "SELECT COALESCE(image.image_bytes, provider.image_bytes),
+                    COALESCE(image.image_mime_type, provider.image_mime_type)
+             FROM tracks track
+             JOIN releases release ON release.id=track.release_id AND release.status='active'
+             LEFT JOIN catalog_entity_images image
+               ON image.entity_type='release' AND image.release_id=release.id
+             LEFT JOIN LATERAL (
+                 SELECT image_bytes, image_mime_type
+                 FROM catalog_provider_images
+                 WHERE entity_type='release' AND entity_id=release.id
+                 ORDER BY confidence DESC, observed_at DESC, id DESC LIMIT 1
+             ) provider ON true
+             WHERE track.public_api_id=$1",
             id,
         ),
     };
-    sqlx::query_as(query)
+    let row = sqlx::query_as::<_, (Option<Vec<u8>>, Option<String>)>(query)
         .bind(public_id)
         .fetch_optional(pool)
-        .await
+        .await?;
+    Ok(row.and_then(|(bytes, mime_type)| {
+        bytes.map(|bytes| {
+            let mime_type = mime_type.unwrap_or_else(|| sniff_image_content_type(&bytes));
+            (bytes, mime_type)
+        })
+    }))
 }
 
 /// Whether an album_/song_/artist_ cover-art id names a known entity.

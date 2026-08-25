@@ -2,7 +2,10 @@
 
 use std::time::Instant;
 
-use melodee_domain::{FailureClass, WorkErrorCode};
+use melodee_domain::{
+    ArtistId, ArtistMerge, ArtistMergeId, Confidence, EvidenceKind, EvidencePolarity, FailureClass,
+    WorkErrorCode,
+};
 use melodee_persistence::{
     CatalogImportRequest, CatalogImportResult, CatalogStore, CatalogStoreError, WorkEngineConfig,
     WorkStoreError, WorkerId,
@@ -11,10 +14,12 @@ use sqlx::PgPool;
 use thiserror::Error;
 use time::OffsetDateTime;
 use tokio::task::JoinSet;
-use tracing::{Instrument, error, info, info_span};
+use tracing::{Instrument, debug, error, info, info_span, warn};
 
 use crate::{
-    CatalogConfig, CatalogImportStats, LOCAL_RESOLVER_VERSION, cancellation::CatalogCancellation,
+    CatalogConfig, CatalogImportStats, LOCAL_RESOLVER_VERSION, LocalArtistCandidate,
+    LocalArtistResolver, LocalResolutionConstraints, ResolutionEvidence, ResolutionEvidenceSource,
+    cancellation::CatalogCancellation,
 };
 
 #[derive(Debug, Error)]
@@ -172,10 +177,14 @@ pub(crate) async fn import_once_with_cancellation(
                     )
                     .await
                 {
-                    Ok(result) => CatalogTaskOutput::Completed {
-                        work_item_id: item.id,
-                        result,
-                    },
+                    Ok(result) => {
+                        reconcile_strong_artist_identities(&store, &pool).await;
+                        reconcile_strong_release_identities(&store, &pool).await;
+                        CatalogTaskOutput::Completed {
+                            work_item_id: item.id,
+                            result,
+                        }
+                    }
                     Err(error) => {
                         failed_output(&store, &pool, item.id, &worker, error, &retry_policy).await
                     }
@@ -202,6 +211,129 @@ pub(crate) async fn import_once_with_cancellation(
         "bounded catalog import pass completed"
     );
     Ok(stats)
+}
+
+/// Runs the bounded production caller for the pure local resolver after each
+/// successful import. Strong embedded evidence may converge identities; names
+/// alone never enter this path. Merge mutations remain append-only and are
+/// safe to retry when another worker wins the row locks first.
+async fn reconcile_strong_artist_identities(store: &CatalogStore, pool: &PgPool) {
+    let candidates = match store.strong_artist_merge_candidates(pool, 64).await {
+        Ok(candidates) => candidates,
+        Err(error) => {
+            warn!(%error, "strong Artist reconciliation scan failed; import remains durable");
+            return;
+        }
+    };
+    let Some(confidence) = Confidence::new(9_500).ok() else {
+        return;
+    };
+    let resolver = LocalArtistResolver::default();
+    for candidate in candidates {
+        let evaluation = match resolver.evaluate(
+            &[LocalArtistCandidate {
+                artist_id: ArtistId::from_uuid(candidate.target_artist_id),
+                evidence: vec![ResolutionEvidence {
+                    kind: EvidenceKind::EmbeddedExternalId,
+                    polarity: EvidencePolarity::Supports,
+                    confidence,
+                    source: ResolutionEvidenceSource::PersistedCatalog,
+                }],
+            }],
+            &LocalResolutionConstraints::default(),
+        ) {
+            Ok(evaluation) => evaluation,
+            Err(error) => {
+                warn!(%error, provider=%candidate.provider, external_id=%candidate.external_id, "Artist resolver rejected bounded evidence");
+                continue;
+            }
+        };
+        if !matches!(
+            evaluation.recommendation,
+            crate::ArtistResolutionRecommendation::Confirmable { .. }
+        ) {
+            continue;
+        }
+        let merge = ArtistMerge {
+            id: ArtistMergeId::new(),
+            source_artist_id: ArtistId::from_uuid(candidate.source_artist_id),
+            source_public_api_id: melodee_domain::ArtistPublicId::from_uuid(
+                candidate.source_public_api_id,
+            ),
+            target_artist_id: ArtistId::from_uuid(candidate.target_artist_id),
+            actor: "catalog-reconciler".to_owned(),
+            reason: format!(
+                "strong embedded {} evidence converged external identifier {}",
+                candidate.provider, candidate.external_id
+            ),
+            occurred_at: time::OffsetDateTime::now_utc(),
+        };
+        match store
+            .merge_artist(pool, &merge, LOCAL_RESOLVER_VERSION)
+            .await
+        {
+            Ok(()) => info!(
+                source_artist_id=%candidate.source_artist_id,
+                target_artist_id=%candidate.target_artist_id,
+                provider=%candidate.provider,
+                external_id=%candidate.external_id,
+                "strong Artist identity converged"
+            ),
+            Err(melodee_persistence::CatalogStoreError::MutationConflict) => {
+                debug!(source_artist_id=%candidate.source_artist_id, "Artist merge was already reconciled or fenced")
+            }
+            Err(error) => {
+                warn!(%error, source_artist_id=%candidate.source_artist_id, "Artist merge candidate was preserved without mutation")
+            }
+        }
+    }
+}
+
+/// Reconciles duplicate active Releases only when the durable catalog contains
+/// the same trusted provider identifier. Release names and normalized titles
+/// are intentionally not identity predicates. The audited persistence
+/// mutation keeps this pass restart-safe: a concurrent winner is fenced and
+/// the next import pass will observe the resulting state.
+async fn reconcile_strong_release_identities(store: &CatalogStore, pool: &PgPool) {
+    let candidates = match store.strong_release_merge_candidates(pool, 64).await {
+        Ok(candidates) => candidates,
+        Err(error) => {
+            warn!(%error, "strong Release reconciliation scan failed; import remains durable");
+            return;
+        }
+    };
+    for candidate in candidates {
+        let reason = format!(
+            "trusted {} evidence converged external identifier {}",
+            candidate.provider, candidate.external_id
+        );
+        match store
+            .merge_release(
+                pool,
+                candidate.source_release_id,
+                candidate.target_release_id,
+                "catalog-reconciler",
+                &reason,
+                OffsetDateTime::now_utc(),
+            )
+            .await
+        {
+            Ok(event_id) => info!(
+                source_release_id=%candidate.source_release_id,
+                target_release_id=%candidate.target_release_id,
+                provider=%candidate.provider,
+                external_id=%candidate.external_id,
+                merge_event_id=%event_id,
+                "strong Release identity converged"
+            ),
+            Err(CatalogStoreError::MutationConflict) => {
+                debug!(source_release_id=%candidate.source_release_id, "Release merge was already reconciled or fenced")
+            }
+            Err(error) => {
+                warn!(%error, source_release_id=%candidate.source_release_id, "Release merge candidate was preserved without mutation")
+            }
+        }
+    }
 }
 
 async fn failed_output(
@@ -320,6 +452,16 @@ fn failure_disposition(error: &CatalogStoreError) -> (&'static str, FailureClass
         CatalogStoreError::Database(_) | CatalogStoreError::Work(WorkStoreError::Database(_)) => {
             ("catalog.database", FailureClass::Retryable)
         }
+        CatalogStoreError::ProviderEnrichment(
+            melodee_persistence::ProviderEnrichmentStoreError::Database(_),
+        ) => (
+            "catalog.provider_enrichment_database",
+            FailureClass::Retryable,
+        ),
+        CatalogStoreError::ProviderEnrichment(_) => (
+            "catalog.provider_enrichment_invalid",
+            FailureClass::Permanent,
+        ),
         CatalogStoreError::Serialization(_) => {
             ("catalog.manifest_invalid", FailureClass::Permanent)
         }

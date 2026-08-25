@@ -40,6 +40,8 @@ pub enum NativeApiError {
     Search(#[from] melodee_search::SearchError),
     #[error("native user-state operation failed")]
     UserState(#[from] melodee_persistence::NativeUserStateStoreError),
+    #[error("provider operation failed")]
+    Provider(#[from] crate::providers::ProviderError),
 }
 
 impl NativeApiError {
@@ -76,7 +78,8 @@ impl NativeApiError {
             ),
             Self::Database(_)
             | Self::Search(_)
-            | Self::UserState(melodee_persistence::NativeUserStateStoreError::Database(_)) => (
+            | Self::UserState(melodee_persistence::NativeUserStateStoreError::Database(_))
+            | Self::Provider(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "INTERNAL_ERROR",
                 "An unexpected error occurred",

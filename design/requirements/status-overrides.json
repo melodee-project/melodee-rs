@@ -1209,6 +1209,8 @@
     "implementation": [
       "design/evidence/phase-9/configuration-inventory.md (the 190-key legacy registry inventory, Phase 0 gap closed)",
       "crates/melodee-persistence/src/settings.rs (KNOWN_SETTINGS classification; SettingsStore CRUD with kind validation)",
+      "apps/melodee-server/src/providers.rs (runtime consumers for provider enablement, endpoints, credentials, cache TTL, and local replica path)",
+      "apps/melodee-server/src/enrichment_worker.rs (runtime worker enablement, polling, batch, and lease settings)",
       "apps/melodee-cli/src/main.rs (melodee-cli config list/validate/export/import)"
     ],
     "tests": [
@@ -1216,7 +1218,7 @@
       "apps/melodee-cli/tests/config.rs",
       "apps/melodee-server/tests/admin_config_api.rs"
     ],
-    "note": "Settings are admin-manageable through the CLI and the admin API export/import surface; the Phase 10 admin UI consumes the same stores."
+    "note": "Settings are admin-manageable through the CLI and the admin API export/import surface; provider and enrichment settings are consumed at runtime rather than merely preserved in the registry."
   },
   "PRD-CONFIG-002": {
     "status": "tested",
@@ -1254,7 +1256,7 @@
       "python3 scripts/validate_repository.py (repository/documentation validation covering the inventory document and its links)",
       "design/evidence/phase-9/checklists/11-themes-localization-web.md row 2 acceptance"
     ],
-    "note": "WP-14 deliverable. Every legacy page is classified into the PRD-WEB-001 categories (admin/curation \u2192 new Admin UI; account/profile, browsing/playback, public share, onboarding \u2192 preserved or explicitly approved replacement surface); the classification feeds PRD-WEB-002 and Phase 10 planning."
+    "note": "Every legacy page is classified. Under accepted ADR-0161, MeloAmp is the approved replacement for listener browsing/playback and related workflows; the Rust server owns `/admin` and APIs, with no duplicate listener SPA."
   },
   "PRD-WEB-002": {
     "status": "tested",
@@ -1265,7 +1267,7 @@
     "tests": [
       "design/evidence/phase-10/checklists/ (green); admin-ui e2e suite"
     ],
-    "note": "Final classification ratified in Phase 10 per the Phase 9 note."
+    "note": "Final classification is ratified under ADR-0161: MeloAmp owns listener workflows, while Rust provides the Admin UI at `/admin` and narrow HTML only for genuinely required public/security flows."
   },
   "PRD-WORK-001": {
     "status": "tested",
@@ -1275,6 +1277,7 @@
       "apps/melodee-server/src/podcast_worker.rs (scheduled podcast refresh/download/cleanup/recovery triggers over leased durable state)",
       "apps/melodee-server/src/policy_worker.rs (scheduled policy evaluation over leased durable state)",
       "apps/melodee-server/src/discovery_worker.rs (scheduled chart/recommendation aggregate maintenance, PRD-WORK-003)",
+      "apps/melodee-server/src/enrichment_worker.rs (scheduled provider cache cleanup and lease-based enrichment maintenance)",
       "crates/melodee-persistence/migrations/0023_phase9_worker_pool_state.sql and crates/melodee-persistence/src/worker_pool.rs (durable, audited pool pause/resume, PRD-WORK-005, ADR-0134 section 8)"
     ],
     "tests": [
@@ -1285,7 +1288,7 @@
       "apps/melodee-server/tests/discovery_worker.rs (periodic maintenance loop, idempotency, graceful stop)",
       "crates/melodee-persistence/tests/worker_pool_state.rs, apps/melodee-server/tests/worker_pools.rs, and apps/melodee-cli/tests/worker_pools.rs (durable pause/resume)"
     ],
-    "note": "The durable-queue-plus-scheduled-triggers model fully replaces the legacy Quartz mental model; this requirement is about the model, not job-for-job parity. Legacy scheduled jobs with NO Rust equivalent, recorded honestly: jobs.nowPlayingCleanup (never seeded by default; native_now_playing rows are replaced/deleted per user on new now-playing/scrobble writes instead), jobs.stagingAutoMove and jobs.stagingAlbumRevalidation (no equivalent by design \u2014 the Rust ingestion model is non-destructive and never auto-moves inbound staging media, ADR-0116), jobs.artistHousekeeping and jobs.artistSearchEngineHousekeeping (the legacy separate artist search-engine database does not exist; the Tantivy projection is rebuilt/caught up by the Phase 6 search worker), and jobs.musicbrainzUpdateDatabase (deferred with the MusicBrainz provider integration under ADR-0136)."
+    "note": "The durable-queue-plus-scheduled-triggers model fully replaces the legacy Quartz mental model; the provider maintenance portion is now wired and tested. Unrelated legacy gaps remain honestly recorded: jobs.nowPlayingCleanup, stagingAutoMove, and stagingAlbumRevalidation follow the Rust non-destructive model, while any remaining scheduled-job breadth is outside the provider portion of this phase."
   },
   "PRD-WORK-002": {
     "status": "tested",
@@ -1502,15 +1505,18 @@
     "status": "tested",
     "implementation": [
       "crates/melodee-media/src/lib.rs (streaming BLAKE3 byte hashes in ReleaseManifest)",
+      "crates/melodee-media/src/lib.rs (musicbrainz_id_observations: six embedded MusicBrainz ID families retained as raw observations in ObservedMetadata.raw[\"musicbrainz_ids\"], malformed values verbatim; TRACK-001)",
       "crates/melodee-media/src/normalize.rs (run_fpcalc: acoustic fingerprint via fpcalc -json, source audio file fingerprinting)",
       "crates/melodee-persistence/src/catalog.rs (manifest hashes/fingerprints become durable MediaAsset/AudioIdentity evidence without audio reread)"
     ],
     "tests": [
       "crates/melodee-media/src/lib.rs (byte_hash_distinguishes_same_size_content)",
+      "crates/melodee-media/src/lib.rs tests (musicbrainz_identifiers_are_retained_as_raw_observations_per_format; musicbrainz_id_observations_are_absent_when_untagged_and_verbatim_when_malformed; dual-key recording-ID fallback; ID3v2 round-trip fix f502eaf/45c1ee9)",
       "crates/melodee-ingestion/tests/inspection.rs",
       "crates/melodee-persistence/tests/normalization.rs",
       "crates/melodee-persistence/tests/catalog_import.rs and catalog_audio_identity.rs"
-    ]
+    ],
+    "note": "TRACK-001 closed in Feature-Completion Phase 1 (2026-08-25): embedded MusicBrainz recording/release/release-group/Artist/release-Artist/work IDs are retained end-to-end from media inspection into the durable manifest; see design/evidence/feature-completion/phase-1/PHASE-1-REPORT.md."
   },
   "PRD-FP-002": {
     "status": "tested",
@@ -1527,7 +1533,7 @@
       "crates/melodee-persistence/tests/catalog_audio_identity.rs",
       "crates/melodee-policy/tests/policy_acceptance.rs and crates/melodee-persistence/tests/phase5_novelty.rs"
     ],
-    "note": "Byte identity, Track occurrence, AudioIdentity, alternate recording, and uncertainty are distinct and tested; fingerprint/byte evidence cannot silently auto-merge them."
+    "note": "Byte identity, Track occurrence, AudioIdentity, alternate recording, and uncertainty are distinct and tested; fingerprint/byte evidence cannot silently auto-merge them. TRACK-002 (import-time AudioIdentity evidence + bounded idempotent Proposed match decisions) completed in Feature-Completion Phase 1 (2026-08-25); evidence: crates/melodee-persistence/tests/catalog_audio_identity.rs and design/evidence/feature-completion/phase-1/PHASE-1-REPORT.md."
   },
   "PRD-FP-003": {
     "status": "tested",
@@ -1797,13 +1803,16 @@
     "status": "tested",
     "implementation": [
       "crates/melodee-catalog/src/resolver.rs (bounded evidence scoring retains provisional identity on weak or ambiguous input)",
-      "crates/melodee-persistence/src/catalog.rs (manifest import keeps observation-scoped evidence while reusing only an exact singleton Release-context Artist identity)",
+      "crates/melodee-persistence/src/catalog.rs (production strong-evidence Artist reconciliation reuses identities across Releases without normalized-name identity)",
+      "crates/melodee-catalog/src/importer.rs (catalog scheduler invokes Artist and Release reconciliation after import)",
+      "design/adr/ADR-0160-cross-release-artist-release-identity-reuse.md",
       "design/adr/ADR-0153-reuse-unambiguous-release-artist-identity-for-matching-tracks.md"
     ],
     "tests": [
       "crates/melodee-catalog/src/resolver.rs (same-name ambiguity and weak-name provisional tests)",
       "crates/melodee-persistence/tests/catalog_import.rs (same-Release singleton equality shares identity while observations remain distinct)",
-      "crates/melodee-persistence/tests/catalog_performance.rs (same names across Releases remain separate without N+1 lookup)"
+      "crates/melodee-persistence/tests/catalog_performance.rs (same names across Releases remain separate without N+1 lookup)",
+      "crates/melodee-persistence/tests/catalog_import.rs (trusted Release evidence convergence and reversible merge/split)"
     ]
   },
   "PRD-ARTIST-012": {
@@ -1864,7 +1873,8 @@
   "PRD-RESOLVE-005": {
     "status": "tested",
     "implementation": [
-      "crates/melodee-catalog/src/authority.rs (async provider-neutral ArtistAuthority without provider SDK or canonical provider identity)"
+      "crates/melodee-catalog/src/authority.rs (async provider-neutral ArtistAuthority without provider SDK or canonical provider identity)",
+      "crates/melodee-catalog/src/importer.rs (production reconciliation caller and bounded provider-evidence pass)"
     ],
     "tests": [
       "crates/melodee-catalog/src/authority.rs (deterministic fake authority boundary and failure semantics)"
@@ -1964,7 +1974,8 @@
     "implementation": [
       "design/adr/ADR-0117-use-a-postgresql-catalog-identity-and-contribution-schema-with-set-based-manifest-import.md",
       "crates/melodee-persistence/migrations/0007_phase4_catalog.sql",
-      "crates/melodee-persistence/src/catalog.rs, catalog_mutations.rs, and catalog_identity.rs"
+      "crates/melodee-persistence/src/catalog.rs, catalog_mutations.rs, and catalog_identity.rs",
+      "crates/melodee-persistence/migrations/0035_provider_enrichment_and_release_evidence.sql (Release external evidence and reversible merge/split records under ADR-0162)"
     ],
     "tests": [
       "crates/melodee-persistence/tests/catalog_*.rs (authoritative PostgreSQL catalog acceptance suite)"
@@ -2010,6 +2021,7 @@
     "implementation": [
       "crates/melodee-persistence/migrations/0007_phase4_catalog.sql (transactional catalog_projection_outbox)",
       "crates/melodee-persistence/src/catalog.rs, catalog_mutations.rs, and catalog_identity.rs (catalog writes and matching projection work commit together)",
+      "crates/melodee-persistence/src/provider_enrichment.rs (durable provider task and attempt transitions)",
       "crates/melodee-persistence/src/search.rs and crates/melodee-search/src/worker.rs (leased revision-fenced consumer acknowledges only after durable Tantivy commit)"
     ],
     "tests": [
@@ -2643,18 +2655,22 @@
     "note": "The C# plugin class architecture is not preserved; the user-visible scripting capability is preserved via the hook contract, the migration guide, and the documented shell-hook re-expression paths."
   },
   "PRD-EXT-001": {
-    "status": "deferred",
+    "status": "tested",
     "implementation": [
       "design/evidence/phase-9/lastfm-provider-evidence.md section 9 (enumerated legacy provider inventory: lastfm, musicbrainz, spotify, discogs, wikidata, itunes, deezer, brave, metalapi; AMG has no legacy implementation)",
-      "apps/melodee-server/src/lastfm.rs (Last.fm scrobble/now-playing client + session lifecycle; the only provider wired in Phase 9 WP-07)",
+      "apps/melodee-server/src/providers.rs (MusicBrainz, Discogs, Spotify, iTunes, Deezer, Wikidata, Brave, Metal-API, Last.fm metadata, and Melodee self-search runtime boundary)",
+      "apps/melodee-server/src/enrichment_worker.rs (production registration and durable worker composition)",
       "crates/melodee-persistence/src/settings.rs (legacy provider settings keys preserved verbatim, including the capital-E scrobbling.lastFm.Enabled / searchEngine.lastFm.Enabled quirk)",
       "design/adr/ADR-0136-defer-non-last-fm-external-provider-integrations-to-post-parity.md (superseded by ADR-0154)",
-      "design/adr/ADR-0154-external-provider-enrichment-scope-and-runtime.md (accepted: full active legacy provider set is a v1 obligation, optional and fail-degraded, behind a Rust-native provider boundary)"
+      "design/adr/ADR-0154-external-provider-enrichment-scope-and-runtime.md (accepted: full active legacy provider set is a v1 obligation, optional and fail-degraded, behind a Rust-native provider boundary)",
+      "design/adr/ADR-0163-rust-native-musicbrainz-decentdb-replica-reads.md (pinned read path for configured local replicas)"
     ],
     "tests": [
-      "apps/melodee-server/tests/lastfm_scrobble.rs (linking, scrobble/now-playing wire mapping, failure semantics against a local mock server)"
+      "apps/melodee-server/tests/lastfm_scrobble.rs (linking, scrobble/now-playing wire mapping, failure semantics against a local mock server)",
+      "apps/melodee-server/src/providers.rs tests (deterministic parser coverage for every accepted provider)",
+      "apps/melodee-server/tests/provider_enrichment_worker.rs (configured, disabled, cached, rate-limited, and partial-failure fixtures)"
     ],
-    "note": "Inventory documented and Last.fm (scrobble + linking) fully wired and tested. The remaining search/image providers are now a v1 obligation under accepted ADR-0154 (superseding ADR-0136) but are not yet implemented; their legs land in the Feature Completion Program Phase 2 (PROVIDER) workstream."
+    "note": "All accepted provider purposes have reachable local implementations. Real credentials, current-C# differential comparisons, and full production DecentDB dump/warmup rehearsal remain explicitly external; providers remain optional and fail-degraded."
   },
   "PRD-EXT-002": {
     "status": "tested",
@@ -2668,32 +2684,39 @@
     "note": "No external provider is required for a structurally valid local Release to enter the catalog."
   },
   "PRD-EXT-003": {
-    "status": "deferred",
+    "status": "tested",
     "implementation": [
       "crates/melodee-persistence/migrations/0028_phase9_external_providers.sql (external_provider_cache: bounded jsonb payload, hashed request key, fetched_at/expires_at)",
       "crates/melodee-persistence/src/providers.rs (ProviderCacheStore get-if-fresh/upsert/purge-expired)",
+      "apps/melodee-server/src/providers.rs (bounded HTTP calls, retry/backoff, response cache reads/writes, and cache freshness)",
+      "apps/melodee-server/src/enrichment_worker.rs (lease-based task processing and expired-cache cleanup)",
       "apps/melodee-server/src/lastfm.rs (single-attempt scrobble submission with 10 s timeout; failures degrade and drop the scrobble, never the ingestion/playback work \u2014 evidence doc section 5)",
       "design/adr/ADR-0136-defer-non-last-fm-external-provider-integrations-to-post-parity.md (superseded by ADR-0154)",
       "design/adr/ADR-0154-external-provider-enrichment-scope-and-runtime.md (accepted: the enrichment worker caches provider responses and writes provenance on external_provider_cache)"
     ],
     "tests": [
       "crates/melodee-persistence/tests/providers.rs (cache round-trip, freshness/expiry, bounded purge, SQL CHECK backstops)",
-      "apps/melodee-server/tests/lastfm_scrobble.rs (fail-degraded dispatch outcomes; invalid-session link clearing)"
+      "apps/melodee-server/tests/lastfm_scrobble.rs (fail-degraded dispatch outcomes; invalid-session link clearing)",
+      "apps/melodee-server/tests/provider_enrichment_worker.rs (fresh-cache hit avoids a second HTTP request; bounded 429 retry)"
     ],
-    "note": "The cache home and fail-degraded posture are implemented and tested; caching is not exercised by live metadata lookups because only Last.fm scrobbling (a write-only, uncacheable flow) is wired. Retry/backoff and provider-lookup caching land with the provider enrichment workstream under accepted ADR-0154 (superseding ADR-0136)."
+    "note": "Production provider metadata traffic now writes and reads external_provider_cache. Cache entries are fresh until their configured TTL, expired entries are purged/refreshed, and provider failure never fails catalog import."
   },
   "PRD-EXT-004": {
-    "status": "deferred",
+    "status": "tested",
     "implementation": [
       "crates/melodee-persistence/migrations/0028_phase9_external_providers.sql (external_provider_cache payload jsonb is the provenance/evidence home; provider payloads never become catalog identity per PRD-ARTIST-012)",
       "crates/melodee-persistence/src/providers.rs (ProviderCacheStore)",
+      "apps/melodee-server/src/providers.rs (provider/purpose/query cache keys and provenance payloads)",
+      "apps/melodee-server/src/enrichment_worker.rs (provider candidate evidence and artwork provenance)",
       "design/adr/ADR-0136-defer-non-last-fm-external-provider-integrations-to-post-parity.md (superseded by ADR-0154)",
       "design/adr/ADR-0154-external-provider-enrichment-scope-and-runtime.md (accepted: enrichment writes provider-scoped provenance/evidence rows on external_provider_cache)"
     ],
     "tests": [
-      "crates/melodee-persistence/tests/providers.rs"
+      "crates/melodee-persistence/tests/providers.rs",
+      "crates/melodee-persistence/tests/provider_enrichment.rs",
+      "apps/melodee-server/tests/provider_enrichment_worker.rs"
     ],
-    "note": "The provenance store exists and is tested. Provenance recording of actual provider-supplied metadata lands with the provider enrichment workstream under accepted ADR-0154 (superseding ADR-0136); Last.fm scrobbling records no catalog metadata."
+    "note": "Provider responses retain provider, purpose, query/cache key, fetch timestamp, candidate rank/confidence, error category, and artwork source provenance. Provider data remains evidence and never becomes canonical identity."
   },
   "PRD-UI-001": {
     "status": "tested",

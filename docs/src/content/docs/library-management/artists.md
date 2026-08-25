@@ -15,8 +15,9 @@ The catalog importer preserves each raw Release/Track Artist observation. When a
 Artist and a Track's single Artist observation exactly matches it, both observations resolve to the
 same provisional Artist identity within that Release. Different names, multi-Artist Release
 contexts, and same-name Artists from separate Releases remain separate unless stronger evidence or
-an administrator decision resolves them. Melodee never merges Artists from normalized-name
-equality alone and does not call an external identity provider during import.
+an administrator decision resolves them. Strong retained provider evidence may schedule an
+auditable reconciliation, but it never bypasses the accepted merge policy. Melodee never merges
+Artists from normalized-name equality alone.
 
 See [Identity Review](../admin/identity-review/) for the administrative workflow that resolves
 uncertain artist matches.

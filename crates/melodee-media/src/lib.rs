@@ -1684,29 +1684,6 @@ mod tests {
         }
     }
 
-    /// Creates a tiny real WAV file (8 kHz mono, 0.1 s) that lofty can tag.
-    fn write_tiny_wav(root: &Path, file_name: &str) -> PathBuf {
-        let path = root.join(file_name);
-        let sample_rate = 8_000_u32;
-        let data_size = 1_600_u32;
-        let mut wav = Vec::new();
-        wav.extend_from_slice(b"RIFF");
-        wav.extend_from_slice(&(36 + data_size).to_le_bytes());
-        wav.extend_from_slice(b"WAVEfmt ");
-        wav.extend_from_slice(&16_u32.to_le_bytes());
-        wav.extend_from_slice(&1_u16.to_le_bytes());
-        wav.extend_from_slice(&1_u16.to_le_bytes());
-        wav.extend_from_slice(&sample_rate.to_le_bytes());
-        wav.extend_from_slice(&(sample_rate * 2).to_le_bytes());
-        wav.extend_from_slice(&2_u16.to_le_bytes());
-        wav.extend_from_slice(&16_u16.to_le_bytes());
-        wav.extend_from_slice(b"data");
-        wav.extend_from_slice(&data_size.to_le_bytes());
-        wav.extend(std::iter::repeat_n(0_u8, data_size as usize));
-        fs::write(&path, wav).expect("tiny wav");
-        path
-    }
-
     /// TRACK-001: the six retained MusicBrainz identifier families are read back
     /// as raw observation strings in `ObservedMetadata.raw["musicbrainz_ids"]` for
     /// each format-native tag family (ID3v2 TXXX, Vorbis comment, MP4 atoms).
@@ -1825,7 +1802,7 @@ mod tests {
                     .expect("read native metadata");
             let ids = &metadata.raw["musicbrainz_ids"];
             for index in indexes {
-                let index = usize::try_from(*index).expect("small index");
+                let index = *index;
                 assert_eq!(
                     ids[FAMILIES[index].0],
                     serde_json::json!(VALUES[index]),
@@ -1944,6 +1921,170 @@ mod tests {
             serde_json::json!("not-a-guid at all"),
             "malformed identifiers are retained verbatim as observations"
         );
+    }
+
+    /// TRACK-001 ingestion-level proof (Wave 1): a release directory whose
+    /// audio files carry embedded MusicBrainz IDs produces a manifest in which
+    /// `ObservedMetadata.raw["musicbrainz_ids"]` retains every present family
+    /// as a raw observation string, for every format inspected here. The
+    /// semantic manifest hash is stable across a jsonb-style key-ordering
+    /// round trip, so the hash the publication gate compares
+    /// (`input_manifest_hash`) depends only on observed facts.
+    #[test]
+    fn musicbrainz_ids_survive_inspection_into_the_durable_manifest() {
+        const REC: &str = "aa1b1c1d-0000-7000-8000-000000000001";
+        const REL: &str = "aa1b1c1d-0000-7000-8000-000000000002";
+        const RLG: &str = "aa1b1c1d-0000-7000-8000-000000000003";
+        const ART: &str = "aa1b1c1d-0000-7000-8000-000000000004";
+        const REL_ART: &str = "aa1b1c1d-0000-7000-8000-000000000005";
+        const WORK: &str = "aa1b1c1d-0000-7000-8000-000000000006";
+        const FAMILIES: [(&str, ItemKey, &str); 6] = [
+            (
+                "recording",
+                ItemKey::MusicBrainzRecordingId,
+                "MUSICBRAINZ_TRACKID",
+            ),
+            (
+                "release",
+                ItemKey::MusicBrainzReleaseId,
+                "MUSICBRAINZ_ALBUMID",
+            ),
+            (
+                "release_group",
+                ItemKey::MusicBrainzReleaseGroupId,
+                "MUSICBRAINZ_RELEASEGROUPID",
+            ),
+            (
+                "artist",
+                ItemKey::MusicBrainzArtistId,
+                "MUSICBRAINZ_ARTISTID",
+            ),
+            (
+                "release_artist",
+                ItemKey::MusicBrainzReleaseArtistId,
+                "MUSICBRAINZ_ALBUMARTISTID",
+            ),
+            ("work", ItemKey::MusicBrainzWorkId, "MUSICBRAINZ_WORKID"),
+        ];
+        const VALUES: [&str; 6] = [REC, REL, RLG, ART, REL_ART, WORK];
+        // ID3v2.4 cannot round-trip the release/release-group families through
+        // lofty's writer, so MP3 asserts the four TXXX/UFID-mapped families;
+        // FLAC and MP4 assert all six.
+        const MP3_INDEXES: [usize; 4] = [0, 3, 4, 5];
+        const ALL_INDEXES: [usize; 6] = [0, 1, 2, 3, 4, 5];
+
+        let root = temp_dir("mb-ids-ingestion");
+        let (mp3, flac, m4a) = (
+            root.join("track.mp3"),
+            root.join("album.flac"),
+            root.join("disc.m4a"),
+        );
+        for (path, codec) in [(&mp3, "libmp3lame"), (&flac, "flac"), (&m4a, "aac")] {
+            let output = std::process::Command::new("ffmpeg")
+                .args([
+                    "-y",
+                    "-v",
+                    "error",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "sine=frequency=440:duration=0.2:sample_rate=8000",
+                    "-c:a",
+                    codec,
+                ])
+                .arg(path)
+                .output()
+                .expect("ffmpeg");
+            assert!(
+                output.status.success(),
+                "ffmpeg failed for {}",
+                path.display()
+            );
+        }
+
+        let mut id3 = Tag::new(TagType::Id3v2);
+        let mut vorbis = Tag::new(TagType::VorbisComments);
+        let mut mp4 = Tag::new(TagType::Mp4Ilst);
+        for (index, (_, key, description)) in FAMILIES.iter().enumerate() {
+            let value = VALUES[index].to_owned();
+            let mut item = TagItem::new(*key, ItemValue::Text(value.clone()));
+            item.set_description(description.to_string());
+            id3.insert_unchecked(item);
+            assert!(vorbis.insert_text(*key, value.clone()));
+            assert!(mp4.insert_text(*key, value));
+        }
+        id3.save_to_path(&mp3, WriteOptions::default())
+            .expect("write id3 tag");
+        vorbis
+            .save_to_path(&flac, WriteOptions::default())
+            .expect("write vorbis tag");
+        mp4.save_to_path(&m4a, WriteOptions::default())
+            .expect("write mp4 tag");
+
+        let report = inspect_release(
+            Uuid::now_v7(),
+            None,
+            "mb-ids",
+            &root,
+            None,
+            None,
+            &InspectionOptions::default(),
+        )
+        .expect("inspect mb-tagged release");
+        assert!(report.structurally_valid);
+        assert_eq!(3, report.manifest.files.len());
+
+        for (path, indexes) in [
+            (&mp3, MP3_INDEXES.as_slice()),
+            (&flac, ALL_INDEXES.as_slice()),
+            (&m4a, ALL_INDEXES.as_slice()),
+        ] {
+            let file = report
+                .manifest
+                .files
+                .iter()
+                .find(|file| file.relative_path == path.file_name().unwrap().to_string_lossy())
+                .unwrap_or_else(|| panic!("inspected file for {}", path.display()));
+            let metadata = file
+                .metadata
+                .as_ref()
+                .unwrap_or_else(|| panic!("native metadata for {}", path.display()));
+            let ids = &metadata.raw["musicbrainz_ids"];
+            for index in indexes {
+                let index = *index;
+                assert_eq!(
+                    ids[FAMILIES[index].0],
+                    serde_json::json!(VALUES[index]),
+                    "{} retained in the durable manifest for {}",
+                    FAMILIES[index].0,
+                    path.display()
+                );
+            }
+        }
+
+        // The hash the ingestion/publication gate compares must be a function
+        // of observed facts only: a jsonb-style key reordering of the whole
+        // manifest (including the retained ID object) leaves it unchanged.
+        let original = hash_manifest(&report.manifest).unwrap();
+        fn reverse_keys(value: &serde_json::Value) -> serde_json::Value {
+            match value {
+                serde_json::Value::Object(map) => {
+                    let mut reversed = serde_json::Map::new();
+                    for (key, entry) in map.iter().rev() {
+                        reversed.insert(key.clone(), reverse_keys(entry));
+                    }
+                    serde_json::Value::Object(reversed)
+                }
+                serde_json::Value::Array(items) => {
+                    serde_json::Value::Array(items.iter().map(reverse_keys).collect())
+                }
+                scalar => scalar.clone(),
+            }
+        }
+        let reordered = reverse_keys(&serde_json::to_value(&report.manifest).unwrap());
+        let decoded: ReleaseManifest = serde_json::from_value(reordered).unwrap();
+        assert_eq!(original, hash_manifest(&decoded).unwrap());
+        assert_eq!(report.manifest_hash, original);
     }
 
     #[cfg(unix)]

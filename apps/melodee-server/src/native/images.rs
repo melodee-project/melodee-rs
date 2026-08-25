@@ -513,7 +513,39 @@ async fn artwork_override_bytes(
         }
         ImageKind::Playlist | ImageKind::User => return Ok(None),
     };
-    sqlx::query_scalar(query)
+    let override_bytes = sqlx::query_scalar(query)
+        .bind(public_id)
+        .fetch_optional(pool)
+        .await?;
+    if override_bytes.is_some() {
+        return Ok(override_bytes);
+    }
+    let provider_query = match kind {
+        ImageKind::Album => {
+            "SELECT image.image_bytes FROM catalog_provider_images image
+             JOIN releases release ON release.id=image.entity_id
+             WHERE image.entity_type='release' AND release.public_api_id=$1
+               AND release.status='active'
+             ORDER BY image.confidence DESC, image.observed_at DESC, image.id DESC LIMIT 1"
+        }
+        ImageKind::Song => {
+            "SELECT image.image_bytes FROM catalog_provider_images image
+             JOIN releases release ON release.id=image.entity_id
+             JOIN tracks track ON track.release_id=release.id
+             WHERE image.entity_type='release' AND track.public_api_id=$1
+               AND release.status='active'
+             ORDER BY image.confidence DESC, image.observed_at DESC, image.id DESC LIMIT 1"
+        }
+        ImageKind::Artist => {
+            "SELECT image.image_bytes FROM catalog_provider_images image
+             JOIN artists artist ON artist.id=image.entity_id
+             WHERE image.entity_type='artist' AND artist.public_api_id=$1
+               AND artist.status NOT IN ('merged','deprecated')
+             ORDER BY image.confidence DESC, image.observed_at DESC, image.id DESC LIMIT 1"
+        }
+        ImageKind::Playlist | ImageKind::User => return Ok(None),
+    };
+    sqlx::query_scalar(provider_query)
         .bind(public_id)
         .fetch_optional(pool)
         .await

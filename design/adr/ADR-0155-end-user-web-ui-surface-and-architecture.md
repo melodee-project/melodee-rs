@@ -1,10 +1,10 @@
 # ADR-0155: End-user web UI product surface and architecture
 
 - **Date:** 2026-08-24
-- **Status:** Accepted
+- **Status:** Superseded
 - **Decision owners:** Feature Completion Program Phase 0 (explicitly user-assigned)
 - **Supersedes:** None
-- **Superseded by:** None
+- **Superseded by:** [ADR-0161](ADR-0161-meloamp-owns-listener-workflows-and-the-server-exposes-only-admin-and-narrow-html-surfaces.md)
 - **Related requirements:** PRD-WEB-001, PRD-WEB-002, PRD-UI-002, PRD-TEST-008, PRD-API-ADMIN-003,
   PRD-AUTH-003, PRD-STREAM-001, PRD-PARTY-003, PRD-USER-001
 

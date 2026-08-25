@@ -1081,6 +1081,8 @@ export interface ReleaseDetail {
   displayArtist: string | null;
   releaseDate: string | null;
   releaseDateText: string | null;
+  country?: string | null;
+  type?: string | null;
   status: CatalogReleaseStatus;
   revision: number;
   trackCount: number;

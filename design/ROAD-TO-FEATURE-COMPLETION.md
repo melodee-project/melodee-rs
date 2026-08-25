@@ -2,18 +2,40 @@
 
 **Document status:** DRAFT planning proposal — **non-authorizing**. Last updated: 2026-08-25.
 
-> ## Revision note (2026-08-25)
+> ## Current disposition (2026-08-25)
 >
-> **Feature-Completion Phase 1 is in progress** per
+> **Feature-Completion Phase 1 is complete** per
 > [agents/FEATURE-COMPLETION-PHASE-1-PLAN.md](agents/FEATURE-COMPLETION-PHASE-1-PLAN.md)
-> (workstreams A–D: RELEASE-002 metadata-editing proof, TRACK-001/002 MusicBrainz-ID
+> and [evidence/feature-completion/phase-1/PHASE-1-REPORT.md](evidence/feature-completion/phase-1/PHASE-1-REPORT.md).
+> Feature-Completion Phase 2 is complete, with its execution map at
+> [agents/FEATURE-COMPLETION-PHASE-2-PLAN.md](agents/FEATURE-COMPLETION-PHASE-2-PLAN.md) and evidence
+> at [evidence/feature-completion/phase-2/PHASE-2-REPORT.md](evidence/feature-completion/phase-2/PHASE-2-REPORT.md).
+> It owns identity convergence, all ADR-0154 providers and purposes, durable enrichment, provider
+> lookup, and artwork. The older W0-only authorization text below is historical and superseded.
+
+> ## Listener product decision (ADR-0161)
+>
+> MeloAmp owns listener browsing, search, playback, playlists, ratings, recommendations, and
+> related listener workflows. The Rust server owns APIs, ingestion, storage, streaming, operations,
+> and `/admin`. `WEBUI-001` is `DIFFERENT — APPROVED`, relocated to MeloAmp; the duplicate listener
+> SPA phase and server backlog blocker are removed from the active plan. Narrow HTML pages remain
+> allowed only for a genuinely required public-link or security flow.
+
+> Current Phase 2 row dispositions: `ARTIST-001/002` and `RELEASE-001/002` are implemented on
+> the production importer/resolver and audited correction paths; `TRACK-001/002` has six-family
+> evidence and bounded Proposed AudioIdentity decisions; `PROVIDER-001`/`ARTWORK-001` has all
+> accepted provider purposes, the pinned DecentDB read path, cache/worker/artwork/API fixtures,
+> with real credentials and full production dump/warmup rehearsal still external; `CONFIG-001`
+> provider settings have runtime consumers; `JOBS-001` provider maintenance is implemented while
+> unrelated legacy jobs remain tracked; and `WEBUI-001` is `DIFFERENT — APPROVED` under ADR-0161.
+
+> Historical Phase 1 revision text:
+>
+> Workstreams A–D were RELEASE-002 metadata-editing proof, TRACK-001/002 MusicBrainz-ID
 > retention + AudioIdentity import-time evidence/proposals, local proof for the nine
-> `IMPLEMENTED — UNPROVEN` rows, and closeout). Evidence is accumulating at
+> `IMPLEMENTED — UNPROVEN` rows, and closeout. Evidence was recorded at
 > [evidence/feature-completion/phase-1/PHASE-1-REPORT.md](evidence/feature-completion/phase-1/PHASE-1-REPORT.md)
-> (currently a stub pending the parallel evidence work). The 2026-08-23 note's
-> "authorized scope inside this non-authorizing document" paragraph — which authorized the
-> W0 workstream only — is **superseded by the current user phase assignment** for
-> Feature-Completion Phase 1; its historical text is retained below unchanged.
+> The 2026-08-23 note's W0-only authorization paragraph is retained below as historical text.
 
 > ## Revision note (2026-08-23) — historical (W0-only authorization portion superseded, see 2026-08-25 note above)
 >
@@ -38,8 +60,8 @@
 >   may be treated as permission to begin implementation.
 > - **Canonical Phases 0–10 are complete.** Their evidence is recorded in
 >   [ROAD-TO-FEATURE-PARITY.md](ROAD-TO-FEATURE-PARITY.md) and the phase reports linked below.
->   The **next canonical repository phase remains unassigned** and may only be started after an
->   explicit phase assignment and operator authorization.
+>   Feature-Completion Phase 2 is complete under its phase report; remaining live-provider,
+>   production-replica, differential, and cutover legs remain explicitly operator-authorized.
 > - **Migration/cutover is the existing, unassigned Phase 11 domain** (ADR-0148/0149/0150). It is
 >   *not* a newly numbered phase, and its production legs (rehearsal, cutover, rollback, release
 >   acceptance) belong to that existing Phase 11 scope.
@@ -47,13 +69,13 @@
 >   names** ("decision gate", "stage", "workstream") and are explicitly *not* the canonical Phase
 >   0–6 numbering. They do not override the authority order in
 >   [AGENTS.md](../AGENTS.md).
-> - Several rows below reference **product decisions** (`WEBUI-001`, `PLAYBACK-002`, provider
->   breadth, scheduled-job run history, OS `?size=`). **These are resolved**: the Phase 0 ADRs
->   (ADR-0154…0160) are accepted and recorded in
+> - Several rows below reference **historical product decisions**. Provider breadth, scheduled-job
+>   history, and OS `?size=` are governed by accepted ADRs 0154–0160. `WEBUI-001` is resolved by
+>   accepted ADR-0161 and relocated to MeloAmp; it is not an active server SPA workstream. The
+>   Phase 0 ADRs (ADR-0154…0161) are accepted and recorded in
 >   [ADR-0154](adr/ADR-0154-external-provider-enrichment-scope-and-runtime.md) and the
 >   [ADR index](adr/README.md). No product decision blocks the Phase 0 ADRs any longer. The
->   *implementation* of the affected workstreams (W3, W5, W6, etc.) is still not started until the
->   next phase is assigned and authorized.
+>   implementation of the assigned Phase 2 workstreams is recorded in the Phase 2 report.
 
 This is the **forward-looking proposal** for taking Melodee from "most features ported and proven"
 to **v1.0.0 feature-complete** — every *in-scope* capability of the C# Melodee application
@@ -155,9 +177,9 @@ actually require:
   CLI-001, PACKAGING-001, and the two product-decision rows PLAYBACK-002 / WEBUI-001.
   `AUTH-001` is `PARTIAL`, not `IMPLEMENTED — UNPROVEN`: its Google OIDC flow exists and is
   loopback-tested; what is missing is real-provider proof plus roles/profiles depth.
-- **Net-new surfaces (largest effort):** WEBUI-001 (end-user web UI — product decision),
-  ADMINUI-001 (admin UI completion + edit forms), PLAYBACK-002 (MPD/MPV backends — product
-  decision).
+- **Net-new surfaces (remaining):** ADMINUI-001 (admin UI completion + edit forms) and
+  PLAYBACK-002 (MPD/MPV backends — separate product scope). WEBUI-001 is an approved MeloAmp
+  relocation under ADR-0161, not an active Rust server surface.
 
 ### 3.1 The 28 v1.0.0 blockers — exactly one primary owning workstream each
 
@@ -179,7 +201,7 @@ decisions; the two product-decision rows and MIGRATE-002's phrasing are exactly 
 | `ARTIST-002` (`PARTIAL`) | W3 — provider enrichment worker | W2 (resolver consumes provider evidence) |
 | `JOBS-001` (`PARTIAL`) | W3 — provider enrichment worker | Decision gate (scheduled-job run history) |
 | `ARTWORK-001` (`PARTIAL`) | W4 — provider-discovered artwork & OS stored-artwork `?size=` | W3 (enrichment); Decision gate (OS `?size=`); ADR-0143 |
-| `WEBUI-001` (product decision) | W5 — end-user web UI | Decision gate (WEBUI-001); ADR-0138/0139 stack |
+| `WEBUI-001` (`DIFFERENT — APPROVED`) | Approved relocation to MeloAmp; no Rust server workstream | ADR-0161; MeloAmp native-v1 acceptance |
 | `PLAYBACK-002` (product decision) | W6 — playback backends (MPD/MPV) | Decision gate (MPD/MPV scope) |
 | `AUTH-001` (`PARTIAL`) | W7 — auth/roles/profiles closure | R4 external leg (real Google OIDC) after freeze |
 | `MEDIA-001` (`PARTIAL`) | W7 — remaining PARTIAL closure | ADR-0117/0118 (metadata schema) |
@@ -213,7 +235,7 @@ Per feature, the C# approach and the Rust-native replacement this program target
 | Provider enrichment at ingestion | Hardwired search-engine services, inline, blocking in staging | A **separate, bounded, fail-degraded enrichment worker** on the durable work-item engine — *not* part of catalog import. Providers sit behind the provider-neutral `ArtistAuthority` boundary; results are recorded as cache/provenance evidence in `external_provider_cache` and **schedule local re-resolution** without ever blocking catalog entry (PRD-EXT-002). Acceptance concerns are explicit: cancellation, bounded concurrency, per-provider rate limiting, retries/backoff, idempotency, and operator-visible failure behavior. |
 | MusicBrainz/external ID retention | Opaque MB-ID columns on catalog rows | Structured **external-ID evidence** per Melodee identity (never a string identity key), under the accepted schema decision ADR-0117 (`artist_external_identities`, `tracks`, `media_assets`, `audio_identity`). Feeds the resolver; no new schema is assumed. |
 | Metadata edit forms + tag rewrite | `MediaEditService` 12 transforms | Idempotent transactional catalog mutations with in-transaction audit (already in `catalog_mutations.rs`), field-level validation, SPA save-path fix + full test coverage. The **route/field contract is a single decision** owned by the W0 workstream — it is not simultaneously "an ADR decision" and "no ADR needed". |
-| End-user web UI | Blazor server-rendered + SignalR | Modern SPA on the ADR-0138/0139 stack, consuming native-v1 over WebSocket/SSE (no SignalR), Carbon components, localized + RTL. **Gated on [ADR-0155](adr/ADR-0155-end-user-web-ui-surface-and-architecture.md) (accepted).** |
+| End-user web UI | Blazor server-rendered + SignalR | MeloAmp owns the listener application; the Rust server exposes APIs and `/admin`. Narrow HTML only for required public/security flows under [ADR-0161](adr/ADR-0161-meloamp-owns-listener-workflows-and-the-server-exposes-only-admin-and-narrow-html-surfaces.md). |
 | Scheduled jobs | Quartz, per-job `JobHistories` | Keep the durable work-item engine as the runtime (crash-safe, lease-based — stronger than Quartz); add a per-scheduled-job **run-history** projection for operator visibility. **Gated on [ADR-0158](adr/ADR-0158-scheduled-job-run-history-storage.md) (accepted).** |
 | Rate limiting / middleware | Named policies | Per-surface token-bucket middleware with documented budgets + differential evidence |
 
@@ -229,9 +251,9 @@ in the [ADR index](adr/README.md) under "Feature Completion Program decisions"):
    ADR-0136; provider enrichment is a **v1 obligation** (build, not waive). Defines the provider
    adapter boundary, the enrichment worker, cache/provenance/rate-limit design on
    `external_provider_cache`, and the fail-degraded contract.
-2. **[ADR-0155](adr/ADR-0155-end-user-web-ui-surface-and-architecture.md)** — end-user web UI
-   surface: a separate SPA served at `/` on the ADR-0138/0139 stack, consuming native-v1, with an
-   SSE/WebSocket push channel (replacing SignalR) and the public share landing.
+2. **[ADR-0161](adr/ADR-0161-meloamp-owns-listener-workflows-and-the-server-exposes-only-admin-and-narrow-html-surfaces.md)**
+   — supersedes ADR-0155: MeloAmp owns listener workflows; the Rust server does not build a
+   duplicate listener SPA.
 3. **[ADR-0156](adr/ADR-0156-mpd-mpv-backend-connectivity-and-lifecycle.md)** — MPD/MPV playback
    backends: a `PlaybackBackend` trait + MPD (TCP) / MPV (IPC socket) adapters, singleton cache,
    fail-degraded availability, and additive native playback-control routes.
@@ -271,32 +293,33 @@ in the [ADR index](adr/README.md) under "Feature Completion Program decisions"):
 
 **Exit:** RELEASE-002 `PROVEN`; most UNPROVEN rows `PROVEN`; TRACK gap closed or ADR'd.
 
-### Phase 2 — Artist identity + provider enrichment (core "better" block)
+### Phase 2 — Artist identity + provider enrichment (core "better" block; complete locally)
 
-Gated on Phase 0 ADRs 1 and 4. This is where the unused `resolver.rs` / `authority.rs` /
-`external_provider_cache` finally go live.
+Executed under ADRs 0154, 0160, and 0162. This is where `resolver.rs`, the provider boundary,
+and `external_provider_cache` go live.
 
-- **ARTIST-001 (`DIFFERENT — UNAPPROVED` → `PROVEN`):** wire `LocalArtistResolver` +
-  `ArtistAuthority` into catalog import (extend the ADR-0153 singleton pattern to cross-Release),
-  replacing fresh-`Uuid::now_v7()`-per-observation at `catalog.rs:1057`. Add a **data-quality
-  property test**: same artist across N releases → exactly one identity. Top correctness priority
-  — a silent, compounding data bug.
-- **PROVIDER-001 / ARTIST-002 / JOBS-001 / ARTWORK-001:** enrichment worker + provider adapters
+- **ARTIST-001:** `LocalArtistResolver` now has a production reconciliation caller; strong embedded
+  evidence converges identities while weak, conflicting, locked, and negative evidence remains
+  separate. The acceptance tests prove the cross-Release merge/split and same-name safety cases.
+- **PROVIDER-001 / ARTIST-002 / JOBS-001 / ARTWORK-001:** the durable enrichment worker and provider adapters
   (MusicBrainz, Discogs, Spotify, iTunes, Deezer, Wikidata, Brave, Metal-API + Last.fm lookup legs)
   behind the existing provider-neutral boundary; live `external_provider_cache` writes with
   provenance; honor `searchEngine.*` settings (currently inert, `settings.rs:462-484`);
-  provider-discovered artwork; enrichment jobs on the work-item engine. Differential evidence that
-  staging enrichment matches or exceeds C#.
+  provider-discovered artwork; enrichment jobs on the work-item engine. Deterministic local fixture
+  evidence covers composition, cache, leases, failure recovery, and artwork precedence. External
+  credential and real-provider legs remain explicitly listed in the Phase 2 report.
 
-**Exit:** ARTIST-001 `PROVEN`; PROVIDER/ARTIST-002/ARTWORK-001/JOBS-001 `PROVEN`.
+**Exit:** implementation and local acceptance complete; remaining differential and operator legs
+are recorded conservatively in the Phase 2 report.
 
-### Phase 3 — End-user web UI (net-new surface; largest single block)
+### Historical proposal — Phase 3 end-user web UI (retired by ADR-0161)
 
-Per Phase 0 ADR 2: the full user product (dashboard, MQL search, music player, stats, public share
-landing, account flows) as a modern SPA on the native-v1 API. Per-screen checklist,
-Playwright/visual, Carbon-first, localized + RTL.
+The former proposal for a duplicate server listener SPA is retained as historical planning context.
+ADR-0161 supersedes it: MeloAmp is the listener application and the Rust server owns `/admin`,
+APIs, ingestion, storage, streaming, and operations. Narrow public/security HTML pages remain
+bounded and are not a listener application.
 
-**Exit:** WEBUI-001 `PROVEN` (per-screen) with e2e + visual evidence.
+**Disposition:** `WEBUI-001` — `DIFFERENT — APPROVED`, relocated to MeloAmp.
 
 ### Phase 4 — MPD/MPV backends + remaining PARTIAL rows
 
@@ -337,7 +360,6 @@ completeness statement, with the accepted-difference list in its §8.
 ```text
 Phase 0 (ADRs 1-6) ──┬─► Phase 1 (quick wins + RELEASE-002 bug; independent)
                      ├─► Phase 2 (ARTIST / PROVIDER)   [needs ADR 1, 4]
-                     ├─► Phase 3 (end-user web UI)     [needs ADR 2]
                      ├─► Phase 4 (MPD/MPV + PARTIAL)   [needs ADR 3 + Phase 2 for settings]
                      └─► (all) ──► Phase 5 (migration / packaging)
                                           └─► Phase 6 (final re-audit → v1.0.0)
@@ -345,25 +367,25 @@ Phase 0 (ADRs 1-6) ──┬─► Phase 1 (quick wins + RELEASE-002 bug; indepe
 
 ## 7. Effort ranking (largest → smallest)
 
-1. **Phase 3 — end-user web UI.** Net-new product surface; the largest block.
-2. **Phase 2 — provider enrichment + Artist identity.** Most *architecturally* significant, but
+1. **Phase 2 — provider enrichment + Artist identity.** Most *architecturally* significant, but
    the design seams already exist (highest leverage).
-3. **Phase 4 — admin UI completion + edit forms.** Sizable UI work.
-4. **Phase 1 — quick wins.** Mostly test/evidence work; fast wins; the RELEASE-002 bug is urgent.
-5. **Phase 5 — migration / packaging.** Operator-heavy; on the critical path.
+2. **Phase 4 — admin UI completion + edit forms.** Sizable UI work.
+3. **Phase 1 — quick wins.** Mostly test/evidence work; fast wins; the RELEASE-002 bug is urgent.
+4. **Phase 5 — migration / packaging.** Operator-heavy; on the critical path.
 
 ## 8. Open items (resolved in Phase 0)
 
-The three open product decisions below were resolved by the accepted Phase 0 ADRs
+The product decisions below are resolved by the accepted ADRs
 ([ADR-0154](adr/ADR-0154-external-provider-enrichment-scope-and-runtime.md),
-[ADR-0155](adr/ADR-0155-end-user-web-ui-surface-and-architecture.md),
+[ADR-0161](adr/ADR-0161-meloamp-owns-listener-workflows-and-the-server-exposes-only-admin-and-narrow-html-surfaces.md),
 [ADR-0156](adr/ADR-0156-mpd-mpv-backend-connectivity-and-lifecycle.md)):
 
 - **Provider enrichment (ADR-0154):** the **full active legacy provider set** (MusicBrainz incl.
   DecentDB, Discogs, Spotify, iTunes, Deezer, Wikidata, Brave, Metal-API + Last.fm metadata-lookup
   legs) is in v1 scope, optional and fail-degraded, behind a single Rust-native provider boundary.
-- **End-user web UI (ADR-0155):** a **separate SPA served at `/`** on the ADR-0138/0139 stack,
-  consuming native-v1 over an SSE/WebSocket push channel — a **first-class v1 surface**.
+- **End-user web UI (ADR-0161):** MeloAmp owns the listener application. The Rust server does not
+  build a second listener SPA; `WEBUI-001` is an approved relocation, with narrow HTML only when a
+  public/security flow requires it.
 - **MPD/MPV (ADR-0156):** **both MPD and MPV** ship in v1 as configuration-selected backends,
   fail-degraded when the backend process is unavailable.
 

@@ -463,25 +463,43 @@ pub static KNOWN_SETTINGS: &[KnownSetting] = &[
     KnownSetting { key: "searchEngine.brave.baseUrl", kind: SettingKind::Text, secret: false, default: Some("https://api.search.brave.com"), env: None },
     KnownSetting { key: "searchEngine.brave.enabled", kind: SettingKind::Bool, secret: false, default: Some("false"), env: None },
     KnownSetting { key: "searchEngine.brave.imageSearchPath", kind: SettingKind::Text, secret: false, default: None, env: None },
+    KnownSetting { key: "searchEngine.brave.timeoutMs", kind: SettingKind::Int { min: 100, max: Some(30000) }, secret: false, default: Some("5000"), env: None },
+    KnownSetting { key: "searchEngine.deezer.baseUrl", kind: SettingKind::Text, secret: false, default: Some("https://api.deezer.com"), env: None },
     KnownSetting { key: "searchEngine.deezer.enabled", kind: SettingKind::Bool, secret: false, default: Some("true"), env: None },
+    KnownSetting { key: "searchEngine.deezer.timeoutMs", kind: SettingKind::Int { min: 100, max: Some(30000) }, secret: false, default: Some("5000"), env: None },
     KnownSetting { key: "searchEngine.defaultPageSize", kind: SettingKind::Int { min: 1, max: None }, secret: false, default: Some("20"), env: None },
+    KnownSetting { key: "searchEngine.discogs.baseUrl", kind: SettingKind::Text, secret: false, default: Some("https://api.discogs.com"), env: None },
     KnownSetting { key: "searchEngine.discogs.enabled", kind: SettingKind::Bool, secret: false, default: Some("false"), env: None },
+    KnownSetting { key: "searchEngine.discogs.timeoutMs", kind: SettingKind::Int { min: 100, max: Some(30000) }, secret: false, default: Some("5000"), env: None },
     KnownSetting { key: "searchEngine.discogs.userToken", kind: SettingKind::Text, secret: true, default: Some(""), env: None },
+    KnownSetting { key: "searchEngine.itunes.baseUrl", kind: SettingKind::Text, secret: false, default: Some("https://itunes.apple.com"), env: None },
     KnownSetting { key: "searchEngine.itunes.enabled", kind: SettingKind::Bool, secret: false, default: Some("true"), env: None },
+    KnownSetting { key: "searchEngine.itunes.timeoutMs", kind: SettingKind::Int { min: 100, max: Some(30000) }, secret: false, default: Some("5000"), env: None },
     KnownSetting { key: "searchEngine.lastFm.Enabled", kind: SettingKind::Bool, secret: false, default: Some("true"), env: None },
+    KnownSetting { key: "searchEngine.lastFm.baseUrl", kind: SettingKind::Text, secret: false, default: Some("https://ws.audioscrobbler.com/2.0/"), env: None },
+    KnownSetting { key: "searchEngine.lastFm.timeoutMs", kind: SettingKind::Int { min: 100, max: Some(30000) }, secret: false, default: Some("5000"), env: None },
     KnownSetting { key: "searchEngine.maximumAllowedPageSize", kind: SettingKind::Int { min: 1, max: None }, secret: false, default: Some("1000"), env: None },
+    KnownSetting { key: "searchEngine.metalApi.baseUrl", kind: SettingKind::Text, secret: false, default: Some("https://metal-api.dev"), env: None },
     KnownSetting { key: "searchEngine.metalApi.enabled", kind: SettingKind::Bool, secret: false, default: Some("false"), env: None },
+    KnownSetting { key: "searchEngine.metalApi.timeoutMs", kind: SettingKind::Int { min: 100, max: Some(30000) }, secret: false, default: Some("5000"), env: None },
+    KnownSetting { key: "searchEngine.musicbrainz.baseUrl", kind: SettingKind::Text, secret: false, default: Some("https://musicbrainz.org/ws/2"), env: None },
     KnownSetting { key: "searchEngine.musicbrainz.enabled", kind: SettingKind::Bool, secret: false, default: Some("true"), env: None },
     KnownSetting { key: "searchEngine.musicbrainz.importBatchSize", kind: SettingKind::Int { min: 1, max: None }, secret: false, default: Some("50000"), env: None },
     KnownSetting { key: "searchEngine.musicbrainz.importLastImportTimestamp", kind: SettingKind::Text, secret: false, default: Some(""), env: None },
     KnownSetting { key: "searchEngine.musicbrainz.importMaximumToProcess", kind: SettingKind::Int { min: 0, max: None }, secret: false, default: Some("0"), env: None },
     KnownSetting { key: "searchEngine.musicbrainz.storagePath", kind: SettingKind::Text, secret: false, default: None, env: None },
+    KnownSetting { key: "searchEngine.musicbrainz.timeoutMs", kind: SettingKind::Int { min: 100, max: Some(30000) }, secret: false, default: Some("5000"), env: None },
+    KnownSetting { key: "searchEngine.provider.cacheTtlHours", kind: SettingKind::Int { min: 1, max: Some(168) }, secret: false, default: Some("6"), env: None },
     KnownSetting { key: "searchEngine.spotify.accessToken", kind: SettingKind::Text, secret: true, default: Some(""), env: None },
     KnownSetting { key: "searchEngine.spotify.apiKey", kind: SettingKind::Text, secret: true, default: Some(""), env: None },
+    KnownSetting { key: "searchEngine.spotify.baseUrl", kind: SettingKind::Text, secret: false, default: Some("https://api.spotify.com/v1"), env: None },
     KnownSetting { key: "searchEngine.spotify.enabled", kind: SettingKind::Bool, secret: false, default: Some("false"), env: None },
     KnownSetting { key: "searchEngine.spotify.sharedSecret", kind: SettingKind::Text, secret: true, default: Some(""), env: None },
+    KnownSetting { key: "searchEngine.spotify.timeoutMs", kind: SettingKind::Int { min: 100, max: Some(30000) }, secret: false, default: Some("5000"), env: None },
     KnownSetting { key: "searchEngine.userAgent", kind: SettingKind::Text, secret: false, default: Some("Mozilla/5.0 (X11; Linux x86_64; rv:131.0) Gecko/20100101 Firefox/131.0"), env: None },
+    KnownSetting { key: "searchEngine.wikidata.baseUrl", kind: SettingKind::Text, secret: false, default: Some("https://query.wikidata.org/sparql"), env: None },
     KnownSetting { key: "searchEngine.wikidata.enabled", kind: SettingKind::Bool, secret: false, default: Some("false"), env: None },
+    KnownSetting { key: "searchEngine.wikidata.timeoutMs", kind: SettingKind::Int { min: 100, max: Some(30000) }, secret: false, default: Some("5000"), env: None },
     KnownSetting { key: "searchResults.defaultPageSize", kind: SettingKind::Int { min: 1, max: None }, secret: false, default: Some("50"), env: None },
     KnownSetting { key: "security.blacklistedEmails", kind: SettingKind::Text, secret: false, default: Some(""), env: None },
     KnownSetting { key: "security.blacklistedIPs", kind: SettingKind::Text, secret: false, default: Some(""), env: None },
@@ -1405,12 +1423,12 @@ mod tests {
 
     #[test]
     fn known_settings_table_is_sorted_complete_and_consistent() {
-        // 190-key legacy inventory + `transcoding.maxConcurrent`, the first
-        // non-legacy operator setting, added under ADR-0147 decision 5.
+        // 190-key legacy inventory + provider runtime settings, provider
+        // timeout settings, and `transcoding.maxConcurrent`.
         assert_eq!(
             KNOWN_SETTINGS.len(),
-            191,
-            "190-key legacy inventory + ADR-0147"
+            209,
+            "190-key legacy inventory + provider runtime settings + timeouts + ADR-0147"
         );
         for pair in KNOWN_SETTINGS.windows(2) {
             assert!(

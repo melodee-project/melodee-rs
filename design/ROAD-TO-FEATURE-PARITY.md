@@ -4,13 +4,59 @@
 **Audit baseline date:** 2026-08-23 (latest pass 2026-08-23, entry 5; 2026-08-25
 Feature-Completion Phase 1 addendum added at the top of this document)
 
-## 2026-08-25 Feature-Completion Phase 1 addendum (in progress)
+## 2026-08-25 Feature-Completion Phase 2 addendum — implementation and local acceptance complete
 
-Feature-Completion Phase 1 (per
+Phase 1 is terminal; its evidence is in
+[evidence/feature-completion/phase-1/PHASE-1-REPORT.md](evidence/feature-completion/phase-1/PHASE-1-REPORT.md).
+Phase 2 implemented the production identity/provider pipeline under ADR-0162 and the listener
+surface decision under ADR-0161. The current status is conservative: local deterministic provider,
+PostgreSQL, ingestion, cache, lease, artwork, merge/split, and API acceptance is complete, while
+current-C# differential tests, real credentials, full production-replica dump/warmup rehearsal,
+and operator-owned production-library legs remain explicitly unproven where they were not
+executed. The pinned Rust DecentDB read path itself is implemented and fixture-tested under
+ADR-0163; the remaining replica leg is operational data preparation and rehearsal, not an inert
+provider implementation.
+
+Current Phase 2 evidence includes:
+
+- embedded six-family MusicBrainz evidence and 36 idempotently scheduled enrichment tasks from
+  catalog import (`catalog_import.rs`);
+- production LocalArtistResolver/Release reconciliation callers, trusted-evidence merge/split,
+  locked/negative/conflict safety, and reversible audited Release correction;
+- all ADR-0154 provider descriptors and deterministic parsers, runtime settings/capabilities,
+  cache/provenance, bounded HTTP retries, partial-failure reporting, and the durable enrichment
+  worker (`apps/melodee-server/src/providers.rs`, `enrichment_worker.rs`);
+- native provider-backed Artist lookup and provider artwork precedence across native-v1,
+  OpenSubsonic, and Jellyfin image serving; and
+- deterministic provider worker fixtures for disabled, configured/cache-hit, rate-limited, and
+  candidate-evidence paths.
+
+ADR-0161 records `WEBUI-001` as `DIFFERENT — APPROVED` with MeloAmp as the replacement listener
+surface. The duplicate server listener SPA is removed from the active backlog; historical audit
+rows below remain unchanged and are interpreted under the superseding ADR.
+
+The historical §4 count of 28 blockers is the pre-Phase-2 baseline. The current disposition adds
+one approved difference (`WEBUI-001`) and therefore leaves 27 rows requiring later parity or
+operator evidence; provider/identity rows are now implemented locally but remain conservative in
+the detailed matrix where differential proof is absent.
+
+### Current Phase 2 row disposition
+
+| Row family | Current disposition | Evidence boundary |
+|---|---|---|
+| `ARTIST-001/002`, `RELEASE-001/002` | Implemented locally | Production importer/resolver callers, trusted-evidence convergence, candidate evidence, and reversible audited Release correction are tested; current-C# differential remains open. |
+| `TRACK-001/002` | Implemented locally | Six embedded MusicBrainz families reach durable evidence and bounded Proposed AudioIdentity decisions; automatic ambiguous confirmation remains prohibited. |
+| `PROVIDER-001`, `ARTWORK-001` | Implemented locally | All accepted provider purposes, pinned DecentDB reads, cache/lease worker, image validation, precedence, and deterministic fixtures are reachable; credentials, quotas, and production replica rehearsal remain operator evidence. |
+| `CONFIG-001`, provider portion of `JOBS-001` | Implemented locally | Runtime settings, cache cleanup, retries, diagnostics, and lease maintenance are consumed; unrelated legacy scheduled-job gaps remain outside this phase. |
+| `WEBUI-001` | `DIFFERENT — APPROVED` | ADR-0161 relocates listener workflows to MeloAmp; Rust retains `/admin` and narrow HTML only. |
+
+## Historical 2026-08-25 Feature-Completion Phase 1 addendum (superseded by Phase 1 closeout)
+
+The original Feature-Completion Phase 1 draft (per
 [agents/FEATURE-COMPLETION-PHASE-1-PLAN.md](agents/FEATURE-COMPLETION-PHASE-1-PLAN.md)) is in
 execution against this audit; specifics are recorded in
 [evidence/feature-completion/phase-1/PHASE-1-REPORT.md](evidence/feature-completion/phase-1/PHASE-1-REPORT.md)
-(currently a stub until the phase evidence lands):
+was superseded by the terminal closeout report:
 
 - **Wave 1 (TRACK-001, MusicBrainz ID retention) verified:** `melodee-media` now retains the
   six embedded MusicBrainz ID families (raw strings, malformed values verbatim) through media
@@ -20,12 +66,11 @@ execution against this audit; specifics are recorded in
   bounded, idempotent **Proposed** match decisions are implemented and integration-tested
   (no schema migration; see the report for the why).
 - **Workstream A (RELEASE-002):** UI field alignment and Playwright edit → save → reload
-  persistence proof for the W0 metadata-editing routes is being added; the row's
-  `IMPLEMENTED — UNPROVEN` status is unchanged until that evidence lands.
-- **Workstream C (local proof for the nine `IMPLEMENTED — UNPROVEN` rows):** differential and
-  end-to-end evidence is being added per row (PLAYBACK-001, TRANSCODE-001, PODCAST-001,
-  DISCOVERY-001/002, SOCIAL-001, OPS-001, MIGRATE-001/002); row statuses below are not
-  moved until the evidence sections of the report are complete.
+  persistence proof is now recorded in the terminal report; the legacy tag-rewrite transforms
+  remain the accepted post-parity exclusion.
+- **Workstream C (local proof for the nine `IMPLEMENTED — UNPROVEN` rows):** local production-path
+  evidence is recorded; statuses remain conservative where current-C# or operator-owned legs are
+  still open.
 - **Workstream D (closeout):** roadmap, matrix, and requirement-traceability reconciliation
   proceeds as the evidence above lands.
 

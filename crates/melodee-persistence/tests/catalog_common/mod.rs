@@ -110,6 +110,27 @@ pub async fn seed_published_release_with_normalized_hash_and_genre(
         normalized_byte_hash,
         false,
         genre,
+        None,
+    )
+    .await
+}
+
+/// Seeds one published fixture with the raw embedded MusicBrainz observation
+/// object used by the production catalog importer.
+pub async fn seed_published_release_with_musicbrainz_ids(
+    db: &TestDb,
+    ordinal: u32,
+    presentation: CatalogFixturePresentation<'_>,
+    musicbrainz_ids: serde_json::Value,
+) -> PublishedCatalogFixture {
+    seed_published_release_with_options_full(
+        db,
+        ordinal,
+        presentation,
+        deterministic_hash('a', ordinal),
+        false,
+        None,
+        Some(musicbrainz_ids),
     )
     .await
 }
@@ -127,6 +148,7 @@ pub async fn seed_published_release_with_read_error(
         presentation,
         deterministic_hash('a', ordinal),
         true,
+        None,
         None,
     )
     .await
@@ -146,6 +168,7 @@ async fn seed_published_release_with_options(
         normalized_byte_hash,
         bytes_read_errors,
         None,
+        None,
     )
     .await
 }
@@ -157,6 +180,7 @@ async fn seed_published_release_with_options_full(
     normalized_byte_hash: String,
     bytes_read_errors: bool,
     genre: Option<&str>,
+    musicbrainz_ids: Option<serde_json::Value>,
 ) -> PublishedCatalogFixture {
     let store = WorkItemStore;
     let config = test_config();
@@ -184,6 +208,13 @@ async fn seed_published_release_with_options_full(
 
     let source_file = format!("disc-01/{ordinal:02} - {}.flac", presentation.track_title);
     let source_byte_hash = deterministic_hash('1', ordinal);
+    let mut raw = json!({
+        "album_artist": presentation.release_artist,
+        "artist": presentation.track_artist,
+    });
+    if let Some(ids) = musicbrainz_ids {
+        raw["musicbrainz_ids"] = ids;
+    }
     let observed_metadata = ObservedMetadata {
         album: Some(presentation.release_title.to_owned()),
         album_artist: Some(presentation.release_artist.to_owned()),
@@ -196,10 +227,7 @@ async fn seed_published_release_with_options_full(
         year: Some(presentation.release_date[..4].to_owned()),
         date: Some(presentation.release_date.to_owned()),
         genre: Some(genre.unwrap_or("Fixture").to_owned()),
-        raw: json!({
-            "album_artist": presentation.release_artist,
-            "artist": presentation.track_artist,
-        }),
+        raw,
     };
     let mut manifest = ReleaseManifest::new(
         work_item_id,

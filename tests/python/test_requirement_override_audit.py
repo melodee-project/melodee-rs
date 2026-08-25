@@ -20,7 +20,7 @@ class RequirementOverrideAuditTests(unittest.TestCase):
         self.assertEqual(result["override_count"], 239)
         self.assertEqual(
             result["status_counts"],
-            {"deferred": 7, "implemented": 9, "in-progress": 12, "tested": 211},
+            {"deferred": 4, "implemented": 9, "in-progress": 12, "tested": 214},
         )
         self.assertEqual(len(result["nonterminal"]), 12)
 

@@ -23,8 +23,9 @@ Effective values resolve through four layers, highest precedence first:
 4. built-in defaults (the legacy registry's seeded values).
 
 Only documented keys are supported. The database layer covers the 190-key legacy settings
-registry; the fixed keys in the tables below (worker, ingestion, search, auth, and email
-transport plumbing) remain environment-driven.
+registry plus the Rust provider runtime settings (including provider endpoints, timeouts, cache
+freshness, and enrichment controls); the fixed keys in the tables below (worker, ingestion,
+search, auth, and email transport plumbing) remain environment-driven.
 
 ## Database-backed settings
 

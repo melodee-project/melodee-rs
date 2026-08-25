@@ -216,6 +216,7 @@ async function mockAdminApi(page: Page, options: { artworkUploadFails?: boolean 
   const listRequests: string[] = [];
   const artworkRequests: { method: string; body: string }[] = [];
   const metadataRequests: { pathname: string; body: unknown }[] = [];
+  let releaseDetail = structuredClone(RELEASE_DETAIL);
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
     const { pathname } = url;
@@ -267,7 +268,7 @@ async function mockAdminApi(page: Page, options: { artworkUploadFails?: boolean 
       return;
     }
     if (pathname === `/api/admin/v1/catalog/releases/${RELEASE_ID}`) {
-      await json(RELEASE_DETAIL);
+      await json(releaseDetail);
       return;
     }
     if (pathname === `/api/admin/v1/catalog/tracks/${TRACK_ID}`) {
@@ -284,7 +285,15 @@ async function mockAdminApi(page: Page, options: { artworkUploadFails?: boolean 
         ),
       ) ?? null;
     if (method === 'PUT' && metadataMatch) {
-      metadataRequests.push({ pathname, body: JSON.parse(route.request().postData() ?? 'null') });
+      const body = JSON.parse(route.request().postData() ?? 'null') as Record<string, unknown>;
+      metadataRequests.push({ pathname, body });
+      if (pathname === `/api/admin/v1/catalog/releases/${RELEASE_ID}/metadata`) {
+        releaseDetail = {
+          ...releaseDetail,
+          title: body.title === null ? '' : String(body.title ?? releaseDetail.title),
+          revision: releaseDetail.revision + 1,
+        };
+      }
       await json({ message: 'Metadata updated', updatedAt: '2026-08-14T12:00:00Z' });
       return;
     }
@@ -524,6 +533,12 @@ test('release metadata save PUTs canonical fields to the /metadata route', async
   expect(first.body).not.toHaveProperty('releaseYear');
   expect(first.body).not.toHaveProperty('name');
   expect(first.body).not.toHaveProperty('trackNumber');
+
+  // The persisted response must survive a browser reload; this catches a
+  // client-only optimistic update that never reached the server contract.
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Into the Night (Remastered)' })).toBeVisible();
+  await page.getByRole('button', { name: 'Edit' }).click();
 
   // Second save: clearing the title sends an explicit null (clear, not skip).
   await page.locator('#edit-title').fill('');

@@ -10,10 +10,11 @@ use melodee_persistence::{CatalogStore, DatabasePoolConfig, WorkEngineConfig, mi
 use melodee_policy::PolicyConfig;
 use melodee_search::{SearchConfig, SearchRoot, start_search_loop};
 use melodee_server::discovery_worker::{DiscoveryWorkerConfig, start_discovery_loop};
+use melodee_server::enrichment_worker::{EnrichmentWorkerConfig, start_enrichment_loop};
 use melodee_server::policy_worker::{PolicyWorkerConfig, start_policy_loop};
 use melodee_server::{
-    admin, admin_ui, discovery_worker, jellyfin, native, native_stream, opensubsonic,
-    podcast_worker, policy_worker, system,
+    admin, admin_ui, discovery_worker, enrichment_worker, jellyfin, native, native_stream,
+    opensubsonic, podcast_worker, policy_worker, system,
 };
 use tokio::sync::oneshot;
 use tower_http::trace::TraceLayer;
@@ -82,6 +83,12 @@ async fn stop_podcast_worker(handle: Option<podcast_worker::PodcastSchedulerHand
 }
 
 async fn stop_discovery_worker(handle: Option<discovery_worker::DiscoverySchedulerHandle>) {
+    if let Some(handle) = handle {
+        handle.stop().await;
+    }
+}
+
+async fn stop_enrichment_worker(handle: Option<enrichment_worker::EnrichmentSchedulerHandle>) {
     if let Some(handle) = handle {
         handle.stop().await;
     }
@@ -209,6 +216,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let policy_config = PolicyConfig::from_env()?;
     let policy_worker_config = PolicyWorkerConfig::from_env()?;
     let discovery_worker_config = DiscoveryWorkerConfig::from_env()?;
+    let enrichment_worker_config = EnrichmentWorkerConfig::from_env()?;
     // Validate all configured storage roles even when canonical publication is
     // disabled. The inbound directory must never overlap staging, work, or
     // canonical roots.
@@ -499,6 +507,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let native_app = native::configured_router(native_state).layer(native_cors);
     let podcast_handle = podcast_worker::start_podcast_loop(pool.clone(), podcast_config);
     let discovery_handle = start_discovery_loop(discovery_worker_config, pool.clone());
+    let enrichment_handle = start_enrichment_loop(enrichment_worker_config, pool.clone());
 
     let admin_access_state = melodee_server::admin_access::AdminAccessState {
         pool: pool.clone(),
@@ -608,7 +617,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     // Signal every worker immediately, then await server drain and worker
     // cancellation together while PostgreSQL is still available for safe
     // lease/error bookkeeping.
-    let (server_result, (), (), (), (), (), (), (), (), (), ()) = tokio::join!(
+    let (server_result, (), (), (), (), (), (), (), (), (), (), ()) = tokio::join!(
         server_handle,
         stop_worker(reconcile_handle),
         stop_worker(inspection_handle),
@@ -620,6 +629,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         stop_search_worker(search_handle),
         stop_podcast_worker(podcast_handle),
         stop_discovery_worker(discovery_handle),
+        stop_enrichment_worker(enrichment_handle),
     );
     server_result??;
     pool.close().await;

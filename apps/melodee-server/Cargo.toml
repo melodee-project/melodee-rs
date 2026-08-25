@@ -16,6 +16,7 @@ axum.workspace = true
 base64.workspace = true
 boa_engine.workspace = true
 dotenvy.workspace = true
+decentdb.workspace = true
 futures-util.workspace = true
 getrandom.workspace = true
 hmac.workspace = true

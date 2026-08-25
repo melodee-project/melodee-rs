@@ -359,9 +359,21 @@ async fn native_discovery_routes_use_durable_bounded_facts_and_preserve_wire_sha
     .await;
     assert_eq!(status, StatusCode::OK);
     let providers: serde_json::Value = serde_json::from_slice(&bytes).expect("providers");
-    assert_eq!(providers.as_array().unwrap().len(), 7);
-    assert_eq!(providers[3]["displayName"], "ITunes Search Engine");
-    assert_eq!(providers[3]["isEnabled"], true);
+    assert_eq!(providers.as_array().unwrap().len(), 10);
+    let itunes = providers
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|provider| provider["displayName"] == "ITunes Search Engine")
+        .expect("iTunes capability");
+    assert_eq!(itunes["isEnabled"], true);
+    assert!(
+        providers
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|provider| provider["displayName"] == "Melodee Database")
+    );
 
     let (status, bytes) = request(
         state.clone(),

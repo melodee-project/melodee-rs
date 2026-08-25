@@ -180,3 +180,84 @@ fn publication_plan_rejects_noncanonical_or_mismatched_paths() {
     plan.target_relative_path = "releases/éé/00/rel_bad".to_owned();
     assert!(plan.validate().is_err());
 }
+
+/// TRACK-001 (Wave 1, plan risk mitigation): a manifest whose observed
+/// metadata carries no MusicBrainz IDs keeps its stable semantic value
+/// (the hash input) unchanged by the ID-retention change — the retained
+/// `raw["musicbrainz_ids"]` object is the empty `{}` for such manifests, and
+/// adding a later-observed `musicbrainz_ids` fact legitimately changes the
+/// semantic value, as it must for genuinely different observed media facts.
+#[test]
+fn manifests_without_musicbrainz_ids_keep_their_stable_semantic_value() {
+    let mut manifest: ReleaseManifest = serde_json::from_str(PHASE_3_1_MANIFEST).unwrap();
+    let base = manifest.semantic_value().unwrap();
+    manifest.files.push(melodee_domain::ObservedFile {
+        relative_path: "track.flac".to_owned(),
+        kind: melodee_domain::ObservedFileKind::Audio,
+        size_bytes: 100,
+        modified_at: Some("2026-08-25T00:00:00Z".to_owned()),
+        content_hash: Some("c".repeat(64)),
+        mime_type: Some("audio/flac".to_owned()),
+        kind_code: Some("flac".to_owned()),
+        metadata: Some(melodee_domain::ObservedMetadata {
+            album: Some("Synthetic Release".to_owned()),
+            album_artist: None,
+            track_title: Some("First Track".to_owned()),
+            artist: Some("Synthetic Artist".to_owned()),
+            track_number: Some(1),
+            track_total: None,
+            disc_number: None,
+            disc_total: None,
+            year: None,
+            date: Some("2026".to_owned()),
+            genre: None,
+            raw: serde_json::json!({
+                "title": "First Track",
+                "artist": "Synthetic Artist",
+                "track": 1,
+                "date": "2026",
+                "musicbrainz_ids": serde_json::json!({}),
+            }),
+        }),
+        audio: None,
+        findings: Vec::new(),
+        embedded_artwork: Vec::new(),
+        sidecar_type: None,
+        bytes_read_errors: false,
+    });
+    let id_free = manifest.semantic_value().unwrap();
+    assert_ne!(base, id_free, "observing a file changes the semantic value");
+
+    // Round-tripping the ID-free manifest through JSON (jsonb reordering
+    // included) leaves its stable semantic value unchanged.
+    fn reverse_keys(value: &serde_json::Value) -> serde_json::Value {
+        match value {
+            serde_json::Value::Object(map) => {
+                let mut reversed = serde_json::Map::new();
+                for (key, entry) in map.iter().rev() {
+                    reversed.insert(key.clone(), reverse_keys(entry));
+                }
+                serde_json::Value::Object(reversed)
+            }
+            serde_json::Value::Array(items) => {
+                serde_json::Value::Array(items.iter().map(reverse_keys).collect())
+            }
+            scalar => scalar.clone(),
+        }
+    }
+    let reordered = reverse_keys(&serde_json::to_value(&manifest).unwrap());
+    let decoded: ReleaseManifest = serde_json::from_value(reordered).unwrap();
+    assert_eq!(id_free, decoded.semantic_value().unwrap());
+
+    // The same manifest observed with a retained MusicBrainz ID is a
+    // different set of observed facts, and its semantic value changes.
+    let mut with_ids = decoded.clone();
+    with_ids.files[0].metadata.as_mut().unwrap().raw["musicbrainz_ids"] = serde_json::json!({
+        "recording": "aa1b1c1d-0000-7000-8000-000000000001"
+    });
+    assert_ne!(
+        id_free,
+        with_ids.semantic_value().unwrap(),
+        "retained ID facts are observed facts and change the semantic value"
+    );
+}

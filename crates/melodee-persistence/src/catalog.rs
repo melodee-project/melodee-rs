@@ -15,14 +15,20 @@ use melodee_domain::{
     PublicationPlan, ReleaseArtistId, ReleaseId, ReleaseManifest, ReleaseWorkItem, RetryPolicy,
     TrackArtistId, TrackId, WorkErrorCode, WorkEventType,
 };
+use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Postgres, QueryBuilder, Transaction};
 use thiserror::Error;
 use time::{Date, Month, OffsetDateTime};
 use tracing::{info, instrument, warn};
 use uuid::Uuid;
 
+use crate::catalog_mutations::ensure_correction_scope;
 use crate::config::WorkEngineConfig;
 use crate::error::WorkStoreError;
+use crate::provider_enrichment::{
+    EnrichmentEntityType, EnrichmentPurpose, schedule_in_transaction,
+};
+use crate::providers::KNOWN_PROVIDERS;
 use crate::work_items::{
     WorkItemRow, WorkItemStore, ensure_active_lease, insert_event, lock_for_update,
 };
@@ -104,6 +110,8 @@ pub enum CatalogStoreError {
     NegativeAssertion,
     #[error("the requested merge, split, or legacy mapping conflicts with persisted catalog data")]
     MutationConflict,
+    #[error("provider enrichment scheduling failed")]
+    ProviderEnrichment(#[from] crate::provider_enrichment::ProviderEnrichmentStoreError),
 }
 
 /// Legacy catalog entity namespace for immutable public-ID mapping evidence.
@@ -178,6 +186,43 @@ pub struct CatalogImportResult {
     pub set_based_mutation_statement_count: u32,
     /// False when an identical uncertain-commit retry found the durable result.
     pub inserted: bool,
+}
+
+/// One deterministic, evidence-backed Artist convergence candidate. The
+/// caller still runs the local resolver before invoking the audited merge
+/// mutation; this row only describes durable facts that made a candidate safe
+/// to consider.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StrongArtistMergeCandidate {
+    pub source_artist_id: Uuid,
+    pub source_public_api_id: Uuid,
+    pub target_artist_id: Uuid,
+    pub target_public_api_id: Uuid,
+    pub provider: String,
+    pub external_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StrongReleaseMergeCandidate {
+    pub source_release_id: Uuid,
+    pub target_release_id: Uuid,
+    pub provider: String,
+    pub external_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ReleaseMovedTrack {
+    track_id: Uuid,
+    original_ordinal: i32,
+    merged_ordinal: i32,
+    observations: Vec<ReleaseMovedObservation>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ReleaseMovedObservation {
+    observation_id: Uuid,
+    original_ordinal: i32,
+    merged_ordinal: i32,
 }
 
 /// Stored exact-once import receipt for diagnostics and retry comparison.
@@ -622,6 +667,49 @@ impl CatalogStore {
         }
 
         let binding = load_manifest_binding(&mut tx, work_item_id).await?;
+        if let Some(existing) = load_existing_release_result(
+            &mut tx,
+            binding.receipt_release_id,
+            &binding.semantic_hash,
+            request,
+        )
+        .await?
+        {
+            let completion = sqlx::query(
+                "UPDATE release_work_items
+                 SET state = 'cataloged', state_reason = 'catalog.import_existing_release',
+                     lease_owner = NULL, lease_acquired_at = NULL,
+                     lease_expires_at = NULL, updated_at = $2
+                 WHERE id = $1 AND state = 'cataloging'
+                   AND lease_owner = $3 AND lease_expires_at > clock_timestamp()",
+            )
+            .bind(work_item_id)
+            .bind(now)
+            .bind(worker.as_str())
+            .execute(&mut *tx)
+            .await?;
+            if completion.rows_affected() != 1 {
+                return Err(WorkStoreError::LeaseExpired(work_item_id).into());
+            }
+            insert_event(
+                &mut tx,
+                work_item_id,
+                WorkEventType::Transitioned,
+                Some(IngestionState::Cataloging),
+                Some(IngestionState::Cataloged),
+                Some("catalog.import_existing_release"),
+                Some(worker.as_str()),
+                item.correlation_id,
+                now,
+                Some(serde_json::json!({
+                    "release_id": binding.receipt_release_id,
+                    "existing_catalog_import_id": existing.catalog_import_id,
+                })),
+            )
+            .await?;
+            tx.commit().await?;
+            return Ok(existing);
+        }
         let prepared = PreparedImport::build(work_item_id, binding, request, now)?;
         let result = persist_prepared_import(&mut tx, &prepared, &item, worker, now).await?;
         tx.commit().await?;
@@ -653,6 +741,611 @@ impl CatalogStore {
         .await?;
         rows.into_iter().map(stored_association).collect()
     }
+
+    /// Returns a bounded, deterministic set of duplicate Artist identities
+    /// sharing strong embedded evidence. Name similarity is intentionally not
+    /// part of this query, and locked/negative decisions suppress candidates.
+    pub async fn strong_artist_merge_candidates(
+        &self,
+        pool: &PgPool,
+        limit: i64,
+    ) -> Result<Vec<StrongArtistMergeCandidate>, CatalogStoreError> {
+        if !(1..=1_000).contains(&limit) {
+            return Err(CatalogStoreError::InvalidRequest);
+        }
+        Ok(sqlx::query_as::<_, (Uuid, Uuid, Uuid, Uuid, String, String)>(
+            "WITH distinct_evidence AS (
+                 SELECT DISTINCT evidence.provider, evidence.external_id, evidence.artist_id
+                 FROM artist_external_identities evidence
+                 JOIN artists artist ON artist.id=evidence.artist_id
+                 WHERE evidence.provider='musicbrainz'
+                   AND evidence.confidence >= 9000
+                   AND evidence.external_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                   AND artist.status NOT IN ('merged','deprecated')
+             ), groups AS (
+                 SELECT provider, external_id
+                 FROM distinct_evidence
+                 GROUP BY provider, external_id
+                 HAVING count(*) > 1
+             )
+             SELECT source_artist.id, source_artist.public_api_id,
+                    target_artist.id, target_artist.public_api_id,
+                    groups.provider, groups.external_id
+             FROM groups
+             JOIN distinct_evidence source
+               ON source.provider=groups.provider AND source.external_id=groups.external_id
+             JOIN distinct_evidence target
+               ON target.provider=groups.provider AND target.external_id=groups.external_id
+              AND source.artist_id < target.artist_id
+             JOIN artists source_artist ON source_artist.id=source.artist_id
+             JOIN artists target_artist ON target_artist.id=target.artist_id
+             WHERE NOT EXISTS (
+                 SELECT 1 FROM artist_match_decisions locked
+                 WHERE locked.artist_id IN (source.artist_id, target.artist_id)
+                   AND locked.is_locked
+             )
+             AND NOT EXISTS (
+                 SELECT 1 FROM artist_negative_assertions negative
+                 WHERE negative.candidate_provider=groups.provider
+                   AND negative.candidate_external_id=groups.external_id
+                   AND negative.assertion_kind='do_not_match'
+             )
+             ORDER BY groups.provider, groups.external_id, source.artist_id, target.artist_id
+             LIMIT $1",
+        )
+        .bind(limit)
+        .fetch_all(pool)
+        .await?
+        .into_iter()
+        .map(
+            |(
+                source_artist_id,
+                source_public_api_id,
+                target_artist_id,
+                target_public_api_id,
+                provider,
+                external_id,
+            )| StrongArtistMergeCandidate {
+                source_artist_id,
+                source_public_api_id,
+                target_artist_id,
+                target_public_api_id,
+                provider,
+                external_id,
+            },
+        )
+        .collect())
+    }
+
+    /// Returns duplicate active Releases with the same trusted provider ID.
+    /// Release names and normalized titles are deliberately absent from this
+    /// identity predicate.
+    pub async fn strong_release_merge_candidates(
+        &self,
+        pool: &PgPool,
+        limit: i64,
+    ) -> Result<Vec<StrongReleaseMergeCandidate>, CatalogStoreError> {
+        if !(1..=1_000).contains(&limit) {
+            return Err(CatalogStoreError::InvalidRequest);
+        }
+        Ok(sqlx::query_as::<_, (Uuid, Uuid, String, String)>(
+            "WITH distinct_evidence AS (
+                 SELECT DISTINCT release_id, provider, external_id
+                 FROM release_external_identities
+                 WHERE trusted
+             ), groups AS (
+                 SELECT provider, external_id
+                 FROM distinct_evidence
+                 GROUP BY provider, external_id
+                 HAVING count(*) > 1
+             )
+             SELECT source.release_id, target.release_id, groups.provider, groups.external_id
+             FROM groups
+             JOIN distinct_evidence source
+               ON source.provider=groups.provider AND source.external_id=groups.external_id
+             JOIN distinct_evidence target
+               ON target.provider=groups.provider AND target.external_id=groups.external_id
+              AND source.release_id < target.release_id
+             JOIN releases source_release ON source_release.id=source.release_id
+             JOIN releases target_release ON target_release.id=target.release_id
+             WHERE source_release.status='active' AND target_release.status='active'
+             ORDER BY groups.provider, groups.external_id, source.release_id, target.release_id
+             LIMIT $1",
+        )
+        .bind(limit)
+        .fetch_all(pool)
+        .await?
+        .into_iter()
+        .map(
+            |(source_release_id, target_release_id, provider, external_id)| {
+                StrongReleaseMergeCandidate {
+                    source_release_id,
+                    target_release_id,
+                    provider,
+                    external_id,
+                }
+            },
+        )
+        .collect())
+    }
+
+    /// Merges one Release into a redirect tombstone without deleting source
+    /// observations or media assets. Track ordinals are appended to the target
+    /// and recorded for the reversible split operation.
+    pub async fn merge_release(
+        &self,
+        pool: &PgPool,
+        source_release_id: Uuid,
+        target_release_id: Uuid,
+        actor: &str,
+        reason: &str,
+        now: OffsetDateTime,
+    ) -> Result<Uuid, CatalogStoreError> {
+        if source_release_id == target_release_id
+            || actor.trim().is_empty()
+            || reason.trim().is_empty()
+        {
+            return Err(CatalogStoreError::InvalidRequest);
+        }
+        let mut tx = pool.begin().await?;
+        let statuses = sqlx::query_as::<_, (Uuid, String)>(
+            "SELECT id, status FROM releases
+             WHERE id=ANY($1) ORDER BY id FOR UPDATE",
+        )
+        .bind([source_release_id, target_release_id])
+        .fetch_all(&mut *tx)
+        .await?;
+        if statuses.len() != 2 || statuses.iter().any(|(_, status)| status != "active") {
+            return Err(CatalogStoreError::MutationConflict);
+        }
+        let source_tracks = sqlx::query_as::<_, (Uuid, i32)>(
+            "SELECT id, ordinal FROM tracks WHERE release_id=$1 ORDER BY ordinal, id",
+        )
+        .bind(source_release_id)
+        .fetch_all(&mut *tx)
+        .await?;
+        ensure_correction_scope(
+            source_tracks.len(),
+            CatalogCorrectionDimension::Tracks,
+            MAX_CATALOG_CORRECTION_TRACKS,
+        )?;
+        let source_track_ids = source_tracks
+            .iter()
+            .map(|(track_id, _)| *track_id)
+            .collect::<Vec<_>>();
+        let source_observations = sqlx::query_as::<_, (Uuid, Uuid, i32)>(
+            "SELECT id, track_id, source_ordinal FROM observed_artists
+             WHERE release_id=$1 AND track_id=ANY($2)
+             ORDER BY track_id, id",
+        )
+        .bind(source_release_id)
+        .bind(&source_track_ids)
+        .fetch_all(&mut *tx)
+        .await?;
+        ensure_correction_scope(
+            source_observations.len(),
+            CatalogCorrectionDimension::IdentityRows,
+            MAX_CATALOG_CORRECTION_IDENTITY_ROWS,
+        )?;
+        let target_max = sqlx::query_scalar::<_, Option<i32>>(
+            "SELECT max(ordinal) FROM tracks WHERE release_id=$1",
+        )
+        .bind(target_release_id)
+        .fetch_one(&mut *tx)
+        .await?
+        .unwrap_or(0);
+        let target_observation_max = sqlx::query_scalar::<_, Option<i32>>(
+            "SELECT max(source_ordinal) FROM observed_artists WHERE release_id=$1",
+        )
+        .bind(target_release_id)
+        .fetch_one(&mut *tx)
+        .await?
+        .unwrap_or(0);
+        let mut moved = Vec::with_capacity(source_tracks.len());
+        let mut next_observation_ordinal = target_observation_max;
+        for (index, (track_id, original_ordinal)) in source_tracks.iter().enumerate() {
+            let merged_ordinal = target_max
+                .checked_add(
+                    i32::try_from(index + 1).map_err(|_| CatalogStoreError::NumericOverflow)?,
+                )
+                .ok_or(CatalogStoreError::NumericOverflow)?;
+            sqlx::query(
+                "UPDATE tracks SET release_id=$2, ordinal=$3,
+                    revision=revision+1, updated_at=$4 WHERE id=$1 AND release_id=$5",
+            )
+            .bind(track_id)
+            .bind(target_release_id)
+            .bind(merged_ordinal)
+            .bind(now)
+            .bind(source_release_id)
+            .execute(&mut *tx)
+            .await?;
+            let mut observations = Vec::new();
+            for (observation_id, _observation_track_id, original_observation_ordinal) in
+                source_observations
+                    .iter()
+                    .filter(|(_, observation_track_id, _)| observation_track_id == track_id)
+            {
+                next_observation_ordinal = next_observation_ordinal
+                    .checked_add(1)
+                    .ok_or(CatalogStoreError::NumericOverflow)?;
+                sqlx::query(
+                    "UPDATE observed_artists SET release_id=$2, source_ordinal=$3
+                     WHERE id=$1 AND release_id=$4",
+                )
+                .bind(observation_id)
+                .bind(target_release_id)
+                .bind(next_observation_ordinal)
+                .bind(source_release_id)
+                .execute(&mut *tx)
+                .await?;
+                observations.push(ReleaseMovedObservation {
+                    observation_id: *observation_id,
+                    original_ordinal: *original_observation_ordinal,
+                    merged_ordinal: next_observation_ordinal,
+                });
+            }
+            moved.push(ReleaseMovedTrack {
+                track_id: *track_id,
+                original_ordinal: *original_ordinal,
+                merged_ordinal,
+                observations,
+            });
+        }
+        let track_ids = moved.iter().map(|track| track.track_id).collect::<Vec<_>>();
+        if !track_ids.is_empty() {
+            sqlx::query("UPDATE contributions SET release_id=$2 WHERE track_id=ANY($1)")
+                .bind(&track_ids)
+                .bind(target_release_id)
+                .execute(&mut *tx)
+                .await?;
+        }
+        sqlx::query(
+            "UPDATE releases SET status='merged', merged_into_release_id=$2,
+                revision=revision+1, updated_at=$3 WHERE id=$1",
+        )
+        .bind(source_release_id)
+        .bind(target_release_id)
+        .bind(now)
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query("UPDATE releases SET revision=revision+1, updated_at=$2 WHERE id=$1")
+            .bind(target_release_id)
+            .bind(now)
+            .execute(&mut *tx)
+            .await?;
+        refresh_release_catalog_aggregate(&mut tx, source_release_id, now).await?;
+        refresh_release_catalog_aggregate(&mut tx, target_release_id, now).await?;
+        refresh_artist_catalog_aggregates(&mut tx, &track_ids, now).await?;
+        let event_id = Uuid::now_v7();
+        let moved_payload = serde_json::to_value(&moved)?;
+        sqlx::query(
+            "INSERT INTO release_merge_events (
+                id, source_release_id, target_release_id, actor, reason,
+                moved_tracks, created_at
+             ) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+        )
+        .bind(event_id)
+        .bind(source_release_id)
+        .bind(target_release_id)
+        .bind(actor)
+        .bind(reason)
+        .bind(&moved_payload)
+        .bind(now)
+        .execute(&mut *tx)
+        .await?;
+        enqueue_release_revision(&mut tx, source_release_id, now).await?;
+        enqueue_release_revision(&mut tx, target_release_id, now).await?;
+        enqueue_track_revisions(&mut tx, &track_ids, now).await?;
+        audit_release_event(
+            &mut tx,
+            source_release_id,
+            "release_merged",
+            actor,
+            reason,
+            event_id,
+            now,
+        )
+        .await?;
+        audit_release_event(
+            &mut tx,
+            target_release_id,
+            "release_merged_into",
+            actor,
+            reason,
+            Uuid::now_v7(),
+            now,
+        )
+        .await?;
+        tx.commit().await?;
+        Ok(event_id)
+    }
+
+    /// Reverses one Release merge using its immutable Track ordinal map.
+    pub async fn split_release_merge(
+        &self,
+        pool: &PgPool,
+        merge_event_id: Uuid,
+        actor: &str,
+        reason: &str,
+        now: OffsetDateTime,
+    ) -> Result<(), CatalogStoreError> {
+        if actor.trim().is_empty() || reason.trim().is_empty() {
+            return Err(CatalogStoreError::InvalidRequest);
+        }
+        let mut tx = pool.begin().await?;
+        let (source_release_id, target_release_id, moved_payload) =
+            sqlx::query_as::<_, (Uuid, Uuid, serde_json::Value)>(
+                "SELECT source_release_id, target_release_id, moved_tracks
+             FROM release_merge_events WHERE id=$1 FOR UPDATE",
+            )
+            .bind(merge_event_id)
+            .fetch_optional(&mut *tx)
+            .await?
+            .ok_or(CatalogStoreError::MutationConflict)?;
+        let moved: Vec<ReleaseMovedTrack> = serde_json::from_value(moved_payload.clone())?;
+        let statuses = sqlx::query_as::<_, (Uuid, String)>(
+            "SELECT id, status FROM releases
+             WHERE id=ANY($1) ORDER BY id FOR UPDATE",
+        )
+        .bind([source_release_id, target_release_id])
+        .fetch_all(&mut *tx)
+        .await?;
+        if statuses.len() != 2 {
+            return Err(CatalogStoreError::MutationConflict);
+        }
+        let source_status = statuses
+            .iter()
+            .find(|(id, _)| *id == source_release_id)
+            .map(|(_, status)| status.as_str());
+        let target_status = statuses
+            .iter()
+            .find(|(id, _)| *id == target_release_id)
+            .map(|(_, status)| status.as_str());
+        if source_status != Some("merged") || target_status != Some("active") {
+            return Err(CatalogStoreError::MutationConflict);
+        }
+        let track_ids = moved.iter().map(|track| track.track_id).collect::<Vec<_>>();
+        for track in &moved {
+            for observation in &track.observations {
+                sqlx::query(
+                    "UPDATE observed_artists SET release_id=$2, source_ordinal=$3
+                     WHERE id=$1 AND release_id=$4",
+                )
+                .bind(observation.observation_id)
+                .bind(source_release_id)
+                .bind(observation.original_ordinal)
+                .bind(target_release_id)
+                .execute(&mut *tx)
+                .await?;
+            }
+            sqlx::query(
+                "UPDATE tracks SET release_id=$2, ordinal=$3,
+                    revision=revision+1, updated_at=$4
+                 WHERE id=$1 AND release_id=$5",
+            )
+            .bind(track.track_id)
+            .bind(source_release_id)
+            .bind(track.original_ordinal)
+            .bind(now)
+            .bind(target_release_id)
+            .execute(&mut *tx)
+            .await?;
+        }
+        if !track_ids.is_empty() {
+            sqlx::query("UPDATE contributions SET release_id=$2 WHERE track_id=ANY($1)")
+                .bind(&track_ids)
+                .bind(source_release_id)
+                .execute(&mut *tx)
+                .await?;
+        }
+        let split_event_id = Uuid::now_v7();
+        sqlx::query(
+            "UPDATE releases SET status='active', merged_into_release_id=NULL,
+                revision=revision+1, updated_at=$2 WHERE id=$1",
+        )
+        .bind(source_release_id)
+        .bind(now)
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query("UPDATE releases SET revision=revision+1, updated_at=$2 WHERE id=$1")
+            .bind(target_release_id)
+            .bind(now)
+            .execute(&mut *tx)
+            .await?;
+        refresh_release_catalog_aggregate(&mut tx, source_release_id, now).await?;
+        refresh_release_catalog_aggregate(&mut tx, target_release_id, now).await?;
+        refresh_artist_catalog_aggregates(&mut tx, &track_ids, now).await?;
+        sqlx::query(
+            "INSERT INTO release_split_events (
+                id, merge_event_id, source_release_id, target_release_id,
+                actor, reason, restored_tracks, created_at
+             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+        )
+        .bind(split_event_id)
+        .bind(merge_event_id)
+        .bind(source_release_id)
+        .bind(target_release_id)
+        .bind(actor)
+        .bind(reason)
+        .bind(moved_payload)
+        .bind(now)
+        .execute(&mut *tx)
+        .await?;
+        enqueue_release_revision(&mut tx, source_release_id, now).await?;
+        enqueue_release_revision(&mut tx, target_release_id, now).await?;
+        enqueue_track_revisions(&mut tx, &track_ids, now).await?;
+        audit_release_event(
+            &mut tx,
+            source_release_id,
+            "release_split",
+            actor,
+            reason,
+            split_event_id,
+            now,
+        )
+        .await?;
+        tx.commit().await?;
+        Ok(())
+    }
+}
+
+async fn enqueue_release_revision(
+    tx: &mut Transaction<'_, Postgres>,
+    release_id: Uuid,
+    now: OffsetDateTime,
+) -> Result<(), CatalogStoreError> {
+    let revision = sqlx::query_scalar::<_, i64>("SELECT revision FROM releases WHERE id=$1")
+        .bind(release_id)
+        .fetch_one(&mut **tx)
+        .await?;
+    sqlx::query(
+        "INSERT INTO catalog_projection_outbox (
+            projection_name, entity_type, entity_id, operation, entity_revision,
+            available_at, attempt_count, created_at
+         ) VALUES ('tantivy.catalog','release',$1,'upsert',$3,$2,0,$2)
+         ON CONFLICT (projection_name, entity_type, entity_id, entity_revision)
+         DO NOTHING",
+    )
+    .bind(release_id)
+    .bind(now)
+    .bind(revision)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+async fn enqueue_track_revisions(
+    tx: &mut Transaction<'_, Postgres>,
+    track_ids: &[Uuid],
+    now: OffsetDateTime,
+) -> Result<(), CatalogStoreError> {
+    if track_ids.is_empty() {
+        return Ok(());
+    }
+    let rows = sqlx::query_as::<_, (Uuid, i64)>("SELECT id, revision FROM tracks WHERE id=ANY($1)")
+        .bind(track_ids)
+        .fetch_all(&mut **tx)
+        .await?;
+    for (track_id, revision) in rows {
+        sqlx::query(
+            "INSERT INTO catalog_projection_outbox (
+                projection_name, entity_type, entity_id, operation, entity_revision,
+                available_at, attempt_count, created_at
+             ) VALUES ('tantivy.catalog','track',$1,'upsert',$3,$2,0,$2)
+             ON CONFLICT (projection_name, entity_type, entity_id, entity_revision)
+             DO NOTHING",
+        )
+        .bind(track_id)
+        .bind(now)
+        .bind(revision)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
+}
+
+async fn refresh_release_catalog_aggregate(
+    tx: &mut Transaction<'_, Postgres>,
+    release_id: Uuid,
+    now: OffsetDateTime,
+) -> Result<(), CatalogStoreError> {
+    sqlx::query(
+        "INSERT INTO release_catalog_aggregates (
+            release_id, track_count, duration_ms, media_bytes, revision, updated_at
+         )
+         SELECT $1, count(DISTINCT t.id), COALESCE(sum(t.duration_ms), 0),
+                COALESCE((
+                    SELECT sum(distinct_assets.byte_size)
+                    FROM (
+                        SELECT DISTINCT ma.id, ma.byte_size
+                        FROM tracks it
+                        JOIN track_media_assets tma ON tma.track_id = it.id
+                        JOIN media_assets ma ON ma.id = tma.media_asset_id
+                        WHERE it.release_id = $1
+                    ) distinct_assets
+                ), 0),
+                (SELECT revision FROM releases WHERE id=$1), $2
+         FROM tracks t WHERE t.release_id = $1
+         ON CONFLICT (release_id) DO UPDATE SET
+            track_count=EXCLUDED.track_count,
+            duration_ms=EXCLUDED.duration_ms,
+            media_bytes=EXCLUDED.media_bytes,
+            revision=EXCLUDED.revision,
+            updated_at=EXCLUDED.updated_at",
+    )
+    .bind(release_id)
+    .bind(now)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+async fn refresh_artist_catalog_aggregates(
+    tx: &mut Transaction<'_, Postgres>,
+    track_ids: &[Uuid],
+    now: OffsetDateTime,
+) -> Result<(), CatalogStoreError> {
+    if track_ids.is_empty() {
+        return Ok(());
+    }
+    sqlx::query(
+        "INSERT INTO artist_catalog_aggregates (
+            artist_id, release_count, billed_track_count,
+            performance_track_count, all_credit_track_count, revision, updated_at
+         )
+         SELECT associations.artist_id, count(DISTINCT tracks.release_id),
+                count(DISTINCT associations.track_id),
+                count(DISTINCT associations.track_id) FILTER (WHERE associations.is_performance),
+                count(DISTINCT associations.track_id), 1, $2
+         FROM artist_track_associations associations
+         JOIN tracks ON tracks.id = associations.track_id
+         WHERE associations.artist_id IN (
+             SELECT DISTINCT artist_id
+             FROM artist_track_associations
+             WHERE track_id=ANY($1)
+         )
+         GROUP BY associations.artist_id
+         ON CONFLICT (artist_id) DO UPDATE SET
+            release_count=EXCLUDED.release_count,
+            billed_track_count=EXCLUDED.billed_track_count,
+            performance_track_count=EXCLUDED.performance_track_count,
+            all_credit_track_count=EXCLUDED.all_credit_track_count,
+            revision=artist_catalog_aggregates.revision+1,
+            updated_at=EXCLUDED.updated_at",
+    )
+    .bind(track_ids)
+    .bind(now)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+async fn audit_release_event(
+    tx: &mut Transaction<'_, Postgres>,
+    release_id: Uuid,
+    event_type: &str,
+    actor: &str,
+    reason: &str,
+    event_id: Uuid,
+    now: OffsetDateTime,
+) -> Result<(), CatalogStoreError> {
+    sqlx::query(
+        "INSERT INTO catalog_audit_events (
+            event_id, entity_type, entity_id, event_type, actor, reason,
+            payload, created_at
+         ) VALUES ($1,'release',$2,$3,$4,$5,$6,$7)",
+    )
+    .bind(event_id)
+    .bind(release_id)
+    .bind(event_type)
+    .bind(actor)
+    .bind(reason)
+    .bind(serde_json::json!({"event_id": event_id}))
+    .bind(now)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
 }
 
 // Import preparation and persistence helpers follow below. Keeping them
@@ -683,6 +1376,7 @@ struct PreparedTrack {
     duration_ms: i64,
     source_path: String,
     media_asset_id: Uuid,
+    musicbrainz_ids: Vec<(String, String)>,
 }
 
 #[derive(Clone)]
@@ -713,6 +1407,7 @@ struct PreparedResolution {
     normalized_value: String,
     source_pointer: String,
     source_payload: serde_json::Value,
+    musicbrainz_ids: Vec<(String, String)>,
 }
 
 struct PreparedImport {
@@ -903,6 +1598,11 @@ impl PreparedImport {
                     .map_err(|_| CatalogStoreError::NumericOverflow)?,
                 source_path: track.file_path.clone(),
                 media_asset_id,
+                musicbrainz_ids: track
+                    .observed_metadata
+                    .as_ref()
+                    .map(extract_musicbrainz_ids)
+                    .unwrap_or_default(),
             });
         }
         if tracks.is_empty() {
@@ -919,6 +1619,25 @@ impl PreparedImport {
                 format!("/release_observation/artists/{index}"),
                 serde_json::json!({ "value": raw }),
             ));
+        }
+        for resolution in &mut resolutions {
+            resolution.musicbrainz_ids = manifest
+                .tracks
+                .iter()
+                .filter(|track| {
+                    track
+                        .observed_metadata
+                        .as_ref()
+                        .and_then(|metadata| metadata.artist.as_deref())
+                        .is_some_and(|artist| {
+                            normalize_lookup(artist) == resolution.normalized_value
+                        })
+                })
+                .filter_map(|track| track.observed_metadata.as_ref())
+                .flat_map(extract_musicbrainz_ids)
+                .collect();
+            resolution.musicbrainz_ids.sort();
+            resolution.musicbrainz_ids.dedup();
         }
         let matching_release_artist = if release_artists.len() == 1 {
             release_artists
@@ -950,6 +1669,13 @@ impl PreparedImport {
                     format!("/tracks/{index}/observed_metadata/artist"),
                     serde_json::json!({ "value": raw, "source_file": manifest_track.file_path }),
                 ));
+                if let Some(resolution) = resolutions.last_mut() {
+                    resolution.musicbrainz_ids = manifest_track
+                        .observed_metadata
+                        .as_ref()
+                        .map(extract_musicbrainz_ids)
+                        .unwrap_or_default();
+                }
             }
         }
 
@@ -1070,6 +1796,7 @@ impl PreparedResolution {
             normalized_value: normalize_lookup(raw),
             source_pointer,
             source_payload,
+            musicbrainz_ids: Vec::new(),
         }
     }
 }
@@ -1117,6 +1844,24 @@ async fn load_manifest_binding(
 
 fn normalize_lookup(value: &str) -> String {
     value.trim().to_lowercase()
+}
+
+fn extract_musicbrainz_ids(metadata: &melodee_domain::ObservedMetadata) -> Vec<(String, String)> {
+    let Some(ids) = metadata
+        .raw
+        .get("musicbrainz_ids")
+        .and_then(serde_json::Value::as_object)
+    else {
+        return Vec::new();
+    };
+    ids.iter()
+        .filter_map(|(family, value)| {
+            value
+                .as_str()
+                .filter(|value| !value.trim().is_empty())
+                .map(|value| (family.clone(), value.to_owned()))
+        })
+        .collect()
 }
 
 fn parse_observed_date(value: Option<&str>) -> (Option<Date>, Option<String>) {
@@ -1251,6 +1996,8 @@ async fn persist_prepared_import(
     });
     link_query.build().execute(&mut **tx).await?;
 
+    persist_embedded_audio_identity_evidence(tx, prepared, now).await?;
+
     let artist_identities = prepared.resolutions.iter().fold(
         BTreeMap::<Uuid, &PreparedResolution>::new(),
         |mut rows, resolution| {
@@ -1277,6 +2024,81 @@ async fn persist_prepared_import(
             .push_bind(now);
     });
     artist_query.build().execute(&mut **tx).await?;
+
+    for resolution in &prepared.resolutions {
+        for (family, external_id) in &resolution.musicbrainz_ids {
+            if !matches!(family.as_str(), "artist" | "release_artist") {
+                continue;
+            }
+            let trusted_shape = Uuid::parse_str(external_id).is_ok();
+            sqlx::query(
+                "INSERT INTO artist_external_identities (
+                    id, artist_id, entity_type, provider, external_id,
+                    provider_unique_scope, confidence, evidence_source,
+                    verified_at, is_locked, created_at
+                 )
+                 SELECT $1,$2,'artist','musicbrainz',$3,$4,$5,$6,NULL,false,$7
+                 WHERE NOT EXISTS (
+                     SELECT 1 FROM artist_external_identities existing
+                     WHERE existing.artist_id = $2
+                       AND existing.provider = 'musicbrainz'
+                       AND existing.external_id = $3
+                 )",
+            )
+            .bind(Uuid::now_v7())
+            .bind(resolution.artist_id)
+            .bind(external_id)
+            .bind(false)
+            .bind(if trusted_shape { 9500_i32 } else { 1000_i32 })
+            .bind(if trusted_shape {
+                "manifest-v3:embedded-musicbrainz"
+            } else {
+                "manifest-v3:malformed-musicbrainz-observation"
+            })
+            .bind(now)
+            .execute(&mut **tx)
+            .await?;
+        }
+    }
+
+    let mut release_external_ids = prepared
+        .resolutions
+        .iter()
+        .filter(|resolution| resolution.track_id.is_none())
+        .flat_map(|resolution| resolution.musicbrainz_ids.iter())
+        .filter(|(family, _)| matches!(family.as_str(), "release" | "release_group"))
+        .cloned()
+        .collect::<Vec<_>>();
+    release_external_ids.sort();
+    release_external_ids.dedup();
+    for (family, external_id) in release_external_ids {
+        sqlx::query(
+            "INSERT INTO release_external_identities (
+                id, release_id, provider, external_id, trusted,
+                confidence, evidence_source, is_locked, observed_at
+             ) VALUES ($1,$2,'musicbrainz',$3,$4,$5,$6,false,$7)
+             ON CONFLICT (release_id, provider, external_id) DO UPDATE
+             SET trusted = release_external_identities.trusted OR EXCLUDED.trusted,
+                 confidence = GREATEST(release_external_identities.confidence, EXCLUDED.confidence),
+                 evidence_source = EXCLUDED.evidence_source,
+                 observed_at = EXCLUDED.observed_at",
+        )
+        .bind(Uuid::now_v7())
+        .bind(release_id)
+        .bind(&external_id)
+        .bind(Uuid::parse_str(&external_id).is_ok())
+        .bind(if Uuid::parse_str(&external_id).is_ok() {
+            9500_i32
+        } else {
+            1000_i32
+        })
+        .bind(format!("manifest-v3:embedded-musicbrainz:{family}"))
+        .bind(now)
+        .execute(&mut **tx)
+        .await?;
+    }
+
+    schedule_provider_enrichment(tx, release_id, artist_identities.keys().copied(), now).await?;
 
     let mut observation_query: QueryBuilder<Postgres> = QueryBuilder::new(
         "INSERT INTO observed_artists (
@@ -1657,6 +2479,195 @@ async fn persist_prepared_import(
     })
 }
 
+const MAX_AUDIO_IDENTITY_PROPOSALS_PER_IMPORT: usize = 256;
+
+async fn schedule_provider_enrichment<I>(
+    tx: &mut Transaction<'_, Postgres>,
+    release_id: Uuid,
+    artist_ids: I,
+    now: OffsetDateTime,
+) -> Result<(), CatalogStoreError>
+where
+    I: IntoIterator<Item = Uuid>,
+{
+    let mut artists = artist_ids.into_iter().collect::<Vec<_>>();
+    artists.sort_unstable();
+    artists.dedup();
+    for artist_id in artists {
+        for provider in KNOWN_PROVIDERS {
+            for purpose in [
+                EnrichmentPurpose::ArtistMetadata,
+                EnrichmentPurpose::ArtistArtwork,
+            ] {
+                let request_key = format!("artist:{artist_id}:{provider}:{}", purpose.as_str());
+                schedule_in_transaction(
+                    tx,
+                    EnrichmentEntityType::Artist,
+                    artist_id,
+                    provider,
+                    purpose,
+                    &request_key,
+                    now,
+                )
+                .await?;
+            }
+        }
+    }
+    for provider in KNOWN_PROVIDERS {
+        for purpose in [
+            EnrichmentPurpose::ReleaseMetadata,
+            EnrichmentPurpose::ReleaseArtwork,
+        ] {
+            let request_key = format!("release:{release_id}:{provider}:{}", purpose.as_str());
+            schedule_in_transaction(
+                tx,
+                EnrichmentEntityType::Release,
+                release_id,
+                provider,
+                purpose,
+                &request_key,
+                now,
+            )
+            .await?;
+        }
+    }
+    Ok(())
+}
+
+/// Retains embedded MusicBrainz observations on the AudioIdentity that owns a
+/// Track. Matching recording IDs are only proposals: a tag is evidence, not a
+/// license to silently collapse two catalog occurrences.
+async fn persist_embedded_audio_identity_evidence(
+    tx: &mut Transaction<'_, Postgres>,
+    prepared: &PreparedImport,
+    now: OffsetDateTime,
+) -> Result<(), CatalogStoreError> {
+    for track in &prepared.tracks {
+        for (family, external_id) in &track.musicbrainz_ids {
+            let trusted_shape = Uuid::parse_str(external_id).is_ok();
+            sqlx::query(
+                "INSERT INTO audio_identity_evidence (
+                    id, source_audio_identity_id, candidate_audio_identity_id,
+                    track_id, evidence_kind, polarity, confidence, source,
+                    payload, created_at
+                 ) VALUES ($1,$2,NULL,$3,'external_identifier','supports',$4,$5,$6,$7)",
+            )
+            .bind(Uuid::now_v7())
+            .bind(track.audio_identity_id)
+            .bind(track.id)
+            .bind(if trusted_shape { 9500_i32 } else { 1000_i32 })
+            .bind(if trusted_shape {
+                "manifest-v3:embedded-musicbrainz"
+            } else {
+                "manifest-v3:malformed-musicbrainz-observation"
+            })
+            .bind(serde_json::json!({
+                "family": family,
+                "external_id": external_id,
+                "media_asset_id": track.media_asset_id,
+                "trusted_identifier_shape": trusted_shape,
+            }))
+            .bind(now)
+            .execute(&mut **tx)
+            .await?;
+        }
+    }
+
+    let mut recording_groups = BTreeMap::<String, Vec<(&PreparedTrack, String)>>::new();
+    for track in &prepared.tracks {
+        for (family, external_id) in &track.musicbrainz_ids {
+            if family == "recording" && Uuid::parse_str(external_id).is_ok() {
+                recording_groups
+                    .entry(external_id.to_ascii_lowercase())
+                    .or_default()
+                    .push((track, external_id.clone()));
+            }
+        }
+    }
+    let mut proposal_count = 0_usize;
+    for (recording_id, tracks) in recording_groups {
+        for left_index in 0..tracks.len() {
+            for right_index in (left_index + 1)..tracks.len() {
+                if proposal_count >= MAX_AUDIO_IDENTITY_PROPOSALS_PER_IMPORT {
+                    return Ok(());
+                }
+                let source = tracks[left_index].0;
+                let candidate = tracks[right_index].0;
+                let already_exists = sqlx::query_scalar::<_, bool>(
+                    "SELECT EXISTS (
+                         SELECT 1 FROM audio_identity_match_decisions
+                         WHERE source_audio_identity_id = $1
+                           AND candidate_audio_identity_id = $2
+                     )",
+                )
+                .bind(source.audio_identity_id)
+                .bind(candidate.audio_identity_id)
+                .fetch_one(&mut **tx)
+                .await?;
+                if already_exists {
+                    continue;
+                }
+                let evidence_id = Uuid::now_v7();
+                sqlx::query(
+                    "INSERT INTO audio_identity_evidence (
+                        id, source_audio_identity_id, candidate_audio_identity_id,
+                        track_id, evidence_kind, polarity, confidence, source,
+                        payload, created_at
+                     ) VALUES ($1,$2,$3,$4,'external_identifier','supports',9500,
+                               'manifest-v3:recording-id-proposal',$5,$6)",
+                )
+                .bind(evidence_id)
+                .bind(source.audio_identity_id)
+                .bind(candidate.audio_identity_id)
+                .bind(source.id)
+                .bind(serde_json::json!({
+                    "family": "recording",
+                    "external_id": recording_id,
+                    "candidate_track_id": candidate.id,
+                }))
+                .bind(now)
+                .execute(&mut **tx)
+                .await?;
+                let decision_id = Uuid::now_v7();
+                sqlx::query(
+                    "INSERT INTO audio_identity_match_decisions (
+                        id, source_audio_identity_id, candidate_audio_identity_id,
+                        outcome, authority, is_locked, reason,
+                        predecessor_decision_id, evidence_ids, payload, created_at
+                     ) VALUES ($1,$2,$3,'proposed','automated',false,
+                               'matching embedded MusicBrainz recording observation',
+                               NULL,$4,$5,$6)",
+                )
+                .bind(decision_id)
+                .bind(source.audio_identity_id)
+                .bind(candidate.audio_identity_id)
+                .bind(serde_json::json!([evidence_id]))
+                .bind(serde_json::json!({
+                    "resolver_version": prepared.resolver_version,
+                    "automatic_confirmation": false,
+                }))
+                .bind(now)
+                .execute(&mut **tx)
+                .await?;
+                sqlx::query(
+                    "INSERT INTO audio_identity_match_current (
+                        source_audio_identity_id, candidate_audio_identity_id,
+                        decision_id, updated_at
+                     ) VALUES ($1,$2,$3,$4)",
+                )
+                .bind(source.audio_identity_id)
+                .bind(candidate.audio_identity_id)
+                .bind(decision_id)
+                .bind(now)
+                .execute(&mut **tx)
+                .await?;
+                proposal_count += 1;
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Preserve native-v1 request auto-completion at the catalog commit boundary.
 ///
 /// The frozen server runs this behavior when a Release or Track is added. Keeping
@@ -1817,6 +2828,49 @@ async fn load_existing_result(
     let overlay_id = row
         .2
         .ok_or(CatalogStoreError::ImportConflict(work_item_id))?;
+    Ok(Some(CatalogImportResult {
+        catalog_import_id: CatalogImportId::from_uuid(row.0),
+        release_id: ReleaseId::from_uuid(row.1),
+        overlay_id: CatalogSemanticOverlayId::from_uuid(overlay_id),
+        track_count: u32::try_from(row.4).map_err(|_| CatalogStoreError::NumericOverflow)?,
+        artist_count: u32::try_from(row.5).map_err(|_| CatalogStoreError::NumericOverflow)?,
+        media_asset_count: u32::try_from(row.6).map_err(|_| CatalogStoreError::NumericOverflow)?,
+        set_based_mutation_statement_count: SET_BASED_MUTATION_STATEMENT_COUNT,
+        inserted: false,
+    }))
+}
+
+async fn load_existing_release_result(
+    tx: &mut Transaction<'_, Postgres>,
+    release_id: Uuid,
+    semantic_hash: &str,
+    request: &CatalogImportRequest,
+) -> Result<Option<CatalogImportResult>, CatalogStoreError> {
+    let row = sqlx::query_as::<_, (Uuid, Uuid, Option<Uuid>, String, i64, i64, i64)>(
+        "SELECT ci.id, ci.release_id, r.current_overlay_id, ci.resolver_version,
+                (SELECT count(*) FROM tracks t WHERE t.release_id = ci.release_id),
+                (SELECT count(*) FROM observed_artists o WHERE o.release_id = ci.release_id),
+                (SELECT count(DISTINCT tma.media_asset_id)
+                   FROM tracks t
+                   JOIN track_media_assets tma ON tma.track_id = t.id
+                  WHERE t.release_id = ci.release_id)
+         FROM catalog_imports ci
+         JOIN releases r ON r.id = ci.release_id
+         WHERE ci.release_id = $1 AND ci.semantic_manifest_hash = $2
+         ORDER BY ci.imported_at, ci.id
+         LIMIT 1",
+    )
+    .bind(release_id)
+    .bind(semantic_hash)
+    .fetch_optional(&mut **tx)
+    .await?;
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    if row.3 != request.resolver_version {
+        return Err(CatalogStoreError::ImportConflict(release_id));
+    }
+    let overlay_id = row.2.ok_or(CatalogStoreError::ImportConflict(release_id))?;
     Ok(Some(CatalogImportResult {
         catalog_import_id: CatalogImportId::from_uuid(row.0),
         release_id: ReleaseId::from_uuid(row.1),

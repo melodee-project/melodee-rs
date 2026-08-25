@@ -118,7 +118,7 @@ Use [the phase implementation prompt](design/prompts/IMPLEMENT-PHASE.md) as the 
 for phase-level coding-agent assignments. The issue template is reserved for explicitly assigned
 issues.
 
-## Current phase boundary: Phase 10 complete — awaiting next phase assignment
+## Current phase boundary: Feature-Completion Phase 2 complete — awaiting next phase assignment
 
 Phases 0–10 are complete. Phase 10's evidence is in
 `design/evidence/phase-10/PHASE-10-REPORT.md`: the Carbon admin SPA (served at `/admin`)
@@ -147,15 +147,21 @@ routes, zero-diff replay, Feishin 12/12 real-client acceptance); Phase 7's accep
 evidence is in `design/evidence/phase-7/PHASE-7-REPORT.md`.
 
 The post-Phase-10 **W0 workstream** (`RELEASE-002` metadata-edit contract and save-path fix) is
-implemented at `cd0256a`, including server/store tests and public API documentation. The remaining
-quick wins and W1–W9 in `design/ROAD-TO-FEATURE-COMPLETION.md` are still planning inputs, not
-individually assigned tasks. When the user assigns the next phase, use them as internal
-workstreams of a complete phase-level assignment rather than prompting for them one at a time.
+implemented at `cd0256a`, including server/store tests and public API documentation. Feature-
+Completion Phase 2 is complete under
+`design/evidence/feature-completion/phase-2/PHASE-2-REPORT.md`; its local identity, provider,
+enrichment, artwork, compatibility, documentation, and validation evidence is closed. The report
+keeps real credentials, live provider differential captures, production replica rehearsal, and
+production-library cutover as explicit operator-authorized external legs.
+
+ADR-0161 supersedes ADR-0155: MeloAmp owns listener browsing, search, playback, playlists, ratings,
+recommendations, and related listener workflows; the Rust server owns APIs, ingestion, storage,
+streaming, operations, and the full Admin UI at `/admin`. A duplicate `web-ui/` listener SPA at `/`
+is not a server obligation. Only narrow HTML pages required by a public link or security flow may
+be added, and they must not become a second listener application.
 
 Allowed without new user direction: fixes to existing evidence and documentation corrections.
-An explicit user request for the next phase or for a coding-agent prompt that accomplishes it is
-the phase-level direction described above; it must not be narrowed to a documentation cleanup or
-single workstream merely because the repository was previously awaiting assignment.
+Phase 2 is closed; do not begin unsolicited feature work while awaiting the next phase assignment.
 
 Not authorized by the current repository state alone: Phase 11 migration/import completion. A
 direct user assignment may authorize that phase, but production rehearsal, cutover, rollback, and

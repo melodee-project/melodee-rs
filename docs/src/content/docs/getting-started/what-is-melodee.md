@@ -17,6 +17,8 @@ Key characteristics:
   files, with explicit Artist identity so same-name artists stay distinct.
 - **Client choice.** Use native Melodee clients, any OpenSubsonic-compatible client, or supported
   Jellyfin-compatible clients.
+- **One listener application.** MeloAmp owns listener browsing, search, playback, playlists,
+  ratings, and recommendations; the server's browser UI is the Admin UI at `/admin`.
 - **Fully FOSS.** Melodee and every capability it requires are free and open source software.
 
 :::note[Deployment]

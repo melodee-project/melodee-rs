@@ -33,6 +33,10 @@ bcrypt = "=0.19.2"
 # in 0.21.x. No intl/temporal: no ICU4X linkage for operator predicates.
 boa_engine = { version = "=0.21.1", default-features = false }
 blake3 = "=1.8.6"
+# ADR-0163: read-only MusicBrainz local-replica access uses the pinned
+# Apache-2.0 DecentDB engine used by the legacy export format. Default Lua
+# extensions are disabled; Melodee only needs bounded SQL reads.
+decentdb = { git = "https://github.com/sphildreth/decentdb.git", rev = "eb7b7d11339e3dd1f436423d8fcf294a6ec51a82", version = "=2.16.1", default-features = false }
 dotenvy = "=0.15.7"
 futures-util = "=0.3.33"
 getrandom = "=0.4.3"

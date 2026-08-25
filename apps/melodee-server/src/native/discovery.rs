@@ -435,44 +435,30 @@ struct ProviderInfo {
     is_enabled: bool,
 }
 
-const MELODEE_PROVIDER_ID: &str = "018A798D-7B68-4F3E-80CD-1BAF03998C0B";
-const SPOTIFY_PROVIDER_ID: &str = "BBAC49B7-0EDF-4D31-8A54-C9126509C2CE";
-const ITUNES_PROVIDER_ID: &str = "36E4DB7A-18BB-4A7D-86F7-A3C653A21611";
-const LAST_FM_PROVIDER_ID: &str = "3E43D998-2E9C-45B0-8128-EE6F0A41419E";
-const DISCOGS_PROVIDER_ID: &str = "5A8D2E5B-3C9D-4E7F-9B7A-A1B2C3D4E5F6";
-const WIKIDATA_PROVIDER_ID: &str = "7B9C8E1F-2A3D-4E5B-8C7D-9E0F1A2B3C4D";
-
-fn provider_info(id: &str, display_name: &str, is_enabled: bool) -> ProviderInfo {
-    ProviderInfo {
-        id: id.to_owned(),
-        display_name: display_name.to_owned(),
-        is_enabled,
-    }
-}
-
-fn provider_facts() -> Vec<ProviderInfo> {
-    vec![
-        provider_info(MELODEE_PROVIDER_ID, "Melodee Database", true),
-        provider_info(MELODEE_PROVIDER_ID, "Music Brainz Database", true),
-        provider_info(SPOTIFY_PROVIDER_ID, "Spotify Service", false),
-        provider_info(ITUNES_PROVIDER_ID, "ITunes Search Engine", true),
-        provider_info(LAST_FM_PROVIDER_ID, "Last FM Search Engine", true),
-        provider_info(DISCOGS_PROVIDER_ID, "Discogs Search Engine", false),
-        provider_info(WIKIDATA_PROVIDER_ID, "WikiData Search Engine", false),
-    ]
-}
-
 fn provider_wire_facts(provider: &str) -> (&'static str, &'static str) {
     match provider.to_ascii_lowercase().as_str() {
-        "musicbrainz" | "music_brainz" | "melodee" => {
-            ("Music Brainz Database", MELODEE_PROVIDER_ID)
-        }
-        "spotify" => ("Spotify Service", SPOTIFY_PROVIDER_ID),
-        "itunes" | "apple" => ("ITunes Search Engine", ITUNES_PROVIDER_ID),
-        "lastfm" | "last_fm" => ("Last FM Search Engine", LAST_FM_PROVIDER_ID),
-        "discogs" => ("Discogs Search Engine", DISCOGS_PROVIDER_ID),
-        "wikidata" | "wiki_data" => ("WikiData Search Engine", WIKIDATA_PROVIDER_ID),
-        _ => ("Melodee Database", MELODEE_PROVIDER_ID),
+        "musicbrainz" => (
+            "Music Brainz Database",
+            crate::providers::MELODEE_PROVIDER_ID,
+        ),
+        "spotify" => ("Spotify Service", crate::providers::SPOTIFY_PROVIDER_ID),
+        "itunes" | "apple" => ("ITunes Search Engine", crate::providers::ITUNES_PROVIDER_ID),
+        "lastfm" | "last_fm" => (
+            "Last FM Search Engine",
+            crate::providers::LAST_FM_PROVIDER_ID,
+        ),
+        "discogs" => (
+            "Discogs Search Engine",
+            crate::providers::DISCOGS_PROVIDER_ID,
+        ),
+        "wikidata" | "wiki_data" => (
+            "WikiData Search Engine",
+            crate::providers::WIKIDATA_PROVIDER_ID,
+        ),
+        "deezer" => ("Deezer Search Engine", crate::providers::DEEZER_PROVIDER_ID),
+        "brave" => ("Brave Search", crate::providers::BRAVE_PROVIDER_ID),
+        "metalapi" | "metal-api" => ("Metal-API", crate::providers::METAL_API_PROVIDER_ID),
+        _ => ("Melodee Database", crate::providers::MELODEE_PROVIDER_ID),
     }
 }
 
@@ -510,11 +496,18 @@ struct LookupResponse {
     providers: Vec<ProviderInfo>,
 }
 
-async fn providers(_pool: &sqlx::PgPool) -> Result<Vec<ProviderInfo>, NativeApiError> {
-    // These are compatibility capability facts, not canonical identity
-    // authorities. Disabled providers remain visible because clients use this
-    // list to explain why a lookup source is unavailable.
-    Ok(provider_facts())
+async fn providers(pool: &sqlx::PgPool) -> Result<Vec<ProviderInfo>, NativeApiError> {
+    let runtime = crate::providers::ProviderRuntime::new(pool.clone())?;
+    Ok(runtime
+        .capabilities()
+        .await?
+        .into_iter()
+        .map(|capability| ProviderInfo {
+            id: capability.wire_id.to_owned(),
+            display_name: capability.display_name.to_owned(),
+            is_enabled: capability.enabled,
+        })
+        .collect())
 }
 
 async fn lookup_providers(
@@ -536,56 +529,60 @@ async fn artist_lookup(
     {
         return Err(NativeApiError::BadRequest);
     }
-    let selected_providers = request.provider_ids.map(|ids| {
-        ids.into_iter()
-            .filter_map(|id| match id.to_ascii_uppercase().as_str() {
-                MELODEE_PROVIDER_ID => Some("musicbrainz".to_owned()),
-                SPOTIFY_PROVIDER_ID => Some("spotify".to_owned()),
-                ITUNES_PROVIDER_ID => Some("itunes".to_owned()),
-                LAST_FM_PROVIDER_ID => Some("lastfm".to_owned()),
-                DISCOGS_PROVIDER_ID => Some("discogs".to_owned()),
-                WIKIDATA_PROVIDER_ID => Some("wikidata".to_owned()),
-                _ => None,
-            })
-            .collect::<Vec<_>>()
-    });
-    let rows=sqlx::query_as::<_,(String,String,String,String)>(
-        "SELECT identity.provider,identity.external_id,artist.canonical_name,artist.sort_name \
-         FROM artist_external_identities identity JOIN artists artist ON artist.id=identity.artist_id \
-         WHERE artist.status IS DISTINCT FROM 'merged' AND artist.canonical_name ILIKE '%'||$1||'%' \
-           AND native_user_can_access_artist($4,artist.id) \
-           AND ($2::text[] IS NULL OR lower(identity.provider)=ANY($2)) \
-         ORDER BY artist.sort_name,artist.public_api_id,identity.provider LIMIT $3")
-        .bind(request.artist_name.trim()).bind(selected_providers).bind(i64::from(limit)).bind(principal.user_id)
-        .fetch_all(&state.pool).await?;
-    let candidates = rows
+    let selected_providers = crate::providers::selected_provider_names(request.provider_ids);
+    let runtime = crate::providers::ProviderRuntime::new(state.pool.clone())?;
+    let lookup = runtime
+        .lookup_artists(
+            request.artist_name.trim(),
+            usize::try_from(limit).map_err(|_| NativeApiError::BadRequest)?,
+            Some(principal.user_id),
+            selected_providers.as_ref(),
+        )
+        .await?;
+    let candidates = lookup
+        .candidates
         .into_iter()
-        .map(|(provider, external, name, sort)| {
-            let (provider_display_name, provider_id) = provider_wire_facts(&provider);
+        .map(|candidate| {
+            let (provider_display_name, provider_id) = provider_wire_facts(&candidate.provider);
             LookupCandidate {
                 provider_display_name: provider_display_name.to_owned(),
                 provider_id: Some(provider_id.to_owned()),
-                name,
-                sort_name: Some(sort),
-                image_url: None,
-                thumbnail_url: None,
-                music_brainz_id: if provider.eq_ignore_ascii_case("musicbrainz") {
-                    external.parse().ok()
-                } else {
-                    None
-                },
-                spotify_id: (provider.eq_ignore_ascii_case("spotify")).then(|| external.clone()),
-                discogs_id: (provider.eq_ignore_ascii_case("discogs")).then(|| external.clone()),
+                name: candidate.name,
+                sort_name: candidate.sort_name,
+                image_url: candidate.image_url,
+                thumbnail_url: candidate.thumbnail_url,
+                music_brainz_id: candidate
+                    .provider
+                    .eq_ignore_ascii_case("musicbrainz")
+                    .then(|| candidate.external_id.parse().ok())
+                    .flatten(),
+                spotify_id: candidate
+                    .provider
+                    .eq_ignore_ascii_case("spotify")
+                    .then_some(candidate.external_id.clone()),
+                discogs_id: candidate
+                    .provider
+                    .eq_ignore_ascii_case("discogs")
+                    .then_some(candidate.external_id.clone()),
                 amg_id: None,
-                wiki_data_id: (provider.eq_ignore_ascii_case("wikidata")).then(|| external.clone()),
-                itunes_id: (provider.eq_ignore_ascii_case("itunes")).then(|| external.clone()),
-                last_fm_id: (provider.eq_ignore_ascii_case("lastfm")).then_some(external),
+                wiki_data_id: candidate
+                    .provider
+                    .eq_ignore_ascii_case("wikidata")
+                    .then_some(candidate.external_id.clone()),
+                itunes_id: candidate
+                    .provider
+                    .eq_ignore_ascii_case("itunes")
+                    .then_some(candidate.external_id.clone()),
+                last_fm_id: candidate
+                    .provider
+                    .eq_ignore_ascii_case("lastfm")
+                    .then_some(candidate.external_id),
             }
         })
         .collect();
     Ok(Json(LookupResponse {
         candidates,
-        has_partial_failures: false,
+        has_partial_failures: !lookup.failed_providers.is_empty(),
         providers: providers(&state.pool).await?,
     }))
 }

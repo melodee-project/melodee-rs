@@ -5,13 +5,115 @@
 mod catalog_common;
 mod common;
 
-use catalog_common::{CatalogFixturePresentation, seed_published_release};
+use catalog_common::{
+    CatalogFixturePresentation, seed_published_release, seed_published_release_with_musicbrainz_ids,
+};
 use common::{TestDb, test_config};
 use melodee_domain::{
     FailureClass, IngestionState, PUBLICATION_MANIFEST_VERSION, RetryPolicy, WorkErrorCode,
 };
 use melodee_persistence::{CatalogImportRequest, CatalogStore, WorkItemStore, WorkerId};
 use time::Duration;
+
+#[tokio::test]
+async fn catalog_import_persists_all_embedded_musicbrainz_families_and_enrichment_work() {
+    let db = TestDb::create("catalog_embedded_evidence").await;
+    let fixture = seed_published_release_with_musicbrainz_ids(
+        &db,
+        91,
+        CatalogFixturePresentation {
+            release_title: "Embedded Evidence",
+            release_artist: "Evidence Artist",
+            track_title: "Evidence Track",
+            track_artist: "Evidence Artist",
+            release_date: "2009-08-07",
+        },
+        serde_json::json!({
+            "recording": "aa1b1c1d-0000-7000-8000-000000000001",
+            "release": "aa1b1c1d-0000-7000-8000-000000000002",
+            "release_group": "aa1b1c1d-0000-7000-8000-000000000003",
+            "artist": "aa1b1c1d-0000-7000-8000-000000000004",
+            "release_artist": "aa1b1c1d-0000-7000-8000-000000000005",
+            "work": "not-a-uuid-but-retained"
+        }),
+    )
+    .await;
+    let catalog = CatalogStore;
+    let worker = WorkerId::new();
+    let now = time::OffsetDateTime::now_utc();
+    catalog
+        .claim_cataloging(&db.pool, &worker, &test_config(), now)
+        .await
+        .expect("claim catalog import");
+    catalog
+        .import_manifest_v3(
+            &db.pool,
+            fixture.work_item_id,
+            &worker,
+            &CatalogImportRequest::new("embedded-evidence-v1", "catalog-test"),
+            now,
+        )
+        .await
+        .expect("import embedded evidence");
+
+    let external_ids: Vec<(String, String, i32)> = sqlx::query_as(
+        "SELECT provider, external_id, confidence
+         FROM artist_external_identities ORDER BY external_id",
+    )
+    .fetch_all(&db.pool)
+    .await
+    .expect("read Artist external evidence");
+    assert_eq!(external_ids.len(), 2);
+    assert!(
+        external_ids
+            .iter()
+            .all(|(_, id, confidence)| { id.starts_with("aa1b1c1d-") && *confidence == 9500 })
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM release_external_identities
+             WHERE release_id=$1 AND provider='musicbrainz'",
+        )
+        .bind(fixture.release_id.into_uuid())
+        .fetch_one(&db.pool)
+        .await
+        .expect("read Release external evidence"),
+        2
+    );
+    let audio_evidence: Vec<(String, i32)> = sqlx::query_as(
+        "SELECT payload->>'family', confidence FROM audio_identity_evidence
+         WHERE track_id=(SELECT id FROM tracks WHERE release_id=$1)
+         ORDER BY payload->>'family'",
+    )
+    .bind(fixture.release_id.into_uuid())
+    .fetch_all(&db.pool)
+    .await
+    .expect("read AudioIdentity evidence");
+    assert_eq!(audio_evidence.len(), 6);
+    assert!(
+        audio_evidence
+            .iter()
+            .any(|(family, confidence)| family == "work" && *confidence == 1000)
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM audio_identity_match_decisions
+             WHERE outcome='proposed'",
+        )
+        .fetch_one(&db.pool)
+        .await
+        .expect("read AudioIdentity proposals"),
+        0
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM provider_enrichment_tasks")
+            .fetch_one(&db.pool)
+            .await
+            .expect("read scheduled enrichment"),
+        36
+    );
+    db.drop().await;
+}
 
 #[tokio::test]
 async fn published_v3_fixture_exposes_complete_catalog_handoff_without_media_files() {
@@ -525,5 +627,193 @@ async fn retryable_catalog_failure_records_backoff_then_direct_reclaim_converges
         1
     );
 
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn trusted_release_evidence_merge_and_split_preserve_tracks_and_audit() {
+    let db = TestDb::create("catalog_release_merge_split").await;
+    let evidence = serde_json::json!({
+        "recording": "bb1b1c1d-0000-7000-8000-000000000001",
+        "release": "bb1b1c1d-0000-7000-8000-000000000002",
+        "release_group": "bb1b1c1d-0000-7000-8000-000000000003",
+        "artist": "bb1b1c1d-0000-7000-8000-000000000004",
+        "release_artist": "bb1b1c1d-0000-7000-8000-000000000005"
+    });
+    let first = seed_published_release_with_musicbrainz_ids(
+        &db,
+        20,
+        CatalogFixturePresentation {
+            release_title: "Merge Source",
+            ..CatalogFixturePresentation::default()
+        },
+        evidence.clone(),
+    )
+    .await;
+    let second = seed_published_release_with_musicbrainz_ids(
+        &db,
+        21,
+        CatalogFixturePresentation {
+            release_title: "Merge Target",
+            ..CatalogFixturePresentation::default()
+        },
+        evidence,
+    )
+    .await;
+    let catalog = CatalogStore;
+    let worker = WorkerId::new();
+    let claimed = catalog
+        .claim_cataloging(
+            &db.pool,
+            &worker,
+            &test_config(),
+            time::OffsetDateTime::now_utc(),
+        )
+        .await
+        .expect("claim Release fixtures");
+    assert_eq!(claimed.len(), 2);
+    for fixture in [&first, &second] {
+        let now = time::OffsetDateTime::now_utc();
+        catalog
+            .import_manifest_v3(
+                &db.pool,
+                fixture.work_item_id,
+                &worker,
+                &CatalogImportRequest::new("release-merge-test-v1", "catalog-test"),
+                now,
+            )
+            .await
+            .expect("import Release fixture");
+    }
+
+    let candidates = catalog
+        .strong_release_merge_candidates(&db.pool, 64)
+        .await
+        .expect("scan trusted Release evidence");
+    let candidate = candidates
+        .into_iter()
+        .find(|candidate| {
+            candidate.source_release_id == first.release_id.into_uuid()
+                && candidate.target_release_id == second.release_id.into_uuid()
+        })
+        .expect("duplicate Releases form a strong evidence candidate");
+    let source_track: uuid::Uuid =
+        sqlx::query_scalar("SELECT id FROM tracks WHERE release_id=$1 ORDER BY ordinal LIMIT 1")
+            .bind(first.release_id.into_uuid())
+            .fetch_one(&db.pool)
+            .await
+            .expect("read source Track before merge");
+    let target_track_count_before: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM tracks WHERE release_id=$1")
+            .bind(second.release_id.into_uuid())
+            .fetch_one(&db.pool)
+            .await
+            .expect("count target Tracks before merge");
+
+    let merge_event = catalog
+        .merge_release(
+            &db.pool,
+            candidate.source_release_id,
+            candidate.target_release_id,
+            "catalog-test",
+            "strong provider evidence test merge",
+            time::OffsetDateTime::now_utc(),
+        )
+        .await
+        .expect("merge Release with durable event");
+    assert_eq!(
+        sqlx::query_scalar::<_, String>("SELECT status FROM releases WHERE id=$1")
+            .bind(first.release_id.into_uuid())
+            .fetch_one(&db.pool)
+            .await
+            .expect("read merged source status"),
+        "merged"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM tracks WHERE release_id=$1")
+            .bind(second.release_id.into_uuid())
+            .fetch_one(&db.pool)
+            .await
+            .expect("count target Tracks after merge"),
+        target_track_count_before + 1
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM release_merge_events WHERE id=$1")
+            .bind(merge_event)
+            .fetch_one(&db.pool)
+            .await
+            .expect("read merge event"),
+        1
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM catalog_projection_outbox
+             WHERE entity_type='track' AND entity_id=$1 AND entity_revision > 1
+               AND processed_at IS NULL",
+        )
+        .bind(source_track)
+        .fetch_one(&db.pool)
+        .await
+        .expect("read Track projection event after merge"),
+        1
+    );
+
+    catalog
+        .split_release_merge(
+            &db.pool,
+            merge_event,
+            "catalog-test",
+            "reversible merge test split",
+            time::OffsetDateTime::now_utc(),
+        )
+        .await
+        .expect("split Release merge");
+    assert_eq!(
+        sqlx::query_scalar::<_, String>("SELECT status FROM releases WHERE id=$1")
+            .bind(first.release_id.into_uuid())
+            .fetch_one(&db.pool)
+            .await
+            .expect("read restored source status"),
+        "active"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, uuid::Uuid>("SELECT release_id FROM tracks WHERE id=$1")
+            .bind(source_track)
+            .fetch_one(&db.pool)
+            .await
+            .expect("read restored Track owner"),
+        first.release_id.into_uuid()
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM release_split_events WHERE merge_event_id=$1",
+        )
+        .bind(merge_event)
+        .fetch_one(&db.pool)
+        .await
+        .expect("read split event"),
+        1
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM catalog_audit_events
+             WHERE entity_id = ANY($1) AND event_type IN ('release_merged','release_merged_into','release_split')",
+        )
+        .bind(vec![first.release_id.into_uuid(), second.release_id.into_uuid()])
+        .fetch_one(&db.pool)
+        .await
+        .expect("read merge and split audit events"),
+        3
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT track_count FROM release_catalog_aggregates WHERE release_id=$1",
+        )
+        .bind(first.release_id.into_uuid())
+        .fetch_one(&db.pool)
+        .await
+        .expect("read restored source aggregate"),
+        1
+    );
     db.drop().await;
 }

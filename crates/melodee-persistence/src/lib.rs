@@ -24,6 +24,7 @@ mod migrate;
 mod native_user_state;
 mod notifications;
 mod policy;
+mod provider_enrichment;
 mod providers;
 mod radio;
 mod scripts;
@@ -48,7 +49,8 @@ pub use catalog::{
     MAX_CATALOG_CORRECTION_OVERLAY_REFERENCES, MAX_CATALOG_CORRECTION_RELEASES,
     MAX_CATALOG_CORRECTION_TRACKS, MAX_CATALOG_SPLIT_ASSIGNMENTS, PolicyEligibleWorkItem,
     ProviderNegativeAssertion, ReleaseMetadataPatch, StoredArtistCandidate,
-    StoredArtistTrackAssociation, StoredCatalogImport, TrackMetadataPatch,
+    StoredArtistTrackAssociation, StoredCatalogImport, StrongArtistMergeCandidate,
+    StrongReleaseMergeCandidate, TrackMetadataPatch,
 };
 pub use catalog_browse::{
     ArtistAliasRow, ArtistCatalogDetail, ArtistContributionRow, ArtistExternalIdRow,
@@ -117,6 +119,13 @@ pub use policy::{
     PolicyDestructiveCompletion, PolicyEvaluationCommit, PolicyReleaseCatalogTraitAssertion,
     PolicyStore, PolicyStoreError, PolicyTestSampleRelease, StoredNoveltyEvaluation,
     StoredPolicyDecision, StoredReleaseClassification, StoredTrackNovelty,
+};
+pub use provider_enrichment::{
+    ClaimedEnrichmentTask, DEFAULT_ENRICHMENT_LEASE_SECONDS, EnrichmentEntityType,
+    EnrichmentOutcome, EnrichmentPurpose, MAX_ENRICHMENT_ATTEMPTS, MAX_ENRICHMENT_BATCH,
+    MAX_PROVIDER_IMAGE_BYTES, ProviderArtworkStore, ProviderEnrichmentStore,
+    ProviderEnrichmentStoreError, ProviderIdentityCandidateObservation,
+    ProviderIdentityCandidateStore, StoredProviderImage, schedule_in_transaction,
 };
 pub use providers::{
     KNOWN_PROVIDERS, LastfmLinkRecord, LastfmLinkStore, MAX_LASTFM_USERNAME_CHARS,

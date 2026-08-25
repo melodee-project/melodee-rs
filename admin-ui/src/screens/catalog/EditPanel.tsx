@@ -17,7 +17,9 @@ interface EditNotice {
 }
 
 /** Form props supplied per entity kind. */
-interface FormFieldConfig {
+type MetadataPatch = ReleaseMetadataPatch | ArtistMetadataPatch | TrackMetadataPatch;
+
+interface FormFieldConfig<P extends MetadataPatch> {
   fields: Array<{
     name: string;
     label: string;
@@ -25,7 +27,7 @@ interface FormFieldConfig {
     value: unknown;
   }>;
   /** Build the patch object from current form state. */
-  buildPatch(state: Record<string, unknown>): ReleaseMetadataPatch | ArtistMetadataPatch | TrackMetadataPatch;
+  buildPatch(state: Record<string, unknown>): P;
 }
 
 /**
@@ -39,7 +41,7 @@ interface FormFieldConfig {
  * `formState`, so `handleSave` always reads the value the user sees on screen —
  * never a stale snapshot captured at mount time.
  */
-export function EditPanel({
+export function EditPanel<P extends MetadataPatch>({
   title,
   fields,
   buildPatch,
@@ -47,9 +49,9 @@ export function EditPanel({
   refresh,
 }: {
   title: string;
-  fields: FormFieldConfig['fields'];
-  buildPatch: FormFieldConfig['buildPatch'];
-  onSave: (patch: ReleaseMetadataPatch | ArtistMetadataPatch | TrackMetadataPatch) => Promise<void>;
+  fields: FormFieldConfig<P>['fields'];
+  buildPatch: FormFieldConfig<P>['buildPatch'];
+  onSave: (patch: P) => Promise<void>;
   refresh: () => void;
 }): React.ReactElement {
   const { t } = useTranslation();
@@ -106,7 +108,7 @@ export function EditPanel({
     setSaving(true);
     setNotice(null);
     try {
-      await onSave(filtered as ReleaseMetadataPatch | ArtistMetadataPatch | TrackMetadataPatch);
+      await onSave(filtered as P);
       refresh();
       setNotice({ kind: 'success', text: t('catalog.edit.saved') });
     } catch {
