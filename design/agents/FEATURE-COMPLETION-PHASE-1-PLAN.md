@@ -256,6 +256,37 @@ for the Rust surfaces. Fix in-scope defects discovered; preserve separate wire c
   evidence; the fingerprint equality scan uses the existing value index. Both are
   O(matches), not cross-product, at catalog scale.
 
+## Execution log (Phase 1)
+
+### Wave 0 — plan amendment (done)
+- `design/agents/FEATURE-COMPLETION-PHASE-1-PLAN.md` amended to full Phase 1 scope
+  (workstreams A–D), D1–D5 demoted to hypotheses, ADR-0160 scope corrected
+  (cross-Release promotion = Phase 2; TRACK-001/002 governed by PRD-FP-001..005 and
+  ADR-0117/0118), ADR-0157 Phase-4 boundary and external R4 residuals reconciled.
+  Committed.
+
+### Wave 1 — TRACK-001 ID retention (implementation done; tests pending verification)
+- `crates/melodee-media/src/lib.rs`:
+  - `MUSICBRAINZ_ID_FAMILIES` (recording/release/release_group/artist/release_artist/work)
+    mapped to lofty canonical `ItemKey`s.
+  - `musicbrainz_id_observations()` inserts present families (raw strings, malformed
+    values verbatim) into `ObservedMetadata.raw["musicbrainz_ids"]`.
+  - `read_native_metadata` now round-trips ID3v2 primary tags through
+    `Id3v2Tag` so TXXX-description and MusicBrainz-owned-UFID frames normalize to
+    canonical keys before extraction (lofty quirk; no effect on other formats).
+  - Unit tests added: per-format round-trip (mp3 TXXX, flac Vorbis, m4a MP4),
+    empty-object-when-untagged, malformed-value-verbatim retention.
+- Oracle alignment: C# stores a single opaque `MusicBrainzId` raw string
+  (`MetaTagIdentifier.MusicBrainzId` `[TXX, TXXX]`, `SafeParser.ToGuid`); the six
+  family keys are the Picard/lofty superset of that mapping.
+- **Blocked on shell**: `cargo test -p melodee-media --lib musicbrainz` could not be
+  run to completion — the command-execution session began failing every invocation
+  (even `pwd`) with `[<literal command string>]: command not found`, which corrupts
+  commands by treating them as a single quoted token. Earlier in the session the
+  per-format test compiled and ran; the final verification run (with the ID3v2
+  round-trip in place) has NOT been executed. Do not report Wave 1 as green until
+  it is.
+
 ## Out of scope (explicit)
 
 Resolver service execution (W4), MusicBrainz client (W3), admin review UI changes,

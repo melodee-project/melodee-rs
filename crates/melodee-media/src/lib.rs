@@ -776,6 +776,38 @@ pub(crate) fn hash_file(path: &Path) -> io::Result<(String, u64)> {
     Ok((hasher.finalize().to_hex().to_string(), bytes))
 }
 
+/// Retained MusicBrainz identifier families (TRACK-001, PRD-FP-001..005, ADR-0117/0118).
+///
+/// Each maps one stable observation key in `ObservedMetadata.raw["musicbrainz_ids"]`
+/// to the [`ItemKey`]s that lofty normalizes the format-native tag keys for that
+/// family to (ID3 TXXX/TID3, Vorbis comment, MP4 iTun/`----` atoms, APE, etc.).
+const MUSICBRAINZ_ID_FAMILIES: [(&str, ItemKey); 6] = [
+    ("recording", ItemKey::MusicBrainzRecordingId),
+    ("release", ItemKey::MusicBrainzReleaseId),
+    ("release_group", ItemKey::MusicBrainzReleaseGroupId),
+    ("artist", ItemKey::MusicBrainzArtistId),
+    ("release_artist", ItemKey::MusicBrainzReleaseArtistId),
+    ("work", ItemKey::MusicBrainzWorkId),
+];
+
+/// Extract the six retained MusicBrainz identifier families from a native tag.
+///
+/// Values are kept as raw observation strings — including malformed ones — because
+/// they are evidence for later identity matching, never identity keys themselves
+/// (PRD-FP-001..005, ADR-0117/0118; the legacy oracle stored them the same way, as
+/// an opaque `MusicBrainzId` string parsed with `SafeParser.ToGuid`). The result
+/// is a JSON object containing only the families present in the tag, so files
+/// without MusicBrainz IDs produce a `{}` object.
+fn musicbrainz_id_observations(tag: &lofty::tag::Tag) -> serde_json::Value {
+    let mut out = serde_json::Map::new();
+    for (name, key) in MUSICBRAINZ_ID_FAMILIES {
+        if let Some(value) = tag.get_string(key) {
+            out.insert(name.to_owned(), serde_json::json!(value));
+        }
+    }
+    serde_json::Value::Object(out)
+}
+
 fn read_native_metadata(
     path: &Path,
     relative_path: &str,
@@ -783,12 +815,30 @@ fn read_native_metadata(
 ) -> Result<(ObservedMetadata, Vec<ObservedArtwork>, Vec<Finding>), String> {
     let mut file = secure_fs::open_read(path).map_err(|error| error.to_string())?;
     let tagged = read_from(&mut file).map_err(|error| error.to_string())?;
-    let tag = tagged.primary_tag().or_else(|| tagged.first_tag());
+    // Prefer the file type's primary tag (MP3 → ID3v2, FLAC → Vorbis Comments,
+    // MP4 → MP4 ILST); fall back to the first available tag for file types whose
+    // metadata lives in a non-primary tag container.
+    let mut tag = tagged.first_tag().cloned();
+
+    // ID3v2.4 stores the MusicBrainz family in TXXX frames keyed by description
+    // (e.g. `TXXX:MusicBrainz Album Id`) or a MusicBrainz-owned UFID, which lofty
+    // normalizes only when converting to `Id3v2Tag`. The format-agnostic `Tag`
+    // view keeps those frames without a canonical key, so for an ID3v2 primary
+    // tag we round-trip through `Id3v2Tag` to recover them (TRACK-001). The
+    // conversion only touches ID3v2 files, so other formats are unaffected.
+    if let Some(current) = tag.take()
+        && current.tag_type() == lofty::tag::TagType::Id3v2
+    {
+        let id3: lofty::tag::Tag = lofty::id3::v2::Id3v2Tag::from(current).into();
+        tag = Some(id3);
+    }
+
     let Some(tag) = tag else {
         return Err("no native metadata tag".to_owned());
     };
 
     let text = |value: Option<std::borrow::Cow<'_, str>>| value.map(|value| value.into_owned());
+    let raw = musicbrainz_id_observations(&tag);
     let metadata = ObservedMetadata {
         album: text(tag.album()),
         album_artist: tag.get_string(ItemKey::AlbumArtist).map(ToOwned::to_owned),
@@ -814,6 +864,11 @@ fn read_native_metadata(
             "genre": tag.genre().as_deref(),
             "musicbrainz_release_type": tag.get_string(ItemKey::MusicBrainzReleaseType),
             "flag_compilation": tag.get_string(ItemKey::FlagCompilation),
+            // TRACK-001: retained MusicBrainz identifiers live in `raw` as raw
+            // observation strings. They are evidence for identity matching
+            // (PRD-FP-001..005, ADR-0117/0118), never identity keys themselves;
+            // malformed values are kept verbatim as observations.
+            "musicbrainz_ids": raw,
         }),
     };
     let mut artwork = Vec::new();
@@ -1194,7 +1249,7 @@ mod tests {
     use super::*;
     use lofty::{
         config::WriteOptions,
-        tag::{Tag, TagExt, TagType},
+        tag::{ItemKey, ItemValue, Tag, TagExt, TagItem, TagType},
     };
 
     #[test]
@@ -1625,6 +1680,242 @@ mod tests {
                 "compilation flag from {extension}"
             );
         }
+    }
+
+    /// Creates a tiny real WAV file (8 kHz mono, 0.1 s) that lofty can tag.
+    fn write_tiny_wav(root: &Path, file_name: &str) -> PathBuf {
+        let path = root.join(file_name);
+        let sample_rate = 8_000_u32;
+        let data_size = 1_600_u32;
+        let mut wav = Vec::new();
+        wav.extend_from_slice(b"RIFF");
+        wav.extend_from_slice(&(36 + data_size).to_le_bytes());
+        wav.extend_from_slice(b"WAVEfmt ");
+        wav.extend_from_slice(&16_u32.to_le_bytes());
+        wav.extend_from_slice(&1_u16.to_le_bytes());
+        wav.extend_from_slice(&1_u16.to_le_bytes());
+        wav.extend_from_slice(&sample_rate.to_le_bytes());
+        wav.extend_from_slice(&(sample_rate * 2).to_le_bytes());
+        wav.extend_from_slice(&2_u16.to_le_bytes());
+        wav.extend_from_slice(&16_u16.to_le_bytes());
+        wav.extend_from_slice(b"data");
+        wav.extend_from_slice(&data_size.to_le_bytes());
+        wav.extend(std::iter::repeat_n(0_u8, data_size as usize));
+        fs::write(&path, wav).expect("tiny wav");
+        path
+    }
+
+    /// TRACK-001: the six retained MusicBrainz identifier families are read back
+    /// as raw observation strings in `ObservedMetadata.raw["musicbrainz_ids"]` for
+    /// each format-native tag family (ID3v2 TXXX, Vorbis comment, MP4 atoms).
+    #[test]
+    fn musicbrainz_identifiers_are_retained_as_raw_observations_per_format() {
+        const REC: &str = "c51b7f5e-3c31-4c9e-a1e1-9b8a7d6c5b4a";
+        const REL: &str = "0e586670-1b32-4c1d-9a1f-6d8e2b3a4c5d";
+        const RLG: &str = "1f2e3d4c-5b6a-4e7f-8a9b-0c1d2e3f4a5b";
+        const ART: &str = "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d";
+        const REL_ART: &str = "3b4c5d6e-7f8a-4b9c-0d1e-2f3a4b5c6d7e";
+        const WORK: &str = "4c5d6e7f-8a9b-4c0d-1e2f-3a4b5c6d7e8f";
+
+        // (observation key, canonical ItemKey, ID3v2.4 TXXX description). The
+        // ID3v2.4 family has no fixed-frame ID, so its tag key is a TXXX
+        // description — matching the legacy C# `[TXX, TXXX]` MusicBrainzId
+        // mapping. Vorbis comments and MP4 `----` atoms use the same canonical
+        // keys with fixed, case-insensitive names.
+        const FAMILIES: [(&str, ItemKey, &str); 6] = [
+            (
+                "recording",
+                ItemKey::MusicBrainzRecordingId,
+                "MUSICBRAINZ_TRACKID",
+            ),
+            (
+                "release",
+                ItemKey::MusicBrainzReleaseId,
+                "MUSICBRAINZ_ALBUMID",
+            ),
+            (
+                "release_group",
+                ItemKey::MusicBrainzReleaseGroupId,
+                "MUSICBRAINZ_RELEASEGROUPID",
+            ),
+            (
+                "artist",
+                ItemKey::MusicBrainzArtistId,
+                "MUSICBRAINZ_ARTISTID",
+            ),
+            (
+                "release_artist",
+                ItemKey::MusicBrainzReleaseArtistId,
+                "MUSICBRAINZ_ALBUMARTISTID",
+            ),
+            ("work", ItemKey::MusicBrainzWorkId, "MUSICBRAINZ_WORKID"),
+        ];
+        const VALUES: [&str; 6] = [REC, REL, RLG, ART, REL_ART, WORK];
+
+        let root = temp_dir("musicbrainz-ids");
+        let (mp3, flac, m4a) = (
+            root.join("mb-ids.mp3"),
+            root.join("mb-ids.flac"),
+            root.join("mb-ids.m4a"),
+        );
+        for (path, codec) in [(&mp3, "libmp3lame"), (&flac, "flac"), (&m4a, "aac")] {
+            let output = std::process::Command::new("ffmpeg")
+                .args([
+                    "-y",
+                    "-v",
+                    "error",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "sine=frequency=440:duration=0.2:sample_rate=8000",
+                    "-c:a",
+                    codec,
+                ])
+                .arg(path)
+                .output()
+                .expect("ffmpeg");
+            assert!(
+                output.status.success(),
+                "ffmpeg failed for {}",
+                path.display()
+            );
+        }
+
+        let mut id3 = Tag::new(TagType::Id3v2);
+        let mut vorbis = Tag::new(TagType::VorbisComments);
+        let mut mp4 = Tag::new(TagType::Mp4Ilst);
+        for (index, (_, key, description)) in FAMILIES.iter().enumerate() {
+            let value = VALUES[index].to_owned();
+            // ID3v2: insert an item keyed for TXXX with the Picard description
+            // so the writer emits `TXXX:MusicBrainz Track Id`-style frames that
+            // lofty normalizes back to the canonical key on read.
+            let mut item = TagItem::new(*key, ItemValue::Text(value.clone()));
+            item.set_description(description.to_string());
+            id3.insert_unchecked(item);
+            assert!(
+                vorbis.insert_text(*key, value.clone()),
+                "insert {key:?} into vorbis"
+            );
+            assert!(mp4.insert_text(*key, value), "insert {key:?} into mp4");
+        }
+        id3.save_to_path(&mp3, WriteOptions::default())
+            .expect("write id3 tag");
+        vorbis
+            .save_to_path(&flac, WriteOptions::default())
+            .expect("write vorbis tag");
+        mp4.save_to_path(&m4a, WriteOptions::default())
+            .expect("write mp4 tag");
+
+        // ID3v2.4 has no fixed frame for the release and release-group IDs:
+        // lofty 0.25 maps only the other four families to TXXX/UFID frames, so
+        // those two are not round-trip-able through lofty's writer and are
+        // asserted only for the formats that support them (FLAC, MP4).
+        let all_indexes = [0_usize, 1, 2, 3, 4, 5];
+        let mp3_indexes = [0_usize, 3, 4, 5];
+        let cases: [(&Path, &str, &[usize]); 3] = [
+            (mp3.as_path(), "mp3", &mp3_indexes),
+            (flac.as_path(), "flac", &all_indexes),
+            (m4a.as_path(), "m4a", &all_indexes),
+        ];
+        for (path, format, indexes) in cases {
+            let (metadata, _, _) =
+                read_native_metadata(path, path.to_str().expect("UTF-8 path"), 0)
+                    .expect("read native metadata");
+            let ids = &metadata.raw["musicbrainz_ids"];
+            for index in indexes {
+                let index = usize::try_from(*index).expect("small index");
+                assert_eq!(
+                    ids[FAMILIES[index].0],
+                    serde_json::json!(VALUES[index]),
+                    "{} id from {format}",
+                    FAMILIES[index].0
+                );
+            }
+        }
+    }
+
+    /// TRACK-001: a tagged file without MusicBrainz tags produces an empty
+    /// observation object (no phantom `null` entries), and malformed values are
+    /// retained verbatim as observations — never rejected or normalized.
+    #[test]
+    fn musicbrainz_id_observations_are_absent_when_untagged_and_verbatim_when_malformed() {
+        let root = temp_dir("musicbrainz-ids-empty");
+
+        // A tagged file without MusicBrainz IDs retains an empty observation
+        // object — no phantom `null` entries for absent families.
+        let tagged = root.join("tagged.flac");
+        let output = std::process::Command::new("ffmpeg")
+            .args([
+                "-y",
+                "-v",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=frequency=440:duration=0.2:sample_rate=8000",
+                "-c:a",
+                "flac",
+            ])
+            .arg(&tagged)
+            .output()
+            .expect("ffmpeg");
+        assert!(output.status.success(), "ffmpeg failed for flac fixture");
+        let mut tag = Tag::new(TagType::VorbisComments);
+        assert!(tag.insert_text(ItemKey::TrackTitle, "No MusicBrainz ids".to_owned()));
+        tag.save_to_path(&tagged, WriteOptions::default())
+            .expect("write tagged flac");
+        let (metadata, _, _) =
+            read_native_metadata(&tagged, "tagged.flac", 0).expect("read tagged flac");
+        assert_eq!(
+            metadata.raw["musicbrainz_ids"],
+            serde_json::json!({}),
+            "tagged file without MusicBrainz IDs retains an empty observation object"
+        );
+
+        // An untagged file carries no native tag at all: the absence is surfaced
+        // as an error, not as a phantom observation object.
+        let untagged = root.join("untagged.flac");
+        let output = std::process::Command::new("ffmpeg")
+            .args([
+                "-y",
+                "-v",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=frequency=440:duration=0.2:sample_rate=8000",
+                "-c:a",
+                "flac",
+            ])
+            .arg(&untagged)
+            .output()
+            .expect("ffmpeg");
+        assert!(
+            output.status.success(),
+            "ffmpeg failed for untagged flac fixture"
+        );
+        let err = read_native_metadata(&untagged, "untagged.flac", 0).expect_err("untagged file");
+        assert!(
+            err.contains("no native metadata tag"),
+            "untagged file reports the absence of a native tag, got: {err}"
+        );
+
+        // A tagged FLAC with a malformed recording ID retains the value verbatim.
+        let mut tag = Tag::new(TagType::VorbisComments);
+        assert!(tag.insert_text(
+            ItemKey::MusicBrainzRecordingId,
+            "not-a-guid at all".to_owned()
+        ));
+        let malformed = root.join("malformed.flac");
+        tag.save_to_path(&malformed, WriteOptions::default())
+            .expect("write malformed tag");
+        let (metadata, _, _) =
+            read_native_metadata(&malformed, "malformed.flac", 0).expect("read malformed flac");
+        assert_eq!(
+            metadata.raw["musicbrainz_ids"]["recording"],
+            serde_json::json!("not-a-guid at all"),
+            "malformed identifiers are retained verbatim as observations"
+        );
     }
 
     #[cfg(unix)]
