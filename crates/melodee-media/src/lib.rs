@@ -826,11 +826,13 @@ fn read_native_metadata(
     // view keeps those frames without a canonical key, so for an ID3v2 primary
     // tag we round-trip through `Id3v2Tag` to recover them (TRACK-001). The
     // conversion only touches ID3v2 files, so other formats are unaffected.
-    if let Some(current) = tag.take()
-        && current.tag_type() == lofty::tag::TagType::Id3v2
-    {
-        let id3: lofty::tag::Tag = lofty::id3::v2::Id3v2Tag::from(current).into();
-        tag = Some(id3);
+    if let Some(current) = tag.take() {
+        tag = if current.tag_type() == lofty::tag::TagType::Id3v2 {
+            Some(lofty::id3::v2::Id3v2Tag::from(current).into())
+        } else {
+            // Not an ID3v2 tag — put it back unchanged.
+            Some(current)
+        };
     }
 
     let Some(tag) = tag else {
@@ -1894,19 +1896,45 @@ mod tests {
             output.status.success(),
             "ffmpeg failed for untagged flac fixture"
         );
-        let err = read_native_metadata(&untagged, "untagged.flac", 0).expect_err("untagged file");
+        // ffmpeg always writes a Vorbis Comment block (with a vendor string),
+        // so the file is not truly untagged. We verify that reading succeeds
+        // but yields no user-visible metadata fields.
+        let (metadata, _, _) =
+            read_native_metadata(&untagged, "untagged.flac", 0).expect("untagged file reads");
         assert!(
-            err.contains("no native metadata tag"),
-            "untagged file reports the absence of a native tag, got: {err}"
+            metadata.album.is_none()
+                && metadata.album_artist.is_none()
+                && metadata.track_title.is_none()
+                && metadata.artist.is_none(),
+            "untagged file has no user-visible metadata fields"
         );
 
         // A tagged FLAC with a malformed recording ID retains the value verbatim.
+        let malformed = root.join("malformed.flac");
+        let output = std::process::Command::new("ffmpeg")
+            .args([
+                "-y",
+                "-v",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=frequency=440:duration=0.2:sample_rate=8000",
+                "-c:a",
+                "flac",
+            ])
+            .arg(&malformed)
+            .output()
+            .expect("ffmpeg");
+        assert!(
+            output.status.success(),
+            "ffmpeg failed for malformed flac fixture"
+        );
         let mut tag = Tag::new(TagType::VorbisComments);
         assert!(tag.insert_text(
             ItemKey::MusicBrainzRecordingId,
             "not-a-guid at all".to_owned()
         ));
-        let malformed = root.join("malformed.flac");
         tag.save_to_path(&malformed, WriteOptions::default())
             .expect("write malformed tag");
         let (metadata, _, _) =
