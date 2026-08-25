@@ -1,7 +1,35 @@
 # Road to Full C# Melodee Feature Parity
 
 **Document status:** Active parity audit — incremental, evidence-backed
-**Audit baseline date:** 2026-08-23 (latest pass 2026-08-23, entry 5)
+**Audit baseline date:** 2026-08-23 (latest pass 2026-08-23, entry 5; 2026-08-25
+Feature-Completion Phase 1 addendum added at the top of this document)
+
+## 2026-08-25 Feature-Completion Phase 1 addendum (in progress)
+
+Feature-Completion Phase 1 (per
+[agents/FEATURE-COMPLETION-PHASE-1-PLAN.md](agents/FEATURE-COMPLETION-PHASE-1-PLAN.md)) is in
+execution against this audit; specifics are recorded in
+[evidence/feature-completion/phase-1/PHASE-1-REPORT.md](evidence/feature-completion/phase-1/PHASE-1-REPORT.md)
+(currently a stub until the phase evidence lands):
+
+- **Wave 1 (TRACK-001, MusicBrainz ID retention) verified:** `melodee-media` now retains the
+  six embedded MusicBrainz ID families (raw strings, malformed values verbatim) through media
+  inspection into the durable manifest; the "retains no MusicBrainz GUIDs at all" claims in the
+  body below are stale for this pass.
+- **Workstream B (TRACK-002) complete:** import-time AudioIdentity evidence rows and
+  bounded, idempotent **Proposed** match decisions are implemented and integration-tested
+  (no schema migration; see the report for the why).
+- **Workstream A (RELEASE-002):** UI field alignment and Playwright edit → save → reload
+  persistence proof for the W0 metadata-editing routes is being added; the row's
+  `IMPLEMENTED — UNPROVEN` status is unchanged until that evidence lands.
+- **Workstream C (local proof for the nine `IMPLEMENTED — UNPROVEN` rows):** differential and
+  end-to-end evidence is being added per row (PLAYBACK-001, TRANSCODE-001, PODCAST-001,
+  DISCOVERY-001/002, SOCIAL-001, OPS-001, MIGRATE-001/002); row statuses below are not
+  moved until the evidence sections of the report are complete.
+- **Workstream D (closeout):** roadmap, matrix, and requirement-traceability reconciliation
+  proceeds as the evidence above lands.
+
+## 1. Purpose and honest current verdict
 **Audit scope:** All 25 required domains have been inventoried on the C# side and compared against
 Rust production wiring; no matrix row remains `NOT ASSESSED`. The C# inventory was built
 independently of the Rust implementation (controllers, Blazor pages, CLI commands, Quartz jobs,

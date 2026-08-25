@@ -1,8 +1,21 @@
 # Road to Feature Completion
 
-**Document status:** DRAFT planning proposal — **non-authorizing**. Last updated: 2026-08-23.
+**Document status:** DRAFT planning proposal — **non-authorizing**. Last updated: 2026-08-25.
 
-> ## Revision note (2026-08-23)
+> ## Revision note (2026-08-25)
+>
+> **Feature-Completion Phase 1 is in progress** per
+> [agents/FEATURE-COMPLETION-PHASE-1-PLAN.md](agents/FEATURE-COMPLETION-PHASE-1-PLAN.md)
+> (workstreams A–D: RELEASE-002 metadata-editing proof, TRACK-001/002 MusicBrainz-ID
+> retention + AudioIdentity import-time evidence/proposals, local proof for the nine
+> `IMPLEMENTED — UNPROVEN` rows, and closeout). Evidence is accumulating at
+> [evidence/feature-completion/phase-1/PHASE-1-REPORT.md](evidence/feature-completion/phase-1/PHASE-1-REPORT.md)
+> (currently a stub pending the parallel evidence work). The 2026-08-23 note's
+> "authorized scope inside this non-authorizing document" paragraph — which authorized the
+> W0 workstream only — is **superseded by the current user phase assignment** for
+> Feature-Completion Phase 1; its historical text is retained below unchanged.
+
+> ## Revision note (2026-08-23) — historical (W0-only authorization portion superseded, see 2026-08-25 note above)
 >
 > The committed Phase 1 draft of this document ("Road to Feature Parity: 50-Row Audit + Work
 > Plan") described a hypothetical 50-row v2 re-audit and a Phase 0–5 renumbered plan. The current
