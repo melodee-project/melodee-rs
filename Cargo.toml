@@ -38,7 +38,7 @@ blake3 = "=1.8.6"
 # extensions are disabled; Melodee only needs bounded SQL reads.
 decentdb = { git = "https://github.com/sphildreth/decentdb.git", rev = "eb7b7d11339e3dd1f436423d8fcf294a6ec51a82", version = "=2.16.1", default-features = false }
 dotenvy = "=0.15.7"
-futures-util = "=0.3.33"
+futures-util = "=0.3.34"
 getrandom = "=0.4.3"
 hmac = "=0.13.0"
 jsonwebtoken = { version = "=11.0.0", default-features = false, features = ["aws_lc_rs", "use_pem"] }
