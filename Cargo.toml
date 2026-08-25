@@ -101,7 +101,7 @@ tower = { version = "=0.5.3", features = ["util"] }
 tower-http = { version = "=0.7.0", features = ["cors", "fs", "trace"] }
 tracing = "=0.1.44"
 tracing-subscriber = { version = "=0.3.23", features = ["env-filter", "fmt", "json"] }
-uuid = { version = "=1.24.0", features = ["serde", "v7"] }
+uuid = { version = "=1.25.0", features = ["serde", "v7"] }
 # ADR-0123: bounded in-memory native-v1 theme-pack import/export. Only the
 # standard DEFLATE codec is enabled; encrypted and exotic archive codecs are
 # intentionally outside the compatibility boundary.
