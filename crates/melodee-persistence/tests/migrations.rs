@@ -35,6 +35,160 @@ async fn migrations_are_repeatable() {
 }
 
 #[tokio::test]
+async fn job_history_is_durable_idempotent_and_operator_audited() {
+    let db = TestDb::create("migrations_job_history").await;
+    let store = melodee_persistence::JobRunHistoryStore;
+    let now = time::OffsetDateTime::now_utc();
+    let tick = melodee_persistence::scheduled_tick(now, std::time::Duration::from_secs(60));
+
+    let first = store
+        .start_tick(&db.pool, "discovery", tick)
+        .await
+        .expect("start first tick")
+        .expect("first process owns tick");
+    assert!(
+        store
+            .start_tick(&db.pool, "discovery", tick)
+            .await
+            .expect("duplicate tick insert")
+            .is_none()
+    );
+
+    let finished = store
+        .finish(
+            &db.pool,
+            first.id,
+            now + time::Duration::milliseconds(25),
+            false,
+            Some("fixture failure"),
+        )
+        .await
+        .expect("finish failed tick");
+    assert_eq!(finished.success, Some(false));
+    assert_eq!(finished.error_message.as_deref(), Some("fixture failure"));
+
+    let manual = store
+        .start_manual(&db.pool, "discovery", "admin-fixture", now)
+        .await
+        .expect("start manual run");
+    store
+        .finish(&db.pool, manual.id, now, true, None)
+        .await
+        .expect("finish manual run");
+    let (rows, total) = store
+        .list(&db.pool, Some("discovery"), 50, 0)
+        .await
+        .expect("list job history");
+    assert_eq!(total, 2);
+    assert_eq!(rows.len(), 2);
+    assert_eq!(
+        store
+            .failure_count_since(&db.pool, now - time::Duration::hours(1))
+            .await
+            .expect("failure summary"),
+        1
+    );
+    assert_eq!(
+        store
+            .cleanup(&db.pool, 1, "admin-fixture", now)
+            .await
+            .expect("cleanup history"),
+        0
+    );
+    let audit_count: i64 = sqlx::query_scalar("SELECT count(*) FROM job_run_history_cleanup_audit")
+        .fetch_one(&db.pool)
+        .await
+        .expect("cleanup audit count");
+    assert_eq!(audit_count, 1);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn job_history_advisory_claim_allows_one_process_per_tick() {
+    let db = TestDb::create("migrations_job_history_advisory").await;
+    let store = melodee_persistence::JobRunHistoryStore;
+    let tick = melodee_persistence::scheduled_tick(
+        time::OffsetDateTime::now_utc(),
+        std::time::Duration::from_secs(60),
+    );
+    let (left, right) = tokio::join!(
+        store.start_tick(&db.pool, "discovery", tick),
+        store.start_tick(&db.pool, "discovery", tick),
+    );
+    let claimed = [left.expect("left claim"), right.expect("right claim")]
+        .into_iter()
+        .filter(Option::is_some)
+        .count();
+    assert_eq!(claimed, 1);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn metadata_edit_audits_preserve_field_deltas_and_reject_invalid_states() {
+    let db = TestDb::create("migrations_metadata_edit_audits").await;
+    let release_id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO releases (
+            id, public_api_id, title, normalized_title, sort_title,
+            release_date, status, revision, created_at, updated_at
+         ) VALUES (uuidv7(), uuidv7(), 'Audit Release', 'audit release',
+                   'Audit Release', DATE '2024-01-01', 'active', 1, now(), now())
+         RETURNING id",
+    )
+    .fetch_one(&db.pool)
+    .await
+    .expect("seed metadata audit release");
+    let audit_id = uuid::Uuid::now_v7();
+    sqlx::query(
+        "INSERT INTO metadata_edit_audits (
+            id, release_id, operation_name, operation_params, affected_files,
+            field_deltas, applied_by, status, recovery_evidence, created_at
+         ) VALUES ($1,$2,'set_year','{}',1,
+                   '[{\"field\":\"recordingDate\",\"old\":\"2023\",\"new\":\"2024\"}]',
+                   'audit-operator','success','{\"files\":[]}',now())",
+    )
+    .bind(audit_id)
+    .bind(release_id)
+    .execute(&db.pool)
+    .await
+    .expect("insert metadata audit");
+    let stored: (String, i32, serde_json::Value) = sqlx::query_as(
+        "SELECT status, affected_files, field_deltas
+         FROM metadata_edit_audits WHERE id=$1",
+    )
+    .bind(audit_id)
+    .fetch_one(&db.pool)
+    .await
+    .expect("read metadata audit");
+    assert_eq!(stored.0, "success");
+    assert_eq!(stored.1, 1);
+    assert_eq!(stored.2[0]["field"], "recordingDate");
+
+    let invalid_status = sqlx::query(
+        "INSERT INTO metadata_edit_audits (
+            id, release_id, operation_name, operation_params, affected_files,
+            field_deltas, applied_by, status, created_at
+         ) VALUES (uuidv7(),$1,'set_year','{}',0,'[]','audit-operator','unknown',now())",
+    )
+    .bind(release_id)
+    .execute(&db.pool)
+    .await;
+    assert!(
+        invalid_status.is_err(),
+        "unknown audit states must fail closed"
+    );
+
+    let delete_release = sqlx::query("DELETE FROM releases WHERE id=$1")
+        .bind(release_id)
+        .execute(&db.pool)
+        .await;
+    assert!(
+        delete_release.is_err(),
+        "audit history must prevent release deletion"
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
 async fn schema_rejects_impossible_states() {
     let db = TestDb::create("migrations_constraints").await;
 

@@ -37,12 +37,18 @@
 //!   `{lyrics:{value:"",artist,title}}` and `getLyricsBySongId` returns a bare
 //!   ok envelope; missing lyrics never error.
 
+use std::{
+    collections::{HashMap, VecDeque},
+    sync::{Mutex, OnceLock},
+};
+
 use axum::{
     Router,
     extract::{Extension, State},
     http::{HeaderValue, Method, StatusCode, header},
     response::{IntoResponse, Response},
 };
+use image::ImageFormat;
 use sqlx::Row;
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -606,6 +612,97 @@ const DEFAULT_COVER_RAW: &[u8] = include_bytes!(
     "../../../../compatibility/opensubsonic/golden/media/os-getcoverart-default.bin"
 );
 
+const STORED_ARTWORK_CACHE_CAPACITY: usize = 256;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct StoredArtworkCacheKey {
+    source_sha256: String,
+    target_size: u32,
+}
+
+#[derive(Debug, Default)]
+struct StoredArtworkCache {
+    values: HashMap<StoredArtworkCacheKey, Vec<u8>>,
+    order: VecDeque<StoredArtworkCacheKey>,
+}
+
+static STORED_ARTWORK_CACHE: OnceLock<Mutex<StoredArtworkCache>> = OnceLock::new();
+
+fn stored_artwork_target_size(requested_size: Option<&str>) -> Option<u32> {
+    match requested_size {
+        Some("small") => Some(100),
+        Some("medium") => Some(200),
+        Some("large") => Some(500),
+        Some("extralarge") => Some(1_000),
+        // `max` and an absent size preserve the stored bytes. The legacy
+        // adapter has no other accepted ImageSize values.
+        Some("max") | None => None,
+        Some(_) => None,
+    }
+}
+
+fn stored_artwork_format(mime_type: &str) -> Option<ImageFormat> {
+    match mime_type {
+        "image/jpeg" => Some(ImageFormat::Jpeg),
+        "image/png" => Some(ImageFormat::Png),
+        "image/webp" => Some(ImageFormat::WebP),
+        "image/gif" => Some(ImageFormat::Gif),
+        _ => None,
+    }
+}
+
+fn cached_stored_artwork(key: &StoredArtworkCacheKey) -> Option<Vec<u8>> {
+    STORED_ARTWORK_CACHE
+        .get_or_init(|| Mutex::new(StoredArtworkCache::default()))
+        .lock()
+        .ok()
+        .and_then(|cache| cache.values.get(key).cloned())
+}
+
+fn cache_stored_artwork(key: StoredArtworkCacheKey, bytes: Vec<u8>) {
+    let Some(mut cache) = STORED_ARTWORK_CACHE
+        .get_or_init(|| Mutex::new(StoredArtworkCache::default()))
+        .lock()
+        .ok()
+    else {
+        return;
+    };
+    if let std::collections::hash_map::Entry::Occupied(mut entry) = cache.values.entry(key.clone())
+    {
+        entry.insert(bytes);
+        return;
+    }
+    while cache.values.len() >= STORED_ARTWORK_CACHE_CAPACITY {
+        let Some(oldest) = cache.order.pop_front() else {
+            break;
+        };
+        cache.values.remove(&oldest);
+    }
+    cache.order.push_back(key.clone());
+    cache.values.insert(key, bytes);
+}
+
+async fn resized_stored_artwork(
+    bytes: Vec<u8>,
+    mime_type: &str,
+    target_size: u32,
+) -> Option<Vec<u8>> {
+    let key = StoredArtworkCacheKey {
+        source_sha256: sha256_hex(&bytes),
+        target_size,
+    };
+    if let Some(cached) = cached_stored_artwork(&key) {
+        return Some(cached);
+    }
+    let format = stored_artwork_format(mime_type)?;
+    let resized =
+        crate::native::images::resize_compatibility_image_no_upscale(bytes, target_size, format)
+            .await
+            .ok()?;
+    cache_stored_artwork(key, resized.clone());
+    Some(resized)
+}
+
 /// Artwork resolution for a `song_`/`album_`/`artist_`/`playlist_` id.
 enum Artwork {
     /// Stored playlist or ADR-0143 catalog-override bytes.
@@ -788,8 +885,23 @@ async fn get_cover_art_impl(
     let requested_size = params_ref.get("size");
     let (bytes, mime_type, etag, is_default) = match artwork {
         Artwork::Stored(bytes, mime_type) => {
-            let etag = format!("\"{}\"", sha256_hex(&bytes));
-            (bytes, mime_type, etag, false)
+            let (bytes, mime_type, used_default) =
+                if let Some(target_size) = stored_artwork_target_size(requested_size) {
+                    match resized_stored_artwork(bytes.clone(), &mime_type, target_size).await {
+                        Some(resized) => (resized, mime_type, false),
+                        // A corrupt/unsupported stored image follows the ADR's
+                        // fail-degraded default behavior.
+                        None => (DEFAULT_COVER_SIZED.to_vec(), "image/jpeg".to_string(), true),
+                    }
+                } else {
+                    (bytes, mime_type, false)
+                };
+            let etag = if used_default {
+                "fda2a2741f69f726b74e07522e8e57487ed3d26a32699e798da0877f47348b18".to_string()
+            } else {
+                format!("\"{}\"", sha256_hex(&bytes))
+            };
+            (bytes, mime_type, etag, used_default)
         }
         Artwork::Default => {
             // Captured defaults (`os-getcoverart-default/-80/-song`): a sized
@@ -1015,4 +1127,56 @@ pub fn router() -> Router<OsState> {
             "getLyricsBySongId",
             get_lyrics_by_song_id,
         ))
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::expect_used)]
+
+    use std::io::Cursor;
+
+    use image::{DynamicImage, ImageReader, RgbaImage};
+
+    use super::*;
+
+    #[test]
+    fn accepted_stored_artwork_sizes_have_bounded_targets() {
+        assert_eq!(stored_artwork_target_size(Some("small")), Some(100));
+        assert_eq!(stored_artwork_target_size(Some("medium")), Some(200));
+        assert_eq!(stored_artwork_target_size(Some("large")), Some(500));
+        assert_eq!(stored_artwork_target_size(Some("extralarge")), Some(1_000));
+        assert_eq!(stored_artwork_target_size(Some("max")), None);
+        assert_eq!(stored_artwork_target_size(None), None);
+    }
+
+    #[tokio::test]
+    async fn stored_artwork_resize_preserves_aspect_ratio_and_cache_source() {
+        let image = DynamicImage::ImageRgba8(RgbaImage::from_fn(400, 200, |x, y| {
+            image::Rgba([
+                u8::try_from(x % 255).unwrap_or(0),
+                u8::try_from(y % 255).unwrap_or(0),
+                32,
+                255,
+            ])
+        }));
+        let mut encoded = Cursor::new(Vec::new());
+        image
+            .write_to(&mut encoded, ImageFormat::Png)
+            .expect("encode fixture");
+        let source = encoded.into_inner();
+
+        let first = resized_stored_artwork(source.clone(), "image/png", 100)
+            .await
+            .expect("resize fixture");
+        let second = resized_stored_artwork(source, "image/png", 100)
+            .await
+            .expect("cached resize fixture");
+        assert_eq!(first, second);
+        let decoded = ImageReader::new(Cursor::new(first))
+            .with_guessed_format()
+            .expect("guess format")
+            .decode()
+            .expect("decode resized fixture");
+        assert_eq!((decoded.width(), decoded.height()), (100, 50));
+    }
 }

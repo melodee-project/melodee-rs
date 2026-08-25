@@ -31,6 +31,18 @@ surfaces:
   active lease proves PostgreSQL holds an unexpired lease; it does not prove the owner process
   is currently alive.
 
+### Scheduled job history and controls
+
+The same screen reads `GET /api/admin/v1/jobs/history` and displays tick-level and manual run
+records. Each record shows whether it is running, completed, failed, or stale (an incomplete
+record older than 15 minutes), along with duration, principal, and the operator-safe failure
+reason. This history is separate from per-Release work-item events.
+
+The **Run now** action is allow-listed to discovery, podcast, enrichment, stale now-playing
+cleanup, and job-history cleanup. Job pause/resume routes use the durable worker-pool pause row,
+so a pause prevents new claims while an already leased item finishes or is released. Job-history
+cleanup retains completed records for 90 days by default and writes a cleanup audit row.
+
 ![The System Workers screen with pool pause/resume and search rebuild](./images/system-workers-light.png)
 
 Structured logs and performance metrics are not exposed over HTTP; use the command-line
@@ -156,6 +168,10 @@ owner process is currently alive.
   no new work, while already-claimed work finishes or is released under the normal lease contract —
   pausing never strands a lease. Pausing a pool name that has no wired worker yet registers the row
   so the pool is paused from its first check once it exists.
+- `melodee-cli jobs history [--job-name <name>] [--json]` lists bounded tick/manual job history,
+  including stale unfinished runs and failure reasons. `melodee-cli jobs cleanup --retention-days
+  <days> --actor <operator> --confirm` removes only completed history older than the requested
+  retention and appends a cleanup audit row; explicit confirmation is required.
 - `melodee-cli config list` prints every known setting's effective value and its source layer;
   secrets are always redacted. `melodee-cli config validate` runs the first-run preflight checks and
   exits non-zero when a required check fails. `melodee-cli config export [--output <path>]` writes the

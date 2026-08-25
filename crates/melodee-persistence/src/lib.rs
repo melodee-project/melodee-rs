@@ -20,6 +20,7 @@ mod discovery;
 mod error;
 mod group_admin;
 mod identity_review;
+mod job_history;
 mod migrate;
 mod native_user_state;
 mod notifications;
@@ -94,6 +95,10 @@ pub use identity_review::{
     ArtistIdentityRef, IdentityDecisionFeedEntry, ObservedArtistCandidate,
     ObservedArtistCurrentDecision, ObservedArtistDetail, ObservedArtistMatchEvidence,
     ObservedArtistNegativeAssertion, ObservedArtistSort, UnresolvedObservedArtist,
+};
+pub use job_history::{
+    DEFAULT_JOB_HISTORY_RETENTION_DAYS, JobHistoryStoreError, JobRunHistory, JobRunHistoryStore,
+    MAX_JOB_HISTORY_PAGE, scheduled_tick,
 };
 pub use migrate::{MIGRATOR, MigrationStatus, migrate, migration_status};
 pub use native_user_state::{

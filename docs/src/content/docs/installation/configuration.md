@@ -83,6 +83,29 @@ redacted export can never overwrite a stored secret. The admin API equivalent is
 | `MELODEE__WORK__MAX_ATTEMPTS` | `5` | Retry attempts before parking a failed item. |
 | `MELODEE__WORK__CLAIM_BATCH_SIZE` | `4` | Max items claimed in one SQL `FOR UPDATE SKIP LOCKED` poll. |
 
+### Local playback backends
+
+These database-backed settings select the optional operator-owned playback process. They are
+resolved through the same environment, config-file, database, and default layers described above;
+secret values are redacted by configuration listing and export.
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `jukebox.enabled` | `false` | Enables the live local playback control surface. Disabled operation is fail-closed. |
+| `jukebox.backendType` | — | `mpd` selects the MPD TCP backend; `mpv` selects the MPV IPC backend. |
+| `mpd.host` | `localhost` | MPD host name or address. |
+| `mpd.port` | `6600` | MPD TCP port. |
+| `mpd.password` | — | Optional MPD password; never displayed in diagnostics. |
+| `mpd.timeoutMs` | `10000` | Bounded MPD connect/command timeout, clamped to 1–60000 ms. |
+| `mpd.initialVolume` | `0.8` | Volume sent during initialization, expressed as a 0–1 setting. |
+| `mpv.socketPath` | — | Operator-created MPV JSON IPC socket path. The server does not spawn MPV. |
+| `mpv.timeoutMs` | `5000` | Bounded MPV IPC connect/command timeout, clamped to 1–60000 ms. |
+| `mpv.initialVolume` | `0.8` | Volume sent during MPV initialization, expressed as a 0–1 setting. |
+
+The legacy MPV process-launch fields remain configuration-compatible but are inert in the Rust
+server because process creation is intentionally operator-owned. Use systemd, a service manager,
+or an equivalent supervisor to start MPV with the configured socket.
+
 ### Inbound discovery and settling
 
 | Key | Default | Effect |

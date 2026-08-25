@@ -537,14 +537,32 @@ pub fn start_enrichment_loop(
             loop {
                 tokio::select! {
                     _ = ticker.tick() => {
+                        let started = OffsetDateTime::now_utc();
+                        let tick = melodee_persistence::scheduled_tick(started, config.poll_interval);
+                        let history = melodee_persistence::JobRunHistoryStore;
+                        let run = match history.start_tick(&pool, "enrichment", tick).await {
+                            Ok(run) => run,
+                            Err(error) => {
+                                error!(%error, "enrichment tick history could not be recorded");
+                                None
+                            }
+                        };
+                        let Some(run) = run else {
+                            continue;
+                        };
                         match run_enrichment_once(&pool, &config, &worker).await {
                             Ok(stats) => {
+                                let _ = history.finish(&pool, run.id, OffsetDateTime::now_utc(), true, None).await;
                                 if stats.claimed > 0 {
                                     info!(?stats, "provider enrichment pass completed");
                                 }
                                 latest = Some(stats);
                             }
-                            Err(error) => error!(%error, "provider enrichment pass failed"),
+                            Err(error) => {
+                                let message = error.to_string();
+                                let _ = history.finish(&pool, run.id, OffsetDateTime::now_utc(), false, Some(&message)).await;
+                                error!(%error, "provider enrichment pass failed");
+                            }
                         }
                     }
                     _ = task_stop.changed() => break,

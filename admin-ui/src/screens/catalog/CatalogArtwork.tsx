@@ -44,7 +44,10 @@ export function CatalogArtwork({
       <img
         src={cacheKey === undefined ? base : `${base}?v=${cacheKey}`}
         alt={decorative ? '' : name}
-        loading="lazy"
+        // The fixed-size fallback must settle before a mobile user reaches the
+        // adjacent upload controls; lazy loading otherwise shifts the tab
+        // panel while the browser is scrolling to the button.
+        loading="eager"
         onError={() => setFailed(true)}
       />
     </span>

@@ -230,7 +230,20 @@ pub async fn start_policy_loop(
             }
             tokio::select! {
                 _ = ticker.tick() => {
-                    match run_policy_once_with_cancellation(
+                    let started = OffsetDateTime::now_utc();
+                    let tick = melodee_persistence::scheduled_tick(started, worker_config.poll_interval);
+                    let history = melodee_persistence::JobRunHistoryStore;
+                    let run = match history.start_tick(&pool, "policy", tick).await {
+                        Ok(run) => run,
+                        Err(error) => {
+                            error!(%error, "policy tick history could not be recorded");
+                            None
+                        }
+                    };
+                    let Some(run) = run else {
+                        continue;
+                    };
+                    let outcome = run_policy_once_with_cancellation(
                         &engine,
                         &policy_config,
                         &store,
@@ -238,9 +251,17 @@ pub async fn start_policy_loop(
                         &work_config,
                         OffsetDateTime::now_utc(),
                         &task_cancellation,
-                    ).await {
-                        Ok(stats) => latest = Some(stats),
-                        Err(worker_error) => error!(%worker_error, "policy pass failed before completion"),
+                    ).await;
+                    match outcome {
+                        Ok(stats) => {
+                            let _ = history.finish(&pool, run.id, OffsetDateTime::now_utc(), true, None).await;
+                            latest = Some(stats);
+                        }
+                        Err(worker_error) => {
+                            let message = worker_error.to_string();
+                            let _ = history.finish(&pool, run.id, OffsetDateTime::now_utc(), false, Some(&message)).await;
+                            error!(%worker_error, "policy pass failed before completion");
+                        }
                     }
                 }
                 () = task_cancellation.cancelled() => break,

@@ -33,8 +33,8 @@ use axum::{
 };
 use melodee_domain::IngestionState;
 use melodee_persistence::{
-    CatalogStore, PolicyStore, WorkItemSort, WorkItemStore, WorkerPoolState, WorkerPoolStore,
-    WorkerPoolStoreError,
+    CatalogStore, JobRunHistory, JobRunHistoryStore, PolicyStore, WorkItemSort, WorkItemStore,
+    WorkerPoolState, WorkerPoolStore, WorkerPoolStoreError,
 };
 use melodee_search::SearchConfig;
 use serde::{Deserialize, Serialize};
@@ -627,6 +627,63 @@ pub struct FailuresPageDto {
 }
 
 // ---------------------------------------------------------------------------
+// durable scheduled-job history and controls
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JobHistoryParams {
+    pub job_name: Option<String>,
+    #[serde(default = "default_job_history_limit")]
+    pub limit: u32,
+    #[serde(default)]
+    pub offset: u32,
+    pub hours: Option<i64>,
+}
+
+const fn default_job_history_limit() -> u32 {
+    50
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JobHistoryPageDto {
+    pub items: Vec<JobRunHistoryDto>,
+    pub total: i64,
+    pub limit: u32,
+    pub offset: u32,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JobRunHistoryDto {
+    #[serde(flatten)]
+    pub run: JobRunHistory,
+    /// `stale` means a process stopped before it could close the durable row;
+    /// it is intentionally distinct from a live `running` row.
+    pub status: &'static str,
+}
+
+impl JobRunHistoryDto {
+    fn from_run(run: JobRunHistory, now: OffsetDateTime) -> Self {
+        let status = match run.success {
+            Some(true) => "completed",
+            Some(false) => "failed",
+            None if run.started_at < now - time::Duration::minutes(15) => "stale",
+            None => "running",
+        };
+        Self { run, status }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JobFailureSummaryDto {
+    pub hours: i64,
+    pub failed_runs: i64,
+}
+
+// ---------------------------------------------------------------------------
 // search administration
 // ---------------------------------------------------------------------------
 
@@ -680,7 +737,15 @@ pub fn router() -> Router<AdminSystemState> {
             "/api/admin/v1/workers/pools/{name}/resume",
             post(resume_pool),
         )
+        .route("/api/admin/v1/jobs/{name}/pause", post(pause_job))
+        .route("/api/admin/v1/jobs/{name}/resume", post(resume_job))
         .route("/api/admin/v1/workers/failures", get(worker_failures))
+        .route("/api/admin/v1/jobs/history", get(job_history))
+        .route(
+            "/api/admin/v1/jobs/failures/summary",
+            get(job_failure_summary),
+        )
+        .route("/api/admin/v1/jobs/{name}/run-now", post(job_run_now))
         .route("/api/admin/v1/search/status", get(search_status))
         .route("/api/admin/v1/search/rebuild", post(search_rebuild))
         .route("/api/admin/v1/system/health", get(system_health))
@@ -894,6 +959,25 @@ async fn resume_pool(
     set_pool_paused(&state, &admin, &name, false).await
 }
 
+/// Job controls are aliases over the durable worker-pool pause row. Keeping
+/// both additive route families lets the Admin UI speak in scheduler terms
+/// while the CLI and workers retain their existing pool contract.
+async fn pause_job(
+    State(state): State<AdminSystemState>,
+    admin: AdminPrincipal,
+    Path(name): Path<String>,
+) -> Response {
+    set_pool_paused(&state, &admin, &name, true).await
+}
+
+async fn resume_job(
+    State(state): State<AdminSystemState>,
+    admin: AdminPrincipal,
+    Path(name): Path<String>,
+) -> Response {
+    set_pool_paused(&state, &admin, &name, false).await
+}
+
 /// GET /api/admin/v1/workers/failures — recent failed work items, bounded.
 async fn worker_failures(
     State(state): State<AdminSystemState>,
@@ -933,6 +1017,229 @@ async fn worker_failures(
         })
         .into_response(),
         Err(error) => store_failure("failure listing failed", &error),
+    }
+}
+
+/// GET /api/admin/v1/jobs/history — durable tick/manual execution history.
+async fn job_history(
+    State(state): State<AdminSystemState>,
+    _admin: AdminPrincipal,
+    Query(params): Query<JobHistoryParams>,
+) -> Response {
+    let limit = params
+        .limit
+        .clamp(1, melodee_persistence::MAX_JOB_HISTORY_PAGE);
+    match JobRunHistoryStore
+        .list(
+            &state.admin.pool,
+            params.job_name.as_deref(),
+            limit,
+            params.offset,
+        )
+        .await
+    {
+        Ok((items, total)) => Json(JobHistoryPageDto {
+            items: items
+                .into_iter()
+                .map(|item| JobRunHistoryDto::from_run(item, OffsetDateTime::now_utc()))
+                .collect(),
+            total,
+            limit,
+            offset: params.offset,
+        })
+        .into_response(),
+        Err(error) => store_failure("job history listing failed", &error),
+    }
+}
+
+/// GET /api/admin/v1/jobs/failures/summary — bounded operator failure count.
+async fn job_failure_summary(
+    State(state): State<AdminSystemState>,
+    _admin: AdminPrincipal,
+    Query(params): Query<JobHistoryParams>,
+) -> Response {
+    let hours = params.hours.unwrap_or(24).clamp(1, 24 * 365);
+    let since = OffsetDateTime::now_utc() - time::Duration::hours(hours);
+    match JobRunHistoryStore
+        .failure_count_since(&state.admin.pool, since)
+        .await
+    {
+        Ok(failed_runs) => Json(JobFailureSummaryDto { hours, failed_runs }).into_response(),
+        Err(error) => store_failure("job failure summary failed", &error),
+    }
+}
+
+/// POST /api/admin/v1/jobs/{name}/run-now — run one bounded maintenance pass.
+///
+/// The dispatch list is intentionally explicit. Unknown names are rejected so
+/// an operator cannot accidentally turn this endpoint into arbitrary code
+/// execution. Each invocation is durably recorded before and after execution.
+async fn job_run_now(
+    State(state): State<AdminSystemState>,
+    admin: AdminPrincipal,
+    Path(name): Path<String>,
+) -> Response {
+    let store = JobRunHistoryStore;
+    let started = OffsetDateTime::now_utc();
+    let run = match store
+        .start_manual(
+            &state.admin.pool,
+            &name,
+            &admin.public_api_id.to_string(),
+            started,
+        )
+        .await
+    {
+        Ok(run) => run,
+        Err(error) => return store_failure("job run could not be recorded", &error),
+    };
+
+    let result = match name.as_str() {
+        "discovery" => {
+            let config = match crate::discovery_worker::DiscoveryWorkerConfig::from_env() {
+                Ok(config) => config,
+                Err(error) => {
+                    let _ = store
+                        .finish(
+                            &state.admin.pool,
+                            run.id,
+                            OffsetDateTime::now_utc(),
+                            false,
+                            Some(&error.to_string()),
+                        )
+                        .await;
+                    return system_error(
+                        StatusCode::BAD_REQUEST,
+                        "invalid_job_configuration",
+                        "discovery configuration is invalid",
+                    );
+                }
+            };
+            crate::discovery_worker::run_discovery_once(&state.admin.pool, &config)
+                .await
+                .map(|_| ())
+                .map_err(|error| error.to_string())
+        }
+        "podcast" => {
+            let config = match crate::podcast_worker::PodcastConfig::from_env() {
+                Ok(config) => config,
+                Err(error) => {
+                    let _ = store
+                        .finish(
+                            &state.admin.pool,
+                            run.id,
+                            OffsetDateTime::now_utc(),
+                            false,
+                            Some(&error.to_string()),
+                        )
+                        .await;
+                    return system_error(
+                        StatusCode::BAD_REQUEST,
+                        "invalid_job_configuration",
+                        "podcast configuration is invalid",
+                    );
+                }
+            };
+            crate::podcast_worker::run_podcast_once(&state.admin.pool, &config)
+                .await
+                .map(|_| ())
+                .map_err(|error| error.to_string())
+        }
+        "enrichment" => {
+            let config = match crate::enrichment_worker::EnrichmentWorkerConfig::from_env() {
+                Ok(config) => config,
+                Err(error) => {
+                    let _ = store
+                        .finish(
+                            &state.admin.pool,
+                            run.id,
+                            OffsetDateTime::now_utc(),
+                            false,
+                            Some(&error.to_string()),
+                        )
+                        .await;
+                    return system_error(
+                        StatusCode::BAD_REQUEST,
+                        "invalid_job_configuration",
+                        "enrichment configuration is invalid",
+                    );
+                }
+            };
+            let worker = format!("admin-enrichment-{}", admin.public_api_id);
+            crate::enrichment_worker::run_enrichment_once(&state.admin.pool, &config, &worker)
+                .await
+                .map(|_| ())
+                .map_err(|error| error.to_string())
+        }
+        "now-playing-cleanup" => {
+            melodee_persistence::NativeUserStateStore::cleanup_stale_now_playing(
+                &state.admin.pool,
+                OffsetDateTime::now_utc() - time::Duration::minutes(15),
+            )
+            .await
+            .map(|removed| {
+                tracing::info!(removed, "stale now-playing rows cleaned up");
+            })
+            .map_err(|error| error.to_string())
+        }
+        "job-history-cleanup" => store
+            .cleanup(
+                &state.admin.pool,
+                melodee_persistence::DEFAULT_JOB_HISTORY_RETENTION_DAYS,
+                &admin.public_api_id.to_string(),
+                OffsetDateTime::now_utc(),
+            )
+            .await
+            .map(|removed| {
+                tracing::info!(removed, "expired job history cleaned up");
+            })
+            .map_err(|error| error.to_string()),
+        _ => {
+            let _ = store
+                .finish(
+                    &state.admin.pool,
+                    run.id,
+                    OffsetDateTime::now_utc(),
+                    false,
+                    Some("job is not exposed for manual execution"),
+                )
+                .await;
+            return system_error(
+                StatusCode::BAD_REQUEST,
+                "unsupported_job",
+                "job is not exposed for manual execution",
+            );
+        }
+    };
+
+    let (success, error_message) = match result {
+        Ok(()) => (true, None),
+        Err(error) => (false, Some(error)),
+    };
+    match store
+        .finish(
+            &state.admin.pool,
+            run.id,
+            OffsetDateTime::now_utc(),
+            success,
+            error_message.as_deref(),
+        )
+        .await
+    {
+        Ok(history) if success => Json(JobRunHistoryDto::from_run(
+            history,
+            OffsetDateTime::now_utc(),
+        ))
+        .into_response(),
+        Ok(history) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(JobRunHistoryDto::from_run(
+                history,
+                OffsetDateTime::now_utc(),
+            )),
+        )
+            .into_response(),
+        Err(error) => store_failure("job completion could not be recorded", &error),
     }
 }
 

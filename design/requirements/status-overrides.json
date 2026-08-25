@@ -740,7 +740,7 @@
       "crates/melodee-media/tests/normalization_real.rs",
       "crates/melodee-media/src/lib.rs tests (format detection, malformed/truncated/zero-length/unsupported/multi-stream/oversized inputs)"
     ],
-    "note": "R2.1 completed the executable practical matrix for the required FFmpeg/FFprobe-supported formats and explicit unsupported/pathology outcomes; the accepted R2 report records the matrix and regenerated media corpus."
+    "note": "R2.1 completed the executable practical matrix for the required FFmpeg/FFprobe-supported formats and explicit unsupported/pathology outcomes; the accepted R2 report records the matrix and regenerated media corpus. Feature-Completion Phase 4 adds real-container tag-rewrite integrity, NFO/lyrics/Blackbeard sidecar, atomic recovery, and decoded-audio preservation evidence in design/evidence/feature-completion/phase-4/PHASE-4-REPORT.md."
   },
   "PRD-MEDIA-002": {
     "status": "tested",
@@ -1151,7 +1151,7 @@
       "crates/melodee-ingestion/tests/environment_faults.rs (R2.7 environment fault suite: full staging disk, slow storage, hung FFmpeg, ENOSPC partial output, PostgreSQL restart; all fail-closed with retry convergence)",
       "crates/melodee-ingestion/tests/normalization.rs::two_hundred_releases_survive_repeated_termination_across_all_stages (R2.7: 200 releases, repeated ungraceful worker death at every stage boundary, exactly-once authoritative results)"
     ],
-    "note": "Ingestion, catalog, policy, and search stages have deterministic crash/retry/lease/corruption/source-change/PostgreSQL/publication/provider-boundary fault coverage. Later public API failures keep the broad requirement in progress."
+    "note": "Ingestion, catalog, policy, and search stages have deterministic crash/retry/lease/corruption/source-change/PostgreSQL/publication/provider-boundary fault coverage. Feature-Completion Phase 4 adds metadata temporary-write/rename/verification/database/audit failure recovery, job crash/stale-run, and OpenSubsonic replay evidence; later public API failures keep the broad requirement in progress."
   },
   "PRD-TEST-007": {
     "status": "in-progress",
@@ -1218,7 +1218,7 @@
       "apps/melodee-cli/tests/config.rs",
       "apps/melodee-server/tests/admin_config_api.rs"
     ],
-    "note": "Settings are admin-manageable through the CLI and the admin API export/import surface; provider and enrichment settings are consumed at runtime rather than merely preserved in the registry."
+    "note": "Settings are admin-manageable through the CLI and the admin API export/import surface; provider and enrichment settings are consumed at runtime rather than merely preserved in the registry. Feature-Completion Phase 4 records playback-layer consumers, redacted deterministic round trips, invalid-value diagnostics, and explicitly migrated-but-inert operator-owned MPV launch settings in design/evidence/feature-completion/phase-4/PHASE-4-REPORT.md."
   },
   "PRD-CONFIG-002": {
     "status": "tested",
@@ -1328,7 +1328,7 @@
       "apps/melodee-server/tests/worker_pools.rs (paused podcast/policy/discovery pools claim nothing; in-flight leases intact; resume recovers)",
       "apps/melodee-cli/tests/worker_pools.rs (CLI pause/resume durability and audit)"
     ],
-    "note": "Retry/reprocess with durable history and durable, audited worker-pool pause/resume are implemented and tested. Pausing never strands a lease; in-flight claims finish or are released per the existing lease contract."
+    "note": "Retry/reprocess with durable history and durable, audited worker-pool pause/resume are implemented and tested. Pausing never strands a lease; in-flight claims finish or are released per the existing lease contract. Feature-Completion Phase 4 adds migration 0036 job-run history, manual principals, tick uniqueness, retention cleanup audit, and Admin UI history/control evidence."
   },
   "PRD-CLI-001": {
     "status": "tested",
@@ -1340,7 +1340,7 @@
       "apps/melodee-cli/tests/plan.rs, config.rs, policy.rs, search.rs, users_groups.rs, podcasts.rs, notifications.rs, scripts.rs, and worker_pools.rs (command suites against real PostgreSQL)",
       "apps/melodee-cli/src/main.rs unit tests (clap parse matrix for every command group, incl. fail-closed argument validation)"
     ],
-    "note": "Every PRD-CLI-001 minimum-set leg is delivered except C# data migration/import, which is Phase 11 scope per IMPLEMENTATION.md (the migrate command covers Rust database migrations, not legacy data import). Notification test-send landed with WP-09; stuck-download recovery with WP-02."
+    "note": "Every PRD-CLI-001 minimum-set leg is delivered except C# data migration/import, which is Phase 11 scope per IMPLEMENTATION.md (the migrate command covers Rust database migrations, not legacy data import). Notification test-send landed with WP-09; stuck-download recovery with WP-02. Feature-Completion Phase 4 adds machine-readable jobs history, confirmation-gated audited cleanup, and the final pre-migration command inventory evidence."
   },
   "PRD-CLI-002": {
     "status": "tested",
@@ -1377,7 +1377,7 @@
       "apps/melodee-server/src/logging.rs (log-level validation plus append-preserving and UTC date-rotation log-file tests)",
       "apps/melodee-server/src/notifications.rs (redaction audit: delivery-failure logs never contain the SMTP password)"
     ],
-    "note": "Correlation identifiers propagate across every PRD-listed boundary: API request (middleware + envelope sourcing), ingestion item (durable correlation_id), worker actions (per-item spans), external provider calls (last.fm dispatch spans; further providers remain deferred under ADR-0136), and media processing (tool-invocation drop-guard)."
+    "note": "Correlation identifiers propagate across every PRD-listed boundary: API request (middleware + envelope sourcing), ingestion item (durable correlation_id), worker actions (per-item spans), external provider calls (last.fm dispatch spans; further providers remain deferred under ADR-0136), and media processing (tool-invocation drop-guard). Feature-Completion Phase 4 extends durable tick-level job records with correlated tracing and operator-facing failure reasons."
   },
   "PRD-OBS-002": {
     "status": "tested",
@@ -1456,7 +1456,7 @@
       "apps/melodee-server/tests/discovery_worker.rs (drift/missing-row reconciliation, idempotency, bounded-batch convergence, periodic run, graceful stop)",
       "crates/melodee-persistence/tests/native_discovery_phase7.rs (discovery_maintenance_relinks_chart_items_only_on_unique_catalog_identity)"
     ],
-    "note": "Periodic reconciliation and scheduled chart/recommendation aggregate maintenance are implemented. Additional scheduled tasks remain deferred."
+    "note": "Periodic reconciliation and scheduled chart/recommendation aggregate maintenance are implemented. Additional scheduled tasks remain deferred. Feature-Completion Phase 4 adds durable tick/manual run history, failure summaries, pause/resume/run-now controls, retention audit, stale-run visibility, and worker recovery evidence."
   },
   "PRD-MEDIA-004": {
     "status": "tested",
@@ -2604,7 +2604,7 @@
       "apps/melodee-server/src/scripting.rs unit tests (legacy canonical directoryProcessingStart example evaluates identically; bare-expression auto-wrap; wrap-rule substring parity)",
       "apps/melodee-server/tests/scripting_service.rs (deny/allow verdicts audited; empty registry allows without audit rows)"
     ],
-    "note": "Existing predicate scripts continue to execute under the documented contract; shell-script hooks (scripting.pre/postDiscoveryScript) are deliberately not portable and have documented re-expression paths in the migration guide."
+    "note": "Existing predicate scripts continue to execute under the documented contract; shell-script hooks (scripting.pre/postDiscoveryScript) are deliberately not portable and have documented re-expression paths in the migration guide. Feature-Completion Phase 4 verifies the active Boa pre-discovery hook is production-wired and sandboxed, while inactive legacy events are surfaced as migrated-but-inert."
   },
   "PRD-SCRIPT-002": {
     "status": "tested",

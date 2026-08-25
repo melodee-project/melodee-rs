@@ -19,6 +19,7 @@
   --melodee-status-neutral: #6f6f6f;
   --melodee-artwork-surface: #e0e0e0;
   --melodee-brand-accent: #0f62fe;
+  --melodee-link-contrast: #0043ce;
   --melodee-shell-background: #091117;
   --melodee-shell-active: #173044;
   --melodee-shell-text: #f4f4f4;
@@ -39,6 +40,7 @@
   --melodee-status-neutral: #a8a8a8;
   --melodee-artwork-surface: #393939;
   --melodee-brand-accent: #78a9ff;
+  --melodee-link-contrast: #78a9ff;
   --melodee-shell-background: #091117;
   --melodee-shell-active: #173044;
   --melodee-shell-text: #f4f4f4;
@@ -101,6 +103,13 @@
 .melodee-shell__brand-link:focus-visible {
   outline: 2px solid var(--cds-focus);
   outline-offset: 3px;
+}
+
+/* Carbon's primary link blue falls below 4.5:1 on the detail-page layer in
+ * the light theme. Keep the edit control a Carbon Link while using the
+ * theme-pack contrast token required for WCAG AA. */
+.melodee-detail-edit-link.cds--link {
+  color: var(--melodee-link-contrast);
 }
 
 .melodee-shell__brand-logo {
@@ -348,6 +357,13 @@
   .melodee-shell__health {
     display: none;
   }
+
+  /* Carbon keeps the overlay node mounted while the off-canvas nav is
+   * collapsed. An inactive overlay must not win hit testing over a scrolled
+   * tab-panel control. */
+  .cds--side-nav__overlay:not(.cds--side-nav__overlay-active) {
+    pointer-events: none !important;
+  }
 }
 
 /* Header panel switcher lists: SwitcherItem renders <li>, so panels wrap
@@ -397,12 +413,27 @@
   background: var(--melodee-artwork-surface);
   color: var(--cds-text-secondary);
   overflow: hidden;
+  pointer-events: none;
 }
 
 .melodee-entity-avatar img {
   inline-size: 100%;
   block-size: 100%;
   object-fit: cover;
+}
+
+/* Keep the compact mobile upload row above the fixed-size artwork fallback
+ * while the browser scrolls a tab panel into view. */
+.melodee-artwork-controls {
+  position: relative;
+  z-index: 1;
+}
+
+@media (max-width: 480px) {
+  .melodee-artwork-controls {
+    flex-direction: column;
+    align-items: flex-start !important;
+  }
 }
 
 .melodee-inspector {
@@ -862,6 +893,7 @@
   color: var(--cds-text-secondary);
   font-size: 0.875rem;
   margin-block-end: 0.75rem;
+  pointer-events: none;
 }
 
 .melodee-panel__footer {

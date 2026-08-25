@@ -1094,6 +1094,33 @@ impl NativeUserStateStore {
         Ok(())
     }
 
+    /// Removes listener now-playing rows whose heartbeat is older than the
+    /// caller's bounded staleness window. Podcast history uses the same
+    /// cleanup pass because its active rows are a separate compatibility
+    /// projection and must not remain visible after a client disappears.
+    pub async fn cleanup_stale_now_playing(
+        pool: &PgPool,
+        stale_before: OffsetDateTime,
+    ) -> Result<u64, NativeUserStateStoreError> {
+        let mut tx = pool.begin().await?;
+        let native_removed = sqlx::query("DELETE FROM native_now_playing WHERE updated_at < $1")
+            .bind(stale_before)
+            .execute(&mut *tx)
+            .await?
+            .rows_affected();
+        let podcast_removed = sqlx::query(
+            "DELETE FROM native_podcast_play_history
+             WHERE is_now_playing
+               AND COALESCE(last_heartbeat_at, played_at) < $1",
+        )
+        .bind(stale_before)
+        .execute(&mut *tx)
+        .await?
+        .rows_affected();
+        tx.commit().await?;
+        Ok(native_removed.saturating_add(podcast_removed))
+    }
+
     /// Records one completed play and derived Track/Release/primary-Artist counters atomically.
     pub async fn record_scrobble(
         pool: &PgPool,

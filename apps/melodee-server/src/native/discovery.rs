@@ -62,6 +62,16 @@ pub fn protected_router() -> Router<NativeState> {
             "/api/v1/playback-backend/heartbeat/{session_id}",
             post(backend_heartbeat),
         )
+        .route("/api/v1/playback/backends", get(playback_capabilities))
+        .route("/api/v1/playback/status", get(playback_status))
+        .route("/api/v1/playback/initialize", post(playback_initialize))
+        .route("/api/v1/playback/shutdown", post(playback_shutdown))
+        .route("/api/v1/playback/play", post(playback_play))
+        .route("/api/v1/playback/pause", post(playback_pause))
+        .route("/api/v1/playback/resume", post(playback_resume))
+        .route("/api/v1/playback/stop", post(playback_stop))
+        .route("/api/v1/playback/seek", post(playback_seek))
+        .route("/api/v1/playback/volume", post(playback_volume))
         .route("/api/v1/recommendations", get(recommendations))
         .route("/api/v1/system/stats", get(system_stats))
 }
@@ -1037,6 +1047,119 @@ async fn backend_heartbeat(
         ));
     }
     Ok(Json(true))
+}
+
+async fn playback_capabilities(
+    State(state): State<NativeState>,
+    _: Authenticated,
+) -> Result<Json<crate::playback::PlaybackCapabilities>, NativeApiError> {
+    crate::playback::PlaybackService::new(state.pool)
+        .capabilities(crate::playback::CancellationToken::new())
+        .await
+        .map(Json)
+        .map_err(NativeApiError::from)
+}
+
+async fn playback_status(
+    State(state): State<NativeState>,
+    _: Authenticated,
+) -> Result<Json<crate::playback::PlaybackStatus>, NativeApiError> {
+    crate::playback::PlaybackService::new(state.pool)
+        .status(crate::playback::CancellationToken::new())
+        .await
+        .map(Json)
+        .map_err(NativeApiError::from)
+}
+
+async fn playback_initialize(
+    State(state): State<NativeState>,
+    _: Authenticated,
+) -> Result<Json<bool>, NativeApiError> {
+    crate::playback::PlaybackService::new(state.pool)
+        .initialize(crate::playback::CancellationToken::new())
+        .await
+        .map(|()| Json(true))
+        .map_err(NativeApiError::from)
+}
+
+async fn playback_shutdown(
+    State(state): State<NativeState>,
+    _: Authenticated,
+) -> Result<Json<bool>, NativeApiError> {
+    crate::playback::PlaybackService::new(state.pool)
+        .shutdown(crate::playback::CancellationToken::new())
+        .await
+        .map(|()| Json(true))
+        .map_err(NativeApiError::from)
+}
+
+async fn playback_play(
+    State(state): State<NativeState>,
+    _: Authenticated,
+    Json(request): Json<crate::playback::PlayRequest>,
+) -> Result<Json<bool>, NativeApiError> {
+    crate::playback::PlaybackService::new(state.pool)
+        .play(&request, crate::playback::CancellationToken::new())
+        .await
+        .map(|()| Json(true))
+        .map_err(NativeApiError::from)
+}
+
+async fn playback_pause(
+    State(state): State<NativeState>,
+    _: Authenticated,
+) -> Result<Json<bool>, NativeApiError> {
+    crate::playback::PlaybackService::new(state.pool)
+        .pause(crate::playback::CancellationToken::new())
+        .await
+        .map(|()| Json(true))
+        .map_err(NativeApiError::from)
+}
+
+async fn playback_resume(
+    State(state): State<NativeState>,
+    _: Authenticated,
+) -> Result<Json<bool>, NativeApiError> {
+    crate::playback::PlaybackService::new(state.pool)
+        .resume(crate::playback::CancellationToken::new())
+        .await
+        .map(|()| Json(true))
+        .map_err(NativeApiError::from)
+}
+
+async fn playback_stop(
+    State(state): State<NativeState>,
+    _: Authenticated,
+) -> Result<Json<bool>, NativeApiError> {
+    crate::playback::PlaybackService::new(state.pool)
+        .stop(crate::playback::CancellationToken::new())
+        .await
+        .map(|()| Json(true))
+        .map_err(NativeApiError::from)
+}
+
+async fn playback_seek(
+    State(state): State<NativeState>,
+    _: Authenticated,
+    Json(request): Json<crate::playback::SeekRequest>,
+) -> Result<Json<bool>, NativeApiError> {
+    crate::playback::PlaybackService::new(state.pool)
+        .seek(&request, crate::playback::CancellationToken::new())
+        .await
+        .map(|()| Json(true))
+        .map_err(NativeApiError::from)
+}
+
+async fn playback_volume(
+    State(state): State<NativeState>,
+    _: Authenticated,
+    Json(request): Json<crate::playback::VolumeRequest>,
+) -> Result<Json<bool>, NativeApiError> {
+    crate::playback::PlaybackService::new(state.pool)
+        .set_volume(&request, crate::playback::CancellationToken::new())
+        .await
+        .map(|()| Json(true))
+        .map_err(NativeApiError::from)
 }
 
 #[derive(Debug, Deserialize)]

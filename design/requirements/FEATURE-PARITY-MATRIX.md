@@ -12,6 +12,35 @@ vocabulary: `Planned` (no implementation), `In progress` (partial; remaining wor
 Notes), `Complete` (parity obligations met, possibly including an approved intentional absence),
 `Waived` (obligation removed for release 1.0 by an accepted ADR-level waiver linked in Notes).
 
+## Current Phase 4 reconciliation and closeout (2026-08-25)
+
+The detailed rows below preserve historical Phase 0–10 audit wording. Current production-source
+evidence and the Phase 4 plan/report supersede stale notes where they conflict; historical reports
+are not rewritten. The Phase 4-owned rows are terminal through local evidence or an explicit
+accepted difference/operator-owned residual:
+
+| Owner | Current disposition | Rows or residuals |
+|---|---|---|
+| A | Complete locally; daemon smoke is environment-dependent | MPD/MPV backend control and lifecycle evidence (`PLAYBACK-002`); `mpd` is not installed locally |
+| B | Complete locally with decoded-audio integrity; production-library mutation remains prohibited | Release-scoped tag transformations and sidecar behavior (`RELEASE-002`, `MEDIA-001`) |
+| C | Complete locally with explicit tick-claim semantics | Durable job history, controls, retention, and maintenance (`JOBS-001`, `AUDIT-001`) |
+| D | Complete locally; live C# stored-artwork capture is unavailable in frozen fixtures | OpenSubsonic stored-artwork sizing (`ARTWORK-001`) |
+| E/F | Complete for current Rust/Admin scope; external identity validation remains operator-owned | Admin UI and local auth/profile/group/reset behavior (`ADMINUI-001`, `AUTH-001`) |
+| G | Complete with explicit migrated-but-inert legacy hooks and operator-owned MPV launch settings | Scripting, CLI, and configuration residuals (`SCRIPT-001`, `CLI-001`, `CONFIG-001`) |
+| H | Terminal local evidence | Remaining local differential/golden workflow rows; operator and production legs remain external |
+
+The Phase 2 OpenSubsonic replay discrepancy is classified in the Phase 4 evidence: the initial
+158 unexpected differences were caused by the disposable replay harness allowing the search worker
+to hold a PostgreSQL snapshot while scenarios were reseeded. Replaying with search disabled in the
+disposable server produced zero unexpected differences and 321 enumerated intentional differences.
+This is harness/environment correction, not a public-contract change.
+
+Phase 4 does not include migration, cutover, rollback, production-library mutation, physical-client
+acceptance, live provider credentials/quotas, or real external Google OIDC validation. Those remain
+Phase 11 or explicitly operator-authorized legs. The Phase 2 OpenSubsonic replay's 158 unexpected
+differences were harness snapshot drift; search-disabled replay produced zero unexpected and 321
+known intentional differences.
+
 | Capability | Parity class | Target phase | Status | Legacy evidence | Rust evidence | Test evidence | Notes |
 |---|---|---:|---|---|---|---|---|
 | Onboarding/setup wizard | Capability | 9 | Complete | Legacy `OnboardingStateService`/`SetupCheckService` (`configuration-inventory.md` §"Consumption pattern") | Six-check preflight + singleton `onboarding_state` marker (migration 0025, ADR-0134 §3); admin API `onboarding/status|complete` fail-closed on required checks; migration bypass heuristic (catalog rows or imported known settings); `melodee-cli config validate` | `apps/melodee-server/tests/admin_onboarding_api.rs`; `crates/melodee-persistence/tests/settings.rs`; `apps/melodee-cli/tests/config.rs` | PRD-SETUP-001/002 tested; the graphical wizard is Phase 10 admin UI over the same stores |

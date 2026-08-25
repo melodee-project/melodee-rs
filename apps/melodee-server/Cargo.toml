@@ -23,6 +23,7 @@ hmac.workspace = true
 image.workspace = true
 jsonwebtoken.workspace = true
 lettre.workspace = true
+lofty.workspace = true
 md-5.workspace = true
 melodee-auth = { path = "../../crates/melodee-auth", version = "0.1.0" }
 melodee-catalog = { path = "../../crates/melodee-catalog", version = "0.1.0" }

@@ -145,10 +145,12 @@ KNOWN_DIFFERENCES: list[tuple[str, str, str]] = [
     ("os-stream-maxbitrate-ignored", "", "ADR-0147: maxBitRate=64 on a 705 kbps WAV source now transcodes to mp3 at the cap; frozen silent-ignore golden is historical"),
     ("jf-playback/stream-extension-no-static", "", "ADR-0147: stream.{container} without static=true now honors configured transcoding; frozen 400 rejection golden is historical"),
 
-    # The Rust catalog has no durable artwork storage yet; catalog entities
-    # serve the captured no-artwork 404 classes. The 200/304 image paths the
-    # legacy fixture produced are the documented Phase 8 evidence gap
-    # (PHASE-8-REPORT.md); images.rs::resolve_image is the wiring point.
+    # The frozen Jellyfin fixture's embedded/publication artwork source is not
+    # present in the disposable Phase-8 seed. The Rust server now supports
+    # durable catalog overrides and publication-plan artwork (ADR-0143), but
+    # those bytes are deliberately not manufactured during replay. The
+    # override precedence and fallback paths have separate source-backed
+    # integration evidence.
     ("jf-images/item-image-primary", "", "artwork storage evidence gap"),
     ("jf-images/item-image-head", "", "artwork storage evidence gap"),
     ("jf-images/item-image-304", "", "artwork storage evidence gap"),
@@ -1154,6 +1156,11 @@ def main() -> None:
             "MELODEE__SERVER__BIND": f"127.0.0.1:{port}",
             "MELODEE__STORAGE__ROOT": str(storage_root),
             "MELODEE__INGEST__ENABLED": "false",
+            # The differential fixture owns a disposable database and reseeds
+            # it between scenario files. Keep rebuildable projections disabled
+            # so a background search snapshot cannot hold a PostgreSQL lock
+            # while the harness truncates that database.
+            "MELODEE__SEARCH__ENABLED": "false",
             "MELODEE__INGEST__SOURCES_JSON": json.dumps(
                 [
                     {

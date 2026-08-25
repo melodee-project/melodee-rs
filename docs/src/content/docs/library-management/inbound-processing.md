@@ -147,5 +147,14 @@ evidence, and releases pre-commit claims on graceful cancellation. `melodee-cli 
   audio. Neither hash alone decides Track identity.
 - External and embedded JPEG/PNG artwork within resource bounds is decoded and written as padded
   1600×1600 JPEG. Malformed or unsafe artwork is skipped with a structured manifest finding.
-- CUE, M3U, SFV, NFO, and LRC sidecars are parsed into structured observations. Malformed content is
-  retained as findings; CUE-driven audio splitting is not part of this sub-slice.
+- CUE, M3U, SFV, NFO, LRC, and matching lyric sidecars are parsed into structured observations.
+  A lyric sidecar is a basename-matched `<audio>.txt`; unrelated text files remain unknown residue.
+  The legacy JSON lyric document (`Artist`, `Title`, and `Value`) and plain UTF-8/Windows-1252
+  lyric text are accepted. NFO text and XML fields include title, artist/album artist, date/year,
+  publisher, track totals, genre, and track lines. Parsed NFO values fill missing release
+  observations without overwriting embedded tags.
+- `.blackbeard.provenance.json` is parsed as supported schema version 1, with its release artist,
+  title, and year filling missing release observations. Unsupported schemas and malformed content
+  remain visible as structured findings; provenance is never allowed to grant unrestricted paths,
+  secrets, or source deletion. Malformed sidecar content is retained as findings rather than being
+  silently accepted.

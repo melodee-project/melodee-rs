@@ -38,6 +38,44 @@ export interface TrackMetadataPatch {
   durationMs?: number | null;
 }
 
+export interface MetadataFieldDelta {
+  file: string;
+  field: string;
+  old: string | null;
+  new: string | null;
+}
+
+export interface MetadataTransformPreview {
+  previewHash: string;
+  operation: string;
+  affectedFiles: number;
+  deltas: MetadataFieldDelta[];
+  validationErrors: string[];
+}
+
+export interface MetadataTransformResult {
+  auditId: string;
+  status: string;
+  previewHash: string;
+  affectedFiles: number;
+  deltas: MetadataFieldDelta[];
+  recovery: unknown;
+}
+
+export interface MetadataTransformAudit {
+  id: string;
+  releaseId: string;
+  operationName: string;
+  operationParams: unknown;
+  affectedFiles: number;
+  fieldDeltas: MetadataFieldDelta[];
+  appliedBy: string;
+  status: string;
+  recoveryEvidence: unknown;
+  createdAt: string;
+  completedAt: string | null;
+}
+
 /** Server-side pagination envelope shared by list endpoints. */
 export interface Page<T> {
   items: T[];
@@ -757,6 +795,20 @@ export interface WorkerPool {
   completedLastHour: number | null;
   throughputPerMinute: number | null;
   failedLast24h: number | null;
+}
+
+export interface JobRunHistory {
+  id: string;
+  jobName: string;
+  scheduledTickAt: string | null;
+  startedAt: string;
+  completedAt: string | null;
+  durationMs: number | null;
+  success: boolean | null;
+  errorMessage: string | null;
+  wasManualTrigger: boolean;
+  triggeredBy: string | null;
+  status?: 'running' | 'completed' | 'failed' | 'stale';
 }
 
 export interface SearchProjection {

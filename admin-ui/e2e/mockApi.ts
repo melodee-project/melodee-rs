@@ -664,6 +664,7 @@ export async function mockAdminApi(
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url());
     const { pathname } = url;
+    const method = route.request().method();
     const json = (body: unknown, status = 200) =>
       route.fulfill({
         status,
@@ -690,6 +691,10 @@ export async function mockAdminApi(
         limit: 2,
         offset: 0,
       });
+      return;
+    }
+    if (pathname === "/api/admin/v1/jobs/history") {
+      await json({ items: [], total: 0, limit: 50, offset: 0 });
       return;
     }
     if (pathname === "/api/admin/v1/workers/failures") {
@@ -839,6 +844,29 @@ export async function mockAdminApi(
     }
     if (pathname === `/api/admin/v1/catalog/releases/${CATALOG_RELEASE_ID}`) {
       await json(RELEASE_DETAIL);
+      return;
+    }
+    if (pathname.includes('/metadata-transforms')) {
+      if (method === 'GET') {
+        await json([]);
+      } else if (pathname.endsWith('/preview')) {
+        await json({
+          previewHash: 'preview-fixture',
+          operation: 'remove_featuring_artists',
+          affectedFiles: 1,
+          deltas: [{ file: 'track.mp3', field: 'title', old: 'Track feat. Guest', new: 'Track' }],
+          validationErrors: [],
+        });
+      } else {
+        await json({
+          auditId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+          status: pathname.endsWith('/revert') ? 'reverted' : 'success',
+          previewHash: 'preview-fixture',
+          affectedFiles: 1,
+          deltas: [],
+          recovery: { files: [] },
+        });
+      }
       return;
     }
     if (pathname === `/api/admin/v1/catalog/tracks/${TRACK_ID}`) {

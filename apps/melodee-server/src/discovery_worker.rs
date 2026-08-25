@@ -232,14 +232,37 @@ pub fn start_discovery_loop(
             loop {
                 tokio::select! {
                     _ = ticker.tick() => {
-                        tokio::select! {
-                            result = run_discovery_once(&pool, &config) => {
-                                match result {
-                                    Ok(stats) => latest = Some(stats),
-                                    Err(error) => error!(%error, "discovery maintenance pass failed"),
-                                }
+                        let started = time::OffsetDateTime::now_utc();
+                        let tick = melodee_persistence::scheduled_tick(started, config.poll_interval);
+                        let history = melodee_persistence::JobRunHistoryStore;
+                        let run = match history.start_tick(&pool, "discovery", tick).await {
+                            Ok(run) => run,
+                            Err(error) => {
+                                error!(%error, "discovery tick history could not be recorded");
+                                None
                             }
-                            _ = task_stop.changed() => break,
+                        };
+                        let Some(run) = run else {
+                            continue;
+                        };
+                        let outcome = tokio::select! {
+                            result = run_discovery_once(&pool, &config) => Some(result),
+                            _ = task_stop.changed() => None,
+                        };
+                        let Some(outcome) = outcome else {
+                            let _ = history.finish(&pool, run.id, time::OffsetDateTime::now_utc(), false, Some("scheduler stopped during run")).await;
+                            break;
+                        };
+                        match outcome {
+                            Ok(stats) => {
+                                let _ = history.finish(&pool, run.id, time::OffsetDateTime::now_utc(), true, None).await;
+                                latest = Some(stats);
+                            }
+                            Err(error) => {
+                                let message = error.to_string();
+                                let _ = history.finish(&pool, run.id, time::OffsetDateTime::now_utc(), false, Some(&message)).await;
+                                error!(%error, "discovery maintenance pass failed");
+                            }
                         }
                     }
                     _ = task_stop.changed() => break,

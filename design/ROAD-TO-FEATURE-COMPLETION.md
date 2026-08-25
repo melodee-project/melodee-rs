@@ -29,6 +29,26 @@
 > provider settings have runtime consumers; `JOBS-001` provider maintenance is implemented while
 > unrelated legacy jobs remain tracked; and `WEBUI-001` is `DIFFERENT — APPROVED` under ADR-0161.
 
+> ## Feature-Completion Phase 4 — terminal disposition (2026-08-25)
+>
+> Phase 4 was explicitly assigned and is complete against the entry plan at
+> [agents/FEATURE-COMPLETION-PHASE-4-PLAN.md](agents/FEATURE-COMPLETION-PHASE-4-PLAN.md). Its
+> authoritative evidence is
+> [evidence/feature-completion/phase-4/PHASE-4-REPORT.md](evidence/feature-completion/phase-4/PHASE-4-REPORT.md).
+> It closed the remaining implementation-level operational gaps: live MPD/MPV backend control,
+> release-scoped safe tag transformations, durable scheduled-job history and maintenance,
+> stored-artwork sizing, verified Admin UI/operator gaps, local authentication depth, scripting
+> and CLI/configuration closure, and local differential evidence. Every owned row is locally
+> evidenced or has an explicit accepted difference/operator-owned disposition in the report.
+> It did not authorize migration, production cutover, production-library mutation, live provider
+> credentials, real Google OIDC, or physical-client acceptance.
+>
+> The historical Phase 4 proposal below is preserved as historical planning text. Where it says
+> metadata tag transforms, job history, or stored-artwork sizing are absent, the terminal Phase 4
+> plan/report and current source are authoritative. Phase 11 migration/import, packaging,
+> rehearsal, cutover, rollback, and production-library validation are the only planned
+> implementation milestone after this closeout.
+
 > Historical Phase 1 revision text:
 >
 > Workstreams A–D were RELEASE-002 metadata-editing proof, TRACK-001/002 MusicBrainz-ID
@@ -321,7 +341,7 @@ bounded and are not a listener application.
 
 **Disposition:** `WEBUI-001` — `DIFFERENT — APPROVED`, relocated to MeloAmp.
 
-### Phase 4 — MPD/MPV backends + remaining PARTIAL rows
+### Historical proposal — Phase 4 — MPD/MPV backends + remaining PARTIAL rows
 
 - **PLAYBACK-002:** backend abstraction + endpoint registry (per ADR 3).
 - **ADMINUI-001:** close the expanded admin gap (libraries/playlists/podcasts/shares/requests/

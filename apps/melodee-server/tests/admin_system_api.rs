@@ -420,6 +420,115 @@ async fn pool_pause_resume_is_lease_coordinated_and_audited() {
 }
 
 #[tokio::test]
+async fn scheduled_job_history_controls_and_failure_reasons_are_operator_visible() {
+    let db = TestDb::create("wp17_job_history_api").await;
+    let fixture = seed_users(&db).await;
+    let admin = token_for(fixture.admin_public, "wp17-admin");
+    let plain = token_for(fixture.plain_public, "wp17-plain");
+    let app = build_app(db.pool.clone(), None);
+
+    for (method, path) in [
+        ("GET", "/api/admin/v1/jobs/history"),
+        ("GET", "/api/admin/v1/jobs/failures/summary"),
+        ("POST", "/api/admin/v1/jobs/now-playing-cleanup/run-now"),
+        ("POST", "/api/admin/v1/jobs/discovery/pause"),
+    ] {
+        let (status, _) = call(app.clone(), method, path, None, Some(&plain)).await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{method} {path}");
+    }
+
+    let (status, body) = call(
+        app.clone(),
+        "POST",
+        "/api/admin/v1/jobs/now-playing-cleanup/run-now",
+        None,
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["status"], "completed");
+    assert_eq!(body["wasManualTrigger"], true);
+    assert_eq!(
+        body["triggeredBy"].as_str().expect("triggering principal"),
+        fixture.admin_public.to_string()
+    );
+
+    let (status, body) = call(
+        app.clone(),
+        "GET",
+        "/api/admin/v1/jobs/history?jobName=now-playing-cleanup",
+        None,
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["total"], 1);
+    assert_eq!(body["items"][0]["status"], "completed");
+    assert!(body["items"][0]["durationMs"].is_number());
+
+    let (status, body) = call(
+        app.clone(),
+        "GET",
+        "/api/admin/v1/jobs/failures/summary?hours=1",
+        None,
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["hours"], 1);
+    assert_eq!(body["failedRuns"], 0);
+
+    let (status, body) = call(
+        app.clone(),
+        "POST",
+        "/api/admin/v1/jobs/not-exposed/run-now",
+        None,
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(body["code"], "unsupported_job");
+
+    let (status, body) = call(
+        app.clone(),
+        "GET",
+        "/api/admin/v1/jobs/history?jobName=not-exposed",
+        None,
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["items"][0]["status"], "failed");
+    assert_eq!(
+        body["items"][0]["errorMessage"],
+        "job is not exposed for manual execution"
+    );
+
+    let (status, body) = call(
+        app.clone(),
+        "POST",
+        "/api/admin/v1/jobs/discovery/pause",
+        None,
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["paused"], true);
+    let (status, body) = call(
+        app,
+        "POST",
+        "/api/admin/v1/jobs/discovery/resume",
+        None,
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["paused"], false);
+
+    db.drop().await;
+}
+
+#[tokio::test]
 async fn worker_failures_list_recent_failed_work_items() {
     let db = TestDb::create("wp17_failures").await;
     let fixture = seed_users(&db).await;

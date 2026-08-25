@@ -15,14 +15,17 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   getDashboard,
   getSystemHealth,
+  listJobHistory,
   listWorkerFailures,
   listWorkerPools,
   pauseWorkerPool,
   resumeWorkerPool,
+  runJobNow,
 } from '../../api/admin';
 import { ApiError } from '../../api/client';
 import type {
   Page,
+  JobRunHistory,
   SortParam,
   SystemHealth,
   WorkItem,
@@ -113,6 +116,10 @@ export function SystemWorkersScreen() {
   const [healthError, setHealthError] = useState<ApiError | null>(null);
   const [failures, setFailures] = useState<Page<WorkItem> | null>(null);
   const [failuresError, setFailuresError] = useState<ApiError | null>(null);
+  const [jobs, setJobs] = useState<Page<JobRunHistory> | null>(null);
+  const [jobsError, setJobsError] = useState<ApiError | null>(null);
+  const [jobBusy, setJobBusy] = useState<string | null>(null);
+  const [cleanupTarget, setCleanupTarget] = useState<string | null>(null);
   const [pauseTarget, setPauseTarget] = useState<WorkerPool | null>(null);
   const [poolBusy, setPoolBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -176,14 +183,31 @@ export function SystemWorkersScreen() {
     [failuresPage, failuresPageSize, failuresSort],
   );
 
+  const fetchJobs = useCallback((signal: { cancelled: boolean }) => {
+    return listJobHistory({
+      limit: failuresPageSize,
+      offset: (failuresPage - 1) * failuresPageSize,
+    })
+      .then((result) => {
+        if (!signal.cancelled) {
+          setJobs(result);
+          setJobsError(null);
+        }
+      })
+      .catch((cause: unknown) => {
+        if (!signal.cancelled) setJobsError(toApiError(cause));
+      });
+  }, [failuresPage, failuresPageSize]);
+
   useEffect(() => {
     const signal = { cancelled: false };
     void fetchPools(signal);
     void fetchHealth(signal);
+    void fetchJobs(signal);
     return () => {
       signal.cancelled = true;
     };
-  }, [fetchPools, fetchHealth]);
+  }, [fetchPools, fetchHealth, fetchJobs]);
 
   useEffect(() => {
     const signal = { cancelled: false };
@@ -227,6 +251,17 @@ export function SystemWorkersScreen() {
         setPauseTarget(null);
       });
   };
+
+  const runJob = useCallback((jobName: string) => {
+    setJobBusy(jobName);
+    runJobNow(jobName)
+      .then(() => {
+        setNotice({ kind: 'success', text: t('system.jobs.runRequested', { job: jobName }) });
+        void fetchJobs({ cancelled: false });
+      })
+      .catch((cause: unknown) => setNotice({ kind: 'error', text: toApiError(cause).message }))
+      .finally(() => setJobBusy(null));
+  }, [fetchJobs, t]);
 
   const poolColumns: EntityColumn[] = useMemo(
     () => [
@@ -341,6 +376,52 @@ export function SystemWorkersScreen() {
 
   const queuedTotal = (pools?.items ?? []).reduce((sum, pool) => sum + (pool.queued ?? 0), 0);
 
+  const jobColumns: EntityColumn[] = useMemo(
+    () => [
+      { key: 'job', header: t('system.jobs.column.job') },
+      { key: 'status', header: t('system.jobs.column.status') },
+      { key: 'started', header: t('system.jobs.column.started') },
+      { key: 'reason', header: t('system.jobs.column.reason') },
+      { key: 'actions', header: t('system.jobs.column.actions') },
+    ],
+    [t],
+  );
+  const jobRows: EntityRow[] = useMemo(
+    () => (jobs?.items ?? []).map((job) => ({
+      id: job.id,
+      cells: {
+        job: job.jobName,
+        status:
+          job.status === 'stale'
+            ? t('status.stale')
+            : job.status === 'failed' || (job.status === undefined && job.success === false)
+              ? t('status.error')
+              : job.status === 'completed' || job.success === true
+                ? t('status.completed')
+                : t('status.running'),
+        started: <span title={formatDateTime(job.startedAt)}>{formatRelativeTime(job.startedAt)}</span>,
+        reason: job.errorMessage ?? t('common.none'),
+        actions: ['discovery', 'podcast', 'enrichment', 'now-playing-cleanup', 'job-history-cleanup'].includes(job.jobName) ? (
+          <Button
+            kind="ghost"
+            size="sm"
+            disabled={jobBusy === job.jobName}
+            onClick={() => {
+              if (job.jobName === 'job-history-cleanup') {
+                setCleanupTarget(job.jobName);
+              } else {
+                runJob(job.jobName);
+              }
+            }}
+          >
+            {t('system.jobs.runNow')}
+          </Button>
+        ) : null,
+      },
+    })),
+    [jobBusy, jobs, runJob, t],
+  );
+
   return (
     <>
       <PageHeader
@@ -355,6 +436,7 @@ export function SystemWorkersScreen() {
               void fetchPools({ cancelled: false });
               void fetchHealth({ cancelled: false });
               void fetchFailures({ cancelled: false });
+              void fetchJobs({ cancelled: false });
               setPanelRefreshKey((key) => key + 1);
             }}
           >
@@ -407,7 +489,8 @@ export function SystemWorkersScreen() {
           {pools === null && !poolsError ? (
             <Loading description={t('common.loading')} withOverlay={false} />
           ) : (
-            <EntityTable
+            <>
+              <EntityTable
               caption={t('system.pools.caption')}
               columns={poolColumns}
               rows={poolRows}
@@ -415,7 +498,21 @@ export function SystemWorkersScreen() {
               compact
               emptyTitle={t('system.pools.emptyTitle')}
               emptyDescription={t('system.pools.emptyDescription')}
-            />
+              />
+
+          {jobsError ? (
+            <ActionableNotification inline kind="error" lowContrast title={t('system.jobs.loadError')} subtitle={jobsError.message} hideCloseButton actionButtonLabel={t('actions.retry')} onActionButtonClick={() => void fetchJobs({ cancelled: false })} />
+          ) : null}
+          <EntityTable
+            caption={t('system.jobs.caption')}
+            columns={jobColumns}
+            rows={jobRows}
+            totalRows={jobs?.total ?? 0}
+            compact
+            emptyTitle={t('system.jobs.emptyTitle')}
+            emptyDescription={t('system.jobs.emptyDescription')}
+          />
+            </>
           )}
 
           {failuresError ? (
@@ -499,6 +596,21 @@ export function SystemWorkersScreen() {
         }}
       >
         <p>{t('system.pools.pauseConfirmBody')}</p>
+      </Modal>
+      <Modal
+        open={cleanupTarget !== null}
+        modalHeading={t('system.jobs.cleanupConfirmTitle')}
+        primaryButtonText={t('system.jobs.cleanupConfirm')}
+        secondaryButtonText={t('actions.cancel')}
+        onRequestClose={() => setCleanupTarget(null)}
+        onRequestSubmit={() => {
+          if (cleanupTarget) {
+            runJob(cleanupTarget);
+            setCleanupTarget(null);
+          }
+        }}
+      >
+        <p>{t('system.jobs.cleanupConfirmBody')}</p>
       </Modal>
     </>
   );

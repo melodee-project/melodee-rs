@@ -16,6 +16,7 @@ import { SystemWorkersScreen } from './SystemWorkersScreen';
 vi.mock('../../api/admin', () => ({
   getDashboard: vi.fn(),
   getSystemHealth: vi.fn(),
+  listJobHistory: vi.fn(),
   listLeases: vi.fn(),
   listWorkerFailures: vi.fn(),
   listWorkerPools: vi.fn(),
@@ -28,6 +29,7 @@ vi.mock('../../api/admin', () => ({
 const admin = await import('../../api/admin');
 const mockGetDashboard = vi.mocked(admin.getDashboard);
 const mockGetSystemHealth = vi.mocked(admin.getSystemHealth);
+const mockListJobHistory = vi.mocked(admin.listJobHistory);
 const mockListLeases = vi.mocked(admin.listLeases);
 const mockListWorkerFailures = vi.mocked(admin.listWorkerFailures);
 const mockListWorkerPools = vi.mocked(admin.listWorkerPools);
@@ -208,6 +210,7 @@ describe('SystemWorkersScreen', () => {
     });
     mockGetDashboard.mockResolvedValue(makeDashboard());
     mockGetSystemHealth.mockResolvedValue(HEALTH);
+    mockListJobHistory.mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
     mockListWorkerFailures.mockResolvedValue({
       items: [makeFailure()],
       total: 1,

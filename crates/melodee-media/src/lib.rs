@@ -11,16 +11,18 @@ use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::atomic::{AtomicBool, Ordering},
+    sync::mpsc,
     thread,
     time::{Duration as StdDuration, Instant},
 };
 
 use blake3::Hasher;
 use lofty::{
+    config::WriteOptions,
     file::{AudioFile, TaggedFileExt},
     prelude::Accessor,
-    read_from,
-    tag::ItemKey,
+    read_from, read_from_path,
+    tag::{ItemKey, Tag},
 };
 use melodee_domain::{
     AudioTechnicalObservation, Finding, FindingSeverity, ManifestReleaseObservation,
@@ -121,6 +123,204 @@ pub struct MediaTagProbe {
     pub track_number: Option<u32>,
 }
 
+/// Tag fields that the safe metadata transformation layer is allowed to
+/// change. `None` means the field is left untouched; clearing a field is
+/// represented by `clear_*` so an absent JSON property cannot accidentally
+/// erase source metadata.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TagRewrite {
+    pub title: Option<String>,
+    pub artist: Option<String>,
+    pub album_artist: Option<String>,
+    pub album: Option<String>,
+    pub recording_date: Option<String>,
+    pub track_number: Option<u32>,
+    pub disc_number: Option<u32>,
+    pub clear_artist: bool,
+    pub clear_album_artist: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TagSnapshot {
+    pub title: Option<String>,
+    pub artist: Option<String>,
+    pub album_artist: Option<String>,
+    pub album: Option<String>,
+    pub recording_date: Option<String>,
+    pub track_number: Option<u32>,
+    pub disc_number: Option<u32>,
+}
+
+#[derive(Debug, Error)]
+pub enum TagRewriteError {
+    #[error("media tag file could not be read")]
+    Read(#[source] lofty::error::FileParseError),
+    #[error("media tag file could not be written")]
+    Write(#[source] lofty::error::FileEncodingError),
+    #[error("media container does not support a writable primary tag")]
+    Unsupported,
+}
+
+/// Reads the normalized tag view used by the safe transformation engine.
+pub fn read_tag_snapshot(path: &Path) -> Result<TagSnapshot, TagRewriteError> {
+    let tagged = read_from_path(path).map_err(TagRewriteError::Read)?;
+    Ok(snapshot_from_tagged(&tagged))
+}
+
+/// Applies only the named tag fields to an already-created same-filesystem
+/// temporary copy. The caller owns atomic replacement and rollback; this
+/// function never touches the original path.
+pub fn apply_tag_rewrite(
+    path: &Path,
+    rewrite: &TagRewrite,
+) -> Result<TagSnapshot, TagRewriteError> {
+    let mut tagged = read_from_path(path).map_err(TagRewriteError::Read)?;
+    let tag_type = tagged.primary_tag_type();
+    if tagged.primary_tag().is_none() {
+        if !tagged.tag_support(tag_type).is_writable() {
+            return Err(TagRewriteError::Unsupported);
+        }
+        tagged.insert_tag(Tag::new(tag_type));
+    }
+    let Some(tag) = tagged.primary_tag_mut() else {
+        return Err(TagRewriteError::Unsupported);
+    };
+    if let Some(value) = rewrite.title.as_deref() {
+        tag.set_title(value.to_owned());
+    }
+    if let Some(value) = rewrite.artist.as_deref() {
+        tag.set_artist(value.to_owned());
+    }
+    if rewrite.clear_artist {
+        tag.remove_artist();
+    }
+    if let Some(value) = rewrite.album_artist.as_deref() {
+        tag.insert_text(ItemKey::AlbumArtist, value.to_owned());
+    }
+    if rewrite.clear_album_artist {
+        tag.remove_key(ItemKey::AlbumArtist);
+    }
+    if let Some(value) = rewrite.album.as_deref() {
+        tag.set_album(value.to_owned());
+    }
+    if let Some(value) = rewrite.recording_date.as_deref() {
+        tag.insert_text(ItemKey::RecordingDate, value.to_owned());
+    }
+    if let Some(value) = rewrite.track_number {
+        tag.set_track(value);
+    }
+    if let Some(value) = rewrite.disc_number {
+        tag.set_disk(value);
+    }
+    tagged
+        .save_to_path(path, WriteOptions::default())
+        .map_err(TagRewriteError::Write)?;
+    Ok(snapshot_from_tagged(&tagged))
+}
+
+fn snapshot_from_tagged(tagged: &lofty::file::TaggedFile) -> TagSnapshot {
+    let tag = tagged.primary_tag().or_else(|| tagged.first_tag());
+    TagSnapshot {
+        title: tag.and_then(|tag| tag.title().map(|value| value.into_owned())),
+        artist: tag.and_then(|tag| tag.artist().map(|value| value.into_owned())),
+        album_artist: tag
+            .and_then(|tag| tag.get_string(ItemKey::AlbumArtist).map(ToOwned::to_owned)),
+        album: tag.and_then(|tag| tag.album().map(|value| value.into_owned())),
+        recording_date: tag.and_then(|tag| {
+            tag.get_string(ItemKey::RecordingDate)
+                .or_else(|| tag.get_string(ItemKey::Year))
+                .map(ToOwned::to_owned)
+        }),
+        track_number: tag.and_then(Accessor::track),
+        disc_number: tag.and_then(Accessor::disk),
+    }
+}
+
+/// Computes a streaming fingerprint over a canonical decoded audio stream.
+/// The output is never buffered in memory. This is the integrity predicate for
+/// tag rewrites; a whole-file hash is expected to change when tags change.
+pub fn decoded_audio_fingerprint(
+    path: &Path,
+    ffmpeg_path: &Path,
+    timeout: StdDuration,
+) -> Result<String, String> {
+    let path_text = path
+        .to_str()
+        .ok_or_else(|| "media path is not UTF-8".to_owned())?;
+    let mut command = Command::new(ffmpeg_path);
+    command
+        .args([
+            "-v",
+            "error",
+            "-i",
+            path_text,
+            "-map",
+            "0:a:0",
+            "-vn",
+            "-f",
+            "s16le",
+            "-ar",
+            "48000",
+            "-ac",
+            "2",
+            "-acodec",
+            "pcm_s16le",
+            "-",
+        ])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    let mut child = command
+        .spawn()
+        .map_err(|error| format!("unable to start audio verifier: {error}"))?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "audio verifier did not expose output".to_owned())?;
+    let (sender, receiver) = mpsc::sync_channel(1);
+    let reader_thread = thread::spawn(move || {
+        let mut reader = stdout;
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(b"melodee-decoded-audio-pcm-v1\0");
+        let mut buffer = [0_u8; HASH_BUFFER_SIZE];
+        let result = loop {
+            let count = match reader.read(&mut buffer) {
+                Ok(count) => count,
+                Err(error) => break Err(format!("audio verifier read failed: {error}")),
+            };
+            if count == 0 {
+                break Ok(hasher.finalize().to_hex().to_string());
+            }
+            hasher.update(&buffer[..count]);
+        };
+        let _ = sender.send(result);
+    });
+    let result = match receiver.recv_timeout(timeout) {
+        Ok(result) => result,
+        Err(mpsc::RecvTimeoutError::Timeout) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            let _ = reader_thread.join();
+            return Err("audio verification timed out".to_owned());
+        }
+        Err(mpsc::RecvTimeoutError::Disconnected) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            let _ = reader_thread.join();
+            return Err("audio verifier output reader stopped unexpectedly".to_owned());
+        }
+    }?;
+    let status = child
+        .wait()
+        .map_err(|error| format!("audio verifier wait failed: {error}"))?;
+    let _ = reader_thread.join();
+    if !status.success() {
+        return Err("audio verifier rejected the media".to_owned());
+    }
+    Ok(result)
+}
+
 /// Probe one media file for the hook context fields. Returns `None` when
 /// the file cannot be read or parsed; callers tolerate per-file failures
 /// exactly like the legacy provider did (log-and-skip).
@@ -204,6 +404,11 @@ pub fn inspect_release(
     collect_files(release_root, release_root, &mut paths)?;
     paths.sort_unstable_by(|left, right| left.0.cmp(&right.0));
 
+    let audio_paths: Vec<String> = paths
+        .iter()
+        .filter(|(relative, _)| classify(relative) == ObservedFileKind::Audio)
+        .map(|(relative, _)| relative.clone())
+        .collect();
     let mut files = Vec::with_capacity(paths.len());
     let mut tracks = Vec::new();
     let mut artwork = Vec::new();
@@ -216,7 +421,7 @@ pub fn inspect_release(
     let ffprobe_version = tool_version(&options.ffprobe_path, options.max_tool_output_bytes);
 
     for (relative_path, path) in paths {
-        let observed = inspect_file(
+        let mut observed = inspect_file(
             &relative_path,
             &path,
             release_root,
@@ -224,6 +429,39 @@ pub fn inspect_release(
             &mut bytes_hashed,
             &mut ffprobe_invocations,
         )?;
+
+        // The C# lyric plugin looks for a basename-matched `<audio>.txt` and
+        // does not treat arbitrary README/source text as lyrics. Promote only
+        // those matching files after the complete directory inventory is
+        // known; unmatched `.txt` files remain explicit unknown residue.
+        if observed.kind == ObservedFileKind::Unknown
+            && observed
+                .relative_path
+                .to_ascii_lowercase()
+                .ends_with(".txt")
+            && audio_paths
+                .iter()
+                .any(|audio| same_stem_and_parent(audio, &observed.relative_path))
+        {
+            observed.kind = ObservedFileKind::Lyrics;
+            observed.sidecar_type = Some("lyrics".to_owned());
+            match hash_file(&path) {
+                Ok((hash, bytes)) => {
+                    observed.content_hash = Some(hash);
+                    bytes_hashed = bytes_hashed.saturating_add(bytes);
+                }
+                Err(error) => {
+                    observed.bytes_read_errors = true;
+                    observed.findings.push(Finding {
+                        code: "file.hash_failed".to_owned(),
+                        message: error.to_string(),
+                        severity: FindingSeverity::Error,
+                        file: Some(observed.relative_path.clone()),
+                        evidence: serde_json::json!({}),
+                    });
+                }
+            }
+        }
 
         if let Some(metadata) = &observed.metadata {
             push_unique(&mut release_titles, metadata.album.clone());
@@ -444,6 +682,14 @@ fn collect_files(
         }
     }
     Ok(())
+}
+
+fn same_stem_and_parent(left: &str, right: &str) -> bool {
+    let left_path = Path::new(left);
+    let right_path = Path::new(right);
+    left_path.parent() == right_path.parent()
+        && left_path.file_stem().and_then(|value| value.to_str())
+            == right_path.file_stem().and_then(|value| value.to_str())
 }
 
 fn inspect_file(
@@ -668,6 +914,9 @@ fn classify(relative_path: &str) -> ObservedFileKind {
         .unwrap_or_default();
     if filename == ".melodee-ready" {
         return ObservedFileKind::MelodeeControl;
+    }
+    if filename.eq_ignore_ascii_case(".blackbeard.provenance.json") {
+        return ObservedFileKind::Sidecar;
     }
     let extension = path
         .extension()
@@ -1283,7 +1532,68 @@ mod tests {
         assert_eq!(classify("disc/list.m3u"), ObservedFileKind::Playlist);
         assert_eq!(classify("disc/info.nfo"), ObservedFileKind::Nfo);
         assert_eq!(classify("disc/track.flac"), ObservedFileKind::Audio);
-        assert_eq!(classify("disc/readme.txt"), ObservedFileKind::Unknown);
+        assert_eq!(classify("disc/track.txt"), ObservedFileKind::Unknown);
+        assert_eq!(
+            classify("disc/.blackbeard.provenance.json"),
+            ObservedFileKind::Sidecar
+        );
+    }
+
+    #[test]
+    fn safe_tag_rewrite_changes_container_hash_but_preserves_decoded_audio() {
+        let root = temp_dir("tag-rewrite-integrity");
+        let original = root.join("track.mp3");
+        let rewritten = root.join("track-copy.mp3");
+        let output = std::process::Command::new("ffmpeg")
+            .args([
+                "-y",
+                "-v",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=frequency=440:duration=0.4:sample_rate=8000",
+                "-metadata",
+                "title=Before",
+                "-metadata",
+                "artist=Original Artist",
+                "-metadata",
+                "album=Observed Release",
+                "-metadata",
+                "track=1/1",
+                "-c:a",
+                "libmp3lame",
+            ])
+            .arg(&original)
+            .output()
+            .expect("ffmpeg");
+        assert!(output.status.success(), "ffmpeg failed to create fixture");
+        fs::copy(&original, &rewritten).expect("copy source");
+        let before_hash = hash_file(&rewritten).expect("hash before").0;
+        let before_audio =
+            decoded_audio_fingerprint(&rewritten, Path::new("ffmpeg"), StdDuration::from_secs(30))
+                .expect("decoded audio before");
+        let before_snapshot = read_tag_snapshot(&rewritten).expect("snapshot before");
+        assert_eq!(before_snapshot.title.as_deref(), Some("Before"));
+        let after = apply_tag_rewrite(
+            &rewritten,
+            &TagRewrite {
+                title: Some("After".to_owned()),
+                clear_artist: true,
+                track_number: Some(2),
+                ..TagRewrite::default()
+            },
+        )
+        .expect("rewrite tags");
+        let after_hash = hash_file(&rewritten).expect("hash after").0;
+        let after_audio =
+            decoded_audio_fingerprint(&rewritten, Path::new("ffmpeg"), StdDuration::from_secs(30))
+                .expect("decoded audio after");
+        assert_ne!(before_hash, after_hash, "tag changes must alter file hash");
+        assert_eq!(before_audio, after_audio, "decoded audio must be stable");
+        assert_eq!(after.title.as_deref(), Some("After"));
+        assert_eq!(after.artist, None);
+        assert_eq!(after.track_number, Some(2));
     }
 
     #[test]
@@ -1503,6 +1813,7 @@ mod tests {
         for sidecar in ["disc.cue", "disc.nfo", "disc.m3u", "disc.sfv", "disc.lrc"] {
             fs::write(root.join(sidecar), b"sidecar").expect("sidecar");
         }
+        fs::write(root.join("broken.txt"), b"plain lyrics").expect("lyrics sidecar");
         fs::write(root.join("README.txt"), b"unknown").expect("unknown");
 
         let report = inspect_release(
@@ -1523,7 +1834,10 @@ mod tests {
                 .iter()
                 .any(|finding| finding.code == "media.ffprobe_failed")
         );
-        assert_eq!(5, report.manifest.sidecars.len());
+        assert_eq!(6, report.manifest.sidecars.len());
+        assert!(report.manifest.files.iter().any(
+            |file| file.relative_path == "broken.txt" && file.kind == ObservedFileKind::Lyrics
+        ));
         assert!(
             report
                 .manifest

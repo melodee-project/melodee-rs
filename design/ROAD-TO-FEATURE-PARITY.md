@@ -31,6 +31,36 @@ Current Phase 2 evidence includes:
 - deterministic provider worker fixtures for disabled, configured/cache-hit, rate-limited, and
   candidate-evidence paths.
 
+## 2026-08-25 Feature-Completion Phase 4 addendum — terminal reconciliation and closeout
+
+Phase 4 was an explicit end-to-end assignment. Its entry reconciliation, one-owner workstream
+map, and terminal evidence are recorded in
+[agents/FEATURE-COMPLETION-PHASE-4-PLAN.md](agents/FEATURE-COMPLETION-PHASE-4-PLAN.md), with
+implementation and closeout evidence in
+[evidence/feature-completion/phase-4/PHASE-4-REPORT.md](evidence/feature-completion/phase-4/PHASE-4-REPORT.md).
+The historical audit below remains unchanged; this addendum is the current disposition after
+Phases 1, 2, and 4.
+
+The Phase 2 OpenSubsonic replay's reported 158 unexpected differences were reproduced as a
+disposable-harness problem: the background Tantivy search worker retained a PostgreSQL snapshot
+while the replay attempted to reseed the database. The replay now disables search for its
+disposable database, and the same frozen scenario set completes with zero unexpected differences
+and 321 enumerated intentional differences. This is a harness/environment correction, not a
+public-contract change.
+
+| Current owner | Rows / residuals | Current disposition |
+|---|---|---|
+| A | `PLAYBACK-002` | Live additive `/api/v1/playback/*` MPD TCP and MPV Unix-IPC implementations, bounded lifecycle/failure behavior, and fake-server evidence are complete; MPD daemon smoke is unavailable because `mpd` is not installed, and production MPV/device acceptance remains operator-owned. |
+| B | `RELEASE-002`, `MEDIA-001` transformation and sidecar portions | Release-scoped preview/apply/audit/revert, decoded-audio integrity under ADR-0164, atomic recovery, supported-container corpus, and sidecar behavior are complete; no production-sized media rehearsal was run. |
+| C | `JOBS-001`, `AUDIT-001` non-provider portion | Migrations 0036/0037, durable run claims/history, failure summaries, manual controls, retention audit, stale now-playing cleanup, and worker wiring are complete. Claims are tick-level, not a lock held for the whole worker lifetime; cleanup is audited/manual. |
+| D | `ARTWORK-001` stored-artwork sizing | Stored artwork honors accepted size targets, aspect ratio, no-upscale, source-specific ETags, `If-None-Match`, bounded cache, override precedence, and fallback; actual stored-artwork integration is complete, while the frozen C# fixture has no live stored-artwork capture. |
+| E/F | `ADMINUI-001`, local `AUTH-001` | Current-source re-audit and metadata-transform/job-history workflows are complete without a listener SPA. Local user/group/profile/reset and OIDC-loopback evidence is complete; real external identity-provider validation remains operator-authorized. |
+| G | `SCRIPT-001`, `CLI-001`, `CONFIG-001` residuals | Active Boa pre-discovery gate is wired and sandboxed; inert registrations are surfaced; CLI job history/cleanup is bounded and confirmation-gated; layered config redaction and validation remain in force. Legacy events and operator-owned MPV launch settings are explicit migrated-but-inert differences. |
+| H | local `PLAYBACK-001`, `TRANSCODE-001`, `PODCAST-001`, `DISCOVERY-001/002`, `SOCIAL-001`, `OPS-001`, `RELEASE-001` evidence | Local production-path/golden/integration evidence is complete or terminally dispositioned. Live credentials, physical clients, production library, and cutover legs remain external or Phase 11-owned. |
+
+No listener-facing `web-ui/` application is in this scope. MeloAmp remains the listener product
+under ADR-0161.
+
 ADR-0161 records `WEBUI-001` as `DIFFERENT — APPROVED` with MeloAmp as the replacement listener
 surface. The duplicate server listener SPA is removed from the active backlog; historical audit
 rows below remain unchanged and are interpreted under the superseding ADR.

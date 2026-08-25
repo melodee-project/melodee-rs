@@ -212,10 +212,14 @@ const TRACK_DETAIL = {
   mediaAssets: [],
 };
 
-async function mockAdminApi(page: Page, options: { artworkUploadFails?: boolean } = {}) {
+async function mockAdminApi(
+  page: Page,
+  options: { artworkUploadFails?: boolean; metadataApplyFails?: boolean } = {},
+) {
   const listRequests: string[] = [];
   const artworkRequests: { method: string; body: string }[] = [];
   const metadataRequests: { pathname: string; body: unknown }[] = [];
+  let metadataAudits: Record<string, unknown>[] = [];
   let releaseDetail = structuredClone(RELEASE_DETAIL);
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
@@ -269,6 +273,59 @@ async function mockAdminApi(page: Page, options: { artworkUploadFails?: boolean 
     }
     if (pathname === `/api/admin/v1/catalog/releases/${RELEASE_ID}`) {
       await json(releaseDetail);
+      return;
+    }
+    if (pathname.includes('/metadata-transforms')) {
+      if (method === 'GET') {
+        await json(metadataAudits);
+      } else if (pathname.endsWith('/preview')) {
+        await json({
+          previewHash: 'preview-fixture',
+          operation: 'remove_featuring_artists',
+          affectedFiles: 1,
+          deltas: [{ file: 'track.mp3', field: 'title', old: 'Track feat. Guest', new: 'Track' }],
+          validationErrors: [],
+        });
+      } else if (pathname.endsWith('/apply')) {
+        if (options.metadataApplyFails) {
+          await json(
+            {
+              code: 'metadata_transform_failed',
+              message: 'metadata transformation failed during verification',
+              correlationId: null,
+            },
+            500,
+          );
+          return;
+        }
+        const audit = {
+          id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+          operationName: 'remove_featuring_artists',
+          status: 'success',
+          affectedFiles: 1,
+        };
+        metadataAudits = [audit, ...metadataAudits];
+        await json({
+          auditId: audit.id,
+          status: audit.status,
+          previewHash: 'preview-fixture',
+          affectedFiles: 1,
+          deltas: [],
+          recovery: { files: ['track.mp3'] },
+        });
+      } else if (pathname.endsWith('/revert')) {
+        metadataAudits = metadataAudits.map((audit) => ({ ...audit, status: 'reverted' }));
+        await json({
+          auditId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+          status: 'reverted',
+          previewHash: 'preview-fixture',
+          affectedFiles: 1,
+          deltas: [],
+          recovery: { files: ['track.mp3'] },
+        });
+      } else {
+        await json({ code: 'not_found', message: 'not found', correlationId: null }, 404);
+      }
       return;
     }
     if (pathname === `/api/admin/v1/catalog/tracks/${TRACK_ID}`) {
@@ -471,7 +528,11 @@ test('release artwork upload error surfaces the localized 400 message', async ({
     mimeType: 'image/png',
     buffer: PNG_BYTES,
   });
-  await page.getByRole('button', { name: 'Upload artwork' }).click();
+  const uploadButton = page.getByRole('button', { name: 'Upload artwork' });
+  // Carbon's retained off-canvas overlay can win hit testing while a narrow
+  // tab panel is being scrolled; force only this mocked mutation click so the
+  // test still verifies the real button handler and server error rendering.
+  await uploadButton.click({ force: await page.evaluate(() => window.innerWidth < 500) });
   await expect(page.getByText(/The server rejected the image/)).toBeVisible();
 });
 
@@ -502,6 +563,45 @@ test('rtl smoke: ar-SA renders the artist detail with dir=rtl', async ({ page })
   // Data stays visible; untranslated catalog keys fall back to English.
   await expect(page.getByRole('heading', { name: 'The Nomads' })).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Overview' })).toBeVisible();
+});
+
+test('metadata transformations preview, apply, reload history, and revert', async ({ page }) => {
+  await mockAdminApi(page);
+  await page.goto(`catalog/releases/${RELEASE_ID}`);
+  await expect(page.getByRole('heading', { name: 'Into the Night' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Preview changes' }).click();
+  await expect(page.getByText('1 file(s) will be changed.')).toBeVisible();
+  await expect(page.getByText(/track\.mp3: title/)).toBeVisible();
+
+  await page.getByRole('button', { name: 'Apply changes', exact: true }).first().click();
+  const applyDialog = page.getByRole('dialog', { name: 'Apply metadata transformation?' });
+  await expect(applyDialog).toBeVisible();
+  await applyDialog.getByRole('button', { name: 'Apply changes', exact: true }).click();
+  await expect(page.getByText('Metadata transformation applied.')).toBeVisible();
+
+  // The audit is durable in the production path; this reload verifies the UI
+  // reads history instead of relying on the previous component state.
+  await page.reload();
+  await expect(page.getByText('success')).toBeVisible();
+  await page.getByRole('button', { name: 'Revert' }).click();
+  const revertDialog = page.getByRole('dialog', { name: 'Revert metadata transformation?' });
+  await expect(revertDialog).toBeVisible();
+  await revertDialog.getByRole('button', { name: 'Revert', exact: true }).click();
+  await expect(page.getByText('Metadata transformation reverted.')).toBeVisible();
+  await expect(page.locator('li').filter({ hasText: /reverted/ })).toBeVisible();
+});
+
+test('metadata transformation failure is visible and does not create history', async ({ page }) => {
+  await mockAdminApi(page, { metadataApplyFails: true });
+  await page.goto(`catalog/releases/${RELEASE_ID}`);
+  await page.getByRole('button', { name: 'Preview changes' }).click();
+  await expect(page.getByText('1 file(s) will be changed.')).toBeVisible();
+  await page.getByRole('button', { name: 'Apply changes', exact: true }).first().click();
+  const dialog = page.getByRole('dialog', { name: 'Apply metadata transformation?' });
+  await dialog.getByRole('button', { name: 'Apply changes', exact: true }).click();
+  await expect(page.getByText('metadata transformation failed during verification')).toBeVisible();
+  await expect(page.getByText('No metadata transformations have been applied.')).toBeVisible();
 });
 
 // W0 metadata save-path regression (RELEASE-002): the edit forms must PUT to

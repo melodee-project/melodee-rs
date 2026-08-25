@@ -135,6 +135,7 @@ export function ArtworkManager({
         />
       ) : null}
       <div
+        className="melodee-artwork-controls"
         style={{
           display: 'flex',
           flexWrap: 'wrap',

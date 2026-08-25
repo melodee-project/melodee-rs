@@ -47,3 +47,9 @@ compatibility but silently ignored.
 override, catalog identifiers retain the captured default-artwork behavior. Playlist artwork is
 separate user-state data. Stored artwork responses carry an ETag and
 `Cache-Control: public, max-age=86400`.
+
+For stored artwork, the optional OpenSubsonic `size` parameter accepts `small`, `medium`, `large`,
+and `extralarge` (100, 200, 500, and 1000 pixels respectively). Resizing preserves aspect ratio
+and never upscales; each generated variant has its own ETag. An omitted size preserves the stored
+bytes. Corrupt or unsupported stored images fall back to the normal artwork response rather than
+failing the request, and administrator overrides retain precedence over stored artwork.

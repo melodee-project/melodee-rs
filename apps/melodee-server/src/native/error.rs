@@ -42,6 +42,8 @@ pub enum NativeApiError {
     UserState(#[from] melodee_persistence::NativeUserStateStoreError),
     #[error("provider operation failed")]
     Provider(#[from] crate::providers::ProviderError),
+    #[error("playback backend operation failed")]
+    Playback(#[from] crate::playback::PlaybackError),
 }
 
 impl NativeApiError {
@@ -83,6 +85,23 @@ impl NativeApiError {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "INTERNAL_ERROR",
                 "An unexpected error occurred",
+            ),
+            Self::Playback(crate::playback::PlaybackError::Disabled)
+            | Self::Playback(crate::playback::PlaybackError::Unavailable)
+            | Self::Playback(crate::playback::PlaybackError::Timeout)
+            | Self::Playback(crate::playback::PlaybackError::Cancelled) => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "SERVICE_UNAVAILABLE",
+                "Playback backend unavailable",
+            ),
+            Self::Playback(crate::playback::PlaybackError::Unsupported)
+            | Self::Playback(crate::playback::PlaybackError::Configuration)
+            | Self::Playback(crate::playback::PlaybackError::MalformedResponse)
+            | Self::Playback(crate::playback::PlaybackError::Rejected)
+            | Self::Playback(crate::playback::PlaybackError::Io(_)) => (
+                StatusCode::BAD_REQUEST,
+                "BAD_REQUEST",
+                "Playback backend rejected the request",
             ),
         }
     }

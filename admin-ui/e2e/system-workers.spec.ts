@@ -151,6 +151,10 @@ async function mockAdminApi(
       await json({ items: [POLICY_POOL, DISCOVERY_POOL], total: 2, limit: 2, offset: 0 });
       return;
     }
+    if (pathname === '/api/admin/v1/jobs/history') {
+      await json({ items: [], total: 0, limit: 50, offset: 0 });
+      return;
+    }
     if (pathname === '/api/admin/v1/workers/pools/policy/pause') {
       pauseCalls.push('policy');
       await json({ ...POLICY_POOL, paused: true, pausedBy: 'admin-1' });

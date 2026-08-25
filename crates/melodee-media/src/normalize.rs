@@ -23,6 +23,7 @@ use melodee_domain::{
     NormalizedOutput, ObservedArtwork, ObservedFile, ObservedFileKind, ObservedMetadata,
     ObservedTrack, ParsedSidecar, ReleaseManifest,
 };
+use quick_xml::{Reader, events::Event};
 use serde::Deserialize;
 use thiserror::Error;
 use time::OffsetDateTime;
@@ -226,6 +227,12 @@ pub fn normalize_release(
             }
         }
     }
+
+    // NFO and Blackbeard are active legacy metadata sources. They are kept as
+    // parsed sidecars for auditability, while filling only missing release
+    // observations so embedded/audio tags remain the authoritative value when
+    // both sources provide the same field.
+    apply_release_sidecar_overrides(manifest, &parsed_sidecars);
 
     // A CUE governs at most one source; each source has at most one
     // governing CUE. Plans are keyed by the source's relative path.
@@ -470,6 +477,89 @@ pub fn normalize_release(
         findings: all_findings,
         provenance,
     })
+}
+
+fn apply_release_sidecar_overrides(manifest: &mut ReleaseManifest, sidecars: &[ParsedSidecar]) {
+    for sidecar in sidecars {
+        let (title, artist, date) = match sidecar.sidecar_type.as_str() {
+            "nfo" => {
+                let fields = sidecar.parsed.get("fields");
+                (
+                    fields
+                        .and_then(|value| value.get("title"))
+                        .and_then(value_string),
+                    fields
+                        .and_then(|value| value.get("album_artist"))
+                        .and_then(value_string)
+                        .or_else(|| {
+                            fields
+                                .and_then(|value| value.get("artist"))
+                                .and_then(value_string)
+                        }),
+                    fields
+                        .and_then(|value| value.get("date"))
+                        .and_then(value_string)
+                        .or_else(|| {
+                            fields
+                                .and_then(|value| value.get("year"))
+                                .and_then(value_string)
+                        }),
+                )
+            }
+            "blackbeard" => {
+                let release = sidecar
+                    .parsed
+                    .get("document")
+                    .and_then(|value| value.get("release"));
+                (
+                    release
+                        .and_then(|value| value.get("album_title"))
+                        .and_then(value_string),
+                    release
+                        .and_then(|value| value.get("album_artist"))
+                        .and_then(value_string),
+                    release
+                        .and_then(|value| value.get("release_year"))
+                        .and_then(|value| {
+                            value
+                                .as_i64()
+                                .map(|year| year.to_string())
+                                .or_else(|| value_string(value))
+                        }),
+                )
+            }
+            _ => (None, None, None),
+        };
+        if manifest
+            .release_observation
+            .title
+            .as_deref()
+            .is_none_or(|value| value.trim().is_empty())
+        {
+            manifest.release_observation.title = title;
+        }
+        if manifest.release_observation.artists.is_empty()
+            && let Some(artist) = artist
+        {
+            manifest.release_observation.artists.push(artist);
+        }
+        if manifest
+            .release_observation
+            .date
+            .as_deref()
+            .is_none_or(|value| value.trim().is_empty())
+        {
+            manifest.release_observation.date = date;
+        }
+    }
+}
+
+fn value_string(value: &serde_json::Value) -> Option<String> {
+    value
+        .as_str()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
 }
 
 /// Per-file processing result bundling the normalized output and its fingerprint.
@@ -1950,7 +2040,15 @@ fn parse_sidecar_content(
         ObservedFileKind::Playlist => "m3u",
         ObservedFileKind::Nfo => "nfo",
         ObservedFileKind::Checksum => "sfv",
+        ObservedFileKind::Lyrics if file.relative_path.to_ascii_lowercase().ends_with(".txt") => {
+            "txt"
+        }
         ObservedFileKind::Lyrics => "lrc",
+        ObservedFileKind::Sidecar
+            if file.relative_path.ends_with(".blackbeard.provenance.json") =>
+        {
+            "blackbeard"
+        }
         _ => "sidecar",
     };
 
@@ -2002,6 +2100,11 @@ fn parse_sidecar_content(
         "sfv" => parse_sfv(&content),
         "nfo" => parse_nfo(&content),
         "lrc" => parse_lrc(&content),
+        "txt" => parse_plain_lyrics(&content),
+        "blackbeard" => parse_blackbeard(&content),
+        "sidecar" if file.relative_path.to_ascii_lowercase().ends_with(".txt") => {
+            parse_plain_lyrics(&content)
+        }
         _ => (serde_json::json!({ "raw": content }), Vec::new()),
     };
     findings.extend(parser_findings.into_iter().map(|mut finding| {
@@ -2371,26 +2474,228 @@ fn parse_sfv(content: &str) -> (serde_json::Value, Vec<Finding>) {
 fn parse_nfo(content: &str) -> (serde_json::Value, Vec<Finding>) {
     let text = content.trim();
     if text.starts_with("<?xml") || text.starts_with("<") {
-        let plausibly_well_formed = text.ends_with('>')
-            && (text.contains("</") || text.trim_end().ends_with("/>") || text.contains("?>"));
-        let findings = if plausibly_well_formed {
-            Vec::new()
-        } else {
-            vec![parser_finding(
-                "sidecar.nfo.malformed_xml",
-                "NFO appears to contain malformed XML".to_owned(),
-            )]
-        };
-        (
-            serde_json::json!({ "type": "xml", "raw": text, "well_formed": plausibly_well_formed }),
-            findings,
-        )
+        parse_nfo_xml(text)
     } else {
-        (
-            serde_json::json!({ "type": "text", "content": text }),
-            Vec::new(),
-        )
+        parse_nfo_text(text)
     }
+}
+
+fn parse_nfo_text(content: &str) -> (serde_json::Value, Vec<Finding>) {
+    let mut fields = serde_json::Map::new();
+    let mut tracks = Vec::new();
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if let Some((key, value)) = trimmed.split_once(':') {
+            let key = key
+                .chars()
+                .filter(|character| character.is_ascii_alphanumeric())
+                .collect::<String>()
+                .to_ascii_lowercase();
+            let value = value.trim();
+            if !value.is_empty() && is_nfo_field(&key) {
+                fields.insert(nfo_field_name(&key).to_owned(), serde_json::json!(value));
+            }
+        }
+        if let Some(track) = parse_nfo_track_line(trimmed) {
+            tracks.push(track);
+        }
+    }
+    (
+        serde_json::json!({
+            "type": "text",
+            "content": content.trim(),
+            "fields": fields,
+            "tracks": tracks,
+        }),
+        Vec::new(),
+    )
+}
+
+fn parse_nfo_xml(content: &str) -> (serde_json::Value, Vec<Finding>) {
+    let mut reader = Reader::from_str(content);
+    reader.config_mut().trim_text(true);
+    let mut current = Vec::new();
+    let mut fields = serde_json::Map::new();
+    let mut findings = Vec::new();
+    loop {
+        match reader.read_event() {
+            Ok(Event::Start(element)) => {
+                current.push(String::from_utf8_lossy(element.name().as_ref()).to_ascii_lowercase());
+            }
+            Ok(Event::Empty(_)) => {}
+            Ok(Event::Text(value)) => {
+                let Some(name) = current.last() else { continue };
+                if is_nfo_field(name) {
+                    match value.decode() {
+                        Ok(value) if !value.trim().is_empty() => {
+                            fields.insert(
+                                nfo_field_name(name).to_owned(),
+                                serde_json::json!(value.trim()),
+                            );
+                        }
+                        Ok(_) => {}
+                        Err(error) => findings.push(parser_finding(
+                            "sidecar.nfo.invalid_text",
+                            format!("NFO XML text could not be decoded: {error}"),
+                        )),
+                    }
+                }
+            }
+            Ok(Event::End(_)) => {
+                let _ = current.pop();
+            }
+            Ok(Event::Eof) => break,
+            Err(error) => {
+                findings.push(parser_finding(
+                    "sidecar.nfo.malformed_xml",
+                    format!("NFO XML could not be parsed: {error}"),
+                ));
+                break;
+            }
+            Ok(_) => {}
+        }
+    }
+    (
+        serde_json::json!({
+            "type": "xml",
+            "raw": content.trim(),
+            "well_formed": findings.iter().all(|finding| finding.code != "sidecar.nfo.malformed_xml"),
+            "fields": fields,
+        }),
+        findings,
+    )
+}
+
+fn is_nfo_field(key: &str) -> bool {
+    matches!(
+        key,
+        "title"
+            | "album"
+            | "albumtitle"
+            | "artist"
+            | "albumartist"
+            | "publisher"
+            | "label"
+            | "year"
+            | "date"
+            | "releasedate"
+            | "retaildate"
+            | "ripdate"
+            | "songtotal"
+            | "songs"
+            | "tracktotal"
+            | "genre"
+            | "encoder"
+            | "length"
+            | "runtime"
+    )
+}
+
+fn nfo_field_name(key: &str) -> &str {
+    match key {
+        "albumtitle" => "title",
+        "albumartist" => "album_artist",
+        "label" => "publisher",
+        "releasedate" | "retaildate" | "ripdate" => "date",
+        "songs" => "song_total",
+        "tracktotal" => "track_total",
+        "runtime" => "length",
+        value => value,
+    }
+}
+
+fn parse_nfo_track_line(line: &str) -> Option<serde_json::Value> {
+    let mut words = line.split_whitespace();
+    let number = words
+        .next()?
+        .trim_end_matches(['.', '-', ')'])
+        .parse::<u32>()
+        .ok()?;
+    let words = words.collect::<Vec<_>>();
+    let duration_index = words.iter().position(|word| {
+        let mut pieces = word.split(':');
+        pieces
+            .next()
+            .is_some_and(|part| part.chars().all(|c| c.is_ascii_digit()))
+            && pieces
+                .next()
+                .is_some_and(|part| part.len() == 2 && part.chars().all(|c| c.is_ascii_digit()))
+            && pieces.next().is_none()
+    })?;
+    let duration = words[duration_index];
+    let title = words[..duration_index].join(" ");
+    if title.is_empty() {
+        return None;
+    }
+    Some(serde_json::json!({ "number": number, "title": title, "duration": duration }))
+}
+
+fn parse_plain_lyrics(content: &str) -> (serde_json::Value, Vec<Finding>) {
+    let normalized = content.replace("\r\n", "\n").replace('\r', "\n");
+    if let Ok(document) = serde_json::from_str::<serde_json::Value>(content.trim())
+        && document.is_object()
+        && let Some(value) = document
+            .get("Value")
+            .or_else(|| document.get("value"))
+            .and_then(serde_json::Value::as_str)
+    {
+        let mut parsed = serde_json::Map::new();
+        parsed.insert("format".to_owned(), serde_json::json!("json"));
+        parsed.insert(
+            "value".to_owned(),
+            serde_json::json!(value.replace("\r\n", "\n").replace('\r', "\n").trim()),
+        );
+        for key in ["Artist", "artist", "Title", "title"] {
+            if let Some(field) = document.get(key).and_then(serde_json::Value::as_str)
+                && !field.trim().is_empty()
+            {
+                let normalized_key = key.to_ascii_lowercase();
+                parsed.insert(normalized_key, serde_json::json!(field.trim()));
+            }
+        }
+        return (serde_json::Value::Object(parsed), Vec::new());
+    }
+    (
+        serde_json::json!({
+            "format": "plain",
+            "value": normalized.trim(),
+        }),
+        Vec::new(),
+    )
+}
+
+fn parse_blackbeard(content: &str) -> (serde_json::Value, Vec<Finding>) {
+    let value = match serde_json::from_str::<serde_json::Value>(content) {
+        Ok(value) => value,
+        Err(error) => {
+            return (
+                serde_json::json!({ "type": "blackbeard", "raw": content.trim() }),
+                vec![parser_finding(
+                    "sidecar.blackbeard.invalid_json",
+                    format!("Blackbeard provenance is not valid JSON: {error}"),
+                )],
+            );
+        }
+    };
+    let mut findings = Vec::new();
+    let schema_version = value
+        .get("schema_version")
+        .or_else(|| value.get("schemaVersion"))
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or_default();
+    if schema_version != 1 {
+        findings.push(parser_finding(
+            "sidecar.blackbeard.unsupported_schema",
+            "Blackbeard provenance schemaVersion is not the supported version 1".to_owned(),
+        ));
+    }
+    (
+        serde_json::json!({ "type": "blackbeard", "schema_version": schema_version, "document": value }),
+        findings,
+    )
 }
 
 fn parse_lrc(content: &str) -> (serde_json::Value, Vec<Finding>) {
@@ -2695,6 +3000,69 @@ mod tests {
         let (xml_result, xml_findings) = parse_nfo("<?xml version=\"1.0\"?><root/>");
         assert!(xml_findings.is_empty());
         assert_eq!(xml_result["type"], "xml");
+    }
+
+    #[test]
+    fn parse_nfo_extracts_legacy_text_fields_and_tracks() {
+        let (result, findings) = parse_nfo(
+            "Title: Example Release\nArtist: Example Artist\nReleaseDate: 2024-01-02\n01. First Song 03:12\n",
+        );
+        assert!(findings.is_empty());
+        assert_eq!(result["fields"]["title"], "Example Release");
+        assert_eq!(result["fields"]["artist"], "Example Artist");
+        assert_eq!(result["fields"]["date"], "2024-01-02");
+        assert_eq!(result["tracks"][0]["number"], 1);
+        assert_eq!(result["tracks"][0]["title"], "First Song");
+    }
+
+    #[test]
+    fn parse_xml_nfo_extracts_supported_fields_and_reports_malformed_input() {
+        let (result, findings) =
+            parse_nfo("<album><title>Example</title><artist>Ada</artist><year>2024</year></album>");
+        assert!(findings.is_empty());
+        assert_eq!(result["fields"]["title"], "Example");
+        assert_eq!(result["fields"]["artist"], "Ada");
+        assert_eq!(result["fields"]["year"], "2024");
+        let (_, malformed) = parse_nfo("<album><title>broken</album>");
+        assert!(
+            malformed
+                .iter()
+                .any(|finding| finding.code == "sidecar.nfo.malformed_xml")
+        );
+    }
+
+    #[test]
+    fn parse_plain_txt_lyrics_normalizes_line_endings() {
+        let (result, findings) = parse_plain_lyrics("line one\r\nline two\r");
+        assert!(findings.is_empty());
+        assert_eq!(result["format"], "plain");
+        assert_eq!(result["value"], "line one\nline two");
+    }
+
+    #[test]
+    fn parse_txt_lyrics_accepts_the_legacy_json_document() {
+        let (result, findings) =
+            parse_plain_lyrics(r#"{"Artist":"Ada","Title":"Song","Value":"one\r\ntwo"}"#);
+        assert!(findings.is_empty());
+        assert_eq!(result["format"], "json");
+        assert_eq!(result["artist"], "Ada");
+        assert_eq!(result["title"], "Song");
+        assert_eq!(result["value"], "one\ntwo");
+    }
+
+    #[test]
+    fn parse_blackbeard_requires_supported_schema() {
+        let (result, findings) =
+            parse_blackbeard(r#"{"schema_version":1,"release":{"album_title":"Example"}}"#);
+        assert!(findings.is_empty());
+        assert_eq!(result["type"], "blackbeard");
+        assert_eq!(result["schema_version"], 1);
+        let (_, unsupported) = parse_blackbeard(r#"{"schemaVersion":2}"#);
+        assert!(
+            unsupported
+                .iter()
+                .any(|finding| finding.code == "sidecar.blackbeard.unsupported_schema")
+        );
     }
 
     #[test]

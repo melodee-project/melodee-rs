@@ -41,6 +41,7 @@ import { catalogStatusKind, toCatalogAuditEvent, trackOrdinalLabel, useCatalogDe
 import { ArtworkManager } from './ArtworkManager';
 import { CatalogArtwork } from './CatalogArtwork';
 import { EditPanel } from './EditPanel';
+import { MetadataTransformPanel } from './MetadataTransformPanel';
 
 /**
  * Release Detail workspace (PRD-UI-006): header artwork/title/status
@@ -142,7 +143,7 @@ export function ReleaseDetailScreen() {
       {detail ? (
         <>
           <p>
-            <Link as="button" onClick={() => setEditing((prev) => !prev)}>
+            <Link className="melodee-detail-edit-link" as="button" onClick={() => setEditing((prev) => !prev)}>
               {editing ? t('catalog.edit.cancel') : t('catalog.edit')}
             </Link>
           </p>
@@ -171,6 +172,7 @@ export function ReleaseDetailScreen() {
               refresh={retry}
             />
           ) : null}
+          <MetadataTransformPanel releaseId={id} refresh={retry} />
           <div className="melodee-review-card">
             <div className="melodee-review-header">
               <CatalogArtwork imageId={detail.imageId} name={detail.title} size={96} decorative />

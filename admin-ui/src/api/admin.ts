@@ -15,8 +15,12 @@ import type {
   IdentityDecisionEntry,
   IdentityResolution,
   Lease,
+  JobRunHistory,
   ListParams,
   MergeArtistsResult,
+  MetadataTransformAudit,
+  MetadataTransformPreview,
+  MetadataTransformResult,
   NeverMatchResult,
   NewArtistInput,
   NotificationDelivery,
@@ -72,8 +76,12 @@ export type {
   IdentityDecisionEntry,
   IdentityResolution,
   Lease,
+  JobRunHistory,
   ListParams,
   MergeArtistsResult,
+  MetadataTransformAudit,
+  MetadataTransformPreview,
+  MetadataTransformResult,
   NeverMatchResult,
   NewArtistInput,
   NotificationDelivery,
@@ -170,6 +178,28 @@ export function resumeWorkerPool(name: string): Promise<WorkerPool> {
 /** Recent failed work items; bounded, paginated, whitelisted sort. */
 export function listWorkerFailures(params: ListParams = {}): Promise<Page<WorkItem>> {
   return apiFetch<Page<WorkItem>>(`${ADMIN}/workers/failures${buildQuery({ ...params })}`);
+}
+
+export function listJobHistory(params: { jobName?: string; limit?: number; offset?: number } = {}): Promise<Page<JobRunHistory>> {
+  return apiFetch<Page<JobRunHistory>>(`${ADMIN}/jobs/history${buildQuery(params)}`);
+}
+
+export function runJobNow(name: string): Promise<JobRunHistory> {
+  return apiFetch<JobRunHistory>(`${ADMIN}/jobs/${encodeURIComponent(name)}/run-now`, {
+    method: 'POST',
+  });
+}
+
+export function pauseJob(name: string): Promise<WorkerPool> {
+  return apiFetch<WorkerPool>(`${ADMIN}/jobs/${encodeURIComponent(name)}/pause`, {
+    method: 'POST',
+  });
+}
+
+export function resumeJob(name: string): Promise<WorkerPool> {
+  return apiFetch<WorkerPool>(`${ADMIN}/jobs/${encodeURIComponent(name)}/resume`, {
+    method: 'POST',
+  });
 }
 
 export function getSearchStatus(): Promise<SearchStatus> {
@@ -853,5 +883,44 @@ export function updateTrackMetadata(trackId: string, patch: TrackMetadataPatch):
   return apiFetch<void>(
     `${ADMIN}/catalog/tracks/${encodeURIComponent(trackId)}/metadata`,
     { method: 'PUT', body: patch },
+  );
+}
+
+export function previewReleaseMetadataTransform(
+  releaseId: string,
+  operation: string,
+  params: Record<string, unknown> = {},
+): Promise<MetadataTransformPreview> {
+  return apiFetch<MetadataTransformPreview>(
+    `${ADMIN}/catalog/releases/${encodeURIComponent(releaseId)}/metadata-transforms/preview`,
+    { method: 'POST', body: { operation, params } },
+  );
+}
+
+export function applyReleaseMetadataTransform(
+  releaseId: string,
+  operation: string,
+  previewHash: string,
+  params: Record<string, unknown> = {},
+): Promise<MetadataTransformResult> {
+  return apiFetch<MetadataTransformResult>(
+    `${ADMIN}/catalog/releases/${encodeURIComponent(releaseId)}/metadata-transforms/apply`,
+    { method: 'POST', body: { operation, params, previewHash } },
+  );
+}
+
+export function listReleaseMetadataAudits(releaseId: string): Promise<MetadataTransformAudit[]> {
+  return apiFetch<MetadataTransformAudit[]>(
+    `${ADMIN}/catalog/releases/${encodeURIComponent(releaseId)}/metadata-transforms`,
+  );
+}
+
+export function revertReleaseMetadataTransform(
+  releaseId: string,
+  auditId: string,
+): Promise<MetadataTransformResult> {
+  return apiFetch<MetadataTransformResult>(
+    `${ADMIN}/catalog/releases/${encodeURIComponent(releaseId)}/metadata-transforms/${encodeURIComponent(auditId)}/revert`,
+    { method: 'POST' },
   );
 }

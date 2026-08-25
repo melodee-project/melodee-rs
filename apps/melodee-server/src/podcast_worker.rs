@@ -1466,13 +1466,36 @@ pub fn start_podcast_loop(pool: PgPool, config: PodcastConfig) -> Option<Podcast
         loop {
             tokio::select! {
                 _ = interval.tick() => {
-                    tokio::select! {
-                        result = run_podcast_once(&pool, &config) => {
-                            if let Err(error) = result {
-                                error!(%error, "podcast worker pass failed");
-                            }
+                    let started = time::OffsetDateTime::now_utc();
+                    let tick = melodee_persistence::scheduled_tick(started, config.poll_interval);
+                    let history = melodee_persistence::JobRunHistoryStore;
+                    let run = match history.start_tick(&pool, "podcast", tick).await {
+                        Ok(run) => run,
+                        Err(error) => {
+                            error!(%error, "podcast tick history could not be recorded");
+                            None
                         }
-                        _ = task_stop.changed() => break,
+                    };
+                    let Some(run) = run else {
+                        continue;
+                    };
+                    let outcome = tokio::select! {
+                        result = run_podcast_once(&pool, &config) => Some(result),
+                        _ = task_stop.changed() => None,
+                    };
+                    let Some(outcome) = outcome else {
+                        let _ = history.finish(&pool, run.id, time::OffsetDateTime::now_utc(), false, Some("scheduler stopped during run")).await;
+                        break;
+                    };
+                    match outcome {
+                        Ok(_) => {
+                            let _ = history.finish(&pool, run.id, time::OffsetDateTime::now_utc(), true, None).await;
+                        }
+                        Err(error) => {
+                            let message = error.to_string();
+                            let _ = history.finish(&pool, run.id, time::OffsetDateTime::now_utc(), false, Some(&message)).await;
+                            error!(%error, "podcast worker pass failed");
+                        }
                     }
                 }
                 _ = task_stop.changed() => break,

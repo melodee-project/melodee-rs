@@ -5,6 +5,7 @@
 #[path = "common/mod.rs"]
 mod common;
 
+use melodee_persistence::NativeUserStateStore;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -88,7 +89,7 @@ async fn podcast_schema_is_tenant_scoped_bounded_and_cascades_playback_state() {
     sqlx::query(
         "INSERT INTO native_podcast_play_history(
             user_id,episode_id,played_at,client,is_now_playing,last_heartbeat_at
-         ) VALUES($1,$2,now(),'fixture',true,now())",
+         ) VALUES($1,$2,now() - interval '30 minutes','fixture',true,now() - interval '30 minutes')",
     )
     .bind(owner)
     .bind(episode)
@@ -107,6 +108,32 @@ async fn podcast_schema_is_tenant_scoped_bounded_and_cascades_playback_state() {
         .await
         .is_err(),
         "one user cannot own two active podcast heartbeat rows"
+    );
+    sqlx::query(
+        "INSERT INTO native_podcast_play_history(
+            user_id,episode_id,played_at,client,is_now_playing,last_heartbeat_at
+         ) VALUES($1,$2,now(),'fresh fixture',true,now())",
+    )
+    .bind(other)
+    .bind(episode)
+    .execute(&db.pool)
+    .await
+    .expect("fresh active playback");
+    let removed = NativeUserStateStore::cleanup_stale_now_playing(
+        &db.pool,
+        OffsetDateTime::now_utc() - time::Duration::minutes(15),
+    )
+    .await
+    .expect("cleanup stale playback");
+    assert_eq!(removed, 1);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM native_podcast_play_history WHERE is_now_playing",
+        )
+        .fetch_one(&db.pool)
+        .await
+        .expect("remaining active playback count"),
+        1
     );
     assert!(
         sqlx::query(

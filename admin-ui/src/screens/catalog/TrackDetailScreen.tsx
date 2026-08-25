@@ -70,7 +70,7 @@ export function TrackDetailScreen() {
       {detail ? (
         <>
           <p>
-            <Link as="button" onClick={() => setEditing((prev) => !prev)}>
+            <Link className="melodee-detail-edit-link" as="button" onClick={() => setEditing((prev) => !prev)}>
               {editing ? t('catalog.edit.cancel') : t('catalog.edit')}
             </Link>
           </p>

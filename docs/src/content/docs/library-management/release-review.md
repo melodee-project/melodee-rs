@@ -64,5 +64,20 @@ action.
 
 **Reprocess** re-queues the Release for another processing pass, with an optional reason.
 
+## Safe metadata transformations
+
+Administrators can open a published Release's metadata transformation panel from its catalog
+detail screen. The panel previews field-level changes and affected files before an apply action;
+apply requires the returned preview hash and an explicit confirmation. Supported operations cover
+featuring cleanup, artist replacement/clearing, year updates, track renumbering, and bounded text
+replacement. Every apply records the acting administrator, deltas, hashes, decoded-audio
+fingerprints, and recovery evidence. The rewrite changes tags only: paths, extensions, audio
+payloads, and Melodee-owned identifiers remain unchanged.
+
+The history view shows successful and failed attempts. A successful attempt can be reverted while
+its same-directory recovery copies remain available. A failed write or integrity check restores
+the originals and leaves an operator-visible failed audit. This workflow never deletes source
+media and is separate from the policy disposition controls below.
+
 The underlying routes are documented under
 [Admin API — Release review](../api/admin-api/#release-review).

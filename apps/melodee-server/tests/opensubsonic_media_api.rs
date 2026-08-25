@@ -35,7 +35,10 @@ mod common;
 #[path = "../../../crates/melodee-persistence/tests/phase5_common/mod.rs"]
 mod phase5_common;
 
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::{
+    io::Cursor,
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+};
 
 use axum::{
     body::Body,
@@ -44,6 +47,7 @@ use axum::{
 };
 use catalog_common::CatalogFixturePresentation;
 use http_body_util::BodyExt;
+use image::{DynamicImage, GenericImageView, ImageFormat, Rgba, RgbaImage};
 use md5::{Digest, Md5};
 use melodee_auth::PasswordHashAlgorithm;
 use melodee_persistence::{
@@ -851,6 +855,62 @@ async fn get_cover_art_if_none_match_returns_304() {
     assert_eq!(status, StatusCode::NOT_MODIFIED);
     assert_eq!(header_str(&headers, header::ETAG), etag);
     assert!(body.is_empty());
+}
+
+#[tokio::test]
+async fn get_cover_art_stored_artwork_honors_size_ratio_etag_and_no_upscale() {
+    let db = common::TestDb::create("os_media_coverart_stored_size").await;
+    let state = state(&db).await;
+    let source_image = DynamicImage::ImageRgba8(RgbaImage::from_fn(400, 200, |x, y| {
+        Rgba([(x % 255) as u8, (y % 255) as u8, 80, 255])
+    }));
+    let mut source = Cursor::new(Vec::new());
+    source_image
+        .write_to(&mut source, ImageFormat::Png)
+        .expect("encode source artwork");
+    let source = source.into_inner();
+    let wire_id = seed_playlist_with_artwork(&db, &state, &source).await;
+    let public_id = wire_id
+        .strip_prefix("playlist_")
+        .and_then(|raw| Uuid::parse_str(raw).ok())
+        .expect("playlist public id");
+    sqlx::query("UPDATE native_playlists SET image_mime_type='image/png' WHERE public_api_id=$1")
+        .bind(public_id)
+        .execute(&db.pool)
+        .await
+        .expect("set source mime");
+
+    let sized_path =
+        format!("/rest/getCoverArt.view?f=json&v=1.16.1&c=phase0&id={wire_id}&size=small");
+    let (status, headers, sized) = respond(state.clone(), get(&authed(&sized_path))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_header(&headers, header::CONTENT_TYPE, "image/png");
+    let decoded = image::load_from_memory(&sized).expect("decode resized artwork");
+    assert_eq!(decoded.dimensions(), (100, 50));
+    let sized_etag = format!("\"{}\"", sha256_hex(&sized));
+    assert_header(&headers, header::ETAG, &sized_etag);
+
+    let conditional = build_request(
+        Method::GET,
+        &authed(&sized_path),
+        &[("if-none-match", &sized_etag)],
+    );
+    let (status, response_headers, response_body) = respond(state.clone(), conditional).await;
+    assert_eq!(status, StatusCode::NOT_MODIFIED);
+    assert_header(&response_headers, header::ETAG, &sized_etag);
+    assert!(response_body.is_empty());
+
+    let no_upscale_path =
+        format!("/rest/getCoverArt.view?f=json&v=1.16.1&c=phase0&id={wire_id}&size=extralarge");
+    let (status, headers, no_upscale) = respond(state, get(&authed(&no_upscale_path))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_header(&headers, header::CONTENT_TYPE, "image/png");
+    assert_eq!(
+        image::load_from_memory(&no_upscale)
+            .expect("decode no-upscale artwork")
+            .dimensions(),
+        (400, 200)
+    );
 }
 
 #[tokio::test]

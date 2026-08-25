@@ -134,6 +134,7 @@ impl ImageProcessor {
         input: Vec<u8>,
         requested_size: u32,
         format: ImageFormat,
+        no_upscale: bool,
         admission: ImageAdmission,
     ) -> Result<(Vec<u8>, ImageAdmission), ImageProcessingError> {
         if input.is_empty()
@@ -142,7 +143,7 @@ impl ImageProcessor {
             return Err(ImageProcessingError);
         }
         let (result, admission) = tokio::task::spawn_blocking(move || {
-            let result = process_image(&input, requested_size, format);
+            let result = process_image(&input, requested_size, format, no_upscale);
             (result, admission)
         })
         .await
@@ -210,7 +211,27 @@ pub(crate) async fn resize_compatibility_image(
         .try_admit()
         .map_err(|_| ImageUploadValidationError::Busy)?;
     let (bytes, _permit) = processor
-        .process(input, requested_size, format, permit)
+        .process(input, requested_size, format, false, permit)
+        .await
+        .map_err(|_| ImageUploadValidationError::Invalid)?;
+    Ok(bytes)
+}
+
+/// OpenSubsonic stored-artwork sizing is a maximum dimension and explicitly
+/// forbids upscaling. Native-v1 and Jellyfin continue to use their captured
+/// exact-size behavior through `resize_compatibility_image`.
+pub(crate) async fn resize_compatibility_image_no_upscale(
+    input: Vec<u8>,
+    requested_size: u32,
+    format: ImageFormat,
+) -> Result<Vec<u8>, ImageUploadValidationError> {
+    let processor =
+        IMAGE_PROCESSOR.get_or_init(|| ImageProcessor::new(IMAGE_PROCESSING_CONCURRENCY));
+    let permit = processor
+        .try_admit()
+        .map_err(|_| ImageUploadValidationError::Busy)?;
+    let (bytes, _permit) = processor
+        .process(input, requested_size, format, true, permit)
         .await
         .map_err(|_| ImageUploadValidationError::Invalid)?;
     Ok(bytes)
@@ -220,12 +241,18 @@ fn process_image(
     input: &[u8],
     requested_size: u32,
     format: ImageFormat,
+    no_upscale: bool,
 ) -> Result<Vec<u8>, ImageProcessingError> {
     if !(1..=MAX_IMAGE_DIMENSION).contains(&requested_size) {
         return Err(ImageProcessingError);
     }
     let image = decode_image(input)?;
-    let resized = image.resize(requested_size, requested_size, FilterType::Lanczos3);
+    let target = if no_upscale {
+        image.width().max(image.height()).min(requested_size)
+    } else {
+        requested_size
+    };
+    let resized = image.resize(target, target, FilterType::Lanczos3);
     let mut output = Cursor::new(Vec::new());
     resized
         .write_to(&mut output, format)
@@ -611,7 +638,7 @@ async fn processed_response(
     let processor =
         IMAGE_PROCESSOR.get_or_init(|| ImageProcessor::new(IMAGE_PROCESSING_CONCURRENCY));
     processor
-        .process(bytes, size, kind.output_format(), admission)
+        .process(bytes, size, kind.output_format(), false, admission)
         .await
         .map(|(bytes, admission)| {
             byte_response(bytes, kind.content_type(), headers, Some(admission))
@@ -720,8 +747,10 @@ mod tests {
 
     #[test]
     fn image_processing_is_deterministic_and_honors_requested_dimensions() {
-        let first = process_image(DEFAULT_USER, 80, ImageFormat::Jpeg).expect("process avatar");
-        let second = process_image(DEFAULT_USER, 80, ImageFormat::Jpeg).expect("process avatar");
+        let first =
+            process_image(DEFAULT_USER, 80, ImageFormat::Jpeg, false).expect("process avatar");
+        let second =
+            process_image(DEFAULT_USER, 80, ImageFormat::Jpeg, false).expect("process avatar");
         assert_eq!(first, second);
         let dimensions = ImageReader::new(Cursor::new(first))
             .with_guessed_format()
@@ -733,14 +762,14 @@ mod tests {
 
     #[test]
     fn unsupported_and_dimension_bomb_inputs_fail_closed() {
-        assert!(process_image(b"not an image", 80, ImageFormat::Jpeg).is_err());
+        assert!(process_image(b"not an image", 80, ImageFormat::Jpeg, false).is_err());
         let image =
             image::DynamicImage::ImageRgba8(image::RgbaImage::new(MAX_IMAGE_DIMENSION + 1, 1));
         let mut encoded = Cursor::new(Vec::new());
         image
             .write_to(&mut encoded, ImageFormat::Png)
             .expect("encode bounded bomb header");
-        assert!(process_image(&encoded.into_inner(), 80, ImageFormat::Jpeg).is_err());
+        assert!(process_image(&encoded.into_inner(), 80, ImageFormat::Jpeg, false).is_err());
     }
 
     #[tokio::test]
@@ -750,7 +779,7 @@ mod tests {
         let permit = processor.try_admit().expect("image admission");
         assert!(
             processor
-                .process(too_large, 80, ImageFormat::Jpeg, permit)
+                .process(too_large, 80, ImageFormat::Jpeg, false, permit)
                 .await
                 .is_err()
         );

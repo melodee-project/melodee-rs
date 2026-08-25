@@ -648,6 +648,45 @@ search projection refreshes. Concurrency is last-write-wins: there is no client-
 revision guard, so two concurrent edits both succeed and the later one's values win.
 
 
+### Scheduled jobs
+
+```http
+GET /api/admin/v1/jobs/history?jobName=discovery&limit=50&offset=0
+GET /api/admin/v1/jobs/failures/summary?hours=24
+POST /api/admin/v1/jobs/{name}/run-now
+POST /api/admin/v1/jobs/{name}/pause
+POST /api/admin/v1/jobs/{name}/resume
+```
+
+Job history is durable PostgreSQL data. A row records the job name, scheduled tick (when
+applicable), start/completion times, duration, success, manual-trigger flag, triggering
+principal, and a bounded failure reason. `status` is `running`, `completed`, `failed`, or
+`stale`; stale means an unfinished row is older than 15 minutes and is not treated as successful.
+The list is server-paged and capped at 500 rows.
+
+The manual run allow-list is `discovery`, `podcast`, `enrichment`, `now-playing-cleanup`, and
+`job-history-cleanup`. Unknown names return `400 unsupported_job`. The pause/resume endpoints
+operate on the durable worker-pool state for the named job and return the worker-pool status.
+Cleanup is bounded and audited; it never removes source media or catalog records.
+
+### Release metadata transformations
+
+The metadata rewrite endpoints are administrator-only and scoped to one Release:
+
+```http
+POST /api/admin/v1/catalog/releases/{id}/metadata-transforms/preview
+POST /api/admin/v1/catalog/releases/{id}/metadata-transforms/apply
+GET /api/admin/v1/catalog/releases/{id}/metadata-transforms?limit=50
+POST /api/admin/v1/catalog/releases/{id}/metadata-transforms/{auditId}/revert
+```
+
+Preview returns a stable preview hash, affected-file count, field-level deltas, and validation
+errors. Apply requires that preview hash. Supported operations include featuring/title cleanup,
+artist replacement or clearing, year updates, track renumbering, and text replacement. Writes
+use same-directory temporary files and replacement, retain a recovery copy, verify decoded audio
+fingerprints, and record an audit row. Paths, extensions, audio payloads, and semantic catalog
+identifiers are not changed. Revert restores the retained originals and updates the media hash.
+
 ## Dashboard
 
 ```http

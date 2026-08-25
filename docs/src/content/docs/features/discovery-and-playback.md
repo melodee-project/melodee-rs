@@ -56,10 +56,21 @@ return `404` from the audio-feature detail route.
 
 ## Playback backend
 
-The native playback-backend routes report status and capabilities, initialize or stop the optional
-backend, register its shared endpoint, and accept active-session heartbeats. When the backend is
-disabled, status, capabilities, initialization, and registration preserve the native `400` response
-with `Jukebox is not enabled`; shutdown remains a safe successful no-op.
+The existing `/api/v1/playback-backend/*` routes preserve their captured endpoint-registration and
+heartbeat contract. The additive `/api/v1/playback/*` routes are the live local-backend control
+surface:
+
+- `GET /api/v1/playback/backends` and `GET /api/v1/playback/status` report selected-backend
+  capabilities and truthful availability;
+- `POST /api/v1/playback/initialize` and `/shutdown` manage the connection lifecycle;
+- `POST /api/v1/playback/play`, `/pause`, `/resume`, `/stop`, `/seek`, and `/volume` send bounded
+  commands to the configured backend.
+
+Set the database-backed `jukebox.enabled` and `jukebox.backendType` settings to `mpd` or `mpv`.
+MPD uses its configured TCP endpoint; MPV uses an operator-started local IPC socket. The server
+does not spawn either process. Connection, command, reconnect, and shutdown work is bounded and
+an unavailable backend returns a service-unavailable result without affecting catalog or
+streaming. See [configuration](../installation/configuration/#local-playback-backends).
 
 ## Themes
 

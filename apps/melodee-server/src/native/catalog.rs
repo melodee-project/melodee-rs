@@ -1967,7 +1967,9 @@ pub async fn song_lyrics(
         "SELECT track.title, COALESCE(track.display_artist, primary_artist.canonical_name),
                 NULLIF(COALESCE(
                   file.value->'metadata'->'raw'->>'lyrics',
-                  file.value->'metadata'->>'lyrics'
+                  file.value->'metadata'->>'lyrics',
+                  lyrics_sidecar.value->'parsed'->>'value',
+                  lyrics_sidecar.value->'parsed'->>'content'
                 ), '') AS lyrics
          FROM tracks track
          JOIN releases release ON release.id=track.release_id AND release.status='active'
@@ -1981,6 +1983,11 @@ pub async fn song_lyrics(
          LEFT JOIN release_work_item_manifests manifest ON manifest.id = catalog_import.manifest_row_id
          LEFT JOIN LATERAL jsonb_array_elements(COALESCE(manifest.manifest_payload->'files', '[]')) file(value)
            ON file.value->>'relative_path' = track.source_path
+         LEFT JOIN LATERAL jsonb_array_elements(
+           COALESCE(manifest.manifest_payload->'normalization'->'parsed_sidecars', '[]')
+         ) lyrics_sidecar(value)
+           ON lyrics_sidecar.value->>'sidecar_type' IN ('txt', 'lyrics', 'lrc')
+          AND lyrics_sidecar.value->>'relative_path' = regexp_replace(track.source_path, '\\.[^./]+$', '.txt')
          WHERE track.public_api_id = $1
            AND native_user_can_access_release($2, track.release_id)
          ORDER BY catalog_import.imported_at DESC NULLS LAST LIMIT 1",
