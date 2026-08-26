@@ -467,15 +467,19 @@ const CHILD_SELECT: &str = "SELECT track.public_api_id, track.title, track.sort_
   LEFT JOIN native_track_audio_features features ON features.track_id = track.id
   WHERE track.public_api_id = ANY($2)";
 
-/// Genre display values and audio bit depth are only durably recorded on the
-/// catalog import manifest, so they resolve through the same
-/// `catalog_imports` + `manifest_payload->'files'` join the native adapter
-/// uses, keyed by the Track source path.
+/// Genre display values use ADR-0165's indexed serving projection. Audio bit
+/// depth remains immutable manifest evidence and is read only for the bounded
+/// set of selected Tracks.
 const CHILD_MANIFEST_SELECT: &str = "SELECT DISTINCT ON (track.public_api_id)
     track.public_api_id,
-    NULLIF(btrim(file.value->'metadata'->>'genre'), ''),
+    genre.value,
     (file.value->'audio'->>'bit_depth')::integer
   FROM tracks track
+  LEFT JOIN LATERAL (
+    SELECT string_agg(term.match_value, ';' ORDER BY term.source_order) AS value
+    FROM catalog_genre_terms term
+    WHERE term.track_id=track.id AND term.surface='opensubsonic'
+  ) genre ON true
   JOIN catalog_imports catalog_import ON catalog_import.release_id = track.release_id
   JOIN release_work_item_manifests manifest ON manifest.id = catalog_import.manifest_row_id
   CROSS JOIN LATERAL jsonb_array_elements(

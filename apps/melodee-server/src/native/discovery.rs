@@ -234,20 +234,13 @@ async fn listening(
     })
     .collect();
     let top_genres = sqlx::query_as::<_, (String, i64, i64)>(
-        "SELECT genre.name,count(*),\
+        "SELECT genre.display_value,count(*),\
          COALESCE(sum(COALESCE(play.duration_seconds::bigint,track.duration_ms/1000,0)),0)::bigint \
          FROM native_track_plays play JOIN tracks track ON track.id=play.track_id \
-         JOIN LATERAL (SELECT btrim(file.value->'metadata'->>'genre') AS name \
-           FROM catalog_imports catalog_import \
-           JOIN release_work_item_manifests manifest ON manifest.id=catalog_import.manifest_row_id \
-           CROSS JOIN LATERAL jsonb_array_elements(COALESCE(manifest.manifest_payload->'files','[]')) file(value) \
-           WHERE catalog_import.release_id=track.release_id \
-             AND file.value->>'relative_path'=track.source_path \
-             AND btrim(COALESCE(file.value->'metadata'->>'genre',''))<>'' \
-           ORDER BY catalog_import.imported_at DESC LIMIT 1) genre ON true \
+         JOIN catalog_genre_terms genre ON genre.track_id=track.id AND genre.surface='native' \
          WHERE play.user_id=$1 AND native_user_can_access_release($1,track.release_id) \
            AND ($2::bigint IS NULL OR play.played_at >= now()-make_interval(days=>$2::integer)) \
-         GROUP BY genre.name ORDER BY count(*) DESC,genre.name LIMIT 10",
+         GROUP BY genre.display_value ORDER BY count(*) DESC,genre.display_value LIMIT 10",
     )
     .bind(principal.user_id)
     .bind(days)

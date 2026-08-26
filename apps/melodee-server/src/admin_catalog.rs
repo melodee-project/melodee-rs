@@ -11,7 +11,7 @@
 //! are ids consumable by the existing frozen `/images/{id}/{size}` native
 //! endpoint; artwork bytes stay behind that contract.
 
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use axum::{
     Json, Router,
@@ -41,6 +41,12 @@ use crate::native_stream::ClientAddressResolver;
 
 /// Maximum rows returned by catalog browsing listings.
 const MAX_LIST_LIMIT: u32 = 500;
+/// Deep offsets cause PostgreSQL to discard an unbounded prefix. Catalog
+/// filters/search remain available for navigation beyond this defensive cap.
+const MAX_LIST_OFFSET: u32 = 1_000_000;
+/// Exact-count catalog reads are cancel-safe, but still need a request budget
+/// so a pathological plan cannot retain a pool connection indefinitely.
+const LIST_QUERY_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// ADR-0143 §1/§3: the upload pipeline bound for catalog artwork overrides
 /// (mirrors `MAX_IMAGE_INPUT_BYTES`). The route body limit admits one MiB of
@@ -97,6 +103,24 @@ impl FromRequestParts<AdminCatalogState> for AdminPrincipal {
 
 const fn default_list_limit() -> u32 {
     50
+}
+
+fn validate_list_offset(offset: u32) -> Result<(), &'static str> {
+    (offset <= MAX_LIST_OFFSET)
+        .then_some(())
+        .ok_or("offset exceeds the maximum supported catalog window")
+}
+
+fn invalid_list_offset(message: &'static str) -> Response {
+    catalog_error(StatusCode::BAD_REQUEST, "invalid_offset", message)
+}
+
+fn list_query_timeout() -> Response {
+    catalog_error(
+        StatusCode::SERVICE_UNAVAILABLE,
+        "query_timeout",
+        "catalog query exceeded its execution budget",
+    )
 }
 
 /// Stable admin API error envelope (shared conventions).
@@ -193,23 +217,6 @@ fn client_binding(
                 "client address could not be resolved",
             )
         })
-}
-
-/// Signs an audio preview URL for one Track through the shared
-/// `NativeStreamUrlSigner` boundary. The signer fails closed (account not
-/// stream-authorized, restricted library, store error); a Track without a
-/// usable URL honestly carries `null` rather than an unusable link.
-async fn preview_stream_url(
-    state: &AdminCatalogState,
-    track_public_id: Uuid,
-    admin: &AdminPrincipal,
-    binding: &str,
-) -> Option<String> {
-    state
-        .stream_url_signer
-        .stream_url(track_public_id, admin.public_api_id, binding)
-        .await
-        .ok()
 }
 
 /// Calendar dates go on the wire as extended ISO `YYYY-MM-DD` strings; the
@@ -770,6 +777,9 @@ async fn list_artists(
     _admin: AdminPrincipal,
     Query(params): Query<ArtistListParams>,
 ) -> Response {
+    if let Err(message) = validate_list_offset(params.offset) {
+        return invalid_list_offset(message);
+    }
     let sort = match params.sort.as_deref() {
         None => CatalogArtistSort::NameAsc,
         Some(raw) => match CatalogArtistSort::parse(raw) {
@@ -789,11 +799,19 @@ async fn list_artists(
     };
     let limit = params.limit.clamp(1, MAX_LIST_LIMIT);
     let offset = params.offset;
-    match CatalogStore
-        .list_catalog_artists(&state.admin.pool, search.as_deref(), limit, offset, sort)
-        .await
+    match tokio::time::timeout(
+        LIST_QUERY_TIMEOUT,
+        CatalogStore.list_catalog_artists(
+            &state.admin.pool,
+            search.as_deref(),
+            limit,
+            offset,
+            sort,
+        ),
+    )
+    .await
     {
-        Ok((items, total)) => Json(PageDto {
+        Ok(Ok((items, total))) => Json(PageDto {
             items: items
                 .into_iter()
                 .map(|row| ArtistListItemDto {
@@ -815,7 +833,8 @@ async fn list_artists(
             offset,
         })
         .into_response(),
-        Err(error) => store_failure("artist listing failed", &error),
+        Ok(Err(error)) => store_failure("artist listing failed", &error),
+        Err(_) => list_query_timeout(),
     }
 }
 
@@ -825,6 +844,9 @@ async fn list_releases(
     _admin: AdminPrincipal,
     Query(params): Query<ReleaseListParams>,
 ) -> Response {
+    if let Err(message) = validate_list_offset(params.offset) {
+        return invalid_list_offset(message);
+    }
     let sort = match params.sort.as_deref() {
         None => CatalogReleaseSort::TitleAsc,
         Some(raw) => match CatalogReleaseSort::parse(raw) {
@@ -844,18 +866,20 @@ async fn list_releases(
     };
     let limit = params.limit.clamp(1, MAX_LIST_LIMIT);
     let offset = params.offset;
-    match CatalogStore
-        .list_catalog_releases(
+    match tokio::time::timeout(
+        LIST_QUERY_TIMEOUT,
+        CatalogStore.list_catalog_releases(
             &state.admin.pool,
             search.as_deref(),
             params.artist_id,
             limit,
             offset,
             sort,
-        )
-        .await
+        ),
+    )
+    .await
     {
-        Ok((items, total)) => Json(PageDto {
+        Ok(Ok((items, total))) => Json(PageDto {
             items: items
                 .into_iter()
                 .map(|row| ReleaseListItemDto {
@@ -877,7 +901,8 @@ async fn list_releases(
             offset,
         })
         .into_response(),
-        Err(error) => store_failure("release listing failed", &error),
+        Ok(Err(error)) => store_failure("release listing failed", &error),
+        Err(_) => list_query_timeout(),
     }
 }
 
@@ -887,6 +912,9 @@ async fn list_tracks(
     _admin: AdminPrincipal,
     Query(params): Query<TrackListParams>,
 ) -> Response {
+    if let Err(message) = validate_list_offset(params.offset) {
+        return invalid_list_offset(message);
+    }
     let sort = match params.sort.as_deref() {
         None => CatalogTrackSort::TitleAsc,
         Some(raw) => match CatalogTrackSort::parse(raw) {
@@ -906,18 +934,20 @@ async fn list_tracks(
     };
     let limit = params.limit.clamp(1, MAX_LIST_LIMIT);
     let offset = params.offset;
-    match CatalogStore
-        .list_catalog_tracks(
+    match tokio::time::timeout(
+        LIST_QUERY_TIMEOUT,
+        CatalogStore.list_catalog_tracks(
             &state.admin.pool,
             search.as_deref(),
             params.release_id,
             limit,
             offset,
             sort,
-        )
-        .await
+        ),
+    )
+    .await
     {
-        Ok((items, total)) => Json(PageDto {
+        Ok(Ok((items, total))) => Json(PageDto {
             items: items
                 .into_iter()
                 .map(|row| TrackListItemDto {
@@ -939,7 +969,8 @@ async fn list_tracks(
             offset,
         })
         .into_response(),
-        Err(error) => store_failure("track listing failed", &error),
+        Ok(Err(error)) => store_failure("track listing failed", &error),
+        Err(_) => list_query_timeout(),
     }
 }
 
@@ -1080,16 +1111,37 @@ async fn release_detail(
         Ok(classification) => classification.map(classification_dto),
         Err(error) => return store_failure("classification read failed", &error),
     };
-    // Sign per Track so one failing signature never blanks the whole
-    // section; signing is bounded by the section's 100-row cap.
-    let mut stream_urls = Vec::with_capacity(detail.tracks.items.len());
-    for track in &detail.tracks.items {
-        stream_urls.push(if track.has_playable {
-            preview_stream_url(&state, track.public_api_id, &admin, &binding).await
-        } else {
-            None
-        });
-    }
+    // The production signer resolves the principal and accessible Track set
+    // in two queries, preserving a nullable result per Track. This retains
+    // the previous fail-closed section behavior without a serial 3N query
+    // pattern at the 100-row section bound.
+    let playable_ids = detail
+        .tracks
+        .items
+        .iter()
+        .filter(|track| track.has_playable)
+        .map(|track| track.public_api_id)
+        .collect::<Vec<_>>();
+    let signed = state
+        .stream_url_signer
+        .stream_urls_partial(playable_ids.clone(), admin.public_api_id, &binding)
+        .await
+        .ok()
+        .filter(|urls| urls.len() == playable_ids.len())
+        .unwrap_or_else(|| vec![None; playable_ids.len()]);
+    let mut signed = signed.into_iter();
+    let stream_urls = detail
+        .tracks
+        .items
+        .iter()
+        .map(|track| {
+            if track.has_playable {
+                signed.next().flatten()
+            } else {
+                None
+            }
+        })
+        .collect();
     Json(release_detail_dto(detail, classification, stream_urls)).into_response()
 }
 
@@ -1185,7 +1237,13 @@ async fn track_detail(
         .iter()
         .any(|(purpose, _)| purpose == "playable");
     let stream_url = if has_playable {
-        preview_stream_url(&state, detail.public_api_id, &admin, &binding).await
+        state
+            .stream_url_signer
+            .stream_urls_partial(vec![detail.public_api_id], admin.public_api_id, &binding)
+            .await
+            .ok()
+            .and_then(|mut urls| (urls.len() == 1).then(|| urls.pop().flatten()))
+            .flatten()
     } else {
         None
     };
@@ -1603,5 +1661,18 @@ async fn update_track_metadata(
     {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(error) => metadata_update_failure("track", error),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{MAX_LIST_OFFSET, validate_list_offset};
+
+    #[test]
+    fn catalog_offsets_are_strictly_bounded() {
+        assert!(validate_list_offset(0).is_ok());
+        assert!(validate_list_offset(MAX_LIST_OFFSET).is_ok());
+        assert!(validate_list_offset(MAX_LIST_OFFSET + 1).is_err());
+        assert!(validate_list_offset(u32::MAX).is_err());
     }
 }

@@ -52,6 +52,7 @@ const DEFAULT_LIST_SIZE: i64 = 10;
 /// the exact configured value is environment state, so a fixed bound keeps
 /// the queries set-based and bounded without inventing a captured number.
 const MAX_LIST_SIZE: i64 = 500;
+const RANDOM_CANDIDATE_WINDOW: i64 = 10_000;
 const DEFAULT_SEARCH_PAGE: i64 = 20;
 const MAX_SEARCH_PAGE: i64 = 500;
 
@@ -164,14 +165,10 @@ const ALBUM_LIST_FROM: &str = "FROM releases release
     ON ustate.release_id = release.id AND ustate.user_id = $1
   WHERE release.status = 'active'
     AND ($2::text IS NULL OR EXISTS (
-      SELECT 1 FROM catalog_imports catalog_import
-      JOIN release_work_item_manifests manifest ON manifest.id = catalog_import.manifest_row_id
-      CROSS JOIN LATERAL jsonb_array_elements(
-        COALESCE(manifest.manifest_payload->'files', '[]')) file(value)
-      CROSS JOIN LATERAL unnest(string_to_array(
-        file.value->'metadata'->>'genre', ';')) genre_part(value)
-      WHERE catalog_import.release_id = release.id
-        AND btrim(genre_part.value) = $2))
+      SELECT 1 FROM catalog_genre_terms genre
+      WHERE genre.release_id = release.id
+        AND genre.surface = 'opensubsonic'
+        AND genre.match_value = $2))
     AND ($3::integer IS NULL OR extract(year FROM release.release_date) >= $3)
     AND ($4::integer IS NULL OR extract(year FROM release.release_date) <= $4)
     AND (NOT $5 OR COALESCE(ustate.starred, false))";
@@ -264,9 +261,8 @@ fn album_list_entry(
     Value::Object(album)
 }
 
-/// Release-level genre display values resolve through the catalog import
-/// manifest files (the same join the native adapter uses); multi-value genre
-/// strings split on `;`, distinct in first-seen order.
+/// Release-level OpenSubsonic genre values from the indexed serving
+/// projection, distinct in original manifest order.
 async fn release_genres(
     pool: &PgPool,
     release_public_ids: &[Uuid],
@@ -276,14 +272,13 @@ async fn release_genres(
         return Ok(genres);
     }
     let rows = sqlx::query(
-        "SELECT release.public_api_id, file.value->'metadata'->>'genre' AS genre
+        "SELECT release.public_api_id, genre.match_value
          FROM releases release
-         JOIN catalog_imports catalog_import ON catalog_import.release_id = release.id
-         JOIN release_work_item_manifests manifest ON manifest.id = catalog_import.manifest_row_id
-         CROSS JOIN LATERAL jsonb_array_elements(
-           COALESCE(manifest.manifest_payload->'files', '[]')) file(value)
+         JOIN catalog_genre_terms genre ON genre.release_id = release.id
+           AND genre.surface = 'opensubsonic'
          WHERE release.public_api_id = ANY($1)
-         ORDER BY release.public_api_id, catalog_import.imported_at DESC",
+         GROUP BY release.public_api_id, genre.match_value
+         ORDER BY release.public_api_id, min(genre.source_order), genre.match_value",
     )
     .bind(release_public_ids)
     .fetch_all(pool)
@@ -292,16 +287,10 @@ async fn release_genres(
         let release_id: Uuid = row.try_get(0)?;
         let genre: Option<String> = row.try_get(1)?;
         let entry = genres.entry(release_id).or_default();
-        if let Some(genre) = genre {
-            for part in genre
-                .split(';')
-                .map(str::trim)
-                .filter(|part| !part.is_empty())
-            {
-                if !entry.iter().any(|known| known == part) {
-                    entry.push(part.to_string());
-                }
-            }
+        if let Some(genre) = genre
+            && !entry.iter().any(|known| known == &genre)
+        {
+            entry.push(genre);
         }
     }
     Ok(genres)
@@ -334,7 +323,8 @@ async fn album_list(
     let user_id = resolve_user_id(state, params, principal).await;
 
     let order = match list_type {
-        ListType::Random => "random()",
+        // Random uses the bounded circular-pivot query below.
+        ListType::Random => "release_id",
         ListType::Newest => "created_at DESC, release_id",
         ListType::Highest => "average_rating DESC, release_id",
         // Frozen tiebreak: zero-play albums order by ascending creation time
@@ -353,10 +343,36 @@ async fn album_list(
     };
     // The ORDER BY is a module-owned constant selected above; every request
     // value stays a bind parameter.
-    let query = format!(
-        "WITH list AS ({ALBUM_LIST_SELECT} {ALBUM_LIST_FROM})
-         SELECT * FROM list ORDER BY {order} LIMIT $6 OFFSET $7"
-    );
+    let query = if list_type == ListType::Random {
+        // Choose a random UUID pivot, then walk the indexed public-id order
+        // with circular wraparound. This keeps legacy random membership and
+        // offset behavior without sorting the whole catalog.
+        format!(
+            "WITH pivot AS MATERIALIZED (
+               SELECT gen_random_uuid() AS public_api_id
+             ), circular AS (
+               SELECT first_half.*, 0 AS random_segment FROM (
+                 {ALBUM_LIST_SELECT} {ALBUM_LIST_FROM}
+                   AND release.public_api_id >= (SELECT public_api_id FROM pivot)
+                 ORDER BY release.public_api_id LIMIT $8
+               ) first_half
+               UNION ALL
+               SELECT second_half.*, 1 AS random_segment FROM (
+                 {ALBUM_LIST_SELECT} {ALBUM_LIST_FROM}
+                   AND release.public_api_id < (SELECT public_api_id FROM pivot)
+                 ORDER BY release.public_api_id LIMIT $8
+               ) second_half
+             )
+             SELECT * FROM circular
+             ORDER BY random_segment, release_id LIMIT $6 OFFSET $7"
+        )
+    } else {
+        format!(
+            "WITH list AS ({ALBUM_LIST_SELECT} {ALBUM_LIST_FROM})
+             SELECT * FROM list WHERE $8 >= 0
+             ORDER BY {order} LIMIT $6 OFFSET $7"
+        )
+    };
     let count_query = format!("SELECT count(*) {ALBUM_LIST_FROM}");
     let rows = sqlx::query(AssertSqlSafe(query))
         .bind(user_id)
@@ -366,6 +382,7 @@ async fn album_list(
         .bind(starred_only)
         .bind(size)
         .bind(offset)
+        .bind(size.saturating_add(offset))
         .fetch_all(&state.pool)
         .await;
     let total = sqlx::query_scalar::<_, i64>(AssertSqlSafe(count_query))
@@ -468,14 +485,10 @@ pub async fn get_album_list2(
 /// album set subsumes the track set, so one release-level EXISTS suffices).
 /// Bound as $1 with `release` and `track` in scope.
 const TRACK_GENRE_MATCH: &str = "EXISTS (
-  SELECT 1 FROM catalog_imports catalog_import
-  JOIN release_work_item_manifests manifest ON manifest.id = catalog_import.manifest_row_id
-  CROSS JOIN LATERAL jsonb_array_elements(
-    COALESCE(manifest.manifest_payload->'files', '[]')) file(value)
-  CROSS JOIN LATERAL unnest(string_to_array(
-    file.value->'metadata'->>'genre', ';')) genre_part(value)
-  WHERE catalog_import.release_id = release.id
-    AND btrim(genre_part.value) = $1)";
+  SELECT 1 FROM catalog_genre_terms genre
+  WHERE genre.release_id = release.id
+    AND genre.surface = 'opensubsonic'
+    AND genre.match_value = $1)";
 
 pub async fn get_songs_by_genre(
     State(state): State<OsState>,
@@ -566,13 +579,47 @@ pub async fn get_random_songs(
     let user_id = resolve_user_id(&state, &params, &principal).await;
 
     let query = format!(
-        "SELECT track.public_api_id
-         FROM tracks track
-         JOIN releases release ON release.id = track.release_id AND release.status = 'active'
-         WHERE ($1::text IS NULL OR {TRACK_GENRE_MATCH})
-           AND extract(year FROM release.release_date) >= $2
-           AND extract(year FROM release.release_date) <= $3
-         ORDER BY random() LIMIT $4"
+        "WITH pivot AS MATERIALIZED (
+           SELECT hashtextextended(random()::text,0) AS random_hash
+         ), hash_window AS MATERIALIZED (
+           SELECT id FROM (
+             (SELECT track.id,
+                     hashtextextended(track.public_api_id::text,0) AS item_hash,
+                     0 AS segment
+                FROM tracks track
+                JOIN releases release ON release.id = track.release_id
+                CROSS JOIN pivot
+               WHERE hashtextextended(track.public_api_id::text,0) >= pivot.random_hash
+                 AND release.status = 'active'
+                 AND ($1::text IS NULL OR {TRACK_GENRE_MATCH})
+                 AND extract(year FROM release.release_date) >= $2
+                 AND extract(year FROM release.release_date) <= $3
+               ORDER BY item_hash, track.public_api_id
+               LIMIT {RANDOM_CANDIDATE_WINDOW})
+             UNION ALL
+             (SELECT track.id,
+                     hashtextextended(track.public_api_id::text,0) AS item_hash,
+                     1 AS segment
+                FROM tracks track
+                JOIN releases release ON release.id = track.release_id
+                CROSS JOIN pivot
+               WHERE hashtextextended(track.public_api_id::text,0) < pivot.random_hash
+                 AND release.status = 'active'
+                 AND ($1::text IS NULL OR {TRACK_GENRE_MATCH})
+                 AND extract(year FROM release.release_date) >= $2
+                 AND extract(year FROM release.release_date) <= $3
+               ORDER BY item_hash, track.public_api_id
+               LIMIT {RANDOM_CANDIDATE_WINDOW})
+           ) circular
+           ORDER BY segment, item_hash LIMIT {RANDOM_CANDIDATE_WINDOW}
+         ), selected AS MATERIALIZED (
+           SELECT id, random() AS random_key FROM hash_window
+           ORDER BY random_key LIMIT $4
+         )
+         SELECT track.public_api_id
+           FROM selected
+           JOIN tracks track ON track.id = selected.id
+          ORDER BY selected.random_key"
     );
     let ids = match sqlx::query_scalar::<_, Uuid>(AssertSqlSafe(query))
         .bind(genre.as_deref())
@@ -1445,16 +1492,12 @@ async fn track_genres(
         return Ok(genres);
     }
     let rows = sqlx::query(
-        "SELECT DISTINCT ON (track.public_api_id)
-           track.public_api_id, file.value->'metadata'->>'genre'
+        "SELECT track.public_api_id, genre.match_value
          FROM tracks track
-         JOIN catalog_imports catalog_import ON catalog_import.release_id = track.release_id
-         JOIN release_work_item_manifests manifest ON manifest.id = catalog_import.manifest_row_id
-         CROSS JOIN LATERAL jsonb_array_elements(
-           COALESCE(manifest.manifest_payload->'files', '[]')) file(value)
+         JOIN catalog_genre_terms genre ON genre.track_id = track.id
+           AND genre.surface = 'opensubsonic'
          WHERE track.public_api_id = ANY($1)
-           AND file.value->>'relative_path' = track.source_path
-         ORDER BY track.public_api_id, catalog_import.imported_at DESC",
+         ORDER BY track.public_api_id, genre.source_order, genre.match_value",
     )
     .bind(track_public_ids)
     .fetch_all(pool)
@@ -1463,13 +1506,10 @@ async fn track_genres(
         let track_id: Uuid = row.try_get(0)?;
         let genre: Option<String> = row.try_get(1)?;
         if let Some(genre) = genre {
-            let parts: Vec<String> = genre
-                .split(';')
-                .map(str::trim)
-                .filter(|part| !part.is_empty())
-                .map(str::to_string)
-                .collect();
-            genres.insert(track_id, parts);
+            let entry = genres.entry(track_id).or_default();
+            if !entry.iter().any(|known| known == &genre) {
+                entry.push(genre);
+            }
         }
     }
     Ok(genres)

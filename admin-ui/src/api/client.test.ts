@@ -27,6 +27,16 @@ describe('apiFetch', () => {
     );
   });
 
+  it('forwards cancellation to the underlying HTTP request', async () => {
+    const fetchMock = stubFetch(200, { service: 'melodee' });
+    const controller = new AbortController();
+    await apiFetch('/api/admin/v1/system/info', { signal: controller.signal });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/admin/v1/system/info',
+      expect.objectContaining({ signal: controller.signal }),
+    );
+  });
+
   it('unwraps the error envelope into a typed ApiError', async () => {
     stubFetch(404, { code: 'not_found', message: 'work item not found', correlationId: 'abc' });
     const error: unknown = await apiFetch('/api/admin/v1/ingest/work-items/x').catch(

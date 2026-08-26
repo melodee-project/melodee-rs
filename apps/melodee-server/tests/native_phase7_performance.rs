@@ -100,6 +100,9 @@ async fn run_scale(track_count: i64, enforce_proposed_budgets: bool) {
         "artists_native_search_name_idx",
         "releases_native_search_title_idx",
         "tracks_native_search_title_idx",
+        "artists_native_search_normalized_name_idx",
+        "releases_native_search_normalized_title_idx",
+        "tracks_native_search_normalized_title_idx",
         "tracks_native_random_hash_idx",
     ] {
         assert!(
@@ -115,6 +118,26 @@ async fn run_scale(track_count: i64, enforce_proposed_budgets: bool) {
         .split_whitespace()
         .next_back()
         .expect("benchmark Track title suffix");
+    if enforce_proposed_budgets {
+        let pattern = format!("%{exact_search_term}%");
+        let plan: serde_json::Value = sqlx::query_scalar(
+            "EXPLAIN (FORMAT JSON)
+             SELECT count(*)
+             FROM tracks track
+             JOIN releases release ON release.id=track.release_id
+             WHERE release.status='active'
+               AND track.normalized_title ILIKE $1 ESCAPE E'\\\\'",
+        )
+        .bind(pattern)
+        .fetch_one(&db.pool)
+        .await
+        .expect("normalized Track search plan");
+        assert!(
+            plan.to_string()
+                .contains("tracks_native_search_normalized_title_idx"),
+            "normalized Track search did not use its trigram index: {plan}"
+        );
+    }
     let exact_search = format!("/api/v1/search/songs?q={exact_search_term}&page=1&pageSize=25");
     let routes = [
         "/api/v1/artists?page=1&pageSize=25&orderBy=Name&orderDirection=asc".to_string(),

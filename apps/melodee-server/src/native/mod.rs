@@ -75,6 +75,29 @@ pub trait NativeStreamUrlSigner: Send + Sync {
             Ok(urls)
         })
     }
+
+    /// Batch signing that preserves one optional result per requested Track.
+    /// Operator detail views use this shape so an inaccessible Track remains
+    /// `null` without forcing one authorization query per row.
+    fn stream_urls_partial(
+        &self,
+        track_public_ids: Vec<Uuid>,
+        user_public_id: Uuid,
+        client_binding: &str,
+    ) -> NativeFuture<'_, Result<Vec<Option<String>>, ()>> {
+        let client_binding = client_binding.to_owned();
+        Box::pin(async move {
+            let mut urls = Vec::with_capacity(track_public_ids.len());
+            for track_public_id in track_public_ids {
+                urls.push(
+                    self.stream_url(track_public_id, user_public_id, &client_binding)
+                        .await
+                        .ok(),
+                );
+            }
+            Ok(urls)
+        })
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]

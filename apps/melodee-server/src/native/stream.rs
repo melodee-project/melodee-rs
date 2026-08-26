@@ -1,6 +1,6 @@
 //! Captured non-versioned native streaming adapter (ADR-0125/ADR-0128).
 
-use std::{net::SocketAddr, sync::Arc};
+use std::{collections::HashSet, net::SocketAddr, sync::Arc};
 
 use axum::{
     Json, Router,
@@ -129,6 +129,60 @@ impl NativeStreamUrlSigner for DatabaseStreamUrlSigner {
                         "{}/song/stream/{track_public_id}/{user_public_id}/{token}",
                         self.public_origin.trim_end_matches('/')
                     ))
+                })
+                .collect()
+        })
+    }
+
+    fn stream_urls_partial(
+        &self,
+        track_public_ids: Vec<Uuid>,
+        user_public_id: Uuid,
+        client_binding: &str,
+    ) -> NativeFuture<'_, Result<Vec<Option<String>>, ()>> {
+        let client_binding = client_binding.to_owned();
+        Box::pin(async move {
+            if track_public_ids.is_empty() {
+                return Ok(Vec::new());
+            }
+            let principal = AuthStore::new()
+                .stream_principal_by_public_id(&self.pool, user_public_id)
+                .await
+                .map_err(|_| ())?
+                .filter(melodee_persistence::StreamPrincipal::is_authorized)
+                .ok_or(())?;
+            let accessible: HashSet<Uuid> = sqlx::query_scalar::<_, Uuid>(
+                "SELECT track.public_api_id FROM tracks track
+                 WHERE track.public_api_id=ANY($1::uuid[])
+                   AND native_user_can_access_release($2,track.release_id)",
+            )
+            .bind(&track_public_ids)
+            .bind(principal.user_id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|_| ())?
+            .into_iter()
+            .collect();
+            let now = OffsetDateTime::now_utc().unix_timestamp();
+            track_public_ids
+                .into_iter()
+                .map(|track_public_id| {
+                    if !accessible.contains(&track_public_id) {
+                        return Ok(None);
+                    }
+                    let token = StreamTokenCodec
+                        .issue(
+                            principal.stream_signing_key.expose_secret(),
+                            user_public_id,
+                            track_public_id,
+                            &client_binding,
+                            now,
+                        )
+                        .map_err(|_| ())?;
+                    Ok(Some(format!(
+                        "{}/song/stream/{track_public_id}/{user_public_id}/{token}",
+                        self.public_origin.trim_end_matches('/')
+                    )))
                 })
                 .collect()
         })

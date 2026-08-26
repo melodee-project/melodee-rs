@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "benchmark": "phase7-native-api-current-catalog-v1",
+  "passed": true,
+  "recordedAtUtc": "2026-08-26T12:29:53Z",
+  "source": {
+    "baseCommit": "26cb87c654cd3a4624f254ce75091d461d6dc8fa",
+    "binding": "The candidate change set containing this report, migrations 0038/0039, and ADR-0165/0167. The resulting Git commit is the immutable source identity.",
+    "command": "cargo test --release -p melodee-server --test native_phase7_performance native_api_current_catalog_scale_evidence -- --ignored --exact --nocapture"
+  },
+  "environment": {
+    "operatingSystem": "Linux 7.1.9-200.fc44.x86_64 x86_64",
+    "cpu": "AMD Ryzen 9 3900X 12-Core Processor",
+    "logicalCpus": 24,
+    "memoryKiB": 65730544,
+    "rust": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+    "postgres": "PostgreSQL 18.4",
+    "buildProfile": "release"
+  },
+  "corpus": {
+    "tracks": 560000,
+    "releases": 50000,
+    "artists": 35000,
+    "requestsPerRoute": 20,
+    "seedWallMs": 342410,
+    "peakTestProcessRssKiB": 15096
+  },
+  "scope": {
+    "measurement": "in-process native router with a preinstalled authenticated principal",
+    "authentication": "access-token cryptography and public-ID lookup are outside the measured interval",
+    "streamSigning": "bounded deterministic test signer; production HMAC signing is outside the measured interval",
+    "mediaIo": "measured metadata routes do not open media; filesystem reads are not instrumented by this harness"
+  },
+  "budgets": {
+    "browseAndSearchP95Ms": 50.0,
+    "randomP95Ms": 500.0,
+    "maxResponseBytes": 1048576
+  },
+  "measurements": [
+    {
+      "route": "/api/v1/artists?page=1&pageSize=25&orderBy=Name&orderDirection=asc",
+      "p50Ms": 9.253109,
+      "p95Ms": 13.92031,
+      "maxMs": 13.982757,
+      "responseBytes": 10121
+    },
+    {
+      "route": "/api/v1/albums?page=1&pageSize=25&orderBy=ReleaseDate&orderDirection=desc",
+      "p50Ms": 11.151452,
+      "p95Ms": 13.973539,
+      "maxMs": 14.457238,
+      "responseBytes": 21696
+    },
+    {
+      "route": "/api/v1/songs?page=1&pageSize=25",
+      "p50Ms": 37.335512,
+      "p95Ms": 44.905251,
+      "maxMs": 45.470822,
+      "responseBytes": 40448
+    },
+    {
+      "route": "/api/v1/search/songs?q=00550001&page=1&pageSize=25",
+      "p50Ms": 13.322167,
+      "p95Ms": 16.569503,
+      "maxMs": 16.809071,
+      "responseBytes": 1729,
+      "planAssertion": "tracks_native_search_normalized_title_idx"
+    },
+    {
+      "route": "/api/v1/songs/random?count=25",
+      "p50Ms": 27.92094,
+      "p95Ms": 31.360376,
+      "maxMs": 31.788389,
+      "responseBytes": 40349
+    },
+    {
+      "route": "/api/v1/songs/{exactTrackPublicId}",
+      "p50Ms": 1.895488,
+      "p95Ms": 5.168421,
+      "maxMs": 5.569725,
+      "responseBytes": 1613
+    }
+  ],
+  "remediationEvidence": {
+    "initialRunPassed": false,
+    "initialExactTrackSearchP95Ms": 326.261,
+    "cause": "native queries filtered normalized_title while migration 0018 indexed title",
+    "correction": "ADR-0167 and migration 0039 add predicate-aligned normalized trigram GIN indexes",
+    "correctedExactTrackSearchP95Ms": 16.569503
+  }
+}

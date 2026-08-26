@@ -175,7 +175,7 @@ describe('ArtistDetailScreen', () => {
   it('renders header facts, stat cards, and section tabs from the detail payload', async () => {
     renderScreen(makeDetail());
     expect(await screen.findByRole('heading', { name: 'The Nomads' })).toBeInTheDocument();
-    expect(mockGetArtist).toHaveBeenCalledWith(ARTIST_ID);
+    expect(mockGetArtist).toHaveBeenCalledWith(ARTIST_ID, expect.any(AbortSignal));
     expect(screen.getAllByText('Australian rock band').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Group').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Verified').length).toBeGreaterThan(0);

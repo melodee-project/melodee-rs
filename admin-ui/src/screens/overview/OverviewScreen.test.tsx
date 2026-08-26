@@ -53,6 +53,13 @@ function makeDashboard(overrides: Partial<Dashboard> = {}): Dashboard {
     health: {
       status: 'ok',
       postgresql: { status: 'ok', detail: 'postgresql answered a bounded probe' },
+      postgresqlPool: {
+        maxConnections: 32,
+        openConnections: 2,
+        idleConnections: 1,
+        inUseConnections: 1,
+        utilizationPercent: 3.125,
+      },
       tantivy: { status: 'ok', detail: 'active search generation validated' },
       storage: { status: 'ok', detail: 'storage paths writable' },
       ffmpeg: { status: 'ok', detail: 'ffmpeg 8.1' },

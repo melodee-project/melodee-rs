@@ -45,8 +45,8 @@ cleanup retains completed records for 90 days by default and writes a cleanup au
 
 ![The System Workers screen with pool pause/resume and search rebuild](./images/system-workers-light.png)
 
-Structured logs and performance metrics are not exposed over HTTP; use the command-line
-diagnostics below for those. The routes behind this screen are documented under
+Structured logs and historical performance profiles are not exposed over HTTP; use the command-
+line diagnostics below for those. The routes behind this screen are documented under
 [Admin API — System, workers, and search](../api/admin-api/#system-workers-and-search).
 
 ## System → Search screen
@@ -77,10 +77,10 @@ Per-path capacity and free space are not exposed over HTTP and are not shown; us
 
 Open **System → Diagnostics** (`/admin/system/diagnostics`). It aggregates the subsystem health
 panel (the same storage, database, index, and media-tool checks as onboarding and readiness),
-the active-leases table, and a link to the recent-failures table on System → Workers. Structured
-logs and performance metrics remain CLI surfaces, as noted on the screen.
-
-## Service health
+the active-leases table, and a link to the recent-failures table on System → Workers. The
+PostgreSQL row includes current pool in-use/open/idle counts; the Admin API also exposes the
+structured pool snapshot and bounded-resource counters. Historical performance profiles and
+structured logs remain CLI/evidence surfaces.
 
 ## Service health
 

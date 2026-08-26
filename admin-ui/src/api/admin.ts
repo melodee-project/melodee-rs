@@ -384,34 +384,46 @@ export interface CatalogListParams extends ListParams {
 /** Server-side Artist browsing (envelope; sort whitelist name/createdAt/updatedAt). */
 export function listCatalogArtists(
   params: CatalogListParams = {},
+  signal?: AbortSignal,
 ): Promise<Page<CatalogArtistListItem>> {
-  return apiFetch<Page<CatalogArtistListItem>>(`${ADMIN}/catalog/artists${buildQuery({ ...params })}`);
+  return apiFetch<Page<CatalogArtistListItem>>(
+    `${ADMIN}/catalog/artists${buildQuery({ ...params })}`,
+    { signal },
+  );
 }
 
 /** Server-side Release browsing (sort whitelist title/releaseDate/createdAt/updatedAt). */
 export function listCatalogReleases(
   params: CatalogListParams = {},
+  signal?: AbortSignal,
 ): Promise<Page<CatalogReleaseListItem>> {
-  return apiFetch<Page<CatalogReleaseListItem>>(`${ADMIN}/catalog/releases${buildQuery({ ...params })}`);
+  return apiFetch<Page<CatalogReleaseListItem>>(
+    `${ADMIN}/catalog/releases${buildQuery({ ...params })}`,
+    { signal },
+  );
 }
 
 /** Server-side Track browsing (sort whitelist title/durationMs/createdAt). */
 export function listCatalogTracks(
   params: CatalogListParams = {},
+  signal?: AbortSignal,
 ): Promise<Page<CatalogTrackListItem>> {
-  return apiFetch<Page<CatalogTrackListItem>>(`${ADMIN}/catalog/tracks${buildQuery({ ...params })}`);
+  return apiFetch<Page<CatalogTrackListItem>>(
+    `${ADMIN}/catalog/tracks${buildQuery({ ...params })}`,
+    { signal },
+  );
 }
 
-export function getCatalogArtist(id: string): Promise<ArtistDetail> {
-  return apiFetch<ArtistDetail>(`${ADMIN}/catalog/artists/${encodeURIComponent(id)}`);
+export function getCatalogArtist(id: string, signal?: AbortSignal): Promise<ArtistDetail> {
+  return apiFetch<ArtistDetail>(`${ADMIN}/catalog/artists/${encodeURIComponent(id)}`, { signal });
 }
 
-export function getCatalogRelease(id: string): Promise<ReleaseDetail> {
-  return apiFetch<ReleaseDetail>(`${ADMIN}/catalog/releases/${encodeURIComponent(id)}`);
+export function getCatalogRelease(id: string, signal?: AbortSignal): Promise<ReleaseDetail> {
+  return apiFetch<ReleaseDetail>(`${ADMIN}/catalog/releases/${encodeURIComponent(id)}`, { signal });
 }
 
-export function getCatalogTrack(id: string): Promise<TrackDetail> {
-  return apiFetch<TrackDetail>(`${ADMIN}/catalog/tracks/${encodeURIComponent(id)}`);
+export function getCatalogTrack(id: string, signal?: AbortSignal): Promise<TrackDetail> {
+  return apiFetch<TrackDetail>(`${ADMIN}/catalog/tracks/${encodeURIComponent(id)}`, { signal });
 }
 
 // ---- Catalog artwork overrides (ADR-0143) ----

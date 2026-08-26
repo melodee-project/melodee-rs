@@ -8,6 +8,13 @@ function makeHealth(overrides: Partial<SystemHealth> = {}): SystemHealth {
   return {
     status: 'degraded',
     postgresql: { status: 'ok', detail: 'postgresql answered a bounded probe' },
+    postgresqlPool: {
+      maxConnections: 32,
+      openConnections: 2,
+      idleConnections: 1,
+      inUseConnections: 1,
+      utilizationPercent: 3.125,
+    },
     tantivy: { status: 'disabled', detail: 'search worker disabled' },
     storage: { status: 'degraded', detail: 'inbound path not writable' },
     ffmpeg: { status: 'ok', detail: 'ffmpeg 8.1' },

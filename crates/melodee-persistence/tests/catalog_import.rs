@@ -112,6 +112,60 @@ async fn catalog_import_persists_all_embedded_musicbrainz_families_and_enrichmen
             .expect("read scheduled enrichment"),
         36
     );
+
+    let genre_terms: Vec<(String, String, String, i64)> = sqlx::query_as(
+        "SELECT surface, display_value, match_value, source_order
+           FROM catalog_genre_terms ORDER BY surface",
+    )
+    .fetch_all(&db.pool)
+    .await
+    .expect("read projected genre terms");
+    assert_eq!(
+        genre_terms,
+        vec![
+            (
+                "native".to_string(),
+                "Fixture".to_string(),
+                "Fixture".to_string(),
+                1,
+            ),
+            (
+                "opensubsonic".to_string(),
+                "Fixture".to_string(),
+                "Fixture".to_string(),
+                100_001,
+            ),
+        ]
+    );
+    let genre_aggregates: Vec<(String, i64, i64)> = sqlx::query_as(
+        "SELECT surface, song_count, release_count
+           FROM catalog_genre_aggregates ORDER BY surface",
+    )
+    .fetch_all(&db.pool)
+    .await
+    .expect("read projected genre aggregates");
+    assert_eq!(
+        genre_aggregates,
+        vec![
+            ("native".to_string(), 1, 1),
+            ("opensubsonic".to_string(), 1, 1),
+        ]
+    );
+
+    sqlx::query("DELETE FROM catalog_genre_terms WHERE surface='native'")
+        .execute(&db.pool)
+        .await
+        .expect("delete projected native term");
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM catalog_genre_aggregates WHERE surface='native'",
+        )
+        .fetch_one(&db.pool)
+        .await
+        .expect("read deleted aggregate"),
+        0,
+        "statement-level delete maintenance removes empty aggregate keys"
+    );
     db.drop().await;
 }
 

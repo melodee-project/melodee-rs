@@ -52,6 +52,8 @@ async function parseError(response: Response): Promise<ApiError> {
 export interface ApiRequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   body?: unknown;
+  /** Cancels the underlying HTTP request when a screen is superseded or unmounted. */
+  signal?: AbortSignal;
   /** Raw non-JSON body (e.g. image bytes) with its wire Content-Type. */
   rawBody?: { data: BodyInit; contentType: string };
   /** When true, a 401 does not dispatch the auth-expired event (used by the
@@ -63,6 +65,7 @@ export async function apiFetch<T>(path: string, options: ApiRequestOptions = {})
   const response = await fetch(path, {
     method: options.method ?? 'GET',
     credentials: 'include',
+    signal: options.signal,
     headers:
       options.rawBody !== undefined
         ? { 'content-type': options.rawBody.contentType }

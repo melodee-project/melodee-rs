@@ -1,4 +1,4 @@
-use std::{env, error::Error, net::SocketAddr, sync::Arc};
+use std::{env, error::Error, net::SocketAddr, sync::Arc, time::Duration};
 
 use axum::{Router, routing::get};
 use melodee_catalog::{CatalogConfig, CatalogSchedulerHandle, start_catalog_loop};
@@ -109,8 +109,11 @@ fn database_url() -> String {
 
 const ENV_NATIVE_PUBLIC_ORIGIN: &str = "MELODEE__NATIVE__PUBLIC_ORIGIN";
 const ENV_NATIVE_STREAM_CONCURRENCY: &str = "MELODEE__NATIVE__STREAM_CONCURRENCY";
+const ENV_SHUTDOWN_GRACE_SECONDS: &str = "MELODEE__SHUTDOWN__GRACE_SECONDS";
 const DEFAULT_NATIVE_STREAM_CONCURRENCY: usize = 32;
 const MAX_NATIVE_STREAM_CONCURRENCY: usize = 4096;
+const DEFAULT_SHUTDOWN_GRACE_SECONDS: u64 = 30;
+const MAX_SHUTDOWN_GRACE_SECONDS: u64 = 600;
 
 fn native_public_origin(address: SocketAddr) -> Result<String, &'static str> {
     let value = env::var(ENV_NATIVE_PUBLIC_ORIGIN).unwrap_or_else(|_| format!("http://{address}"));
@@ -145,6 +148,16 @@ fn parse_native_stream_concurrency(value: &str) -> Result<usize, &'static str> {
         return Err("MELODEE__NATIVE__STREAM_CONCURRENCY must be between 1 and 4096");
     }
     Ok(concurrency)
+}
+
+fn parse_shutdown_grace_seconds(value: &str) -> Result<u64, &'static str> {
+    let seconds = value
+        .parse::<u64>()
+        .map_err(|_| "MELODEE__SHUTDOWN__GRACE_SECONDS must be an integer between 1 and 600")?;
+    if !(1..=MAX_SHUTDOWN_GRACE_SECONDS).contains(&seconds) {
+        return Err("MELODEE__SHUTDOWN__GRACE_SECONDS must be between 1 and 600");
+    }
+    Ok(seconds)
 }
 
 /// Jellyfin UserViews mirror the captured "unlocked Storage libraries" set.
@@ -408,6 +421,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             |value| parse_native_stream_concurrency(&value),
         )
         .map_err(|error| -> Box<dyn Error + Send + Sync> { error.into() })?;
+    let shutdown_grace_seconds = env::var(ENV_SHUTDOWN_GRACE_SECONDS)
+        .map_or_else(
+            |_| Ok(DEFAULT_SHUTDOWN_GRACE_SECONDS),
+            |value| parse_shutdown_grace_seconds(&value),
+        )
+        .map_err(|error| -> Box<dyn Error + Send + Sync> { error.into() })?;
     let direct_play = publication_roots
         .as_ref()
         .map(|roots| native_stream::CanonicalAssetRoot::open(&roots.storage_root))
@@ -448,6 +467,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 resource_bounds.register("streams.transcoding", transcode_concurrency.max(1)),
             )
         });
+    let direct_play_shutdown = direct_play.clone();
+    let transcoding_shutdown = transcoding.clone();
     let opensubsonic_state = opensubsonic::OsState::from_env(
         pool.clone(),
         public_origin.clone(),
@@ -613,34 +634,57 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     info!(%address, "Melodee Rust bootstrap server listening");
     wait_for_shutdown_signal().await;
+    if let Some(service) = &direct_play_shutdown {
+        service.close_admission();
+    }
+    if let Some(service) = &transcoding_shutdown {
+        service.close_admission();
+    }
     let _ = shutdown_tx.send(());
 
     // Signal every worker immediately, then await server drain and worker
     // cancellation together while PostgreSQL is still available for safe
     // lease/error bookkeeping.
-    let (server_result, (), (), (), (), (), (), (), (), (), (), ()) = tokio::join!(
-        server_handle,
-        stop_worker(reconcile_handle),
-        stop_worker(inspection_handle),
-        stop_worker(normalization_handle),
-        stop_worker(validation_handle),
-        stop_worker(publication_handle),
-        stop_catalog_worker(catalog_handle),
-        stop_policy_worker(policy_handle),
-        stop_search_worker(search_handle),
-        stop_podcast_worker(podcast_handle),
-        stop_discovery_worker(discovery_handle),
-        stop_enrichment_worker(enrichment_handle),
-    );
-    server_result??;
-    pool.close().await;
+    let drain = async move {
+        let (server_result, (), (), (), (), (), (), (), (), (), (), ()) = tokio::join!(
+            server_handle,
+            stop_worker(reconcile_handle),
+            stop_worker(inspection_handle),
+            stop_worker(normalization_handle),
+            stop_worker(validation_handle),
+            stop_worker(publication_handle),
+            stop_catalog_worker(catalog_handle),
+            stop_policy_worker(policy_handle),
+            stop_search_worker(search_handle),
+            stop_podcast_worker(podcast_handle),
+            stop_discovery_worker(discovery_handle),
+            stop_enrichment_worker(enrichment_handle),
+        );
+        server_result??;
+        Ok::<(), Box<dyn Error + Send + Sync>>(())
+    };
+    match tokio::time::timeout(Duration::from_secs(shutdown_grace_seconds), drain).await {
+        Ok(result) => result?,
+        Err(_) => tracing::warn!(
+            shutdown_grace_seconds,
+            "graceful shutdown deadline expired; terminating remaining work"
+        ),
+    }
+    if tokio::time::timeout(Duration::from_secs(5), pool.close())
+        .await
+        .is_err()
+    {
+        tracing::warn!("postgresql pool close deadline expired");
+    }
 
     Ok(())
 }
 
 #[cfg(test)]
 mod native_configuration_tests {
-    use super::{parse_native_stream_concurrency, validate_public_origin};
+    use super::{
+        parse_native_stream_concurrency, parse_shutdown_grace_seconds, validate_public_origin,
+    };
 
     #[test]
     fn native_stream_concurrency_is_strictly_bounded() {
@@ -650,6 +694,16 @@ mod native_configuration_tests {
         assert!(parse_native_stream_concurrency("4097").is_err());
         assert!(parse_native_stream_concurrency(" 32").is_err());
         assert!(parse_native_stream_concurrency("many").is_err());
+    }
+
+    #[test]
+    fn shutdown_grace_is_strictly_bounded() {
+        assert_eq!(parse_shutdown_grace_seconds("1"), Ok(1));
+        assert_eq!(parse_shutdown_grace_seconds("600"), Ok(600));
+        assert!(parse_shutdown_grace_seconds("0").is_err());
+        assert!(parse_shutdown_grace_seconds("601").is_err());
+        assert!(parse_shutdown_grace_seconds(" 30").is_err());
+        assert!(parse_shutdown_grace_seconds("forever").is_err());
     }
 
     #[test]

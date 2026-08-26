@@ -2,6 +2,17 @@
 
 All timings are server-response wall time (ms) for a single request, median of warm iterations after the first (cold) call. Environment details are in the linked result files. Legacy Melodee 2.2.0 at baseline 4028b58d.
 
+## Current Rust candidate
+
+The 2026-08-26 release-mode native harness passed at 35,000 Artists, 50,000 Releases, and 560,000
+Tracks. Browse/search p95 was at most 44.906 ms (50 ms proposal); random selection p95 was 31.361 ms
+(500 ms proposal). The first candidate exposed a normalized-title index mismatch at 326.261 ms p95;
+ADR-0167/migration 0039 corrected it to 16.570 ms and asserts the selected PostgreSQL plan. Exact
+environment, per-route measurements, and scope exclusions are in
+[rust-native-current-20260826.json](results/rust-native-current-20260826.json).
+
+## Legacy baseline
+
 | Date (UTC) | Tier | Endpoint | Cold (ms) | Warm median (ms) | Status | Result file |
 |---|---|---|---|---|---|---|
 | 2026-08-08T05:12:56Z | A | native.artists.list | 149.2 | 8.6 | 200 | results/tier-a-20260808T051256Z.json |

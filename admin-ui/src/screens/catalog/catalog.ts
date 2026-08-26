@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { ApiError } from '../../api/client';
 import type { CatalogAuditEvent, SortParam } from '../../api/types';
@@ -81,41 +81,46 @@ export function trackOrdinalLabel(
  * Detail fetch with cancellation: the last error replaces the payload so a
  * failed id shows the retryable error instead of a stale entity.
  */
-export function useCatalogDetail<T>(fetcher: (id: string) => Promise<T>, id: string) {
+export function useCatalogDetail<T>(
+  fetcher: (id: string, signal?: AbortSignal) => Promise<T>,
+  id: string,
+) {
   const [detail, setDetail] = useState<T | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState(true);
+  const request = useRef<AbortController | null>(null);
 
   const fetchDetail = useCallback(
-    (signal: { cancelled: boolean }) =>
-      fetcher(id)
+    () => {
+      request.current?.abort();
+      const controller = new AbortController();
+      request.current = controller;
+      return fetcher(id, controller.signal)
         .then((result) => {
-          if (!signal.cancelled) {
+          if (!controller.signal.aborted) {
             setDetail(result);
             setError(null);
             setLoading(false);
           }
         })
         .catch((cause: unknown) => {
-          if (!signal.cancelled) {
+          if (!controller.signal.aborted) {
             setError(toApiError(cause));
             setLoading(false);
           }
-        }),
+        });
+    },
     [fetcher, id],
   );
 
   useEffect(() => {
-    const signal = { cancelled: false };
-    void fetchDetail(signal);
-    return () => {
-      signal.cancelled = true;
-    };
+    void fetchDetail();
+    return () => request.current?.abort();
   }, [fetchDetail]);
 
   const retry = useCallback(() => {
     setLoading(detail === null);
-    void fetchDetail({ cancelled: false });
+    void fetchDetail();
   }, [detail, fetchDetail]);
 
   return { detail, error, loading, retry };

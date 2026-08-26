@@ -101,7 +101,7 @@ describe('TrackDetailScreen', () => {
       </MemoryRouter>,
     );
     expect(await screen.findByRole('heading', { name: 'Down Under' })).toBeInTheDocument();
-    expect(mockGetTrack).toHaveBeenCalledWith(TRACK_ID);
+    expect(mockGetTrack).toHaveBeenCalledWith(TRACK_ID, expect.any(AbortSignal));
 
     // Facts: ordinal renders as disc.track, release links to the catalog route.
     expect(screen.getByText('1.3')).toBeInTheDocument();

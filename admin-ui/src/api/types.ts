@@ -715,6 +715,15 @@ export interface ResourceBoundSnapshot {
   saturated: boolean;
 }
 
+/** SQLx PostgreSQL pool utilization exposed without connection secrets. */
+export interface PostgresqlPoolSnapshot {
+  maxConnections: number;
+  openConnections: number;
+  idleConnections: number;
+  inUseConnections: number;
+  utilizationPercent: number;
+}
+
 /** Aggregated subsystem health (HealthDto, SPEC §22 panel content). The
  *  top-level `status` is `ok` when PostgreSQL is reachable and Tantivy is
  * healthy-or-disabled; subsystems report their own statuses without
@@ -722,6 +731,7 @@ export interface ResourceBoundSnapshot {
 export interface SystemHealth {
   status: 'ok' | 'degraded';
   postgresql: SubsystemHealth;
+  postgresqlPool: PostgresqlPoolSnapshot;
   tantivy: SubsystemHealth;
   storage: SubsystemHealth;
   ffmpeg: SubsystemHealth;

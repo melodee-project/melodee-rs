@@ -332,8 +332,8 @@ async fn load_artist(pool: &PgPool, public_id: Uuid) -> Result<Option<ArtistFact
     }))
 }
 
-/// Batch genre lookup from ingestion manifests (the only genre source in the
-/// Rust catalog at this baseline), mirroring the OpenSubsonic adapter.
+/// Batch genre lookup from the indexed semicolon-split serving projection,
+/// preserving the adapter's original manifest order.
 async fn release_genres(
     pool: &PgPool,
     release_public_ids: &[Uuid],
@@ -343,14 +343,13 @@ async fn release_genres(
         return Ok(genres);
     }
     let rows = sqlx::query(
-        "SELECT release.public_api_id, file.value->'metadata'->>'genre' AS genre \
+        "SELECT release.public_api_id, genre.match_value \
           FROM releases release \
-          JOIN catalog_imports catalog_import ON catalog_import.release_id = release.id \
-          JOIN release_work_item_manifests manifest ON manifest.id = catalog_import.manifest_row_id \
-          CROSS JOIN LATERAL jsonb_array_elements( \
-            COALESCE(manifest.manifest_payload->'files', '[]')) file(value) \
+          JOIN catalog_genre_terms genre ON genre.release_id = release.id \
+            AND genre.surface = 'opensubsonic' \
          WHERE release.public_api_id = ANY($1) \
-         ORDER BY release.public_api_id, catalog_import.imported_at DESC",
+         GROUP BY release.public_api_id, genre.match_value \
+         ORDER BY release.public_api_id, min(genre.source_order), genre.match_value",
     )
     .bind(release_public_ids)
     .fetch_all(pool)
@@ -359,12 +358,10 @@ async fn release_genres(
         let release_id: Uuid = row.get(0);
         let genre: Option<String> = row.get(1);
         let entry = genres.entry(release_id).or_default();
-        if let Some(genre) = genre {
-            for part in genre.split(';').map(str::trim).filter(|p| !p.is_empty()) {
-                if !entry.iter().any(|known| known == part) {
-                    entry.push(part.to_string());
-                }
-            }
+        if let Some(genre) = genre
+            && !entry.iter().any(|known| known == &genre)
+        {
+            entry.push(genre);
         }
     }
     Ok(genres)
@@ -592,16 +589,9 @@ pub(crate) async fn load_song(
 
 async fn distinct_genres(pool: &PgPool) -> Result<Vec<String>, sqlx::Error> {
     let mut genres: Vec<String> = sqlx::query_scalar(
-        "SELECT DISTINCT btrim(part) \
-           FROM releases release \
-           JOIN catalog_imports catalog_import ON catalog_import.release_id = release.id \
-           JOIN release_work_item_manifests manifest ON manifest.id = catalog_import.manifest_row_id \
-           CROSS JOIN LATERAL jsonb_array_elements( \
-             COALESCE(manifest.manifest_payload->'files', '[]')) file(value) \
-           CROSS JOIN LATERAL unnest(string_to_array(file.value->'metadata'->>'genre', ';')) AS part \
-          WHERE release.status = 'active' \
-            AND file.value->'metadata'->>'genre' IS NOT NULL \
-            AND btrim(part) <> ''",
+        "SELECT DISTINCT aggregate.match_value \
+           FROM catalog_genre_aggregates aggregate \
+          WHERE aggregate.surface = 'opensubsonic'",
     )
     .fetch_all(pool)
     .await?;
@@ -610,15 +600,11 @@ async fn distinct_genres(pool: &PgPool) -> Result<Vec<String>, sqlx::Error> {
 }
 
 /// Shared-release-genre subquery: release public ids sharing at least one
-/// `;`-separated manifest genre with the `$genres` bind.
+/// semicolon-split projected genre with the `$genres` bind.
 const GENRE_OVERLAP_RELEASES: &str = "\
-    SELECT genre_release.id FROM catalog_imports catalog_import \
-    JOIN release_work_item_manifests manifest ON manifest.id = catalog_import.manifest_row_id \
-    JOIN releases genre_release ON genre_release.id = catalog_import.release_id \
-    CROSS JOIN LATERAL jsonb_array_elements( \
-      COALESCE(manifest.manifest_payload->'files', '[]')) file(value) \
-    CROSS JOIN LATERAL unnest(string_to_array(file.value->'metadata'->>'genre', ';')) AS part \
-    WHERE btrim(part) = ANY($GENRES::text[])";
+    SELECT DISTINCT genre.release_id FROM catalog_genre_terms genre \
+    WHERE genre.surface='opensubsonic' \
+      AND genre.match_value = ANY($GENRES::text[])";
 
 fn genre_overlap_sql(genres_bind: &str) -> String {
     GENRE_OVERLAP_RELEASES.replace("$GENRES", genres_bind)
@@ -728,18 +714,13 @@ async fn get_similar_artists(
     // overlap desc, then sort name, then public id (D10 tiebreak).
     let rows = match sqlx::query(
         "WITH artist_genres AS ( \
-           SELECT billing.artist_id, btrim(part) AS genre \
+           SELECT billing.artist_id, genre.match_value AS genre \
              FROM release_artists billing \
              JOIN releases release ON release.id = billing.release_id AND release.status = 'active' \
-             JOIN catalog_imports catalog_import ON catalog_import.release_id = release.id \
-             JOIN release_work_item_manifests manifest ON manifest.id = catalog_import.manifest_row_id \
-             CROSS JOIN LATERAL jsonb_array_elements( \
-               COALESCE(manifest.manifest_payload->'files', '[]')) file(value) \
-             CROSS JOIN LATERAL unnest(string_to_array(file.value->'metadata'->>'genre', ';')) AS part \
+             JOIN catalog_genre_terms genre ON genre.release_id=release.id \
+               AND genre.surface='opensubsonic' \
             WHERE billing.role = 'primary' \
-              AND file.value->'metadata'->>'genre' IS NOT NULL \
-              AND btrim(part) <> '' \
-            GROUP BY billing.artist_id, btrim(part) \
+            GROUP BY billing.artist_id, genre.match_value \
          ), seed AS ( \
            SELECT id AS artist_id FROM artists WHERE public_api_id = $1 \
          ) \

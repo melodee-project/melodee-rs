@@ -243,7 +243,7 @@ pub(crate) async fn check_database(pool: &PgPool) -> PreflightCheck {
                 "migrations not current (applied={}, latest={}, all_successful={})",
                 status.applied, status.latest_available, status.all_successful
             ),
-            "run `melodee migrate` with the current server binary",
+            "run `melodee-cli migrate` with the current CLI binary",
         ),
         Err(error) => PreflightCheck::fail(
             "database",

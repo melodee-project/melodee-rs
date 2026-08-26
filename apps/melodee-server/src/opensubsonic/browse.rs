@@ -1686,27 +1686,15 @@ pub async fn get_genres(
     principal: Option<Extension<OsPrincipal>>,
 ) -> Response {
     let _ = principal;
-    // The captured getGenres aggregates distinct genre tags from the catalog
-    // import manifests with per-genre song and album counts, ordered by value
-    // COLLATE "C" (ADR-0130 decision 5). Each manifest file matching a track's
-    // source_path contributes its `;`-split genre tags.
+    // ADR-0165 materializes the captured semicolon-split values and counts so
+    // this normal browse request is proportional to genre count, not catalog
+    // or manifest size. Exact display values and C ordering stay frozen.
     let rows = match sqlx::query(
-        "SELECT genre_part.value AS genre,
-                count(DISTINCT track.id) AS song_count,
-                count(DISTINCT release.id) AS album_count
-           FROM releases release
-           JOIN catalog_imports catalog_import ON catalog_import.release_id = release.id
-           JOIN release_work_item_manifests manifest ON manifest.id = catalog_import.manifest_row_id
-           JOIN tracks track ON track.release_id = release.id
-           CROSS JOIN LATERAL jsonb_array_elements(
-             COALESCE(manifest.manifest_payload->'files', '[]')) AS file(value)
-           CROSS JOIN LATERAL unnest(string_to_array(
-             file.value->'metadata'->>'genre', ';')) AS genre_part(value)
-          WHERE release.status = 'active'
-            AND file.value->>'relative_path' = track.source_path
-            AND btrim(genre_part.value) <> ''
-          GROUP BY genre_part.value
-          ORDER BY genre_part.value COLLATE \"C\"",
+        "SELECT aggregate.display_value AS genre,
+                aggregate.song_count, aggregate.release_count AS album_count
+           FROM catalog_genre_aggregates aggregate
+          WHERE aggregate.surface = 'opensubsonic'
+          ORDER BY aggregate.display_value COLLATE \"C\"",
     )
     .fetch_all(&state.pool)
     .await
@@ -1831,8 +1819,8 @@ pub async fn get_top_songs(
 // Shared genre helper (mirrors lists.rs release_genres)
 // ---------------------------------------------------------------------------
 
-/// Release-level genre display values from the catalog import manifest files;
-/// multi-value genre strings split on `;`, distinct in first-seen order.
+/// Release-level OpenSubsonic genre values from the indexed serving
+/// projection, distinct in original manifest order.
 async fn release_genres(
     pool: &PgPool,
     release_public_ids: &[Uuid],
@@ -1842,14 +1830,13 @@ async fn release_genres(
         return Ok(genres);
     }
     let rows = sqlx::query(
-        "SELECT release.public_api_id, file.value->'metadata'->>'genre' AS genre
+        "SELECT release.public_api_id, genre.match_value
           FROM releases release
-          JOIN catalog_imports catalog_import ON catalog_import.release_id = release.id
-          JOIN release_work_item_manifests manifest ON manifest.id = catalog_import.manifest_row_id
-          CROSS JOIN LATERAL jsonb_array_elements(
-            COALESCE(manifest.manifest_payload->'files', '[]')) file(value)
+          JOIN catalog_genre_terms genre ON genre.release_id = release.id
+            AND genre.surface = 'opensubsonic'
          WHERE release.public_api_id = ANY($1)
-         ORDER BY release.public_api_id, catalog_import.imported_at DESC",
+         GROUP BY release.public_api_id, genre.match_value
+         ORDER BY release.public_api_id, min(genre.source_order), genre.match_value",
     )
     .bind(release_public_ids)
     .fetch_all(pool)
@@ -1858,12 +1845,10 @@ async fn release_genres(
         let release_id: Uuid = row.try_get(0)?;
         let genre: Option<String> = row.try_get(1)?;
         let entry = genres.entry(release_id).or_default();
-        if let Some(genre) = genre {
-            for part in genre.split(';').map(str::trim).filter(|p| !p.is_empty()) {
-                if !entry.iter().any(|known| known == part) {
-                    entry.push(part.to_string());
-                }
-            }
+        if let Some(genre) = genre
+            && !entry.iter().any(|known| known == &genre)
+        {
+            entry.push(genre);
         }
     }
     Ok(genres)

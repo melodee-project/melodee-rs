@@ -73,11 +73,9 @@ fn greatest_hits_compatibility_corpus_executes_the_real_policy_pipeline() {
             "PRD-POLICY-007",
         ]
     );
-    assert!(
-        corpus
-            .authority
-            .legacy_evidence
-            .contains("phase-0/media-baseline.md")
+    assert_eq!(
+        corpus.authority.legacy_evidence,
+        "compatibility/media/README.md"
     );
     assert!(
         corpus

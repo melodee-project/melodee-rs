@@ -678,7 +678,7 @@ async fn run_deep_checks() -> Result<(), String> {
                 );
             } else {
                 println!(
-                    "migrations: pending (applied {} / {} available; run `melodee migrate`)",
+                    "migrations: pending (applied {} / {} available; run `melodee-cli migrate`)",
                     status.applied, status.latest_available
                 );
             }
@@ -3264,7 +3264,9 @@ async fn run_rollback_status(database_url: Option<&str>) {
             );
         }
         if !status.migration_current {
-            eprintln!("  X Schema migrations not current - run `melodee migrate` before cutover");
+            eprintln!(
+                "  X Schema migrations not current - run `melodee-cli migrate` before cutover"
+            );
         }
     }
 

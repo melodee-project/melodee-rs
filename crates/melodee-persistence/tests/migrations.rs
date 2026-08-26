@@ -364,6 +364,62 @@ async fn admin_browse_indexes_are_full_and_browse_results_stay_correct() {
     db.drop().await;
 }
 
+/// ADR-0167 / migration 0039: native substring predicates and their trigram
+/// indexes must name the same normalized columns. Display-column indexes do
+/// not make these expressions indexable.
+#[tokio::test]
+async fn native_normalized_search_indexes_match_query_predicates() {
+    let db = TestDb::create("migrations_native_normalized_search").await;
+    for (index, column, partial_predicate) in [
+        (
+            "artists_native_search_normalized_name_idx",
+            "normalized_name",
+            Some("status"),
+        ),
+        (
+            "artist_aliases_native_search_normalized_alias_idx",
+            "normalized_alias",
+            None,
+        ),
+        (
+            "releases_native_search_normalized_title_idx",
+            "normalized_title",
+            Some("status"),
+        ),
+        (
+            "tracks_native_search_normalized_title_idx",
+            "normalized_title",
+            None,
+        ),
+    ] {
+        let definition: String = sqlx::query_scalar(
+            "SELECT indexdef FROM pg_indexes
+             WHERE schemaname = 'public' AND indexname = $1",
+        )
+        .bind(index)
+        .fetch_one(&db.pool)
+        .await
+        .expect("read native normalized search index");
+        assert!(
+            definition.contains("USING gin"),
+            "{index} must be a GIN index: {definition}"
+        );
+        assert!(
+            definition.contains(&format!("{column} gin_trgm_ops")),
+            "{index} does not match its query predicate: {definition}"
+        );
+        assert_eq!(
+            definition.contains(" WHERE "),
+            partial_predicate.is_some(),
+            "{index} partial-index shape changed: {definition}"
+        );
+        if let Some(predicate) = partial_predicate {
+            assert!(definition.contains(predicate));
+        }
+    }
+    db.drop().await;
+}
+
 /// ADR-0143 / migration 0030 data integrity: `catalog_entity_images` enforces
 /// its entity-type domain, typed-column pairing, mime domain, and the
 /// 1 byte–10 MiB byte bound at the schema level; the typed partial unique

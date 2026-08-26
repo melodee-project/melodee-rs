@@ -810,6 +810,19 @@ async fn system_health_exposes_registered_resource_bounds() {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(body["postgresqlPool"]["maxConnections"].as_u64().is_some());
+    assert!(body["postgresqlPool"]["openConnections"].as_u64().is_some());
+    assert!(body["postgresqlPool"]["idleConnections"].as_u64().is_some());
+    assert!(
+        body["postgresqlPool"]["inUseConnections"]
+            .as_u64()
+            .is_some()
+    );
+    assert!(
+        body["postgresqlPool"]["utilizationPercent"]
+            .as_f64()
+            .is_some()
+    );
     let bounds = body["resourceBounds"]
         .as_array()
         .expect("resourceBounds array");

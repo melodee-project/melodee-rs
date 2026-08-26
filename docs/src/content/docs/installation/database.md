@@ -11,8 +11,11 @@ Melodee uses PostgreSQL as its authoritative state store.
 - All catalog, identity, queue, and policy state lives in PostgreSQL.
 - The search index is a rebuildable projection; losing it never requires re-ingesting media.
 
-Schema changes ship as migrations with rollback plans. Upgrades apply migrations automatically at
-startup; see [Upgrading](./upgrading/).
+Schema changes ship as migrations with rollback plans. Upgrades apply migrations before the HTTP
+listener opens, but this is not an online-migration guarantee: ordinary PostgreSQL `CREATE INDEX`
+and backfills can block concurrent writers. Put every Melodee server and worker that can write to
+the database behind a maintenance fence before starting one candidate instance to migrate. See
+[Upgrading](./upgrading/).
 
 The reference Compose deployment provisions the `melodee` database and persists PostgreSQL under
 the `melodee_postgres` named volume. For an external database, create a dedicated database and
@@ -20,6 +23,16 @@ least-privilege application role, keep `MELODEE__DATABASE__URL` in your deployme
 and use TLS/network controls appropriate to your environment. The server applies its embedded SQLx
 migrations before it starts listening, so a failed migration prevents readiness rather than serving
 against an unknown schema.
+
+Migration `0038_catalog_genre_serving_projection.sql` is additive but performs a one-time scan of
+catalog manifests to build indexed native/OpenSubsonic genre serving facts. On a large catalog,
+budget the maintenance window and PostgreSQL temporary/WAL space for that backfill. Do not create
+the migration-owned indexes manually with `CREATE INDEX CONCURRENTLY`; doing so diverges SQLx
+migration history from the schema. Migration `0039_native_normalized_search_indexes.sql` then builds
+four trigram GIN indexes over normalized Artist/Release/Track search facts; include their build time
+and disk/WAL growth in the same maintenance budget. If either migration fails, keep traffic fenced,
+retain the failed database for diagnosis, and restore the verified pre-upgrade backup into an
+isolated target.
 
 Back up PostgreSQL before every image upgrade. The [upgrade guide](./upgrading/) gives the
 container-oriented backup, validation, and rollback sequence.

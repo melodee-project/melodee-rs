@@ -1,6 +1,6 @@
 import { ActionableNotification, Loading, Search } from '@carbon/react';
 import type { ReactNode, SyntheticEvent } from 'react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
@@ -31,7 +31,7 @@ export interface CatalogListScreenProps<T extends { id: string }> {
   emptyDescriptionKey: string;
   /** Backend sort whitelist (mirrors admin_catalog.rs). */
   sortKeys: readonly string[];
-  fetchPage: (params: CatalogListParams) => Promise<Page<T>>;
+  fetchPage: (params: CatalogListParams, signal?: AbortSignal) => Promise<Page<T>>;
   columns: EntityColumn[];
   toRow: (item: T) => EntityRow;
   detailPath: (item: T) => string;
@@ -79,6 +79,7 @@ export function CatalogListScreen<T extends { id: string }>({
   const [pageData, setPageData] = useState<Page<T> | null>(null);
   const [listError, setListError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState(true);
+  const request = useRef<AbortController | null>(null);
 
   // Search text is local while typing; the debounced effect publishes it to
   // the URL (resetting to page 1), which drives the server fetch.
@@ -117,35 +118,39 @@ export function CatalogListScreen<T extends { id: string }>({
   // Server-side page fetch. Rows stay on screen while a refetch is in
   // flight so paging/sorting does not flash an empty table.
   const fetchCurrentPage = useCallback(
-    (signal: { cancelled: boolean }) =>
-      fetchPage({
-        query: queryParam || undefined,
-        limit: pageSize,
-        offset: (page - 1) * pageSize,
-        sort,
-      })
+    () => {
+      request.current?.abort();
+      const controller = new AbortController();
+      request.current = controller;
+      return fetchPage(
+        {
+          query: queryParam || undefined,
+          limit: pageSize,
+          offset: (page - 1) * pageSize,
+          sort,
+        },
+        controller.signal,
+      )
         .then((result) => {
-          if (!signal.cancelled) {
+          if (!controller.signal.aborted) {
             setPageData(result);
             setListError(null);
             setLoading(false);
           }
         })
         .catch((cause: unknown) => {
-          if (!signal.cancelled) {
+          if (!controller.signal.aborted) {
             setListError(toApiError(cause));
             setLoading(false);
           }
-        }),
+        });
+    },
     [fetchPage, queryParam, page, pageSize, sort],
   );
 
   useEffect(() => {
-    const signal = { cancelled: false };
-    void fetchCurrentPage(signal);
-    return () => {
-      signal.cancelled = true;
-    };
+    void fetchCurrentPage();
+    return () => request.current?.abort();
   }, [fetchCurrentPage]);
 
   const rows: EntityRow[] = (pageData?.items ?? []).map(toRow);
@@ -173,7 +178,7 @@ export function CatalogListScreen<T extends { id: string }>({
           subtitle={listError.message}
           hideCloseButton
           actionButtonLabel={t('actions.retry')}
-          onActionButtonClick={() => void fetchCurrentPage({ cancelled: false })}
+          onActionButtonClick={() => void fetchCurrentPage()}
         />
       ) : null}
       {loading && pageData === null ? (

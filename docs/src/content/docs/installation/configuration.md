@@ -76,6 +76,7 @@ redacted export can never overwrite a stored secret. The admin API equivalent is
 | `MELODEE__DATABASE__MIN_CONNECTIONS` | `2` | Minimum idle database pool connections. |
 | `MELODEE__DATABASE__ACQUIRE_TIMEOUT_SECONDS` | `30` | Timeout in seconds for acquiring a connection from the pool. |
 | `MELODEE__DATABASE__IDLE_TIMEOUT_SECONDS` | `600` | Timeout in seconds for idle connections before closing. |
+| `MELODEE__SHUTDOWN__GRACE_SECONDS` | `30` | Process-wide graceful-drain deadline (`1`–`600` seconds). On SIGTERM/CTRL+C, new direct-play and transcode admissions close immediately; HTTP responses and workers may finish within this window before remaining work is terminated. |
 | `MELODEE__ADMIN_UI__DIST` | `admin-ui/dist` | Directory containing the built admin SPA, served at `/admin` with client-side routing fallback to `index.html`. A missing directory is not fatal: the server starts, all APIs serve normally, and `/admin` answers 404 until the bundle is deployed. |
 | `MELODEE__WORK__LEASE_SECONDS` | `300` | PostgreSQL lease duration for claimed work items. |
 | `MELODEE__WORK__RETRY_BASE_SECONDS` | `60` | Base retry delay (`base * 2^(attempt-1)`). |

@@ -990,10 +990,14 @@
       "crates/melodee-persistence/tests/catalog_performance.rs (catalog wall time, call time, peak RSS, SQL statement count, rows written, throughput inputs, and zero media reads)",
       "apps/melodee-server/tests/policy_worker.rs (policy window wall time, measured concurrency, whole-test VmHWM, mutation statements, and zero media reads)",
       "crates/melodee-search/src/bin/phase6_benchmark.rs (build/query wall time, documents/sec, index bytes, process VmHWM, query count/time fields, and zero media reads)",
-      "apps/melodee-server/tests/native_phase7_performance.rs (route p50/p95/max, response bytes, seed wall, process VmHWM, and zero media reads)"
+      "apps/melodee-server/tests/native_phase7_performance.rs (route p50/p95/max, response bytes, seed wall, process VmHWM, and zero media reads)",
+      "apps/melodee-server/src/admin_system.rs (structured PostgreSQL pool utilization plus semaphore admission/saturation snapshots)",
+      "apps/melodee-server/src/main.rs (bounded process drain deadline with stream/transcode admission closure)"
     ],
     "tests": [
-      "tests/python/test_benchmark_baseline.py"
+      "tests/python/test_benchmark_baseline.py",
+      "apps/melodee-server/tests/admin_system_api.rs (pool and bounded-resource health payload)",
+      "apps/melodee-server/src/main.rs unit tests (strict shutdown deadline configuration bounds)"
     ],
     "note": "catalog and identity catalog, classification and policy policy, search and MQL search, and native API compatibility native API evidence cover the required metric families across their relevant workload boundaries. Per-request PostgreSQL query timing remains an operational-observability follow-up, so the broad requirement stays in progress."
   },
@@ -1011,24 +1015,31 @@
     "status": "tested",
     "implementation": [
       "crates/melodee-search/src/bin/phase6_benchmark.rs (35k Artist/50k Release with 560k and 10M Track runs)",
-      "apps/melodee-server/tests/native_phase7_performance.rs (35k Artist/50k Release/560k Track native API run)"
+      "apps/melodee-server/tests/native_phase7_performance.rs (35k Artist/50k Release/560k Track native API run with exact normalized-search plan assertion)",
+      "design/adr/ADR-0167-align-native-normalized-search-indexes.md and migration 0039 (predicate-aligned native trigram indexes)",
+      "compatibility/benchmarks/results/rust-native-current-20260826.json (passing current-candidate report and failed-first-run remediation evidence)"
     ],
     "tests": [
-      "tests/python/test_benchmark_baseline.py"
+      "tests/python/test_benchmark_baseline.py",
+      "cargo test --release -p melodee-server --test native_phase7_performance native_api_current_catalog_scale_evidence -- --ignored --exact --nocapture"
     ],
-    "note": "Search is measured at current and 10M-Track scale; native browse/random/detail routes are measured at 560k-Track current-catalog scale with a default-gate smoke."
+    "note": "Search is measured at current and 10M-Track scale. The committed 2026-08-26 Rust native report passes every current-catalog proposal: browse/search p95 <= 44.906 ms and random p95 31.361 ms; a failed 326.261 ms normalized-search candidate was corrected and rerun to 16.570 ms with the selected GIN plan asserted."
   },
   "PRD-PERF-006": {
     "status": "tested",
     "implementation": [
       "crates/melodee-persistence/src/search.rs (bounded keyset snapshot pages and bounded outbox reads)",
       "crates/melodee-search/src/worker.rs, rebuild.rs, and service.rs (bounded projection/query paths with no filesystem-tree or media scan)",
-      "apps/melodee-server/src/native/catalog.rs (bounded browse/random/detail SQL paths)"
+      "apps/melodee-server/src/native/catalog.rs (bounded browse/random/detail SQL paths)",
+      "crates/melodee-persistence/migrations/0038_catalog_genre_serving_projection.sql and design/adr/ADR-0165-materialize-catalog-genre-serving-facts.md (indexed, transactionally maintained genre serving facts)",
+      "apps/melodee-server/src/opensubsonic/lists.rs (indexed circular random candidate windows; bounded randomization)"
     ],
     "tests": [
       "crates/melodee-search/tests/rebuild_integration.rs",
       "crates/melodee-persistence/tests/search_phase6.rs",
-      "apps/melodee-server/tests/native_phase7_performance.rs"
+      "apps/melodee-server/tests/native_phase7_performance.rs",
+      "tests/python/test_scalability_query_shapes.py",
+      "apps/melodee-server/tests/opensubsonic_lists_api.rs and opensubsonic_browse_api.rs"
     ],
     "note": "Normal indexing/search and native browse/random/detail paths are page/batch bounded, avoid filesystem-tree scans and catalog materialization, and report zero media reads."
   },
@@ -1326,12 +1337,13 @@
       "apps/melodee-server/src/system.rs (bounded PostgreSQL readiness plus active search generation/schema/count validation; liveness remains separate)",
       "crates/melodee-search/src/service.rs (active-generation manifest/index diagnostic)",
       "apps/melodee-server/src/admin_system.rs (R2.5 /system/health extension: podcastStorage root writability, disk free-space across storage/work-area/podcast roots via statvfs, workers stale-lease count and durable queue age; subsystem vocabulary extended with unavailable/readOnly/misconfigured/capacityExhausted)",
+      "apps/melodee-server/src/admin_system.rs (PostgreSQL pool max/open/idle/in-use/utilization telemetry and request-path bounded-resource snapshots)",
       "apps/melodee-server/src/onboarding.rs (media-tools preflight now probes fpcalc alongside ffmpeg/ffprobe)",
       "admin-ui/src/components/SystemHealthPanel.tsx (all seven subsystems rendered with the extended status vocabulary)"
     ],
     "tests": [
       "apps/melodee-server/tests/system_api.rs (disabled/healthy/corrupt-generation readiness)",
-      "apps/melodee-server/tests/admin_system_api.rs (workers subsystem reports stale leases with operator-readable detail)",
+      "apps/melodee-server/tests/admin_system_api.rs (workers subsystem reports stale leases and PostgreSQL pool utilization with operator-readable detail)",
       "apps/melodee-server/src/admin_system.rs unit tests (disk capacityExhausted/degraded/disabled/tightest-root through the injected statfs seam)"
     ],
     "note": "Health now covers every PRD-listed subsystem: PostgreSQL, search index, inbound/staging/storage filesystem access, ffmpeg/ffprobe, the fpcalc fingerprinting tool, worker leases, queue backlog, disk space, and API adapters. The top-level status keeps the work program-10 rule; the extended subsystem vocabulary distinguishes unavailable, degraded, read-only, misconfigured, and capacity-exhausted states."
@@ -2156,28 +2168,37 @@
       "crates/melodee-persistence/src/catalog.rs (set-based import and indexed bounded participation reads)",
       "crates/melodee-persistence/src/catalog_mutations.rs (affected-scope correction/projection rebuilds)",
       "crates/melodee-persistence/src/search.rs (repeatable-read keyset snapshot pages and bounded outbox batches)",
-      "crates/melodee-search/src/rebuild.rs (streamed page-by-page generation build)"
+      "crates/melodee-search/src/rebuild.rs (streamed page-by-page generation build)",
+      "crates/melodee-persistence/migrations/0038_catalog_genre_serving_projection.sql (narrow indexed genre terms and active-Release aggregates maintained transactionally)",
+      "apps/melodee-server/src/opensubsonic/lists.rs (indexed circular random sampling with a 10,000-row candidate bound)",
+      "crates/melodee-persistence/migrations/0039_native_normalized_search_indexes.sql (trigram indexes match native normalized predicates)"
     ],
     "tests": [
       "crates/melodee-persistence/tests/catalog_performance.rs (200 imports with constant set-based statement count)",
       "crates/melodee-persistence/tests/catalog_participation.rs (indexed bounded participation query)",
-      "crates/melodee-persistence/tests/search_phase6.rs"
+      "crates/melodee-persistence/tests/search_phase6.rs",
+      "apps/melodee-server/tests/opensubsonic_lists_api.rs and native_catalog_api.rs",
+      "tests/python/test_scalability_query_shapes.py"
     ],
-    "note": "Normal catalog and search projection paths do not load or reshuffle the whole catalog. Later public browse/API operations must preserve that invariant."
+    "note": "Normal catalog/search projection and genre/random-serving paths do not load or reshuffle the whole catalog. The requirement remains in progress pending current-candidate production rehearsal evidence across every release workload."
   },
   "PRD-SCALE-002": {
     "status": "in-progress",
     "implementation": [
       "crates/melodee-persistence/migrations/0007_phase4_catalog.sql (catalog, participation, correction, and outbox indexes)",
       "crates/melodee-persistence/src/catalog.rs (bounded participation and diagnostic queries)",
-      "crates/melodee-search/src/service.rs and store.rs (bounded result limits, deterministic pagination, and embedded rebuildable projection)"
+      "crates/melodee-search/src/service.rs and store.rs (bounded result limits, deterministic pagination, and embedded rebuildable projection)",
+      "crates/melodee-persistence/migrations/0038_catalog_genre_serving_projection.sql and design/adr/ADR-0165-materialize-catalog-genre-serving-facts.md",
+      "crates/melodee-persistence/migrations/0039_native_normalized_search_indexes.sql and design/adr/ADR-0167-align-native-normalized-search-indexes.md",
+      "apps/melodee-server/src/admin_catalog.rs (bounded list size/offset and ten-second cancel-safe list deadline)"
     ],
     "tests": [
       "crates/melodee-persistence/tests/catalog_participation.rs (default-query index-plan assertion)",
       "crates/melodee-persistence/tests/catalog_performance.rs",
-      "crates/melodee-search/tests/search_tests.rs"
+      "crates/melodee-search/tests/search_tests.rs",
+      "apps/melodee-server/tests/opensubsonic_browse_api.rs, opensubsonic_lists_api.rs, jellyfin_media_api.rs, native_catalog_api.rs, and admin_catalog_api.rs"
     ],
-    "note": "catalog and identity provides indexed bounded PostgreSQL foundations and search and MQL provides bounded deterministic search pagination. Large-library public API and UI server-side operations remain their assigned future work."
+    "note": "Indexed bounded foundations now cover catalog/search, public genre/random requests, and defensive Admin catalog paging. The requirement remains in progress until current-candidate large-library acceptance and production query-plan evidence are signed off."
   },
   "PRD-SCALE-003": {
     "status": "implemented",
@@ -2706,7 +2727,7 @@
     "implementation": [
       "admin-ui/src/components/AudioPreview.tsx (labeled, no autoplay)",
       "apps/melodee-server/src/admin_review.rs (pre-publication preview endpoint)",
-      "apps/melodee-server/src/admin_catalog.rs (streamUrl on track/release detail via DatabaseStreamUrlSigner)"
+      "apps/melodee-server/src/admin_catalog.rs (streamUrl on track/release detail via one batch authorization/signing operation per detail response)"
     ],
     "tests": [
       "apps/melodee-server/tests/admin_catalog_api.rs (signed URL streams 200/206)",
@@ -2737,10 +2758,13 @@
     "status": "tested",
     "implementation": [
       "admin-api pagination envelopes + sort whitelists (admin.rs, admin_catalog.rs, admin_identity.rs, admin_review.rs)",
-      "admin-ui EntityTable server-side only; migration 0029 admin browse indexes (ADR-0142)"
+      "apps/melodee-server/src/admin_catalog.rs (bounded offset plus cancel-safe list-query deadline)",
+      "admin-ui EntityTable server-side only; migration 0029 admin browse indexes (ADR-0142)",
+      "admin-ui/src/screens/catalog and api/client.ts (AbortController cancellation reaches fetch for superseded/unmounted catalog requests)"
     ],
     "tests": [
-      "crates/melodee-persistence/tests/ (envelope/sort whitelist tests)"
+      "crates/melodee-persistence/tests/ (envelope/sort whitelist tests)",
+      "admin-ui/src/api/client.test.ts and screens/catalog/CatalogListScreens.test.tsx"
     ]
   },
   "PRD-UI-REF-001": {

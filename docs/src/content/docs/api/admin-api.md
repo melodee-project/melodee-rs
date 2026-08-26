@@ -477,11 +477,15 @@ These routes back the catalog browsing tables and the Artist/Release/Track detai
 require an administrator's native access token and use Melodee's own vocabulary (`Artist`,
 `Release`, `Track`) with public ids as lookup keys; unknown ids return `404 not_found`. Every
 listing uses the shared pagination envelope (`items`, `total`, `limit`, `offset`; `limit`
-defaults to 50 and clamps to 500) and a strict `key:asc|desc` sort whitelist (`400
-unknown_sort` otherwise). The optional `query` parameter is a bounded case-insensitive
-substring filter (overlong queries return `400 invalid_query`). Browse and read routes are
-read-only; the one write surface in this section is [Catalog metadata editing](#catalog-metadata-editing),
-which updates the display-metadata fields of an existing entity.
+defaults to 50 and clamps to 500; `offset` must not exceed 1,000,000) and a strict
+`key:asc|desc` sort whitelist (`400 unknown_sort` otherwise). An excessive offset returns
+`400 invalid_offset`. The optional `query` parameter is a bounded case-insensitive substring
+filter (overlong queries return `400 invalid_query`). Each catalog listing has a 10-second
+server-side deadline covering its count and page query; deadline exhaustion returns
+`503 query_timeout` instead of retaining a database connection indefinitely. Browse and read
+routes are read-only; the one write surface in this section is
+[Catalog metadata editing](#catalog-metadata-editing), which updates the display-metadata fields
+of an existing entity.
 
 ### Browse Artists
 
@@ -865,6 +869,11 @@ The top-level `status` is `ok` when PostgreSQL is reachable and Tantivy is healt
 disabled, otherwise `degraded`; the `workers` subsystem degrades on stale leases (expired
 beyond the one-hour grace) or a durable queue whose oldest ready item is more than 24 hours
 old.
+
+`postgresqlPool` reports the SQLx pool's point-in-time `maxConnections`, `openConnections`,
+`idleConnections`, `inUseConnections`, and `utilizationPercent`. It contains no URL, database name,
+hostname, username, or credential. The PostgreSQL subsystem detail repeats the current in-use/open/
+idle counts so the Admin health panel surfaces saturation without requiring raw JSON inspection.
 
 The payload also carries a `resourceBounds` array: a point-in-time snapshot of every
 semaphore-bounded request-path resource class (`streams.direct_play`, `streams.transcoding`,

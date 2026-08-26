@@ -62,7 +62,7 @@ tokens, and session keys from saved output.
 Against the approved isolated snapshot and Rust target, run:
 
 ```bash
-melodee migrate
+melodee-cli migrate
 melodee doctor --deep
 melodee legacy inventory --source-db "$LEGACY_SOURCE_DATABASE_URL" --json > inventory.json
 melodee legacy plan --source-db "$LEGACY_SOURCE_DATABASE_URL" \

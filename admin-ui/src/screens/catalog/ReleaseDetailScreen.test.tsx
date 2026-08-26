@@ -133,7 +133,7 @@ describe('ReleaseDetailScreen', () => {
   it('renders the header stats strip, tracks table, artists, files, and provenance', async () => {
     renderScreen(makeDetail());
     expect(await screen.findByRole('heading', { name: 'Into the Night' })).toBeInTheDocument();
-    expect(mockGetRelease).toHaveBeenCalledWith(RELEASE_ID);
+    expect(mockGetRelease).toHaveBeenCalledWith(RELEASE_ID, expect.any(AbortSignal));
     expect(screen.getAllByText('The Nomads').length).toBeGreaterThan(0);
     expect(screen.getByText('Active')).toBeInTheDocument();
 

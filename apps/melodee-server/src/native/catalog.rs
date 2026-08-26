@@ -48,13 +48,9 @@ const RANDOM_ELIGIBILITY: &str = "release.status='active'
   AND ($3::integer IS NULL OR extract(year FROM release.release_date) >= $3)
   AND ($4::integer IS NULL OR extract(year FROM release.release_date) <= $4)
   AND ($5::text IS NULL OR EXISTS (
-    SELECT 1 FROM catalog_imports catalog_import
-    JOIN release_work_item_manifests manifest ON manifest.id=catalog_import.manifest_row_id
-    CROSS JOIN LATERAL jsonb_array_elements(
-      COALESCE(manifest.manifest_payload->'files','[]')) file(value)
-    WHERE catalog_import.release_id=release.id
-      AND file.value->>'relative_path'=track.source_path
-      AND file.value->'metadata'->>'genre' ILIKE $5 ESCAPE E'\\\\'))
+    SELECT 1 FROM catalog_genre_terms genre
+    WHERE genre.track_id=track.id AND genre.surface='native'
+      AND genre.display_value ILIKE $5 ESCAPE E'\\\\'))
   AND (NOT $7 OR native_user_can_access_release($8,release.id))";
 
 #[derive(Debug, Deserialize)]
@@ -2314,32 +2310,20 @@ pub async fn similar(
                    WHERE release.public_api_id=$1 AND release.status='active'
                      AND native_user_can_access_release($3,release.id)
                  ), source_genres AS MATERIALIZED (
-                   SELECT DISTINCT lower(btrim(file.value->'metadata'->>'genre')) AS genre
+                   SELECT DISTINCT genre.normalized_value AS genre
                    FROM source
-                   JOIN tracks track ON track.release_id=source.id
-                   JOIN catalog_imports catalog_import ON catalog_import.release_id=source.id
-                   JOIN release_work_item_manifests manifest
-                     ON manifest.id=catalog_import.manifest_row_id
-                   CROSS JOIN LATERAL jsonb_array_elements(
-                     COALESCE(manifest.manifest_payload->'files','[]')) file(value)
-                   WHERE file.value->>'relative_path'=track.source_path
-                     AND btrim(COALESCE(file.value->'metadata'->>'genre',''))<>''
+                   JOIN catalog_genre_terms genre ON genre.release_id=source.id
+                    AND genre.surface='native'
                  )
                  SELECT candidate.public_api_id,candidate.title
                  FROM releases candidate,source
                  WHERE candidate.id<>source.id AND candidate.status='active'
                    AND native_user_can_access_release($3,candidate.id)
                    AND EXISTS (
-                     SELECT 1 FROM tracks candidate_track
-                     JOIN catalog_imports catalog_import
-                       ON catalog_import.release_id=candidate.id
-                     JOIN release_work_item_manifests manifest
-                       ON manifest.id=catalog_import.manifest_row_id
-                     CROSS JOIN LATERAL jsonb_array_elements(
-                       COALESCE(manifest.manifest_payload->'files','[]')) file(value)
-                     WHERE candidate_track.release_id=candidate.id
-                       AND file.value->>'relative_path'=candidate_track.source_path
-                       AND lower(btrim(file.value->'metadata'->>'genre')) IN (
+                     SELECT 1 FROM catalog_genre_terms candidate_genre
+                     WHERE candidate_genre.release_id=candidate.id
+                       AND candidate_genre.surface='native'
+                       AND candidate_genre.normalized_value IN (
                          SELECT genre FROM source_genres))
                  ORDER BY (
                    SELECT count(*) FROM native_track_plays play
@@ -2377,17 +2361,10 @@ pub async fn similar(
                    WHERE track.public_api_id=$1
                      AND native_user_can_access_release($3,track.release_id)
                  ), source_genres AS MATERIALIZED (
-                   SELECT DISTINCT lower(btrim(file.value->'metadata'->>'genre')) AS genre
+                   SELECT DISTINCT genre.normalized_value AS genre
                    FROM source
-                   JOIN catalog_imports catalog_import
-                     ON catalog_import.release_id=source.release_id
-                   JOIN release_work_item_manifests manifest
-                     ON manifest.id=catalog_import.manifest_row_id
-                   CROSS JOIN LATERAL jsonb_array_elements(
-                     COALESCE(manifest.manifest_payload->'files','[]')) file(value)
-                   JOIN tracks source_track ON source_track.id=source.id
-                   WHERE file.value->>'relative_path'=source_track.source_path
-                     AND btrim(COALESCE(file.value->'metadata'->>'genre',''))<>''
+                   JOIN catalog_genre_terms genre ON genre.track_id=source.id
+                    AND genre.surface='native'
                  )
                  SELECT candidate.public_api_id,candidate.title
                  FROM tracks candidate
@@ -2397,14 +2374,10 @@ pub async fn similar(
                  WHERE candidate.id<>source.id AND release.status='active'
                    AND native_user_can_access_release($3,candidate.release_id)
                    AND EXISTS (
-                     SELECT 1 FROM catalog_imports catalog_import
-                     JOIN release_work_item_manifests manifest
-                       ON manifest.id=catalog_import.manifest_row_id
-                     CROSS JOIN LATERAL jsonb_array_elements(
-                       COALESCE(manifest.manifest_payload->'files','[]')) file(value)
-                     WHERE catalog_import.release_id=candidate.release_id
-                       AND file.value->>'relative_path'=candidate.source_path
-                       AND lower(btrim(file.value->'metadata'->>'genre')) IN (
+                     SELECT 1 FROM catalog_genre_terms candidate_genre
+                     WHERE candidate_genre.track_id=candidate.id
+                       AND candidate_genre.surface='native'
+                       AND candidate_genre.normalized_value IN (
                          SELECT genre FROM source_genres))
                    AND (source.tempo IS NULL OR source.tempo<=0
                      OR feature.tempo BETWEEN source.tempo-20 AND source.tempo+20)
@@ -2484,16 +2457,14 @@ async fn resolve_genre_name(
         return Err(NativeApiError::BadRequest);
     }
     sqlx::query_scalar(
-        "SELECT DISTINCT btrim(file.value->'metadata'->>'genre') AS name
-         FROM tracks track
+        "SELECT DISTINCT genre.display_value AS name
+         FROM catalog_genre_terms genre
+         JOIN tracks track ON track.id=genre.track_id
          JOIN releases release ON release.id=track.release_id
-         JOIN catalog_imports catalog_import ON catalog_import.release_id = track.release_id
-         JOIN release_work_item_manifests manifest ON manifest.id = catalog_import.manifest_row_id
-         CROSS JOIN LATERAL jsonb_array_elements(COALESCE(manifest.manifest_payload->'files', '[]')) file(value)
-         WHERE file.value->>'relative_path' = track.source_path
+         WHERE genre.surface='native'
            AND release.status='active'
            AND native_user_can_access_release($2, track.release_id)
-           AND translate(rtrim(encode(convert_to(btrim(file.value->'metadata'->>'genre'), 'UTF8'), 'base64'), '='), '+/', '-_') = $1
+           AND translate(rtrim(encode(convert_to(genre.display_value, 'UTF8'), 'base64'), '='), '+/', '-_') = $1
          ORDER BY name LIMIT 1",
     )
     .bind(id)
@@ -2514,12 +2485,9 @@ pub async fn genre_songs(
     let query = format!(
         "SELECT song.*, count(*) OVER() FROM ({SONG_SELECT}
          WHERE EXISTS (
-           SELECT 1 FROM catalog_imports catalog_import
-           JOIN release_work_item_manifests manifest ON manifest.id = catalog_import.manifest_row_id
-           CROSS JOIN LATERAL jsonb_array_elements(COALESCE(manifest.manifest_payload->'files', '[]')) file(value)
-           WHERE catalog_import.release_id = release.id
-             AND file.value->>'relative_path' = track.source_path
-             AND btrim(file.value->'metadata'->>'genre') ILIKE $1)
+           SELECT 1 FROM catalog_genre_terms genre
+           WHERE genre.track_id=track.id AND genre.surface='native'
+             AND genre.display_value ILIKE $1)
            AND native_user_can_access_release($4, release.id)
          ORDER BY track.sort_title, track.public_api_id LIMIT $2 OFFSET $3) song"
     );
@@ -2618,14 +2586,12 @@ async fn accessible_genre_preferences(
         "SELECT state.genre_name FROM native_genre_user_states state
          WHERE state.user_id = $1 AND state.{column}
            AND EXISTS (
-             SELECT 1 FROM tracks track
+             SELECT 1 FROM catalog_genre_terms genre
+             JOIN tracks track ON track.id=genre.track_id
              JOIN releases release ON release.id=track.release_id
-             JOIN catalog_imports catalog_import ON catalog_import.release_id = track.release_id
-             JOIN release_work_item_manifests manifest ON manifest.id = catalog_import.manifest_row_id
-             CROSS JOIN LATERAL jsonb_array_elements(COALESCE(manifest.manifest_payload->'files', '[]')) file(value)
-             WHERE file.value->>'relative_path' = track.source_path
+             WHERE genre.surface='native'
                AND release.status='active'
-               AND lower(btrim(file.value->'metadata'->>'genre')) = state.normalized_genre_name
+               AND genre.normalized_value = state.normalized_genre_name
                AND native_user_can_access_release($1, track.release_id)
            )
          ORDER BY state.normalized_genre_name"
@@ -2650,23 +2616,21 @@ pub async fn list_genres(
     {
         return Err(NativeApiError::BadRequest);
     }
+    let restricted = has_library_bindings(&state.pool).await?;
     let rows = sqlx::query(
-        "WITH genre_terms AS (
-           SELECT btrim(file.value->'metadata'->>'genre') AS name,
-                  track.id AS track_id, track.release_id
-           FROM tracks track
-           JOIN releases release ON release.id=track.release_id
-           JOIN catalog_imports catalog_import ON catalog_import.release_id = track.release_id
-           JOIN release_work_item_manifests manifest ON manifest.id = catalog_import.manifest_row_id
-           CROSS JOIN LATERAL jsonb_array_elements(COALESCE(manifest.manifest_payload->'files', '[]')) file(value)
-           WHERE file.value->>'relative_path' = track.source_path
-             AND release.status='active'
-             AND native_user_can_access_release($4, track.release_id)
-             AND btrim(COALESCE(file.value->'metadata'->>'genre', '')) <> ''
-         ), grouped AS (
-           SELECT name, count(DISTINCT track_id)::bigint AS song_count,
-                  count(DISTINCT release_id)::bigint AS album_count
-           FROM genre_terms GROUP BY name
+        "WITH grouped AS (
+           SELECT aggregate.display_value AS name, aggregate.song_count,
+                  aggregate.release_count AS album_count
+           FROM catalog_genre_aggregates aggregate
+           WHERE NOT $5 AND aggregate.surface='native'
+           UNION ALL
+           SELECT genre.display_value AS name, count(*)::bigint AS song_count,
+                  count(DISTINCT genre.release_id)::bigint AS album_count
+           FROM catalog_genre_terms genre
+           JOIN releases release ON release.id=genre.release_id
+           WHERE $5 AND genre.surface='native' AND release.status='active'
+             AND native_user_can_access_release($4, genre.release_id)
+           GROUP BY genre.display_value
          )
          SELECT name, song_count, album_count, count(*) OVER()
          FROM grouped
@@ -2678,6 +2642,7 @@ pub async fn list_genres(
     .bind(page.offset)
     .bind(direction)
     .bind(principal.user_id)
+    .bind(restricted)
     .fetch_all(&state.pool)
     .await?;
     let total = rows.first().map_or(Ok(0), |row| row.try_get::<i64, _>(3))?;
@@ -3060,26 +3025,18 @@ pub async fn user_top_genres(
     let days = stats_days(params.days);
     let limit = stats_limit(params.limit, 10, 100);
     let rows = sqlx::query_as::<_, (String, i64)>(
-        "SELECT genre.name, count(*) AS play_count
+        "SELECT genre.display_value, count(*) AS play_count
          FROM native_track_plays play
          JOIN tracks track ON track.id = play.track_id
          JOIN releases release ON release.id=track.release_id
-         JOIN LATERAL (
-           SELECT btrim(file.value->'metadata'->>'genre') AS name
-           FROM catalog_imports catalog_import
-           JOIN release_work_item_manifests manifest ON manifest.id = catalog_import.manifest_row_id
-           CROSS JOIN LATERAL jsonb_array_elements(COALESCE(manifest.manifest_payload->'files', '[]')) file(value)
-           WHERE catalog_import.release_id = track.release_id
-             AND file.value->>'relative_path' = track.source_path
-             AND btrim(COALESCE(file.value->'metadata'->>'genre', '')) <> ''
-           ORDER BY catalog_import.imported_at DESC LIMIT 1
-         ) genre ON true
+         JOIN catalog_genre_terms genre ON genre.track_id=track.id
+           AND genre.surface='native'
          WHERE play.user_id = $1
            AND play.played_at >= clock_timestamp() - ($2 * interval '1 day')
            AND release.status='active'
            AND native_user_can_access_release($1, track.release_id)
-         GROUP BY genre.name
-         ORDER BY play_count DESC, genre.name LIMIT $3",
+         GROUP BY genre.display_value
+         ORDER BY play_count DESC, genre.display_value LIMIT $3",
     )
     .bind(principal.user_id)
     .bind(days)

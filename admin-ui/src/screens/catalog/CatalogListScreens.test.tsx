@@ -83,6 +83,27 @@ beforeEach(() => {
 });
 
 describe('ArtistsScreen', () => {
+  it('aborts the HTTP request when the screen unmounts', async () => {
+    let requestSignal: AbortSignal | undefined;
+    let completeRequest: ((result: Page<CatalogArtistListItem>) => void) | undefined;
+    mockListArtists.mockImplementation(
+      (_params, signal) =>
+        new Promise((resolve) => {
+          requestSignal = signal;
+          completeRequest = resolve;
+        }),
+    );
+    const view = render(
+      <MemoryRouter initialEntries={['/catalog/artists']}>
+        <ArtistsScreen />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(requestSignal).toBeDefined());
+    view.unmount();
+    expect(requestSignal?.aborted).toBe(true);
+    completeRequest?.(page([]));
+  });
+
   it('renders the server envelope and maps query/sort/page URL state to request params', async () => {
     render(
       <MemoryRouter initialEntries={['/catalog/artists?sort=name:desc&page=2&pageSize=25']}>
@@ -93,12 +114,15 @@ describe('ArtistsScreen', () => {
       'href',
       `/catalog/artists/${ARTIST.id}`,
     );
-    expect(mockListArtists).toHaveBeenCalledWith({
-      query: undefined,
-      limit: 25,
-      offset: 25,
-      sort: 'name:desc',
-    });
+    expect(mockListArtists).toHaveBeenCalledWith(
+      {
+        query: undefined,
+        limit: 25,
+        offset: 25,
+        sort: 'name:desc',
+      },
+      expect.any(AbortSignal),
+    );
     // Total-count pagination: 137 server-side rows over one rendered row.
     expect(screen.getByText(/137/)).toBeInTheDocument();
     expect(screen.getByText('Group')).toBeInTheDocument();
@@ -112,12 +136,15 @@ describe('ArtistsScreen', () => {
       </MemoryRouter>,
     );
     await screen.findByRole('link', { name: 'The Nomads' });
-    expect(mockListArtists).toHaveBeenLastCalledWith({
-      query: undefined,
-      limit: 50,
-      offset: 0,
-      sort: undefined,
-    });
+    expect(mockListArtists).toHaveBeenLastCalledWith(
+      {
+        query: undefined,
+        limit: 50,
+        offset: 0,
+        sort: undefined,
+      },
+      expect.any(AbortSignal),
+    );
 
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search artists' }), {
       target: { value: 'nomads' },
@@ -126,6 +153,7 @@ describe('ArtistsScreen', () => {
       () => {
         expect(mockListArtists).toHaveBeenLastCalledWith(
           expect.objectContaining({ query: 'nomads', offset: 0 }),
+          expect.any(AbortSignal),
         );
       },
       { timeout: 2000 },
@@ -135,6 +163,7 @@ describe('ArtistsScreen', () => {
     await waitFor(() => {
       expect(mockListArtists).toHaveBeenLastCalledWith(
         expect.objectContaining({ sort: 'name:asc' }),
+        expect.any(AbortSignal),
       );
     });
   });
@@ -153,12 +182,15 @@ describe('ReleasesScreen', () => {
       'href',
       `/catalog/releases/${RELEASE.id}`,
     );
-    expect(mockListReleases).toHaveBeenCalledWith({
-      query: 'night',
-      limit: 25,
-      offset: 50,
-      sort: 'releaseDate:asc',
-    });
+    expect(mockListReleases).toHaveBeenCalledWith(
+      {
+        query: 'night',
+        limit: 25,
+        offset: 50,
+        sort: 'releaseDate:asc',
+      },
+      expect.any(AbortSignal),
+    );
     expect(screen.getByText('The Nomads')).toBeInTheDocument();
   });
 
@@ -171,6 +203,7 @@ describe('ReleasesScreen', () => {
     await screen.findByRole('link', { name: 'Into the Night' });
     expect(mockListReleases).toHaveBeenCalledWith(
       expect.objectContaining({ sort: undefined }),
+      expect.any(AbortSignal),
     );
   });
 });
@@ -190,12 +223,15 @@ describe('TracksScreen', () => {
       'href',
       `/catalog/releases/${RELEASE.id}`,
     );
-    expect(mockListTracks).toHaveBeenCalledWith({
-      query: undefined,
-      limit: 25,
-      offset: 25,
-      sort: 'durationMs:desc',
-    });
+    expect(mockListTracks).toHaveBeenCalledWith(
+      {
+        query: undefined,
+        limit: 25,
+        offset: 25,
+        sort: 'durationMs:desc',
+      },
+      expect.any(AbortSignal),
+    );
   });
 
   it('shows the localized empty state when the server page is empty', async () => {

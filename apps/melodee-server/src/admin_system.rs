@@ -210,6 +210,38 @@ pub struct ApiSurfaceDto {
     pub status: &'static str,
 }
 
+/// Point-in-time SQLx pool utilization. This exposes saturation without
+/// leaking connection strings or PostgreSQL credentials.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PostgresqlPoolDto {
+    pub max_connections: u32,
+    pub open_connections: u32,
+    pub idle_connections: u32,
+    pub in_use_connections: u32,
+    pub utilization_percent: f64,
+}
+
+fn postgresql_pool(pool: &sqlx::PgPool) -> PostgresqlPoolDto {
+    let max_connections = pool.options().get_max_connections();
+    let open_connections = pool.size();
+    let idle_connections =
+        u32::try_from(pool.num_idle()).map_or(open_connections, |idle| idle.min(open_connections));
+    let in_use_connections = open_connections.saturating_sub(idle_connections);
+    let utilization_percent = if max_connections == 0 {
+        0.0
+    } else {
+        f64::from(in_use_connections) * 100.0 / f64::from(max_connections)
+    };
+    PostgresqlPoolDto {
+        max_connections,
+        open_connections,
+        idle_connections,
+        in_use_connections,
+        utilization_percent,
+    }
+}
+
 /// Aggregated subsystem health (SPEC §22 panel content).
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -219,6 +251,7 @@ pub struct HealthDto {
     /// their own statuses without flipping the top-level indicator.
     pub status: &'static str,
     pub postgresql: SubsystemHealthDto,
+    pub postgresql_pool: PostgresqlPoolDto,
     pub tantivy: SubsystemHealthDto,
     pub storage: SubsystemHealthDto,
     pub ffmpeg: SubsystemHealthDto,
@@ -246,9 +279,16 @@ const STALE_LEASE_GRACE: time::Duration = time::Duration::hours(1);
 const QUEUE_AGE_WARN: time::Duration = time::Duration::hours(24);
 
 async fn postgresql_health(pool: &sqlx::PgPool) -> SubsystemHealthDto {
+    let snapshot = postgresql_pool(pool);
     let probe = sqlx::query_scalar::<_, i32>("SELECT 1").fetch_one(pool);
     match tokio::time::timeout(HEALTH_PROBE_TIMEOUT, probe).await {
-        Ok(Ok(1)) => SubsystemHealthDto::ok("postgresql answered a bounded probe"),
+        Ok(Ok(1)) => SubsystemHealthDto::ok(format!(
+            "postgresql answered a bounded probe; pool {}/{} in use ({} open, {} idle)",
+            snapshot.in_use_connections,
+            snapshot.max_connections,
+            snapshot.open_connections,
+            snapshot.idle_connections
+        )),
         Ok(Ok(_)) | Ok(Err(_)) | Err(_) => {
             SubsystemHealthDto::unavailable("postgresql probe failed or timed out")
         }
@@ -458,6 +498,7 @@ async fn aggregate_health(
     resource_bounds: &Option<std::sync::Arc<crate::resource_bounds::ResourceBounds>>,
 ) -> HealthDto {
     let postgresql = postgresql_health(pool).await;
+    let postgresql_pool = postgresql_pool(pool);
     let tantivy = tantivy_health(pool, search).await;
     // The onboarding preflight checks are configuration/filesystem reads
     // plus bounded `-version` probes — exactly what the onboarding surface
@@ -480,6 +521,7 @@ async fn aggregate_health(
     HealthDto {
         status,
         postgresql,
+        postgresql_pool,
         tantivy,
         storage,
         ffmpeg,

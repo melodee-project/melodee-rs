@@ -229,6 +229,12 @@ impl TranscodingService {
         self
     }
 
+    /// Stops new transcode admissions. Existing child-backed response bodies
+    /// keep draining until the process shutdown deadline expires.
+    pub fn close_admission(&self) {
+        self.permits.close();
+    }
+
     /// Resolves and parses the configured template for `format`. Resolution
     /// is per request so admin edits take effect without restart; every
     /// failure mode fails closed with a sanitized log.

@@ -554,6 +554,13 @@ impl DirectPlayService {
         self
     }
 
+    /// Stops new direct-play admissions and wakes queued requests. Existing
+    /// response bodies retain their permits and may drain until the process
+    /// shutdown deadline expires.
+    pub fn close_admission(&self) {
+        self.permits.close();
+    }
+
     /// Blocking acquisition with gauge instrumentation: waiters are visible
     /// while queued and cancellation of the future simply never admits.
     async fn acquire(&self) -> Result<Admission, StreamError> {

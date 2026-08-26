@@ -13,7 +13,10 @@ updates unless you intentionally accept each new stable release automatically. P
 
 1. Read the GitHub Release notes for the target version.
 2. Record the current image digest and retain the current image tag for a binary rollback.
-3. Stop writes or otherwise schedule a maintenance window appropriate to your installation.
+3. Enter a maintenance window and stop **every** Melodee server and worker that can write to this
+   PostgreSQL database. Verify there is no old instance still serving or claiming work. Ordinary
+   PostgreSQL index creation and backfills can block writers; startup migration is not an online
+   schema-change mechanism.
 4. Back up PostgreSQL and validate the backup before changing the container:
 
    ```bash
@@ -31,7 +34,9 @@ not passed `pg_restore --list` and an isolated restore check is not a rollback a
 
 ## Upgrade
 
-Set `MELODEE_IMAGE_TAG=X.Y.Z` in `.env`, then pull and recreate only the application service:
+Set `MELODEE_IMAGE_TAG=X.Y.Z` in `.env`, then pull the image. Start exactly one candidate instance
+while traffic remains fenced; that instance applies the embedded migration set. Do not start the
+remaining replicas until its migration completes and schema history is verified:
 
 ```bash
 docker compose pull melodee
@@ -52,6 +57,13 @@ Also run `docker compose exec melodee melodee-cli doctor --deep`, verify search 
 representative public-ID lookup, artwork request, range stream, and client journey. `/healthz`
 proves process liveness; `/readyz` proves PostgreSQL and the configured search generation are
 usable.
+
+Migration `0038_catalog_genre_serving_projection.sql` performs an additive, one-time catalog genre
+backfill. Large catalogs need extra maintenance-window, WAL, and temporary-space headroom. Never
+pre-create its indexes concurrently: migration-owned objects and SQLx history must advance as one
+reviewed unit. Migration `0039_native_normalized_search_indexes.sql` subsequently builds four
+catalog-scale trigram GIN indexes; include that disk, WAL, and wall time in the same window. After
+verification, start the remaining replicas and restore traffic.
 
 ## Rollback
 

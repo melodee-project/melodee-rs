@@ -1655,15 +1655,10 @@ const RELEASE_SELECT_BY_ID: &str = "
                    JOIN release_traits trait ON trait.classification_id = classification.id
                    WHERE classification.release_id = release.id
                    UNION ALL
-                   SELECT file.value->'metadata'->>'genre' AS term
-                   FROM catalog_imports catalog_import
-                   JOIN release_work_item_manifests manifest
-                     ON manifest.id = catalog_import.manifest_row_id
-                   CROSS JOIN LATERAL jsonb_array_elements(
-                       COALESCE(manifest.manifest_payload->'files', '[]'::jsonb)
-                   ) file(value)
-                   WHERE catalog_import.release_id = release.id
-                     AND btrim(COALESCE(file.value->'metadata'->>'genre', '')) <> ''
+                   SELECT genre.display_value AS term
+                   FROM catalog_genre_terms genre
+                   WHERE genre.release_id = release.id
+                     AND genre.surface = 'native'
                ) terms WHERE btrim(term) <> '' ORDER BY term
            ),
            extract(year FROM release.release_date)::bigint,
@@ -1756,16 +1751,10 @@ const TRACK_SELECT_BY_ID: &str = "
                    JOIN release_traits trait ON trait.classification_id = classification.id
                    WHERE classification.release_id = track.release_id
                    UNION ALL
-                   SELECT file.value->'metadata'->>'genre' AS term
-                   FROM catalog_imports catalog_import
-                   JOIN release_work_item_manifests manifest
-                     ON manifest.id = catalog_import.manifest_row_id
-                   CROSS JOIN LATERAL jsonb_array_elements(
-                       COALESCE(manifest.manifest_payload->'files', '[]'::jsonb)
-                   ) file(value)
-                   WHERE catalog_import.release_id = track.release_id
-                     AND file.value->>'relative_path' = track.source_path
-                     AND btrim(COALESCE(file.value->'metadata'->>'genre', '')) <> ''
+                   SELECT genre.display_value AS term
+                   FROM catalog_genre_terms genre
+                   WHERE genre.track_id = track.id
+                     AND genre.surface = 'native'
                ) terms WHERE btrim(term) <> '' ORDER BY term
            ),
            track.track_number::bigint, track.duration_ms,

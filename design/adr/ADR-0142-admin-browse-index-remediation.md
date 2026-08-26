@@ -4,7 +4,7 @@
 - **Status:** Accepted
 - **Decision owners:** Phase 10 follow-up (admin-list index remediation)
 - **Supersedes:** None
-- **Superseded by:** None
+- **Superseded by:** ADR-0166 (operational application guidance only)
 - **Related requirements:** PRD-API-ADMIN-002, PRD-UI-005/006/007/008/010, SPEC §23
 
 ## Context
@@ -105,8 +105,9 @@ Explicitly **not** in this package (recorded as follow-ups):
 
 Project convention: migrations are forward-only; rollback is a documented manual statement
 set, not a down-migration. These indexes are additive and non-unique — dropping them
-restores the pre-migration plan shapes exactly, with no data impact. Rollback (any order,
-safe to run while serving traffic apart from brief catalog locks):
+restores the pre-migration plan shapes exactly, with no data impact. ADR-0166 supersedes the
+original online-operation claim: execute even this manual rollback only inside the maintenance
+fence after stopping Melodee writers. Rollback statements (any order):
 
 ```sql
 DROP INDEX IF EXISTS artists_admin_browse_name_idx;
@@ -124,12 +125,11 @@ DROP INDEX IF EXISTS release_work_items_admin_browse_created_idx;
 DROP INDEX IF EXISTS artist_match_decisions_observed_outcome_idx;
 ```
 
-Forward: `sqlx migrate` applies 0029 in the normal ordered flow; each standard
-`CREATE INDEX` takes only a `ShareUpdateExclusiveLock`, so reads/writes continue during
-application. `CREATE INDEX CONCURRENTLY` is not usable here because sqlx runs each
-migration inside a transaction; on a live large catalog an operator may apply the same
-statements manually with `CONCURRENTLY` (outside the migration runner) if build-time write
-blocking is a concern — recorded as operational guidance, not a second migration.
+Forward: `sqlx migrate` applies 0029 in the normal ordered flow. The original operational
+guidance here incorrectly described ordinary `CREATE INDEX` as allowing writes and suggested
+manual concurrent application. ADR-0166 supersedes that guidance: 0029 is a
+maintenance-fenced migration, every Melodee writer must be stopped, and operators must not
+diverge migration-owned indexes from SQLx history through ad-hoc manual creation.
 
 ## Alternatives considered
 
