@@ -180,4 +180,5 @@ and has a time-of-check/time-of-use race.
 - [SPEC.md](../../SPEC.md)
 - [ADR-0106](ADR-0106-use-release-centric-canonical-storage.md)
 - [ADR-0115](ADR-0115-media-inspection-boundary-and-manifest-byte-hashing.md)
-- Phase 3.2 evidence (historical artifact removed)
+- Phase 3.2 evidence (withdrawn evidence report
+  `design/evidence/phase-3/media-normalization/README.md`)

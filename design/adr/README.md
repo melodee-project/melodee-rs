@@ -9,6 +9,21 @@ The existing C# repository already contains ADR-0001 through ADR-0007. This repo
 ADRs at **ADR-0100** to avoid collision and preserve historical identity. See
 [legacy/README.md](legacy/README.md).
 
+## Withdrawn evidence reports
+
+The `design/evidence/` phase reports were removed from the repository on 2026-08-25
+(commit `26cb87c`) as historical artifacts. Accepted ADRs, the requirement index
+(`design/requirements/REQUIREMENTS-INDEX.md`), and the committed compatibility evidence in
+`compatibility/` are the authoritative record of what was decided, tested, and shipped.
+
+Where an ADR or design document cites one of those reports, the citation names it as a
+withdrawn evidence report. The original text remains recoverable from git history, for
+example:
+
+```bash
+git show 26cb87c^:design/evidence/phase-0/PHASE-0-REPORT.md
+```
+
 ## Status lifecycle
 
 - **Proposed** — under review; not authority for irreversible implementation.

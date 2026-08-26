@@ -14,7 +14,8 @@ Regenerate: `python3 scripts/generate_benchmark_dataset.py --tier B` then
 `python3 scripts/run_benchmarks.py --tier B`. Datasets land in dedicated disposable
 databases (`melodee_bench_{tier}`) — never in the capture fixture DB.
 
-Evidence report: historical artifact removed (findings, budgets, hazards).
+Evidence: the committed tier datasets, result matrices, and `SUMMARY.md`. The original
+scale-baseline narrative report (findings, budgets, hazards) is a withdrawn evidence report.
 
 The legacy tier files are behavior-oracle baselines, not current Rust acceptance. Generate the Rust
 current-catalog result with the ignored release-mode test command recorded in its JSON report; do

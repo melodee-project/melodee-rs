@@ -3,7 +3,7 @@
 - **Date:** 2026-08-17
 - **Status:** Accepted
 - **Acceptance:** 2026-08-17, R3.1; implemented literally by the R3.2–R3.8 work packages
-  (evidence: historical artifact removed)
+  (evidence: withdrawn `design/evidence/r3/README.md` report)
 - **Decision owners:** Release owner
 - **Supersedes:** None
 - **Superseded by:** None
@@ -245,7 +245,8 @@ compat-layer identity preservation testable in isolation.
 - [SPEC.md](../../SPEC.md)
 - [SPEC.md](../../SPEC.md) §14 (Phase 11) — the release-closure ledger
   (`IMPLMENTATION_OUTSTANDING.md` §8, R3) was removed in the `a42e733` restructure; it remains
-  available in git history at `ce3f0cd`. R3 completion evidence:
-  historical artifact removed (historical artifact removed)
-- Phase 0 legacy baseline: historical artifact removed
+  available in git history at `ce3f0cd`. R3 completion evidence: withdrawn
+  `design/evidence/r4/adr-0149-decision-package.md` report
+- Phase 0 legacy baseline: withdrawn evidence report
+  `design/evidence/phase-0/legacy-baseline.md`
 - ADR-0133, ADR-0136, ADR-0140, ADR-0141, ADR-0145

@@ -60,8 +60,10 @@ and do not relabel the historical fixture evidence. The launcher does not seed
 or drop the supplied database and validates that the supplied storage root is
 an existing directory with no symlinked path components. It waits for the
 local client server and relay before starting the probe. The native Android phone
-and MeloAmp workflows use the client launch procedures in
-historical artifact removed; the representative
+and MeloAmp workflows use the client launch procedures in the withdrawn Phase 8/R4
+client-acceptance reports (withdrawn evidence reports; the harnesses
+`scripts/r4_integration_probe.py`, `scripts/run_android_auto_probe.py`, and
+`scripts/validate_r4_client_acceptance.py` carry the current procedures); the representative
 OpenSubsonic/Jellyfin workflow uses
 `compatibility/clients/phase8/README.md`.
 

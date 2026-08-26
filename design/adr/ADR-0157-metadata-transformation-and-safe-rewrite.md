@@ -163,4 +163,5 @@ the "never delete source media" and "never change identity" invariants.
 - [ADR-0117](ADR-0117-use-a-postgresql-catalog-identity-and-contribution-schema-with-set-based-manifest-import.md)
   (identity/contribution schema — transformations write to it)
 - `src/Melodee.Common/Services/Scanning/MediaEditService.cs` (C# legacy, behavioral oracle)
-- historical artifact removed (metadata edit forms deferral)
+- Phase 10 report (withdrawn evidence report `design/evidence/phase-10/PHASE-10-REPORT.md`)
+  (metadata edit forms deferral)

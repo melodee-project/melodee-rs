@@ -57,7 +57,8 @@ Exit code 0 = all assertions passed.
 
 ## Findings this harness produced
 
-See historical artifact removed. In short: two
+See the withdrawn Phase 8 client-acceptance report (a withdrawn evidence report; the fixes
+below are the durable record). In short: two
 real-client-only compatibility gaps were found and fixed (case-insensitive
 Jellyfin route matching; `ApiKey` query token alias), and the captured
 OpenSubsonic secret-based token auth was confirmed working as designed.

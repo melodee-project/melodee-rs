@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+description = "Melodee music server: native API v1, OpenSubsonic, Jellyfin adapters, workers, and admin API"
 publish = false
 
 [lib]

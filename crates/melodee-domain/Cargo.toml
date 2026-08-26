@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+description = "Pure Melodee core domain types: artists, releases, tracks, manifests, identity, and ingestion state"
 publish = false
 
 [dependencies]

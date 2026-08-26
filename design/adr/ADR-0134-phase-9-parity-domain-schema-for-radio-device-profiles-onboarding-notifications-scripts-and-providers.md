@@ -77,8 +77,8 @@ Existing stores being extended rather than duplicated:
    `SHA-256("melodee-lastfm-session-key/v1" || 0x00 || security.secretKey)`. Each seal uses a
    fresh random 96-bit nonce prepended to the ciphertext. The raw key is never logged, never
    traced, never serialized, and never exposed by any API; only the digest may appear in audit
-   surfaces. `lastfm_username` is nullable because the legacy exchange discards it (evidence:
-   historical artifact removed §3). Operational note: because the
+    surfaces. `lastfm_username` is nullable because the legacy exchange discards it (evidence:
+    withdrawn `design/evidence/phase-9/lastfm-provider-evidence.md` report §3). Operational note: because the
    sealing key derives from `security.secretKey`, rotating that secret invalidates stored
    links; affected users re-link — re-authentication is the only recovery flow legacy has
    (legacy ADR-0004: no refresh flow). A missing `security.secretKey` fails Last.fm linking

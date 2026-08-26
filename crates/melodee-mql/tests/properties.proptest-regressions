@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc c6f6b8c488e2eb5f65cba34e7247dcdb3434b2dea1ba7fbd6d2ed4fe4203106b # shrinks to prefix = "¡  𐀀 \u{80} \0ࠀ a  0AA 𐀀A\0AA    𐀀A0𐀀𐀀ࠀ0 𐀀a¡ࠀ"
+cc 3cc52c3fded068ad77ce6f09a538c04069ab61127c3c885ea7818bb946879e48 # shrinks to ast = Term(MqlTerm { field: None, op: NotEq, value: Text(""), negate: false, span: (0, 0) })

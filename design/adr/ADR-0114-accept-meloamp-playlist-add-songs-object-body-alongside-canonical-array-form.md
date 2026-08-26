@@ -82,7 +82,8 @@ behavior plus actual client usage over the published document.
 ## References
 
 - [PRD.md](../../PRD.md) (PRD-API-M1-001/002/005/006)
-- Phase 0 report (historical artifact removed) (risk R3)
-- Native client route inventory (historical artifact removed)
+- Phase 0 report (withdrawn evidence report `design/evidence/phase-0/PHASE-0-REPORT.md`) (risk R3)
+- Native client route inventory (withdrawn evidence report
+  `design/evidence/phase-0/native-client-route-inventory.md`)
   (finding 5)
 - `compatibility/melodee-api-v1/golden/native-catalog/catalog-playlist-crud-*`

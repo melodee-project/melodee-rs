@@ -63,12 +63,13 @@ Validation matrix evidence:
   System/Light/Dark appearance over Carbon g10/g100; covered by component tests and the e2e
   suite.
 - **Translated locale:** 20-culture i18next catalog (ADR-0137) with legacy-harvested translations
-  (historical artifact removed); locale switching covered by e2e.
+  (harvest evidence: withdrawn `design/evidence/phase-10/i18n-harvest.md` report); locale switching covered by e2e.
 - **RTL smoke:** ar-SA `dir="rtl"` assertions in `admin-ui/e2e/` (shell, processing queue,
   release review, identity review specs) at 1600×1200, 768×1024, and 375×812.
 - **Keyboard navigation:** e2e keyboard specs (table row focus/Enter activation, decision-action
   tab order) in the processing-queue/release-review/identity-review e2e files.
 - **Responsive:** all e2e specs run at the three UI-SPEC §8 viewports.
 
-Test counts at time of recording: 96 unit/component tests, 42 e2e runs — all green; see
-historical artifact removed. **ADR-0109 validation is satisfied.**
+Test counts at time of recording: 96 unit/component tests, 42 e2e runs — all green; recorded
+in the withdrawn `design/evidence/phase-10/checklists/04..06` evidence.
+**ADR-0109 validation is satisfied.**

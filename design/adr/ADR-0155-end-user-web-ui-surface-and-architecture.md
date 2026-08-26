@@ -126,4 +126,5 @@ currently-implemented web capabilities in a modern surface with an explicit, ADR
 - [ADR-0138](ADR-0138-admin-spa-tooling-and-static-serving.md), [ADR-0139](ADR-0139-admin-spa-session-strategy-and-admin-api-gating.md)
 - [ADR-0109](ADR-0109-use-carbon-for-admin-ui.md), [ADR-0137](ADR-0137-localization-stack-and-rtl-preservation.md)
 - [ADR-0102](ADR-0102-preserve-public-apis-as-separate-adapters.md)
-- historical artifact removed (Blazor route inventory)
+- Blazor route inventory (withdrawn evidence report
+  `design/evidence/phase-9/blazor-page-inventory.md`)

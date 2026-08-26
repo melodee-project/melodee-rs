@@ -14,7 +14,7 @@ The release image currently uses `debian:bookworm-slim` and installs the Debian-
 `ffmpeg`, `ffprobe`, and `libchromaprint-tools` required by ADR-0108. An earlier Bookworm scan
 reported 11 critical and 185 high findings. The exact guarded Bookworm image built on 2026-08-20
 reports 11 critical and 193 high findings, with its machine-readable scan and SBOM retained under
-historical artifact removed. The image cannot pass the release workflow's
+`design/evidence/r5/artifacts/local-20260820/` (withdrawn evidence tree). The image cannot pass the release workflow's
 critical-finding gate in that state; no finding is suppressed by this proposal.
 
 Debian Trixie is the current stable Debian release in the local release environment and provides
@@ -93,4 +93,5 @@ SBOM, provenance, and the accepted media/client gates.
 - [SPEC.md](../../SPEC.md) §6 and §27
 - [ADR-0144: Publish official releases as GHCR OCI images](ADR-0144-publish-official-releases-as-ghcr-oci-images.md)
 - [ADR-0108: Use FFmpeg, ffprobe, and Chromaprint tools](ADR-0108-use-ffmpeg-ffprobe-and-chromaprint-tools.md)
-- ADR-0151 decision package (historical artifact removed)
+- ADR-0151 decision package (withdrawn evidence report
+  `design/evidence/r5/adr-0151-decision-package.md`)

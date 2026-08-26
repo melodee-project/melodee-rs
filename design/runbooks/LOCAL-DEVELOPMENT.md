@@ -1,11 +1,11 @@
 # Local Development
 
-search and MQL is the current implementation boundary. Phases 0–5 are complete: the server implements
-durable inbound processing through immutable manifest v3, the bounded PostgreSQL catalog and
-identity model, and explainable classification/novelty/policy evaluation with operator commands.
-The authoritative classification and policy decision is in historical artifact removed. search and MQL search
-and MQL are implemented under Candidate review; compatibility APIs, playback, and authentication
-remain later-phase work.
+The server, catalog and processing pipeline, client adapters (native Melodee API v1,
+OpenSubsonic, Jellyfin), user-domain parity, and the admin SPA are implemented. The
+authoritative classification and policy decision record is
+[ADR-0120](../adr/ADR-0120-phase5-classification-novelty-and-policy-schema.md); the Phase 5
+closure report it accompanied is a withdrawn evidence report. Legacy import, production
+cutover, and rollback rehearsal are the remaining release-readiness work.
 
 ## Start PostgreSQL and the server
 

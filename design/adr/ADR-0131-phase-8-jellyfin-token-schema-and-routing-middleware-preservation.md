@@ -13,7 +13,8 @@
 ## Context
 
 The Jellyfin compatibility surface is a music-focused subset with its own stateful token model,
-captured in Phase 0 (historical artifact removed,
+captured in Phase 0 (withdrawn evidence report
+`design/evidence/phase-0/jellyfin-capture.md`;
 `compatibility/jellyfin/contracts/route-inventory.json`):
 
 - **Issuance:** `POST /Users/AuthenticateByName {Username, Pw}` (the DTO reads only `Pw`; a body
@@ -138,5 +139,6 @@ admin app is itself part of the contract.
 
 - [PRD.md](../../PRD.md) (PRD-API-JF-001..006, PRD-STREAM-002)
 - [SPEC.md](../../SPEC.md) §19.3, §20, §24
-- Jellyfin capture evidence (historical artifact removed) §1–§2
+- Jellyfin capture evidence (withdrawn evidence report
+  `design/evidence/phase-0/jellyfin-capture.md`) §1–§2
 - `compatibility/COVERAGE-MATRIX.md` discrepancies D3, D10

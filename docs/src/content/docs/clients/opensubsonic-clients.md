@@ -33,8 +33,7 @@ credentials.
   disabled transcoder return the standard error envelope with code `0`. See
   [Configuration — Transcoding](../installation/configuration/#transcoding).
 - The shipping Feishin client completes the documented smoke workflows (connect, browse,
-  playback, search, favorites) against this surface; acceptance evidence lives in
-  historical artifact removed in the repository.
+  playback, search, favorites) against this surface.
 - Artist, album, and song cover art reflect administrator-managed catalog artwork overrides;
   a song uses its Release artwork. Without an override, clients receive the captured default
   artwork behavior.

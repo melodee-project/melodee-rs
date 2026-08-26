@@ -147,5 +147,5 @@ unchanged (modern ECMAScript, camelCase `ctx`, same auto-wrap rule). Known diffe
 - the legacy editor's mock ctx advertised `libraryId`/`relativePath` fields that production
   never supplied — test against the real field list above.
 
-Per-hook dispositions and shell-hook migration paths are recorded in the engineering migration
-guide (historical artifact removed in the source repository).
+Per-hook dispositions and shell-hook migration paths are recorded in the repository's
+engineering documentation (`design/adr/ADR-0135` and the scripting module documentation).

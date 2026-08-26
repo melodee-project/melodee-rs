@@ -12,10 +12,10 @@ References: [ADR-0148](../adr/ADR-0148-legacy-migration-contract.md),
 [ADR-0149](../adr/ADR-0149-phase-11-rehearsal-freeze-cutover-and-rollback-procedures.md), and the
 [public migration guide](../../docs/src/content/docs/installation/legacy-migration.md).
 
-Current acceptance evidence is tracked in
-the operator acceptance plan and
-the operator acceptance report (historical artifact removed). Until that
-report records an exact candidate SHA and image digests, all commands below are planned operator
+Current acceptance evidence is tracked in the operator acceptance plan and the operator
+acceptance report. The original report (`design/evidence/phase-11/OPERATOR-ACCEPTANCE-REPORT.md`)
+is a withdrawn evidence report; until a current report records an exact candidate SHA and image
+digests, all commands below are planned operator
 commands, not executed release evidence. A changed candidate or dirty tree invalidates prior
 candidate evidence.
 

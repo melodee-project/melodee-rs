@@ -222,7 +222,7 @@ installed as `python`, use `make PYTHON=python <target>`.
 Read [AGENTS.md](AGENTS.md) before changing this repository. It defines the authority order,
 dependency boundaries, data-safety rules, compatibility process, documentation expectations, and
 the required definition of done. The primary engineering references are the
-[PRD](PRD.md), [SPEC](SPEC.md), [technical specification](SPEC.md),
+[PRD](PRD.md), [SPEC](SPEC.md),
 and [accepted ADRs](design/adr/README.md).
 
 ## Documentation, compatibility, and migration
@@ -233,8 +233,10 @@ and [accepted ADRs](design/adr/README.md).
 - Captured compatibility contracts, golden responses, media evidence, and client exercises live
   in [`compatibility/`](compatibility/). They are executable release evidence, not examples to
   hand-edit.
-- completion reports and requirement traceability live in historical artifact removed (historical artifact removed) and
-  [`design/requirements/`](design/requirements/).
+- Requirement traceability lives in [`design/requirements/`](design/requirements/). Historical
+  phase completion reports were withdrawn from the repository on 2026-08-25 and remain
+  recoverable from git history (see
+  [Withdrawn evidence reports](design/adr/README.md#withdrawn-evidence-reports)).
 - The legacy C# repository is valuable compatibility evidence, but its classes and service
   boundaries must not be copied into the Rust implementation.
 

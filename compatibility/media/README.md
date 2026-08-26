@@ -10,5 +10,6 @@ Phase 0 media-processing behavioral baseline (FIRST-10-ISSUES.md Issue 8).
 - Generator: `python3 scripts/generate_media_corpus.py` (deterministic ffmpeg-synthesized
   corpus into /tmp/media-baseline; fully redistributable, no copyrighted media).
 - Capture: `python3 scripts/capture_media_baseline.py`.
-- Evidence report: historical artifact removed (includes the two critical
-  legacy defects F1 metadata-container gate and F2 same-size destructive dedupe).
+- Evidence: `baseline.json` plus the per-case outcomes. The two critical legacy defects
+  (F1 metadata-container gate and F2 same-size destructive dedupe) are recorded in
+  ADR-0113 and ADR-0115; the original narrative report is a withdrawn evidence report.

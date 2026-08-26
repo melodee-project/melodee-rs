@@ -51,5 +51,6 @@ retained; its move/delete requires a later, separate policy decision and audit. 
 inbound occurrence is drained after its verified durable staging receipt — the inbound directory
 is transient, not retention storage.
 
-See ADR-0106, ADR-0108, ADR-0115, ADR-0116, ADR-0145, and
-normalization and publication canonical-publication evidence (historical artifact removed).
+See ADR-0106, ADR-0108, ADR-0115, ADR-0116, ADR-0145, and the withdrawn Phase 3
+normalization and canonical-publication evidence
+(`design/evidence/phase-3/`, a withdrawn evidence tree).

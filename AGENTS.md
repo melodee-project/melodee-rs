@@ -36,7 +36,7 @@ template.
 - **Legacy compatibility oracle:** `python3 scripts/legacy_oracle.py recreate`
   rebuilds the frozen C# baseline (commit `4028b58d...`, fails closed on mismatch) and
   `python3 scripts/legacy_oracle.py capture` regenerates all golden captures. Details:
-  historical artifact removed and `compatibility/README.md`.
+  `compatibility/README.md`.
 - **cargo-deny** warnings like `license-not-encountered` (allowed licenses with no current
   dependent crate) are benign; errors are not.
 - **Doc validation is executable.** `python3 scripts/validate_repository.py` enforces required
@@ -77,11 +77,10 @@ template.
 
 1. Accepted ADRs in `design/adr/`
 2. `SPEC.md` technical invariants and interface contracts
-3. `PRD.md` product requirements
-4. `IMPLEMENTATION.md` delivery scope and completion gates
-5. The assigned phase, issue, or work package
-6. Existing implementation patterns in this repository
-7. Legacy C# code — evidence of behavior, **not** an architecture template
+3. `PRD.md` product requirements and the active roadmap
+4. The assigned phase, issue, or work package
+5. Existing implementation patterns in this repository
+6. Legacy C# code — evidence of behavior, **not** an architecture template
 
 Do not silently resolve a material conflict; record it in the PR and propose an ADR when needed.
 
@@ -112,10 +111,14 @@ subject to accepted differences recorded in `PRD.md`. MeloAmp owns
 listener-facing web workflows under ADR-0161. The active roadmap is
 `PRD.md`.
 
-Thirteen non-terminal requirements remain. They concern immutable release artifacts, authorized
-migration verification, public-ID and media preservation, performance and scale acceptance,
-differential validation, fault recovery, cutover, and rollback. They are release-readiness and
-operator-acceptance obligations, not missing runtime workflows.
+Non-terminal requirements remaining: **15** (status `in-progress` in
+`design/requirements/REQUIREMENTS-INDEX.md`; `implemented`, `tested`, and `deferred` are the
+terminal statuses defined by `scripts/audit_requirement_overrides.py`, with `deferred` rows
+recorded under accepted ADR-level waivers). The count in this paragraph is enforced by
+`tests/python/test_requirements_index.py` so it cannot drift. They concern immutable release
+artifacts, authorized migration verification, public-ID and media preservation, performance
+and scale acceptance, differential validation, fault recovery, cutover, and rollback. They are
+release-readiness and operator-acceptance obligations, not missing runtime workflows.
 
 Allowed without new user direction: corrections to existing evidence and documentation. An explicit
 request to implement the next substantive work program authorizes all safe in-repository work needed

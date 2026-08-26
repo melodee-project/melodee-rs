@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+description = "PostgreSQL stores and migrations for the Melodee catalog, work items, policy, users, and settings"
 publish = false
 
 [dependencies]

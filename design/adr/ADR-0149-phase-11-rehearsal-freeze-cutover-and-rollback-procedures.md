@@ -115,7 +115,9 @@ proves procedure.
 
 ### Follow-up work
 
-- R4.1–R4.8 implement and rehearse these procedures; evidence lands in historical artifact removed.
+- R4.1–R4.8 implement and rehearse these procedures; evidence lands in
+  `design/runbooks/CUTOVER-AND-ROLLBACK.md` (the `design/evidence/r4/` tree that collected it
+  was a withdrawn evidence tree).
 - R6 documents the final cutover/rollback runbooks as the supported procedure.
 
 ## Validation
@@ -129,7 +131,8 @@ proves procedure.
 
 - [PRD.md](../../PRD.md) §49 (migration requirements)
 - [ADR-0148: Legacy migration contract](ADR-0148-legacy-migration-contract.md)
-- ADR-0149 decision package (historical artifact removed)
+- ADR-0149 decision package (withdrawn evidence report
+  `design/evidence/r4/adr-0149-decision-package.md`)
 - [SPEC.md](../../SPEC.md) §14 (Phase 11) — the release-closure ledger
   (`IMPLMENTATION_OUTSTANDING.md` §9, R4) was removed in the `a42e733` restructure; it remains
   available in git history at `ce3f0cd`. R4 evidence: [design/runbooks/CUTOVER-AND-ROLLBACK.md](../runbooks/CUTOVER-AND-ROLLBACK.md)

@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+description = "Melodee administrative CLI: migration tooling, ingestion diagnostics, and operator recovery"
 publish = false
 
 [dependencies]
