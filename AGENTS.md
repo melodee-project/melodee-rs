@@ -108,9 +108,9 @@ The issue template is reserved for explicitly assigned narrow issues.
 ## Current project state
 
 The Rust server and Admin UI are functionally feature complete relative to the current C# product,
-subject to accepted differences recorded in `design/ROAD-TO-FEATURE-PARITY.md`. MeloAmp owns
+subject to accepted differences recorded in `PRD.md`. MeloAmp owns
 listener-facing web workflows under ADR-0161. The active roadmap is
-`design/ROAD-TO-FEATURE-COMPLETION.md`.
+`PRD.md`.
 
 Thirteen non-terminal requirements remain. They concern immutable release artifacts, authorized
 migration verification, public-ID and media preservation, performance and scale acceptance,

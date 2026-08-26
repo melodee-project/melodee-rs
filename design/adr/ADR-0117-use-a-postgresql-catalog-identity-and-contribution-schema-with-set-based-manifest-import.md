@@ -215,4 +215,4 @@ provides a clean projection boundary for later search.
 - [ADR-0110](ADR-0110-use-sqlx-and-explicit-sql.md)
 - [ADR-0116](ADR-0116-use-immutable-release-ids-and-convergent-canonical-publication.md)
 - [Phase 3 report](../evidence/phase-3/PHASE-3-REPORT.md)
-- [Phase 4 work package](../ROAD-TO-FEATURE-COMPLETION.md)
+- Phase 4 work package

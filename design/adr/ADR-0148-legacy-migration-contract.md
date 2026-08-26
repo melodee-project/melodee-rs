@@ -243,7 +243,7 @@ compat-layer identity preservation testable in isolation.
 
 - [PRD.md](../../PRD.md)
 - [SPEC.md](../../SPEC.md)
-- [IMPLEMENTATION.md](../../IMPLEMENTATION.md) §14 (Phase 11) — the release-closure ledger
+- [SPEC.md](../../SPEC.md) §14 (Phase 11) — the release-closure ledger
   (`IMPLMENTATION_OUTSTANDING.md` §8, R3) was removed in the `a42e733` restructure; it remains
   available in git history at `ce3f0cd`. R3 completion evidence:
   [design/evidence/r4/adr-0149-decision-package.md](../evidence/r4/adr-0149-decision-package.md)

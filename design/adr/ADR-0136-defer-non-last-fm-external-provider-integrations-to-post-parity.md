@@ -3,7 +3,7 @@
 - **Date:** 2026-08-14
 - **Status:** Superseded
 - **Decision owners:** Phase 9 work package (delegated phase decision per the
-  `design/ROAD-TO-FEATURE-COMPLETION.md` §3 decision-bundle pattern; ADR-0133 is the precedent for an
+  `PRD.md` §3 decision-bundle pattern; ADR-0133 is the precedent for an
   accepted, phase-scoped waiver/deferral ADR recorded by the executing agent)
 - **Supersedes:** None
 - **Superseded by:** [ADR-0154](ADR-0154-external-provider-enrichment-scope-and-runtime.md)
@@ -41,7 +41,7 @@ Party Mode.
 Phase 9 **defers** wiring the search/image/enrichment integrations of the eight non-Last.fm
 inventoried providers (and Last.fm's own unwired metadata-lookup legs) to a **post-parity phase
 with its own work package**. The Phase 9 parity deliverable for the provider domain is exactly
-what WP-07 shipped (per `design/ROAD-TO-FEATURE-COMPLETION.md` WP-07 scope):
+what WP-07 shipped (per `PRD.md` WP-07 scope):
 
 1. The provider inventory evidence with per-provider purpose, config keys, and legacy code
    citations (`lastfm-provider-evidence.md` §9).
@@ -133,4 +133,4 @@ decision, not an untracked one.
 - [ADR-0134](ADR-0134-phase-9-parity-domain-schema-for-radio-device-profiles-onboarding-notifications-scripts-and-providers.md)
   §7 (provider cache/link schema authority)
 - `design/evidence/phase-9/lastfm-provider-evidence.md` (WP-07 inventory and Last.fm evidence)
-- `design/ROAD-TO-FEATURE-COMPLETION.md` §3 (decision bundle) and WP-07 scope
+- `PRD.md` §3 (decision bundle) and WP-07 scope

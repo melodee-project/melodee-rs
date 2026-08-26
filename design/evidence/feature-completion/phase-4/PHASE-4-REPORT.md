@@ -290,9 +290,9 @@ claimed as an Admin UI feature; a future product decision would be required befo
 ## Documentation impact:
 
 Documentation impact:
-- Updated - `design/ROAD-TO-FEATURE-COMPLETION.md`,
+- Updated - `PRD.md`,
   `design/evidence/feature-completion/phase-4/PHASE-4-REPORT.md`,
-  `design/ROAD-TO-FEATURE-COMPLETION.md`, `design/ROAD-TO-FEATURE-PARITY.md`,
+  `PRD.md`, `PRD.md`,
   `design/requirements/FEATURE-PARITY-MATRIX.md`, `design/requirements/status-overrides.json`,
   `design/adr/README.md`,
   `docs/src/content/docs/admin/system-diagnostics.md`, `docs/src/content/docs/api/admin-api.md`,

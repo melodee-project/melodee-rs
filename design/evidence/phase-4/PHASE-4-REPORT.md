@@ -5,7 +5,7 @@
 **Authority:** PRD-ARTIST-001 through PRD-ARTIST-012, PRD-RESOLVE-001 through
 PRD-RESOLVE-005, PRD-CREDIT-001 through PRD-CREDIT-008, PRD-CATALOG-001 through
 PRD-CATALOG-005, the supporting requirements named by the
-[Phase 4 work package](../../ROAD-TO-FEATURE-COMPLETION.md), SPEC sections 7–13, 16–17,
+Phase 4 work package, SPEC sections 7–13, 16–17,
 22–25, and 28, ADR-0117/0118/0119, and
 `design/agents/DEFINITION-OF-DONE.md`.
 

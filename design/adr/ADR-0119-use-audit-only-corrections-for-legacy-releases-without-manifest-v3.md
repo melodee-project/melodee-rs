@@ -74,4 +74,4 @@ corrections must test both paths atomically.
 - [SPEC.md](../../SPEC.md)
 - [ADR-0117](ADR-0117-use-a-postgresql-catalog-identity-and-contribution-schema-with-set-based-manifest-import.md)
 - [ADR-0118](ADR-0118-use-audioidentity-and-immutable-manifest-v3-semantic-overlays.md)
-- [Phase 4 work package](../ROAD-TO-FEATURE-COMPLETION.md)
+- Phase 4 work package

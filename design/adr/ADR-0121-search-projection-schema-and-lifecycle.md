@@ -223,4 +223,4 @@ state.
 - [ADR-0110](ADR-0110-use-sqlx-and-explicit-sql.md)
 - [ADR-0111](ADR-0111-do-not-require-broker-or-redis-initially.md)
 - [ADR-0117](ADR-0117-use-a-postgresql-catalog-identity-and-contribution-schema-with-set-based-manifest-import.md)
-- [Phase 5 work package](../ROAD-TO-FEATURE-COMPLETION.md)
+- Phase 5 work package

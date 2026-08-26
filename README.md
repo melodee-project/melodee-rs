@@ -222,7 +222,7 @@ installed as `python`, use `make PYTHON=python <target>`.
 Read [AGENTS.md](AGENTS.md) before changing this repository. It defines the authority order,
 dependency boundaries, data-safety rules, compatibility process, documentation expectations, and
 the required definition of done. The primary engineering references are the
-[PRD](PRD.md), [SPEC](SPEC.md), [implementation plan](IMPLEMENTATION.md),
+[PRD](PRD.md), [SPEC](SPEC.md), [technical specification](SPEC.md),
 [accepted ADRs](design/adr/README.md), and [phase evidence](design/evidence/).
 
 ## Documentation, compatibility, and migration

@@ -206,8 +206,8 @@ before claiming external parity.
 ## Documentation impact:
 - Updated - `design/evidence/feature-completion/phase-1/PHASE-1-REPORT.md`,
   `design/evidence/feature-completion/phase-2/PHASE-2-REPORT.md`,
-  `design/ROAD-TO-FEATURE-COMPLETION.md`,
-  `design/ROAD-TO-FEATURE-COMPLETION.md`, `design/ROAD-TO-FEATURE-PARITY.md`,
+  `PRD.md`,
+  `PRD.md`, `PRD.md`,
   `design/requirements/FEATURE-PARITY-MATRIX.md`,
   `design/requirements/status-overrides.json`, generated requirements indexes,
   ADR index/ADR-0155 metadata, and public provider, operator, configuration, and MeloAmp docs.

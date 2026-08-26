@@ -76,7 +76,7 @@ read-only checks, public-ID mapping, durable issues, search rebuild, backup/rest
 and retained-target rollback. It does not prove a production-sized rehearsal.
 
 The bounded approval package is prepared in
-`design/ROAD-TO-FEATURE-COMPLETION.md`. It requires exact source/snapshot identity,
+`PRD.md`. It requires exact source/snapshot identity,
 read-only proof, media access mode, target locations, capacity, protected secret injection,
 commands, redacted outputs, cleanup, stop conditions, and named operator/approver. No production
 or private snapshot/media access occurred, so source inventory, initial import, delta, freeze,

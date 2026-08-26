@@ -1,21 +1,21 @@
 # Feature Completion Program — Phase 0 Report
 
 **Status: COMPLETE (2026-08-24).** Executed as the program's decision/alignment phase per
-[design/ROAD-TO-FEATURE-COMPLETION.md](../../../ROAD-TO-FEATURE-COMPLETION.md) §5 "Phase 0 —
+PRD.md §5 "Phase 0 —
 Architecture ADRs (no code; prerequisite)". The sole obligation of Phase 0 is architectural
 decisions and alignment: each scope change in the user's direction is captured as an accepted ADR,
 and repository documentation is reconciled against the new decisions. No implementation, schema, or
 compatibility capture belongs in this phase (the Phase 0 exit criterion: "all seven ADRs
 accepted").
 
-## Exit criteria (ROAD-TO-FEATURE-COMPLETION.md Phase 0)
+## Exit criteria (PRD.md Phase 0)
 
 | Exit criterion | Result | Evidence |
 |---|---|---|
 | All seven Phase 0 ADRs accepted | ✅ ADR-0154…0160 accepted | `design/adr/ADR-015{4..9}-*.md`, `ADR-0160-*.md` |
 | Existing conflicting ADR superseded, not edited | ✅ ADR-0136 marked `Superseded (by 0154)`; body preserved | `design/adr/ADR-0136-*.md` status line |
 | ADR index reconciled | ✅ ADR-0136 row updated; rows 0154–0160 added | `design/adr/README.md` |
-| Roadmap status header + open-questions section refreshed | ✅ header "In Progress — Phase 0 (ADRs) complete"; §8 open items resolved with ADR links | ROAD-TO-FEATURE-COMPLETION.md |
+| Roadmap status header + open-questions section refreshed | ✅ header "In Progress — Phase 0 (ADRs) complete"; §8 open items resolved with ADR links | PRD.md |
 | Requirement overrides reconciled to the accepted ADRs | ✅ `PRD-EXT-001/003/004` reference ADR-0154 | `design/requirements/status-overrides.json` |
 | Parity matrix reconciled | ✅ "External metadata providers" row `Waived → Partial` (ADR-0154 supersedes ADR-0136) | `design/requirements/FEATURE-PARITY-MATRIX.md` |
 | `python3 scripts/extract_requirements.py --check` passes | ✅ 239 requirements, index current | `design/requirements/status.json` (regenerated) |
@@ -76,7 +76,7 @@ Observability, §50 Testing).
   summaries.
 - **`design/adr/ADR-0136-*.md`** — status line changed to `Superseded (2026-08-24, by ADR-0154)`;
   the superseding decision is recorded in place (history never edited).
-- **`design/ROAD-TO-FEATURE-COMPLETION.md`** — Phase 0 section lists all 7 ADRs as accepted with
+- **`PRD.md`** — Phase 0 section lists all 7 ADRs as accepted with
   the "Exit: all seven ADRs accepted — satisfied" note; §8 open items marked resolved with
   per-question ADR links; the status header is refreshed to "In Progress — Phase 0 (ADRs)
   complete".
@@ -128,7 +128,7 @@ ADR index + supersession:
 - `design/adr/ADR-0136-defer-non-last-fm-external-provider-integrations-to-post-parity.md`
 
 Roadmap + requirements + parity:
-- `design/ROAD-TO-FEATURE-COMPLETION.md`
+- `PRD.md`
 - `design/requirements/status-overrides.json`
 - `design/requirements/status.json` (regenerated)
 - `design/requirements/FEATURE-PARITY-MATRIX.md`
@@ -167,7 +167,7 @@ Logging fix:
 ## Remaining work (subsequent phases)
 
 Phase 0 is decision-only. The accepted decisions now feed the implementation stages per
-ROAD-TO-FEATURE-COMPLETION.md §5:
+PRD.md §5:
 
 - **Phase 1** — quick wins + the RELEASE-002 P0 bug (the RELEASE-002 save-path fix is already
   done; the remaining quick wins are test/evidence work, no ADR needed).

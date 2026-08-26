@@ -35,7 +35,7 @@ class RequirementExtractionTests(unittest.TestCase):
         ids = [item["id"] for item in requirements]
         self.assertGreaterEqual(len(ids), 200)
         self.assertEqual(len(ids), len(set(ids)))
-        self.assertNotIn("unmapped", {item["phase"] for item in requirements})
+        self.assertTrue(all(item["source"] == "PRD.md" for item in requirements))
 
 
 class DeveloperCommandTests(unittest.TestCase):

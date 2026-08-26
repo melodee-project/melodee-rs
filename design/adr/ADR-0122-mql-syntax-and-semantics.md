@@ -183,4 +183,4 @@ testable.
 - [SPEC.md](../../SPEC.md)
 - [ADR-0107](ADR-0107-use-tantivy-as-search-projection.md)
 - [ADR-0121](ADR-0121-search-projection-schema-and-lifecycle.md)
-- [Phase 6 work package](../ROAD-TO-FEATURE-COMPLETION.md)
+- Phase 6 work package

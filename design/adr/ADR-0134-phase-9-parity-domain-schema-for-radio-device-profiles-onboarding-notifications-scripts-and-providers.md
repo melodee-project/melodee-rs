@@ -159,4 +159,4 @@ per-WP migrations with integrity tests.
   [ADR-0105](ADR-0105-postgresql-is-authoritative-state-store.md),
   [ADR-0120](ADR-0120-phase5-classification-novelty-and-policy-schema.md),
   [ADR-0127](ADR-0127-native-public-id-migration-and-id-preserving-schema-for-api-v1.md)
-- `design/ROAD-TO-FEATURE-COMPLETION.md` §4
+- `PRD.md` §4

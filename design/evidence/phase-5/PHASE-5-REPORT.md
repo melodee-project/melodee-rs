@@ -5,7 +5,7 @@
 **Base commit:** `68a11a0364a9c57bb72e8f43e9092851c01c275d` plus the shared Phase 5 working tree  
 **Authority:** PRD-CLASS-001 through PRD-CLASS-003, PRD-POLICY-001 through
 PRD-POLICY-008, the supporting requirements named by the
-[Phase 5 work package](../../ROAD-TO-FEATURE-COMPLETION.md), SPEC invariants 001–009 and
+Phase 5 work package, SPEC invariants 001–009 and
 sections 7, 11, 15–17, 22–25, and 28, ADR-0120, and the
 [Definition of Done](../../agents/DEFINITION-OF-DONE.md).
 

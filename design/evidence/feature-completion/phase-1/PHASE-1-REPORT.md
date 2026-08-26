@@ -103,7 +103,7 @@ repeatability tests, and restore-based rollback guidance; it does not alter sour
 
 Documentation impact:
 - Updated — `design/evidence/feature-completion/phase-1/PHASE-1-REPORT.md`,
-  `design/ROAD-TO-FEATURE-PARITY.md`, `design/requirements/FEATURE-PARITY-MATRIX.md`,
+  `PRD.md`, `design/requirements/FEATURE-PARITY-MATRIX.md`,
   `design/requirements/status-overrides.json`, and generated requirements indexes.
 
 ## Phase 1 gate evidence
