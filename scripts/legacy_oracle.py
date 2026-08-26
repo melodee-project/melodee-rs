@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Reproducible lifecycle for the Phase 0 legacy (C#) compatibility oracle.
 
-FIRST-10-ISSUES.md Issues 2 and 5. The documented recreation procedure in
-``design/evidence/phase-0/legacy-baseline.md`` section 6 is authoritative; this
-script automates it so no agent session depends on a previously running server.
+The compatibility contract in ``compatibility/README.md`` is authoritative;
+this script automates it so no agent session depends on a previously running
+server.
 
 Subcommands:
 

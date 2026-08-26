@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Phase 11 R4 rehearsal drill (ADR-0148/ADR-0149): drives the complete
 migration lifecycle against an isolated, synthetic production-shaped legacy
-source and emits machine-readable evidence to ``design/evidence/r4/``.
+source and emits machine-readable evidence to ``target/verification/migration/``.
 
 The drill NEVER touches a live database or canonical media tree: the source
 is a disposable database seeded from the frozen legacy DDL fixture, and the
@@ -48,7 +48,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
-EVIDENCE_DIR = ROOT / "design" / "evidence" / "r4"
+EVIDENCE_DIR = ROOT / "target" / "verification" / "migration"
 LEGACY_DDL = ROOT / "apps" / "melodee-cli" / "tests" / "fixtures" / "legacy_schema.sql"
 
 DB_ADMIN_URL = os.environ.get(

@@ -13,7 +13,7 @@
 
 PRD-EXT-001 requires inventorying and preserving the legacy external metadata/search/enrichment
 providers "where they are active product functionality." Phase 9 WP-07 delivered that inventory
-as evidence (`design/evidence/phase-9/lastfm-provider-evidence.md` §9, from the frozen oracle at
+as evidence (historical artifact removed §9, from the frozen oracle at
 commit `4028b58d…`): nine legacy provider integrations — Last.fm, MusicBrainz, Discogs, Spotify,
 iTunes/Apple, Deezer, Wikidata, Brave Search, and Metal-API (AMG is named in PRD prose but has no
 legacy implementation). WP-07 also delivered the FOSS Last.fm client (scrobble/now-playing
@@ -120,7 +120,7 @@ decision, not an untracked one.
   `catalog_entry_never_requires_a_provider` invariant stay green with zero provider
   configuration.
 - `crates/melodee-persistence/tests/providers.rs` — cache/provenance store contract stays green.
-- `design/evidence/phase-9/checklists/05-lastfm-scrobbling.md` — WP-07 rows green with the
+- historical artifact removed — WP-07 rows green with the
   deferral recorded as the honest scope note.
 - `design/requirements/REQUIREMENTS-INDEX.md` — PRD-EXT-001/003/004 show `deferred` citing this
   ADR; PRD-EXT-002 remains `tested`.
@@ -132,5 +132,5 @@ decision, not an untracked one.
   phase-scoped waiver/deferral under the delegated decision bundle)
 - [ADR-0134](ADR-0134-phase-9-parity-domain-schema-for-radio-device-profiles-onboarding-notifications-scripts-and-providers.md)
   §7 (provider cache/link schema authority)
-- `design/evidence/phase-9/lastfm-provider-evidence.md` (WP-07 inventory and Last.fm evidence)
+- historical artifact removed (WP-07 inventory and Last.fm evidence)
 - `PRD.md` §3 (decision bundle) and WP-07 scope

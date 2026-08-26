@@ -19,7 +19,7 @@ import {
  *    translations where coverage exists, and falls back to English for
  *    admin-console vocabulary (PRD-I18N-006);
  *  - a full rendered pass of every canonical screen under ja-JP (100% of the
- *    harvested/mapped set per design/evidence/phase-10/i18n-harvest.md);
+ *    harvested/mapped set per legacy C# behavior audit);
  *  - ar-SA AND fa-IR RTL verification on every canonical screen: dir=rtl on
  *    the document root plus a mirrored-layout assertion (the side nav docks
  *    at the inline-start, i.e. the right edge under RTL).

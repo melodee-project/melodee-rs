@@ -3,7 +3,7 @@
 //! Protocol-owned PascalCase DTOs are built here and stay inside the Jellyfin
 //! adapter (ADR-0102); nothing is shared with native-v1 or OpenSubsonic.
 //!
-//! Frozen conventions (capture, `design/evidence/phase-0/jellyfin-capture.md`):
+//! Frozen conventions (capture, legacy C# behavior audit):
 //!
 //! - IDs are ApiKey GUIDs in N-format (32 lowercase hex, no dashes).
 //! - Dates are `yyyy-MM-ddTHH:mm:ss.fffffffZ` (always 7 fractional digits).

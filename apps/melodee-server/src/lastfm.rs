@@ -2,7 +2,7 @@
 //! scrobble/now-playing submission (PRD-EXT-001/003/004, PRD-AUTH-002;
 //! legacy ADR-0003/0004; ADR-0134 §7 as amended 2026-08-14).
 //!
-//! Behavioral evidence: `design/evidence/phase-9/lastfm-provider-evidence.md`.
+//! Behavioral evidence: legacy C# behavior audit.
 //! Preserved legacy semantics:
 //!
 //! - Web authentication flow (`auth.getSession`) only — the user's Last.fm

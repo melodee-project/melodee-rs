@@ -10,7 +10,7 @@
 ## Context
 
 The Phase 10 W4-5 performance evidence
-([performance-report.md](../evidence/phase-10/performance-report.md), §3/§4) measured every
+(performance-report.md (historical artifact removed), §3/§4) measured every
 admin list endpoint with `EXPLAIN (ANALYZE, BUFFERS)` against a synthetic catalog-scale
 scratch dataset (100k artists, 100k releases, 500k tracks, 200k observed artists, 200k work
 items). The Phase 7 native browse indexes (migration 0018) are **partial**
@@ -222,7 +222,7 @@ verified by EXPLAIN to be selected for the query it targets.
 - `EXPLAIN (ANALYZE, BUFFERS)` before/after on the report's synthetic-scale scratch
   dataset (`melodee_perf_scratch`, harness `perf_seed.sql` / `perf_explain.sql`),
   recorded as an addendum in
-  [performance-report.md](../evidence/phase-10/performance-report.md) — including the two
+  performance-report.md (historical artifact removed) — including the two
   findings above that narrowed the index set relative to the report's §4 candidates.
 - Full workspace gates: `cargo fmt --check`, `clippy -D warnings`,
   `cargo test -p melodee-persistence`, `cargo test -p melodee-server` (every `TestDb`
@@ -232,7 +232,7 @@ verified by EXPLAIN to be selected for the query it targets.
 
 - [PRD.md](../../PRD.md)
 - [SPEC.md](../../SPEC.md) §23
-- [performance-report.md](../evidence/phase-10/performance-report.md) §4 (index gaps)
+- performance-report.md (historical artifact removed) §4 (index gaps)
 - [ADR-0117](ADR-0117-use-a-postgresql-catalog-identity-and-contribution-schema-with-set-based-manifest-import.md)
   (catalog schema)
 - Migration 0018 (`crates/melodee-persistence/migrations/0018_phase7_native_catalog_browse_indexes.sql`),

@@ -99,4 +99,4 @@ tool versions and corpus/performance results.
 
 - [PRD.md](../../PRD.md)
 - [SPEC.md](../../SPEC.md)
-- [Phase 3 evidence](../evidence/phase-3/media-inspection-and-manifest/README.md)
+- Phase 3 evidence (historical artifact removed)

@@ -18,7 +18,7 @@ send authorization headers. Upstream Jellyfin's `AuthorizationContext` reads the
 
 The legacy Melodee server's `JellyfinTokenParser` read **only** `api_key`. The Phase 8
 real-client smoke (Feishin v1.15.1 web build, driven by Playwright; evidence in
-`design/evidence/phase-8/REAL-CLIENT-ACCEPTANCE.md`) showed that Feishin builds playback URLs as
+historical artifact removed) showed that Feishin builds playback URLs as
 `/Items/{id}/Download?apiKey={token}` — so audio playback 401'd against the Rust adapter, exactly
 as it would have against the legacy server. This is a legacy real-client defect the frozen
 captures never exercised: every golden scenario authenticates media requests with `api_key`.
@@ -98,7 +98,7 @@ primary token parameter, and was proven necessary and sufficient by the shipping
 - [SPEC.md](../../SPEC.md)
 - ADR-0131 (Jellyfin token schema and routing preservation)
 - ADR-0130 (OpenSubsonic auth decisions; precedent for not-preserving legacy auth defects)
-- `design/evidence/phase-8/REAL-CLIENT-ACCEPTANCE.md`
+- historical artifact removed
 - Upstream: `jellyfin/jellyfin` `MediaBrowser.Controller/Net/AuthorizationContext.cs`
   (`queryString["ApiKey"]` primary, `api_key` legacy-gated fallback)
 
@@ -107,4 +107,4 @@ primary token parameter, and was proven necessary and sufficient by the shipping
 - **Status changed: Proposed → Accepted.** The validation evidence named above now exists:
   the Phase 8 differential replay reports zero unexpected differences and the shipping Feishin
   v1.15.1 client completed the documented Jellyfin workflows (12/12 assertions,
-  `design/evidence/phase-8/REAL-CLIENT-ACCEPTANCE.md`) against the shipped implementation.
+  historical artifact removed) against the shipped implementation.

@@ -65,5 +65,5 @@ dependency from the product surface.
 
 - [ADR-0133](ADR-0133-phase-9-party-mode-and-jukebox-parity-waiver.md)
 - [ADR-0123](ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md)
-- [Blazor page inventory](../evidence/phase-9/blazor-page-inventory.md)
+- Blazor page inventory (historical artifact removed)
 - [PRD.md](../../PRD.md) §43

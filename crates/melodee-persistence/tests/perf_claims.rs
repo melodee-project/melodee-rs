@@ -1,7 +1,7 @@
 //! Performance evidence for work claiming:
 //! a nontrivial queue, many workers, zero duplicate ownership, query plan
 //! capture. Set `MELODEE_WRITE_PERF_EVIDENCE=1` to refresh
-//! `design/evidence/phase-2/durable-work-execution/work-claim-benchmark.json`;
+//! `target/verification/performance/work-claims/work-claim-benchmark.json`;
 //! normal correctness gates never rewrite tracked evidence.
 //!
 //! These measurements are evidence, not user-facing performance claims; no
@@ -111,7 +111,7 @@ async fn claim_benchmark_10k_queue_32_workers() {
     });
     if std::env::var("MELODEE_WRITE_PERF_EVIDENCE").as_deref() == Ok("1") {
         let out_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../design/evidence/phase-2/durable-work-execution");
+            .join("../../target/verification/performance/work-claims");
         std::fs::create_dir_all(&out_dir).expect("evidence dir");
         std::fs::write(
             out_dir.join("work-claim-benchmark.json"),

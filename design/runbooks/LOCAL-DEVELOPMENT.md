@@ -3,7 +3,7 @@
 search and MQL is the current implementation boundary. Phases 0–5 are complete: the server implements
 durable inbound processing through immutable manifest v3, the bounded PostgreSQL catalog and
 identity model, and explainable classification/novelty/policy evaluation with operator commands.
-The authoritative classification and policy decision is in `design/evidence/phase-5/PHASE-5-REPORT.md`. search and MQL search
+The authoritative classification and policy decision is in historical artifact removed. search and MQL search
 and MQL are implemented under Candidate review; compatibility APIs, playback, and authentication
 remain later-phase work.
 

@@ -146,5 +146,5 @@ API surfaces already define the disabled/cached response shapes.
 - [ADR-0136](ADR-0136-defer-non-last-fm-external-provider-integrations-to-post-parity.md) (superseded)
 - [ADR-0134](ADR-0134-phase-9-parity-domain-schema-for-radio-device-profiles-onboarding-notifications-scripts-and-providers.md)
   §7 (provider cache/link schema)
-- `design/evidence/phase-9/lastfm-provider-evidence.md` §8/§9 (provider inventory)
-- `design/evidence/phase-9/PHASE-9-REPORT.md`
+- historical artifact removed §8/§9 (provider inventory)
+- historical artifact removed

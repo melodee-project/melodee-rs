@@ -4,7 +4,7 @@
 //! measurements are evidence, not user-facing performance claims; no
 //! thresholds are asserted (PRD-PERF-001/003). Set
 //! `MELODEE_WRITE_PERF_EVIDENCE=1` to refresh
-//! `design/evidence/r2/catalog-query-benchmark.json`; normal correctness
+//! `target/catalog-query-benchmark.json`; normal correctness
 //! gates never rewrite tracked evidence.
 #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 
@@ -477,7 +477,7 @@ async fn catalog_browse_queries_at_production_shaped_cardinality() {
     if std::env::var_os("MELODEE_WRITE_PERF_EVIDENCE").is_some() {
         let path = concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../design/evidence/r2/catalog-query-benchmark.json"
+            "/../../target/catalog-query-benchmark.json"
         );
         std::fs::write(path, format!("{json}\n")).expect("write evidence");
     }

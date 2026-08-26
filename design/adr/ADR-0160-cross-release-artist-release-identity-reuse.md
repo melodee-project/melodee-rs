@@ -170,4 +170,4 @@ evidence-only rule.
   (identity/contribution schema; occurrence provenance distinct)
 - [ADR-0153](ADR-0153-reuse-unambiguous-release-artist-identity-for-matching-tracks.md)
   (within-Release reuse rule; this ADR generalizes it across Releases)
-- `design/evidence/phase-4/` (identity schema evidence)
+- historical artifact removed (identity schema evidence)

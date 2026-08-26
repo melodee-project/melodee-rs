@@ -114,7 +114,7 @@
       "id": "D10",
       "surface": "all",
       "summary": "List sorts lack tiebreaks (recents, playlists, global song lists) — nondeterministic order on equal keys",
-      "evidence": "design/evidence/phase-0/native-api-v1-capture.md section 5",
+      "evidence": "compatibility/melodee-api-v1/golden/native-catalog",
       "disposition": "do-not-preserve"
     }
   ]

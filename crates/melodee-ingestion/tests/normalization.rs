@@ -1082,7 +1082,7 @@ async fn two_hundred_releases_survive_repeated_termination_across_all_stages() {
     if std::env::var_os("MELODEE_WRITE_PERF_EVIDENCE").is_some() {
         let path = concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../design/evidence/r2/repeated-termination-200.json"
+            "/../../target/repeated-termination-200.json"
         );
         std::fs::write(path, format!("{report}\n")).expect("write termination evidence");
     }

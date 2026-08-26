@@ -57,7 +57,7 @@ Exit code 0 = all assertions passed.
 
 ## Findings this harness produced
 
-See `design/evidence/phase-8/REAL-CLIENT-ACCEPTANCE.md`. In short: two
+See historical artifact removed. In short: two
 real-client-only compatibility gaps were found and fixed (case-insensitive
 Jellyfin route matching; `ApiKey` query token alias), and the captured
 OpenSubsonic secret-based token auth was confirmed working as designed.

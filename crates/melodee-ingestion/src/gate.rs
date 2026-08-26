@@ -14,7 +14,7 @@
 //! `onDeny: skip` behavior. Physical quarantine moves are deferred (they
 //! require the durable decision/audit/authorization contract); the
 //! legacy `delete` action stays rewritten to `skip` (evidence:
-//! design/evidence/phase-9/script-events-legacy-inventory.md §1a).
+//! legacy C# behavior audit).
 
 use std::{future::Future, path::Path, pin::Pin};
 

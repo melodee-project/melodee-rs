@@ -68,7 +68,7 @@ python3 scripts/legacy_rehearsal.py drill \
   --library-path-map /srv/music=library \
   --canonical-root "$CANONICAL_ROOT" \
   --source-backup "$LEGACY_BACKUP" \
-  --output design/evidence/r4/rehearsal-drill-existing-snapshot.json
+  --output target/verification/migration/rehearsal-drill-existing-snapshot.json
 ```
 
 The harness records source counts, migration/search/backup/restore/freeze measurements, and

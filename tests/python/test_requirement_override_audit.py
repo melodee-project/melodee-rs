@@ -20,9 +20,9 @@ class RequirementOverrideAuditTests(unittest.TestCase):
         self.assertEqual(result["override_count"], 239)
         self.assertEqual(
             result["status_counts"],
-            {"deferred": 4, "implemented": 9, "in-progress": 13, "tested": 213},
+            {"deferred": 4, "implemented": 4, "in-progress": 15, "tested": 216},
         )
-        self.assertEqual(len(result["nonterminal"]), 13)
+        self.assertEqual(len(result["nonterminal"]), 15)
 
     def test_strict_release_mode_rejects_current_nonterminal_requirements(self) -> None:
         with self.assertRaises(MODULE.OverrideAuditError) as context:

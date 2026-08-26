@@ -158,5 +158,5 @@ auditable without coupling them to the filesystem.
 - [ADR-0115](ADR-0115-media-inspection-boundary-and-manifest-byte-hashing.md)
 - [ADR-0116](ADR-0116-use-immutable-release-ids-and-convergent-canonical-publication.md)
 - [ADR-0117](ADR-0117-use-a-postgresql-catalog-identity-and-contribution-schema-with-set-based-manifest-import.md)
-- [Phase 3 report](../evidence/phase-3/PHASE-3-REPORT.md)
+- Phase 3 report (historical artifact removed)
 - Phase 4 work package

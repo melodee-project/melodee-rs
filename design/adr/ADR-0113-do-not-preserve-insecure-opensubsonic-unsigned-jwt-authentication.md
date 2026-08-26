@@ -99,6 +99,6 @@ oracle and the Rust implementation is deliberate, reviewed, and testable.
 
 - [PRD.md](../../PRD.md) (PRD-API-OS-003, security requirements)
 - [SPEC.md](../../SPEC.md)
-- [Phase 0 report](../evidence/phase-0/PHASE-0-REPORT.md) (risk R1)
-- [OpenSubsonic capture evidence](../evidence/phase-0/opensubsonic-capture.md) section 3
+- Phase 0 report (historical artifact removed) (risk R1)
+- OpenSubsonic capture evidence (historical artifact removed) section 3
 - `compatibility/opensubsonic/golden/auth/os-auth-jwt-forged-unsigned.json`

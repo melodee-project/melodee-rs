@@ -299,36 +299,6 @@ class R4DualRunScenarioTests(unittest.TestCase):
         self.assertIn("opensubsonic-conditional-off.json", self.module.SCENARIO_FILES)
 
 
-class R4AdrDecisionPackageTests(unittest.TestCase):
-    def test_adr_0150_inventory_matches_committed_surface_reports(self) -> None:
-        expected = {"native": 181, "opensubsonic": 330, "jellyfin": 17}
-        for surface, count in expected.items():
-            with self.subTest(surface=surface):
-                report = json.loads(
-                    (
-                        ROOT
-                        / "design"
-                        / "evidence"
-                        / "r4"
-                        / f"dual-run-report-{surface}.json"
-                    ).read_text()
-                )
-                self.assertEqual(len(report["unexpected"]), count)
-
-        package = (
-            ROOT / "design" / "evidence" / "r4" / "adr-0150-decision-package.md"
-        ).read_text()
-        for required_text in (
-            "181, 330, and 17",
-            "Reference-only metadata",
-            "Accepted schema-backed projection",
-            "Bounded adapter reconstruction",
-            "no comparator mask is added here",
-        ):
-            with self.subTest(required_text=required_text):
-                self.assertIn(required_text, package)
-
-
 SAMPLE_CONTROLLER = """
 using Microsoft.AspNetCore.Mvc;
 

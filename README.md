@@ -223,7 +223,7 @@ Read [AGENTS.md](AGENTS.md) before changing this repository. It defines the auth
 dependency boundaries, data-safety rules, compatibility process, documentation expectations, and
 the required definition of done. The primary engineering references are the
 [PRD](PRD.md), [SPEC](SPEC.md), [technical specification](SPEC.md),
-[accepted ADRs](design/adr/README.md), and [phase evidence](design/evidence/).
+and [accepted ADRs](design/adr/README.md).
 
 ## Documentation, compatibility, and migration
 
@@ -233,7 +233,7 @@ the required definition of done. The primary engineering references are the
 - Captured compatibility contracts, golden responses, media evidence, and client exercises live
   in [`compatibility/`](compatibility/). They are executable release evidence, not examples to
   hand-edit.
-- completion reports and requirement traceability live in [`design/evidence/`](design/evidence/) and
+- completion reports and requirement traceability live in historical artifact removed (historical artifact removed) and
   [`design/requirements/`](design/requirements/).
 - The legacy C# repository is valuable compatibility evidence, but its classes and service
   boundaries must not be copied into the Rust implementation.

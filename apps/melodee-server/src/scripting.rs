@@ -10,7 +10,7 @@
 //! scriptConfig)` call arguments.
 //!
 //! Hook contract (legacy-compatible; evidence:
-//! design/evidence/phase-9/script-events-legacy-inventory.md §1a):
+//! legacy C# behavior audit):
 //!
 //! - A script body without a `function check` declaration is auto-wrapped as
 //!   `function check(ctx, scriptConfig) { return (<body>); }` (the legacy

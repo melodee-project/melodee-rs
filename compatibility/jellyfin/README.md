@@ -10,5 +10,5 @@ this compatibility surface here. Every fixture must identify its legacy baseline
   coverage (100%). Regenerate: `python3 scripts/build_jellyfin_inventory.py`; `--check`.
 - `golden/` — sanitized captures across discovery, auth, browse, playback, userstate,
   playlists, images, extra. Provenance per directory.
-- Findings: `design/evidence/phase-0/jellyfin-capture.md`. Tests:
+- Findings: historical artifact removed. Tests:
   `tests/python/test_jellyfin_capture.py`.

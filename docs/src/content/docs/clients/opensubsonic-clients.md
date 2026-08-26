@@ -34,7 +34,7 @@ credentials.
   [Configuration — Transcoding](../installation/configuration/#transcoding).
 - The shipping Feishin client completes the documented smoke workflows (connect, browse,
   playback, search, favorites) against this surface; acceptance evidence lives in
-  `design/evidence/phase-8/` in the repository.
+  historical artifact removed in the repository.
 - Artist, album, and song cover art reflect administrator-managed catalog artwork overrides;
   a song uses its Release artwork. Without an override, clients receive the captured default
   artwork behavior.

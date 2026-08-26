@@ -1,6 +1,6 @@
 -- admin browse index remediation (ADR-0142; PRD-API-ADMIN-002,
 -- SPEC §23), closing the index gaps measured in
--- design/evidence/phase-10/performance-report.md §4.
+-- legacy C# behavior audit
 --
 -- The native browse indexes (migration 0018) are partial
 -- (status-filtered) because native v1 never lists merged/deprecated rows. The

@@ -11,4 +11,4 @@ Regenerate: `python3 scripts/generate_benchmark_dataset.py --tier B` then
 `python3 scripts/run_benchmarks.py --tier B`. Datasets land in dedicated disposable
 databases (`melodee_bench_{tier}`) — never in the capture fixture DB.
 
-Evidence report: `design/evidence/phase-0/scale-baseline.md` (findings, budgets, hazards).
+Evidence report: historical artifact removed (findings, budgets, hazards).

@@ -11,7 +11,7 @@ Inputs : ../melodee/src/Melodee.Blazor/Resources/SharedResources*.resx
          (overridable via argv[1])
 Outputs: admin-ui/src/i18n/locales/<culture>.json  (19 non-English cultures,
          harvested keys only)
-         design/evidence/phase-10/i18n-harvest.md  (coverage + mapping table)
+         target/verification/i18n/i18n-harvest.md  (coverage + mapping table)
 
 Python stdlib only.
 """
@@ -27,7 +27,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_RESX_DIR = REPO_ROOT.parent / "melodee" / "src" / "Melodee.Blazor" / "Resources"
 LOCALES_DIR = REPO_ROOT / "admin-ui" / "src" / "i18n" / "locales"
-REPORT_PATH = REPO_ROOT / "design" / "evidence" / "phase-10" / "i18n-harvest.md"
+REPORT_PATH = REPO_ROOT / "target" / "verification" / "i18n" / "i18n-harvest.md"
 
 SOURCE_CULTURE = "en-US"
 

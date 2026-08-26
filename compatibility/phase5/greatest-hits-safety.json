@@ -10,7 +10,7 @@
       "PRD-POLICY-006",
       "PRD-POLICY-007"
     ],
-    "legacyEvidence": "design/evidence/phase-0/media-baseline.md#7-classification-and-destructive-policy-hazards",
+    "legacyEvidence": "compatibility/media/README.md",
     "legacyBehaviorPreserved": "A matching directory name alone is non-destructive.",
     "legacyBehaviorNotPreserved": "Same-size files are never treated as duplicates without authoritative content evidence."
   },

@@ -52,4 +52,4 @@ inbound occurrence is drained after its verified durable staging receipt — the
 is transient, not retention storage.
 
 See ADR-0106, ADR-0108, ADR-0115, ADR-0116, ADR-0145, and
-[normalization and publication canonical-publication evidence](../evidence/phase-3/canonical-publication/README.md).
+normalization and publication canonical-publication evidence (historical artifact removed).

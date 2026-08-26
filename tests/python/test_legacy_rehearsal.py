@@ -72,10 +72,33 @@ class RehearsalInputTests(unittest.TestCase):
             create_db.assert_not_called()
 
     def test_baseline_artifact_schema_is_redacted_and_fail_closed(self) -> None:
-        evidence = json.loads(
-            (ROOT / "design" / "evidence" / "r4" / "rehearsal-drill-12000.json").read_text()
+        baseline = MODULE.validate_baseline_artifact(
+            {
+                "artifact": MODULE.BASELINE_ARTIFACT,
+                "schema_version": MODULE.BASELINE_SCHEMA_VERSION,
+                "captured_at": "2026-08-25T00:00:00Z",
+                "table_count": MODULE.FROZEN_SOURCE_TABLE_COUNT,
+                "schema_fingerprint": "schema-fixture",
+                "source_identity": "pg-source-sha256:fixture:schema:schema-fixture",
+                "snapshot_marker": f"legacy-marker-v2:{'0' * 64}",
+                "source_read_only": {
+                    "transaction_read_only": True,
+                    "default_transaction_read_only": True,
+                    "in_recovery": False,
+                },
+                "domains": [
+                    {"domain": "artists", "rows": 0, "min_pk": None, "max_pk": None}
+                ],
+                "anomalies": [],
+                "media": {"file_count": 0, "total_bytes": 0},
+                "configuration_fingerprint": {
+                    "algorithm": "sha256-v1",
+                    "settings_keys": ["smtp.password"],
+                    "settings": [{"key": "smtp.password", "redacted": True}],
+                    "library_root_count": 0,
+                },
+            }
         )
-        baseline = MODULE.validate_baseline_artifact(evidence["baseline"])
         self.assertEqual(baseline["artifact"], "melodee.legacy-baseline")
 
         malformed = json.loads(json.dumps(baseline))

@@ -3,7 +3,7 @@
 //! getAlbumInfo2, getSong, getGenres, getSimilarSongs, getSimilarSongs2,
 //! getTopSongs (PRD-API-OS-005; golden evidence
 //! `compatibility/opensubsonic/golden/browse`, capture semantics
-//! `design/evidence/phase-0/opensubsonic-capture.md` §4/§8).
+//! legacy C# behavior audit §4/§8).
 //!
 //! Captured behaviors reproduced here:
 //! - Wire ids are `artist_`/`album_`/`song_` + public_api_id; `library_` for

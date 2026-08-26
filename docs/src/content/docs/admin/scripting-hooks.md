@@ -148,4 +148,4 @@ unchanged (modern ECMAScript, camelCase `ctx`, same auto-wrap rule). Known diffe
   never supplied — test against the real field list above.
 
 Per-hook dispositions and shell-hook migration paths are recorded in the engineering migration
-guide (`design/evidence/phase-9/script-hook-migration-guide.md` in the source repository).
+guide (historical artifact removed in the source repository).

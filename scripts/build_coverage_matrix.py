@@ -111,7 +111,7 @@ def main() -> None:
             {"id": "D7", "surface": "melodee-api-v1", "summary": "JWT access tokens survive logout (stateless); refresh tokens revoked", "evidence": "golden/native-auth/auth-refresh-rotation-access-after-logout", "disposition": "preserve-for-compatibility"},
             {"id": "D8", "surface": "opensubsonic", "summary": "Advertised extensions apiKeyAuthentication/transcodeOffset are non-functional", "evidence": "golden/system/os-getopensubsonicextensions-*", "disposition": "needs-explicit-decision"},
             {"id": "D9", "surface": "media", "summary": "F1: metadata-container gate silently skips tagless WAV/AIFF; F2: same-size files deleted without content comparison", "evidence": "compatibility/media/cases/{clean-wav,same-size-files}.json", "disposition": "do-not-preserve"},
-            {"id": "D10", "surface": "all", "summary": "List sorts lack tiebreaks (recents, playlists, global song lists) — nondeterministic order on equal keys", "evidence": "design/evidence/phase-0/native-api-v1-capture.md section 5", "disposition": "do-not-preserve"},
+            {"id": "D10", "surface": "all", "summary": "List sorts lack tiebreaks (recents, playlists, global song lists) — nondeterministic order on equal keys", "evidence": "compatibility/melodee-api-v1/golden/native-catalog", "disposition": "do-not-preserve"},
         ],
     }
 

@@ -47,6 +47,6 @@ Non-music Jellyfin behavior is intentionally out of scope.
 The wire contract is covered by frozen compatibility captures and integration tests, and the
 shipping Feishin client completes the documented smoke workflows (sign-in, browse, playback,
 search, favorites) against the Jellyfin surface. Acceptance evidence:
-`design/evidence/phase-8/REAL-CLIENT-ACCEPTANCE.md` in the repository. Finamp and Streamyfin
+historical artifact removed in the repository. Finamp and Streamyfin
 mobile smoke runs are planned hardening on top of the same exercised contract.
 :::

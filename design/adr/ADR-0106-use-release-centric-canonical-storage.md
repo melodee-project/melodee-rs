@@ -35,7 +35,7 @@ human-operability, and cross-filesystem publication behavior before acceptance.
   Release-centric/immutable-ID-centric canonical storage" with this sharded layout as the
   example; PRD-STORAGE-001 forbids filesystem-defined Artist identity; PRD-STORAGE-003 allows
   rebuildable by-artist views.
-- **Phase 0 evidence:** media baseline (`design/evidence/phase-0/media-baseline.md`) measured
+- **Phase 0 evidence:** media baseline (historical artifact removed) measured
   the artist-folder coupling hazards this removes: artwork discovery reads the artist/album
   directory (ArtistService.cs:2300+), staging/storage naming derives from artist/album strings,
   and same-name-artist identity is schema-impossible in legacy (`IX_Artists_Name` UNIQUE) while

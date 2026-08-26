@@ -38,14 +38,14 @@ by an accepted ADR and release gate.
   confirmable evidence without string-only confirmation. A provider-neutral Artist evidence
   interface retains provisional identities on provider failure and cannot outrank locked manual or
   negative decisions. The complete Phase 4 acceptance decision and exact 200-Release metrics are in
-  `design/evidence/phase-4/PHASE-4-REPORT.md`.
+  historical artifact removed.
 - Phase 5 explainable multi-valued Release classification, complete Track novelty across exact,
   known, alternate, new, and uncertain outcomes, immutable versioned policy rules, bounded catalog
   dry-run, independently leased policy workers, durable facts/decision/audit state, explicit
   administrator overrides, and a separate destructive-completion authorization boundary. The
   worker and CLI consume PostgreSQL facts without reopening media; no deletion implementation was
   added. The complete acceptance decision and exact 200-Release metrics are in
-  `design/evidence/phase-5/PHASE-5-REPORT.md`.
+  historical artifact removed.
 - Phase 6 pure bounded MQL parsing/planning and rebuildable Tantivy catalog search for Artists,
   Releases, Tracks, aliases, genres, display credits, and ID-backed participant roles. PostgreSQL
   outbox leases fence multi-process writers; generation rebuilds stream bounded catalog pages,

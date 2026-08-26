@@ -9,7 +9,7 @@
 -- requiring its own ADR (PRD-DEVICE-003).
 --
 -- Legacy parity (evidence:
--- design/evidence/phase-9/device-profiles-legacy-inventory.md): the legacy
+-- legacy C# behavior audit): the legacy
 -- preview model bounded names at 255 characters and allowed exactly one
 -- default; both invariants are enforced here as constraints rather than
 -- service-level convention.

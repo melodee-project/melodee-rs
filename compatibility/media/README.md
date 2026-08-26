@@ -10,5 +10,5 @@ Phase 0 media-processing behavioral baseline (FIRST-10-ISSUES.md Issue 8).
 - Generator: `python3 scripts/generate_media_corpus.py` (deterministic ffmpeg-synthesized
   corpus into /tmp/media-baseline; fully redistributable, no copyrighted media).
 - Capture: `python3 scripts/capture_media_baseline.py`.
-- Evidence report: `design/evidence/phase-0/media-baseline.md` (includes the two critical
+- Evidence report: historical artifact removed (includes the two critical
   legacy defects F1 metadata-container gate and F2 same-size destructive dedupe).

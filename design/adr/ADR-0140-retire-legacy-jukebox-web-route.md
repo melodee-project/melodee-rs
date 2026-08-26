@@ -9,7 +9,7 @@
 
 ## Context
 
-The Phase 9 Blazor page inventory (`design/evidence/phase-9/blazor-page-inventory.md`, 63 pages /
+The Phase 9 Blazor page inventory (historical artifact removed, 63 pages /
 68 routes from the frozen legacy baseline) classified the legacy `/jukebox` page as a DROP
 candidate: jukebox capability was never implemented in the legacy server (legacy ADR-0001), the
 OpenSubsonic jukebox endpoints are an intentional frozen 410, and ADR-0133 waived party/jukebox
@@ -62,5 +62,5 @@ capability decision is already made. The cheapest honest disposition is retireme
 ## References
 
 - [ADR-0133](ADR-0133-phase-9-party-mode-and-jukebox-parity-waiver.md)
-- [Blazor page inventory](../evidence/phase-9/blazor-page-inventory.md)
+- Blazor page inventory (historical artifact removed)
 - [PRD.md](../../PRD.md) §43

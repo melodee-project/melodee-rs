@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "description": "Native Melodee API v1 routes actually exercised by the two supported native clients, inventoried from source at the recorded commits (FIRST-10-ISSUES.md Issue 5; Phase 0 review item 3). Only real call sites are listed; routes declared in client route tables but never invoked are excluded. Path parameters are normalized to {}. Full analysis: design/evidence/phase-0/native-client-route-inventory.md.",
+  "description": "Native Melodee API v1 routes actually exercised by the two supported native clients, inventoried from source at the recorded commits (FIRST-10-ISSUES.md Issue 5; Phase 0 review item 3). Only real call sites are listed; routes declared in client route tables but never invoked are excluded. Path parameters are normalized to {}.",
   "clients": [
     {
       "name": "melodee-player",

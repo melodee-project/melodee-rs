@@ -11,7 +11,7 @@
 
 -- Response cache/provenance home for external metadata providers. The
 -- provider vocabulary is the enumerated legacy inventory (evidence:
--- design/evidence/phase-9/lastfm-provider-evidence.md §9); "AMG" named in
+-- legacy C# behavior audit); "AMG" named in
 -- PRD-EXT-001 prose has no legacy implementation and is deliberately absent.
 CREATE TABLE external_provider_cache (
     -- Provider identifier from the enumerated set below.

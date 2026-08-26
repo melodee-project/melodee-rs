@@ -5,7 +5,7 @@
 -- restores a verified pre-migration backup into a new database.
 --
 -- Legacy parity (evidence:
--- design/evidence/phase-9/configuration-inventory.md): the legacy `Settings`
+-- legacy C# behavior audit): the legacy `Settings`
 -- table stored every value as a string; the Rust store uses typed jsonb so
 -- booleans/numbers validate structurally instead of by parse-at-read
 -- convention. The 190-key classification (kinds, secret flags, seeded

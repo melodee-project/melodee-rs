@@ -14,7 +14,7 @@ It is not a place for production credentials or private library dumps.
 ## Route manifests and OpenAPI contract
 
 Each surface's `contracts/route-manifest.json` is generated from the frozen legacy checkout
-(see `design/evidence/phase-0/legacy-baseline.md`):
+(see historical artifact removed):
 
 ```bash
 python3 scripts/generate_route_manifest.py --legacy-root /path/to/melodee
@@ -25,7 +25,7 @@ python3 scripts/generate_route_manifest.py --legacy-root /path/to/melodee --chec
 document with the volatile `servers` URL normalized to `https://{melodee-host}/`. The published
 document is known to be incomplete (party, native podcasts, and queue routes are missing); the
 route manifests are the authoritative route inventory. See
-`design/evidence/phase-0/route-inventory-summary.md`.
+historical artifact removed.
 
 ## Capture public baseline
 
@@ -52,8 +52,8 @@ python3 scripts/legacy_oracle.py capture    # reseed + capture native-auth/catal
 - Golden evidence: `melodee-api-v1/golden/` with per-directory `provenance.json`.
 - Unified route inventory: `melodee-api-v1/contracts/route-inventory.json`
   (`scripts/build_native_inventory.py --check` for drift).
-- Findings: `design/evidence/phase-0/native-api-v1-capture.md` and
-  `design/evidence/phase-0/native-client-route-inventory.md`.
+- Findings: historical artifact removed and
+  historical artifact removed.
 
 ## Golden fixture rules
 
@@ -75,7 +75,7 @@ Do not normalize meaningful differences merely to make tests pass.
 - Golden: `opensubsonic/golden/` with per-directory `provenance.json`.
 - Endpoint inventory: `opensubsonic/contracts/route-inventory.json`
   (`python3 scripts/build_opensubsonic_inventory.py --check`).
-- Findings: `design/evidence/phase-0/opensubsonic-capture.md` (auth bypass contract, unsigned
+- Findings: historical artifact removed (auth bypass contract, unsigned
   JWT acceptance, double range-processing seek bug, 410/501 matrix, playlist mutation breakage).
 
 
@@ -83,17 +83,17 @@ Do not normalize meaningful differences merely to make tests pass.
 
 - `media/baseline.json` + `media/cases/` — 31-case synthetic corpus outcomes (extraction,
   pipeline, validation). Generator: `scripts/generate_media_corpus.py`; harness:
-  `scripts/capture_media_baseline.py`. Report: `design/evidence/phase-0/media-baseline.md`.
+  `scripts/capture_media_baseline.py`. Report: historical artifact removed.
 
 ## Benchmarks (Issue 9)
 
 - `benchmarks/` — three deterministic dataset tiers (15k/560k/5M songs), endpoint timing
   matrices with environment metadata, `SUMMARY.md`. Generators:
   `scripts/generate_benchmark_dataset.py`, `scripts/run_benchmarks.py`.
-  Report: `design/evidence/phase-0/scale-baseline.md`.
+  Report: historical artifact removed.
 
 ## Phase 0 closure (Issue 10)
 
 - `coverage-matrix.json` + `COVERAGE-MATRIX.md` — per-surface coverage and open discrepancies
   (`scripts/build_coverage_matrix.py`).
-- Canonical report: `design/evidence/phase-0/PHASE-0-REPORT.md`.
+- Canonical report: historical artifact removed.

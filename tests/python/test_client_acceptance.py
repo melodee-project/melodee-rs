@@ -64,7 +64,7 @@ class ClientAcceptanceTests(unittest.TestCase):
                 "platformVersion": "test-platform",
                 "configurationFingerprint": "b" * 16,
                 "command": "scripts/run-client-smoke.sh",
-                "evidence": ["design/evidence/r4/does-not-exist.json"],
+                "evidence": ["target/verification/does-not-exist.json"],
             }
         )
         with self.assertRaisesRegex(ValueError, "existing repository file"):
@@ -83,7 +83,7 @@ class ClientAcceptanceTests(unittest.TestCase):
                 "platformVersion": "test-platform",
                 "configurationFingerprint": "b" * 16,
                 "command": "scripts/run-client-smoke.sh",
-                "evidence": ["design/evidence/r4/README.md"],
+                "evidence": ["compatibility/clients/r4/README.md"],
                 "workflowResults": {
                     workflow_id: {
                         "status": workflow_status,

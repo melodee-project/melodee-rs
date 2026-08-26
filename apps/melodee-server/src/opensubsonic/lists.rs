@@ -2,7 +2,7 @@
 //! getNowPlaying, getStarred, getStarred2, getSongsByGenre, search2, search3,
 //! and the melodeeExtensions[1] search endpoints
 //! (PRD-API-OS-005; golden evidence `compatibility/opensubsonic/golden/lists`,
-//! capture semantics `design/evidence/phase-0/opensubsonic-capture.md` §8).
+//! capture semantics legacy C# behavior audit §8).
 //!
 //! Captured behaviors reproduced here:
 //! - Album list types newest/alphabeticalByName/alphabeticalByArtist/byGenre/

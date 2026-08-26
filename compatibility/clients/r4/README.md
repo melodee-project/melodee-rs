@@ -61,7 +61,7 @@ or drop the supplied database and validates that the supplied storage root is
 an existing directory with no symlinked path components. It waits for the
 local client server and relay before starting the probe. The native Android phone
 and MeloAmp workflows use the client launch procedures in
-`design/evidence/phase-7/REAL-CLIENT-ACCEPTANCE.md`; the representative
+historical artifact removed; the representative
 OpenSubsonic/Jellyfin workflow uses
 `compatibility/clients/phase8/README.md`.
 

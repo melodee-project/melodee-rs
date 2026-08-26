@@ -14,7 +14,7 @@ References: [ADR-0148](../adr/ADR-0148-legacy-migration-contract.md),
 
 Current acceptance evidence is tracked in
 the operator acceptance plan and
-[the operator acceptance report](../evidence/phase-11/OPERATOR-ACCEPTANCE-REPORT.md). Until that
+the operator acceptance report (historical artifact removed). Until that
 report records an exact candidate SHA and image digests, all commands below are planned operator
 commands, not executed release evidence. A changed candidate or dirty tree invalidates prior
 candidate evidence.

@@ -21,7 +21,7 @@
 //!    `MELODEE__CONFIG_FILE` for container deployments.
 //! 3. **Database** — `server_settings` rows (operator-managed at runtime).
 //! 4. **Built-in defaults** — the seeded legacy defaults from the 190-key
-//!    inventory (`design/evidence/phase-9/configuration-inventory.md`),
+//!    inventory (legacy C# behavior audit),
 //!    encoded in [`KNOWN_SETTINGS`].
 //!
 //! # Secret handling (PRD-AUTH-007)
@@ -310,7 +310,7 @@ impl KnownSetting {
 }
 
 /// The 190-key legacy configuration registry classification (evidence:
-/// `design/evidence/phase-9/configuration-inventory.md`). Sorted by key;
+/// legacy C# behavior audit). Sorted by key;
 /// a unit test pins the count and the sort order.
 ///
 /// Casing quirks are verbatim (`defaults.pagesize`, `scrobbling.lastFm.Enabled`,

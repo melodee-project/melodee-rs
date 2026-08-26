@@ -177,7 +177,7 @@ own wire shapes (ADR-0102).
 
 ### Follow-up work
 
-- R2.3 evidence section in `design/evidence/r2/README.md`; requirement traceability update for
+- R2.3 evidence section in historical artifact removed; requirement traceability update for
   PRD-STREAM-002 once tests land.
 - `compatibility/COVERAGE-MATRIX.md` D8 note updated to point at this ADR for the transcode
   parameter clause.

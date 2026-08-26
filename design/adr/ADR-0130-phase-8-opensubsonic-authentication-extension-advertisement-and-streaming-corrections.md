@@ -14,7 +14,7 @@
 
 ## Context
 
-Phase 0 capture (`design/evidence/phase-0/opensubsonic-capture.md`,
+Phase 0 capture (historical artifact removed,
 `compatibility/COVERAGE-MATRIX.md`) left four OpenSubsonic discrepancies that require an explicit
 product decision before the Phase 8 adapter can be implemented:
 
@@ -161,5 +161,5 @@ reusing the Phase 7 user identity and password-verification primitives.
 - [PRD.md](../../PRD.md) (PRD-API-OS-001..007, PRD-STREAM-002)
 - [SPEC.md](../../SPEC.md) §19.2, §20, §24
 - [ADR-0113](ADR-0113-do-not-preserve-insecure-opensubsonic-unsigned-jwt-authentication.md)
-- [OpenSubsonic capture evidence](../evidence/phase-0/opensubsonic-capture.md) §3–§5
+- OpenSubsonic capture evidence (historical artifact removed) §3–§5
 - `compatibility/COVERAGE-MATRIX.md` discrepancies D1, D2, D3, D8, D10

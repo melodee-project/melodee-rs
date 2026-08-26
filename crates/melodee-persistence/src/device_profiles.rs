@@ -7,7 +7,7 @@
 //! post-parity work requiring its own ADR (PRD-DEVICE-003).
 //!
 //! Preserved legacy preview behavior (evidence:
-//! `design/evidence/phase-9/device-profiles-legacy-inventory.md`):
+//! legacy C# behavior audit):
 //! bounded names, the direct-play/codec/bitrate consistency rules, and the
 //! single-default invariant. Unlike the legacy service's load-modify-save,
 //! default flips here are transactional and the at-most-one-default

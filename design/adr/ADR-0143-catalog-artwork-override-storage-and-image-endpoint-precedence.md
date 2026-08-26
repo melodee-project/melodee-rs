@@ -152,7 +152,7 @@ Implemented as decided above; no deviations from the Decision section.
   audit attribution); admin UI in `admin-ui/src/screens/catalog/ArtworkManager.tsx` (unit
   tests 7, e2e 3 in `catalog.spec.ts`); docs in
   `docs/src/content/docs/api/admin-api.md`; checklist row:
-  `design/evidence/phase-10/checklists/07-artist-release-detail.md` (artwork row ✅).
+  historical artifact removed (artwork row ✅).
 
 ### Post-acceptance adapter completion (2026-08-15)
 

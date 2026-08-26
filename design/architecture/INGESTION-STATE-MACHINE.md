@@ -60,4 +60,4 @@ stateDiagram-v2
 - A matching final directory is adopted after a crash; a mismatching final is never overwritten.
 
 See [ADR-0116](../adr/ADR-0116-use-immutable-release-ids-and-convergent-canonical-publication.md)
-and [normalization and publication evidence](../evidence/phase-3/PHASE-3-REPORT.md).
+and normalization and publication evidence (historical artifact removed).

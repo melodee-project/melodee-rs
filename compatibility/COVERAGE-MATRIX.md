@@ -20,7 +20,7 @@ Legacy baseline: `4028b58dbd3302ed431e2c5b32d9dde5634db218`. Machine-readable fo
 - **D7** (melodee-api-v1) [preserve-for-compatibility]: JWT access tokens survive logout (stateless); refresh tokens revoked — evidence: `golden/native-auth/auth-refresh-rotation-access-after-logout`
 - **D8** (opensubsonic) [needs-explicit-decision]: Advertised extensions apiKeyAuthentication/transcodeOffset are non-functional — evidence: `golden/system/os-getopensubsonicextensions-*`
 - **D9** (media) [do-not-preserve]: F1: metadata-container gate silently skips tagless WAV/AIFF; F2: same-size files deleted without content comparison — evidence: `compatibility/media/cases/{clean-wav,same-size-files}.json`
-- **D10** (all) [do-not-preserve]: List sorts lack tiebreaks (recents, playlists, global song lists) — nondeterministic order on equal keys — evidence: `design/evidence/phase-0/native-api-v1-capture.md section 5`
+- **D10** (all) [do-not-preserve]: List sorts lack tiebreaks (recents, playlists, global song lists) — nondeterministic order on equal keys — evidence: `compatibility/melodee-api-v1/golden/native-catalog`
 
 ## Gaps (routes without golden coverage)
 

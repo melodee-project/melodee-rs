@@ -7,7 +7,7 @@
 -- Nothing is seeded: scripts are operator-installed only (ADR-0135 operator
 -- trust boundary); there is no default script content. The registry replaces
 -- the legacy Settings-table `script.{eventName}` JSON documents (evidence:
--- design/evidence/phase-9/script-events-legacy-inventory.md §3); the audit
+-- legacy C# behavior audit); the audit
 -- table closes the legacy "log lines only" gap (inventory §2).
 
 CREATE TABLE script_registry (

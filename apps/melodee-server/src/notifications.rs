@@ -38,7 +38,7 @@ use tracing::Instrument as _;
 
 /// Environment keys (the complete email set this module honors), mirroring
 /// the legacy `email.*` group in
-/// `design/evidence/phase-9/configuration-inventory.md` §14.
+/// legacy C# behavior audit §14.
 pub const ENV_EMAIL_ENABLED: &str = "MELODEE__EMAIL__ENABLED";
 pub const ENV_EMAIL_FROM_NAME: &str = "MELODEE__EMAIL__FROM_NAME";
 pub const ENV_EMAIL_FROM_EMAIL: &str = "MELODEE__EMAIL__FROM_EMAIL";

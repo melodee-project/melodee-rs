@@ -8,7 +8,7 @@ staging. It did **not** delete Releases because of those keywords. It also had
 no authoritative AudioIdentity-based Track novelty model, so it cannot be an
 oracle for `ExactDuplicate`, `KnownAudioIdentity`, `AlternateRecording`,
 `NewTrack`, or `Uncertain` outcomes. See
-[`media-baseline.md`](../../design/evidence/phase-0/media-baseline.md#7-classification-and-destructive-policy-hazards).
+`media-baseline.md` (historical artifact removed).
 
 `greatest-hits-safety.json` is therefore a synthetic truth table governed by
 ADR-0120 and PRD-POLICY-003 through PRD-POLICY-008. Tests may use it to prove:
@@ -18,7 +18,7 @@ ADR-0120 and PRD-POLICY-003 through PRD-POLICY-008. Tests may use it to prove:
   disposition;
 - directory-only and title-only evidence cannot authorize deletion; and
 - the legacy
-  [same-size-file deletion bug](../../design/evidence/phase-0/media-baseline.md#8-hashing-and-duplicates)
+  same-size-file deletion bug (historical artifact removed)
   is not preserved.
 
 The expected outcomes use the safe default preferences (`Ignore` redundant,

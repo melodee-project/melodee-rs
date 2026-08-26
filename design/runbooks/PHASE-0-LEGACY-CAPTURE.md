@@ -3,7 +3,7 @@
 1. Check out and build a recorded legacy Melodee commit/tag.
 2. Restore a sanitized representative database/media fixture.
 3. Record legacy commit, server/database/tool versions, enabled features, fixture counts, and startup
-   command in `design/evidence/phase-0/legacy-baseline.md`.
+   command in historical artifact removed.
 4. Start the legacy server on a non-public interface.
 5. Capture public scenarios:
 

@@ -32,7 +32,7 @@ a hardening change, not a contract break.
   account with administrator rights (`isAdmin` or `Administrator` role) — the existing
   `AdminPrincipal` semantics. The SPA enforces route guards for UX only; the server enforces
   authorization for every data-changing action (SPEC §20), closing the legacy Blazor
-  service-layer-auth mismatch flagged in `design/evidence/phase-9/blazor-page-inventory.md`.
+  service-layer-auth mismatch flagged in historical artifact removed.
 - **Diagnostics gating:** `/api/admin/v1/ingest/*` and `/api/admin/v1/system/info` adopt
   `AdminPrincipal` (401 anonymous / 403 non-admin with the stable error envelope). `/healthz` and
   `/readyz` remain anonymous infrastructure probes.
@@ -93,4 +93,4 @@ auditable before Phase 11 production cutover.
 - [PRD.md](../../PRD.md) §25
 - [SPEC.md](../../SPEC.md) §19.4, §20
 - [ADR-0124](ADR-0124-native-authentication-session-and-refresh-token-compatibility.md)
-- [Phase 9 report](../evidence/phase-9/PHASE-9-REPORT.md)
+- Phase 9 report (historical artifact removed)

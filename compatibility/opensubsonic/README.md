@@ -12,5 +12,5 @@ this compatibility surface here. Every fixture must identify its legacy baseline
 - `golden/` — 177 sanitized captures across system, auth, browse, lists, media, annotation,
   playlists, community, negative (410/501), conditional (podcasts/jukebox), conditional-off
   (podcast disabled). Provenance per directory.
-- Findings: `design/evidence/phase-0/opensubsonic-capture.md`. Tests:
+- Findings: historical artifact removed. Tests:
   `tests/python/test_opensubsonic_capture.py`.

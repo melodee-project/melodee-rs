@@ -297,9 +297,8 @@ async fn performance_snapshot_settling() {
         ],
     };
 
-    let output = std::path::Path::new(
-        "design/evidence/phase-2/discovery-and-settling/perf-settling-benchmark.json",
-    );
+    let output =
+        std::path::Path::new("target/verification/performance/perf-settling-benchmark.json");
     if let Some(parent) = output.parent() {
         fs::create_dir_all(parent).expect("make evidence directory");
     }
