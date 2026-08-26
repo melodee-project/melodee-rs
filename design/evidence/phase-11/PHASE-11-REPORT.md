@@ -44,8 +44,9 @@ Passed at entry:
 
 The strict `python3 scripts/audit_requirement_overrides.py --require-terminal` check correctly
 fails closed on 13 non-terminal requirements. The requested
-`scripts/validate_r4_client_acceptance.py` is absent from this checkout and was not represented by
-another validator.
+`scripts/validate_r4_client_acceptance.py` is present as a compatibility wrapper for the
+historical R4 client acceptance matrix, and it validates the committed artifact structurally
+without creating physical-client evidence.
 
 R3 is synthetic/production-shaped local importer evidence. R4 is isolated synthetic/fixture
 rehearsal evidence, including the earlier 12,000-Track recovery drill. R5 is historical local
@@ -227,6 +228,7 @@ Current closeout results:
 
     python3 scripts/validate_repository.py                         # pass
     python3 scripts/extract_requirements.py --check                 # pass
+    python3 scripts/validate_r4_client_acceptance.py                # pass structurally; 5 pending-external
     python3 scripts/validate_client_acceptance.py                   # pass structurally; 5 pending-external
     make check-fast                                                 # pass
     make test-integration                                             # pass; workspace PostgreSQL/integration matrix

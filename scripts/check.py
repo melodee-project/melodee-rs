@@ -28,6 +28,7 @@ def run_python_checks(*, include_tests: bool) -> None:
         "validate_repository.py",
         "extract_requirements.py",
         "audit_requirement_overrides.py",
+        "validate_r4_client_acceptance.py",
         "validate_client_acceptance.py",
     ):
         command = [sys.executable, f"scripts/{script}"]

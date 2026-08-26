@@ -27,7 +27,8 @@ Current disposition:
   GHCR publication, GitHub Release, production rehearsal, migrated differential run, physical
   client acceptance, cutover, production rollback, or cleanup result is claimed.
 - Strict terminal requirement audit remains fail-closed on 13 non-terminal requirements. The
-  requested `scripts/validate_r4_client_acceptance.py` is absent from the checkout.
+  requested `scripts/validate_r4_client_acceptance.py` is present as a compatibility wrapper and
+  validates the committed matrix structurally only.
 
 The authoritative current operator record is
 [OPERATOR-ACCEPTANCE-REPORT.md](../phase-11/OPERATOR-ACCEPTANCE-REPORT.md), and the execution

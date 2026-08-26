@@ -26,10 +26,11 @@ tag is `v0.1.0`; no GitHub Release or registry tag exists as current publication
 | `python3 scripts/validate_repository.py` | Pass | Repository/doc structure only |
 | `python3 scripts/extract_requirements.py --check` | Pass | Requirement index integrity only |
 | `make check-fast` | Pass | Fast local gate; not PostgreSQL/full release/remote evidence |
+| `python3 scripts/validate_r4_client_acceptance.py` | Pass structurally: 0 pass, 0 fail, 5 pending-external | Historical wrapper alias for the R4 client matrix; does not create physical-client evidence |
 | `python3 scripts/validate_client_acceptance.py` | Pass structurally: 0 pass, 0 fail, 5 pending-external | Does not create physical-client evidence |
 | `python3 scripts/audit_requirement_overrides.py --require-terminal` | Fail closed on 13 non-terminal requirements | Correctly blocks release acceptance |
 | `cargo fmt --all`, Rust unit/library tests | Included in fast gate and pass | Does not prove production migration |
-| `scripts/validate_r4_client_acceptance.py` | Absent | Required historical validator cannot be run |
+| `scripts/validate_r4_client_acceptance.py` | Present | Historical wrapper alias validates the committed matrix structurally only |
 
 No C# or MeloAmp command was run. No production endpoint, registry, external provider, private
 database, private media root, physical device, traffic controller, or GitHub configuration was

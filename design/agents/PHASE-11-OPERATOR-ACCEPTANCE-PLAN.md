@@ -132,8 +132,9 @@ Executed at the recaptured clean HEAD:
 - `python3 scripts/audit_requirement_overrides.py --require-terminal` — fail closed on the 13
   non-terminal requirements; this is an expected release blocker, not a waiver.
 
-The requested `scripts/validate_r4_client_acceptance.py` is absent from this checkout. No
-substitute validator is represented as that script.
+The requested `scripts/validate_r4_client_acceptance.py` is present as a compatibility wrapper
+for the historical R4 client acceptance matrix. It validates the committed matrix structurally
+but does not create physical-client evidence.
 
 ## Exit decision
 
