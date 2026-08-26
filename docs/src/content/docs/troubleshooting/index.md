@@ -130,4 +130,13 @@ part of a Rust container upgrade.
   rollback runbook is an auditable procedure, not an automatic traffic switch.
 - After an approved external traffic return to C#, run `melodee-cli rollback record ... --confirm`
   against the still `cutover-ready` run. Retain the Rust target and backups; never mark rollback
-  complete by deleting forensic evidence.
+complete by deleting forensic evidence.
+
+## Release-candidate and migration blockers
+
+If release evidence names a different commit, image digest, architecture, or checksum than the
+candidate under review, stop and invalidate the evidence. A clean local smoke test does not prove
+arm64 execution, a current vulnerability disposition, provenance, production migration, physical
+client acceptance, or cutover. Escalate those gaps to the release owner and keep source media,
+backups, and failed targets until the documented acceptance window and cleanup approval are
+complete.

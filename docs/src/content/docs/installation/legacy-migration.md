@@ -286,3 +286,12 @@ mapping, and resolved rows import normally.
 - [Storage roles: inbound, staging, work, canonical](./storage/)
 - [Upgrading a Rust deployment](./upgrading/)
 - [Operational troubleshooting](../troubleshooting/)
+
+## Release-acceptance boundary
+
+The migration commands and synthetic rehearsal are safe preparation, not production approval.
+Before using a private snapshot or media root, obtain a named operator and approver, record the
+exact source identity and read-only proof, and use the [cutover and rollback runbook](https://github.com/melodee-project/melodee-rs/blob/main/design/runbooks/CUTOVER-AND-ROLLBACK.md).
+Do not freeze writes, switch traffic, publish an image, or delete rollback assets without the
+corresponding approval and audit record. Historical rehearsal results do not prove a current
+release candidate.

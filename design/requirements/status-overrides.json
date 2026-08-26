@@ -2977,7 +2977,7 @@
     ]
   },
   "PRD-DEPLOY-001": {
-    "status": "tested",
+    "status": "in-progress",
     "implementation": [
       "Dockerfile (multi-stage OCI image with melodee-server, melodee CLI, admin SPA, FFmpeg/ffprobe/fpcalc, UID 10001)",
       ".github/workflows/release-container.yml (release-published-only GHCR linux/amd64+linux/arm64 manifest workflow)",
@@ -2988,7 +2988,7 @@
       ".github/workflows/release-container.yml (native image smoke before publication; multi-platform Buildx publication)",
       "scripts/container_smoke.py (current local amd64 image: non-root, media tools, CLI, Admin UI, readiness, and graceful stop)"
     ],
-    "note": "Official release distribution is GHCR OCI only. Stable releases produce X.Y.Z, X.Y, and latest; GitHub prereleases produce their exact tag only. Native source builds remain available but are not official release artifacts. The current local amd64 image is not a published release; Syft/Trivy are unavailable in this environment, so current candidate scan results are not claimed."
+    "note": "Official release distribution is GHCR OCI only. Stable releases produce X.Y.Z, X.Y, and latest; GitHub prereleases produce their exact tag only. Native source builds remain available but are not official release artifacts. Historical/local images are not current-candidate evidence; exact candidate amd64/arm64 execution, SBOM, scan-policy disposition, provenance, and publication remain open."
   },
   "PRD-DEPLOY-002": {
     "status": "tested",

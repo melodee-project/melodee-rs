@@ -4093,7 +4093,7 @@
     "phase": "1,11",
     "source": "PRD.md",
     "line": 2430,
-    "status": "tested",
+    "status": "in-progress",
     "implementation": [
       "Dockerfile (multi-stage OCI image with melodee-server, melodee CLI, admin SPA, FFmpeg/ffprobe/fpcalc, UID 10001)",
       ".github/workflows/release-container.yml (release-published-only GHCR linux/amd64+linux/arm64 manifest workflow)",

@@ -5,6 +5,22 @@ acceptance, publication, and cleanup gates remain operator-controlled.
 
 Date opened and closed for safe local scope: 2026-08-25
 
+## Current operator-acceptance supplement — 2026-08-25
+
+The historical safe-scope baseline in this document (`91167a1…`) is retained as implementation
+history and is not current-candidate evidence. Before this supplement, the repositories were
+recaptured at Rust `35272b1d344cb0c821b171c3f215243af8706c24`, C#
+`4028b58dbd3302ed431e2c5b32d9dde5634db218`, and MeloAmp
+`096c76d810af91205aeee54da58131766b0f076b`. The exact candidate SHA must be recaptured after the
+operator-acceptance documentation closeout; dirty-tree or rebuilt-after-scan evidence is invalid.
+
+The execution contract and truthful current result are
+[PHASE-11-OPERATOR-ACCEPTANCE-PLAN.md](PHASE-11-OPERATOR-ACCEPTANCE-PLAN.md) and
+[OPERATOR-ACCEPTANCE-REPORT.md](../evidence/phase-11/OPERATOR-ACCEPTANCE-REPORT.md). The current
+report does not claim a current image digest, exact security scan, arm64 execution, provenance,
+private-data rehearsal, migrated differential, physical-client pass, cutover, rollback,
+publication, or cleanup.
+
 ## Objective and authority
 
 Prove that a supported C# Melodee installation can be migrated to Rust without losing public

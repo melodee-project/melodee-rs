@@ -1,5 +1,19 @@
 # Road to Feature Completion
 
+## Phase 11 operator acceptance status (2026-08-25)
+
+Canonical Phase 11 safe implementation and synthetic rehearsal tooling are complete, but the
+release is not accepted. The current Rust HEAD recaptured before closeout is
+`35272b1d344cb0c821b171c3f215243af8706c24`; the final candidate must be recaptured after the
+operator-acceptance documentation is complete. Current-candidate amd64/arm64 image builds and
+scans, security disposition, remote workflow/provenance, private-data rehearsal, migrated
+differential validation, physical-client acceptance, production cutover/rollback, publication,
+and cleanup remain open. See the [operator acceptance report](evidence/phase-11/OPERATOR-ACCEPTANCE-REPORT.md).
+
+The strict terminal requirement audit fails closed on 13 non-terminal requirements. This is a
+truthful release blocker, not a waiver; historical R5 evidence remains historical and does not
+prove the current candidate.
+
 **Document status:** DRAFT planning proposal — **non-authorizing**. Last updated: 2026-08-25.
 
 > ## Current disposition (2026-08-25)

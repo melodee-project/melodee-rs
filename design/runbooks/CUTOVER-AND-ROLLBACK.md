@@ -12,6 +12,13 @@ References: [ADR-0148](../adr/ADR-0148-legacy-migration-contract.md),
 [ADR-0149](../adr/ADR-0149-phase-11-rehearsal-freeze-cutover-and-rollback-procedures.md), and the
 [public migration guide](../../docs/src/content/docs/installation/legacy-migration.md).
 
+Current acceptance evidence is tracked in
+[the operator acceptance plan](../agents/PHASE-11-OPERATOR-ACCEPTANCE-PLAN.md) and
+[the operator acceptance report](../evidence/phase-11/OPERATOR-ACCEPTANCE-REPORT.md). Until that
+report records an exact candidate SHA and image digests, all commands below are planned operator
+commands, not executed release evidence. A changed candidate or dirty tree invalidates prior
+candidate evidence.
+
 ## Roles and approval gates
 
 Name these roles in the change record:
@@ -233,6 +240,11 @@ signoff plus the documented retention period.
 Cleanup is a separate approved destructive action. Before cleanup, verify signed acceptance,
 retention expiry, backup readability, and that no incident or rollback decision remains. Name each
 exact object to remove; topology drift fails closed.
+
+The approval record must also identify the security disposition, exact amd64/arm64 image digests,
+SBOM and scan checksums, provenance verification, migrated differential result, client result, and
+the rollback decision window. “Prepared”, “configured”, “no fixed version”, or a historical image
+scan is not an acceptance result.
 
 ## What this runbook does not claim
 

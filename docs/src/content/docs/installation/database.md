@@ -69,5 +69,10 @@ current migration. It does not stop the Compose project or ask Docker to delete 
 resulting application database has no administrator; create the first administrator before running
 `melodee-cli config validate`.
 
+For a release decision, a successful local backup or restore is not enough: retain the verified
+source and target backups through the acceptance window, verify the restored PostgreSQL authority,
+rebuild search from PostgreSQL, and keep the failed Rust target for rollback forensics. Cleanup is
+a separate, named, approval-gated action.
+
 If Docker volume operations are unresponsive, the command stops after ten seconds without changing
 the database and asks you to restart Docker Engine or Docker Desktop before retrying.

@@ -4,6 +4,18 @@
 **Audit baseline date:** 2026-08-23 (latest pass 2026-08-23, entry 5; 2026-08-25
 Feature-Completion Phase 1 addendum added at the top of this document)
 
+## Current Phase 11 operator disposition (2026-08-25)
+
+The current Rust HEAD is `35272b1d344cb0c821b171c3f215243af8706c24` after clean-state recapture.
+Phase 11 safe implementation is complete, but operator acceptance is not. The exact candidate
+SHA is pending final documentation closeout; no current-candidate image digest, fresh security
+scan, arm64 execution, provenance, production/private-data rehearsal, migrated dual-server
+differential, physical-client pass, cutover, production rollback, publication, or cleanup is
+claimed. The detailed operator record is [here](evidence/phase-11/OPERATOR-ACCEPTANCE-REPORT.md).
+
+The feature-parity rows `MIGRATE-001`, `MIGRATE-002`, `PACKAGING-001`, and applicable `OPS-001`
+remain in progress until their external evidence or explicit release-owner dispositions exist.
+
 ## 2026-08-25 Feature-Completion Phase 2 addendum — implementation and local acceptance complete
 
 Phase 1 is terminal; its evidence is in

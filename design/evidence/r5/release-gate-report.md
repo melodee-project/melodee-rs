@@ -8,6 +8,31 @@ HEAD: `2877e2c` (`Add R4 integration probe and associated tests`)
 Working tree: intentionally dirty with R4/R5 closure changes listed by `git status --short`  
 Toolchain: Rust `1.97.1`, Docker `29.7.2`, BuildKit `0.32.2`, PostgreSQL `18.4-alpine`
 
+## Current-candidate reconciliation — 2026-08-25
+
+The historical report below is retained for local hardening and workflow evidence, but its HEAD
+(`2877e2c`), dirty-tree state, image digests, scan counts, and remote workflow observations are
+not evidence for the current candidate. The current recaptured Rust HEAD is
+`35272b1d344cb0c821b171c3f215243af8706c24`; a final immutable candidate SHA has not yet been
+established after the operator-acceptance documentation closeout.
+
+Current disposition:
+
+- No exact current-candidate amd64 or arm64 image digest is recorded.
+- No current-candidate SPDX SBOM, Trivy JSON/human report, Trivy database timestamp/digest, or
+  scan-policy result is recorded. The assignment baseline reports 7 critical and 153 high
+  findings; no fixed version is not an automatic waiver.
+- Existing local amd64/arm64 images and historical R5 reports are stale/non-candidate evidence.
+- No current candidate-SHA remote full-validation or release workflow result, OIDC attestation,
+  GHCR publication, GitHub Release, production rehearsal, migrated differential run, physical
+  client acceptance, cutover, production rollback, or cleanup result is claimed.
+- Strict terminal requirement audit remains fail-closed on 13 non-terminal requirements. The
+  requested `scripts/validate_r4_client_acceptance.py` is absent from the checkout.
+
+The authoritative current operator record is
+[OPERATOR-ACCEPTANCE-REPORT.md](../phase-11/OPERATOR-ACCEPTANCE-REPORT.md), and the execution
+contract is [PHASE-11-OPERATOR-ACCEPTANCE-PLAN.md](../../agents/PHASE-11-OPERATOR-ACCEPTANCE-PLAN.md).
+
 ## Commands and direct evidence
 
 The following local gates passed from this working tree:

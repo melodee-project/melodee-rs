@@ -145,3 +145,9 @@ Release publication is intentionally release-event-only. A candidate can be buil
 locally, but the official GHCR image, immutable semantic-version tag, stable floating tags, SBOM,
 vulnerability result, and provenance are not claimed until the release workflow completes with an
 approved GitHub Release.
+
+Do not treat a historical image digest, a dirty-tree build, or a scan of an image rebuilt after
+scanning as a release candidate. The accepted release record must bind the exact commit, version,
+amd64 and arm64 digests, SPDX SBOMs, vulnerability reports, checksums, and provenance. If a
+required security finding has no fixed version, it still needs a documented release-owner
+disposition; “no fixed version” is not an automatic waiver.

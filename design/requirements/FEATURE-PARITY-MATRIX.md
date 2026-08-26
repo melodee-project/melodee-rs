@@ -47,11 +47,16 @@ The historical rows below retain their original audit wording; this section is t
 Phase 11 disposition and links to the authoritative [plan](../agents/PHASE-11-PLAN.md) and
 [report](../evidence/phase-11/PHASE-11-REPORT.md).
 
+The operator-acceptance supplement is
+[OPERATOR-ACCEPTANCE-REPORT.md](../evidence/phase-11/OPERATOR-ACCEPTANCE-REPORT.md). It records
+that the current-candidate SHA is pending final documentation closeout and that historical R5
+image, SBOM, vulnerability, and client artifacts are not current-candidate evidence.
+
 | Row | Current disposition | Evidence and remaining boundary |
 |---|---|---|
 | `MIGRATE-001` | In progress — safe local closure | 52-table source inventory, read-only schema/snapshot gates, domain mapping/identity and secret handling, media safety, preview-first validation/repair, and a 12,000-Track drill are current. Production/private snapshot and media rehearsal, migrated-production differential checks, and final client/cutover acceptance remain operator-gated. |
 | `MIGRATE-002` | In progress — local recovery proven | PostgreSQL backup/isolated restore, Tantivy rebuild, freeze/cutover-ready fencing, topology-bound rollback instructions, durable rollback audit, and retained failed-target evidence pass in the synthetic drill. Production backup/restore, traffic rollback, and post-rollback legacy-authority verification remain unexecuted. |
-| `PACKAGING-001` | In progress — local amd64 smoke proven | Current Trixie/non-root image build and PostgreSQL-backed smoke pass; the release-only workflow defines arm64, SPDX SBOM, Trivy, and OIDC provenance gates. Local Syft/Trivy binaries are unavailable, so no current candidate scan, arm64 run, attestation, GHCR publication, or GitHub Release is claimed. |
+| `PACKAGING-001` | In progress — no current-candidate artifact | Historical/local Trixie non-root smoke and the release-only workflow are retained as preparation. The current exact-SHA amd64/arm64 build, SBOM, Trivy scan, checksum bundle, attestation, GHCR publication, and GitHub Release are not claimed. |
 | `OPS-001` (Phase 11 obligations) | In progress — local diagnostics/runbook proven | Correlated migration evidence, durable issues, health/readiness, search rebuild status, rollback audit, and operator runbook paths are documented/tested locally. Production topology, deployment endpoints, live providers/OIDC, and hardware/client legs remain external. |
 
 The `Container images amd64/arm64` row and the detailed migration rows below are interpreted under

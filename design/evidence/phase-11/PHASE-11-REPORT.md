@@ -1,8 +1,9 @@
 # Canonical Phase 11 Report
 
-Status: **Complete with operator blockers** — safe local implementation, rehearsal, packaging,
-documentation, and validation are complete. Production/private-data execution, traffic
-operations, release publication, and rollback-asset cleanup remain explicit approval gates.
+Status: **Not release-accepted — operator and external blockers remain** — safe local
+implementation, synthetic rehearsal tooling, documentation, and fast local validation are
+complete. Current-candidate security, exact multi-architecture packaging, production/private-data
+execution, traffic operations, release publication, and rollback-asset cleanup remain open.
 
 Date: 2026-08-25
 
@@ -12,21 +13,22 @@ The objective was to prove a repeatable, non-destructive migration from a suppor
 installation to the Rust server, preserving public identity, media references, configuration,
 users, and user state, with verified backup, restore, rollback, packaging, and release operations.
 
-The safe local portion is complete. This is not a claim of production completion: the
-approval-gated legs are listed below and must be executed by the named operator/approver before a
-production release can be accepted.
+The safe local portion is complete. This is not a claim of production or release completion. The
+operator acceptance record is
+[OPERATOR-ACCEPTANCE-REPORT.md](OPERATOR-ACCEPTANCE-REPORT.md); its approval-gated legs must be
+executed by the named operator/approver before a production release can be accepted.
 
 ## Baselines and worktree state
 
 | Repository | HEAD | Branch | Worktree at entry | Handling |
 |---|---|---|---|---|
-| Rust rewrite | 91167a1ad90d293d5fc82b2bb3a13d61b856eb00 | main | clean | implementation target |
+| Rust rewrite | 35272b1d344cb0c821b171c3f215243af8706c24 | main | clean before closeout edits | implementation target; final candidate recapture remains required |
 | C# oracle | 4028b58dbd3302ed431e2c5b32d9dde5634db218 | sph.2026-07-11.01 | clean | read-only; not built or modified |
 | MeloAmp | 096c76d810af91205aeee54da58131766b0f076b | sph.2026-07-14.01 | clean | read-only; not built or modified |
 
-The Rust worktree is intentionally dirty after this phase because the implementation, tests,
-runbook, evidence, and documentation changes are the deliverable. The C# and MeloAmp worktrees
-remain clean and untouched.
+The C# and MeloAmp worktrees remain clean and untouched. Any final candidate must be captured only
+after the Rust documentation closeout is complete and the Rust worktree is clean; evidence from a
+dirty or subsequently changed tree is invalid.
 
 ## Entry validation and historical evidence
 
@@ -35,8 +37,15 @@ Passed at entry:
 - python3 scripts/validate_repository.py
 - python3 scripts/extract_requirements.py --check
 - python3 scripts/audit_requirement_overrides.py
+- python3 scripts/validate_client_acceptance.py
+- make check-fast
 - python3 -m unittest tests.python.test_legacy_rehearsal tests.python.test_release_evidence tests.python.test_container_smoke -v
 - cargo test -p melodee-cli --test legacy --test legacy_faults --test legacy_freeze
+
+The strict `python3 scripts/audit_requirement_overrides.py --require-terminal` check correctly
+fails closed on 13 non-terminal requirements. The requested
+`scripts/validate_r4_client_acceptance.py` is absent from this checkout and was not represented by
+another validator.
 
 R3 is synthetic/production-shaped local importer evidence. R4 is isolated synthetic/fixture
 rehearsal evidence, including the earlier 12,000-Track recovery drill. R5 is historical local
@@ -165,29 +174,18 @@ to force migration fixtures to pass.
 
 ## Packaging and release readiness
 
-Local image build:
+No current-candidate image was built in this closeout. The existing local amd64 image has label
+revision `phase11-local` and ID
+`sha256:1ba0b659c8c80dcb2e6bc579cda08ba7459e1a4795ae48ea733133062afd18f6`; it predates the
+current HEAD recapture and is stale/non-candidate evidence. Historical arm64 images are likewise
+not current-candidate evidence. Host Syft and Trivy binaries are absent; cached tool containers
+were version-observed but no exact candidate scan was run. Therefore this report records no
+current SBOM, Trivy database timestamp/digest, image digest pair, scan-policy pass, provenance,
+GHCR publication, GitHub Release, or post-publication smoke result.
 
-    docker buildx build --platform linux/amd64 --load --build-arg VERSION=0.1.0 --build-arg REVISION=phase11-local --build-arg CREATED=2026-08-25T00:00:00Z --tag melodee:phase11-local .
-
-The image built successfully with a Debian Trixie runtime and image ID
-sha256:1ba0b659c8c80dcb2e6bc579cda08ba7459e1a4795ae48ea733133062afd18f6. The current Python
-smoke passed PostgreSQL-backed startup, health/readiness, non-root UID 10001, FFmpeg, ffprobe,
-fpcalc, CLI version, Admin UI static serving, graceful SIGTERM, and a run-scoped PostgreSQL
-persistent-volume restart:
-
-    SMOKE_IMAGE=melodee:phase11-local RELEASE_VERSION=0.1.0 RELEASE_REVISION=phase11-local SMOKE_RUN_ID=phase11-volume SMOKE_PORT=18082 python3 scripts/container_smoke.py
-
-Current local security evidence was generated from this exact image with Syft 1.51.0 and Trivy
-0.72.0. The SPDX SBOM was generated successfully. Trivy reported 7 CRITICAL and 153 HIGH
-findings; all 160 findings had no fixed version in the scan database. The release workflow's
-critical policy therefore remains blocking. Local workflow/container evidence tests pass, but no
-candidate release evidence bundle, arm64 execution, GitHub OIDC provenance attestation, GHCR
-image, GitHub Release, or floating-tag publication is claimed. The release workflow remains
-release-published-only and defines the amd64/arm64, SPDX, Trivy, exact-scanned-image, and
-provenance gates.
-
-docker compose config --quiet passed with disposable interpolation values. No production compose
-deployment was started.
+The release workflow remains release-published-only and defines the required amd64/arm64, SPDX,
+Trivy, exact-scanned-image, checksum, and provenance gates. No production Compose deployment was
+started.
 
 ## Approval-gated actions and blockers
 
@@ -225,28 +223,20 @@ existing migration run contract.
 
 ## Validation commands
 
-Passed during this phase:
+Current closeout results:
 
-    cargo fmt --all
-    cargo fmt --all -- --check
-    cargo test -p melodee-cli --test legacy --test legacy_faults --test legacy_freeze
-    python3 -m unittest tests.python.test_legacy_rehearsal tests.python.test_release_evidence tests.python.test_container_smoke -v
-    python3 scripts/legacy_rehearsal.py drill --songs 12000 --output design/evidence/phase-11/rehearsal-drill-12000.json
-    docker compose config --quiet  (with disposable interpolation values)
-    docker buildx build --platform linux/amd64 --load ...
-    python3 scripts/container_smoke.py  (current image, volume restart included)
-    python3 scripts/validate_repository.py
-    python3 scripts/extract_requirements.py --check
-    make test-integration
-    cargo deny check
-    make check
-    cd docs && pnpm check && pnpm check:links && pnpm build
+    python3 scripts/validate_repository.py                         # pass
+    python3 scripts/extract_requirements.py --check                 # pass
+    python3 scripts/validate_client_acceptance.py                   # pass structurally; 5 pending-external
+    make check-fast                                                 # pass
+    make test-integration                                             # pass; workspace PostgreSQL/integration matrix
+    cargo deny check                                                  # pass; policy checks with non-failing warnings
+    python3 scripts/audit_requirement_overrides.py --require-terminal # fail closed on 13 non-terminal requirements
 
-All listed repository and documentation gates passed. `make check` passed the repository checks,
-Python suite (232 tests), Admin UI static/type/lint/unit/build gate, formatting, Clippy, full
-workspace tests, and dependency gate. The two existing Admin UI Fast Refresh warnings remain
-non-fatal. The release scanner result above is current evidence, not a pass; arm64, provenance,
-publication, production data, and external-client legs were not executed.
+The full `make check`, PostgreSQL production rehearsal, exact candidate image build, exact
+amd64/arm64 scan, remote workflows, and docs-site release gate were not rerun after the final
+candidate documentation changes. Historical reports may contain successful older runs, but those
+are not current-candidate evidence.
 
 ## Readiness for comprehensive parity audit
 
@@ -256,4 +246,4 @@ policy, arm64/provenance/publication, differential/client, traffic, rollback, an
 none may be silently converted into completed evidence.
 
 Documentation impact:
-- Updated - design/agents/PHASE-11-PLAN.md; design/evidence/phase-11/PHASE-11-REPORT.md; design/ROAD-TO-FEATURE-COMPLETION.md; design/ROAD-TO-FEATURE-PARITY.md; design/requirements/FEATURE-PARITY-MATRIX.md; design/requirements/status-overrides.json; design/runbooks/CUTOVER-AND-ROLLBACK.md; docs/src/content/docs/installation/legacy-migration.md; docs/src/content/docs/installation/database.md; docs/src/content/docs/installation/upgrading.md; docs/src/content/docs/installation/docker.md; docs/src/content/docs/troubleshooting/index.md.
+- Updated - design/agents/PHASE-11-PLAN.md; design/agents/PHASE-11-OPERATOR-ACCEPTANCE-PLAN.md; design/evidence/phase-11/PHASE-11-REPORT.md; design/evidence/phase-11/OPERATOR-ACCEPTANCE-REPORT.md; design/ROAD-TO-FEATURE-COMPLETION.md; design/ROAD-TO-FEATURE-PARITY.md; design/requirements/FEATURE-PARITY-MATRIX.md; design/requirements/status-overrides.json; design/runbooks/CUTOVER-AND-ROLLBACK.md; docs/src/content/docs/installation/legacy-migration.md; docs/src/content/docs/installation/database.md; docs/src/content/docs/installation/upgrading.md; docs/src/content/docs/installation/docker.md; docs/src/content/docs/troubleshooting/index.md.

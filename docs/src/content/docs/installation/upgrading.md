@@ -70,6 +70,11 @@ For a C# to Rust migration, use the [cutover and rollback runbook](https://githu
 The Rust `rollback` commands generate topology-bound instructions and record durable audit
 evidence; they do not switch traffic, restore C# state, or delete the failed Rust target.
 
+Release-owner acceptance is separate from an image upgrade. Keep the exact pre-upgrade and
+candidate digests, validated backups, search rebuild result, differential checks, and client
+acceptance record until the acceptance window closes. Do not publish or clean up rollback assets
+while any migration, security, client, or rollback gate is only prepared or historical.
+
 ## Legacy C# migration
 
 Migration from an existing C# Melodee installation is handled by the
