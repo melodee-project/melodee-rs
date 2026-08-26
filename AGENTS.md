@@ -33,7 +33,7 @@ template.
   Host port is **5433**, not 5432 — `DATABASE_URL` in `.env` must match. The `postgres:18+`
   image requires the volume mounted at `/var/lib/postgresql` (not the legacy
   `/var/lib/postgresql/data`).
-- **Legacy oracle (Phase 0 compatibility):** `python3 scripts/legacy_oracle.py recreate`
+- **Legacy compatibility oracle:** `python3 scripts/legacy_oracle.py recreate`
   rebuilds the frozen C# baseline (commit `4028b58d...`, fails closed on mismatch) and
   `python3 scripts/legacy_oracle.py capture` regenerates all golden captures. Details:
   `design/evidence/phase-0/legacy-baseline.md` and `compatibility/README.md`.
@@ -78,7 +78,7 @@ template.
 1. Accepted ADRs in `design/adr/`
 2. `SPEC.md` technical invariants and interface contracts
 3. `PRD.md` product requirements
-4. `IMPLEMENTATION.md` phase scope and exit criteria
+4. `IMPLEMENTATION.md` delivery scope and completion gates
 5. The assigned phase, issue, or work package
 6. Existing implementation patterns in this repository
 7. Legacy C# code — evidence of behavior, **not** an architecture template
@@ -87,92 +87,42 @@ Do not silently resolve a material conflict; record it in the PR and propose an 
 
 ## Coding-agent assignment granularity
 
-The assignment unit and the implementation unit are different:
+The assignment unit and implementation units are different:
 
-- **Phase-level requests produce phase-level assignments.** When the repository has a
-  phase-structured roadmap and the user asks for a coding-agent prompt for "the next phase",
-  "what should be worked on next", or equivalent without naming a single issue, default to the
-  next complete phase or program milestone. Do not reinterpret that request as permission to
-  return only the first task, prerequisite, bug fix, or workstream in the phase.
-- A phase-level prompt delegates the end-to-end outcome: resolve or surface its entry decisions,
-  decompose and order its internal workstreams, implement every in-scope requirement, run the
-  required compatibility and validation gates, update public documentation and traceability, and
-  produce phase-closeout evidence. The receiving coding agent owns that decomposition and should
-  continue across workstreams without requiring a new user prompt for each one.
-- Work packages, waves, issues, and "smallest coherent changes" are execution and review units
-  *inside* a phase. They keep commits understandable and dependencies ordered; they do not reduce
-  the scope of a phase assignment.
-- Return a single-issue or single-workstream prompt only when the user explicitly asks for that
-  granularity, or when a concrete external decision makes the rest of the phase impossible to
-  execute safely. A prerequisite that the agent can complete is part of the phase, not a reason
-  to stop after the prerequisite.
-- "Awaiting next phase assignment" prevents unsolicited feature work. An explicit user request
-  to create a prompt that accomplishes the next phase is direction to select and frame the whole
-  phase. An explicit request to implement or proceed with that phase assigns it for execution,
-  subject to the authority hierarchy and destructive/external approval gates above.
-- If more than one phase could reasonably be next, recommend the best complete phase and state
-  the dependency reasoning. Do not silently fall back to a microtask merely because the roadmap
-  needs reconciliation; include safe reconciliation as the phase's entry wave.
+- Requests for the next substantive body of work produce a complete work-program assignment. Do not
+  reinterpret them as permission to return only the first prerequisite, bug fix, or workstream.
+- A program-level prompt delegates the end-to-end outcome: resolve or surface entry decisions,
+  decompose and order internal workstreams, implement every in-scope requirement, run applicable
+  compatibility and validation gates, update public documentation and traceability, and produce
+  closeout evidence.
+- Issues and small coherent changes are execution and review units inside a work program. They do
+  not reduce the scope of the assigned outcome.
+- Return a single-issue prompt only when the user explicitly requests that granularity or an external
+  decision prevents the rest of the work from proceeding safely.
+- If several work programs are available, recommend the one that best closes current requirement or
+  release-readiness gaps and explain its dependencies.
 
-Use [the phase implementation prompt](design/prompts/IMPLEMENT-PHASE.md) as the default template
-for phase-level coding-agent assignments. The issue template is reserved for explicitly assigned
-issues.
+Use [the substantive work prompt](design/prompts/IMPLEMENT-WORK.md) for program-level assignments.
+The issue template is reserved for explicitly assigned narrow issues.
 
-## Current phase boundary: Feature-Completion Phase 2 complete — awaiting next phase assignment
+## Current project state
 
-Phases 0–10 are complete. Phase 10's evidence is in
-`design/evidence/phase-10/PHASE-10-REPORT.md`: the Carbon admin SPA (served at `/admin`)
-implements all eight canonical screens plus supporting surfaces, all ten per-screen checklists
-are green, ADR-0109 shell-validation evidence is recorded, theming/localization/RTL,
-accessibility, responsive, and visual-regression suites are evidenced, and all Phase-10-tagged
-requirements are terminal (metadata edit forms are the single deliberate deferral, recorded in
-the Phase 10 decision log). Phase 10 landed under accepted ADRs 0137 (localization stack),
-0138 (SPA tooling + static serving), 0139 (session strategy + admin API gating), 0140/0141
-(legacy jukebox/party web-route retirements), 0142 (admin browse indexes), and 0143 (catalog
-artwork overrides with evidenced frozen-endpoint precedence). The full repository gate passes
-(904 Rust tests, 232 JS unit tests, 259 Playwright e2e runs, 140 Python capture tests, zero
-failures); the local gate now includes the admin-ui toolchain (`make check`). Phase 9's
-evidence is in
-`design/evidence/phase-9/PHASE-9-REPORT.md`: all twelve per-domain parity checklists are green
-(74 rows ✅ with linked test evidence, 4 rows 🚫 waived by accepted ADRs, 2 rows ➡ Phase 10),
-all 61 Phase-9-tagged requirements are terminal (52 tested, 2 implemented, 7 deferred under
-ADRs 0133/0136 or the Phase 10 boundary), the feature-parity matrix carries no unapproved gaps,
-and the full repository gate passes (834 Rust tests, 140 Python capture tests, zero failures).
-Phase 9 landed under accepted ADRs 0133 (party/jukebox waiver), 0134 (parity-domain schema, §7
-amended for Last.fm session-key sealing), 0135 (Boa scripting runtime), and 0136 (non-Last.fm
-provider deferral), plus dispositions accepting ADR-0109 (with shell validation moved to
-Phase 10 entry criteria) and ADR-0132. Phase 8's accepted adapter evidence is in
-`design/evidence/phase-8/PHASE-8-REPORT.md` (81/81 OpenSubsonic endpoints, 60/60 Jellyfin
-routes, zero-diff replay, Feishin 12/12 real-client acceptance); Phase 7's accepted native-v1
-evidence is in `design/evidence/phase-7/PHASE-7-REPORT.md`.
+The Rust server and Admin UI are functionally feature complete relative to the current C# product,
+subject to accepted differences recorded in `design/ROAD-TO-FEATURE-PARITY.md`. MeloAmp owns
+listener-facing web workflows under ADR-0161. The active roadmap is
+`design/ROAD-TO-FEATURE-COMPLETION.md`.
 
-The post-Phase-10 **W0 workstream** (`RELEASE-002` metadata-edit contract and save-path fix) is
-implemented at `cd0256a`, including server/store tests and public API documentation. Feature-
-Completion Phase 2 is complete under
-`design/evidence/feature-completion/phase-2/PHASE-2-REPORT.md`; its local identity, provider,
-enrichment, artwork, compatibility, documentation, and validation evidence is closed. The report
-keeps real credentials, live provider differential captures, production replica rehearsal, and
-production-library cutover as explicit operator-authorized external legs.
+Thirteen non-terminal requirements remain. They concern immutable release artifacts, authorized
+migration verification, public-ID and media preservation, performance and scale acceptance,
+differential validation, fault recovery, cutover, and rollback. They are release-readiness and
+operator-acceptance obligations, not missing runtime workflows.
 
-ADR-0161 supersedes ADR-0155: MeloAmp owns listener browsing, search, playback, playlists, ratings,
-recommendations, and related listener workflows; the Rust server owns APIs, ingestion, storage,
-streaming, operations, and the full Admin UI at `/admin`. A duplicate `web-ui/` listener SPA at `/`
-is not a server obligation. Only narrow HTML pages required by a public link or security flow may
-be added, and they must not become a second listener application.
+Allowed without new user direction: corrections to existing evidence and documentation. An explicit
+request to implement the next substantive work program authorizes all safe in-repository work needed
+for that outcome.
 
-Allowed without new user direction: fixes to existing evidence and documentation corrections.
-Phase 2 is closed; do not begin unsolicited feature work while awaiting the next phase assignment.
-
-Not authorized by the current repository state alone: Phase 11 migration/import completion. A
-direct user assignment may authorize that phase, but production rehearsal, cutover, rollback, and
-other destructive or external legs still require their documented operator approvals.
-
-Forbidden: merging native-v1, OpenSubsonic, or Jellyfin wire DTOs; redesigning captured
-external contracts without compatibility evidence, a product decision, an accepted ADR, and a
-migration/client plan; any database schema without an accepted schema ADR; message brokers,
-Redis, Elasticsearch/OpenSearch, GraphQL, microservices; copying C# service/class boundaries
-into Rust; destructive operations against an existing Melodee library outside the durable
-Phase 5 decision/audit/authorization contract.
+Production rehearsal, private-data access, external credentials, publication, cutover, rollback,
+cleanup, and other destructive or external actions still require their documented operator approvals.
 
 ## Product language
 
@@ -273,7 +223,7 @@ A bare `None` without a reason is not sufficient for user-visible work. Read
 Public documentation must only describe implemented behavior; planned capabilities are marked
 as planned.
 
-## UI rules (future admin phase)
+## UI rules
 
 Carbon Design System is the preferred candidate, pending ADR acceptance. Use Carbon and Melodee
 shared components before another UI library; TanStack Table only for a proven Carbon DataTable
@@ -284,9 +234,9 @@ sorting/filtering/paging is server-side.
 
 ## Required workflow for every assigned unit
 
-For a phase assignment, apply this workflow across every internal workstream and continue until
-the phase exit criteria are satisfied. Do not stop after the first passing issue and ask the user
-to assign the next issue.
+For a program-level assignment, apply this workflow across every internal workstream and continue
+until the complete outcome satisfies its acceptance criteria. Do not stop after the first passing
+issue and ask the user to assign the next issue.
 
 1. Read the assigned requirement IDs and linked ADRs.
 2. Inspect existing tests and legacy behavior where relevant.

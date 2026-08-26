@@ -5,7 +5,7 @@ Describe the problem and the smallest implemented solution.
 ## Requirements
 
 - PRD requirement IDs:
-- Implementation phase:
+- delivery workstream:
 - Related issue/work package:
 
 ## Architecture
@@ -53,7 +53,7 @@ goal is a conscious evaluation. See `docs/AGENTS.md` for the rules.
 
 ## Checklist
 
-- [ ] Scope is within the current implementation phase.
+- [ ] Scope is within the current delivery workstream.
 - [ ] Requirements traceability is updated.
 - [ ] ADR requirements are satisfied.
 - [ ] Formatting, linting, tests, and repository validation pass.

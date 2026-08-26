@@ -34,7 +34,7 @@ A C# capability does not cease to be a parity obligation merely because:
 - a first-party client did not use it during an earlier acceptance run;
 - it is implemented in an admin UI, background job, ingestion pipeline, or provider plugin rather
   than a public API;
-- an ADR deferred, waived, or excluded it from an earlier phase;
+- an ADR deferred, waived, or excluded it from an earlier delivery milestone;
 - the Rust repository preserved its setting names or database schema;
 - a Rust unit test proves an interface or pure function in isolation.
 
@@ -148,7 +148,7 @@ Never mark parity proven solely from any of the following:
 - an API route that returns placeholder, empty, compatibility-shaped, or pre-seeded data;
 - a cache exercised only by cache tests;
 - successful compilation or a large total test count;
-- an implementation report, phase report, checklist, ADR waiver, or requirement status;
+- an implementation report, completion report, checklist, ADR waiver, or requirement status;
 - preservation of imported provider identifiers without live provider behavior;
 - one compatibility surface when the same capability has separate native, OpenSubsonic,
   Jellyfin, admin, CLI, worker, or UI behavior.

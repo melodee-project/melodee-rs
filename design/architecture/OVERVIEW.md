@@ -26,7 +26,7 @@ flowchart TB
 
 Dependencies point inward. Domain code never imports transport, persistence, or filesystem crates.
 
-For Phase 3 publication, PostgreSQL holds durable work state, immutable authorization/plan, journal,
+For normalization and publication publication, PostgreSQL holds durable work state, immutable authorization/plan, journal,
 and receipt evidence. Canonical storage holds the verified finalized media bytes and manifest v3.
 The two authorities converge through a no-clobber incoming-directory protocol rather than a
 fictional cross-resource transaction. Inbound media bytes are immutable while Melodee settles and

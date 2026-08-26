@@ -106,4 +106,4 @@ ambient authority.
 - [ADR-0103](ADR-0103-require-fully-foss-dependencies.md),
   [ADR-0111](ADR-0111-do-not-require-broker-or-redis-initially.md),
   [ADR-0134](ADR-0134-phase-9-parity-domain-schema-for-radio-device-profiles-onboarding-notifications-scripts-and-providers.md)
-- `design/agents/PHASE-9-PLAN.md` §3
+- `design/ROAD-TO-FEATURE-COMPLETION.md` §3

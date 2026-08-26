@@ -1,5 +1,5 @@
 {
-  "comment": "Status/evidence overrides merged by scripts/extract_requirements.py. The requirements index is generated; record implementation/test evidence here. Controlled status vocabulary: planned, in-progress, captured, implemented, tested, deferred, superseded. 'captured' means Phase 0 behavioral evidence exists; it does not mean the Rust implementation exists.",
+  "comment": "Status/evidence overrides merged by scripts/extract_requirements.py. The requirements index is generated; record implementation/test evidence here. Controlled status vocabulary: planned, in-progress, captured, implemented, tested, deferred, superseded. 'captured' means baseline capture behavioral evidence exists; it does not mean the Rust implementation exists.",
   "PRD-ARCH-001": {
     "status": "tested",
     "implementation": [
@@ -36,8 +36,8 @@
       "crates/melodee-persistence/migrations/0010..0028 (auth/users, shares, podcasts, discovery, settings, notifications, providers, scripts, device profiles)"
     ],
     "tests": [
-      "crates/melodee-persistence/tests/ (migration, claiming, recovery, history, manifest, catalog, policy, auth, settings, notification, and Phase 6 projection lifecycle tests against PostgreSQL)",
-      "crates/melodee-search/tests/ and Phase 6 rebuild evidence (Tantivy projection rebuildable from authoritative state)"
+      "crates/melodee-persistence/tests/ (migration, claiming, recovery, history, manifest, catalog, policy, auth, settings, notification, and search and MQL projection lifecycle tests against PostgreSQL)",
+      "crates/melodee-search/tests/ and search and MQL rebuild evidence (Tantivy projection rebuildable from authoritative state)"
     ],
     "note": "PostgreSQL is authoritative for all shipped state: ingestion, catalog, identity, audit, users/auth, configuration, notifications, providers, and search-generation lifecycle. Tantivy remains a disposable projection, proven rebuildable, and never rereads media."
   },
@@ -100,7 +100,7 @@
       "scripts/build_native_inventory.py --check",
       "scripts/build_phase7_route_matrix.py --check"
     ],
-    "note": "The complete native-v1 surface is captured and its 202 route dispositions are executable. OpenSubsonic and Jellyfin remain separate Phase 8 adapters."
+    "note": "The complete native-v1 surface is captured and its 202 route dispositions are executable. OpenSubsonic and Jellyfin remain separate OpenSubsonic and Jellyfin compatibility adapters."
   },
   "PRD-API-M1-002": {
     "status": "tested",
@@ -138,7 +138,7 @@
       "tests/python/test_native_v1_capture.py (GoldenFixtureTests)",
       "crates/melodee-persistence/tests/catalog_legacy.rs (all frozen Artist/Release/Track public UUIDs round-trip verbatim)"
     ],
-    "note": "Phase 4 proves the catalog mapping for all frozen public UUIDs. Phase 11 still owns production migration/cutover and real-client state validation, so the broad API migration requirement remains in progress."
+    "note": "catalog and identity proves the catalog mapping for all frozen public UUIDs. release qualification still owns production migration/cutover and real-client state validation, so the broad API migration requirement remains in progress."
   },
   "PRD-API-M1-005": {
     "status": "tested",
@@ -166,7 +166,7 @@
       "tests/python/test_native_v1_capture.py (RouteInventoryTests)",
       "scripts/build_phase7_route_matrix.py --check"
     ],
-    "note": "The Phase 7 matrix is complete with no pending or deferred native-v1 route."
+    "note": "The native API compatibility matrix is complete with no pending or deferred native-v1 route."
   },
   "PRD-API-M1-007": {
     "status": "tested",
@@ -316,7 +316,7 @@
       "apps/melodee-cli/tests/config.rs (list/export never print secrets)",
       "cd docs && pnpm check && pnpm check:links && pnpm build"
     ],
-    "note": "Phase 7 documented secret handling; WP-08 landed the general configuration export/import facility with explicit secret warnings. Compromised/placeholder legacy secret defaults (encryption.privateKey, jellyfin.token.pepper) are never carried as built-in defaults."
+    "note": "native API compatibility documented secret handling; WP-08 landed the general configuration export/import facility with explicit secret warnings. Compromised/placeholder legacy secret defaults (encryption.privateKey, jellyfin.token.pepper) are never carried as built-in defaults."
   },
   "PRD-USER-001": {
     "status": "tested",
@@ -362,7 +362,7 @@
       "apps/melodee-server/tests/native_catalog_api.rs (exact excluded route matrix)",
       "compatibility/melodee-api-v1/golden/native-excluded/"
     ],
-    "note": "The current frozen native build exposes no Queue controller; Phase 7 preserves that exact absence rather than inventing persistence or routes."
+    "note": "The current frozen native build exposes no Queue controller; native API compatibility preserves that exact absence rather than inventing persistence or routes."
   },
   "PRD-USER-005": {
     "status": "tested",
@@ -380,8 +380,8 @@
     "implementation": [
       "crates/melodee-persistence/migrations/0016_phase7_native_playlists.sql",
       "apps/melodee-server/src/native/playlists.rs",
-      "apps/melodee-server/src/opensubsonic/ (playlist adapter group, Phase 8)",
-      "apps/melodee-server/src/jellyfin/playlists.rs (Phase 8)"
+      "apps/melodee-server/src/opensubsonic/ (playlist adapter group, OpenSubsonic and Jellyfin compatibility)",
+      "apps/melodee-server/src/jellyfin/playlists.rs (OpenSubsonic and Jellyfin compatibility)"
     ],
     "tests": [
       "apps/melodee-server/tests/native_playlists.rs",
@@ -389,7 +389,7 @@
       "apps/melodee-server/tests/jellyfin_core_api.rs",
       "scripts/run_phase8_differential.py (zero unexpected playlist differences)"
     ],
-    "note": "Playlist CRUD/order/visibility/import is tested on all three captured surfaces: native v1 (Phase 7), OpenSubsonic and Jellyfin (Phase 8, 81/81 and 60/60 matrices)."
+    "note": "Playlist CRUD/order/visibility/import is tested on all three captured surfaces: native v1 (native API compatibility), OpenSubsonic and Jellyfin (OpenSubsonic and Jellyfin compatibility, 81/81 and 60/60 matrices)."
   },
   "PRD-PLAYLIST-002": {
     "status": "tested",
@@ -513,25 +513,25 @@
       "apps/melodee-cli/tests/notifications.rs (list shows seeded templates; test-send records skipped/template-not-found honestly; bad recipients fail closed)",
       "apps/melodee-server/tests/admin_notifications_api.rs (test-send endpoint)"
     ],
-    "note": "CLI commands authenticate via MELODEE__DATABASE__URL and use the same stores and delivery service as the server, mirroring the admin API semantics exactly like the existing users/groups commands (PRD-CLI-002); the CLI has no HTTP/JWT mechanism and none was invented. Server-wired events render the en locale until Phase 10 per-user localization."
+    "note": "CLI commands authenticate via MELODEE__DATABASE__URL and use the same stores and delivery service as the server, mirroring the admin API semantics exactly like the existing users/groups commands (PRD-CLI-002); the CLI has no HTTP/JWT mechanism and none was invented. Server-wired events render the en locale until Admin UI per-user localization."
   },
   "PRD-PARTY-001": {
     "status": "deferred",
     "implementation": [
       "design/agents/PHASE-7-ROUTE-MATRIX.json (32 frozen Party exclusions preserved)",
-      "design/adr/ADR-0133-phase-9-party-mode-and-jukebox-parity-waiver.md (accepted Phase 9 waiver)"
+      "design/adr/ADR-0133-phase-9-party-mode-and-jukebox-parity-waiver.md (accepted server feature parity waiver)"
     ],
     "tests": [
       "apps/melodee-server/tests/native_catalog_api.rs (exact excluded route matrix)",
       "compatibility/melodee-api-v1/golden/native-excluded/"
     ],
-    "note": "The frozen native server did not compile Party routes; the frozen 404 absence is preserved and differentially evidenced. ADR-0133 (accepted) waives Party Mode as a Phase 9 parity obligation: 'where currently implemented' is the empty set at the baseline. Reactivation is a post-parity feature requiring a superseding ADR plus a client compatibility plan per the ADR-0123 clause."
+    "note": "The frozen native server did not compile Party routes; the frozen 404 absence is preserved and differentially evidenced. ADR-0133 (accepted) waives Party Mode as a server feature parity parity obligation: 'where currently implemented' is the empty set at the baseline. Reactivation is a post-parity feature requiring a superseding ADR plus a client compatibility plan per the ADR-0123 clause."
   },
   "PRD-PARTY-002": {
     "status": "deferred",
     "implementation": [
       "apps/melodee-server/src/opensubsonic/negative.rs (jukeboxControl intentional 410, captured disabled behavior)",
-      "design/adr/ADR-0133-phase-9-party-mode-and-jukebox-parity-waiver.md (accepted Phase 9 waiver)"
+      "design/adr/ADR-0133-phase-9-party-mode-and-jukebox-parity-waiver.md (accepted server feature parity waiver)"
     ],
     "tests": [
       "scripts/run_phase8_differential.py (zero unexpected differences; jukebox 410 pinned)",
@@ -565,7 +565,7 @@
     "status": "tested",
     "implementation": [
       "compatibility/opensubsonic/contracts/route-inventory.json (164 routes; plain and .view forms)",
-      "apps/melodee-server/src/opensubsonic/ (Phase 8 adapter)",
+      "apps/melodee-server/src/opensubsonic/ (OpenSubsonic and Jellyfin compatibility adapter)",
       "design/agents/PHASE-8-OPENSUBSONIC-ROUTE-MATRIX.json (81/81 endpoints dispositioned)"
     ],
     "tests": [
@@ -612,7 +612,7 @@
       "scripts/run_phase8_differential.py (zero unexpected differences across all groups)",
       "apps/melodee-server/tests/opensubsonic_*.rs (including get_cover_art_catalog_overrides_are_served_for_artist_release_and_song)"
     ],
-    "note": "All current music-relevant groups are implemented and differentially tested in Phase 8, including internet-radio CRUD and podcast/share adapters."
+    "note": "All current music-relevant groups are implemented and differentially tested in OpenSubsonic and Jellyfin compatibility, including internet-radio CRUD and podcast/share adapters."
   },
   "PRD-API-OS-005": {
     "status": "tested",
@@ -636,7 +636,7 @@
       "tests/python/test_opensubsonic_capture.py (test_extensions_advertised)",
       "apps/melodee-server/tests/opensubsonic_system.rs"
     ],
-    "note": "ADR-0130 resolved the apiKeyAuthentication/transcodeOffset advertisement question for Phase 8; the advertised extension set matches the frozen captures."
+    "note": "ADR-0130 resolved the apiKeyAuthentication/transcodeOffset advertisement question for OpenSubsonic and Jellyfin compatibility; the advertised extension set matches the frozen captures."
   },
   "PRD-API-OS-007": {
     "status": "tested",
@@ -648,7 +648,7 @@
       "tests/python/test_opensubsonic_capture.py",
       "design/evidence/phase-8/REAL-CLIENT-ACCEPTANCE.md (12/12 assertions across both surfaces)"
     ],
-    "note": "The shipping Feishin v1.15.1 client completed the documented OpenSubsonic workflows against the Rust server in Phase 8."
+    "note": "The shipping Feishin v1.15.1 client completed the documented OpenSubsonic workflows against the Rust server in OpenSubsonic and Jellyfin compatibility."
   },
   "PRD-API-JF-001": {
     "status": "tested",
@@ -723,7 +723,7 @@
     "tests": [
       "design/evidence/phase-8/REAL-CLIENT-ACCEPTANCE.md (12/12 assertions across both surfaces)"
     ],
-    "note": "The shipping Feishin v1.15.1 client completed the documented Jellyfin workflows against the Rust server in Phase 8. Finamp/Streamyfin mobile smoke remains optional recorded hardening, not a gate."
+    "note": "The shipping Feishin v1.15.1 client completed the documented Jellyfin workflows against the Rust server in OpenSubsonic and Jellyfin compatibility. Finamp/Streamyfin mobile smoke remains optional recorded hardening, not a gate."
   },
   "PRD-MEDIA-001": {
     "status": "tested",
@@ -740,7 +740,7 @@
       "crates/melodee-media/tests/normalization_real.rs",
       "crates/melodee-media/src/lib.rs tests (format detection, malformed/truncated/zero-length/unsupported/multi-stream/oversized inputs)"
     ],
-    "note": "R2.1 completed the executable practical matrix for the required FFmpeg/FFprobe-supported formats and explicit unsupported/pathology outcomes; the accepted R2 report records the matrix and regenerated media corpus. Feature-Completion Phase 4 adds real-container tag-rewrite integrity, NFO/lyrics/Blackbeard sidecar, atomic recovery, and decoded-audio preservation evidence in design/evidence/feature-completion/phase-4/PHASE-4-REPORT.md."
+    "note": "R2.1 completed the executable practical matrix for the required FFmpeg/FFprobe-supported formats and explicit unsupported/pathology outcomes; the accepted R2 report records the matrix and regenerated media corpus. Feature-Completion catalog and identity adds real-container tag-rewrite integrity, NFO/lyrics/Blackbeard sidecar, atomic recovery, and decoded-audio preservation evidence in design/evidence/feature-completion/phase-4/PHASE-4-REPORT.md."
   },
   "PRD-MEDIA-002": {
     "status": "tested",
@@ -757,7 +757,7 @@
       "crates/melodee-persistence/tests/normalization.rs (atomic publish, timestamp semantics, stale/missing manifest rejection)",
       "compatibility/media/baseline.json environment.seededSettings (legacy conversion profile preserved as evidence)"
     ],
-    "note": "The legacy-seeded -b:a 384k argument is retained for profile fidelity, but official libmp3lame behavior confirms it is ignored when -q:a enables VBR; it is not a bitrate cap. Phase 3.2 produces verified temporary output, not Phase 3.3 canonical publication."
+    "note": "The legacy-seeded -b:a 384k argument is retained for profile fidelity, but official libmp3lame behavior confirms it is ignored when -q:a enables VBR; it is not a bitrate cap. media normalization produces verified temporary output, not canonical publication canonical publication."
   },
   "PRD-MEDIA-003": {
     "status": "tested",
@@ -782,7 +782,7 @@
       "crates/melodee-persistence/tests/recovery.rs (permanent/review failure classes)",
       "crates/melodee-domain unit tests (retry backoff)"
     ],
-    "note": "Per-Release retry with bounded exponential backoff operates on durable work items (no root rescans). Media-stage retries arrive with later phases."
+    "note": "Per-Release retry with bounded exponential backoff operates on durable work items (no root rescans). Media-stage retries arrive with future work."
   },
   "PRD-INGEST-002": {
     "status": "implemented",
@@ -866,7 +866,7 @@
       "crates/melodee-ingestion/tests/normalization.rs (rename-before-database-completion adoption, concurrent fencing, real pathology, and 200-Release Published scenario)",
       "crates/melodee-ingestion/tests/normalization.rs (feature-gated deterministic lease theft during copy: stale cancellation, no final/receipt, direct retry convergence, source retention)"
     ],
-    "note": "Phase 3 publication is safe to retry and exposes only an absent or complete canonical Release. Source removal is intentionally not part of this non-destructive authorization."
+    "note": "normalization and publication publication is safe to retry and exposes only an absent or complete canonical Release. Source removal is intentionally not part of this non-destructive authorization."
   },
   "PRD-SEC-004": {
     "status": "tested",
@@ -1022,12 +1022,12 @@
     ],
     "tests": [
       "tests/python/test_benchmark_baseline.py",
-      "design/evidence/phase-4/PHASE-4-REPORT.md (exact Phase 4 metric record)",
-      "design/evidence/phase-5/PHASE-5-REPORT.md (exact Phase 5 metric record)",
+      "design/evidence/phase-4/PHASE-4-REPORT.md (exact catalog and identity metric record)",
+      "design/evidence/phase-5/PHASE-5-REPORT.md (exact classification and policy metric record)",
       "design/evidence/phase-6/PHASE-6-REPORT.md (exact default/current-scale/10M search metric record)",
       "design/evidence/phase-7/PHASE-7-REPORT.md (exact current-catalog native API metric record)"
     ],
-    "note": "Phase 4 catalog, Phase 5 policy, Phase 6 search, and Phase 7 native API evidence cover the required metric families across their relevant workload boundaries. Per-request PostgreSQL query timing remains an operational-observability follow-up, so the broad requirement stays in progress."
+    "note": "catalog and identity catalog, classification and policy policy, search and MQL search, and native API compatibility native API evidence cover the required metric families across their relevant workload boundaries. Per-request PostgreSQL query timing remains an operational-observability follow-up, so the broad requirement stays in progress."
   },
   "PRD-PERF-004": {
     "status": "in-progress",
@@ -1082,7 +1082,7 @@
       "compatibility/scenarios/*.json (22 scenario files, declarative flows)",
       "scripts/capture_baseline.py + scripts/compare_captures.py (deterministic A/B comparison)",
       "compatibility/*/golden/ (424 promoted captures with provenance)",
-      "crates/melodee-persistence/src/catalog_mutations.rs (frozen legacy catalog mapping into the Phase 4 model)"
+      "crates/melodee-persistence/src/catalog_mutations.rs (frozen legacy catalog mapping into the catalog and identity model)"
     ],
     "tests": [
       "tests/python/test_native_v1_capture.py",
@@ -1090,9 +1090,9 @@
       "tests/python/test_jellyfin_capture.py",
       "tests/python/test_media_baseline.py",
       "tests/python/test_benchmark_baseline.py",
-      "crates/melodee-persistence/tests/catalog_legacy.rs (frozen Phase 0 Artist/Release/Track/public-ID relationship mapping)"
+      "crates/melodee-persistence/tests/catalog_legacy.rs (frozen baseline capture Artist/Release/Track/public-ID relationship mapping)"
     ],
-    "note": "Golden fixture infrastructure exists for all three API surfaces and media; Phase 4 adds frozen catalog-mapping evidence. Route-level Rust differential suites activate with the compatibility adapters in later phases."
+    "note": "Golden fixture infrastructure exists for all three API surfaces and media; catalog and identity adds frozen catalog-mapping evidence. Route-level Rust differential suites activate with the compatibility adapters in future work."
   },
   "PRD-TEST-002": {
     "status": "in-progress",
@@ -1124,7 +1124,7 @@
       "crates/melodee-ingestion/tests/environment_faults.rs (R2.7 environment fault suite: full staging disk, slow storage, hung FFmpeg, ENOSPC partial output, PostgreSQL restart; all fail-closed with retry convergence)",
       "crates/melodee-ingestion/tests/normalization.rs::two_hundred_releases_survive_repeated_termination_across_all_stages (R2.7: 200 releases, repeated ungraceful worker death at every stage boundary, exactly-once authoritative results)"
     ],
-    "note": "Phase 3 media/pathology, Phase 4 identity/credit/AudioIdentity ambiguity, and Phase 5 classification/novelty safety cases are implemented. Later API/client compatibility-scale cases keep the cross-product requirement in progress."
+    "note": "normalization and publication media/pathology, catalog and identity identity/credit/AudioIdentity ambiguity, and classification and policy classification/novelty safety cases are implemented. Later API/client compatibility-scale cases keep the cross-product requirement in progress."
   },
   "PRD-TEST-006": {
     "status": "in-progress",
@@ -1151,7 +1151,7 @@
       "crates/melodee-ingestion/tests/environment_faults.rs (R2.7 environment fault suite: full staging disk, slow storage, hung FFmpeg, ENOSPC partial output, PostgreSQL restart; all fail-closed with retry convergence)",
       "crates/melodee-ingestion/tests/normalization.rs::two_hundred_releases_survive_repeated_termination_across_all_stages (R2.7: 200 releases, repeated ungraceful worker death at every stage boundary, exactly-once authoritative results)"
     ],
-    "note": "Ingestion, catalog, policy, and search stages have deterministic crash/retry/lease/corruption/source-change/PostgreSQL/publication/provider-boundary fault coverage. Feature-Completion Phase 4 adds metadata temporary-write/rename/verification/database/audit failure recovery, job crash/stale-run, and OpenSubsonic replay evidence; later public API failures keep the broad requirement in progress."
+    "note": "Ingestion, catalog, policy, and search stages have deterministic crash/retry/lease/corruption/source-change/PostgreSQL/publication/provider-boundary fault coverage. Feature-Completion catalog and identity adds metadata temporary-write/rename/verification/database/audit failure recovery, job crash/stale-run, and OpenSubsonic replay evidence; later public API failures keep the broad requirement in progress."
   },
   "PRD-TEST-007": {
     "status": "in-progress",
@@ -1161,7 +1161,7 @@
       "apps/melodee-server/src/admin.rs and apps/melodee-cli/src/main.rs (operator-visible state/history/next actions)",
       "crates/melodee-persistence/src/catalog.rs and crates/melodee-catalog/src/importer.rs (Published/Cataloging/Cataloged lease, retry, cancellation, and diagnostics contract)",
       "crates/melodee-persistence/src/policy.rs and apps/melodee-server/src/policy_worker.rs (Cataloged policy lease, atomic disposition, retry, cancellation, and audit contract)",
-      "crates/melodee-persistence/src/search.rs and crates/melodee-search/src/worker.rs and rebuild.rs (Phase 6 leased next actions, bounded retry/permanent failure, cancellation, rebuild recovery, and diagnostics)"
+      "crates/melodee-persistence/src/search.rs and crates/melodee-search/src/worker.rs and rebuild.rs (search and MQL leased next actions, bounded retry/permanent failure, cancellation, rebuild recovery, and diagnostics)"
     ],
     "tests": [
       "crates/melodee-domain unit tests (transition matrix and retry policy)",
@@ -1175,7 +1175,7 @@
       "crates/melodee-ingestion/tests/environment_faults.rs (R2.7 environment fault suite: full staging disk, slow storage, hung FFmpeg, ENOSPC partial output, PostgreSQL restart; all fail-closed with retry convergence)",
       "crates/melodee-ingestion/tests/normalization.rs::two_hundred_releases_survive_repeated_termination_across_all_stages (R2.7: 200 releases, repeated ungraceful worker death at every stage boundary, exactly-once authoritative results)"
     ],
-    "note": "The invariant is implemented and tested through durable Phase 5 dispositions, including retryable policy backoff, cancellation reclaim, and operator authorization. Phase 6 search and rebuild evidence now extends the same durable-state/next-action proof, but the broader pipeline requirement remains in progress until all public surfaces land."
+    "note": "The invariant is implemented and tested through durable classification and policy dispositions, including retryable policy backoff, cancellation reclaim, and operator authorization. search and MQL search and rebuild evidence now extends the same durable-state/next-action proof, but the broader pipeline requirement remains in progress until all public surfaces land."
   },
   "PRD-SETUP-001": {
     "status": "tested",
@@ -1190,7 +1190,7 @@
       "apps/melodee-server/tests/admin_onboarding_api.rs (six checks, fail-closed completion, admin gate)",
       "apps/melodee-cli/tests/config.rs (validate exit codes)"
     ],
-    "note": "The legacy eight-step wizard became a six-check preflight plus completion marker; PRD-SETUP-001 explicitly allows a different step count. The graphical wizard surface remains Phase 10 admin UI work."
+    "note": "The legacy eight-step wizard became a six-check preflight plus completion marker; PRD-SETUP-001 explicitly allows a different step count. The graphical wizard surface remains Admin UI admin UI work."
   },
   "PRD-SETUP-002": {
     "status": "tested",
@@ -1207,7 +1207,7 @@
   "PRD-CONFIG-001": {
     "status": "tested",
     "implementation": [
-      "design/evidence/phase-9/configuration-inventory.md (the 190-key legacy registry inventory, Phase 0 gap closed)",
+      "design/evidence/phase-9/configuration-inventory.md (the 190-key legacy registry inventory, baseline capture gap closed)",
       "crates/melodee-persistence/src/settings.rs (KNOWN_SETTINGS classification; SettingsStore CRUD with kind validation)",
       "apps/melodee-server/src/providers.rs (runtime consumers for provider enablement, endpoints, credentials, cache TTL, and local replica path)",
       "apps/melodee-server/src/enrichment_worker.rs (runtime worker enablement, polling, batch, and lease settings)",
@@ -1218,7 +1218,7 @@
       "apps/melodee-cli/tests/config.rs",
       "apps/melodee-server/tests/admin_config_api.rs"
     ],
-    "note": "Settings are admin-manageable through the CLI and the admin API export/import surface; provider and enrichment settings are consumed at runtime rather than merely preserved in the registry. Feature-Completion Phase 4 records playback-layer consumers, redacted deterministic round trips, invalid-value diagnostics, and explicitly migrated-but-inert operator-owned MPV launch settings in design/evidence/feature-completion/phase-4/PHASE-4-REPORT.md."
+    "note": "Settings are admin-manageable through the CLI and the admin API export/import surface; provider and enrichment settings are consumed at runtime rather than merely preserved in the registry. Feature-Completion catalog and identity records playback-layer consumers, redacted deterministic round trips, invalid-value diagnostics, and explicitly migrated-but-inert operator-owned MPV launch settings in design/evidence/feature-completion/phase-4/PHASE-4-REPORT.md."
   },
   "PRD-CONFIG-002": {
     "status": "tested",
@@ -1272,7 +1272,7 @@
   "PRD-WORK-001": {
     "status": "tested",
     "implementation": [
-      "crates/melodee-persistence/migrations/0001_release_work_items.sql and 0002_release_work_item_events.sql plus crates/melodee-persistence/src/work_items.rs (durable work items, FOR UPDATE SKIP LOCKED leases, bounded retries, append-only history \u2014 the durable-queue replacement for the legacy everything-is-a-Quartz-job model, since Phase 2)",
+      "crates/melodee-persistence/migrations/0001_release_work_items.sql and 0002_release_work_item_events.sql plus crates/melodee-persistence/src/work_items.rs (durable work items, FOR UPDATE SKIP LOCKED leases, bounded retries, append-only history \u2014 the durable-queue replacement for the legacy everything-is-a-Quartz-job model, since inbound processing)",
       "crates/melodee-ingestion/src/scheduler.rs and apps/melodee-server/src/main.rs (scheduled ingestion reconciliation trigger)",
       "apps/melodee-server/src/podcast_worker.rs (scheduled podcast refresh/download/cleanup/recovery triggers over leased durable state)",
       "apps/melodee-server/src/policy_worker.rs (scheduled policy evaluation over leased durable state)",
@@ -1288,7 +1288,7 @@
       "apps/melodee-server/tests/discovery_worker.rs (periodic maintenance loop, idempotency, graceful stop)",
       "crates/melodee-persistence/tests/worker_pool_state.rs, apps/melodee-server/tests/worker_pools.rs, and apps/melodee-cli/tests/worker_pools.rs (durable pause/resume)"
     ],
-    "note": "The durable-queue-plus-scheduled-triggers model fully replaces the legacy Quartz mental model; the provider maintenance portion is now wired and tested. Unrelated legacy gaps remain honestly recorded: jobs.nowPlayingCleanup, stagingAutoMove, and stagingAlbumRevalidation follow the Rust non-destructive model, while any remaining scheduled-job breadth is outside the provider portion of this phase."
+    "note": "The durable-queue-plus-scheduled-triggers model fully replaces the legacy Quartz mental model; the provider maintenance portion is now wired and tested. Unrelated legacy gaps remain honestly recorded: jobs.nowPlayingCleanup, stagingAutoMove, and stagingAlbumRevalidation follow the Rust non-destructive model, while any remaining scheduled-job breadth is outside the provider portion of this processing stage."
   },
   "PRD-WORK-002": {
     "status": "tested",
@@ -1328,7 +1328,7 @@
       "apps/melodee-server/tests/worker_pools.rs (paused podcast/policy/discovery pools claim nothing; in-flight leases intact; resume recovers)",
       "apps/melodee-cli/tests/worker_pools.rs (CLI pause/resume durability and audit)"
     ],
-    "note": "Retry/reprocess with durable history and durable, audited worker-pool pause/resume are implemented and tested. Pausing never strands a lease; in-flight claims finish or are released per the existing lease contract. Feature-Completion Phase 4 adds migration 0036 job-run history, manual principals, tick uniqueness, retention cleanup audit, and Admin UI history/control evidence."
+    "note": "Retry/reprocess with durable history and durable, audited worker-pool pause/resume are implemented and tested. Pausing never strands a lease; in-flight claims finish or are released per the existing lease contract. Feature-Completion catalog and identity adds migration 0036 job-run history, manual principals, tick uniqueness, retention cleanup audit, and Admin UI history/control evidence."
   },
   "PRD-CLI-001": {
     "status": "tested",
@@ -1340,7 +1340,7 @@
       "apps/melodee-cli/tests/plan.rs, config.rs, policy.rs, search.rs, users_groups.rs, podcasts.rs, notifications.rs, scripts.rs, and worker_pools.rs (command suites against real PostgreSQL)",
       "apps/melodee-cli/src/main.rs unit tests (clap parse matrix for every command group, incl. fail-closed argument validation)"
     ],
-    "note": "Every PRD-CLI-001 minimum-set leg is delivered except C# data migration/import, which is Phase 11 scope per IMPLEMENTATION.md (the migrate command covers Rust database migrations, not legacy data import). Notification test-send landed with WP-09; stuck-download recovery with WP-02. Feature-Completion Phase 4 adds machine-readable jobs history, confirmation-gated audited cleanup, and the final pre-migration command inventory evidence."
+    "note": "Every PRD-CLI-001 minimum-set leg is delivered except C# data migration/import, which is release qualification scope per IMPLEMENTATION.md (the migrate command covers Rust database migrations, not legacy data import). Notification test-send landed with WP-09; stuck-download recovery with WP-02. Feature-Completion catalog and identity adds machine-readable jobs history, confirmation-gated audited cleanup, and the final pre-migration command inventory evidence."
   },
   "PRD-CLI-002": {
     "status": "tested",
@@ -1377,7 +1377,7 @@
       "apps/melodee-server/src/logging.rs (log-level validation plus append-preserving and UTC date-rotation log-file tests)",
       "apps/melodee-server/src/notifications.rs (redaction audit: delivery-failure logs never contain the SMTP password)"
     ],
-    "note": "Correlation identifiers propagate across every PRD-listed boundary: API request (middleware + envelope sourcing), ingestion item (durable correlation_id), worker actions (per-item spans), external provider calls (last.fm dispatch spans; further providers remain deferred under ADR-0136), and media processing (tool-invocation drop-guard). Feature-Completion Phase 4 extends durable tick-level job records with correlated tracing and operator-facing failure reasons."
+    "note": "Correlation identifiers propagate across every PRD-listed boundary: API request (middleware + envelope sourcing), ingestion item (durable correlation_id), worker actions (per-item spans), external provider calls (last.fm dispatch spans; further providers remain deferred under ADR-0136), and media processing (tool-invocation drop-guard). Feature-Completion catalog and identity extends durable tick-level job records with correlated tracing and operator-facing failure reasons."
   },
   "PRD-OBS-002": {
     "status": "tested",
@@ -1393,14 +1393,14 @@
       "apps/melodee-server/tests/admin_system_api.rs (workers subsystem reports stale leases with operator-readable detail)",
       "apps/melodee-server/src/admin_system.rs unit tests (disk capacityExhausted/degraded/disabled/tightest-root through the injected statfs seam)"
     ],
-    "note": "Health now covers every PRD-listed subsystem: PostgreSQL, search index, inbound/staging/storage filesystem access, ffmpeg/ffprobe, the fpcalc fingerprinting tool, worker leases, queue backlog, disk space, and API adapters. The top-level status keeps the Phase-10 rule; the extended subsystem vocabulary distinguishes unavailable, degraded, read-only, misconfigured, and capacity-exhausted states."
+    "note": "Health now covers every PRD-listed subsystem: PostgreSQL, search index, inbound/staging/storage filesystem access, ffmpeg/ffprobe, the fpcalc fingerprinting tool, worker leases, queue backlog, disk space, and API adapters. The top-level status keeps the work program-10 rule; the extended subsystem vocabulary distinguishes unavailable, degraded, read-only, misconfigured, and capacity-exhausted states."
   },
   "PRD-OBS-003": {
     "status": "tested",
     "implementation": [
       "apps/melodee-cli/src/main.rs (search status JSON with backlog, lease, active generation, latest rebuild, and failure evidence)",
       "apps/melodee-server/src/onboarding.rs (ADR-0145 four-role storage diagnostics: inbound, staging, work, canonical reported separately)",
-      "admin-ui/src/screens/system/ (Phase 10 System/Workers/Diagnostics/Storage screens over the diagnostics APIs)",
+      "admin-ui/src/screens/system/ (Admin UI System/Workers/Diagnostics/Storage screens over the diagnostics APIs)",
       "docs/src/content/docs/admin/system-diagnostics.md and troubleshooting/index.md"
     ],
     "tests": [
@@ -1408,7 +1408,7 @@
       "apps/melodee-server/src/onboarding.rs (storage role label, creatable work area, missing staging, unreadable source, unconfigured guidance unit tests)",
       "admin-ui/src/screens/system/StorageScreen.test.tsx and admin-ui/e2e/system-screens.spec.ts (per-role rendering assertions)"
     ],
-    "note": "Operators see actionable per-role storage status and search failure evidence through the CLI, the diagnostics APIs, and the Phase 10 admin UI; the R0 durable-staging roles are surfaced end to end."
+    "note": "Operators see actionable per-role storage status and search failure evidence through the CLI, the diagnostics APIs, and the Admin UI admin UI; the R0 durable-staging roles are surfaced end to end."
   },
   "PRD-OBS-005": {
     "status": "implemented",
@@ -1440,7 +1440,7 @@
       "crates/melodee-persistence/tests/publication.rs (durable publication evidence and operator-safe problem state)",
       "crates/melodee-persistence/tests/catalog_import.rs and catalog_identity.rs (durable retry/correction evidence)"
     ],
-    "note": "State/worker/attempt/error/history, publication, catalog-import, and identity evidence are durable and visible through Rust-native CLI/API diagnostics. The graphical UI is a later phase."
+    "note": "State/worker/attempt/error/history, publication, catalog-import, and identity evidence are durable and visible through Rust-native CLI/API diagnostics. The graphical UI is a future work."
   },
   "PRD-WORK-003": {
     "status": "tested",
@@ -1456,7 +1456,7 @@
       "apps/melodee-server/tests/discovery_worker.rs (drift/missing-row reconciliation, idempotency, bounded-batch convergence, periodic run, graceful stop)",
       "crates/melodee-persistence/tests/native_discovery_phase7.rs (discovery_maintenance_relinks_chart_items_only_on_unique_catalog_identity)"
     ],
-    "note": "Periodic reconciliation and scheduled chart/recommendation aggregate maintenance are implemented. Additional scheduled tasks remain deferred. Feature-Completion Phase 4 adds durable tick/manual run history, failure summaries, pause/resume/run-now controls, retention audit, stale-run visibility, and worker recovery evidence."
+    "note": "Periodic reconciliation and scheduled chart/recommendation aggregate maintenance are implemented. Additional scheduled tasks remain deferred. Feature-Completion catalog and identity adds durable tick/manual run history, failure summaries, pause/resume/run-now controls, retention audit, stale-run visibility, and worker recovery evidence."
   },
   "PRD-MEDIA-004": {
     "status": "tested",
@@ -1476,14 +1476,14 @@
       "crates/melodee-media/src/normalize.rs (strict non-empty JPEG/hash/dimension verification and bounded source preflight)",
       "crates/melodee-persistence/migrations/ (catalog_entity_images operator overrides, ADR-0143)",
       "apps/melodee-server/src/admin/ artwork upload/remove endpoints with frozen image-endpoint precedence (no-override behavior byte-identical)",
-      "admin-ui artwork management (Phase 10)"
+      "admin-ui artwork management (Admin UI)"
     ],
     "tests": [
       "crates/melodee-media/tests/normalization_real.rs (embedded/external JPEG and PNG, malformed/absurd artwork, multiple entries)",
       "apps/melodee-server/tests/admin_artwork_api.rs (override lifecycle and precedence)",
       "native/OpenSubsonic/Jellyfin image golden suites (captured fallback preserved)"
     ],
-    "note": "Full artwork surface closed: Phase 3 extraction/validation/normalization plus Phase 10 operator replacement, upload, removal, and thumbnail serving under ADR-0143 with evidenced frozen-endpoint precedence."
+    "note": "Full artwork surface closed: normalization and publication extraction/validation/normalization plus Admin UI operator replacement, upload, removal, and thumbnail serving under ADR-0143 with evidenced frozen-endpoint precedence."
   },
   "PRD-MEDIA-006": {
     "status": "tested",
@@ -1516,7 +1516,7 @@
       "crates/melodee-persistence/tests/normalization.rs",
       "crates/melodee-persistence/tests/catalog_import.rs and catalog_audio_identity.rs"
     ],
-    "note": "TRACK-001 closed in Feature-Completion Phase 1 (2026-08-25): embedded MusicBrainz recording/release/release-group/Artist/release-Artist/work IDs are retained end-to-end from media inspection into the durable manifest; see design/evidence/feature-completion/phase-1/PHASE-1-REPORT.md."
+    "note": "TRACK-001 closed in Feature-Completion runtime foundation (2026-08-25): embedded MusicBrainz recording/release/release-group/Artist/release-Artist/work IDs are retained end-to-end from media inspection into the durable manifest; see design/evidence/feature-completion/phase-1/PHASE-1-REPORT.md."
   },
   "PRD-FP-002": {
     "status": "tested",
@@ -1533,7 +1533,7 @@
       "crates/melodee-persistence/tests/catalog_audio_identity.rs",
       "crates/melodee-policy/tests/policy_acceptance.rs and crates/melodee-persistence/tests/phase5_novelty.rs"
     ],
-    "note": "Byte identity, Track occurrence, AudioIdentity, alternate recording, and uncertainty are distinct and tested; fingerprint/byte evidence cannot silently auto-merge them. TRACK-002 (import-time AudioIdentity evidence + bounded idempotent Proposed match decisions) completed in Feature-Completion Phase 1 (2026-08-25); evidence: crates/melodee-persistence/tests/catalog_audio_identity.rs and design/evidence/feature-completion/phase-1/PHASE-1-REPORT.md."
+    "note": "Byte identity, Track occurrence, AudioIdentity, alternate recording, and uncertainty are distinct and tested; fingerprint/byte evidence cannot silently auto-merge them. TRACK-002 (import-time AudioIdentity evidence + bounded idempotent Proposed match decisions) completed in Feature-Completion runtime foundation (2026-08-25); evidence: crates/melodee-persistence/tests/catalog_audio_identity.rs and design/evidence/feature-completion/phase-1/PHASE-1-REPORT.md."
   },
   "PRD-FP-003": {
     "status": "tested",
@@ -1668,7 +1668,7 @@
       "crates/melodee-ingestion/tests/publication.rs (complete manifest/media/artwork layout, adoption, and conflict protection)",
       "crates/melodee-ingestion/tests/normalization.rs (real-format and 200-Release canonical publication)"
     ],
-    "note": "ADR-0116 accepted and Phase 3 implemented the exact immutable-ID-centric layout required before storage implementation."
+    "note": "ADR-0116 accepted and normalization and publication implemented the exact immutable-ID-centric layout required before storage implementation."
   },
   "PRD-STORAGE-004": {
     "status": "in-progress",
@@ -1679,7 +1679,7 @@
     "tests": [
       "crates/melodee-media/tests/normalization_real.rs (valid existing VBR/CBR MP3 bytes retained exactly)"
     ],
-    "note": "New ingestion avoids unnecessary re-encoding of valid MP3. Phase 11 registration of an existing canonical library without forced relocation or re-encoding is not implemented, so the broad migration requirement remains in progress."
+    "note": "New ingestion avoids unnecessary re-encoding of valid MP3. release qualification registration of an existing canonical library without forced relocation or re-encoding is not implemented, so the broad migration requirement remains in progress."
   },
   "PRD-STORAGE-003": {
     "status": "deferred",
@@ -2014,7 +2014,7 @@
       "crates/melodee-persistence/tests/catalog_legacy.rs",
       "crates/melodee-persistence/tests/catalog_performance.rs"
     ],
-    "note": "Operational downgrade retains Phase 4 evidence; full schema rollback is a verified pre-0007 database restore and never touches media."
+    "note": "Operational downgrade retains catalog and identity evidence; full schema rollback is a verified pre-0007 database restore and never touches media."
   },
   "PRD-CATALOG-005": {
     "status": "tested",
@@ -2132,7 +2132,7 @@
     "tests": [
       "tests/python/test_native_v1_capture.py, test_opensubsonic_capture.py, and test_jellyfin_capture.py (287 golden scenarios)",
       "Per-surface route matrices: 202/202 native, 81/81 OpenSubsonic, 60/60 Jellyfin",
-      "Real-client acceptance: Android 1.8.0 + MeloAmp (Phase 7), Feishin v1.15.1 (Phase 8)"
+      "Real-client acceptance: Android 1.8.0 + MeloAmp (native API compatibility), Feishin v1.15.1 (OpenSubsonic and Jellyfin compatibility)"
     ],
     "note": "Native Melodee API v1, OpenSubsonic, and Jellyfin behavior are shipped, frozen, continuously tested product features; the R1 reconciliation verified no contract row lacks Complete evidence or an accepted waiver."
   },
@@ -2168,7 +2168,7 @@
       "design/adr/ADR-0118-use-audioidentity-and-immutable-manifest-v3-semantic-overlays.md",
       "design/adr/ADR-0119-use-audit-only-corrections-for-legacy-releases-without-manifest-v3.md",
       "design/adr/ADR-0120-phase5-classification-novelty-and-policy-schema.md",
-      "design/adr/README.md (accepted Phase 4 and Phase 5 decision index)"
+      "design/adr/README.md (accepted catalog and identity and classification and policy decision index)"
     ],
     "tests": [
       "python3 scripts/validate_repository.py (ADR status/link validation)"
@@ -2244,7 +2244,7 @@
       "crates/melodee-persistence/tests/catalog_performance.rs",
       "crates/melodee-search/tests/search_tests.rs and design/evidence/phase-6/PHASE-6-REPORT.md"
     ],
-    "note": "Phase 4 provides indexed bounded PostgreSQL foundations and Phase 6 provides bounded deterministic search pagination. Large-library public API and UI server-side operations remain their assigned later phases."
+    "note": "catalog and identity provides indexed bounded PostgreSQL foundations and search and MQL provides bounded deterministic search pagination. Large-library public API and UI server-side operations remain their assigned future work."
   },
   "PRD-SCALE-003": {
     "status": "tested",
@@ -2475,7 +2475,7 @@
     "tests": [
       "apps/melodee-server/tests/admin_policies_api.rs; admin-ui/e2e/policies.spec.ts"
     ],
-    "note": "Closes the remaining admin-UI leg; dry-run engine and audit shipped in Phase 5."
+    "note": "Closes the remaining admin-UI leg; dry-run engine and audit shipped in classification and policy."
   },
   "PRD-REQUEST-001": {
     "status": "tested",
@@ -2499,7 +2499,7 @@
     "tests": [
       "apps/melodee-server/tests/native_community_api.rs::native_community_routes_are_owner_fenced_bounded_and_replay_safe"
     ],
-    "note": "The frozen legacy build exposes requests only on the native v1 surface (11 routes; zero request routes in the 81-endpoint OpenSubsonic or 60-route Jellyfin inventories), so 'both parity APIs/UI surfaces where currently exposed' is satisfied by the Phase 7 native implementation. The Phase 10 admin UI will add its own request surface."
+    "note": "The frozen legacy build exposes requests only on the native v1 surface (11 routes; zero request routes in the 81-endpoint OpenSubsonic or 60-route Jellyfin inventories), so 'both parity APIs/UI surfaces where currently exposed' is satisfied by the native API compatibility native implementation. The Admin UI admin UI will add its own request surface."
   },
   "PRD-SHARE-001": {
     "status": "tested",
@@ -2563,19 +2563,19 @@
     "implementation": [
       "apps/melodee-server/src/native/podcasts.rs (all 19 compiled native-v1 routes)",
       "compatibility/melodee-api-v1/golden/native-podcasts",
-      "apps/melodee-server/src/opensubsonic/ (getPodcasts/getNewestPodcasts/refreshPodcasts, Phase 8)"
+      "apps/melodee-server/src/opensubsonic/ (getPodcasts/getNewestPodcasts/refreshPodcasts, OpenSubsonic and Jellyfin compatibility)"
     ],
     "tests": [
       "apps/melodee-server/tests/native_podcasts_api.rs::all_native_podcast_routes_are_tenant_scoped_bounded_and_authorized",
       "scripts/run_phase8_differential.py (zero unexpected podcast differences)",
       "design/agents/PHASE-8-OPENSUBSONIC-ROUTE-MATRIX.json (podcast endpoint dispositions)"
     ],
-    "note": "Native Melodee API (Phase 7) and OpenSubsonic (Phase 8) podcast compatibility are both implemented and differentially tested."
+    "note": "Native Melodee API (native API compatibility) and OpenSubsonic (OpenSubsonic and Jellyfin compatibility) podcast compatibility are both implemented and differentially tested."
   },
   "PRD-RADIO-001": {
     "status": "tested",
     "implementation": [
-      "apps/melodee-server/src/opensubsonic/radio.rs (captured OS CRUD, Phase 8)",
+      "apps/melodee-server/src/opensubsonic/radio.rs (captured OS CRUD, OpenSubsonic and Jellyfin compatibility)",
       "crates/melodee-persistence/src/radio.rs (RadioStationStore over opensubsonic_radio_stations, ADR-0134 \u00a71)",
       "apps/melodee-server/src/admin_radio.rs (Admin API list/read for any authenticated user, bounded/paginated)"
     ],
@@ -2607,7 +2607,7 @@
       "apps/melodee-server/src/scripting.rs unit tests (legacy canonical directoryProcessingStart example evaluates identically; bare-expression auto-wrap; wrap-rule substring parity)",
       "apps/melodee-server/tests/scripting_service.rs (deny/allow verdicts audited; empty registry allows without audit rows)"
     ],
-    "note": "Existing predicate scripts continue to execute under the documented contract; shell-script hooks (scripting.pre/postDiscoveryScript) are deliberately not portable and have documented re-expression paths in the migration guide. Feature-Completion Phase 4 verifies the active Boa pre-discovery hook is production-wired and sandboxed, while inactive legacy events are surfaced as migrated-but-inert."
+    "note": "Existing predicate scripts continue to execute under the documented contract; shell-script hooks (scripting.pre/postDiscoveryScript) are deliberately not portable and have documented re-expression paths in the migration guide. Feature-Completion catalog and identity verifies the active Boa pre-discovery hook is production-wired and sandboxed, while inactive legacy events are surfaced as migrated-but-inert."
   },
   "PRD-SCRIPT-002": {
     "status": "tested",
@@ -2736,7 +2736,7 @@
     "status": "tested",
     "implementation": [
       "admin-ui/package.json (React 19.2.8, TypeScript, @carbon/react 1.114.0 exact pins)",
-      "design/adr/ADR-0109-use-carbon-for-admin-ui.md (Accepted; Phase 10 validation evidence section)"
+      "design/adr/ADR-0109-use-carbon-for-admin-ui.md (Accepted; Admin UI validation evidence section)"
     ],
     "tests": [
       "admin-ui/e2e/ (Carbon components exercised across all canonical screens)"
@@ -2970,7 +2970,7 @@
   "PRD-API-ADMIN-003": {
     "status": "tested",
     "implementation": [
-      "ADR-0139 + Phase 10 evidence: no native-v1/OpenSubsonic/Jellyfin route or DTO changed for the admin UI (frozen surfaces untouched; only ADR-0143's evidenced image precedence extension)"
+      "ADR-0139 + Admin UI evidence: no native-v1/OpenSubsonic/Jellyfin route or DTO changed for the admin UI (frozen surfaces untouched; only ADR-0143's evidenced image precedence extension)"
     ],
     "tests": [
       "apps/melodee-server/tests/ native/opensubsonic/jellyfin suites + image goldens unchanged and green"
@@ -3035,7 +3035,7 @@
       "crates/melodee-persistence migration tests",
       "local production image startup/readiness and graceful-stop smoke"
     ],
-    "note": "This evidence covers Rust container upgrades only. Legacy C# migration/cutover remains explicitly deferred to Phase 11."
+    "note": "This evidence covers Rust container upgrades only. Legacy C# migration/cutover remains explicitly deferred to release qualification."
   },
   "PRD-DEPLOY-006": {
     "status": "implemented",
@@ -3046,7 +3046,7 @@
     "tests": [
       "local PostgreSQL dump/restore command validation against the Compose service"
     ],
-    "note": "Production-size legacy cutover/rollback rehearsal is Phase 11 work; this requirement's documented Rust release backup procedure does not claim to replace it."
+    "note": "Production-size legacy cutover/rollback rehearsal is release qualification work; this requirement's documented Rust release backup procedure does not claim to replace it."
   },
   "PRD-TEST-008": {
     "status": "tested",
@@ -3076,9 +3076,9 @@
       "design/evidence/phase-8/PHASE-8-REPORT.md (Feishin v1.15.1 acceptance, 12/12)"
     ],
     "tests": [
-      "Android 1.8.0 player on emulator including the committed Android Auto-mode probe harness (Phase 7)",
-      "MeloAmp desktop client acceptance (Phase 7)",
-      "Feishin v1.15.1 as the representative OpenSubsonic and Jellyfin client (Phase 8)"
+      "Android 1.8.0 player on emulator including the committed Android Auto-mode probe harness (native API compatibility)",
+      "MeloAmp desktop client acceptance (native API compatibility)",
+      "Feishin v1.15.1 as the representative OpenSubsonic and Jellyfin client (OpenSubsonic and Jellyfin compatibility)"
     ],
     "note": "All four named client classes passed release-gate smoke/integration acceptance. Limitation recorded for the R4/R5 gates: the Android Auto leg ran through the committed probe harness on an emulator; a physical head-unit pass remains a hardening acceptance task."
   },

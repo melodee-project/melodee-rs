@@ -24,7 +24,7 @@ OpenSubsonic client) can depend on routes that return 404/410 at the baseline.
 
 The Phase 9 work assignment (2026-08-13) delegated the waiver-or-build product decision to the
 executing agent with a documented recommendation for the waiver path
-(`design/agents/PHASE-9-PLAN.md` §3).
+(`design/ROAD-TO-FEATURE-COMPLETION.md` §3).
 
 ## Decision
 
@@ -98,4 +98,4 @@ any migration burden (no client can have state against routes that never existed
 - [ADR-0123](ADR-0123-phase-7-scope-overlap-handling-for-party-requests-podcasts-shares-analytics.md)
 - [Legacy ADR-0001 / ADR-0007](legacy/README.md)
 - `compatibility/melodee-api-v1/golden/native-excluded/`
-- `design/agents/PHASE-9-PLAN.md` §3
+- `design/ROAD-TO-FEATURE-COMPLETION.md` §3

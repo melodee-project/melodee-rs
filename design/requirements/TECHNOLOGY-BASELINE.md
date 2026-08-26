@@ -1,6 +1,6 @@
 # Technology Baseline
 
-**Audit date:** 2026-08-07; updated 2026-08-12 for Phase 7 dependencies
+**Audit date:** 2026-08-07; updated 2026-08-12 for native API compatibility dependencies
 **Policy:** Candidate versions are revalidated and locked when first used. Required functionality must
 remain fully FOSS.
 

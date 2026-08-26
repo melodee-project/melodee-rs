@@ -1,0 +1,33 @@
+name: Work item
+description: Define a substantive product, compatibility, reliability, or release-readiness outcome.
+title: ""
+labels: []
+body:
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Outcome
+      description: Describe the observable result, not an implementation stage.
+    validations:
+      required: true
+  - type: textarea
+    id: requirements
+    attributes:
+      label: Requirements and decisions
+      description: List applicable PRD requirement IDs, ADRs, and compatibility contracts.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance evidence
+      description: Define the unit, integration, differential, end-to-end, operational, and documentation evidence required.
+    validations:
+      required: true
+  - type: textarea
+    id: safety
+    attributes:
+      label: Safety and external gates
+      description: Identify data-safety constraints and any operator-controlled or external actions.
+    validations:
+      required: false

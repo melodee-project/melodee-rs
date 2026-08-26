@@ -94,7 +94,6 @@ def extract() -> list[dict[str, object]]:
             {
                 "id": requirement_id,
                 "title": title.strip() or requirement_id,
-                "phase": determine_phase(requirement_id),
                 "source": "PRD.md",
                 "line": line_number,
                 "status": override.get("status", "planned"),
@@ -118,14 +117,14 @@ def render_markdown(requirements: list[dict[str, object]]) -> str:
         "",
         f"Total requirements: **{len(requirements)}**",
         "",
-        "| Requirement | Title | Planned phase | Status | Implementation evidence | Test evidence |",
-        "|---|---|---:|---|---|---|",
+        "| Requirement | Title | Status | Implementation evidence | Test evidence |",
+        "|---|---|---|---|---|",
     ]
     for item in requirements:
         implementation = "; ".join(str(x) for x in item["implementation"]) or "—"
         tests = "; ".join(str(x) for x in item["tests"]) or "—"
         lines.append(
-            f"| `{item['id']}` | {item['title']} | {item['phase']} | {item['status']} | {implementation} | {tests} |"
+            f"| `{item['id']}` | {item['title']} | {item['status']} | {implementation} | {tests} |"
         )
     return "\n".join(lines) + "\n"
 

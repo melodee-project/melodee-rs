@@ -32,7 +32,7 @@ Inbound processing discovers candidate Releases from inbound roots and creates o
    Tracks, MediaAssets, provisional local Artist and AudioIdentity records, semantic overlay,
    aggregates, audit evidence, and future-projection outbox records.
 
-Discovery and settling are source-correctness gates only in this phase. The candidate is not interpreted as
+Discovery and settling are source-correctness gates only in this processing stage. The candidate is not interpreted as
 media yet.
 
 ## Observed states

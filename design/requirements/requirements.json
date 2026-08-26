@@ -2,7 +2,6 @@
   {
     "id": "PRD-PRINCIPLE-001",
     "title": "Behavioral compatibility over implementation similarity",
-    "phase": "all",
     "source": "PRD.md",
     "line": 27,
     "status": "tested",
@@ -21,7 +20,6 @@
   {
     "id": "PRD-PRINCIPLE-002",
     "title": "Existing external contracts are first-class product features",
-    "phase": "all",
     "source": "PRD.md",
     "line": 37,
     "status": "tested",
@@ -34,13 +32,12 @@
     "tests": [
       "tests/python/test_native_v1_capture.py, test_opensubsonic_capture.py, and test_jellyfin_capture.py (287 golden scenarios)",
       "Per-surface route matrices: 202/202 native, 81/81 OpenSubsonic, 60/60 Jellyfin",
-      "Real-client acceptance: Android 1.8.0 + MeloAmp (Phase 7), Feishin v1.15.1 (Phase 8)"
+      "Real-client acceptance: Android 1.8.0 + MeloAmp (native API compatibility), Feishin v1.15.1 (OpenSubsonic and Jellyfin compatibility)"
     ]
   },
   {
     "id": "PRD-PRINCIPLE-003",
     "title": "The native Melodee API is a core product surface",
-    "phase": "all",
     "source": "PRD.md",
     "line": 51,
     "status": "tested",
@@ -58,7 +55,6 @@
   {
     "id": "PRD-PRINCIPLE-004",
     "title": "OpenSubsonic and native Melodee APIs serve different purposes",
-    "phase": "all",
     "source": "PRD.md",
     "line": 57,
     "status": "tested",
@@ -74,7 +70,6 @@
   {
     "id": "PRD-PRINCIPLE-005",
     "title": "Melodee owns identity",
-    "phase": "all",
     "source": "PRD.md",
     "line": 66,
     "status": "tested",
@@ -90,7 +85,6 @@
   {
     "id": "PRD-PRINCIPLE-006",
     "title": "Uncertainty must not become destructive behavior",
-    "phase": "all",
     "source": "PRD.md",
     "line": 70,
     "status": "tested",
@@ -108,7 +102,6 @@
   {
     "id": "PRD-PRINCIPLE-007",
     "title": "FOSS-only core stack",
-    "phase": "all",
     "source": "PRD.md",
     "line": 74,
     "status": "tested",
@@ -125,7 +118,6 @@
   {
     "id": "PRD-PRINCIPLE-008",
     "title": "Architecture decisions are durable records",
-    "phase": "all",
     "source": "PRD.md",
     "line": 78,
     "status": "tested",
@@ -134,7 +126,7 @@
       "design/adr/ADR-0118-use-audioidentity-and-immutable-manifest-v3-semantic-overlays.md",
       "design/adr/ADR-0119-use-audit-only-corrections-for-legacy-releases-without-manifest-v3.md",
       "design/adr/ADR-0120-phase5-classification-novelty-and-policy-schema.md",
-      "design/adr/README.md (accepted Phase 4 and Phase 5 decision index)"
+      "design/adr/README.md (accepted catalog and identity and classification and policy decision index)"
     ],
     "tests": [
       "python3 scripts/validate_repository.py (ADR status/link validation)"
@@ -143,7 +135,6 @@
   {
     "id": "PRD-SCALE-001",
     "title": "PRD-SCALE-001",
-    "phase": "0,6",
     "source": "PRD.md",
     "line": 100,
     "status": "in-progress",
@@ -164,7 +155,6 @@
   {
     "id": "PRD-SCALE-002",
     "title": "PRD-SCALE-002",
-    "phase": "0,6",
     "source": "PRD.md",
     "line": 104,
     "status": "in-progress",
@@ -184,7 +174,6 @@
   {
     "id": "PRD-SCALE-003",
     "title": "PRD-SCALE-003",
-    "phase": "0,6",
     "source": "PRD.md",
     "line": 108,
     "status": "tested",
@@ -198,7 +187,6 @@
   {
     "id": "PRD-ARCH-001",
     "title": "Modular monolith first",
-    "phase": "1",
     "source": "PRD.md",
     "line": 283,
     "status": "tested",
@@ -215,7 +203,6 @@
   {
     "id": "PRD-ARCH-002",
     "title": "Compile-time module boundaries",
-    "phase": "1",
     "source": "PRD.md",
     "line": 332,
     "status": "implemented",
@@ -231,7 +218,6 @@
   {
     "id": "PRD-ARCH-003",
     "title": "PostgreSQL is the authoritative state store",
-    "phase": "1",
     "source": "PRD.md",
     "line": 336,
     "status": "tested",
@@ -244,14 +230,13 @@
       "crates/melodee-persistence/migrations/0010..0028 (auth/users, shares, podcasts, discovery, settings, notifications, providers, scripts, device profiles)"
     ],
     "tests": [
-      "crates/melodee-persistence/tests/ (migration, claiming, recovery, history, manifest, catalog, policy, auth, settings, notification, and Phase 6 projection lifecycle tests against PostgreSQL)",
-      "crates/melodee-search/tests/ and Phase 6 rebuild evidence (Tantivy projection rebuildable from authoritative state)"
+      "crates/melodee-persistence/tests/ (migration, claiming, recovery, history, manifest, catalog, policy, auth, settings, notification, and search and MQL projection lifecycle tests against PostgreSQL)",
+      "crates/melodee-search/tests/ and search and MQL rebuild evidence (Tantivy projection rebuildable from authoritative state)"
     ]
   },
   {
     "id": "PRD-ARCH-004",
     "title": "Tantivy is a projection",
-    "phase": "1",
     "source": "PRD.md",
     "line": 349,
     "status": "tested",
@@ -268,7 +253,6 @@
   {
     "id": "PRD-ARCH-005",
     "title": "Filesystem is canonical for media bytes, not identity",
-    "phase": "1",
     "source": "PRD.md",
     "line": 353,
     "status": "tested",
@@ -290,7 +274,6 @@
   {
     "id": "PRD-ARCH-006",
     "title": "Avoid unnecessary infrastructure",
-    "phase": "1",
     "source": "PRD.md",
     "line": 357,
     "status": "implemented",
@@ -307,7 +290,6 @@
   {
     "id": "PRD-INGEST-001",
     "title": "Per-Release retry",
-    "phase": "2",
     "source": "PRD.md",
     "line": 492,
     "status": "implemented",
@@ -324,7 +306,6 @@
   {
     "id": "PRD-INGEST-002",
     "title": "Lease-based concurrency",
-    "phase": "2",
     "source": "PRD.md",
     "line": 496,
     "status": "implemented",
@@ -340,7 +321,6 @@
   {
     "id": "PRD-INGEST-003",
     "title": "Watchers are accelerators only",
-    "phase": "2",
     "source": "PRD.md",
     "line": 502,
     "status": "tested",
@@ -358,7 +338,6 @@
   {
     "id": "PRD-INGEST-004",
     "title": "Settling detection",
-    "phase": "2",
     "source": "PRD.md",
     "line": 506,
     "status": "tested",
@@ -377,7 +356,6 @@
   {
     "id": "PRD-INGEST-005",
     "title": "Source safety and durable inbound acquisition",
-    "phase": "2",
     "source": "PRD.md",
     "line": 520,
     "status": "tested",
@@ -404,7 +382,6 @@
   {
     "id": "PRD-INGEST-006",
     "title": "Safe staging/publishing",
-    "phase": "2",
     "source": "PRD.md",
     "line": 529,
     "status": "tested",
@@ -428,7 +405,6 @@
   {
     "id": "PRD-INGEST-007",
     "title": "Versioned manifest",
-    "phase": "2",
     "source": "PRD.md",
     "line": 551,
     "status": "tested",
@@ -458,7 +434,6 @@
   {
     "id": "PRD-INGEST-008",
     "title": "Structural validity is independent of enrichment",
-    "phase": "2",
     "source": "PRD.md",
     "line": 557,
     "status": "tested",
@@ -477,7 +452,6 @@
   {
     "id": "PRD-INGEST-009",
     "title": "Bounded resource pools",
-    "phase": "2",
     "source": "PRD.md",
     "line": 561,
     "status": "tested",
@@ -511,7 +485,6 @@
   {
     "id": "PRD-INGEST-010",
     "title": "Operator visibility",
-    "phase": "2",
     "source": "PRD.md",
     "line": 575,
     "status": "tested",
@@ -536,7 +509,6 @@
   {
     "id": "PRD-MEDIA-001",
     "title": "PRD-MEDIA-001",
-    "phase": "3",
     "source": "PRD.md",
     "line": 583,
     "status": "tested",
@@ -557,7 +529,6 @@
   {
     "id": "PRD-MEDIA-002",
     "title": "Canonical format policy",
-    "phase": "3",
     "source": "PRD.md",
     "line": 589,
     "status": "tested",
@@ -578,7 +549,6 @@
   {
     "id": "PRD-MEDIA-003",
     "title": "Use mature media tools",
-    "phase": "3",
     "source": "PRD.md",
     "line": 595,
     "status": "tested",
@@ -594,7 +564,6 @@
   {
     "id": "PRD-MEDIA-004",
     "title": "Metadata reading",
-    "phase": "3",
     "source": "PRD.md",
     "line": 599,
     "status": "tested",
@@ -609,7 +578,6 @@
   {
     "id": "PRD-MEDIA-005",
     "title": "Artwork",
-    "phase": "3",
     "source": "PRD.md",
     "line": 603,
     "status": "tested",
@@ -618,7 +586,7 @@
       "crates/melodee-media/src/normalize.rs (strict non-empty JPEG/hash/dimension verification and bounded source preflight)",
       "crates/melodee-persistence/migrations/ (catalog_entity_images operator overrides, ADR-0143)",
       "apps/melodee-server/src/admin/ artwork upload/remove endpoints with frozen image-endpoint precedence (no-override behavior byte-identical)",
-      "admin-ui artwork management (Phase 10)"
+      "admin-ui artwork management (Admin UI)"
     ],
     "tests": [
       "crates/melodee-media/tests/normalization_real.rs (embedded/external JPEG and PNG, malformed/absurd artwork, multiple entries)",
@@ -629,7 +597,6 @@
   {
     "id": "PRD-MEDIA-006",
     "title": "Sidecar files",
-    "phase": "3",
     "source": "PRD.md",
     "line": 607,
     "status": "tested",
@@ -649,7 +616,6 @@
   {
     "id": "PRD-FP-001",
     "title": "Compute once, reuse",
-    "phase": "3,5",
     "source": "PRD.md",
     "line": 615,
     "status": "tested",
@@ -670,7 +636,6 @@
   {
     "id": "PRD-FP-002",
     "title": "Distinguish byte identity from audio identity",
-    "phase": "3,5",
     "source": "PRD.md",
     "line": 619,
     "status": "tested",
@@ -691,7 +656,6 @@
   {
     "id": "PRD-FP-003",
     "title": "Acoustic fingerprinting",
-    "phase": "3,5",
     "source": "PRD.md",
     "line": 628,
     "status": "tested",
@@ -708,7 +672,6 @@
   {
     "id": "PRD-FP-004",
     "title": "Underlying audio identity abstraction",
-    "phase": "3,5",
     "source": "PRD.md",
     "line": 632,
     "status": "tested",
@@ -725,7 +688,6 @@
   {
     "id": "PRD-FP-005",
     "title": "Physical byte deduplication is optional for parity",
-    "phase": "3,5",
     "source": "PRD.md",
     "line": 638,
     "status": "tested",
@@ -740,7 +702,6 @@
   {
     "id": "PRD-ARTIST-001",
     "title": "Names are not unique",
-    "phase": "4",
     "source": "PRD.md",
     "line": 652,
     "status": "tested",
@@ -756,7 +717,6 @@
   {
     "id": "PRD-ARTIST-002",
     "title": "Stable immutable identity",
-    "phase": "4",
     "source": "PRD.md",
     "line": 656,
     "status": "tested",
@@ -772,7 +732,6 @@
   {
     "id": "PRD-ARTIST-003",
     "title": "Artist types remain identity-oriented",
-    "phase": "4",
     "source": "PRD.md",
     "line": 676,
     "status": "tested",
@@ -788,7 +747,6 @@
   {
     "id": "PRD-ARTIST-004",
     "title": "Aliases mean same identity",
-    "phase": "4",
     "source": "PRD.md",
     "line": 689,
     "status": "tested",
@@ -804,7 +762,6 @@
   {
     "id": "PRD-ARTIST-005",
     "title": "External identities are normalized rows",
-    "phase": "4",
     "source": "PRD.md",
     "line": 695,
     "status": "tested",
@@ -820,7 +777,6 @@
   {
     "id": "PRD-ARTIST-006",
     "title": "Relationships do not imply equality",
-    "phase": "4",
     "source": "PRD.md",
     "line": 713,
     "status": "tested",
@@ -836,7 +792,6 @@
   {
     "id": "PRD-ARTIST-007",
     "title": "Date-bounded group membership",
-    "phase": "4",
     "source": "PRD.md",
     "line": 723,
     "status": "tested",
@@ -852,7 +807,6 @@
   {
     "id": "PRD-ARTIST-008",
     "title": "User decisions outrank providers",
-    "phase": "4",
     "source": "PRD.md",
     "line": 727,
     "status": "tested",
@@ -870,7 +824,6 @@
   {
     "id": "PRD-ARTIST-009",
     "title": "Negative identity assertions",
-    "phase": "4",
     "source": "PRD.md",
     "line": 731,
     "status": "tested",
@@ -887,7 +840,6 @@
   {
     "id": "PRD-ARTIST-010",
     "title": "Safe merge/split",
-    "phase": "4",
     "source": "PRD.md",
     "line": 735,
     "status": "tested",
@@ -904,7 +856,6 @@
   {
     "id": "PRD-ARTIST-011",
     "title": "Bias against false merges",
-    "phase": "4",
     "source": "PRD.md",
     "line": 741,
     "status": "tested",
@@ -925,7 +876,6 @@
   {
     "id": "PRD-ARTIST-012",
     "title": "Do not port the current external-authority identity model",
-    "phase": "4",
     "source": "PRD.md",
     "line": 745,
     "status": "tested",
@@ -941,7 +891,6 @@
   {
     "id": "PRD-RESOLVE-001",
     "title": "PRD-RESOLVE-001",
-    "phase": "4",
     "source": "PRD.md",
     "line": 753,
     "status": "tested",
@@ -957,7 +906,6 @@
   {
     "id": "PRD-RESOLVE-002",
     "title": "PRD-RESOLVE-002",
-    "phase": "4",
     "source": "PRD.md",
     "line": 757,
     "status": "tested",
@@ -973,7 +921,6 @@
   {
     "id": "PRD-RESOLVE-003",
     "title": "PRD-RESOLVE-003",
-    "phase": "4",
     "source": "PRD.md",
     "line": 772,
     "status": "tested",
@@ -990,7 +937,6 @@
   {
     "id": "PRD-RESOLVE-004",
     "title": "PRD-RESOLVE-004",
-    "phase": "4",
     "source": "PRD.md",
     "line": 776,
     "status": "tested",
@@ -1005,7 +951,6 @@
   {
     "id": "PRD-RESOLVE-005",
     "title": "PRD-RESOLVE-005",
-    "phase": "4",
     "source": "PRD.md",
     "line": 780,
     "status": "tested",
@@ -1020,7 +965,6 @@
   {
     "id": "PRD-CREDIT-001",
     "title": "ReleaseArtist",
-    "phase": "4",
     "source": "PRD.md",
     "line": 805,
     "status": "tested",
@@ -1036,7 +980,6 @@
   {
     "id": "PRD-CREDIT-002",
     "title": "TrackArtist",
-    "phase": "4",
     "source": "PRD.md",
     "line": 809,
     "status": "tested",
@@ -1052,7 +995,6 @@
   {
     "id": "PRD-CREDIT-003",
     "title": "Contribution",
-    "phase": "4",
     "source": "PRD.md",
     "line": 813,
     "status": "tested",
@@ -1068,7 +1010,6 @@
   {
     "id": "PRD-CREDIT-004",
     "title": "Preserve DisplayArtist",
-    "phase": "4",
     "source": "PRD.md",
     "line": 835,
     "status": "tested",
@@ -1087,7 +1028,6 @@
   {
     "id": "PRD-CREDIT-005",
     "title": "Parsing does not create identity",
-    "phase": "4",
     "source": "PRD.md",
     "line": 853,
     "status": "tested",
@@ -1101,7 +1041,6 @@
   {
     "id": "PRD-CREDIT-006",
     "title": "“Everything this Artist is on” is first-class",
-    "phase": "4",
     "source": "PRD.md",
     "line": 857,
     "status": "tested",
@@ -1116,7 +1055,6 @@
   {
     "id": "PRD-CREDIT-007",
     "title": "Direct vs inferred participation",
-    "phase": "4",
     "source": "PRD.md",
     "line": 867,
     "status": "tested",
@@ -1132,7 +1070,6 @@
   {
     "id": "PRD-CREDIT-008",
     "title": "Materialized relationship projection",
-    "phase": "4",
     "source": "PRD.md",
     "line": 876,
     "status": "tested",
@@ -1149,7 +1086,6 @@
   {
     "id": "PRD-CLASS-001",
     "title": "Multi-valued traits",
-    "phase": "5",
     "source": "PRD.md",
     "line": 896,
     "status": "tested",
@@ -1166,7 +1102,6 @@
   {
     "id": "PRD-CLASS-002",
     "title": "Evidence and confidence",
-    "phase": "5",
     "source": "PRD.md",
     "line": 936,
     "status": "tested",
@@ -1182,7 +1117,6 @@
   {
     "id": "PRD-CLASS-003",
     "title": "Evidence hierarchy",
-    "phase": "5",
     "source": "PRD.md",
     "line": 951,
     "status": "tested",
@@ -1198,7 +1132,6 @@
   {
     "id": "PRD-POLICY-001",
     "title": "Dispositions",
-    "phase": "5",
     "source": "PRD.md",
     "line": 973,
     "status": "tested",
@@ -1217,7 +1150,6 @@
   {
     "id": "PRD-POLICY-002",
     "title": "Semantics",
-    "phase": "5",
     "source": "PRD.md",
     "line": 985,
     "status": "tested",
@@ -1234,7 +1166,6 @@
   {
     "id": "PRD-POLICY-003",
     "title": "Greatest Hits requirement",
-    "phase": "5",
     "source": "PRD.md",
     "line": 993,
     "status": "tested",
@@ -1250,7 +1181,6 @@
   {
     "id": "PRD-POLICY-004",
     "title": "Track novelty categories",
-    "phase": "5",
     "source": "PRD.md",
     "line": 1005,
     "status": "tested",
@@ -1268,7 +1198,6 @@
   {
     "id": "PRD-POLICY-005",
     "title": "Novelty semantics for redundant collections",
-    "phase": "5",
     "source": "PRD.md",
     "line": 1015,
     "status": "tested",
@@ -1284,7 +1213,6 @@
   {
     "id": "PRD-POLICY-006",
     "title": "Example default rules",
-    "phase": "5",
     "source": "PRD.md",
     "line": 1025,
     "status": "tested",
@@ -1302,7 +1230,6 @@
   {
     "id": "PRD-POLICY-007",
     "title": "Durable decision record before delete",
-    "phase": "5",
     "source": "PRD.md",
     "line": 1048,
     "status": "tested",
@@ -1323,7 +1250,6 @@
   {
     "id": "PRD-POLICY-008",
     "title": "Policy test mode",
-    "phase": "5",
     "source": "PRD.md",
     "line": 1062,
     "status": "tested",
@@ -1338,7 +1264,6 @@
   {
     "id": "PRD-STORAGE-001",
     "title": "PRD-STORAGE-001",
-    "phase": "2,3,11",
     "source": "PRD.md",
     "line": 1075,
     "status": "tested",
@@ -1356,7 +1281,6 @@
   {
     "id": "PRD-STORAGE-002",
     "title": "PRD-STORAGE-002",
-    "phase": "2,3,11",
     "source": "PRD.md",
     "line": 1081,
     "status": "tested",
@@ -1375,7 +1299,6 @@
   {
     "id": "PRD-STORAGE-003",
     "title": "PRD-STORAGE-003",
-    "phase": "2,3,11",
     "source": "PRD.md",
     "line": 1100,
     "status": "deferred",
@@ -1385,7 +1308,6 @@
   {
     "id": "PRD-STORAGE-004",
     "title": "PRD-STORAGE-004",
-    "phase": "2,3,11",
     "source": "PRD.md",
     "line": 1104,
     "status": "in-progress",
@@ -1400,7 +1322,6 @@
   {
     "id": "PRD-CATALOG-001",
     "title": "PRD-CATALOG-001",
-    "phase": "4",
     "source": "PRD.md",
     "line": 1112,
     "status": "tested",
@@ -1417,7 +1338,6 @@
   {
     "id": "PRD-CATALOG-002",
     "title": "PRD-CATALOG-002",
-    "phase": "4",
     "source": "PRD.md",
     "line": 1116,
     "status": "tested",
@@ -1432,7 +1352,6 @@
   {
     "id": "PRD-CATALOG-003",
     "title": "PRD-CATALOG-003",
-    "phase": "4",
     "source": "PRD.md",
     "line": 1120,
     "status": "tested",
@@ -1449,7 +1368,6 @@
   {
     "id": "PRD-CATALOG-004",
     "title": "PRD-CATALOG-004",
-    "phase": "4",
     "source": "PRD.md",
     "line": 1124,
     "status": "tested",
@@ -1466,7 +1384,6 @@
   {
     "id": "PRD-CATALOG-005",
     "title": "PRD-CATALOG-005",
-    "phase": "4",
     "source": "PRD.md",
     "line": 1128,
     "status": "tested",
@@ -1487,7 +1404,6 @@
   {
     "id": "PRD-SEARCH-001",
     "title": "Search engine",
-    "phase": "6",
     "source": "PRD.md",
     "line": 1136,
     "status": "tested",
@@ -1504,7 +1420,6 @@
   {
     "id": "PRD-SEARCH-002",
     "title": "Searchable entities",
-    "phase": "6",
     "source": "PRD.md",
     "line": 1140,
     "status": "tested",
@@ -1520,7 +1435,6 @@
   {
     "id": "PRD-SEARCH-003",
     "title": "Participant IDs in Track index",
-    "phase": "6",
     "source": "PRD.md",
     "line": 1150,
     "status": "tested",
@@ -1535,7 +1449,6 @@
   {
     "id": "PRD-SEARCH-004",
     "title": "MQL isolation",
-    "phase": "6",
     "source": "PRD.md",
     "line": 1154,
     "status": "tested",
@@ -1549,7 +1462,6 @@
   {
     "id": "PRD-SEARCH-005",
     "title": "MQL parity",
-    "phase": "6",
     "source": "PRD.md",
     "line": 1164,
     "status": "tested",
@@ -1565,7 +1477,6 @@
   {
     "id": "PRD-SEARCH-006",
     "title": "Performance target",
-    "phase": "6",
     "source": "PRD.md",
     "line": 1176,
     "status": "tested",
@@ -1580,7 +1491,6 @@
   {
     "id": "PRD-SEARCH-007",
     "title": "Rebuild command",
-    "phase": "6",
     "source": "PRD.md",
     "line": 1180,
     "status": "tested",
@@ -1596,7 +1506,6 @@
   {
     "id": "PRD-API-M1-001",
     "title": "Compatibility contract",
-    "phase": "7",
     "source": "PRD.md",
     "line": 1194,
     "status": "tested",
@@ -1617,7 +1526,6 @@
   {
     "id": "PRD-API-M1-002",
     "title": "No forced synchronized client release",
-    "phase": "7",
     "source": "PRD.md",
     "line": 1205,
     "status": "tested",
@@ -1633,7 +1541,6 @@
   {
     "id": "PRD-API-M1-003",
     "title": "Preserve existing vocabulary",
-    "phase": "7",
     "source": "PRD.md",
     "line": 1209,
     "status": "tested",
@@ -1649,7 +1556,6 @@
   {
     "id": "PRD-API-M1-004",
     "title": "Preserve public IDs",
-    "phase": "7",
     "source": "PRD.md",
     "line": 1213,
     "status": "in-progress",
@@ -1667,7 +1573,6 @@
   {
     "id": "PRD-API-M1-005",
     "title": "Preserve response details",
-    "phase": "7",
     "source": "PRD.md",
     "line": 1217,
     "status": "tested",
@@ -1687,7 +1592,6 @@
   {
     "id": "PRD-API-M1-006",
     "title": "Current native surface",
-    "phase": "7",
     "source": "PRD.md",
     "line": 1233,
     "status": "tested",
@@ -1703,7 +1607,6 @@
   {
     "id": "PRD-API-M1-007",
     "title": "Future API evolution",
-    "phase": "7",
     "source": "PRD.md",
     "line": 1260,
     "status": "tested",
@@ -1720,7 +1623,6 @@
   {
     "id": "PRD-STREAM-001",
     "title": "PRD-STREAM-001",
-    "phase": "7,8",
     "source": "PRD.md",
     "line": 1270,
     "status": "tested",
@@ -1739,7 +1641,6 @@
   {
     "id": "PRD-STREAM-002",
     "title": "PRD-STREAM-002",
-    "phase": "7,8",
     "source": "PRD.md",
     "line": 1274,
     "status": "tested",
@@ -1764,7 +1665,6 @@
   {
     "id": "PRD-STREAM-003",
     "title": "Android/Android Auto release gate",
-    "phase": "7,8",
     "source": "PRD.md",
     "line": 1286,
     "status": "tested",
@@ -1781,13 +1681,12 @@
   {
     "id": "PRD-API-OS-001",
     "title": "PRD-API-OS-001",
-    "phase": "8",
     "source": "PRD.md",
     "line": 1309,
     "status": "tested",
     "implementation": [
       "compatibility/opensubsonic/contracts/route-inventory.json (164 routes; plain and .view forms)",
-      "apps/melodee-server/src/opensubsonic/ (Phase 8 adapter)",
+      "apps/melodee-server/src/opensubsonic/ (OpenSubsonic and Jellyfin compatibility adapter)",
       "design/agents/PHASE-8-OPENSUBSONIC-ROUTE-MATRIX.json (81/81 endpoints dispositioned)"
     ],
     "tests": [
@@ -1800,7 +1699,6 @@
   {
     "id": "PRD-API-OS-002",
     "title": "PRD-API-OS-002",
-    "phase": "8",
     "source": "PRD.md",
     "line": 1313,
     "status": "tested",
@@ -1817,7 +1715,6 @@
   {
     "id": "PRD-API-OS-003",
     "title": "PRD-API-OS-003",
-    "phase": "8",
     "source": "PRD.md",
     "line": 1317,
     "status": "tested",
@@ -1835,7 +1732,6 @@
   {
     "id": "PRD-API-OS-004",
     "title": "Current supported groups",
-    "phase": "8",
     "source": "PRD.md",
     "line": 1321,
     "status": "tested",
@@ -1853,7 +1749,6 @@
   {
     "id": "PRD-API-OS-005",
     "title": "Preserve intentional unsupported behavior",
-    "phase": "8",
     "source": "PRD.md",
     "line": 1344,
     "status": "tested",
@@ -1870,7 +1765,6 @@
   {
     "id": "PRD-API-OS-006",
     "title": "Advertised extensions",
-    "phase": "8",
     "source": "PRD.md",
     "line": 1350,
     "status": "tested",
@@ -1886,7 +1780,6 @@
   {
     "id": "PRD-API-OS-007",
     "title": "Client verification",
-    "phase": "8",
     "source": "PRD.md",
     "line": 1354,
     "status": "tested",
@@ -1902,7 +1795,6 @@
   {
     "id": "PRD-API-JF-001",
     "title": "PRD-API-JF-001",
-    "phase": "8",
     "source": "PRD.md",
     "line": 1372,
     "status": "tested",
@@ -1921,7 +1813,6 @@
   {
     "id": "PRD-API-JF-002",
     "title": "PRD-API-JF-002",
-    "phase": "8",
     "source": "PRD.md",
     "line": 1376,
     "status": "tested",
@@ -1938,7 +1829,6 @@
   {
     "id": "PRD-API-JF-003",
     "title": "PRD-API-JF-003",
-    "phase": "8",
     "source": "PRD.md",
     "line": 1380,
     "status": "tested",
@@ -1954,7 +1844,6 @@
   {
     "id": "PRD-API-JF-004",
     "title": "PRD-API-JF-004",
-    "phase": "8",
     "source": "PRD.md",
     "line": 1384,
     "status": "tested",
@@ -1975,7 +1864,6 @@
   {
     "id": "PRD-API-JF-005",
     "title": "PRD-API-JF-005",
-    "phase": "8",
     "source": "PRD.md",
     "line": 1398,
     "status": "tested",
@@ -1990,7 +1878,6 @@
   {
     "id": "PRD-API-JF-006",
     "title": "PRD-API-JF-006",
-    "phase": "8",
     "source": "PRD.md",
     "line": 1402,
     "status": "tested",
@@ -2005,7 +1892,6 @@
   {
     "id": "PRD-API-ADMIN-001",
     "title": "PRD-API-ADMIN-001",
-    "phase": "10",
     "source": "PRD.md",
     "line": 1410,
     "status": "tested",
@@ -2019,7 +1905,6 @@
   {
     "id": "PRD-API-ADMIN-002",
     "title": "PRD-API-ADMIN-002",
-    "phase": "10",
     "source": "PRD.md",
     "line": 1414,
     "status": "tested",
@@ -2036,12 +1921,11 @@
   {
     "id": "PRD-API-ADMIN-003",
     "title": "PRD-API-ADMIN-003",
-    "phase": "10",
     "source": "PRD.md",
     "line": 1428,
     "status": "tested",
     "implementation": [
-      "ADR-0139 + Phase 10 evidence: no native-v1/OpenSubsonic/Jellyfin route or DTO changed for the admin UI (frozen surfaces untouched; only ADR-0143's evidenced image precedence extension)"
+      "ADR-0139 + Admin UI evidence: no native-v1/OpenSubsonic/Jellyfin route or DTO changed for the admin UI (frozen surfaces untouched; only ADR-0143's evidenced image precedence extension)"
     ],
     "tests": [
       "apps/melodee-server/tests/ native/opensubsonic/jellyfin suites + image goldens unchanged and green"
@@ -2050,7 +1934,6 @@
   {
     "id": "PRD-AUTH-001",
     "title": "PRD-AUTH-001",
-    "phase": "7,8,9",
     "source": "PRD.md",
     "line": 1436,
     "status": "tested",
@@ -2067,7 +1950,6 @@
   {
     "id": "PRD-AUTH-002",
     "title": "PRD-AUTH-002",
-    "phase": "7,8,9",
     "source": "PRD.md",
     "line": 1442,
     "status": "tested",
@@ -2087,7 +1969,6 @@
   {
     "id": "PRD-AUTH-003",
     "title": "PRD-AUTH-003",
-    "phase": "7,8,9",
     "source": "PRD.md",
     "line": 1454,
     "status": "tested",
@@ -2103,7 +1984,6 @@
   {
     "id": "PRD-AUTH-004",
     "title": "PRD-AUTH-004",
-    "phase": "7,8,9",
     "source": "PRD.md",
     "line": 1458,
     "status": "tested",
@@ -2118,7 +1998,6 @@
   {
     "id": "PRD-AUTH-005",
     "title": "PRD-AUTH-005",
-    "phase": "7,8,9",
     "source": "PRD.md",
     "line": 1462,
     "status": "tested",
@@ -2136,7 +2015,6 @@
   {
     "id": "PRD-AUTH-006",
     "title": "PRD-AUTH-006",
-    "phase": "7,8,9",
     "source": "PRD.md",
     "line": 1466,
     "status": "tested",
@@ -2152,7 +2030,6 @@
   {
     "id": "PRD-AUTH-007",
     "title": "PRD-AUTH-007",
-    "phase": "7,8,9",
     "source": "PRD.md",
     "line": 1472,
     "status": "tested",
@@ -2172,7 +2049,6 @@
   {
     "id": "PRD-USER-001",
     "title": "PRD-USER-001",
-    "phase": "9",
     "source": "PRD.md",
     "line": 1480,
     "status": "tested",
@@ -2188,7 +2064,6 @@
   {
     "id": "PRD-USER-002",
     "title": "PRD-USER-002",
-    "phase": "9",
     "source": "PRD.md",
     "line": 1484,
     "status": "tested",
@@ -2204,7 +2079,6 @@
   {
     "id": "PRD-USER-003",
     "title": "PRD-USER-003",
-    "phase": "9",
     "source": "PRD.md",
     "line": 1488,
     "status": "tested",
@@ -2221,7 +2095,6 @@
   {
     "id": "PRD-USER-004",
     "title": "PRD-USER-004",
-    "phase": "9",
     "source": "PRD.md",
     "line": 1492,
     "status": "tested",
@@ -2237,7 +2110,6 @@
   {
     "id": "PRD-USER-005",
     "title": "PRD-USER-005",
-    "phase": "9",
     "source": "PRD.md",
     "line": 1496,
     "status": "tested",
@@ -2253,7 +2125,6 @@
   {
     "id": "PRD-NOTIF-001",
     "title": "PRD-NOTIF-001",
-    "phase": "9",
     "source": "PRD.md",
     "line": 1500,
     "status": "tested",
@@ -2273,7 +2144,6 @@
   {
     "id": "PRD-NOTIF-002",
     "title": "PRD-NOTIF-002",
-    "phase": "9",
     "source": "PRD.md",
     "line": 1504,
     "status": "tested",
@@ -2291,7 +2161,6 @@
   {
     "id": "PRD-NOTIF-003",
     "title": "PRD-NOTIF-003",
-    "phase": "9",
     "source": "PRD.md",
     "line": 1508,
     "status": "tested",
@@ -2308,15 +2177,14 @@
   {
     "id": "PRD-PLAYLIST-001",
     "title": "PRD-PLAYLIST-001",
-    "phase": "9",
     "source": "PRD.md",
     "line": 1516,
     "status": "tested",
     "implementation": [
       "crates/melodee-persistence/migrations/0016_phase7_native_playlists.sql",
       "apps/melodee-server/src/native/playlists.rs",
-      "apps/melodee-server/src/opensubsonic/ (playlist adapter group, Phase 8)",
-      "apps/melodee-server/src/jellyfin/playlists.rs (Phase 8)"
+      "apps/melodee-server/src/opensubsonic/ (playlist adapter group, OpenSubsonic and Jellyfin compatibility)",
+      "apps/melodee-server/src/jellyfin/playlists.rs (OpenSubsonic and Jellyfin compatibility)"
     ],
     "tests": [
       "apps/melodee-server/tests/native_playlists.rs",
@@ -2328,7 +2196,6 @@
   {
     "id": "PRD-PLAYLIST-002",
     "title": "PRD-PLAYLIST-002",
-    "phase": "9",
     "source": "PRD.md",
     "line": 1520,
     "status": "tested",
@@ -2343,7 +2210,6 @@
   {
     "id": "PRD-PLAYLIST-003",
     "title": "PRD-PLAYLIST-003",
-    "phase": "9",
     "source": "PRD.md",
     "line": 1524,
     "status": "tested",
@@ -2358,7 +2224,6 @@
   {
     "id": "PRD-REQUEST-001",
     "title": "PRD-REQUEST-001",
-    "phase": "9",
     "source": "PRD.md",
     "line": 1532,
     "status": "tested",
@@ -2375,7 +2240,6 @@
   {
     "id": "PRD-REQUEST-002",
     "title": "PRD-REQUEST-002",
-    "phase": "9",
     "source": "PRD.md",
     "line": 1536,
     "status": "tested",
@@ -2390,7 +2254,6 @@
   {
     "id": "PRD-SHARE-001",
     "title": "PRD-SHARE-001",
-    "phase": "9",
     "source": "PRD.md",
     "line": 1544,
     "status": "tested",
@@ -2406,7 +2269,6 @@
   {
     "id": "PRD-SHARE-002",
     "title": "PRD-SHARE-002",
-    "phase": "9",
     "source": "PRD.md",
     "line": 1548,
     "status": "tested",
@@ -2420,7 +2282,6 @@
   {
     "id": "PRD-SHARE-003",
     "title": "PRD-SHARE-003",
-    "phase": "9",
     "source": "PRD.md",
     "line": 1552,
     "status": "tested",
@@ -2436,12 +2297,11 @@
   {
     "id": "PRD-RADIO-001",
     "title": "PRD-RADIO-001",
-    "phase": "8,9",
     "source": "PRD.md",
     "line": 1562,
     "status": "tested",
     "implementation": [
-      "apps/melodee-server/src/opensubsonic/radio.rs (captured OS CRUD, Phase 8)",
+      "apps/melodee-server/src/opensubsonic/radio.rs (captured OS CRUD, OpenSubsonic and Jellyfin compatibility)",
       "crates/melodee-persistence/src/radio.rs (RadioStationStore over opensubsonic_radio_stations, ADR-0134 §1)",
       "apps/melodee-server/src/admin_radio.rs (Admin API list/read for any authenticated user, bounded/paginated)"
     ],
@@ -2454,7 +2314,6 @@
   {
     "id": "PRD-RADIO-002",
     "title": "PRD-RADIO-002",
-    "phase": "8,9",
     "source": "PRD.md",
     "line": 1566,
     "status": "tested",
@@ -2470,7 +2329,6 @@
   {
     "id": "PRD-POD-001",
     "title": "PRD-POD-001",
-    "phase": "9",
     "source": "PRD.md",
     "line": 1574,
     "status": "tested",
@@ -2486,7 +2344,6 @@
   {
     "id": "PRD-POD-002",
     "title": "PRD-POD-002",
-    "phase": "9",
     "source": "PRD.md",
     "line": 1578,
     "status": "tested",
@@ -2505,14 +2362,13 @@
   {
     "id": "PRD-POD-003",
     "title": "PRD-POD-003",
-    "phase": "9",
     "source": "PRD.md",
     "line": 1594,
     "status": "tested",
     "implementation": [
       "apps/melodee-server/src/native/podcasts.rs (all 19 compiled native-v1 routes)",
       "compatibility/melodee-api-v1/golden/native-podcasts",
-      "apps/melodee-server/src/opensubsonic/ (getPodcasts/getNewestPodcasts/refreshPodcasts, Phase 8)"
+      "apps/melodee-server/src/opensubsonic/ (getPodcasts/getNewestPodcasts/refreshPodcasts, OpenSubsonic and Jellyfin compatibility)"
     ],
     "tests": [
       "apps/melodee-server/tests/native_podcasts_api.rs::all_native_podcast_routes_are_tenant_scoped_bounded_and_authorized",
@@ -2523,7 +2379,6 @@
   {
     "id": "PRD-DISCOVERY-001",
     "title": "PRD-DISCOVERY-001",
-    "phase": "9",
     "source": "PRD.md",
     "line": 1602,
     "status": "tested",
@@ -2539,7 +2394,6 @@
   {
     "id": "PRD-DISCOVERY-002",
     "title": "PRD-DISCOVERY-002",
-    "phase": "9",
     "source": "PRD.md",
     "line": 1606,
     "status": "tested",
@@ -2553,7 +2407,6 @@
   {
     "id": "PRD-DISCOVERY-003",
     "title": "PRD-DISCOVERY-003",
-    "phase": "9",
     "source": "PRD.md",
     "line": 1610,
     "status": "tested",
@@ -2569,13 +2422,12 @@
   {
     "id": "PRD-PARTY-001",
     "title": "PRD-PARTY-001",
-    "phase": "9",
     "source": "PRD.md",
     "line": 1620,
     "status": "deferred",
     "implementation": [
       "design/agents/PHASE-7-ROUTE-MATRIX.json (32 frozen Party exclusions preserved)",
-      "design/adr/ADR-0133-phase-9-party-mode-and-jukebox-parity-waiver.md (accepted Phase 9 waiver)"
+      "design/adr/ADR-0133-phase-9-party-mode-and-jukebox-parity-waiver.md (accepted server feature parity waiver)"
     ],
     "tests": [
       "apps/melodee-server/tests/native_catalog_api.rs (exact excluded route matrix)",
@@ -2585,13 +2437,12 @@
   {
     "id": "PRD-PARTY-002",
     "title": "PRD-PARTY-002",
-    "phase": "9",
     "source": "PRD.md",
     "line": 1624,
     "status": "deferred",
     "implementation": [
       "apps/melodee-server/src/opensubsonic/negative.rs (jukeboxControl intentional 410, captured disabled behavior)",
-      "design/adr/ADR-0133-phase-9-party-mode-and-jukebox-parity-waiver.md (accepted Phase 9 waiver)"
+      "design/adr/ADR-0133-phase-9-party-mode-and-jukebox-parity-waiver.md (accepted server feature parity waiver)"
     ],
     "tests": [
       "scripts/run_phase8_differential.py (zero unexpected differences; jukebox 410 pinned)",
@@ -2601,7 +2452,6 @@
   {
     "id": "PRD-PARTY-003",
     "title": "PRD-PARTY-003",
-    "phase": "9",
     "source": "PRD.md",
     "line": 1628,
     "status": "tested",
@@ -2616,7 +2466,6 @@
   {
     "id": "PRD-PARTY-004",
     "title": "PRD-PARTY-004",
-    "phase": "9",
     "source": "PRD.md",
     "line": 1632,
     "status": "tested",
@@ -2631,7 +2480,6 @@
   {
     "id": "PRD-DEVICE-001",
     "title": "PRD-DEVICE-001",
-    "phase": "9",
     "source": "PRD.md",
     "line": 1642,
     "status": "tested",
@@ -2648,7 +2496,6 @@
   {
     "id": "PRD-DEVICE-002",
     "title": "PRD-DEVICE-002",
-    "phase": "9",
     "source": "PRD.md",
     "line": 1646,
     "status": "implemented",
@@ -2665,7 +2512,6 @@
   {
     "id": "PRD-DEVICE-003",
     "title": "PRD-DEVICE-003",
-    "phase": "9",
     "source": "PRD.md",
     "line": 1650,
     "status": "deferred",
@@ -2675,7 +2521,6 @@
   {
     "id": "PRD-SCRIPT-001",
     "title": "PRD-SCRIPT-001",
-    "phase": "9",
     "source": "PRD.md",
     "line": 1658,
     "status": "tested",
@@ -2692,7 +2537,6 @@
   {
     "id": "PRD-SCRIPT-002",
     "title": "PRD-SCRIPT-002",
-    "phase": "9",
     "source": "PRD.md",
     "line": 1665,
     "status": "tested",
@@ -2706,7 +2550,6 @@
   {
     "id": "PRD-SCRIPT-003",
     "title": "PRD-SCRIPT-003",
-    "phase": "9",
     "source": "PRD.md",
     "line": 1669,
     "status": "tested",
@@ -2721,7 +2564,6 @@
   {
     "id": "PRD-SCRIPT-004",
     "title": "PRD-SCRIPT-004",
-    "phase": "9",
     "source": "PRD.md",
     "line": 1673,
     "status": "tested",
@@ -2739,7 +2581,6 @@
   {
     "id": "PRD-SCRIPT-005",
     "title": "PRD-SCRIPT-005",
-    "phase": "9",
     "source": "PRD.md",
     "line": 1677,
     "status": "tested",
@@ -2756,7 +2597,6 @@
   {
     "id": "PRD-EXT-001",
     "title": "PRD-EXT-001",
-    "phase": "4,9",
     "source": "PRD.md",
     "line": 1685,
     "status": "tested",
@@ -2778,7 +2618,6 @@
   {
     "id": "PRD-EXT-002",
     "title": "PRD-EXT-002",
-    "phase": "4,9",
     "source": "PRD.md",
     "line": 1691,
     "status": "tested",
@@ -2793,7 +2632,6 @@
   {
     "id": "PRD-EXT-003",
     "title": "PRD-EXT-003",
-    "phase": "4,9",
     "source": "PRD.md",
     "line": 1695,
     "status": "tested",
@@ -2815,7 +2653,6 @@
   {
     "id": "PRD-EXT-004",
     "title": "PRD-EXT-004",
-    "phase": "4,9",
     "source": "PRD.md",
     "line": 1699,
     "status": "tested",
@@ -2836,7 +2673,6 @@
   {
     "id": "PRD-UI-001",
     "title": "Modern, slick, simple, intuitive",
-    "phase": "10",
     "source": "PRD.md",
     "line": 1715,
     "status": "tested",
@@ -2852,13 +2688,12 @@
   {
     "id": "PRD-UI-002",
     "title": "Preferred stack",
-    "phase": "10",
     "source": "PRD.md",
     "line": 1719,
     "status": "tested",
     "implementation": [
       "admin-ui/package.json (React 19.2.8, TypeScript, @carbon/react 1.114.0 exact pins)",
-      "design/adr/ADR-0109-use-carbon-for-admin-ui.md (Accepted; Phase 10 validation evidence section)"
+      "design/adr/ADR-0109-use-carbon-for-admin-ui.md (Accepted; Admin UI validation evidence section)"
     ],
     "tests": [
       "admin-ui/e2e/ (Carbon components exercised across all canonical screens)"
@@ -2867,7 +2702,6 @@
   {
     "id": "PRD-UI-003",
     "title": "TanStack Table is optional",
-    "phase": "10",
     "source": "PRD.md",
     "line": 1725,
     "status": "tested",
@@ -2881,7 +2715,6 @@
   {
     "id": "PRD-UI-004",
     "title": "Admin navigation",
-    "phase": "10",
     "source": "PRD.md",
     "line": 1729,
     "status": "tested",
@@ -2895,7 +2728,6 @@
   {
     "id": "PRD-UI-005",
     "title": "Remove `/Data` vs `/Media` from the user mental model",
-    "phase": "10",
     "source": "PRD.md",
     "line": 1763,
     "status": "tested",
@@ -2910,7 +2742,6 @@
   {
     "id": "PRD-UI-006",
     "title": "Primary/detail workflows",
-    "phase": "10",
     "source": "PRD.md",
     "line": 1775,
     "status": "tested",
@@ -2925,7 +2756,6 @@
   {
     "id": "PRD-UI-007",
     "title": "Preview playback only where useful",
-    "phase": "10",
     "source": "PRD.md",
     "line": 1779,
     "status": "tested",
@@ -2942,7 +2772,6 @@
   {
     "id": "PRD-UI-008",
     "title": "Destructive action UX",
-    "phase": "10",
     "source": "PRD.md",
     "line": 1783,
     "status": "tested",
@@ -2957,7 +2786,6 @@
   {
     "id": "PRD-UI-009",
     "title": "Command palette",
-    "phase": "10",
     "source": "PRD.md",
     "line": 1793,
     "status": "implemented",
@@ -2971,7 +2799,6 @@
   {
     "id": "PRD-UI-010",
     "title": "Server-side data operations",
-    "phase": "10",
     "source": "PRD.md",
     "line": 1797,
     "status": "tested",
@@ -2987,7 +2814,6 @@
   {
     "id": "PRD-UI-REF-001",
     "title": "PRD-UI-REF-001",
-    "phase": "10",
     "source": "PRD.md",
     "line": 1816,
     "status": "tested",
@@ -3001,7 +2827,6 @@
   {
     "id": "PRD-UI-REF-002",
     "title": "PRD-UI-REF-002",
-    "phase": "10",
     "source": "PRD.md",
     "line": 1820,
     "status": "tested",
@@ -3016,7 +2841,6 @@
   {
     "id": "PRD-UI-REF-003",
     "title": "PRD-UI-REF-003",
-    "phase": "10",
     "source": "PRD.md",
     "line": 1824,
     "status": "tested",
@@ -3030,7 +2854,6 @@
   {
     "id": "PRD-THEME-001",
     "title": "PRD-THEME-001",
-    "phase": "10",
     "source": "PRD.md",
     "line": 1887,
     "status": "tested",
@@ -3046,7 +2869,6 @@
   {
     "id": "PRD-THEME-002",
     "title": "PRD-THEME-002",
-    "phase": "10",
     "source": "PRD.md",
     "line": 1891,
     "status": "tested",
@@ -3060,7 +2882,6 @@
   {
     "id": "PRD-THEME-003",
     "title": "PRD-THEME-003",
-    "phase": "10",
     "source": "PRD.md",
     "line": 1902,
     "status": "tested",
@@ -3074,7 +2895,6 @@
   {
     "id": "PRD-THEME-004",
     "title": "PRD-THEME-004",
-    "phase": "10",
     "source": "PRD.md",
     "line": 1906,
     "status": "tested",
@@ -3088,7 +2908,6 @@
   {
     "id": "PRD-I18N-001",
     "title": "PRD-I18N-001",
-    "phase": "10",
     "source": "PRD.md",
     "line": 1916,
     "status": "tested",
@@ -3103,7 +2922,6 @@
   {
     "id": "PRD-I18N-002",
     "title": "PRD-I18N-002",
-    "phase": "10",
     "source": "PRD.md",
     "line": 1941,
     "status": "tested",
@@ -3118,7 +2936,6 @@
   {
     "id": "PRD-I18N-003",
     "title": "PRD-I18N-003",
-    "phase": "10",
     "source": "PRD.md",
     "line": 1945,
     "status": "tested",
@@ -3132,7 +2949,6 @@
   {
     "id": "PRD-I18N-004",
     "title": "PRD-I18N-004",
-    "phase": "10",
     "source": "PRD.md",
     "line": 1949,
     "status": "tested",
@@ -3146,7 +2962,6 @@
   {
     "id": "PRD-I18N-005",
     "title": "PRD-I18N-005",
-    "phase": "10",
     "source": "PRD.md",
     "line": 1953,
     "status": "tested",
@@ -3161,7 +2976,6 @@
   {
     "id": "PRD-I18N-006",
     "title": "PRD-I18N-006",
-    "phase": "10",
     "source": "PRD.md",
     "line": 1957,
     "status": "tested",
@@ -3175,7 +2989,6 @@
   {
     "id": "PRD-WEB-001",
     "title": "PRD-WEB-001",
-    "phase": "9,10",
     "source": "PRD.md",
     "line": 1967,
     "status": "tested",
@@ -3190,7 +3003,6 @@
   {
     "id": "PRD-WEB-002",
     "title": "PRD-WEB-002",
-    "phase": "9,10",
     "source": "PRD.md",
     "line": 1978,
     "status": "tested",
@@ -3205,7 +3017,6 @@
   {
     "id": "PRD-SETUP-001",
     "title": "PRD-SETUP-001",
-    "phase": "9",
     "source": "PRD.md",
     "line": 1986,
     "status": "tested",
@@ -3224,7 +3035,6 @@
   {
     "id": "PRD-SETUP-002",
     "title": "PRD-SETUP-002",
-    "phase": "9",
     "source": "PRD.md",
     "line": 2000,
     "status": "tested",
@@ -3240,12 +3050,11 @@
   {
     "id": "PRD-CONFIG-001",
     "title": "PRD-CONFIG-001",
-    "phase": "1,9",
     "source": "PRD.md",
     "line": 2004,
     "status": "tested",
     "implementation": [
-      "design/evidence/phase-9/configuration-inventory.md (the 190-key legacy registry inventory, Phase 0 gap closed)",
+      "design/evidence/phase-9/configuration-inventory.md (the 190-key legacy registry inventory, baseline capture gap closed)",
       "crates/melodee-persistence/src/settings.rs (KNOWN_SETTINGS classification; SettingsStore CRUD with kind validation)",
       "apps/melodee-server/src/providers.rs (runtime consumers for provider enablement, endpoints, credentials, cache TTL, and local replica path)",
       "apps/melodee-server/src/enrichment_worker.rs (runtime worker enablement, polling, batch, and lease settings)",
@@ -3260,7 +3069,6 @@
   {
     "id": "PRD-CONFIG-002",
     "title": "PRD-CONFIG-002",
-    "phase": "1,9",
     "source": "PRD.md",
     "line": 2008,
     "status": "tested",
@@ -3278,7 +3086,6 @@
   {
     "id": "PRD-CONFIG-003",
     "title": "PRD-CONFIG-003",
-    "phase": "1,9",
     "source": "PRD.md",
     "line": 2012,
     "status": "tested",
@@ -3295,12 +3102,11 @@
   {
     "id": "PRD-WORK-001",
     "title": "PRD-WORK-001",
-    "phase": "1,2,9",
     "source": "PRD.md",
     "line": 2020,
     "status": "tested",
     "implementation": [
-      "crates/melodee-persistence/migrations/0001_release_work_items.sql and 0002_release_work_item_events.sql plus crates/melodee-persistence/src/work_items.rs (durable work items, FOR UPDATE SKIP LOCKED leases, bounded retries, append-only history — the durable-queue replacement for the legacy everything-is-a-Quartz-job model, since Phase 2)",
+      "crates/melodee-persistence/migrations/0001_release_work_items.sql and 0002_release_work_item_events.sql plus crates/melodee-persistence/src/work_items.rs (durable work items, FOR UPDATE SKIP LOCKED leases, bounded retries, append-only history — the durable-queue replacement for the legacy everything-is-a-Quartz-job model, since inbound processing)",
       "crates/melodee-ingestion/src/scheduler.rs and apps/melodee-server/src/main.rs (scheduled ingestion reconciliation trigger)",
       "apps/melodee-server/src/podcast_worker.rs (scheduled podcast refresh/download/cleanup/recovery triggers over leased durable state)",
       "apps/melodee-server/src/policy_worker.rs (scheduled policy evaluation over leased durable state)",
@@ -3320,7 +3126,6 @@
   {
     "id": "PRD-WORK-002",
     "title": "PRD-WORK-002",
-    "phase": "1,2,9",
     "source": "PRD.md",
     "line": 2024,
     "status": "tested",
@@ -3335,7 +3140,6 @@
   {
     "id": "PRD-WORK-003",
     "title": "PRD-WORK-003",
-    "phase": "1,2,9",
     "source": "PRD.md",
     "line": 2036,
     "status": "tested",
@@ -3355,7 +3159,6 @@
   {
     "id": "PRD-WORK-004",
     "title": "PRD-WORK-004",
-    "phase": "1,2,9",
     "source": "PRD.md",
     "line": 2050,
     "status": "tested",
@@ -3372,7 +3175,6 @@
   {
     "id": "PRD-WORK-005",
     "title": "PRD-WORK-005",
-    "phase": "1,2,9",
     "source": "PRD.md",
     "line": 2054,
     "status": "tested",
@@ -3392,7 +3194,6 @@
   {
     "id": "PRD-CLI-001",
     "title": "PRD-CLI-001",
-    "phase": "1,9",
     "source": "PRD.md",
     "line": 2077,
     "status": "tested",
@@ -3408,7 +3209,6 @@
   {
     "id": "PRD-CLI-002",
     "title": "PRD-CLI-002",
-    "phase": "1,9",
     "source": "PRD.md",
     "line": 2081,
     "status": "tested",
@@ -3428,7 +3228,6 @@
   {
     "id": "PRD-OBS-001",
     "title": "PRD-OBS-001",
-    "phase": "1,2",
     "source": "PRD.md",
     "line": 2089,
     "status": "tested",
@@ -3453,7 +3252,6 @@
   {
     "id": "PRD-OBS-002",
     "title": "PRD-OBS-002",
-    "phase": "1,2",
     "source": "PRD.md",
     "line": 2093,
     "status": "tested",
@@ -3473,14 +3271,13 @@
   {
     "id": "PRD-OBS-003",
     "title": "PRD-OBS-003",
-    "phase": "1,2",
     "source": "PRD.md",
     "line": 2107,
     "status": "tested",
     "implementation": [
       "apps/melodee-cli/src/main.rs (search status JSON with backlog, lease, active generation, latest rebuild, and failure evidence)",
       "apps/melodee-server/src/onboarding.rs (ADR-0145 four-role storage diagnostics: inbound, staging, work, canonical reported separately)",
-      "admin-ui/src/screens/system/ (Phase 10 System/Workers/Diagnostics/Storage screens over the diagnostics APIs)",
+      "admin-ui/src/screens/system/ (Admin UI System/Workers/Diagnostics/Storage screens over the diagnostics APIs)",
       "docs/src/content/docs/admin/system-diagnostics.md and troubleshooting/index.md"
     ],
     "tests": [
@@ -3492,7 +3289,6 @@
   {
     "id": "PRD-OBS-004",
     "title": "PRD-OBS-004",
-    "phase": "1,2",
     "source": "PRD.md",
     "line": 2111,
     "status": "tested",
@@ -3511,7 +3307,6 @@
   {
     "id": "PRD-OBS-005",
     "title": "PRD-OBS-005",
-    "phase": "1,2",
     "source": "PRD.md",
     "line": 2115,
     "status": "implemented",
@@ -3526,7 +3321,6 @@
   {
     "id": "PRD-PERF-001",
     "title": "PRD-PERF-001",
-    "phase": "0,all",
     "source": "PRD.md",
     "line": 2123,
     "status": "tested",
@@ -3552,7 +3346,6 @@
   {
     "id": "PRD-PERF-002",
     "title": "PRD-PERF-002",
-    "phase": "0,all",
     "source": "PRD.md",
     "line": 2127,
     "status": "tested",
@@ -3572,7 +3365,6 @@
   {
     "id": "PRD-PERF-003",
     "title": "PRD-PERF-003",
-    "phase": "0,all",
     "source": "PRD.md",
     "line": 2135,
     "status": "in-progress",
@@ -3588,8 +3380,8 @@
     ],
     "tests": [
       "tests/python/test_benchmark_baseline.py",
-      "design/evidence/phase-4/PHASE-4-REPORT.md (exact Phase 4 metric record)",
-      "design/evidence/phase-5/PHASE-5-REPORT.md (exact Phase 5 metric record)",
+      "design/evidence/phase-4/PHASE-4-REPORT.md (exact catalog and identity metric record)",
+      "design/evidence/phase-5/PHASE-5-REPORT.md (exact classification and policy metric record)",
       "design/evidence/phase-6/PHASE-6-REPORT.md (exact default/current-scale/10M search metric record)",
       "design/evidence/phase-7/PHASE-7-REPORT.md (exact current-catalog native API metric record)"
     ]
@@ -3597,7 +3389,6 @@
   {
     "id": "PRD-PERF-004",
     "title": "PRD-PERF-004",
-    "phase": "0,all",
     "source": "PRD.md",
     "line": 2147,
     "status": "in-progress",
@@ -3619,7 +3410,6 @@
   {
     "id": "PRD-PERF-005",
     "title": "PRD-PERF-005",
-    "phase": "0,all",
     "source": "PRD.md",
     "line": 2151,
     "status": "tested",
@@ -3637,7 +3427,6 @@
   {
     "id": "PRD-PERF-006",
     "title": "PRD-PERF-006",
-    "phase": "0,all",
     "source": "PRD.md",
     "line": 2155,
     "status": "tested",
@@ -3656,7 +3445,6 @@
   {
     "id": "PRD-MIG-001",
     "title": "Preserve media",
-    "phase": "11",
     "source": "PRD.md",
     "line": 2165,
     "status": "tested",
@@ -3675,7 +3463,6 @@
   {
     "id": "PRD-MIG-002",
     "title": "Preserve public identity",
-    "phase": "11",
     "source": "PRD.md",
     "line": 2169,
     "status": "tested",
@@ -3694,7 +3481,6 @@
   {
     "id": "PRD-MIG-003",
     "title": "Preserve user state",
-    "phase": "11",
     "source": "PRD.md",
     "line": 2173,
     "status": "tested",
@@ -3715,7 +3501,6 @@
   {
     "id": "PRD-MIG-004",
     "title": "Preserve catalog relationships",
-    "phase": "11",
     "source": "PRD.md",
     "line": 2191,
     "status": "tested",
@@ -3736,7 +3521,6 @@
   {
     "id": "PRD-MIG-005",
     "title": "No mandatory upfront fingerprint of every byte",
-    "phase": "11",
     "source": "PRD.md",
     "line": 2195,
     "status": "tested",
@@ -3752,7 +3536,6 @@
   {
     "id": "PRD-MIG-006",
     "title": "Search is rebuildable",
-    "phase": "11",
     "source": "PRD.md",
     "line": 2199,
     "status": "tested",
@@ -3768,7 +3551,6 @@
   {
     "id": "PRD-MIG-007",
     "title": "Rollback",
-    "phase": "11",
     "source": "PRD.md",
     "line": 2203,
     "status": "in-progress",
@@ -3790,7 +3572,6 @@
   {
     "id": "PRD-TEST-001",
     "title": "C# server as oracle",
-    "phase": "0,all",
     "source": "PRD.md",
     "line": 2235,
     "status": "in-progress",
@@ -3798,7 +3579,7 @@
       "compatibility/scenarios/*.json (22 scenario files, declarative flows)",
       "scripts/capture_baseline.py + scripts/compare_captures.py (deterministic A/B comparison)",
       "compatibility/*/golden/ (424 promoted captures with provenance)",
-      "crates/melodee-persistence/src/catalog_mutations.rs (frozen legacy catalog mapping into the Phase 4 model)"
+      "crates/melodee-persistence/src/catalog_mutations.rs (frozen legacy catalog mapping into the catalog and identity model)"
     ],
     "tests": [
       "tests/python/test_native_v1_capture.py",
@@ -3806,13 +3587,12 @@
       "tests/python/test_jellyfin_capture.py",
       "tests/python/test_media_baseline.py",
       "tests/python/test_benchmark_baseline.py",
-      "crates/melodee-persistence/tests/catalog_legacy.rs (frozen Phase 0 Artist/Release/Track/public-ID relationship mapping)"
+      "crates/melodee-persistence/tests/catalog_legacy.rs (frozen baseline capture Artist/Release/Track/public-ID relationship mapping)"
     ]
   },
   {
     "id": "PRD-TEST-002",
     "title": "Differential API harness",
-    "phase": "0,all",
     "source": "PRD.md",
     "line": 2239,
     "status": "in-progress",
@@ -3828,7 +3608,6 @@
   {
     "id": "PRD-TEST-003",
     "title": "Golden contracts",
-    "phase": "0,all",
     "source": "PRD.md",
     "line": 2255,
     "status": "tested",
@@ -3844,7 +3623,6 @@
   {
     "id": "PRD-TEST-004",
     "title": "Real-client compatibility",
-    "phase": "0,all",
     "source": "PRD.md",
     "line": 2259,
     "status": "tested",
@@ -3853,15 +3631,14 @@
       "design/evidence/phase-8/PHASE-8-REPORT.md (Feishin v1.15.1 acceptance, 12/12)"
     ],
     "tests": [
-      "Android 1.8.0 player on emulator including the committed Android Auto-mode probe harness (Phase 7)",
-      "MeloAmp desktop client acceptance (Phase 7)",
-      "Feishin v1.15.1 as the representative OpenSubsonic and Jellyfin client (Phase 8)"
+      "Android 1.8.0 player on emulator including the committed Android Auto-mode probe harness (native API compatibility)",
+      "MeloAmp desktop client acceptance (native API compatibility)",
+      "Feishin v1.15.1 as the representative OpenSubsonic and Jellyfin client (OpenSubsonic and Jellyfin compatibility)"
     ]
   },
   {
     "id": "PRD-TEST-005",
     "title": "Media corpus",
-    "phase": "0,all",
     "source": "PRD.md",
     "line": 2268,
     "status": "in-progress",
@@ -3886,7 +3663,6 @@
   {
     "id": "PRD-TEST-006",
     "title": "Fault injection",
-    "phase": "0,all",
     "source": "PRD.md",
     "line": 2292,
     "status": "in-progress",
@@ -3917,7 +3693,6 @@
   {
     "id": "PRD-TEST-007",
     "title": "Invariant",
-    "phase": "0,all",
     "source": "PRD.md",
     "line": 2310,
     "status": "in-progress",
@@ -3927,7 +3702,7 @@
       "apps/melodee-server/src/admin.rs and apps/melodee-cli/src/main.rs (operator-visible state/history/next actions)",
       "crates/melodee-persistence/src/catalog.rs and crates/melodee-catalog/src/importer.rs (Published/Cataloging/Cataloged lease, retry, cancellation, and diagnostics contract)",
       "crates/melodee-persistence/src/policy.rs and apps/melodee-server/src/policy_worker.rs (Cataloged policy lease, atomic disposition, retry, cancellation, and audit contract)",
-      "crates/melodee-persistence/src/search.rs and crates/melodee-search/src/worker.rs and rebuild.rs (Phase 6 leased next actions, bounded retry/permanent failure, cancellation, rebuild recovery, and diagnostics)"
+      "crates/melodee-persistence/src/search.rs and crates/melodee-search/src/worker.rs and rebuild.rs (search and MQL leased next actions, bounded retry/permanent failure, cancellation, rebuild recovery, and diagnostics)"
     ],
     "tests": [
       "crates/melodee-domain unit tests (transition matrix and retry policy)",
@@ -3945,7 +3720,6 @@
   {
     "id": "PRD-TEST-008",
     "title": "UI testing",
-    "phase": "0,all",
     "source": "PRD.md",
     "line": 2316,
     "status": "tested",
@@ -3959,7 +3733,6 @@
   {
     "id": "PRD-SEC-001",
     "title": "PRD-SEC-001",
-    "phase": "all",
     "source": "PRD.md",
     "line": 2326,
     "status": "tested",
@@ -3980,7 +3753,6 @@
   {
     "id": "PRD-SEC-002",
     "title": "PRD-SEC-002",
-    "phase": "all",
     "source": "PRD.md",
     "line": 2330,
     "status": "tested",
@@ -3998,7 +3770,6 @@
   {
     "id": "PRD-SEC-003",
     "title": "PRD-SEC-003",
-    "phase": "all",
     "source": "PRD.md",
     "line": 2334,
     "status": "tested",
@@ -4019,7 +3790,6 @@
   {
     "id": "PRD-SEC-004",
     "title": "PRD-SEC-004",
-    "phase": "all",
     "source": "PRD.md",
     "line": 2338,
     "status": "tested",
@@ -4037,7 +3807,6 @@
   {
     "id": "PRD-SEC-005",
     "title": "PRD-SEC-005",
-    "phase": "all",
     "source": "PRD.md",
     "line": 2342,
     "status": "tested",
@@ -4052,7 +3821,6 @@
   {
     "id": "PRD-SEC-006",
     "title": "PRD-SEC-006",
-    "phase": "all",
     "source": "PRD.md",
     "line": 2346,
     "status": "tested",
@@ -4073,7 +3841,6 @@
   {
     "id": "PRD-SEC-007",
     "title": "PRD-SEC-007",
-    "phase": "all",
     "source": "PRD.md",
     "line": 2350,
     "status": "tested",
@@ -4090,7 +3857,6 @@
   {
     "id": "PRD-DEPLOY-001",
     "title": "PRD-DEPLOY-001",
-    "phase": "1,11",
     "source": "PRD.md",
     "line": 2430,
     "status": "in-progress",
@@ -4108,7 +3874,6 @@
   {
     "id": "PRD-DEPLOY-002",
     "title": "PRD-DEPLOY-002",
-    "phase": "1,11",
     "source": "PRD.md",
     "line": 2441,
     "status": "tested",
@@ -4124,7 +3889,6 @@
   {
     "id": "PRD-DEPLOY-003",
     "title": "PRD-DEPLOY-003",
-    "phase": "1,11",
     "source": "PRD.md",
     "line": 2445,
     "status": "tested",
@@ -4140,7 +3904,6 @@
   {
     "id": "PRD-DEPLOY-004",
     "title": "PRD-DEPLOY-004",
-    "phase": "1,11",
     "source": "PRD.md",
     "line": 2462,
     "status": "implemented",
@@ -4155,7 +3918,6 @@
   {
     "id": "PRD-DEPLOY-005",
     "title": "PRD-DEPLOY-005",
-    "phase": "1,11",
     "source": "PRD.md",
     "line": 2466,
     "status": "tested",
@@ -4171,7 +3933,6 @@
   {
     "id": "PRD-DEPLOY-006",
     "title": "PRD-DEPLOY-006",
-    "phase": "1,11",
     "source": "PRD.md",
     "line": 2470,
     "status": "implemented",

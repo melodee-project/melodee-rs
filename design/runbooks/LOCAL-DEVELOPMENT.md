@@ -1,9 +1,9 @@
 # Local Development
 
-Phase 6 is the current implementation boundary. Phases 0–5 are complete: the server implements
+search and MQL is the current implementation boundary. Phases 0–5 are complete: the server implements
 durable inbound processing through immutable manifest v3, the bounded PostgreSQL catalog and
 identity model, and explainable classification/novelty/policy evaluation with operator commands.
-The authoritative Phase 5 decision is in `design/evidence/phase-5/PHASE-5-REPORT.md`. Phase 6 search
+The authoritative classification and policy decision is in `design/evidence/phase-5/PHASE-5-REPORT.md`. search and MQL search
 and MQL are implemented under Candidate review; compatibility APIs, playback, and authentication
 remain later-phase work.
 
@@ -51,7 +51,7 @@ a compatibility fallback. Keep the loopback default unless the diagnostics route
 trusted network controls: the current pre-compatibility server has no application authentication
 layer.
 
-## Apply and recover the Phase 4 catalog migration
+## Apply and recover the catalog and identity catalog migration
 
 Migration `0007_phase4_catalog.sql` is additive. It creates catalog, identity, contribution, audit,
 overlay, import-receipt, participation, and outbox relations and extends the durable work-state
@@ -73,9 +73,8 @@ cargo run -p melodee-cli -- catalog status
 An operational binary downgrade leaves migration 0007 and all catalog, identity, negative
 assertion, merge/split, audit, and import evidence in place. Stop catalog workers first, verify the
 exact older binary against an isolated copy of the current post-0007 database, and only then change
-the running binary. If that build cannot tolerate Phase 4 work states and relations, do not downgrade
-it in place; use the verified full-restore path below. Do not approximate rollback by dropping Phase
-4 tables: there is intentionally no destructive down migration.
+the running binary. If that build cannot tolerate catalog and identity work states and relations, do not downgrade
+it in place; use the verified full-restore path below. Do not approximate rollback by dropping catalog and identity tables: there is intentionally no destructive down migration.
 
 A full schema rollback is only a verified restore of the pre-0007 database backup. Restore into a
 new empty database, validate it, and repoint the service according to the site's database cutover
@@ -93,10 +92,10 @@ psql postgres://melodee:melodee-dev@127.0.0.1:5433/melodee_phase4_restore_check 
 ```
 
 The restore target must be empty and disposable. This procedure restores PostgreSQL only; it does
-not modify or remove media. Retain Phase 4 evidence by default unless the explicitly chosen,
+not modify or remove media. Retain catalog and identity evidence by default unless the explicitly chosen,
 verified full-backup restore is required.
 
-## Apply and recover the Phase 5 policy migration
+## Apply and recover the classification and policy policy migration
 
 Migration `0008_phase5_policy.sql` is additive. It adds independently asserted catalog traits,
 AudioIdentity no-match/alternate-recording facts, Release classification and evidence, Track
@@ -117,7 +116,7 @@ psql "$MELODEE__DATABASE__URL" --set ON_ERROR_STOP=1 --command \
 An operational binary downgrade retains migration 0008 and all catalog-trait, AudioIdentity,
 classification, novelty, policy, test-run, and audit evidence. Stop the policy worker, verify the
 exact older binary against an isolated copy of the post-0008 database, and only then change the
-running binary. If it cannot tolerate the additive relations or Phase 5 work-item behavior, do not
+running binary. If it cannot tolerate the additive relations or classification and policy work-item behavior, do not
 downgrade in place. There is no destructive down migration.
 
 A full schema rollback is only a verified restore of the pre-0008 database backup into a new empty
@@ -141,7 +140,7 @@ The restore target must be empty and disposable. Restoring PostgreSQL does not m
 retain the post-0008 database and its audit evidence unless an explicitly verified full restore is
 required.
 
-## Apply and recover the Phase 6 search migration
+## Apply and recover the search and MQL search migration
 
 Migration `0009_phase6_search.sql` additively extends the catalog projection outbox and adds search
 checkpoints, generations, rebuild jobs, and the active-generation pointer. It does not read or alter
@@ -163,7 +162,7 @@ place. A full schema rollback is a drained restore of the verified pre-0009 back
 database. Tantivy generations are disposable: after forward migration, use
 `melodee search rebuild --actor <administrator-id>` rather than copying or editing generation files.
 
-## Apply and recover the Phase 7 native API migrations
+## Apply and recover the native API compatibility native API migrations
 
 Migration `0010_phase7_native_auth.sql` is additive and creates the native User/public-ID,
 role/library-access, refresh-family, password-reset, social-login, and cluster-wide rate-limit
@@ -199,7 +198,7 @@ PostgreSQL before applying the set to a database that matters:
     psql "$MELODEE__DATABASE__URL" --set ON_ERROR_STOP=1 --command "SELECT to_regclass('public.native_users'), to_regclass('public.native_refresh_tokens'), to_regclass('public.native_endpoint_sessions'), to_regclass('public.native_playlists'), to_regclass('public.native_podcast_episodes')"
 
 An older binary may leave these additive relations unused; verify that exact binary against an
-isolated copy before downgrade. Do not drop Phase 7 tables in place. Full schema rollback restores
+isolated copy before downgrade. Do not drop native API compatibility tables in place. Full schema rollback restores
 the verified pre-0010 backup into a new empty database and repoints the service only after migration
 history and catalog checks pass. A disposable restore rehearsal is:
 
@@ -246,7 +245,7 @@ space for attempt-isolated output. It is not a canonical media root. Canonical v
 publication use independently bounded `MELODEE__VALIDATION__CONCURRENCY` and
 `MELODEE__PUBLICATION__CONCURRENCY` settings. Publication is disabled unless
 `MELODEE__STORAGE__ROOT` is explicitly configured; keep that root separate from every inbound and
-normalization work directory. Phase 3 publication never moves or deletes the inbound source.
+normalization work directory. normalization and publication publication never moves or deletes the inbound source.
 
 Catalog import is independently enabled and bounded by `MELODEE__CATALOG__ENABLED`,
 `MELODEE__CATALOG__CONCURRENCY`, `MELODEE__CATALOG__BATCH_SIZE`, and
@@ -269,7 +268,7 @@ Greatest Hits behavior is restricted to safe configured choices:
 `MELODEE__POLICY__NOVEL_GREATEST_HITS_DISPOSITION` accepts `review` or `accept`, and
 `MELODEE__POLICY__UNCERTAIN_GREATEST_HITS_DISPOSITION` accepts `review` or `quarantine`. Any other
 value fails startup. A `delete` preference records a pending, inspectable decision and routes the
-Release for review; Phase 5 does not remove media or report destructive work as completed.
+Release for review; classification and policy does not remove media or report destructive work as completed.
 Rule sets are immutable by name and version. When changing any policy preference, increment
 `MELODEE__POLICY__RULE_SET_VERSION`; attempting to start with different rules at an already-stored
 version fails closed instead of silently changing the meaning of historical decisions.
@@ -308,7 +307,7 @@ cargo run -p melodee-cli -- work show <work-item-uuid>
 
 `policy test` rejects missing/blank administrator identity and limits outside `1..=10000`; a
 successful test run stores that exact actor with its aggregate audit summary. The default server
-integration tests enforce the Phase 5 load gate; run it directly and retain its JSON metrics with:
+integration tests enforce the classification and policy load gate; run it directly and retain its JSON metrics with:
 
 ```bash
 cargo test -p melodee-server --test policy_worker \
@@ -317,5 +316,5 @@ cargo test -p melodee-server --test policy_worker \
 ```
 
 These commands use the same exported hierarchical configuration as the server. They are operator
-tools, not authenticated remote APIs. Local Phase 0 compatibility captures remain beneath
+tools, not authenticated remote APIs. Local baseline capture compatibility captures remain beneath
 `compatibility/captures/` and are ignored by Git.

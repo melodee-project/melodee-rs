@@ -5,7 +5,7 @@
   PRD-EXT-001..004. Governing legacy decisions: legacy ADR-0003
   (settings + caching) and legacy ADR-0004 (per-user session-key lifecycle).
   Governing Rust decisions: ADR-0134 §7 (`external_provider_cache`,
-  `native_lastfm_links`) and `design/agents/PHASE-9-PLAN.md` WP-07 scope
+  `native_lastfm_links`) and `design/ROAD-TO-FEATURE-COMPLETION.md` WP-07 scope
   (captured "unconfigured" shapes remain the disabled-state contract).
 - **Date:** 2026-08-14.
 - **Source basis:** legacy oracle `/home/steven/src/github/melodee` source read

@@ -1,6 +1,6 @@
 # Melodee UI Specification
 
-Status: **Accepted for Phase 10 implementation (2026-08-14).** Satisfies PRD-UI-REF-003.
+Status: **Accepted for Admin UI implementation (2026-08-14).** Satisfies PRD-UI-REF-003.
 Authoritative for implemented behavior alongside `DESIGN-SYSTEM.md`; mockups remain visual intent
 only (PRD-UI-REF-001). Governing ADRs: ADR-0109 (React + TypeScript + Carbon), ADR-0137
 (localization/RTL), ADR-0138 (tooling/serving), ADR-0139 (session/gating).

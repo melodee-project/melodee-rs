@@ -32,7 +32,7 @@ Current disposition:
 
 The authoritative current operator record is
 [OPERATOR-ACCEPTANCE-REPORT.md](../phase-11/OPERATOR-ACCEPTANCE-REPORT.md), and the execution
-contract is [PHASE-11-OPERATOR-ACCEPTANCE-PLAN.md](../../agents/PHASE-11-OPERATOR-ACCEPTANCE-PLAN.md).
+contract is [PHASE-11-OPERATOR-ACCEPTANCE-PLAN.md](../../ROAD-TO-FEATURE-COMPLETION.md).
 
 ## Commands and direct evidence
 

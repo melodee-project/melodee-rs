@@ -233,7 +233,7 @@ the required definition of done. The primary engineering references are the
 - Captured compatibility contracts, golden responses, media evidence, and client exercises live
   in [`compatibility/`](compatibility/). They are executable release evidence, not examples to
   hand-edit.
-- Phase reports and requirement traceability live in [`design/evidence/`](design/evidence/) and
+- completion reports and requirement traceability live in [`design/evidence/`](design/evidence/) and
   [`design/requirements/`](design/requirements/).
 - The legacy C# repository is valuable compatibility evidence, but its classes and service
   boundaries must not be copied into the Rust implementation.

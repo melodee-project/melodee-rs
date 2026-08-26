@@ -206,7 +206,7 @@ before claiming external parity.
 ## Documentation impact:
 - Updated - `design/evidence/feature-completion/phase-1/PHASE-1-REPORT.md`,
   `design/evidence/feature-completion/phase-2/PHASE-2-REPORT.md`,
-  `design/agents/FEATURE-COMPLETION-PHASE-2-PLAN.md`,
+  `design/ROAD-TO-FEATURE-COMPLETION.md`,
   `design/ROAD-TO-FEATURE-COMPLETION.md`, `design/ROAD-TO-FEATURE-PARITY.md`,
   `design/requirements/FEATURE-PARITY-MATRIX.md`,
   `design/requirements/status-overrides.json`, generated requirements indexes,

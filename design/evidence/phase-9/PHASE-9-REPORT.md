@@ -16,7 +16,7 @@ parity residue, status reconciliation, and the pre-existing gate-blocker fix des
 ADR-0133 (party/jukebox waiver), ADR-0134 (parity-domain schema; §7 amended by WP-07),
 ADR-0135 (Boa scripting runtime), ADR-0136 (non-Last.fm provider deferral),
 ADR-0109 (accepted with the Phase 10 scope amendment), ADR-0132 (accepted),
-and `design/agents/PHASE-9-PLAN.md` (four waves, WP-01..WP-14).
+and `design/ROAD-TO-FEATURE-COMPLETION.md` (four waves, WP-01..WP-14).
 
 ## Current state
 
@@ -282,7 +282,7 @@ test.
 
 ## Independent review decision
 
-Phase 9 executed per `design/agents/PHASE-9-PLAN.md` under accepted ADRs 0133/0134/0135/0136.
+Phase 9 executed per `design/ROAD-TO-FEATURE-COMPLETION.md` under accepted ADRs 0133/0134/0135/0136.
 The exit gate (PRD §56: parity matrix without unapproved gaps; IMPLEMENTATION §12: per-domain
 checklists and tests) is satisfied by the evidence above. Recommended decision: **accept Phase
 9 and open Phase 10 (admin UI) scope**; Phase 11 (migration/import) owns the

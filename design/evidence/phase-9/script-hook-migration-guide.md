@@ -2,7 +2,7 @@
 
 - **Purpose:** per-hook migration disposition for every legacy scripting
   hook, as required by PRD-SCRIPT-005 and the WP-11 plan
-  (`design/agents/PHASE-9-PLAN.md` §3).
+  (`design/ROAD-TO-FEATURE-COMPLETION.md` §3).
 - **Date:** 2026-08-14.
 - **Basis:** the legacy inventory in
   `design/evidence/phase-9/script-events-legacy-inventory.md` (PRD-SCRIPT-002;

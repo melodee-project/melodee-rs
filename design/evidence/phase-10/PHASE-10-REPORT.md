@@ -1,7 +1,7 @@
 # Phase 10 Report — Admin UI
 
 **Status: COMPLETE (2026-08-15).** Executed per
-[design/agents/PHASE-10-PLAN.md](../../agents/PHASE-10-PLAN.md) (five waves) under accepted ADRs
+[design/ROAD-TO-FEATURE-COMPLETION.md](../../ROAD-TO-FEATURE-COMPLETION.md) (five waves) under accepted ADRs
 0109 (Carbon; validation evidence recorded in the ADR), 0137 (localization stack), 0138 (SPA
 tooling + static serving), 0139 (session strategy + admin API gating), 0140/0141 (legacy
 jukebox/party web-route retirements), 0142 (admin browse indexes), and 0143 (catalog artwork

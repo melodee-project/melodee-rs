@@ -7,7 +7,7 @@
 **Base commit:** `e9cf1b3c9ce81b0d28fbf17cf4f582dba4218422` plus the Phase 6 change set
 
 **Authority:** PRD-SEARCH-001 through PRD-SEARCH-007 and the supporting requirements in the
-[Phase 6 work package](../../agents/PHASE-6-WORK-PACKAGE.md), SPEC sections 16–18 and 22–23,
+[Phase 6 work package](../../ROAD-TO-FEATURE-COMPLETION.md), SPEC sections 16–18 and 22–23,
 ADR-0105, ADR-0107, ADR-0121, ADR-0122, and the
 [Definition of Done](../../agents/DEFINITION-OF-DONE.md).
 

@@ -174,7 +174,7 @@ separate processes later without redefining the work model.
 | `melodee-server` | Composition root, listeners, middleware, lifecycle | Domain logic |
 | `melodee-cli` | Operator commands and offline/maintenance entry points | Duplicate business logic |
 
-Only crates needed in the current phase should be created. A planned boundary is not justification for
+Only crates needed in the current scope should be created. A planned boundary is not justification for
 an empty crate.
 
 ## 8. Domain model
@@ -446,7 +446,7 @@ Normalization produces a versioned manifest that includes:
 Catalog insertion consumes manifests instead of reopening every audio file. Manifest upgrades are
 explicit, versioned, and tested.
 
-Phase 3's implemented manifest evolution is:
+normalization and publication's implemented manifest evolution is:
 
 - v1: inspection observations;
 - v2: normalization, acoustic fingerprints, normalized artwork, and parsed sidecars; and
@@ -455,7 +455,7 @@ Phase 3's implemented manifest evolution is:
   asset inventory.
 
 V1/v2 remain readable. The v2-to-v3 upgrade preserves the semantic observed-media hash because
-publication intent/provenance is a separate fact. Phase 4 consumes the reserved Release ID and v3
+publication intent/provenance is a separate fact. catalog and identity consumes the reserved Release ID and v3
 facts rather than allocating a replacement identity or reopening audio to rediscover them. See
 ADR-0115 and ADR-0116.
 
@@ -671,7 +671,7 @@ Initial budgets to measure and ratify:
 | Worker crash | Lease expiry enables safe resumption without duplicate publication |
 | Search index loss | Full rebuild without media re-ingestion |
 
-Representative hardware and exact budgets are captured during Phase 0.
+Representative hardware and exact budgets are captured during baseline capture.
 
 ## 24. Compatibility testing
 
@@ -709,9 +709,9 @@ The recommended sequence is:
 11. cut traffic; and
 12. retain rollback until release gates are satisfied.
 
-## 26. Phase 0 technical specification
+## 26. baseline capture technical specification
 
-Phase 0 delivers evidence and guardrails, not broad product features.
+baseline capture delivers evidence and guardrails, not broad product features.
 
 Required outputs:
 
@@ -726,14 +726,14 @@ Required outputs:
 9. Baseline reports for search, browse, ingest, stream start, and memory.
 10. Real-client smoke-test checklists for Android/Android Auto, MeloAmp, representative OpenSubsonic
     clients, and supported Jellyfin clients.
-11. Accepted foundational ADRs needed for Phase 1.
+11. Accepted foundational ADRs needed for runtime foundation.
 12. CI that formats, lints, tests, validates docs/requirements, and enforces FOSS dependencies.
 
-Phase 0 is complete only when another agent can run documented commands and reproduce the baseline.
+baseline capture is complete only when another agent can run documented commands and reproduce the baseline.
 
-## 27. Phase 1 technical specification
+## 27. runtime foundation technical specification
 
-Phase 1 establishes the modular Rust runtime without feature breadth:
+runtime foundation establishes the modular Rust runtime without feature breadth:
 
 - server lifecycle, configuration loading, graceful shutdown, request IDs, structured tracing;
 - PostgreSQL connectivity and migrations after ADR acceptance;

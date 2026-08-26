@@ -159,4 +159,4 @@ auditable without coupling them to the filesystem.
 - [ADR-0116](ADR-0116-use-immutable-release-ids-and-convergent-canonical-publication.md)
 - [ADR-0117](ADR-0117-use-a-postgresql-catalog-identity-and-contribution-schema-with-set-based-manifest-import.md)
 - [Phase 3 report](../evidence/phase-3/PHASE-3-REPORT.md)
-- [Phase 4 work package](../agents/PHASE-4-WORK-PACKAGE.md)
+- [Phase 4 work package](../ROAD-TO-FEATURE-COMPLETION.md)

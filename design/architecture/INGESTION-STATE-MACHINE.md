@@ -42,10 +42,10 @@ stateDiagram-v2
 - Delete requires a prior durable authorized decision.
 - Reprocess is explicit and records who/why reset the item.
 
-## Implemented Phase 3 publication semantics
+## Implemented normalization and publication publication semantics
 
 - `Validating` performs structural/media checks only. It never guesses Artist/catalog identity or
-  performs Phase 5 classification/novelty policy.
+  performs classification and policy classification/novelty policy.
 - A passing result reserves one immutable UUIDv7 Release ID and atomically stores manifest v3,
   `phase3.structural-publication` authorization v1, and an immutable canonical-publication plan
   before entering unleased `Staged`.
@@ -60,4 +60,4 @@ stateDiagram-v2
 - A matching final directory is adopted after a crash; a mismatching final is never overwritten.
 
 See [ADR-0116](../adr/ADR-0116-use-immutable-release-ids-and-convergent-canonical-publication.md)
-and [Phase 3 evidence](../evidence/phase-3/PHASE-3-REPORT.md).
+and [normalization and publication evidence](../evidence/phase-3/PHASE-3-REPORT.md).

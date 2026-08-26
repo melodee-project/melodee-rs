@@ -7,7 +7,7 @@
 **Base commit:** `5c75673d5c8524cd2212aaa4d78bfad5bf081fcc` plus the pending Phase 7 change set
 
 **Authority:** the requirements listed in the
-[Phase 7 work package](../../agents/PHASE-7-WORK-PACKAGE.md), SPEC native API, authentication,
+[Phase 7 work package](../../ROAD-TO-FEATURE-COMPLETION.md), SPEC native API, authentication,
 compatibility, migration, and resource-bound invariants, ADR-0100 through ADR-0105, ADR-0107,
 ADR-0108, ADR-0110, ADR-0111, ADR-0114, and ADR-0123 through ADR-0129.
 

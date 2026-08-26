@@ -33,7 +33,7 @@ Important rules:
 - Inspection, normalization, validation, review, and quarantine read staged source; the work area
   contains only generated output. Staged source remains after publication unless a future explicit
   retention policy authorizes cleanup.
-- Watchers (if enabled in later phases) are accelerators only; reconciliation scans and durable work items are
+- Watchers (if enabled in future work) are accelerators only; reconciliation scans and durable work items are
   the source of truth.
 
 ## Path safety rules

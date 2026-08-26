@@ -1,7 +1,7 @@
 # Phase 10 checklists
 
 One checklist per canonical screen plus cross-cutting foundations, per IMPLEMENTATION §16 and the
-Phase 10 plan (`design/agents/PHASE-10-PLAN.md`, W0-4).
+Phase 10 plan (`design/ROAD-TO-FEATURE-COMPLETION.md`, W0-4).
 
 Legend: ✅ done · 🔶 partial · ⬜ pending · 🚫 waived (ADR linked). A checklist is green when every
 row is ✅ with linked evidence or 🚫 waived by an accepted ADR.

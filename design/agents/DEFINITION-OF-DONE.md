@@ -1,26 +1,26 @@
 # Definition of Done
 
-An assigned issue, work package, or phase is done when all applicable items below are satisfied.
-For a phase-level assignment, this checklist applies to the whole phase as well as to its internal
+An assigned issue, work package, or work program is done when all applicable items below are satisfied.
+For a program-level assignment, this checklist applies to the whole phase as well as to its internal
 implementation slices. Completing one slice does not complete the assignment.
 
-## Phase ownership
+## program ownership
 
-- [ ] The phase objective, in-scope requirements, entry conditions, and exit criteria are named.
-- [ ] The agent decomposed and ordered the phase's internal workstreams without requiring a new
+- [ ] The program objective, in-scope requirements, entry conditions, and exit criteria are named.
+- [ ] The agent decomposed and ordered the program's internal workstreams without requiring a new
       user prompt for each workstream.
 - [ ] Every in-scope workstream is implemented and evidenced, or has an explicit terminal
       disposition authorized by the applicable product decision or ADR.
 - [ ] Prerequisite cleanup, ADR drafting, tests, documentation, traceability, and closeout evidence
-      were treated as parts of the phase rather than reasons to reduce the assignment to a
+      were treated as parts of the work program rather than reasons to reduce the assignment to a
       microtask.
-- [ ] The phase report records the exit decision and any genuinely external follow-up; it does not
+- [ ] The completion report records the exit decision and any genuinely external follow-up; it does not
       present a passing intermediate checkpoint as phase completion.
 
 ## Requirements and scope
 
 - [ ] The issue links to one or more PRD requirement IDs.
-- [ ] Work stays within the current phase.
+- [ ] Work stays within the current scope.
 - [ ] Any scope change is explicit and reviewed.
 - [ ] No product capability was silently removed or redefined.
 
@@ -67,7 +67,7 @@ implementation slices. Completing one slice does not complete the assignment.
 
 ## Documentation and evidence
 
-User-facing documentation is a completion gate, not a later phase. Public documentation lives
+User-facing documentation is a completion gate, not a future work. Public documentation lives
 in `/docs`; internal engineering documentation lives in `/design`.
 
 - [ ] Documentation impact has been evaluated.

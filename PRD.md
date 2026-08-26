@@ -1507,7 +1507,7 @@ Notification delivery must use a FOSS transport, require no new infrastructure s
 
 ### PRD-NOTIF-003
 
-Notification behavior must be operator-verifiable headlessly (CLI test-send with evidence) and must externalize all user-visible text so the Phase 10 localization work can translate it.
+Notification behavior must be operator-verifiable headlessly (CLI test-send with evidence) and must externalize all user-visible text so the Admin UI localization work can translate it.
 
 ---
 
@@ -2516,9 +2516,9 @@ An agent must not make a new cross-cutting architectural choice merely because i
 
 ---
 
-## 56. Implementation Phases and Exit Criteria
+## 56. delivery workstreams and Exit Criteria
 
-### Phase 0 — Baseline freeze and compatibility capture
+### baseline capture — Baseline freeze and compatibility capture
 
 Deliverables:
 
@@ -2534,7 +2534,7 @@ Deliverables:
 
 **Exit:** An automated report can enumerate known parity surfaces and run representative baseline performance/compatibility tests against C#.
 
-### Phase 1 — Rust foundation
+### runtime foundation — Rust foundation
 
 Deliverables:
 
@@ -2548,7 +2548,7 @@ Deliverables:
 
 **Exit:** Rust server starts reliably, migrates an empty database, exposes diagnostics, and passes foundational tests.
 
-### Phase 2 — Durable ingestion engine
+### inbound processing — Durable ingestion engine
 
 Deliverables:
 
@@ -2562,7 +2562,7 @@ Deliverables:
 
 **Exit:** 200 Releases can be discovered and tracked through repeated server restarts with no lost work.
 
-### Phase 3 — Media normalization + manifest
+### normalization and publication — Media normalization + manifest
 
 Deliverables:
 
@@ -2575,7 +2575,7 @@ Deliverables:
 
 **Exit:** Representative media corpus normalizes deterministically and safely.
 
-### Phase 4 — Catalog/identity/contribution model
+### catalog and identity — Catalog/identity/contribution model
 
 Deliverables:
 
@@ -2588,7 +2588,7 @@ Deliverables:
 
 **Exit:** Same-name Artists, aliases, group membership, featured credits, and manual identity decisions are correctly represented and queryable.
 
-### Phase 5 — Classification/policy/novelty
+### classification and policy — Classification/policy/novelty
 
 Deliverables:
 
@@ -2601,7 +2601,7 @@ Deliverables:
 
 **Exit:** Redundant Greatest Hits with 100% known audio can be safely identified; Releases with new/alternate/uncertain material route according to policy without unsafe deletion.
 
-### Phase 6 — Search/MQL
+### search and MQL — Search/MQL
 
 Deliverables:
 
@@ -2613,7 +2613,7 @@ Deliverables:
 
 **Exit:** Search p95 target is met on agreed synthetic dataset and rebuild from PostgreSQL is proven.
 
-### Phase 7 — Native Melodee API v1
+### native API compatibility — Native Melodee API v1
 
 Deliverables:
 
@@ -2625,7 +2625,7 @@ Deliverables:
 
 **Exit:** Current Android and MeloAmp clients pass designated compatibility suites against Rust.
 
-### Phase 8 — OpenSubsonic and Jellyfin adapters
+### OpenSubsonic and Jellyfin compatibility — OpenSubsonic and Jellyfin adapters
 
 Deliverables:
 
@@ -2635,7 +2635,7 @@ Deliverables:
 
 **Exit:** No unintended regression versus current documented compatibility matrices.
 
-### Phase 9 — Remaining parity domains
+### server feature parity — Remaining parity domains
 
 Deliverables:
 
@@ -2652,7 +2652,7 @@ Deliverables:
 
 **Exit:** Feature-parity matrix has no unapproved gaps.
 
-### Phase 10 — Admin UI
+### Admin UI — Admin UI
 
 Deliverables:
 
@@ -2665,7 +2665,7 @@ Deliverables:
 
 **Exit:** All canonical admin workflows are complete and accepted.
 
-### Phase 11 — Production migration/cutover
+### release qualification — Production migration/cutover
 
 Deliverables:
 

@@ -290,7 +290,7 @@ claimed as an Admin UI feature; a future product decision would be required befo
 ## Documentation impact:
 
 Documentation impact:
-- Updated - `design/agents/FEATURE-COMPLETION-PHASE-4-PLAN.md`,
+- Updated - `design/ROAD-TO-FEATURE-COMPLETION.md`,
   `design/evidence/feature-completion/phase-4/PHASE-4-REPORT.md`,
   `design/ROAD-TO-FEATURE-COMPLETION.md`, `design/ROAD-TO-FEATURE-PARITY.md`,
   `design/requirements/FEATURE-PARITY-MATRIX.md`, `design/requirements/status-overrides.json`,

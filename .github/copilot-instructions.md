@@ -15,4 +15,4 @@ Read `AGENTS.md` before editing anything. The following rules are non-negotiable
 - Keep the domain crate independent of Axum, Tokio, SQLx, filesystems, FFmpeg, and protocol DTOs.
 - Production Rust forbids unsafe code, unwrap, expect, panic, todo, and unimplemented.
 - Add tests and traceability for every behavior change.
-- Do not claim completion until the applicable phase exit criteria and Definition of Done are met.
+- Do not claim completion until the applicable completion criteria and Definition of Done are met.
