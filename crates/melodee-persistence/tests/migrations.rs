@@ -1195,6 +1195,226 @@ async fn migration_0034_repairs_only_the_same_release_artist_identity() {
     db.drop().await;
 }
 
+/// ADR-0170 / migration 0040: a Track identity created under the old
+/// singleton-only rule is redirected when exactly one of several primary
+/// Release Artist observations matches. The second billing identity and all
+/// immutable observation/decision evidence remain intact.
+#[tokio::test]
+async fn migration_0040_repairs_a_unique_match_on_a_multi_artist_release() {
+    use melodee_persistence::MIGRATOR;
+    use sqlx::migrate::Migrator;
+    use std::borrow::Cow;
+
+    let db = TestDb::create_unmigrated("migrations_forward_0040_multi_artist_repair").await;
+    let prior: Vec<sqlx::migrate::Migration> = MIGRATOR
+        .migrations
+        .iter()
+        .filter(|migration| migration.version <= 39)
+        .cloned()
+        .collect();
+    assert_eq!(prior.len(), 39, "expected migrations 0001..=0039");
+    Migrator {
+        migrations: Cow::Owned(prior),
+        ..Migrator::DEFAULT
+    }
+    .run(&db.pool)
+    .await
+    .expect("apply pre-0040 schema");
+
+    sqlx::raw_sql(sqlx::AssertSqlSafe(
+        r#"
+        DO $$
+        DECLARE
+            release_id uuid := uuidv7();
+            target_artist_id uuid := uuidv7();
+            other_artist_id uuid := uuidv7();
+            source_artist_id uuid := uuidv7();
+            audio_id uuid := uuidv7();
+            media_id uuid := uuidv7();
+            track_id uuid := uuidv7();
+            target_observation_id uuid := uuidv7();
+            other_observation_id uuid := uuidv7();
+            track_observation_id uuid := uuidv7();
+            target_release_artist_row_id uuid := uuidv7();
+            other_release_artist_row_id uuid := uuidv7();
+            track_artist_row_id uuid := uuidv7();
+            target_decision_id uuid := uuidv7();
+            other_decision_id uuid := uuidv7();
+            track_decision_id uuid := uuidv7();
+        BEGIN
+            INSERT INTO artists (
+                id, public_api_id, canonical_name, normalized_name, sort_name,
+                artist_type, status, revision, created_at, updated_at
+            ) VALUES
+                (target_artist_id, uuidv7(), '$NOT', '$not', '$NOT',
+                 'group', 'provisional', 1, now(), now()),
+                (other_artist_id, uuidv7(), '$NOT/Jeht', '$not/jeht', '$NOT/Jeht',
+                 'group', 'provisional', 1, now(), now()),
+                (source_artist_id, uuidv7(), '$NOT', '$not', '$NOT',
+                 'group', 'provisional', 1, now(), now());
+            INSERT INTO releases (
+                id, public_api_id, title, normalized_title, sort_title,
+                status, revision, created_at, updated_at
+            ) VALUES (
+                release_id, uuidv7(), 'High Risk', 'high risk',
+                'High Risk', 'active', 1, now(), now()
+            );
+            INSERT INTO audio_identities (
+                id, status, revision, created_at, updated_at
+            ) VALUES (audio_id, 'provisional', 1, now(), now());
+            INSERT INTO media_assets (
+                id, canonical_relative_path, byte_hash, byte_size, mime_type, created_at
+            ) VALUES (
+                media_id, 'releases/multi-artist/track.flac', repeat('b', 64), 1,
+                'audio/flac', now()
+            );
+            INSERT INTO tracks (
+                id, public_api_id, release_id, audio_identity_id,
+                playable_media_asset_id, ordinal, title, normalized_title,
+                sort_title, revision, created_at, updated_at
+            ) VALUES (
+                track_id, uuidv7(), release_id, audio_id, media_id, 1,
+                'Locked In', 'locked in', 'Locked In', 1, now(), now()
+            );
+            INSERT INTO track_media_assets (
+                track_id, media_asset_id, purpose, ordinal, created_at
+            ) VALUES (track_id, media_id, 'playable', 1, now());
+            INSERT INTO observed_artists (
+                id, release_id, track_id, scope, source_ordinal, raw_value,
+                normalized_value, display_value, source_pointer, source_payload, created_at
+            ) VALUES
+                (target_observation_id, release_id, NULL, 'release', 1,
+                 '$NOT', '$not', '$NOT',
+                 '/release_observation/artists/0', '{}'::jsonb, now()),
+                (other_observation_id, release_id, NULL, 'release', 2,
+                 '$NOT/Jeht', '$not/jeht', '$NOT/Jeht',
+                 '/release_observation/artists/1', '{}'::jsonb, now()),
+                (track_observation_id, release_id, track_id, 'track', 1,
+                 '$NOT', '$not', '$NOT',
+                 '/tracks/0/artist', '{}'::jsonb, now());
+            INSERT INTO release_artists (
+                id, release_id, artist_id, observed_artist_id, role,
+                presentation_order, display_value, join_phrase, created_at
+            ) VALUES
+                (target_release_artist_row_id, release_id, target_artist_id,
+                 target_observation_id, 'primary', 1, '$NOT', '', now()),
+                (other_release_artist_row_id, release_id, other_artist_id,
+                 other_observation_id, 'primary', 2, '$NOT/Jeht', '', now());
+            INSERT INTO track_artists (
+                id, track_id, artist_id, observed_artist_id, role,
+                presentation_order, display_value, join_phrase, created_at
+            ) VALUES (
+                track_artist_row_id, track_id, source_artist_id,
+                track_observation_id, 'primary', 1, '$NOT', '', now()
+            );
+            INSERT INTO artist_match_decisions (
+                id, observed_artist_id, artist_id, outcome, authority,
+                confidence, reason, is_locked, payload, created_at
+            ) VALUES
+                (target_decision_id, target_observation_id, target_artist_id,
+                 'confirmed', 'automated', 6000,
+                 'created a distinct provisional identity from manifest context',
+                 false, '{}'::jsonb, now()),
+                (other_decision_id, other_observation_id, other_artist_id,
+                 'confirmed', 'automated', 6000,
+                 'created a distinct provisional identity from manifest context',
+                 false, '{}'::jsonb, now()),
+                (track_decision_id, track_observation_id, source_artist_id,
+                 'confirmed', 'automated', 6000,
+                 'created a distinct provisional identity from manifest context',
+                 false, '{}'::jsonb, now());
+            INSERT INTO artist_match_current (
+                observed_artist_id, decision_id, updated_at
+            ) VALUES
+                (target_observation_id, target_decision_id, now()),
+                (other_observation_id, other_decision_id, now()),
+                (track_observation_id, track_decision_id, now());
+            INSERT INTO artist_track_associations (
+                artist_id, track_id, association_type, participation_kind,
+                source_key, source_artist_id, confidence, is_performance, created_at
+            ) VALUES (
+                source_artist_id, track_id, 'primary_artist', 'direct',
+                track_artist_row_id, NULL, 6000, true, now()
+            );
+        END $$;
+        "#,
+    ))
+    .execute(&db.pool)
+    .await
+    .expect("seed pre-0040 multi-Artist identity split");
+
+    migrate(&db.pool).await.expect("forward migration to 0040");
+
+    let visible: Vec<(uuid::Uuid, String)> = sqlx::query_as(
+        "SELECT id, canonical_name FROM artists
+          WHERE status IN ('provisional','verified') ORDER BY canonical_name, id",
+    )
+    .fetch_all(&db.pool)
+    .await
+    .expect("read visible Artists");
+    assert_eq!(visible.len(), 2, "one repaired source becomes a tombstone");
+    let target_id = visible
+        .iter()
+        .find(|(_, name)| name == "$NOT")
+        .map(|(id, _)| *id)
+        .expect("visible $NOT target");
+    assert!(
+        visible.iter().any(|(_, name)| name == "$NOT/Jeht"),
+        "nonmatching Release Artist remains distinct"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, uuid::Uuid>("SELECT artist_id FROM track_artists")
+            .fetch_one(&db.pool)
+            .await
+            .expect("repaired Track Artist"),
+        target_id
+    );
+    let current: (uuid::Uuid, String, bool) = sqlx::query_as(
+        "SELECT decision.artist_id, decision.reason,
+                decision.predecessor_decision_id IS NOT NULL
+           FROM observed_artists observed
+           JOIN artist_match_current current_match
+             ON current_match.observed_artist_id=observed.id
+           JOIN artist_match_decisions decision ON decision.id=current_match.decision_id
+          WHERE observed.scope='track'",
+    )
+    .fetch_one(&db.pool)
+    .await
+    .expect("read repaired current decision");
+    assert_eq!(current.0, target_id);
+    assert_eq!(
+        current.1,
+        "resolved to the uniquely matching Release Artist from manifest context"
+    );
+    assert!(current.2, "append-only predecessor is retained");
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM observed_artists")
+            .fetch_one(&db.pool)
+            .await
+            .expect("observations retained"),
+        3
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM artist_match_decisions")
+            .fetch_one(&db.pool)
+            .await
+            .expect("decision history retained"),
+        4
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM artist_merge_events
+              WHERE actor='catalog.same-release-unique-artist.v1'",
+        )
+        .fetch_one(&db.pool)
+        .await
+        .expect("audited merge event"),
+        1
+    );
+
+    db.drop().await;
+}
+
 /// ADR-0148 §D.5/D.6 schema contract: the run state machine, uuidv7 primary
 /// keys, non-negative checkpoint counters, the entity-map row-hash shape, and
 /// the issue severity vocabulary are enforced declaratively.

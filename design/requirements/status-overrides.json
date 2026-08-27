@@ -1759,11 +1759,13 @@
       "crates/melodee-persistence/src/catalog.rs (production strong-evidence Artist reconciliation reuses identities across Releases without normalized-name identity)",
       "crates/melodee-catalog/src/importer.rs (catalog scheduler invokes Artist and Release reconciliation after import)",
       "design/adr/ADR-0160-cross-release-artist-release-identity-reuse.md",
-      "design/adr/ADR-0153-reuse-unambiguous-release-artist-identity-for-matching-tracks.md"
+      "design/adr/ADR-0170-reuse-uniquely-matching-release-artist-identities-for-tracks.md (same-Release exact-match reuse with conflict gating)",
+      "crates/melodee-persistence/migrations/0040_repair_multi_artist_release_track_identities.sql (audited repair of old importer-created duplicates)"
     ],
     "tests": [
       "crates/melodee-catalog/src/resolver.rs (same-name ambiguity and weak-name provisional tests)",
-      "crates/melodee-persistence/tests/catalog_import.rs (same-Release singleton equality shares identity while observations remain distinct)",
+      "crates/melodee-persistence/tests/catalog_import.rs (same-Release unique equality shares identity while multiple equal candidates remain ambiguous)",
+      "crates/melodee-persistence/tests/migrations.rs (migration 0040 preserves observations and predecessor decisions while creating merge tombstones)",
       "crates/melodee-persistence/tests/catalog_performance.rs (same names across Releases remain separate without N+1 lookup)",
       "crates/melodee-persistence/tests/catalog_import.rs (trusted Release evidence convergence and reversible merge/split)"
     ]
@@ -1795,7 +1797,7 @@
     "implementation": [
       "crates/melodee-domain/src/identity.rs (accepted evidence dimensions and polarity)",
       "crates/melodee-catalog/src/resolver.rs (deterministic scoring across name, alias, external ID, release/track, type/date/area/membership, and provider evidence)",
-      "crates/melodee-persistence/src/catalog.rs (exact singleton Release context is structured co-resolution evidence)"
+      "crates/melodee-persistence/src/catalog.rs (one exact match among the same Release's primary Artist observations is structured co-resolution evidence)"
     ],
     "tests": [
       "crates/melodee-catalog/src/resolver.rs (alias/context, external ID, conflict, ambiguity, and provider cases)"
@@ -1806,11 +1808,13 @@
     "implementation": [
       "crates/melodee-domain/src/identity.rs (automatic name-only confirmation invariant)",
       "crates/melodee-catalog/src/resolver.rs (name-only evidence cannot confirm)",
-      "crates/melodee-persistence/src/catalog.rs (identity reuse is bounded to one immutable Release context rather than global name equality)"
+      "crates/melodee-persistence/src/catalog.rs (unique exact-match identity reuse is bounded to one immutable Release context rather than global name equality)",
+      "design/adr/ADR-0170-reuse-uniquely-matching-release-artist-identities-for-tracks.md"
     ],
     "tests": [
       "crates/melodee-domain/tests/phase4_domain.rs",
-      "crates/melodee-catalog/src/resolver.rs (weak and same-name cases retain provisional identity)"
+      "crates/melodee-catalog/src/resolver.rs (weak and same-name cases retain provisional identity)",
+      "crates/melodee-persistence/tests/catalog_import.rs (multiple equal same-Release candidates remain separate)"
     ]
   },
   "PRD-RESOLVE-004": {

@@ -111,6 +111,7 @@ pub async fn seed_published_release_with_normalized_hash_and_genre(
         false,
         genre,
         None,
+        None,
     )
     .await
 }
@@ -131,6 +132,7 @@ pub async fn seed_published_release_with_musicbrainz_ids(
         false,
         None,
         Some(musicbrainz_ids),
+        None,
     )
     .await
 }
@@ -148,6 +150,7 @@ pub async fn seed_published_release_with_read_error(
         presentation,
         deterministic_hash('a', ordinal),
         true,
+        None,
         None,
         None,
     )
@@ -169,10 +172,34 @@ async fn seed_published_release_with_options(
         bytes_read_errors,
         None,
         None,
+        None,
     )
     .await
 }
 
+/// Variant for multi-Artist Release observations. The Track metadata remains
+/// the `presentation.track_artist` value so importer identity selection can
+/// be tested independently from presentation parsing.
+pub async fn seed_published_release_with_release_artists(
+    db: &TestDb,
+    ordinal: u32,
+    presentation: CatalogFixturePresentation<'_>,
+    release_artists: &[&str],
+) -> PublishedCatalogFixture {
+    seed_published_release_with_options_full(
+        db,
+        ordinal,
+        presentation,
+        deterministic_hash('a', ordinal),
+        false,
+        None,
+        None,
+        Some(release_artists),
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
 async fn seed_published_release_with_options_full(
     db: &TestDb,
     ordinal: u32,
@@ -181,6 +208,7 @@ async fn seed_published_release_with_options_full(
     bytes_read_errors: bool,
     genre: Option<&str>,
     musicbrainz_ids: Option<serde_json::Value>,
+    release_artists: Option<&[&str]>,
 ) -> PublishedCatalogFixture {
     let store = WorkItemStore;
     let config = test_config();
@@ -242,7 +270,10 @@ async fn seed_published_release_with_options_full(
         true,
         ManifestReleaseObservation {
             title: Some(presentation.release_title.to_owned()),
-            artists: vec![presentation.release_artist.to_owned()],
+            artists: release_artists.map_or_else(
+                || vec![presentation.release_artist.to_owned()],
+                |artists| artists.iter().map(|artist| (*artist).to_owned()).collect(),
+            ),
             date: Some(presentation.release_date.to_owned()),
             source_labels: json!({ "fixture_ordinal": ordinal }),
         },

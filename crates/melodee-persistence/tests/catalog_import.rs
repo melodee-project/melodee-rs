@@ -6,7 +6,8 @@ mod catalog_common;
 mod common;
 
 use catalog_common::{
-    CatalogFixturePresentation, seed_published_release, seed_published_release_with_musicbrainz_ids,
+    CatalogFixturePresentation, seed_published_release,
+    seed_published_release_with_musicbrainz_ids, seed_published_release_with_release_artists,
 };
 use common::{TestDb, test_config};
 use melodee_domain::{
@@ -14,6 +15,114 @@ use melodee_domain::{
 };
 use melodee_persistence::{CatalogImportRequest, CatalogStore, WorkItemStore, WorkerId};
 use time::Duration;
+
+#[tokio::test]
+async fn multi_artist_release_reuses_the_one_exact_track_artist_match() {
+    let db = TestDb::create("catalog_multi_artist_exact_match").await;
+    let catalog = CatalogStore;
+    let worker = WorkerId::new();
+    let now = time::OffsetDateTime::now_utc();
+    let fixture = seed_published_release_with_release_artists(
+        &db,
+        90,
+        CatalogFixturePresentation {
+            release_title: "High Risk",
+            release_artist: "$NOT",
+            track_title: "Locked In",
+            track_artist: "$NOT",
+            release_date: "2026-01-02",
+        },
+        &["$NOT", "$NOT/Jeht"],
+    )
+    .await;
+    catalog
+        .claim_cataloging(&db.pool, &worker, &test_config(), now)
+        .await
+        .expect("claim exact-match import");
+    let imported = catalog
+        .import_manifest_v3(
+            &db.pool,
+            fixture.work_item_id,
+            &worker,
+            &CatalogImportRequest::new("same-release-unique-match-v1", "catalog-test"),
+            now,
+        )
+        .await
+        .expect("import multi-Artist Release");
+    assert_eq!(
+        imported.artist_count, 2,
+        "the matching Track must not allocate a third Artist identity"
+    );
+
+    let rows: Vec<(String, String, uuid::Uuid)> = sqlx::query_as(
+        "SELECT observed.scope, observed.normalized_value, decision.artist_id
+           FROM observed_artists observed
+           JOIN artist_match_current current ON current.observed_artist_id=observed.id
+           JOIN artist_match_decisions decision ON decision.id=current.decision_id
+          WHERE observed.release_id=$1
+          ORDER BY observed.scope, observed.normalized_value, observed.id",
+    )
+    .bind(fixture.release_id.into_uuid())
+    .fetch_all(&db.pool)
+    .await
+    .expect("read multi-Artist decisions");
+    assert_eq!(rows.len(), 3, "all raw observations remain distinct");
+    let release_not = rows
+        .iter()
+        .find(|(scope, normalized, _)| scope == "release" && normalized == "$not")
+        .expect("release $NOT observation");
+    let release_collaboration = rows
+        .iter()
+        .find(|(scope, normalized, _)| scope == "release" && normalized == "$not/jeht")
+        .expect("collaboration Release observation");
+    let track_not = rows
+        .iter()
+        .find(|(scope, normalized, _)| scope == "track" && normalized == "$not")
+        .expect("track $NOT observation");
+    assert_eq!(track_not.2, release_not.2);
+    assert_ne!(track_not.2, release_collaboration.2);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn multi_artist_release_keeps_equal_normalized_release_matches_ambiguous() {
+    let db = TestDb::create("catalog_multi_artist_ambiguous_match").await;
+    let catalog = CatalogStore;
+    let worker = WorkerId::new();
+    let now = time::OffsetDateTime::now_utc();
+    let fixture = seed_published_release_with_release_artists(
+        &db,
+        89,
+        CatalogFixturePresentation {
+            release_title: "Ambiguous Billing",
+            release_artist: "Same Name",
+            track_title: "Do Not Conflate",
+            track_artist: "Same Name",
+            release_date: "2026-01-01",
+        },
+        &["Same Name", " SAME NAME "],
+    )
+    .await;
+    catalog
+        .claim_cataloging(&db.pool, &worker, &test_config(), now)
+        .await
+        .expect("claim ambiguous import");
+    let imported = catalog
+        .import_manifest_v3(
+            &db.pool,
+            fixture.work_item_id,
+            &worker,
+            &CatalogImportRequest::new("same-release-unique-match-v1", "catalog-test"),
+            now,
+        )
+        .await
+        .expect("import ambiguous multi-Artist Release");
+    assert_eq!(
+        imported.artist_count, 3,
+        "two equal Release observations are not a unique identity match"
+    );
+    db.drop().await;
+}
 
 #[tokio::test]
 async fn catalog_import_persists_all_embedded_musicbrainz_families_and_enrichment_work() {

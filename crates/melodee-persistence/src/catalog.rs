@@ -1639,14 +1639,20 @@ impl PreparedImport {
             resolution.musicbrainz_ids.sort();
             resolution.musicbrainz_ids.dedup();
         }
-        let matching_release_artist = if release_artists.len() == 1 {
-            release_artists
-                .first()
-                .zip(resolutions.first())
-                .map(|(raw, resolution)| (normalize_lookup(raw), resolution.artist_id))
-        } else {
-            None
-        };
+        // ADR-0170: additional billed Artists do not make an exact match
+        // ambiguous. Reuse only when one Release observation owns the Track's
+        // normalized value; equal normalized Release observations deliberately
+        // collapse this map entry to None rather than becoming an identity key.
+        let matching_release_artists = resolutions.iter().fold(
+            BTreeMap::<String, Option<Uuid>>::new(),
+            |mut matches, resolution| {
+                matches
+                    .entry(resolution.normalized_value.clone())
+                    .and_modify(|artist_id| *artist_id = None)
+                    .or_insert(Some(resolution.artist_id));
+                matches
+            },
+        );
         for (index, (manifest_track, prepared_track)) in
             manifest.tracks.iter().zip(tracks.iter()).enumerate()
         {
@@ -1657,10 +1663,8 @@ impl PreparedImport {
                 .filter(|value| !value.trim().is_empty())
             {
                 let normalized = normalize_lookup(raw);
-                let release_artist_id = matching_release_artist
-                    .as_ref()
-                    .filter(|(release_normalized, _)| release_normalized == &normalized)
-                    .map(|(_, artist_id)| *artist_id);
+                let release_artist_id =
+                    matching_release_artists.get(&normalized).copied().flatten();
                 resolutions.push(PreparedResolution::new(
                     release_artist_id,
                     Some(prepared_track.id),

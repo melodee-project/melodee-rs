@@ -4,7 +4,7 @@
 - **Status:** Accepted
 - **Decision owners:** User-directed Artist identity correction
 - **Supersedes:** None
-- **Superseded by:** None
+- **Superseded by:** ADR-0170
 - **Related requirements:** PRD-ARTIST-001, PRD-ARTIST-002, PRD-ARTIST-011,
   PRD-RESOLVE-001, PRD-RESOLVE-002, PRD-RESOLVE-003
 

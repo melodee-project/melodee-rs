@@ -72,6 +72,14 @@ reviewed unit. Migration `0039_native_normalized_search_indexes.sql` subsequentl
 catalog-scale trigram GIN indexes; include that disk, WAL, and wall time in the same window. After
 verification, start the remaining replicas and restore traffic.
 
+Migration `0040_repair_multi_artist_release_track_identities.sql` repairs provisional Track Artist
+identities created by the earlier singleton-only matching rule. It acts only when one primary
+Release Artist on the same Release exactly matches the Track observation. Raw observations and
+prior decisions remain; repaired sources become audited merge tombstones. Verify the active Artist
+count and representative multi-Artist Releases after startup. Reversing the migration requires an
+audited Artist split or restoring the pre-upgrade PostgreSQL backup—it is not rolled back by merely
+starting an older image.
+
 ## Rollback
 
 An image rollback and a database-schema rollback are different operations. The current migrations

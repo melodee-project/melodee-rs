@@ -11,13 +11,15 @@ An Artist in Melodee is an owned identity, not a name string:
 - Name variations resolve to one Artist through evidence and aliases.
 - Artist merges and splits never move media files; they change catalog relationships only.
 
-The catalog importer preserves each raw Release/Track Artist observation. When a Release has one
-Artist and a Track's single Artist observation exactly matches it, both observations resolve to the
-same provisional Artist identity within that Release. Different names, multi-Artist Release
-contexts, and same-name Artists from separate Releases remain separate unless stronger evidence or
-an administrator decision resolves them. Strong retained provider evidence may schedule an
-auditable reconciliation, but it never bypasses the accepted merge policy. Melodee never merges
-Artists from normalized-name equality alone.
+The catalog importer preserves each raw Release/Track Artist observation. A Track's single Artist
+observation resolves to a Release Artist identity when exactly one primary Artist observation on
+that same Release has the same normalized value. Other differently named Artists billed on the
+Release do not make that exact match ambiguous. If no Release Artist or multiple Release Artist
+observations match, the Track keeps a separate provisional identity for review. Same-name Artists
+from separate Releases remain separate unless stronger evidence or an administrator decision
+resolves them. Strong retained provider evidence may schedule an auditable reconciliation, but it
+never bypasses the accepted merge policy. Melodee never merges Artists from normalized-name
+equality alone.
 
 See [Identity Review](../admin/identity-review/) for the administrative workflow that resolves
 uncertain artist matches.
