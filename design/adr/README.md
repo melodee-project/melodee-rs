@@ -114,7 +114,8 @@ python3 scripts/new_adr.py "short title"
 - [ADR-0160: Cross-Release Artist/Release identity reuse and disposition](ADR-0160-cross-release-artist-release-identity-reuse.md)
 - [ADR-0161: MeloAmp owns listener workflows and the server exposes only admin and narrow HTML surfaces](ADR-0161-meloamp-owns-listener-workflows-and-the-server-exposes-only-admin-and-narrow-html-surfaces.md) (supersedes ADR-0155)
 - [ADR-0162: Durable provider enrichment tasks and Release external evidence](ADR-0162-durable-provider-enrichment-tasks-and-release-external-evidence.md)
-- [ADR-0163: Rust-native MusicBrainz DecentDB replica reads](ADR-0163-rust-native-musicbrainz-decentdb-replica-reads.md)
+- [ADR-0163: Rust-native MusicBrainz DecentDB replica reads](ADR-0163-rust-native-musicbrainz-decentdb-replica-reads.md) (superseded by ADR-0168)
+- [ADR-0168: Upgrade pinned DecentDB replica reader to 2.17.1](ADR-0168-upgrade-pinned-decentdb-replica-reader-to-2-17-1.md) (supersedes ADR-0163)
 
 ## ADR quality rules
 

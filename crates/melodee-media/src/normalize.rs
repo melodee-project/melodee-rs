@@ -2523,24 +2523,18 @@ fn parse_nfo_xml(content: &str) -> (serde_json::Value, Vec<Finding>) {
     loop {
         match reader.read_event() {
             Ok(Event::Start(element)) => {
-                current.push(String::from_utf8_lossy(element.name().as_ref()).to_ascii_lowercase());
+                current.push(element.name().as_ref().to_ascii_lowercase());
             }
             Ok(Event::Empty(_)) => {}
             Ok(Event::Text(value)) => {
                 let Some(name) = current.last() else { continue };
                 if is_nfo_field(name) {
-                    match value.decode() {
-                        Ok(value) if !value.trim().is_empty() => {
-                            fields.insert(
-                                nfo_field_name(name).to_owned(),
-                                serde_json::json!(value.trim()),
-                            );
-                        }
-                        Ok(_) => {}
-                        Err(error) => findings.push(parser_finding(
-                            "sidecar.nfo.invalid_text",
-                            format!("NFO XML text could not be decoded: {error}"),
-                        )),
+                    let value = value.as_ref();
+                    if !value.trim().is_empty() {
+                        fields.insert(
+                            nfo_field_name(name).to_owned(),
+                            serde_json::json!(value.trim()),
+                        );
                     }
                 }
             }

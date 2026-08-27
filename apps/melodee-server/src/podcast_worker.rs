@@ -612,7 +612,7 @@ fn parse_feed(bytes: &[u8]) -> Result<Feed, PodcastWorkerError> {
     loop {
         match reader.read_event() {
             Ok(Event::Start(start)) => {
-                current = String::from_utf8_lossy(start.local_name().as_ref()).to_ascii_lowercase();
+                current = start.local_name().as_ref().to_ascii_lowercase();
                 if matches!(current.as_str(), "item" | "entry") {
                     if feed.episodes.len() >= MAX_FEED_ITEMS {
                         return Err(PodcastWorkerError::InvalidResponse);
@@ -621,12 +621,11 @@ fn parse_feed(bytes: &[u8]) -> Result<Feed, PodcastWorkerError> {
                 }
             }
             Ok(Event::Empty(empty)) => {
-                let name =
-                    String::from_utf8_lossy(empty.local_name().as_ref()).to_ascii_lowercase();
+                let name = empty.local_name().as_ref().to_ascii_lowercase();
                 if name == "enclosure" || name == "link" {
                     for attribute in empty.attributes().flatten() {
-                        let key = attribute.key.local_name().as_ref().to_vec();
-                        if matches!(key.as_slice(), b"url" | b"href") {
+                        let key = attribute.key.local_name();
+                        if matches!(key.as_ref(), "url" | "href") {
                             let value = attribute
                                 .normalized_value(quick_xml::XmlVersion::Implicit1_0)
                                 .map_err(|_| PodcastWorkerError::InvalidResponse)?
@@ -642,20 +641,16 @@ fn parse_feed(bytes: &[u8]) -> Result<Feed, PodcastWorkerError> {
                 &mut feed,
                 episode.as_mut(),
                 &current,
-                text.decode()
-                    .map_err(|_| PodcastWorkerError::InvalidResponse)?
-                    .into_owned(),
+                text.into_inner().into_owned(),
             ),
             Ok(Event::CData(text)) => apply_feed_text(
                 &mut feed,
                 episode.as_mut(),
                 &current,
-                text.decode()
-                    .map_err(|_| PodcastWorkerError::InvalidResponse)?
-                    .into_owned(),
+                text.into_inner().into_owned(),
             ),
             Ok(Event::End(end)) => {
-                let name = String::from_utf8_lossy(end.local_name().as_ref()).to_ascii_lowercase();
+                let name = end.local_name().as_ref().to_ascii_lowercase();
                 if matches!(name.as_str(), "item" | "entry") {
                     let mut item = episode.take().ok_or(PodcastWorkerError::InvalidResponse)?;
                     if item.title.trim().is_empty() {

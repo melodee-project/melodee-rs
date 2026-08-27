@@ -2609,7 +2609,7 @@
       "crates/melodee-persistence/src/settings.rs (legacy provider settings keys preserved verbatim, including the capital-E scrobbling.lastFm.Enabled / searchEngine.lastFm.Enabled quirk)",
       "design/adr/ADR-0136-defer-non-last-fm-external-provider-integrations-to-post-parity.md (superseded by ADR-0154)",
       "design/adr/ADR-0154-external-provider-enrichment-scope-and-runtime.md (accepted: full active legacy provider set is a v1 obligation, optional and fail-degraded, behind a Rust-native provider boundary)",
-      "design/adr/ADR-0163-rust-native-musicbrainz-decentdb-replica-reads.md (pinned read path for configured local replicas)"
+      "design/adr/ADR-0168-upgrade-pinned-decentdb-replica-reader-to-2-17-1.md (latest stable pinned read path for configured local replicas; supersedes ADR-0163)"
     ],
     "tests": [
       "apps/melodee-server/tests/lastfm_scrobble.rs (linking, scrobble/now-playing wire mapping, failure semantics against a local mock server)",
@@ -2843,7 +2843,7 @@
     "status": "tested",
     "implementation": [
       "design/adr/ADR-0137-localization-stack-and-rtl-preservation.md (i18next + react-i18next, Accepted)",
-      "admin-ui/package.json (i18next 26.3.6, react-i18next 17.0.11)"
+      "admin-ui/package.json (i18next 26.4.0, react-i18next 17.0.12)"
     ],
     "tests": [
       "admin-ui unit + e2e suites"

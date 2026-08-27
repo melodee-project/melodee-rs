@@ -258,7 +258,11 @@ fn expected_signature(params: &[(String, String)]) -> String {
         hasher.update(value.as_bytes());
     }
     hasher.update(SHARED_SECRET.as_bytes());
-    format!("{:x}", hasher.finalize())
+    hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 fn captured_requests(mock: &MockHandle) -> Vec<Captured> {

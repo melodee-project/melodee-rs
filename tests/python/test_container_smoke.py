@@ -153,7 +153,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
         ):
             self.assertIn(evidence_file, workflow)
         self.assertIn("scripts/validate_release_evidence.py", workflow)
-        self.assertIn("uses: actions/upload-artifact@v4", workflow)
+        self.assertIn("uses: actions/upload-artifact@v7", workflow)
         self.assertIn("if-no-files-found: error", workflow)
         self.assertIn("if: always()", workflow)
         self.assertIn("name: Archive exact scanned image", workflow)
@@ -166,7 +166,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
             "needs: [validate-release, quality-gate, build-and-test]",
             workflow,
         )
-        self.assertIn("uses: actions/download-artifact@v4", workflow)
+        self.assertIn("uses: actions/download-artifact@v8", workflow)
         self.assertIn("docker load --input", workflow)
         self.assertIn("staging-${{ github.run_id }}", workflow)
         self.assertIn("docker buildx imagetools create", workflow)

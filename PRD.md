@@ -2382,19 +2382,19 @@ A dependency is approved only when:
 
 ---
 
-## 53. Preferred Technology Baseline — Audited 2026-08-06
+## 53. Preferred Technology Baseline — Audited 2026-08-26
 
 These are **preferred/proposed architecture choices** and should be ratified through ADRs before implementation freeze. Versions shown are the current audited stable state as of this PRD date; implementation should use the current supported patch release at lock time.
 
 | Area | Preferred technology | Current audited state | License / FOSS note |
 |---|---|---|---|
 | Language | Rust, Edition 2024 | Rust 1.97.1 current stable point release | Rust project primarily MIT/Apache-2.0 |
-| Async runtime | Tokio | 1.52.3 current release | MIT |
+| Async runtime | Tokio | 1.53.1 current release | MIT |
 | HTTP | Axum | 0.8.9 current release | MIT |
 | Database | PostgreSQL | 18.4 current 18.x minor; 17 also supported | PostgreSQL License |
 | SQL/data access | SQLx | 0.9.0 current stable line | MIT/Apache-2.0; PostgreSQL driver remains FOSS |
 | Search | Tantivy | 0.26.1 current | MIT |
-| Audio metadata | Lofty | 0.24.0 current | MIT/Apache-2.0 |
+| Audio metadata | Lofty | 0.25.1 current | MIT/Apache-2.0 |
 | Media conversion/inspection | FFmpeg/ffprobe | 8.1.2 current stable 8.1 line | LGPL/GPL; FOSS; distribute compliantly |
 | Acoustic fingerprint | Chromaprint/fpcalc | 1.6.1 current | FOSS/MIT library |
 | Image processing | image-rs/image | Active | MIT/Apache-2.0 |
@@ -2405,7 +2405,7 @@ These are **preferred/proposed architecture choices** and should be ratified thr
 | Admin frontend | React | 19.2.8 current | MIT |
 | Frontend build | Vite | 8.x stable | MIT |
 | UI system | Carbon Design System | Carbon v11 / `@carbon/react` 1.x current stable; v12 upcoming | Apache-2.0 |
-| Localization | i18next + react-i18next | i18next 26.1.0 current | MIT |
+| Localization | i18next + react-i18next | i18next 26.4.0 / react-i18next 17.0.12 current | MIT |
 | Server state in UI | TanStack Query | Preferred candidate | MIT |
 | Table enhancement | TanStack Table | **Not baseline**; add only if Carbon DataTable proves insufficient | MIT |
 

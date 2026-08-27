@@ -1329,21 +1329,18 @@ fn extract_opml_urls(text: &str) -> Result<Vec<String>, NativeApiError> {
     loop {
         match reader.read_event() {
             Ok(Event::Start(element)) | Ok(Event::Empty(element)) => {
-                if element.local_name().as_ref() == b"opml" {
+                if element.local_name().as_ref() == "opml" {
                     saw_opml = true;
                 }
-                if element.local_name().as_ref() == b"outline" {
+                if element.local_name().as_ref() == "outline" {
                     for attribute in element.attributes() {
                         let attribute = attribute.map_err(|_| NativeApiError::BadRequest)?;
-                        if attribute.key.as_ref() == b"xmlUrl" {
+                        if attribute.key.as_ref() == "xmlUrl" {
                             if out.len() >= 1000 {
                                 return Err(NativeApiError::BadRequest);
                             }
                             let value = attribute
-                                .decoded_and_normalized_value(
-                                    XmlVersion::Implicit1_0,
-                                    reader.decoder(),
-                                )
+                                .normalized_value(XmlVersion::Implicit1_0)
                                 .map_err(|_| NativeApiError::BadRequest)?
                                 .into_owned();
                             if !value.trim().is_empty() {

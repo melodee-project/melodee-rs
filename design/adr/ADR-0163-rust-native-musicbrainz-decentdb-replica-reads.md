@@ -1,10 +1,10 @@
 # ADR-0163: Rust-native MusicBrainz DecentDB replica reads
 
 - **Date:** 2026-08-25
-- **Status:** Accepted
+- **Status:** Superseded
 - **Decision owners:** Feature Completion Program Phase 2
 - **Supersedes:** None
-- **Superseded by:** None
+- **Superseded by:** ADR-0168
 - **Related requirements:** PRD-ARTIST-012, PRD-EXT-001, PRD-EXT-003, PRD-CONFIG-001
 
 ## Context
