@@ -4,11 +4,17 @@
 - **Status:** Accepted
 - **Decision owners:** Feature Completion Program Phase 0 (explicitly user-assigned)
 - **Supersedes:** None
-- **Superseded by:** None
+- **Superseded by:** ADR-0174 partially supersedes the name-only Artist predicate; provider-ID and
+  Release identity decisions remain active
 - **Related requirements:** PRD-ARTIST-001, PRD-ARTIST-002, PRD-ARTIST-010, PRD-ARTIST-011,
   PRD-RESOLVE-001, PRD-RESOLVE-002, PRD-RESOLVE-003, PRD-RESOLVE-005, PRD-CATALOG-001
 
 ## Context
+
+> **Partial supersession:** [ADR-0174](ADR-0174-require-review-for-name-only-artist-identity-matches.md)
+> supersedes Artist decision 1(b), decision 2, and the related automatic name-only portions of
+> decisions 5 and 8. Exact Artist name equality now creates a review proposal and never an
+> automatic cross-Release merge. The provider-ID and Release portions of this ADR remain accepted.
 
 ADR-0153 (Accepted) authorizes the manifest importer to **reuse the Release Artist identity for a
 Track observation** only when the match is *unambiguous and scoped to the same Release import*:
@@ -141,19 +147,35 @@ evidence-only rule.
 
 ### Follow-up work
 
-- Feature Completion Phase 2 (ARTIST workstream): the cross-Release promotion pass (predicate a:
-  external-ID join; predicate b: conflict-gated name join); the `ReleaseMergeTombstone` row and
-  Release-promotion pass; the audited split reverse; the admin "candidate merges" review screen;
-  property tests (idempotency, reversibility, no-conflict-gate).
+- The Artist cross-Release promotion pass implements provider-ID predicate (a). ADR-0174 replaced
+  predicate (b) with bounded, non-authoritative Identity Review proposals.
+- Remaining work is the name-and-context Release promotion predicate and any dedicated admin
+  "candidate merges" presentation beyond the existing Identity Review merge/split workflow.
+
+## Implementation
+
+The production implementation is split at the evidence boundary:
+
+- `CatalogStore::strong_artist_merge_candidates` supplies provider-ID candidates for predicate
+  (a).
+- `CatalogStore::name_only_artist_match_proposal_candidates` supplies exact-name candidates for
+  Identity Review without merging them or advancing their authoritative current decisions.
+- The catalog scheduler runs one bounded Artist reconciliation at startup and after each successful
+  import. Each candidate uses the existing reversible Artist merge mutation; automated replacement
+  decisions remain `authority=automated` and unlocked rather than impersonating administrator
+  decisions.
+- PostgreSQL and scheduler integration tests cover strong provider-ID convergence and prove the
+  concrete `4Trey` and `Alice Cooper` exact-name cases remain distinct while producing review
+  proposals at post-import and startup boundaries.
 
 ## Validation
 
 - Artist promotion (a): two provisional Artists with the same MusicBrainz external ID are
   promoted to one; the tombstone records predicate (a) and the external-ID evidence; the split
   restores two provisional identities.
-- Artist promotion (b): two provisional Artists with exactly equal normalized names and no
-  conflicting evidence are promoted; a third provisional Artist with the same name but a
-  different external ID blocks promotion (identities remain provisional).
+- Artist predicate (b), as superseded by ADR-0174: exact-name matches retain separate provisional
+  Artists and create review proposals; conflicting provider/date evidence continues to block
+  automatic provider-ID convergence.
 - Release promotion: two provisional Releases with the same (Artist-after-promotion, title,
   year) are promoted; Tracks are retargeted to the surviving Release in an audited transaction.
 - Idempotency: running the promotion pass twice does not re-merge an already-merged pair.

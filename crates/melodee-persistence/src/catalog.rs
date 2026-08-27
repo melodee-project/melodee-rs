@@ -203,6 +203,97 @@ pub struct StrongArtistMergeCandidate {
     pub external_id: String,
 }
 
+/// One exact-name Artist candidate that requires operator review.
+///
+/// The current provisional identity is deliberately retained. This row only
+/// provides enough information to append immutable name evidence and a
+/// non-authoritative proposal for Identity Review.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NameOnlyArtistMatchProposalCandidate {
+    pub observed_artist_id: Uuid,
+    pub current_artist_id: Uuid,
+    pub candidate_artist_id: Uuid,
+    pub normalized_name: String,
+}
+
+/// One repeated structured Track credit that can safely reuse another
+/// provisional, track-only Artist identity inside the same immutable Release.
+///
+/// Release Artist identities and mixed-scope observations never enter this
+/// candidate set. That keeps ADR-0173's bounded co-resolution rule separate
+/// from global name identity and from ambiguous same-Release billing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SameReleaseTrackArtistMergeCandidate {
+    pub source_artist_id: Uuid,
+    pub source_public_api_id: Uuid,
+    pub target_artist_id: Uuid,
+    pub target_public_api_id: Uuid,
+    pub release_id: Uuid,
+    pub normalized_name: String,
+}
+
+/// Structured evidence retained with an automated Artist reconciliation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ArtistReconciliationEvidence {
+    /// Both provisional identities carried the same trusted provider key.
+    EmbeddedExternalId {
+        provider: String,
+        external_id: String,
+    },
+    /// ADR-0173's exact Track credit recurred inside one immutable Release.
+    SameReleaseTrackCredit {
+        release_id: Uuid,
+        normalized_name: String,
+    },
+}
+
+impl ArtistReconciliationEvidence {
+    pub(crate) fn validate(&self) -> Result<(), CatalogStoreError> {
+        let valid = match self {
+            Self::EmbeddedExternalId {
+                provider,
+                external_id,
+            } => !provider.trim().is_empty() && !external_id.trim().is_empty(),
+            Self::SameReleaseTrackCredit {
+                normalized_name, ..
+            } => !normalized_name.trim().is_empty(),
+        };
+        if valid {
+            Ok(())
+        } else {
+            Err(CatalogStoreError::InvalidRequest)
+        }
+    }
+
+    pub(crate) const fn predicate(&self) -> &'static str {
+        match self {
+            Self::EmbeddedExternalId { .. } => "embedded_external_id",
+            Self::SameReleaseTrackCredit { .. } => "same_release_track_credit",
+        }
+    }
+
+    pub(crate) fn payload(&self) -> serde_json::Value {
+        match self {
+            Self::EmbeddedExternalId {
+                provider,
+                external_id,
+            } => serde_json::json!({
+                "predicate": self.predicate(),
+                "provider": provider,
+                "external_id": external_id,
+            }),
+            Self::SameReleaseTrackCredit {
+                release_id,
+                normalized_name,
+            } => serde_json::json!({
+                "predicate": self.predicate(),
+                "release_id": release_id,
+                "normalized_name": normalized_name,
+            }),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StrongReleaseMergeCandidate {
     pub source_release_id: Uuid,
@@ -785,6 +876,47 @@ impl CatalogStore {
                  WHERE locked.artist_id IN (source.artist_id, target.artist_id)
                    AND locked.is_locked
              )
+             AND NOT (
+                 source_artist.artist_type <> target_artist.artist_type
+                 AND source_artist.artist_type <> 'unknown'
+                 AND target_artist.artist_type <> 'unknown'
+             )
+             AND NOT (
+                 source_artist.end_date IS NOT NULL
+                 AND target_artist.begin_date IS NOT NULL
+                 AND source_artist.end_date < target_artist.begin_date
+                 OR target_artist.end_date IS NOT NULL
+                 AND source_artist.begin_date IS NOT NULL
+                 AND target_artist.end_date < source_artist.begin_date
+             )
+             AND NOT EXISTS (
+                 SELECT 1
+                 FROM artist_external_identities source_conflict
+                 JOIN artist_external_identities target_conflict
+                   ON target_conflict.provider=source_conflict.provider
+                  AND target_conflict.external_id <> source_conflict.external_id
+                 WHERE source_conflict.artist_id=source.artist_id
+                   AND target_conflict.artist_id=target.artist_id
+             )
+             AND NOT (
+                 EXISTS (
+                     SELECT 1 FROM group_memberships source_membership
+                     WHERE source_membership.group_artist_id=source.artist_id
+                 )
+                 AND EXISTS (
+                     SELECT 1 FROM group_memberships target_membership
+                     WHERE target_membership.group_artist_id=target.artist_id
+                 )
+                 AND NOT EXISTS (
+                     SELECT 1
+                     FROM group_memberships source_membership
+                     JOIN group_memberships target_membership
+                       ON resolve_artist_redirect(target_membership.member_artist_id)
+                          = resolve_artist_redirect(source_membership.member_artist_id)
+                     WHERE source_membership.group_artist_id=source.artist_id
+                       AND target_membership.group_artist_id=target.artist_id
+                 )
+             )
              AND NOT EXISTS (
                  SELECT 1 FROM artist_negative_assertions negative
                  WHERE negative.candidate_provider=groups.provider
@@ -813,6 +945,327 @@ impl CatalogStore {
                 target_public_api_id,
                 provider,
                 external_id,
+            },
+        )
+        .collect())
+    }
+
+    /// Returns bounded ADR-0173 candidates for repeated structured Track
+    /// credits inside one immutable Release.
+    ///
+    /// Every identity in a candidate group is provisional, resolves only
+    /// Track-scoped observations from one Release, and has no Release Artist
+    /// link. Mixed-scope identities, locked decisions, active do-not-match
+    /// assertions, and same-provider/different-ID evidence block the group.
+    pub async fn same_release_track_artist_merge_candidates(
+        &self,
+        pool: &PgPool,
+        limit: i64,
+    ) -> Result<Vec<SameReleaseTrackArtistMergeCandidate>, CatalogStoreError> {
+        if !(1..=1_000).contains(&limit) {
+            return Err(CatalogStoreError::InvalidRequest);
+        }
+        Ok(sqlx::query_as::<_, (Uuid, Uuid, Uuid, Uuid, Uuid, String)>(
+            "WITH eligible_releases AS (
+                 SELECT release.id
+                 FROM releases release
+                 JOIN release_artists release_credit
+                   ON release_credit.release_id=release.id
+                 JOIN artists release_artist
+                   ON release_artist.id=release_credit.artist_id
+                 WHERE release.status='active'
+                 GROUP BY release.id
+                 HAVING count(DISTINCT release_credit.artist_id)
+                            FILTER (WHERE release_credit.role='primary')=1
+                    AND count(*) FILTER (
+                            WHERE release_credit.role='primary'
+                              AND release_artist.normalized_name IN (
+                                  'various artists', 'various', 'va'
+                              ))=0
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM release_classifications classification
+                        JOIN release_traits trait
+                          ON trait.classification_id=classification.id
+                        WHERE classification.release_id=release.id
+                          AND trait.trait='compilation'
+                    )
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM release_catalog_trait_assertions assertion
+                        WHERE assertion.release_id=release.id
+                          AND assertion.trait='compilation'
+                    )
+             ), duplicate_names AS (
+                 SELECT normalized_name
+                 FROM artists
+                 WHERE status='provisional'
+                 GROUP BY normalized_name
+                 HAVING count(*) > 1
+             ), track_only_identities AS (
+                 SELECT artist.id, artist.public_api_id, artist.normalized_name,
+                        min(observed.release_id::text)::uuid AS release_id
+                 FROM duplicate_names duplicate
+                 JOIN artists artist ON artist.normalized_name=duplicate.normalized_name
+                 JOIN artist_match_decisions decision ON decision.artist_id=artist.id
+                 JOIN artist_match_current current
+                   ON current.decision_id=decision.id
+                  AND current.observed_artist_id=decision.observed_artist_id
+                 JOIN observed_artists observed ON observed.id=current.observed_artist_id
+                 JOIN eligible_releases eligible ON eligible.id=observed.release_id
+                 LEFT JOIN track_artists track_credit
+                   ON track_credit.artist_id=artist.id
+                  AND track_credit.observed_artist_id=observed.id
+                 LEFT JOIN release_artists release_credit
+                   ON release_credit.artist_id=artist.id
+                 WHERE artist.status='provisional'
+                   AND btrim(observed.normalized_value) <> ''
+                 GROUP BY artist.id, artist.public_api_id, artist.normalized_name
+                 HAVING count(DISTINCT observed.normalized_value)=1
+                    AND min(observed.normalized_value)=artist.normalized_name
+                    AND count(DISTINCT observed.release_id)=1
+                    AND bool_and(observed.scope='track')
+                    AND count(DISTINCT observed.id)
+                        = count(DISTINCT track_credit.observed_artist_id)
+                    AND count(DISTINCT release_credit.release_id)=0
+             ), candidate_groups AS (
+                 SELECT normalized_name, release_id
+                 FROM track_only_identities
+                 GROUP BY normalized_name, release_id
+                 HAVING count(*) > 1
+             ), blocked_groups AS (
+                 SELECT DISTINCT candidate_group.normalized_name,
+                                 candidate_group.release_id
+                 FROM candidate_groups candidate_group
+                 JOIN artists same_name
+                   ON same_name.normalized_name=candidate_group.normalized_name
+                  AND same_name.status NOT IN ('merged','deprecated')
+                 JOIN artist_match_decisions same_decision
+                   ON same_decision.artist_id=same_name.id
+                 JOIN artist_match_current same_current
+                   ON same_current.decision_id=same_decision.id
+                  AND same_current.observed_artist_id=same_decision.observed_artist_id
+                 JOIN observed_artists same_observed
+                   ON same_observed.id=same_current.observed_artist_id
+                  AND same_observed.release_id=candidate_group.release_id
+                 LEFT JOIN track_only_identities qualified
+                   ON qualified.id=same_name.id
+                  AND qualified.normalized_name=candidate_group.normalized_name
+                  AND qualified.release_id=candidate_group.release_id
+                 WHERE qualified.id IS NULL
+                    OR same_name.status <> 'provisional'
+                    OR same_decision.is_locked
+                    OR EXISTS (
+                        SELECT 1
+                        FROM artist_negative_assertions negative
+                        JOIN artist_match_current owner_current
+                          ON owner_current.observed_artist_id=negative.observed_artist_id
+                        JOIN artist_match_decisions owner
+                          ON owner.id=owner_current.decision_id
+                        JOIN track_only_identities other
+                          ON other.id=negative.candidate_artist_id
+                         AND other.normalized_name=candidate_group.normalized_name
+                         AND other.release_id=candidate_group.release_id
+                        WHERE owner.artist_id=same_name.id
+                          AND negative.assertion_kind='do_not_match'
+                          AND NOT EXISTS (
+                              SELECT 1 FROM artist_negative_assertions revoked
+                              WHERE revoked.predecessor_assertion_id=negative.id
+                                AND revoked.assertion_kind='revoke'
+                          )
+                    )
+             ), conflicting_external_groups AS (
+                 SELECT DISTINCT left_identity.normalized_name,
+                                 left_identity.release_id
+                 FROM track_only_identities left_identity
+                 JOIN track_only_identities right_identity
+                   ON right_identity.normalized_name=left_identity.normalized_name
+                  AND right_identity.release_id=left_identity.release_id
+                  AND right_identity.id > left_identity.id
+                 JOIN artist_external_identities left_external
+                   ON left_external.artist_id=left_identity.id
+                 JOIN artist_external_identities right_external
+                  ON right_external.artist_id=right_identity.id
+                  AND right_external.provider=left_external.provider
+                  AND right_external.external_id <> left_external.external_id
+             ), conflicting_attribute_groups AS (
+                 SELECT DISTINCT left_identity.normalized_name,
+                                 left_identity.release_id
+                 FROM track_only_identities left_identity
+                 JOIN track_only_identities right_identity
+                   ON right_identity.normalized_name=left_identity.normalized_name
+                  AND right_identity.release_id=left_identity.release_id
+                  AND right_identity.id > left_identity.id
+                 JOIN artists left_artist ON left_artist.id=left_identity.id
+                 JOIN artists right_artist ON right_artist.id=right_identity.id
+                 WHERE (
+                     left_artist.artist_type <> right_artist.artist_type
+                     AND left_artist.artist_type <> 'unknown'
+                     AND right_artist.artist_type <> 'unknown'
+                 )
+                    OR (
+                        left_artist.end_date IS NOT NULL
+                        AND right_artist.begin_date IS NOT NULL
+                        AND left_artist.end_date < right_artist.begin_date
+                    )
+                    OR (
+                        right_artist.end_date IS NOT NULL
+                        AND left_artist.begin_date IS NOT NULL
+                        AND right_artist.end_date < left_artist.begin_date
+                    )
+                    OR (
+                        EXISTS (
+                            SELECT 1 FROM group_memberships left_membership
+                            WHERE left_membership.group_artist_id=left_identity.id
+                        )
+                        AND EXISTS (
+                            SELECT 1 FROM group_memberships right_membership
+                            WHERE right_membership.group_artist_id=right_identity.id
+                        )
+                        AND NOT EXISTS (
+                            SELECT 1
+                            FROM group_memberships left_membership
+                            JOIN group_memberships right_membership
+                              ON resolve_artist_redirect(right_membership.member_artist_id)
+                                 = resolve_artist_redirect(left_membership.member_artist_id)
+                            WHERE left_membership.group_artist_id=left_identity.id
+                              AND right_membership.group_artist_id=right_identity.id
+                        )
+                    )
+             ), ranked AS (
+                 SELECT candidate.*,
+                        first_value(candidate.id) OVER (
+                            PARTITION BY candidate.normalized_name, candidate.release_id
+                            ORDER BY candidate.id
+                        ) AS target_artist_id
+                 FROM track_only_identities candidate
+                 JOIN candidate_groups candidate_group
+                   ON candidate_group.normalized_name=candidate.normalized_name
+                  AND candidate_group.release_id=candidate.release_id
+                 WHERE NOT EXISTS (
+                     SELECT 1 FROM blocked_groups blocked
+                     WHERE blocked.normalized_name=candidate.normalized_name
+                       AND blocked.release_id=candidate.release_id
+                 )
+                   AND NOT EXISTS (
+                     SELECT 1 FROM conflicting_external_groups conflicting
+                     WHERE conflicting.normalized_name=candidate.normalized_name
+                       AND conflicting.release_id=candidate.release_id
+                 )
+                   AND NOT EXISTS (
+                     SELECT 1 FROM conflicting_attribute_groups conflicting
+                     WHERE conflicting.normalized_name=candidate.normalized_name
+                       AND conflicting.release_id=candidate.release_id
+                 )
+             )
+             SELECT source.id, source.public_api_id,
+                    target.id, target.public_api_id,
+                    source.release_id, source.normalized_name
+             FROM ranked source
+             JOIN track_only_identities target ON target.id=source.target_artist_id
+             WHERE source.id <> target.id
+             ORDER BY source.normalized_name, source.release_id, source.id
+             LIMIT $1",
+        )
+        .bind(limit)
+        .fetch_all(pool)
+        .await?
+        .into_iter()
+        .map(
+            |(
+                source_artist_id,
+                source_public_api_id,
+                target_artist_id,
+                target_public_api_id,
+                release_id,
+                normalized_name,
+            )| SameReleaseTrackArtistMergeCandidate {
+                source_artist_id,
+                source_public_api_id,
+                target_artist_id,
+                target_public_api_id,
+                release_id,
+                normalized_name,
+            },
+        )
+        .collect())
+    }
+
+    /// Returns bounded exact-name candidates for non-authoritative review
+    /// proposals. Name equality is discovery evidence, never an identity key.
+    ///
+    /// Only observations still owned by an automated provisional decision are
+    /// eligible. Existing proposals and active local do-not-match assertions
+    /// make the scan idempotent without suppressing other same-name Artists.
+    pub async fn name_only_artist_match_proposal_candidates(
+        &self,
+        pool: &PgPool,
+        limit: i64,
+    ) -> Result<Vec<NameOnlyArtistMatchProposalCandidate>, CatalogStoreError> {
+        if !(1..=1_000).contains(&limit) {
+            return Err(CatalogStoreError::InvalidRequest);
+        }
+        Ok(sqlx::query_as::<_, (Uuid, Uuid, Uuid, String)>(
+            "WITH current_observations AS (
+                 SELECT observed.id AS observed_artist_id,
+                        owner.id AS current_artist_id,
+                        owner.normalized_name,
+                        current_decision.created_at AS current_decided_at
+                 FROM observed_artists observed
+                 JOIN artist_match_current current
+                   ON current.observed_artist_id=observed.id
+                 JOIN artist_match_decisions current_decision
+                   ON current_decision.id=current.decision_id
+                 JOIN artists owner ON owner.id=current_decision.artist_id
+                 WHERE owner.status='provisional'
+                   AND current_decision.authority='automated'
+                   AND NOT current_decision.is_locked
+                   AND btrim(owner.normalized_name) <> ''
+             )
+             SELECT source.observed_artist_id, source.current_artist_id,
+                    candidate.id, source.normalized_name
+             FROM current_observations source
+             JOIN artists candidate
+               ON candidate.normalized_name=source.normalized_name
+              AND candidate.status IN ('provisional','verified')
+              AND candidate.id <> source.current_artist_id
+             WHERE NOT EXISTS (
+                 SELECT 1
+                 FROM artist_negative_assertions negative
+                 WHERE negative.observed_artist_id=source.observed_artist_id
+                   AND negative.candidate_artist_id IS NOT NULL
+                   AND resolve_artist_redirect(negative.candidate_artist_id)
+                       = resolve_artist_redirect(candidate.id)
+                   AND negative.assertion_kind='do_not_match'
+                   AND NOT EXISTS (
+                       SELECT 1 FROM artist_negative_assertions revoked
+                       WHERE revoked.predecessor_assertion_id=negative.id
+                         AND revoked.assertion_kind='revoke'
+                   )
+             )
+               AND NOT EXISTS (
+                   SELECT 1
+                   FROM artist_match_decisions proposal
+                   WHERE proposal.observed_artist_id=source.observed_artist_id
+                     AND proposal.artist_id=candidate.id
+                     AND proposal.outcome='proposed'
+                     AND proposal.created_at >= source.current_decided_at
+               )
+             ORDER BY source.normalized_name, source.observed_artist_id, candidate.id
+             LIMIT $1",
+        )
+        .bind(limit)
+        .fetch_all(pool)
+        .await?
+        .into_iter()
+        .map(
+            |(observed_artist_id, current_artist_id, candidate_artist_id, normalized_name)| {
+                NameOnlyArtistMatchProposalCandidate {
+                    observed_artist_id,
+                    current_artist_id,
+                    candidate_artist_id,
+                    normalized_name,
+                }
             },
         )
         .collect())

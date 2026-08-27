@@ -96,6 +96,7 @@ function makeDetail(overrides: Partial<ObservationDetail> = {}): ObservationDeta
       {
         artistId: ARTIST_ID,
         artistName: 'The Nomads',
+        artistDisambiguation: 'Australian rock band',
         artistStatus: 'active',
         latestOutcome: 'provisional',
         latestConfidence: 9200,
@@ -149,6 +150,7 @@ function makeDetail(overrides: Partial<ObservationDetail> = {}): ObservationDeta
       {
         artistId: ARTIST_ID_2,
         artistName: 'The Nomads (US)',
+        artistDisambiguation: null,
         artistStatus: 'provisional',
         latestOutcome: 'provisional',
         latestConfidence: 4100,
@@ -255,6 +257,7 @@ describe('IdentityReviewScreen', () => {
     // Confidence percentages from basis points.
     expect(screen.getByText('92%')).toBeInTheDocument();
     expect(screen.getByText('41%')).toBeInTheDocument();
+    expect(screen.getByText('Australian rock band')).toBeInTheDocument();
     expect(screen.getByText('Strong alias and release overlap.')).toBeInTheDocument();
     // Evidence summary strip: counts by kind with the negative count split out.
     expect(screen.getByText('Evidence Summary')).toBeInTheDocument();
@@ -268,7 +271,9 @@ describe('IdentityReviewScreen', () => {
 
   it('confirm posts the resolution with the selected candidate and reason', async () => {
     renderScreen(`/catalog/identity?observation=${OBSERVATION_ID}`);
-    fireEvent.click(await screen.findByRole('radio', { name: /^The NomadsActive/ }));
+    fireEvent.click(
+      await screen.findByRole('radio', { name: /^The NomadsAustralian rock bandActive/ }),
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Confirm Match' }));
     const dialog = await screen.findByRole('dialog');
     fireEvent.change(within(dialog).getByLabelText('Reason'), {
@@ -355,7 +360,9 @@ describe('IdentityReviewScreen', () => {
       new ApiError(409, 'locked_decision', 'a locked manual identity decision prevents this change', 'corr-1'),
     );
     renderScreen(`/catalog/identity?observation=${OBSERVATION_ID}`);
-    fireEvent.click(await screen.findByRole('radio', { name: /^The NomadsActive/ }));
+    fireEvent.click(
+      await screen.findByRole('radio', { name: /^The NomadsAustralian rock bandActive/ }),
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Confirm Match' }));
     const dialog = await screen.findByRole('dialog');
     fireEvent.change(within(dialog).getByLabelText('Reason'), { target: { value: 'Trying.' } });

@@ -199,6 +199,138 @@ pub async fn seed_published_release_with_release_artists(
     .await
 }
 
+/// Adds the durable shape emitted by older importers when a structured Track
+/// credit repeated inside one Release but received a fresh provisional Artist
+/// identity. This is intentionally test-only corruption setup for startup and
+/// reconciliation coverage; production code must create observations through
+/// the manifest import boundary.
+pub async fn seed_legacy_repeated_track_artist_identity(
+    db: &TestDb,
+    release_id: ReleaseId,
+    normalized_name: &str,
+) -> (uuid::Uuid, uuid::Uuid, uuid::Uuid) {
+    let release_id = release_id.into_uuid();
+    let (track_id, target_artist_id, role, display_value): (
+        uuid::Uuid,
+        uuid::Uuid,
+        String,
+        String,
+    ) = sqlx::query_as(
+        "SELECT billing.track_id, billing.artist_id, billing.role, billing.display_value
+               FROM track_artists billing
+               JOIN tracks track ON track.id=billing.track_id
+               JOIN artists artist ON artist.id=billing.artist_id
+              WHERE track.release_id=$1 AND artist.normalized_name=$2
+              ORDER BY billing.presentation_order, billing.id
+              LIMIT 1",
+    )
+    .bind(release_id)
+    .bind(normalized_name)
+    .fetch_one(&db.pool)
+    .await
+    .expect("find Track Artist to repeat");
+    let source_artist_id = uuid::Uuid::now_v7();
+    let source_public_api_id = uuid::Uuid::now_v7();
+    let observation_id = uuid::Uuid::now_v7();
+    let decision_id = uuid::Uuid::now_v7();
+    let billing_id = uuid::Uuid::now_v7();
+    let source_ordinal: i32 = sqlx::query_scalar(
+        "SELECT COALESCE(max(source_ordinal), -1) + 1
+           FROM observed_artists WHERE release_id=$1",
+    )
+    .bind(release_id)
+    .fetch_one(&db.pool)
+    .await
+    .expect("allocate repeated observation ordinal");
+    let presentation_order: i32 = sqlx::query_scalar(
+        "SELECT COALESCE(max(presentation_order), 0) + 1
+           FROM track_artists WHERE track_id=$1",
+    )
+    .bind(track_id)
+    .fetch_one(&db.pool)
+    .await
+    .expect("allocate repeated billing order");
+    let now = time::OffsetDateTime::now_utc();
+    let mut tx = db.pool.begin().await.expect("begin repeated Artist setup");
+    sqlx::query(
+        "INSERT INTO artists (
+            id, public_api_id, canonical_name, normalized_name, sort_name,
+            artist_type, status, revision, created_at, updated_at
+         ) VALUES ($1,$2,$3,$4,$3,'unknown','provisional',1,$5,$5)",
+    )
+    .bind(source_artist_id)
+    .bind(source_public_api_id)
+    .bind(&display_value)
+    .bind(normalized_name)
+    .bind(now)
+    .execute(&mut *tx)
+    .await
+    .expect("insert repeated provisional Artist");
+    sqlx::query(
+        "INSERT INTO observed_artists (
+            id, release_id, track_id, scope, source_ordinal, raw_value,
+            normalized_value, display_value, source_pointer, source_payload,
+            created_at
+         ) VALUES ($1,$2,$3,'track',$4,$5,$6,$5,$7,$8,$9)",
+    )
+    .bind(observation_id)
+    .bind(release_id)
+    .bind(track_id)
+    .bind(source_ordinal)
+    .bind(&display_value)
+    .bind(normalized_name)
+    .bind(format!("test:legacy-repeat:{source_artist_id}"))
+    .bind(serde_json::json!({ "test_fixture": "legacy_repeated_track_credit" }))
+    .bind(now)
+    .execute(&mut *tx)
+    .await
+    .expect("insert repeated Track observation");
+    sqlx::query(
+        "INSERT INTO artist_match_decisions (
+            id, observed_artist_id, artist_id, outcome, authority, confidence,
+            reason, is_locked, predecessor_decision_id, payload, created_at
+         ) VALUES ($1,$2,$3,'confirmed','automated',7000,
+                   'legacy importer provisional allocation',false,NULL,$4,$5)",
+    )
+    .bind(decision_id)
+    .bind(observation_id)
+    .bind(source_artist_id)
+    .bind(serde_json::json!({ "test_fixture": "legacy_repeated_track_credit" }))
+    .bind(now)
+    .execute(&mut *tx)
+    .await
+    .expect("insert repeated Track decision");
+    sqlx::query(
+        "INSERT INTO artist_match_current (observed_artist_id, decision_id, updated_at)
+         VALUES ($1,$2,$3)",
+    )
+    .bind(observation_id)
+    .bind(decision_id)
+    .bind(now)
+    .execute(&mut *tx)
+    .await
+    .expect("point repeated Track observation at decision");
+    sqlx::query(
+        "INSERT INTO track_artists (
+            id, track_id, artist_id, observed_artist_id, role,
+            presentation_order, display_value, join_phrase, created_at
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,'',$8)",
+    )
+    .bind(billing_id)
+    .bind(track_id)
+    .bind(source_artist_id)
+    .bind(observation_id)
+    .bind(role)
+    .bind(presentation_order)
+    .bind(display_value)
+    .bind(now)
+    .execute(&mut *tx)
+    .await
+    .expect("insert repeated Track Artist billing");
+    tx.commit().await.expect("commit repeated Artist setup");
+    (target_artist_id, source_artist_id, observation_id)
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn seed_published_release_with_options_full(
     db: &TestDb,

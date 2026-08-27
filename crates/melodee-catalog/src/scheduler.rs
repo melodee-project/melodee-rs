@@ -6,8 +6,9 @@ use tokio::time::{self, Duration as TokioDuration};
 use tracing::{error, info};
 
 use crate::{
-    CatalogConfig, CatalogImportStats, cancellation::CatalogCancellation,
-    importer::import_once_with_cancellation,
+    CatalogConfig, CatalogImportStats,
+    cancellation::CatalogCancellation,
+    importer::{import_once_with_cancellation, reconcile_artist_identities_once},
 };
 
 /// Lifecycle handle for the catalog scheduler.
@@ -48,6 +49,10 @@ pub fn start_catalog_loop(
             info!("catalog import disabled: no periodic worker started");
             return None;
         }
+
+        // Converge safe candidates left by an older binary even when no new
+        // Published work remains to trigger the post-import reconciliation.
+        reconcile_artist_identities_once(&store, &pool).await;
 
         let interval = TokioDuration::try_from(config.poll_interval)
             .unwrap_or_else(|_| TokioDuration::from_secs(5));

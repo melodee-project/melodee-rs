@@ -15,11 +15,32 @@ The catalog importer preserves each raw Release/Track Artist observation. A Trac
 observation resolves to a Release Artist identity when exactly one primary Artist observation on
 that same Release has the same normalized value. Other differently named Artists billed on the
 Release do not make that exact match ambiguous. If no Release Artist or multiple Release Artist
-observations match, the Track keeps a separate provisional identity for review. Same-name Artists
-from separate Releases remain separate unless stronger evidence or an administrator decision
-resolves them. Strong retained provider evidence may schedule an auditable reconciliation, but it
-never bypasses the accepted merge policy. Melodee never merges Artists from normalized-name
-equality alone.
+observations match, the Track keeps a separate provisional identity for review.
+
+Across Releases, exact name equality never merges Artists automatically. The catalog keeps each
+provisional identity and records the other same-name identities as non-authoritative proposals in
+Identity Review. A later administrator confirmation or merge can resolve a true duplicate, while a
+**Never Match** decision durably suppresses an incorrect candidate. Candidate cards include Artist
+disambiguation text, so legitimate same-name identities such as `Nirvana — UK psychedelic group`
+and `Nirvana — US grunge band` can be reviewed without changing their canonical names.
+
+The catalog automatically converges cross-Release Artists only when both carry the same trusted,
+well-formed provider identifier. Known conflicts—different IDs from the same provider,
+incompatible Artist types, disjoint active dates, disjoint known group membership, locked decisions,
+or do-not-match assertions—block that merge. Successful strong-evidence convergence retains raw
+observations, writes a reversible merge tombstone and automated audit history, and leaves the
+surviving identity provisional. The bounded strong-ID and proposal checks run after imports and
+once at server startup.
+
+Repeated structured Track credits inside one Release use a separate, narrower rule. If the same
+exact normalized credit received several provisional track-only identities, Melodee converges them
+to one active Artist only when every occurrence belongs to that Release and no Release Artist,
+verified identity, locked decision, do-not-match assertion, or conflicting provider ID makes the
+group ambiguous. The Release must also have exactly one primary Release Artist and no `Various
+Artists` billing or durable compilation evidence. Primary and featured roles do not create separate
+identities. This reconciliation also runs after imports and at startup, so repeated credits such as
+`Glockboyz Teejaee` across several Tracks repair without deleting observations or resetting the
+catalog; ambiguous and compilation contexts remain in Identity Review.
 
 ## Structured Track billing
 

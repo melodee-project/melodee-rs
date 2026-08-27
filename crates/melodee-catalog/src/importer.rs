@@ -3,12 +3,14 @@
 use std::time::Instant;
 
 use melodee_domain::{
-    ArtistId, ArtistMerge, ArtistMergeId, Confidence, EvidenceKind, EvidencePolarity, FailureClass,
-    WorkErrorCode,
+    ArtistId, ArtistMatchDecision, ArtistMatchDecisionId, ArtistMatchEvidence,
+    ArtistMatchEvidenceId, ArtistMatchOutcome, ArtistMerge, ArtistMergeId, Confidence,
+    DecisionAuthority, EvidenceKind, EvidencePolarity, FailureClass, NewArtistMatchDecision,
+    ObservedArtistId, WorkErrorCode,
 };
 use melodee_persistence::{
-    CatalogImportRequest, CatalogImportResult, CatalogStore, CatalogStoreError, WorkEngineConfig,
-    WorkStoreError, WorkerId,
+    ArtistReconciliationEvidence, CatalogImportRequest, CatalogImportResult, CatalogStore,
+    CatalogStoreError, WorkEngineConfig, WorkStoreError, WorkerId,
 };
 use sqlx::PgPool;
 use thiserror::Error;
@@ -178,7 +180,7 @@ pub(crate) async fn import_once_with_cancellation(
                     .await
                 {
                     Ok(result) => {
-                        reconcile_strong_artist_identities(&store, &pool).await;
+                        reconcile_artist_identities_once(&store, &pool).await;
                         reconcile_strong_release_identities(&store, &pool).await;
                         CatalogTaskOutput::Completed {
                             work_item_id: item.id,
@@ -211,6 +213,15 @@ pub(crate) async fn import_once_with_cancellation(
         "bounded catalog import pass completed"
     );
     Ok(stats)
+}
+
+/// Runs one bounded Artist reconciliation sweep. The scheduler invokes this
+/// once at startup to converge durable duplicates left by older binaries, and
+/// successful imports invoke it again for newly committed observations.
+pub(crate) async fn reconcile_artist_identities_once(store: &CatalogStore, pool: &PgPool) {
+    reconcile_strong_artist_identities(store, pool).await;
+    reconcile_same_release_track_artist_identities(store, pool).await;
+    propose_name_only_artist_matches(store, pool).await;
 }
 
 /// Runs the bounded production caller for the pure local resolver after each
@@ -268,8 +279,12 @@ async fn reconcile_strong_artist_identities(store: &CatalogStore, pool: &PgPool)
             ),
             occurred_at: time::OffsetDateTime::now_utc(),
         };
+        let evidence = ArtistReconciliationEvidence::EmbeddedExternalId {
+            provider: candidate.provider.clone(),
+            external_id: candidate.external_id.clone(),
+        };
         match store
-            .merge_artist(pool, &merge, LOCAL_RESOLVER_VERSION)
+            .reconcile_artist(pool, &merge, LOCAL_RESOLVER_VERSION, &evidence)
             .await
         {
             Ok(()) => info!(
@@ -284,6 +299,143 @@ async fn reconcile_strong_artist_identities(store: &CatalogStore, pool: &PgPool)
             }
             Err(error) => {
                 warn!(%error, source_artist_id=%candidate.source_artist_id, "Artist merge candidate was preserved without mutation")
+            }
+        }
+    }
+}
+
+/// Runs ADR-0173's Release-bounded Track-credit predicate before name-only
+/// proposals. Collapsing repeated track-only observations to one
+/// provisional identity per Release first prevents candidate ordering from
+/// leaving same-Release siblings behind when a name also occurs elsewhere.
+async fn reconcile_same_release_track_artist_identities(store: &CatalogStore, pool: &PgPool) {
+    let candidates = match store
+        .same_release_track_artist_merge_candidates(pool, 64)
+        .await
+    {
+        Ok(candidates) => candidates,
+        Err(error) => {
+            warn!(%error, "same-Release Track Artist reconciliation scan failed; import remains durable");
+            return;
+        }
+    };
+    for candidate in candidates {
+        let merge = ArtistMerge {
+            id: ArtistMergeId::new(),
+            source_artist_id: ArtistId::from_uuid(candidate.source_artist_id),
+            source_public_api_id: melodee_domain::ArtistPublicId::from_uuid(
+                candidate.source_public_api_id,
+            ),
+            target_artist_id: ArtistId::from_uuid(candidate.target_artist_id),
+            actor: "catalog-reconciler".to_owned(),
+            reason: format!(
+                "exact structured Track credit {} recurred within Release {}",
+                candidate.normalized_name, candidate.release_id
+            ),
+            occurred_at: OffsetDateTime::now_utc(),
+        };
+        let evidence = ArtistReconciliationEvidence::SameReleaseTrackCredit {
+            release_id: candidate.release_id,
+            normalized_name: candidate.normalized_name.clone(),
+        };
+        match store
+            .reconcile_artist(pool, &merge, LOCAL_RESOLVER_VERSION, &evidence)
+            .await
+        {
+            Ok(()) => info!(
+                source_artist_id=%candidate.source_artist_id,
+                target_artist_id=%candidate.target_artist_id,
+                release_id=%candidate.release_id,
+                normalized_name=%candidate.normalized_name,
+                "same-Release Track Artist identity converged"
+            ),
+            Err(CatalogStoreError::MutationConflict) => {
+                debug!(source_artist_id=%candidate.source_artist_id, "same-Release Track Artist merge was already reconciled or fenced")
+            }
+            Err(error) => {
+                warn!(%error, source_artist_id=%candidate.source_artist_id, "same-Release Track Artist candidate was preserved without mutation")
+            }
+        }
+    }
+}
+
+/// Turns exact normalized-name equality into reviewable evidence without
+/// changing either Melodee-owned Artist identity. Proposals do not advance the
+/// authoritative current pointer, so legitimate same-name Artists remain
+/// distinct unless an administrator confirms or merges them.
+async fn propose_name_only_artist_matches(store: &CatalogStore, pool: &PgPool) {
+    let candidates = match store
+        .name_only_artist_match_proposal_candidates(pool, 64)
+        .await
+    {
+        Ok(candidates) => candidates,
+        Err(error) => {
+            warn!(%error, "name-only Artist proposal scan failed; import remains durable");
+            return;
+        }
+    };
+    let Some(confidence) = Confidence::new(7_000).ok() else {
+        return;
+    };
+    for candidate in candidates {
+        let now = OffsetDateTime::now_utc();
+        let evidence = ArtistMatchEvidence {
+            id: ArtistMatchEvidenceId::new(),
+            observed_artist_id: ObservedArtistId::from_uuid(candidate.observed_artist_id),
+            candidate_artist_id: ArtistId::from_uuid(candidate.candidate_artist_id),
+            kind: EvidenceKind::NameSimilarity,
+            polarity: EvidencePolarity::Supports,
+            confidence,
+            source: "catalog-name-proposal".to_owned(),
+        };
+        if let Err(error) = store
+            .record_artist_match_evidence(pool, &evidence, Default::default(), now)
+            .await
+        {
+            warn!(%error, observed_artist_id=%candidate.observed_artist_id, "name-only Artist evidence could not be recorded");
+            continue;
+        }
+        let reason = format!(
+            "exact normalized name '{}' requires identity review",
+            candidate.normalized_name
+        );
+        let decision = match ArtistMatchDecision::new(
+            NewArtistMatchDecision {
+                id: ArtistMatchDecisionId::new(),
+                observed_artist_id: ObservedArtistId::from_uuid(candidate.observed_artist_id),
+                artist_id: ArtistId::from_uuid(candidate.candidate_artist_id),
+                outcome: ArtistMatchOutcome::Proposed,
+                authority: DecisionAuthority::Automated {
+                    resolver_version: LOCAL_RESOLVER_VERSION.to_owned(),
+                },
+                locked: false,
+                reason,
+                decided_at: now,
+            },
+            std::slice::from_ref(&evidence),
+        ) {
+            Ok(decision) => decision,
+            Err(error) => {
+                warn!(%error, observed_artist_id=%candidate.observed_artist_id, "name-only Artist proposal was invalid");
+                continue;
+            }
+        };
+        match store
+            .record_artist_match_decision(pool, &decision, confidence, Default::default())
+            .await
+        {
+            Ok(()) => info!(
+                observed_artist_id=%candidate.observed_artist_id,
+                current_artist_id=%candidate.current_artist_id,
+                candidate_artist_id=%candidate.candidate_artist_id,
+                normalized_name=%candidate.normalized_name,
+                "name-only Artist match proposed for review"
+            ),
+            Err(CatalogStoreError::MutationConflict | CatalogStoreError::NegativeAssertion) => {
+                debug!(observed_artist_id=%candidate.observed_artist_id, "name-only Artist proposal was already recorded or suppressed")
+            }
+            Err(error) => {
+                warn!(%error, observed_artist_id=%candidate.observed_artist_id, "name-only Artist proposal was preserved without an identity mutation")
             }
         }
     }

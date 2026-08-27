@@ -200,6 +200,7 @@ pub struct MatchEvidenceDto {
 pub struct CandidateDto {
     pub artist_id: Uuid,
     pub artist_name: String,
+    pub artist_disambiguation: Option<String>,
     pub artist_status: String,
     pub latest_outcome: String,
     pub latest_confidence: i32,
@@ -946,6 +947,7 @@ fn detail_dto(detail: ObservedArtistDetail) -> ObservationDetailDto {
             .map(|candidate| CandidateDto {
                 artist_id: candidate.artist_public_id,
                 artist_name: candidate.artist_name,
+                artist_disambiguation: candidate.artist_disambiguation,
                 artist_status: candidate.artist_status,
                 latest_outcome: candidate.latest_outcome,
                 latest_confidence: candidate.latest_confidence,

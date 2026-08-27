@@ -14,10 +14,61 @@ use crate::catalog_mutations::{
     insert_artist, rebuild_participation_for_tracks,
 };
 use crate::{
-    CatalogCorrectionDimension, CatalogStore, CatalogStoreError,
+    ArtistReconciliationEvidence, CatalogCorrectionDimension, CatalogStore, CatalogStoreError,
     MAX_CATALOG_CORRECTION_IDENTITY_ROWS, MAX_CATALOG_CORRECTION_RELEASES,
     MAX_CATALOG_CORRECTION_TRACKS, MAX_CATALOG_SPLIT_ASSIGNMENTS,
 };
+
+#[derive(Clone, Copy)]
+enum ArtistMergeDecisionAuthority<'a> {
+    Admin,
+    Automated(&'a ArtistReconciliationEvidence),
+}
+
+impl<'a> ArtistMergeDecisionAuthority<'a> {
+    const fn database_values(self) -> (&'static str, i32, bool) {
+        match self {
+            Self::Admin => ("admin", 10_000, true),
+            Self::Automated(_) => ("automated", 9_000, false),
+        }
+    }
+
+    const fn predicate(self) -> &'static str {
+        match self {
+            Self::Admin => "administrative_merge",
+            Self::Automated(evidence) => evidence.predicate(),
+        }
+    }
+
+    fn audit_payload(self) -> serde_json::Value {
+        match self {
+            Self::Admin => serde_json::json!({
+                "authority": "admin",
+                "predicate": self.predicate(),
+            }),
+            Self::Automated(evidence) => serde_json::json!({
+                "authority": "automated",
+                "evidence": evidence.payload(),
+            }),
+        }
+    }
+
+    const fn automated_evidence(self) -> Option<&'a ArtistReconciliationEvidence> {
+        match self {
+            Self::Admin => None,
+            Self::Automated(evidence) => Some(evidence),
+        }
+    }
+}
+
+struct ArtistObservationRetarget<'a> {
+    expected_artist_id: ArtistId,
+    artist_id: ArtistId,
+    actor: &'a str,
+    reason: &'a str,
+    now: OffsetDateTime,
+    decision_authority: ArtistMergeDecisionAuthority<'a>,
+}
 
 impl CatalogStore {
     /// Appends immutable AudioIdentity comparison evidence.
@@ -452,6 +503,41 @@ impl CatalogStore {
         merge: &ArtistMerge,
         resolver_version: &str,
     ) -> Result<(), CatalogStoreError> {
+        self.merge_artist_with_authority(
+            pool,
+            merge,
+            resolver_version,
+            ArtistMergeDecisionAuthority::Admin,
+        )
+        .await
+    }
+
+    /// Applies an automated, audited Artist reconciliation without recording
+    /// its replacement decisions as locked administrator choices.
+    pub async fn reconcile_artist(
+        &self,
+        pool: &PgPool,
+        merge: &ArtistMerge,
+        resolver_version: &str,
+        evidence: &ArtistReconciliationEvidence,
+    ) -> Result<(), CatalogStoreError> {
+        evidence.validate()?;
+        self.merge_artist_with_authority(
+            pool,
+            merge,
+            resolver_version,
+            ArtistMergeDecisionAuthority::Automated(evidence),
+        )
+        .await
+    }
+
+    async fn merge_artist_with_authority(
+        &self,
+        pool: &PgPool,
+        merge: &ArtistMerge,
+        resolver_version: &str,
+        decision_authority: ArtistMergeDecisionAuthority<'_>,
+    ) -> Result<(), CatalogStoreError> {
         ArtistMerge::new(merge.clone())?;
         let mut tx = pool.begin().await?;
         let artists = sqlx::query_as::<_, (Uuid, Uuid, String, String, String, i64)>(
@@ -553,11 +639,14 @@ impl CatalogStore {
         retarget_observations(
             &mut tx,
             &observation_ids,
-            merge.source_artist_id,
-            merge.target_artist_id,
-            &merge.actor,
-            &merge.reason,
-            merge.occurred_at,
+            &ArtistObservationRetarget {
+                expected_artist_id: merge.source_artist_id,
+                artist_id: merge.target_artist_id,
+                actor: &merge.actor,
+                reason: &merge.reason,
+                now: merge.occurred_at,
+                decision_authority,
+            },
         )
         .await?;
         let release_artist_count = update_artist_links(
@@ -661,6 +750,7 @@ impl CatalogStore {
             "relationships": relationship_count,
             "memberships": membership_count,
             "observations": observation_ids.len(),
+            "reconciliation": decision_authority.audit_payload(),
         });
         sqlx::query(
             "INSERT INTO artist_merge_events (
@@ -769,11 +859,14 @@ impl CatalogStore {
         retarget_observations(
             &mut tx,
             &observation_ids,
-            split.source_artist_id,
-            split.new_artist_id,
-            &split.actor,
-            &split.reason,
-            split.occurred_at,
+            &ArtistObservationRetarget {
+                expected_artist_id: split.source_artist_id,
+                artist_id: split.new_artist_id,
+                actor: &split.actor,
+                reason: &split.reason,
+                now: split.occurred_at,
+                decision_authority: ArtistMergeDecisionAuthority::Admin,
+            },
         )
         .await?;
 
@@ -1087,11 +1180,7 @@ fn limit_plus_one(limit: usize) -> Result<i64, CatalogStoreError> {
 async fn retarget_observations(
     tx: &mut Transaction<'_, Postgres>,
     observation_ids: &[Uuid],
-    expected_artist_id: ArtistId,
-    artist_id: ArtistId,
-    actor: &str,
-    reason: &str,
-    now: OffsetDateTime,
+    retarget: &ArtistObservationRetarget<'_>,
 ) -> Result<(), CatalogStoreError> {
     if observation_ids.is_empty() {
         return Ok(());
@@ -1128,7 +1217,7 @@ async fn retarget_observations(
          FOR UPDATE OF current, authoritative",
     )
     .bind(observation_ids)
-    .bind(expected_artist_id.into_uuid())
+    .bind(retarget.expected_artist_id.into_uuid())
     .fetch_all(&mut **tx)
     .await?;
     if predecessors.len() != observation_ids.len() {
@@ -1146,6 +1235,21 @@ async fn retarget_observations(
         .iter()
         .map(|(_, predecessor_id)| *predecessor_id)
         .collect::<Vec<_>>();
+    let reconciliation_evidence_ids = match retarget.decision_authority.automated_evidence() {
+        Some(evidence) => {
+            insert_automated_reconciliation_evidence(
+                tx,
+                &persisted_observation_ids,
+                retarget.artist_id,
+                retarget.actor,
+                retarget.now,
+                evidence,
+            )
+            .await?
+        }
+        None => Vec::new(),
+    };
+    let (authority, confidence, is_locked) = retarget.decision_authority.database_values();
     sqlx::query(
         "INSERT INTO artist_match_decisions (
             id, observed_artist_id, artist_id, outcome, authority,
@@ -1153,19 +1257,34 @@ async fn retarget_observations(
             payload, created_at
          )
          SELECT input.decision_id, input.observed_artist_id, $4,
-                'confirmed', 'admin', 10000, $5, true,
+                'confirmed', $8, $9, $5, $10,
                 input.predecessor_decision_id,
-                jsonb_build_object('actor', $6::text, 'correction', true), $7
+                jsonb_build_object(
+                    'actor', $6::text,
+                    'correction', true,
+                    'reconciliation_predicate', $11::text,
+                    'evidence_ids', COALESCE((
+                        SELECT jsonb_agg(evidence.id ORDER BY evidence.id)
+                        FROM artist_match_evidence evidence
+                        WHERE evidence.id=ANY($12::uuid[])
+                          AND evidence.observed_artist_id=input.observed_artist_id
+                    ), '[]'::jsonb)
+                ), $7
          FROM unnest($1::uuid[], $2::uuid[], $3::uuid[])
               AS input(decision_id, observed_artist_id, predecessor_decision_id)",
     )
     .bind(&decision_ids)
     .bind(&persisted_observation_ids)
     .bind(&predecessor_ids)
-    .bind(artist_id.into_uuid())
-    .bind(reason)
-    .bind(actor)
-    .bind(now)
+    .bind(retarget.artist_id.into_uuid())
+    .bind(retarget.reason)
+    .bind(retarget.actor)
+    .bind(retarget.now)
+    .bind(authority)
+    .bind(confidence)
+    .bind(is_locked)
+    .bind(retarget.decision_authority.predicate())
+    .bind(&reconciliation_evidence_ids)
     .execute(&mut **tx)
     .await?;
     let updated = sqlx::query(
@@ -1176,7 +1295,7 @@ async fn retarget_observations(
     )
     .bind(&persisted_observation_ids)
     .bind(&decision_ids)
-    .bind(now)
+    .bind(retarget.now)
     .execute(&mut **tx)
     .await?
     .rows_affected();
@@ -1186,6 +1305,60 @@ async fn retarget_observations(
         return Err(CatalogStoreError::MutationConflict);
     }
     Ok(())
+}
+
+async fn insert_automated_reconciliation_evidence(
+    tx: &mut Transaction<'_, Postgres>,
+    observation_ids: &[Uuid],
+    candidate_artist_id: ArtistId,
+    actor: &str,
+    now: OffsetDateTime,
+    evidence: &ArtistReconciliationEvidence,
+) -> Result<Vec<Uuid>, CatalogStoreError> {
+    let facts: &[(&str, i32)] = match evidence {
+        ArtistReconciliationEvidence::EmbeddedExternalId { .. } => {
+            &[("embedded_external_id", 9_500)]
+        }
+        ArtistReconciliationEvidence::SameReleaseTrackCredit { .. } => {
+            &[("name_similarity", 9_000), ("release_context", 9_500)]
+        }
+    };
+    let mut ids = Vec::with_capacity(observation_ids.len().saturating_mul(facts.len()));
+    let mut observations = Vec::with_capacity(ids.capacity());
+    let mut kinds = Vec::with_capacity(ids.capacity());
+    let mut confidences = Vec::with_capacity(ids.capacity());
+    for observation_id in observation_ids {
+        for (kind, confidence) in facts {
+            ids.push(Uuid::now_v7());
+            observations.push(*observation_id);
+            kinds.push(*kind);
+            confidences.push(*confidence);
+        }
+    }
+    if ids.is_empty() {
+        return Ok(ids);
+    }
+    sqlx::query(
+        "INSERT INTO artist_match_evidence (
+            id, observed_artist_id, candidate_artist_id, evidence_kind,
+            polarity, confidence, source, payload, created_at
+         )
+         SELECT input.id, input.observed_artist_id, $5, input.evidence_kind,
+                'supports', input.confidence, $6, $7, $8
+         FROM unnest($1::uuid[], $2::uuid[], $3::text[], $4::integer[])
+              AS input(id, observed_artist_id, evidence_kind, confidence)",
+    )
+    .bind(&ids)
+    .bind(&observations)
+    .bind(&kinds)
+    .bind(&confidences)
+    .bind(candidate_artist_id.into_uuid())
+    .bind(actor)
+    .bind(evidence.payload())
+    .bind(now)
+    .execute(&mut **tx)
+    .await?;
+    Ok(ids)
 }
 
 async fn audio_release_ids(

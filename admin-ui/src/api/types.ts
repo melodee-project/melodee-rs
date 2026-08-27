@@ -578,6 +578,7 @@ export interface MatchEvidence {
 export interface IdentityCandidate {
   artistId: string;
   artistName: string;
+  artistDisambiguation: string | null;
   artistStatus: string;
   latestOutcome: string;
   /** Basis points out of 10_000. */

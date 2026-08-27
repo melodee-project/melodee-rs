@@ -53,10 +53,10 @@ impl ObservedArtistSort {
     }
 }
 
-/// One observed Artist string awaiting an authoritative resolution, with its
-/// Release/Track source context and pending-match counts. An observation is
-/// unresolved while `artist_match_current` has no authoritative decision for
-/// it (proposals never advance the current pointer).
+/// One observed Artist string awaiting operator attention, with its
+/// Release/Track source context and pending-match counts. An observation is in
+/// the queue when it has no authoritative decision or when a newer,
+/// non-authoritative alternative proposal requires review.
 #[derive(Debug, Clone)]
 pub struct UnresolvedObservedArtist {
     pub id: Uuid,
@@ -112,6 +112,7 @@ pub struct ObservedArtistCandidate {
     pub artist_id: Uuid,
     pub artist_public_id: Uuid,
     pub artist_name: String,
+    pub artist_disambiguation: Option<String>,
     pub artist_status: String,
     pub latest_outcome: String,
     pub latest_confidence: i32,
@@ -222,8 +223,30 @@ const OBSERVATION_SELECT: &str = "SELECT o.id, o.release_id, r.public_api_id AS 
             o.display_value, o.source_pointer,
             (SELECT count(DISTINCT proposed.artist_id)
                FROM artist_match_decisions proposed
+               JOIN artists proposed_artist ON proposed_artist.id=proposed.artist_id
               WHERE proposed.observed_artist_id = o.id
-                AND proposed.outcome = 'proposed') AS pending_match_count,
+                AND proposed.outcome = 'proposed'
+                AND proposed_artist.status IN ('provisional','verified')
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM artist_match_current settled
+                    JOIN artist_match_decisions settled_decision
+                      ON settled_decision.id=settled.decision_id
+                    WHERE settled.observed_artist_id=o.id
+                      AND settled_decision.created_at >= proposed.created_at
+                )
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM artist_negative_assertions negative
+                    WHERE negative.observed_artist_id=o.id
+                      AND negative.candidate_artist_id=proposed.artist_id
+                      AND negative.assertion_kind='do_not_match'
+                      AND NOT EXISTS (
+                          SELECT 1 FROM artist_negative_assertions revoked
+                          WHERE revoked.predecessor_assertion_id=negative.id
+                            AND revoked.assertion_kind='revoke'
+                      )
+                )) AS pending_match_count,
             (SELECT count(*)
                FROM artist_match_evidence evidence
               WHERE evidence.observed_artist_id = o.id) AS evidence_count,
@@ -233,9 +256,9 @@ const OBSERVATION_SELECT: &str = "SELECT o.id, o.release_id, r.public_api_id AS 
        LEFT JOIN tracks t ON t.id = o.track_id";
 
 impl CatalogStore {
-    /// Counts observed Artists without an authoritative match decision (the
-    /// unresolved identity queue depth) without loading any rows — the
-    /// dashboard attention count.
+    /// Counts observed Artists requiring operator attention: observations
+    /// without a current decision plus observations with a newer alternative
+    /// proposal.
     pub async fn count_unresolved_observations(
         &self,
         pool: &PgPool,
@@ -244,15 +267,39 @@ impl CatalogStore {
             "SELECT COUNT(*)::bigint FROM observed_artists o
              WHERE NOT EXISTS (
                  SELECT 1 FROM artist_match_current current
-                 WHERE current.observed_artist_id = o.id)",
+                 WHERE current.observed_artist_id = o.id)
+                OR EXISTS (
+                    SELECT 1
+                    FROM artist_match_decisions proposal
+                    JOIN artists candidate ON candidate.id=proposal.artist_id
+                    JOIN artist_match_current current
+                      ON current.observed_artist_id=o.id
+                    JOIN artist_match_decisions current_decision
+                      ON current_decision.id=current.decision_id
+                    WHERE proposal.observed_artist_id=o.id
+                      AND proposal.outcome='proposed'
+                      AND proposal.created_at > current_decision.created_at
+                      AND proposal.artist_id <> current_decision.artist_id
+                      AND candidate.status IN ('provisional','verified')
+                      AND NOT EXISTS (
+                          SELECT 1 FROM artist_negative_assertions negative
+                          WHERE negative.observed_artist_id=o.id
+                            AND negative.candidate_artist_id=proposal.artist_id
+                            AND negative.assertion_kind='do_not_match'
+                            AND NOT EXISTS (
+                                SELECT 1 FROM artist_negative_assertions revoked
+                                WHERE revoked.predecessor_assertion_id=negative.id
+                                  AND revoked.assertion_kind='revoke'
+                            )
+                      )
+                )",
         )
         .fetch_one(pool)
         .await?)
     }
 
-    /// Lists observed Artists without an authoritative match decision
-    /// (the unresolved identity queue), paged and whitelist-sorted, plus the
-    /// total row count for the filter.
+    /// Lists observed Artists requiring operator attention, paged and
+    /// whitelist-sorted, plus the total row count for the filter.
     pub async fn list_unresolved_observations(
         &self,
         pool: &PgPool,
@@ -264,7 +311,32 @@ impl CatalogStore {
             "SELECT COUNT(*)::bigint FROM observed_artists o
              WHERE NOT EXISTS (
                  SELECT 1 FROM artist_match_current current
-                 WHERE current.observed_artist_id = o.id)",
+                 WHERE current.observed_artist_id = o.id)
+                OR EXISTS (
+                    SELECT 1
+                    FROM artist_match_decisions proposal
+                    JOIN artists candidate ON candidate.id=proposal.artist_id
+                    JOIN artist_match_current current
+                      ON current.observed_artist_id=o.id
+                    JOIN artist_match_decisions current_decision
+                      ON current_decision.id=current.decision_id
+                    WHERE proposal.observed_artist_id=o.id
+                      AND proposal.outcome='proposed'
+                      AND proposal.created_at > current_decision.created_at
+                      AND proposal.artist_id <> current_decision.artist_id
+                      AND candidate.status IN ('provisional','verified')
+                      AND NOT EXISTS (
+                          SELECT 1 FROM artist_negative_assertions negative
+                          WHERE negative.observed_artist_id=o.id
+                            AND negative.candidate_artist_id=proposal.artist_id
+                            AND negative.assertion_kind='do_not_match'
+                            AND NOT EXISTS (
+                                SELECT 1 FROM artist_negative_assertions revoked
+                                WHERE revoked.predecessor_assertion_id=negative.id
+                                  AND revoked.assertion_kind='revoke'
+                            )
+                      )
+                )",
         )
         .fetch_one(pool)
         .await?;
@@ -276,6 +348,31 @@ impl CatalogStore {
              WHERE NOT EXISTS (
                  SELECT 1 FROM artist_match_current current
                  WHERE current.observed_artist_id = o.id)
+                OR EXISTS (
+                    SELECT 1
+                    FROM artist_match_decisions proposal
+                    JOIN artists candidate ON candidate.id=proposal.artist_id
+                    JOIN artist_match_current current
+                      ON current.observed_artist_id=o.id
+                    JOIN artist_match_decisions current_decision
+                      ON current_decision.id=current.decision_id
+                    WHERE proposal.observed_artist_id=o.id
+                      AND proposal.outcome='proposed'
+                      AND proposal.created_at > current_decision.created_at
+                      AND proposal.artist_id <> current_decision.artist_id
+                      AND candidate.status IN ('provisional','verified')
+                      AND NOT EXISTS (
+                          SELECT 1 FROM artist_negative_assertions negative
+                          WHERE negative.observed_artist_id=o.id
+                            AND negative.candidate_artist_id=proposal.artist_id
+                            AND negative.assertion_kind='do_not_match'
+                            AND NOT EXISTS (
+                                SELECT 1 FROM artist_negative_assertions revoked
+                                WHERE revoked.predecessor_assertion_id=negative.id
+                                  AND revoked.assertion_kind='revoke'
+                            )
+                      )
+                )
              ORDER BY {}
              LIMIT $1 OFFSET $2",
             sort.order_by()
@@ -360,6 +457,7 @@ impl CatalogStore {
                 Uuid,
                 Uuid,
                 String,
+                Option<String>,
                 String,
                 String,
                 i32,
@@ -371,7 +469,7 @@ impl CatalogStore {
         >(
             "SELECT DISTINCT ON (decision.artist_id)
                     decision.artist_id, artist.public_api_id, artist.canonical_name,
-                    artist.status, decision.outcome, decision.confidence,
+                    artist.disambiguation, artist.status, decision.outcome, decision.confidence,
                     decision.reason, decision.is_locked, decision.created_at,
                     (SELECT count(*) FROM artist_match_decisions history
                       WHERE history.observed_artist_id = $1
@@ -390,6 +488,7 @@ impl CatalogStore {
                 artist_id,
                 public_id,
                 name,
+                disambiguation,
                 status,
                 outcome,
                 confidence,
@@ -402,6 +501,7 @@ impl CatalogStore {
                     artist_id,
                     artist_public_id: public_id,
                     artist_name: name,
+                    artist_disambiguation: disambiguation,
                     artist_status: status,
                     latest_outcome: outcome,
                     latest_confidence: confidence,

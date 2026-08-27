@@ -2244,6 +2244,7 @@ version = "0.1.0"
 dependencies = [
  "melodee-domain",
  "melodee-persistence",
+ "serde_json",
  "sqlx",
  "thiserror 2.0.20",
  "time",

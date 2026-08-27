@@ -44,12 +44,13 @@ pub use auth::{
     normalize_login,
 };
 pub use catalog::{
-    ArtistMetadataPatch, CatalogCorrectionDimension, CatalogCounts, CatalogImportRequest,
-    CatalogImportResult, CatalogStore, CatalogStoreError, LegacyCatalogEntityType,
-    LegacyCatalogIdMapping, MAX_CATALOG_CORRECTION_IDENTITY_ROWS,
+    ArtistMetadataPatch, ArtistReconciliationEvidence, CatalogCorrectionDimension, CatalogCounts,
+    CatalogImportRequest, CatalogImportResult, CatalogStore, CatalogStoreError,
+    LegacyCatalogEntityType, LegacyCatalogIdMapping, MAX_CATALOG_CORRECTION_IDENTITY_ROWS,
     MAX_CATALOG_CORRECTION_OVERLAY_REFERENCES, MAX_CATALOG_CORRECTION_RELEASES,
-    MAX_CATALOG_CORRECTION_TRACKS, MAX_CATALOG_SPLIT_ASSIGNMENTS, PolicyEligibleWorkItem,
-    ProviderNegativeAssertion, ReleaseMetadataPatch, StoredArtistCandidate,
+    MAX_CATALOG_CORRECTION_TRACKS, MAX_CATALOG_SPLIT_ASSIGNMENTS,
+    NameOnlyArtistMatchProposalCandidate, PolicyEligibleWorkItem, ProviderNegativeAssertion,
+    ReleaseMetadataPatch, SameReleaseTrackArtistMergeCandidate, StoredArtistCandidate,
     StoredArtistTrackAssociation, StoredCatalogImport, StrongArtistMergeCandidate,
     StrongReleaseMergeCandidate, TrackMetadataPatch,
 };

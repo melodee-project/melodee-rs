@@ -248,6 +248,11 @@ function CandidateCard({
         </span>
         <span className="melodee-identity-candidate__title">
           <strong>{candidate.artistName}</strong>
+          {candidate.artistDisambiguation ? (
+            <span className="melodee-identity-candidate__facts">
+              {candidate.artistDisambiguation}
+            </span>
+          ) : null}
           <span className="melodee-identity-candidate__meta">
             <StatusTag
               kind={artistStatusKind(candidate.artistStatus)}

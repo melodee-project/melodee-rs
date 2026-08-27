@@ -6,14 +6,19 @@ mod catalog_common;
 mod common;
 
 use catalog_common::{
-    CatalogFixturePresentation, seed_published_release,
+    CatalogFixturePresentation, seed_legacy_repeated_track_artist_identity, seed_published_release,
     seed_published_release_with_musicbrainz_ids, seed_published_release_with_release_artists,
 };
 use common::{TestDb, test_config};
 use melodee_domain::{
-    FailureClass, IngestionState, PUBLICATION_MANIFEST_VERSION, RetryPolicy, WorkErrorCode,
+    ArtistId, ArtistMatchDecision, ArtistMatchDecisionId, ArtistMatchOutcome, ArtistMerge,
+    ArtistMergeId, ArtistNegativeAssertion, ArtistNegativeAssertionId, ArtistPublicId, Confidence,
+    DecisionAuthority, FailureClass, IngestionState, NewArtistMatchDecision, ObservedArtistId,
+    PUBLICATION_MANIFEST_VERSION, RetryPolicy, WorkErrorCode,
 };
-use melodee_persistence::{CatalogImportRequest, CatalogStore, WorkItemStore, WorkerId};
+use melodee_persistence::{
+    ArtistReconciliationEvidence, CatalogImportRequest, CatalogStore, WorkItemStore, WorkerId,
+};
 use time::Duration;
 
 #[tokio::test]
@@ -415,6 +420,856 @@ async fn multi_artist_release_keeps_equal_normalized_release_matches_ambiguous()
     assert_eq!(
         imported.artist_count, 3,
         "two equal Release observations are not a unique identity match"
+    );
+    assert!(
+        catalog
+            .same_release_track_artist_merge_candidates(&db.pool, 64)
+            .await
+            .expect("scan same-Release Track candidates")
+            .is_empty(),
+        "Release Artist ambiguity must not enter Track-only reconciliation"
+    );
+    assert!(
+        !catalog
+            .name_only_artist_match_proposal_candidates(&db.pool, 64)
+            .await
+            .expect("scan exact-name review candidates")
+            .is_empty(),
+        "same-Release ambiguity remains reviewable without automatic convergence"
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn repeated_track_artist_credit_reconciliation_is_release_scoped_audited_and_unlocked() {
+    let db = TestDb::create("catalog_same_release_track_reconciliation").await;
+    let catalog = CatalogStore;
+    let worker = WorkerId::new();
+    let now = time::OffsetDateTime::now_utc();
+    let fixture = seed_published_release_with_release_artists(
+        &db,
+        88,
+        CatalogFixturePresentation {
+            release_title: "Woounded, Vol. 2",
+            release_artist: "9000 Rondae",
+            track_title: "Face Hot",
+            track_artist: "9000 Rondae/Glockboyz Teejaee",
+            release_date: "2023-01-01",
+        },
+        &["9000 Rondae"],
+    )
+    .await;
+    catalog
+        .claim_cataloging(&db.pool, &worker, &test_config(), now)
+        .await
+        .expect("claim repeated Track credit fixture");
+    catalog
+        .import_manifest_v3(
+            &db.pool,
+            fixture.work_item_id,
+            &worker,
+            &CatalogImportRequest::new("same-release-track-v1", "catalog-test"),
+            now,
+        )
+        .await
+        .expect("import Track billing fixture");
+    let (_, legacy_source_artist_id, legacy_observation_id) =
+        seed_legacy_repeated_track_artist_identity(&db, fixture.release_id, "glockboyz teejaee")
+            .await;
+
+    let candidates = catalog
+        .same_release_track_artist_merge_candidates(&db.pool, 64)
+        .await
+        .expect("scan repeated same-Release Track credits");
+    assert_eq!(candidates.len(), 1);
+    let candidate = &candidates[0];
+    assert_eq!(candidate.release_id, fixture.release_id.into_uuid());
+    assert_eq!(candidate.normalized_name, "glockboyz teejaee");
+    assert_eq!(candidate.source_artist_id, legacy_source_artist_id);
+    let merge = ArtistMerge {
+        id: ArtistMergeId::new(),
+        source_artist_id: ArtistId::from_uuid(candidate.source_artist_id),
+        source_public_api_id: ArtistPublicId::from_uuid(candidate.source_public_api_id),
+        target_artist_id: ArtistId::from_uuid(candidate.target_artist_id),
+        actor: "catalog-reconciler".to_owned(),
+        reason: "ADR-0173 repeated same-Release Track credit".to_owned(),
+        occurred_at: time::OffsetDateTime::now_utc(),
+    };
+    catalog
+        .reconcile_artist(
+            &db.pool,
+            &merge,
+            "same-release-track-v1",
+            &ArtistReconciliationEvidence::SameReleaseTrackCredit {
+                release_id: candidate.release_id,
+                normalized_name: candidate.normalized_name.clone(),
+            },
+        )
+        .await
+        .expect("reconcile repeated Track credit");
+
+    let statuses: (i64, i64) = sqlx::query_as(
+        "SELECT count(*) FILTER (WHERE status='provisional'),
+                count(*) FILTER (WHERE status='merged')
+           FROM artists WHERE normalized_name='glockboyz teejaee'",
+    )
+    .fetch_one(&db.pool)
+    .await
+    .expect("read repeated credit Artist statuses");
+    assert_eq!(statuses, (1, 1));
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM track_artists WHERE artist_id=$1",)
+            .bind(candidate.target_artist_id)
+            .fetch_one(&db.pool)
+            .await
+            .expect("count retargeted Track credits"),
+        2
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM observed_artists WHERE id=$1")
+            .bind(legacy_observation_id)
+            .fetch_one(&db.pool)
+            .await
+            .expect("read retained raw observation"),
+        1
+    );
+    let replacement: (String, bool, serde_json::Value) = sqlx::query_as(
+        "SELECT decision.authority, decision.is_locked, decision.payload
+           FROM artist_match_current current
+           JOIN artist_match_decisions decision ON decision.id=current.decision_id
+          WHERE current.observed_artist_id=$1",
+    )
+    .bind(legacy_observation_id)
+    .fetch_one(&db.pool)
+    .await
+    .expect("read automated replacement decision");
+    assert_eq!(replacement.0, "automated");
+    assert!(!replacement.1);
+    assert_eq!(
+        replacement.2["reconciliation_predicate"],
+        "same_release_track_credit"
+    );
+    let evidence: Vec<String> = sqlx::query_scalar(
+        "SELECT evidence_kind FROM artist_match_evidence
+          WHERE observed_artist_id=$1 AND candidate_artist_id=$2
+          ORDER BY evidence_kind",
+    )
+    .bind(legacy_observation_id)
+    .bind(candidate.target_artist_id)
+    .fetch_all(&db.pool)
+    .await
+    .expect("read retained reconciliation evidence");
+    assert_eq!(evidence, ["name_similarity", "release_context"]);
+    let audit: serde_json::Value = sqlx::query_scalar(
+        "SELECT moved_relationships FROM artist_merge_events
+          WHERE source_artist_id=$1 AND target_artist_id=$2",
+    )
+    .bind(candidate.source_artist_id)
+    .bind(candidate.target_artist_id)
+    .fetch_one(&db.pool)
+    .await
+    .expect("read repeated credit merge audit");
+    assert_eq!(
+        audit["reconciliation"]["evidence"]["predicate"],
+        "same_release_track_credit"
+    );
+    assert_eq!(
+        audit["reconciliation"]["evidence"]["release_id"],
+        candidate.release_id.to_string()
+    );
+    assert!(
+        catalog
+            .same_release_track_artist_merge_candidates(&db.pool, 64)
+            .await
+            .expect("repeat reconciliation scan")
+            .is_empty(),
+        "reconciliation is idempotent"
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn conflicting_provider_ids_block_same_release_track_artist_reconciliation() {
+    let db = TestDb::create("catalog_same_release_track_provider_conflict").await;
+    let catalog = CatalogStore;
+    let worker = WorkerId::new();
+    let now = time::OffsetDateTime::now_utc();
+    let fixture = seed_published_release_with_release_artists(
+        &db,
+        87,
+        CatalogFixturePresentation {
+            release_title: "Provider Conflict",
+            release_artist: "Host Artist",
+            track_title: "Shared Stage",
+            track_artist: "Host Artist/Conflict Guest",
+            release_date: "2026-01-01",
+        },
+        &["Host Artist"],
+    )
+    .await;
+    catalog
+        .claim_cataloging(&db.pool, &worker, &test_config(), now)
+        .await
+        .expect("claim provider-conflict fixture");
+    catalog
+        .import_manifest_v3(
+            &db.pool,
+            fixture.work_item_id,
+            &worker,
+            &CatalogImportRequest::new("same-release-track-v1", "catalog-test"),
+            now,
+        )
+        .await
+        .expect("import provider-conflict fixture");
+    let (target_artist_id, source_artist_id, _) =
+        seed_legacy_repeated_track_artist_identity(&db, fixture.release_id, "conflict guest").await;
+    for (artist_id, external_id) in [
+        (target_artist_id, "aa1b1c1d-0000-7000-8000-000000000051"),
+        (source_artist_id, "aa1b1c1d-0000-7000-8000-000000000052"),
+    ] {
+        sqlx::query(
+            "INSERT INTO artist_external_identities (
+                id, artist_id, provider, external_id, confidence,
+                evidence_source, created_at
+             ) VALUES ($1,$2,'musicbrainz',$3,9000,'catalog-test',$4)",
+        )
+        .bind(uuid::Uuid::now_v7())
+        .bind(artist_id)
+        .bind(external_id)
+        .bind(now)
+        .execute(&db.pool)
+        .await
+        .expect("insert conflicting provider identity");
+    }
+    assert!(
+        catalog
+            .same_release_track_artist_merge_candidates(&db.pool, 64)
+            .await
+            .expect("scan provider-conflicted Track credits")
+            .is_empty(),
+        "different IDs from the same provider must block co-resolution"
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn compilation_evidence_blocks_same_release_track_artist_reconciliation() {
+    let db = TestDb::create("catalog_same_release_track_compilation").await;
+    let catalog = CatalogStore;
+    let worker = WorkerId::new();
+    let now = time::OffsetDateTime::now_utc();
+    let fixture = seed_published_release_with_release_artists(
+        &db,
+        85,
+        CatalogFixturePresentation {
+            release_title: "Compilation Context",
+            release_artist: "Host Artist",
+            track_title: "Shared Stage",
+            track_artist: "Host Artist/Compilation Guest",
+            release_date: "2026-01-01",
+        },
+        &["Host Artist"],
+    )
+    .await;
+    catalog
+        .claim_cataloging(&db.pool, &worker, &test_config(), now)
+        .await
+        .expect("claim compilation fixture");
+    catalog
+        .import_manifest_v3(
+            &db.pool,
+            fixture.work_item_id,
+            &worker,
+            &CatalogImportRequest::new("same-release-track-v1", "catalog-test"),
+            now,
+        )
+        .await
+        .expect("import compilation fixture");
+    seed_legacy_repeated_track_artist_identity(&db, fixture.release_id, "compilation guest").await;
+    assert_eq!(
+        catalog
+            .same_release_track_artist_merge_candidates(&db.pool, 64)
+            .await
+            .expect("scan pre-classification Track credits")
+            .len(),
+        1
+    );
+
+    sqlx::query(
+        "INSERT INTO release_catalog_trait_assertions (
+            id, release_id, trait, source_version, actor, reason, evidence, created_at
+         ) VALUES ($1,$2,'compilation','catalog-test-v1','catalog-test',
+                   'fixture compilation evidence',$3,$4)",
+    )
+    .bind(uuid::Uuid::now_v7())
+    .bind(fixture.release_id.into_uuid())
+    .bind(serde_json::json!({"source": "test"}))
+    .bind(now)
+    .execute(&db.pool)
+    .await
+    .expect("insert compilation evidence");
+
+    assert!(
+        catalog
+            .same_release_track_artist_merge_candidates(&db.pool, 64)
+            .await
+            .expect("scan compilation Track credits")
+            .is_empty(),
+        "known compilations fail closed instead of co-resolving repeated names"
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn negative_assertions_and_locked_decisions_block_same_release_track_reconciliation() {
+    let db = TestDb::create("catalog_same_release_track_manual_conflict").await;
+    let catalog = CatalogStore;
+    let worker = WorkerId::new();
+    let now = time::OffsetDateTime::now_utc();
+    let fixture = seed_published_release_with_release_artists(
+        &db,
+        86,
+        CatalogFixturePresentation {
+            release_title: "Manual Conflict",
+            release_artist: "Host Artist",
+            track_title: "Shared Stage",
+            track_artist: "Host Artist/Manual Guest",
+            release_date: "2026-01-01",
+        },
+        &["Host Artist"],
+    )
+    .await;
+    catalog
+        .claim_cataloging(&db.pool, &worker, &test_config(), now)
+        .await
+        .expect("claim manual-conflict fixture");
+    catalog
+        .import_manifest_v3(
+            &db.pool,
+            fixture.work_item_id,
+            &worker,
+            &CatalogImportRequest::new("same-release-track-v1", "catalog-test"),
+            now,
+        )
+        .await
+        .expect("import manual-conflict fixture");
+    let (target_artist_id, source_artist_id, source_observation_id) =
+        seed_legacy_repeated_track_artist_identity(&db, fixture.release_id, "manual guest").await;
+    assert_eq!(
+        catalog
+            .same_release_track_artist_merge_candidates(&db.pool, 64)
+            .await
+            .expect("scan initial same-Release candidate")
+            .len(),
+        1
+    );
+
+    let assertion_id = ArtistNegativeAssertionId::new();
+    catalog
+        .record_artist_negative_assertion(
+            &db.pool,
+            &ArtistNegativeAssertion {
+                id: assertion_id,
+                observed_artist_id: ObservedArtistId::from_uuid(source_observation_id),
+                rejected_artist_id: ArtistId::from_uuid(target_artist_id),
+                authority: DecisionAuthority::Administrator {
+                    actor: "catalog-test".to_owned(),
+                },
+                locked: true,
+                reason: "same Track display name is not the same Artist".to_owned(),
+                decided_at: now + Duration::seconds(1),
+            },
+        )
+        .await
+        .expect("record same-Release do-not-match assertion");
+    assert!(
+        catalog
+            .same_release_track_artist_merge_candidates(&db.pool, 64)
+            .await
+            .expect("scan negative-assertion candidates")
+            .is_empty()
+    );
+
+    catalog
+        .revoke_artist_negative_assertion(
+            &db.pool,
+            assertion_id.into_uuid(),
+            &DecisionAuthority::Administrator {
+                actor: "catalog-test".to_owned(),
+            },
+            "resume same-Release evidence evaluation",
+            now + Duration::seconds(2),
+        )
+        .await
+        .expect("revoke same-Release do-not-match assertion");
+    assert_eq!(
+        catalog
+            .same_release_track_artist_merge_candidates(&db.pool, 64)
+            .await
+            .expect("scan after same-Release assertion revocation")
+            .len(),
+        1
+    );
+
+    let locked = ArtistMatchDecision::new(
+        NewArtistMatchDecision {
+            id: ArtistMatchDecisionId::new(),
+            observed_artist_id: ObservedArtistId::from_uuid(source_observation_id),
+            artist_id: ArtistId::from_uuid(source_artist_id),
+            outcome: ArtistMatchOutcome::Confirmed,
+            authority: DecisionAuthority::Administrator {
+                actor: "catalog-test".to_owned(),
+            },
+            locked: true,
+            reason: "administrator locked this same-Release identity".to_owned(),
+            decided_at: now + Duration::seconds(3),
+        },
+        &[],
+    )
+    .expect("construct locked same-Release decision");
+    catalog
+        .record_artist_match_decision(
+            &db.pool,
+            &locked,
+            Confidence::new(10_000).expect("valid confidence"),
+            serde_json::json!({"fixture": "same-release-track-lock"}),
+        )
+        .await
+        .expect("record locked same-Release decision");
+    assert!(
+        catalog
+            .same_release_track_artist_merge_candidates(&db.pool, 64)
+            .await
+            .expect("scan locked same-Release candidates")
+            .is_empty()
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn cross_release_exact_names_are_review_candidates_not_merge_candidates() {
+    let db = TestDb::create("catalog_cross_release_name_proposal").await;
+    let first = seed_published_release(
+        &db,
+        96,
+        CatalogFixturePresentation {
+            release_title: "Alice Cooper Goes to Hell",
+            release_artist: "Alice Cooper",
+            track_title: "Go to Hell",
+            track_artist: "Alice Cooper",
+            release_date: "1976-06-25",
+        },
+    )
+    .await;
+    let second = seed_published_release(
+        &db,
+        97,
+        CatalogFixturePresentation {
+            release_title: "Brutal Planet",
+            release_artist: "Alice Cooper",
+            track_title: "Brutal Planet",
+            track_artist: "Alice Cooper",
+            release_date: "2000-06-06",
+        },
+    )
+    .await;
+    let catalog = CatalogStore;
+    let worker = WorkerId::new();
+    let now = time::OffsetDateTime::now_utc();
+    let claimed = catalog
+        .claim_cataloging(&db.pool, &worker, &test_config(), now)
+        .await
+        .expect("claim cross-Release fixtures");
+    assert_eq!(claimed.len(), 2);
+    for fixture in [&first, &second] {
+        catalog
+            .import_manifest_v3(
+                &db.pool,
+                fixture.work_item_id,
+                &worker,
+                &CatalogImportRequest::new("cross-release-name-v1", "catalog-test"),
+                now,
+            )
+            .await
+            .expect("import cross-Release fixture");
+    }
+
+    let candidates = catalog
+        .name_only_artist_match_proposal_candidates(&db.pool, 64)
+        .await
+        .expect("scan exact-name review candidates");
+    assert_eq!(
+        candidates.len(),
+        4,
+        "each raw occurrence retains a review path"
+    );
+    assert!(
+        candidates
+            .iter()
+            .all(|candidate| candidate.normalized_name == "alice cooper"
+                && candidate.current_artist_id != candidate.candidate_artist_id)
+    );
+
+    let statuses: (i64, i64) = sqlx::query_as(
+        "SELECT count(*) FILTER (WHERE status='provisional'),
+                count(*) FILTER (WHERE status='merged')
+           FROM artists WHERE normalized_name='alice cooper'",
+    )
+    .fetch_one(&db.pool)
+    .await
+    .expect("read same-name Artist statuses");
+    assert_eq!(statuses, (2, 0));
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM artist_merge_events")
+            .fetch_one(&db.pool)
+            .await
+            .expect("count merge events"),
+        0,
+        "name equality must never mutate Artist identity"
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn conflicting_provider_ids_preserve_same_name_identities_and_allow_review() {
+    let db = TestDb::create("catalog_cross_release_name_conflict").await;
+    let first_artist_id = "aa1b1c1d-0000-7000-8000-000000000041";
+    let second_artist_id = "aa1b1c1d-0000-7000-8000-000000000042";
+    let fixtures = [
+        seed_published_release_with_musicbrainz_ids(
+            &db,
+            98,
+            CatalogFixturePresentation {
+                release_title: "First Same-Name Release",
+                release_artist: "Same Name",
+                track_title: "First Track",
+                track_artist: "Same Name",
+                release_date: "2025-01-01",
+            },
+            serde_json::json!({
+                "artist": first_artist_id,
+                "release_artist": first_artist_id
+            }),
+        )
+        .await,
+        seed_published_release_with_musicbrainz_ids(
+            &db,
+            99,
+            CatalogFixturePresentation {
+                release_title: "Second Same-Name Release",
+                release_artist: "Same Name",
+                track_title: "Second Track",
+                track_artist: "Same Name",
+                release_date: "2026-01-01",
+            },
+            serde_json::json!({
+                "artist": second_artist_id,
+                "release_artist": second_artist_id
+            }),
+        )
+        .await,
+    ];
+    let catalog = CatalogStore;
+    let worker = WorkerId::new();
+    let now = time::OffsetDateTime::now_utc();
+    assert_eq!(
+        catalog
+            .claim_cataloging(&db.pool, &worker, &test_config(), now)
+            .await
+            .expect("claim provider-conflict fixtures")
+            .len(),
+        2
+    );
+    for fixture in &fixtures {
+        catalog
+            .import_manifest_v3(
+                &db.pool,
+                fixture.work_item_id,
+                &worker,
+                &CatalogImportRequest::new("cross-release-name-v1", "catalog-test"),
+                now,
+            )
+            .await
+            .expect("import provider-conflict fixture");
+    }
+
+    assert_eq!(
+        catalog
+            .strong_artist_merge_candidates(&db.pool, 64)
+            .await
+            .expect("scan strong candidates")
+            .len(),
+        0,
+        "different IDs from the same provider block automatic convergence"
+    );
+    assert!(
+        !catalog
+            .name_only_artist_match_proposal_candidates(&db.pool, 64)
+            .await
+            .expect("scan conflicted names for review")
+            .is_empty(),
+        "conflicting same-name identities remain available for human review"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM artists
+              WHERE normalized_name='same name' AND status='provisional'",
+        )
+        .fetch_one(&db.pool)
+        .await
+        .expect("count preserved same-name identities"),
+        2
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn conflicting_active_dates_block_strong_provider_id_reconciliation() {
+    let db = TestDb::create("catalog_strong_artist_date_conflict").await;
+    let shared_artist_id = "aa1b1c1d-0000-7000-8000-000000000061";
+    let fixtures = [
+        seed_published_release_with_musicbrainz_ids(
+            &db,
+            100,
+            CatalogFixturePresentation {
+                release_title: "British Same-Name Release",
+                release_artist: "Nirvana",
+                track_title: "First Track",
+                track_artist: "Nirvana",
+                release_date: "1968-01-01",
+            },
+            serde_json::json!({
+                "artist": shared_artist_id,
+                "release_artist": shared_artist_id
+            }),
+        )
+        .await,
+        seed_published_release_with_musicbrainz_ids(
+            &db,
+            101,
+            CatalogFixturePresentation {
+                release_title: "American Same-Name Release",
+                release_artist: "Nirvana",
+                track_title: "Second Track",
+                track_artist: "Nirvana",
+                release_date: "1991-01-01",
+            },
+            serde_json::json!({
+                "artist": shared_artist_id,
+                "release_artist": shared_artist_id
+            }),
+        )
+        .await,
+    ];
+    let catalog = CatalogStore;
+    let worker = WorkerId::new();
+    let now = time::OffsetDateTime::now_utc();
+    assert_eq!(
+        catalog
+            .claim_cataloging(&db.pool, &worker, &test_config(), now)
+            .await
+            .expect("claim active-date fixtures")
+            .len(),
+        2
+    );
+    for fixture in &fixtures {
+        catalog
+            .import_manifest_v3(
+                &db.pool,
+                fixture.work_item_id,
+                &worker,
+                &CatalogImportRequest::new("strong-id-conflict-v1", "catalog-test"),
+                now,
+            )
+            .await
+            .expect("import active-date fixture");
+    }
+    let artist_ids: Vec<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT DISTINCT artist_id FROM release_artists
+          WHERE release_id=ANY($1) ORDER BY artist_id",
+    )
+    .bind(
+        fixtures
+            .iter()
+            .map(|fixture| fixture.release_id.into_uuid())
+            .collect::<Vec<_>>(),
+    )
+    .fetch_all(&db.pool)
+    .await
+    .expect("read same-name Artist identities");
+    assert_eq!(artist_ids.len(), 2);
+    assert_eq!(
+        catalog
+            .strong_artist_merge_candidates(&db.pool, 64)
+            .await
+            .expect("scan matching trusted IDs")
+            .len(),
+        1
+    );
+
+    sqlx::query("UPDATE artists SET begin_date='1966-01-01', end_date='1971-12-31' WHERE id=$1")
+        .bind(artist_ids[0])
+        .execute(&db.pool)
+        .await
+        .expect("set first Artist dates");
+    sqlx::query("UPDATE artists SET begin_date='1987-01-01' WHERE id=$1")
+        .bind(artist_ids[1])
+        .execute(&db.pool)
+        .await
+        .expect("set second Artist dates");
+    assert!(
+        catalog
+            .strong_artist_merge_candidates(&db.pool, 64)
+            .await
+            .expect("scan conflicting active dates")
+            .is_empty(),
+        "disjoint active ranges block even an otherwise strong provider-ID merge"
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn negative_assertions_and_locked_decisions_suppress_name_only_proposals() {
+    let db = TestDb::create("catalog_cross_release_manual_conflict").await;
+    let fixtures = [
+        seed_published_release(
+            &db,
+            105,
+            CatalogFixturePresentation {
+                release_title: "First Manual Context",
+                release_artist: "Shared Billing",
+                track_title: "First Track",
+                track_artist: "Shared Billing",
+                release_date: "2025-01-01",
+            },
+        )
+        .await,
+        seed_published_release(
+            &db,
+            106,
+            CatalogFixturePresentation {
+                release_title: "Second Manual Context",
+                release_artist: "Shared Billing",
+                track_title: "Second Track",
+                track_artist: "Shared Billing",
+                release_date: "2026-01-01",
+            },
+        )
+        .await,
+    ];
+    let catalog = CatalogStore;
+    let worker = WorkerId::new();
+    let now = time::OffsetDateTime::now_utc();
+    assert_eq!(
+        catalog
+            .claim_cataloging(&db.pool, &worker, &test_config(), now)
+            .await
+            .expect("claim manual-conflict fixtures")
+            .len(),
+        2
+    );
+    for fixture in &fixtures {
+        catalog
+            .import_manifest_v3(
+                &db.pool,
+                fixture.work_item_id,
+                &worker,
+                &CatalogImportRequest::new("cross-release-name-v1", "catalog-test"),
+                now,
+            )
+            .await
+            .expect("import manual-conflict fixture");
+    }
+    let candidate = catalog
+        .name_only_artist_match_proposal_candidates(&db.pool, 64)
+        .await
+        .expect("scan initial name-only candidate")
+        .into_iter()
+        .next()
+        .expect("same provisional billing is initially eligible");
+    let source_observation = candidate.observed_artist_id;
+    let assertion_id = ArtistNegativeAssertionId::new();
+    catalog
+        .record_artist_negative_assertion(
+            &db.pool,
+            &ArtistNegativeAssertion {
+                id: assertion_id,
+                observed_artist_id: ObservedArtistId::from_uuid(source_observation),
+                rejected_artist_id: ArtistId::from_uuid(candidate.candidate_artist_id),
+                authority: DecisionAuthority::Administrator {
+                    actor: "catalog-test".to_owned(),
+                },
+                locked: true,
+                reason: "same display name is not the same Artist".to_owned(),
+                decided_at: now + Duration::seconds(1),
+            },
+        )
+        .await
+        .expect("record local do-not-match assertion");
+    assert!(
+        catalog
+            .name_only_artist_match_proposal_candidates(&db.pool, 64)
+            .await
+            .expect("scan negative-assertion candidates")
+            .iter()
+            .all(|other| other.observed_artist_id != source_observation
+                || other.candidate_artist_id != candidate.candidate_artist_id)
+    );
+
+    catalog
+        .revoke_artist_negative_assertion(
+            &db.pool,
+            assertion_id.into_uuid(),
+            &DecisionAuthority::Administrator {
+                actor: "catalog-test".to_owned(),
+            },
+            "resume evidence evaluation",
+            now + Duration::seconds(2),
+        )
+        .await
+        .expect("revoke local do-not-match assertion");
+    assert!(
+        catalog
+            .name_only_artist_match_proposal_candidates(&db.pool, 64)
+            .await
+            .expect("scan after negative revocation")
+            .iter()
+            .any(|other| other.observed_artist_id == source_observation
+                && other.candidate_artist_id == candidate.candidate_artist_id)
+    );
+
+    let locked = ArtistMatchDecision::new(
+        NewArtistMatchDecision {
+            id: ArtistMatchDecisionId::new(),
+            observed_artist_id: ObservedArtistId::from_uuid(source_observation),
+            artist_id: ArtistId::from_uuid(candidate.current_artist_id),
+            outcome: ArtistMatchOutcome::Confirmed,
+            authority: DecisionAuthority::Administrator {
+                actor: "catalog-test".to_owned(),
+            },
+            locked: true,
+            reason: "administrator locked this provisional identity".to_owned(),
+            decided_at: now + Duration::seconds(3),
+        },
+        &[],
+    )
+    .expect("construct locked administrator decision");
+    catalog
+        .record_artist_match_decision(
+            &db.pool,
+            &locked,
+            Confidence::new(10_000).expect("valid confidence"),
+            serde_json::json!({"fixture": "cross-release-lock"}),
+        )
+        .await
+        .expect("record locked administrator decision");
+    assert!(
+        catalog
+            .name_only_artist_match_proposal_candidates(&db.pool, 64)
+            .await
+            .expect("scan locked-decision candidates")
+            .iter()
+            .all(|other| other.observed_artist_id != source_observation)
     );
     db.drop().await;
 }

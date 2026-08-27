@@ -108,6 +108,8 @@ python3 scripts/new_adr.py "short title"
 - [ADR-0153: Reuse unambiguous Release Artist identity for matching Tracks](ADR-0153-reuse-unambiguous-release-artist-identity-for-matching-tracks.md) (superseded by ADR-0170)
 - [ADR-0170: Reuse uniquely matching Release Artist identities for Tracks](ADR-0170-reuse-uniquely-matching-release-artist-identities-for-tracks.md) (supersedes ADR-0153)
 - [ADR-0172: Parse Track billing with Release-scoped identity evidence](ADR-0172-parse-track-billing-with-release-scoped-identity-evidence.md)
+- [ADR-0173: Reconcile repeated Track Artist credits within one Release](ADR-0173-reconcile-repeated-track-artist-credits-within-one-release.md)
+- [ADR-0174: Require review for name-only Artist identity matches](ADR-0174-require-review-for-name-only-artist-identity-matches.md) (partially supersedes ADR-0160)
 
 ## Feature Completion Program decisions
 

@@ -208,7 +208,7 @@ async fn identity_review_reads_surface_observations_evidence_and_feed() {
         normalized_name: "the unresolved".to_string(),
         sort_name: "Unresolved, The".to_string(),
         artist_type: melodee_domain::ArtistType::Group,
-        disambiguation: None,
+        disambiguation: Some("London psychedelic group".to_string()),
         active_dates: None,
         status: melodee_domain::ArtistStatus::Verified,
         created_at: now,
@@ -285,6 +285,10 @@ async fn identity_review_reads_surface_observations_evidence_and_feed() {
     assert_eq!(detail.candidates.len(), 1);
     let candidate_row = &detail.candidates[0];
     assert_eq!(candidate_row.artist_id, candidate.id().into_uuid());
+    assert_eq!(
+        candidate_row.artist_disambiguation.as_deref(),
+        Some("London psychedelic group")
+    );
     assert_eq!(candidate_row.latest_outcome, "proposed");
     assert_eq!(candidate_row.latest_confidence, 7_500);
     assert_eq!(candidate_row.decision_count, 1);
