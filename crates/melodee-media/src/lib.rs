@@ -415,7 +415,8 @@ pub fn inspect_release(
     let mut sidecars = Vec::new();
     let mut findings = Vec::new();
     let mut release_titles = Vec::new();
-    let mut release_artists = Vec::new();
+    let mut release_album_artists = Vec::new();
+    let mut release_track_artists = Vec::new();
     let mut bytes_hashed = 0_u64;
     let mut ffprobe_invocations = 0_u32;
     let ffprobe_version = tool_version(&options.ffprobe_path, options.max_tool_output_bytes);
@@ -465,8 +466,8 @@ pub fn inspect_release(
 
         if let Some(metadata) = &observed.metadata {
             push_unique(&mut release_titles, metadata.album.clone());
-            push_unique(&mut release_artists, metadata.album_artist.clone());
-            push_unique(&mut release_artists, metadata.artist.clone());
+            push_unique(&mut release_album_artists, metadata.album_artist.clone());
+            push_unique(&mut release_track_artists, metadata.artist.clone());
         }
 
         if observed.kind == ObservedFileKind::Audio {
@@ -510,7 +511,15 @@ pub fn inspect_release(
     artwork.sort_unstable_by(|left, right| left.relative_path.cmp(&right.relative_path));
     sidecars.sort_unstable_by(|left, right| left.relative_path.cmp(&right.relative_path));
     release_titles.sort_unstable();
-    release_artists.sort_unstable();
+    release_album_artists.sort_unstable();
+    release_track_artists.sort_unstable();
+    let release_artists =
+        select_release_artist_observations(&release_album_artists, &release_track_artists);
+    let release_artist_source = if release_album_artists.is_empty() {
+        "track_artist_fallback"
+    } else {
+        "album_artist"
+    };
 
     let audio_count = files
         .iter()
@@ -570,6 +579,9 @@ pub fn inspect_release(
             date: None,
             source_labels: serde_json::json!({
                 "observed_titles": release_titles,
+                "observed_album_artists": release_album_artists,
+                "observed_track_artists": release_track_artists,
+                "release_artist_source": release_artist_source,
             }),
         },
         files,
@@ -600,6 +612,17 @@ pub fn inspect_release(
         bytes_hashed,
         ffprobe_invocations,
     })
+}
+
+fn select_release_artist_observations(
+    album_artists: &[String],
+    track_artists: &[String],
+) -> Vec<String> {
+    if album_artists.is_empty() {
+        track_artists.to_vec()
+    } else {
+        album_artists.to_vec()
+    }
 }
 
 /// Hashes a manifest's stable semantic representation with BLAKE3.
@@ -1523,6 +1546,20 @@ mod tests {
         let path = std::env::temp_dir().join(format!("melodee-media-{name}-{}", Uuid::now_v7()));
         fs::create_dir_all(&path).expect("temp directory");
         path
+    }
+
+    #[test]
+    fn release_artist_observation_prefers_album_artist_over_track_billing() {
+        let album_artists = vec!["6arelyhuman".to_owned()];
+        let track_artists = vec!["6arelyhuman".to_owned(), "6arelyhuman/Baby Jane".to_owned()];
+        assert_eq!(
+            select_release_artist_observations(&album_artists, &track_artists),
+            album_artists
+        );
+        assert_eq!(
+            select_release_artist_observations(&[], &track_artists),
+            track_artists
+        );
     }
 
     #[test]

@@ -107,6 +107,7 @@ python3 scripts/new_adr.py "short title"
 - [ADR-0152: Execute confirmed Release deletion with audited tombstones](ADR-0152-execute-confirmed-release-deletion-with-audited-tombstones.md)
 - [ADR-0153: Reuse unambiguous Release Artist identity for matching Tracks](ADR-0153-reuse-unambiguous-release-artist-identity-for-matching-tracks.md) (superseded by ADR-0170)
 - [ADR-0170: Reuse uniquely matching Release Artist identities for Tracks](ADR-0170-reuse-uniquely-matching-release-artist-identities-for-tracks.md) (supersedes ADR-0153)
+- [ADR-0172: Parse Track billing with Release-scoped identity evidence](ADR-0172-parse-track-billing-with-release-scoped-identity-evidence.md)
 
 ## Feature Completion Program decisions
 

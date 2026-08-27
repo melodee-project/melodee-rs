@@ -17,6 +17,301 @@ use melodee_persistence::{CatalogImportRequest, CatalogStore, WorkItemStore, Wor
 use time::Duration;
 
 #[tokio::test]
+async fn slash_billing_keeps_release_artist_primary_and_creates_featured_track_artists() {
+    let db = TestDb::create("catalog_slash_track_billing").await;
+    let catalog = CatalogStore;
+    let worker = WorkerId::new();
+    let now = time::OffsetDateTime::now_utc();
+    let fixture = seed_published_release_with_release_artists(
+        &db,
+        92,
+        CatalogFixturePresentation {
+            release_title: "Digital Dancer",
+            release_artist: "6arelyhuman",
+            track_title: "Abyss",
+            track_artist: "6arelyhuman/Baby Jane",
+            release_date: "2024-05-03",
+        },
+        &["6arelyhuman"],
+    )
+    .await;
+    catalog
+        .claim_cataloging(&db.pool, &worker, &test_config(), now)
+        .await
+        .expect("claim slash billing import");
+    let imported = catalog
+        .import_manifest_v3(
+            &db.pool,
+            fixture.work_item_id,
+            &worker,
+            &CatalogImportRequest::new("structured-track-billing-v1", "catalog-test"),
+            now,
+        )
+        .await
+        .expect("import slash billing");
+    assert_eq!(imported.artist_count, 2);
+
+    let release_artists: Vec<String> = sqlx::query_scalar(
+        "SELECT artist.canonical_name
+           FROM release_artists billing
+           JOIN artists artist ON artist.id=billing.artist_id
+          WHERE billing.release_id=$1 ORDER BY billing.presentation_order",
+    )
+    .bind(fixture.release_id.into_uuid())
+    .fetch_all(&db.pool)
+    .await
+    .expect("read Release Artists");
+    assert_eq!(release_artists, ["6arelyhuman"]);
+
+    let track_artists: Vec<(String, String, String, i32)> = sqlx::query_as(
+        "SELECT artist.canonical_name, billing.role, billing.join_phrase,
+                billing.presentation_order
+           FROM track_artists billing
+           JOIN artists artist ON artist.id=billing.artist_id
+           JOIN tracks track ON track.id=billing.track_id
+          WHERE track.release_id=$1 ORDER BY billing.presentation_order",
+    )
+    .bind(fixture.release_id.into_uuid())
+    .fetch_all(&db.pool)
+    .await
+    .expect("read structured Track Artists");
+    assert_eq!(
+        track_artists,
+        vec![
+            (
+                "6arelyhuman".to_owned(),
+                "primary".to_owned(),
+                "/".to_owned(),
+                1
+            ),
+            (
+                "Baby Jane".to_owned(),
+                "featured".to_owned(),
+                String::new(),
+                2
+            ),
+        ]
+    );
+    let display_artist: String =
+        sqlx::query_scalar("SELECT display_artist FROM tracks WHERE release_id=$1")
+            .bind(fixture.release_id.into_uuid())
+            .fetch_one(&db.pool)
+            .await
+            .expect("read exact Track DisplayArtist");
+    assert_eq!(display_artist, "6arelyhuman/Baby Jane");
+    let associations: Vec<(String, String)> = sqlx::query_as(
+        "SELECT artist.canonical_name, association.association_type
+           FROM artist_track_associations association
+           JOIN artists artist ON artist.id=association.artist_id
+           JOIN tracks track ON track.id=association.track_id
+          WHERE track.release_id=$1
+          ORDER BY artist.canonical_name, association.association_type",
+    )
+    .bind(fixture.release_id.into_uuid())
+    .fetch_all(&db.pool)
+    .await
+    .expect("read Artist participation");
+    assert!(
+        associations
+            .iter()
+            .any(|row| row == &("Baby Jane".to_owned(), "featured_artist".to_owned()))
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM artists WHERE canonical_name='6arelyhuman/Baby Jane'",
+        )
+        .fetch_one(&db.pool)
+        .await
+        .expect("count compound identities"),
+        0
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn slash_billing_supports_multiple_featured_track_artists() {
+    let db = TestDb::create("catalog_multi_feature_slash_billing").await;
+    let catalog = CatalogStore;
+    let worker = WorkerId::new();
+    let now = time::OffsetDateTime::now_utc();
+    let fixture = seed_published_release_with_release_artists(
+        &db,
+        93,
+        CatalogFixturePresentation {
+            release_title: "Woounded, Vol. 2",
+            release_artist: "9000 Rondae",
+            track_title: "Face Hot",
+            track_artist: "9000 Rondae/Glockboyz Teejaee/OnFully/Roadrunner Glockboyz Tez",
+            release_date: "2023-01-01",
+        },
+        &["9000 Rondae"],
+    )
+    .await;
+    catalog
+        .claim_cataloging(&db.pool, &worker, &test_config(), now)
+        .await
+        .expect("claim multiple-feature import");
+    let imported = catalog
+        .import_manifest_v3(
+            &db.pool,
+            fixture.work_item_id,
+            &worker,
+            &CatalogImportRequest::new("structured-track-billing-v1", "catalog-test"),
+            now,
+        )
+        .await
+        .expect("import multiple-feature billing");
+    assert_eq!(imported.artist_count, 4);
+
+    let rows: Vec<(String, String, String)> = sqlx::query_as(
+        "SELECT artist.canonical_name, billing.role, billing.join_phrase
+           FROM track_artists billing
+           JOIN artists artist ON artist.id=billing.artist_id
+           JOIN tracks track ON track.id=billing.track_id
+          WHERE track.release_id=$1 ORDER BY billing.presentation_order",
+    )
+    .bind(fixture.release_id.into_uuid())
+    .fetch_all(&db.pool)
+    .await
+    .expect("read multiple structured Track Artists");
+    assert_eq!(
+        rows,
+        vec![
+            (
+                "9000 Rondae".to_owned(),
+                "primary".to_owned(),
+                "/".to_owned()
+            ),
+            (
+                "Glockboyz Teejaee".to_owned(),
+                "featured".to_owned(),
+                "/".to_owned()
+            ),
+            ("OnFully".to_owned(), "featured".to_owned(), "/".to_owned()),
+            (
+                "Roadrunner Glockboyz Tez".to_owned(),
+                "featured".to_owned(),
+                String::new()
+            ),
+        ]
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn explicit_track_billing_phrases_create_featured_associations() {
+    let db = TestDb::create("catalog_explicit_track_billing").await;
+    let catalog = CatalogStore;
+    let worker = WorkerId::new();
+    let now = time::OffsetDateTime::now_utc();
+    let fixture = seed_published_release_with_release_artists(
+        &db,
+        94,
+        CatalogFixturePresentation {
+            release_title: "Explicit Billing",
+            release_artist: "Somebody",
+            track_title: "Together",
+            track_artist: "Somebody Featuring Colin Hay with Guest",
+            release_date: "2026-01-01",
+        },
+        &["Somebody"],
+    )
+    .await;
+    catalog
+        .claim_cataloging(&db.pool, &worker, &test_config(), now)
+        .await
+        .expect("claim explicit billing import");
+    catalog
+        .import_manifest_v3(
+            &db.pool,
+            fixture.work_item_id,
+            &worker,
+            &CatalogImportRequest::new("structured-track-billing-v1", "catalog-test"),
+            now,
+        )
+        .await
+        .expect("import explicit billing");
+
+    let rows: Vec<(String, String, String)> = sqlx::query_as(
+        "SELECT artist.canonical_name, billing.role, billing.join_phrase
+           FROM track_artists billing
+           JOIN artists artist ON artist.id=billing.artist_id
+           JOIN tracks track ON track.id=billing.track_id
+          WHERE track.release_id=$1 ORDER BY billing.presentation_order",
+    )
+    .bind(fixture.release_id.into_uuid())
+    .fetch_all(&db.pool)
+    .await
+    .expect("read explicit structured Track Artists");
+    assert_eq!(
+        rows,
+        vec![
+            (
+                "Somebody".to_owned(),
+                "primary".to_owned(),
+                " Featuring ".to_owned()
+            ),
+            (
+                "Colin Hay".to_owned(),
+                "featured".to_owned(),
+                " with ".to_owned()
+            ),
+            ("Guest".to_owned(), "featured".to_owned(), String::new()),
+        ]
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn exact_release_artist_with_a_slash_remains_a_literal_identity() {
+    let db = TestDb::create("catalog_literal_slash_artist").await;
+    let catalog = CatalogStore;
+    let worker = WorkerId::new();
+    let now = time::OffsetDateTime::now_utc();
+    let fixture = seed_published_release_with_release_artists(
+        &db,
+        95,
+        CatalogFixturePresentation {
+            release_title: "Literal Slash",
+            release_artist: "$NOT/Jeht",
+            track_title: "No Split",
+            track_artist: "$NOT/Jeht",
+            release_date: "2026-01-01",
+        },
+        &["$NOT/Jeht"],
+    )
+    .await;
+    catalog
+        .claim_cataloging(&db.pool, &worker, &test_config(), now)
+        .await
+        .expect("claim literal slash import");
+    let imported = catalog
+        .import_manifest_v3(
+            &db.pool,
+            fixture.work_item_id,
+            &worker,
+            &CatalogImportRequest::new("structured-track-billing-v1", "catalog-test"),
+            now,
+        )
+        .await
+        .expect("import literal slash Artist");
+    assert_eq!(imported.artist_count, 1);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM track_artists billing
+              JOIN tracks track ON track.id=billing.track_id
+             WHERE track.release_id=$1",
+        )
+        .bind(fixture.release_id.into_uuid())
+        .fetch_one(&db.pool)
+        .await
+        .expect("count literal Track Artist rows"),
+        1
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
 async fn multi_artist_release_reuses_the_one_exact_track_artist_match() {
     let db = TestDb::create("catalog_multi_artist_exact_match").await;
     let catalog = CatalogStore;

@@ -54,6 +54,115 @@ impl ParsedArtistCandidate {
     }
 }
 
+/// Extracts identity-free Artist candidates from explicit billing phrases.
+///
+/// The exact separator text is retained as the preceding candidate's join
+/// phrase. Callers must still resolve every candidate in its Release context;
+/// this parser never assigns or implies an [`ArtistId`]. Malformed billing is
+/// returned as one literal candidate so an incomplete parse cannot discard
+/// source text.
+pub fn parse_explicit_artist_billing(
+    value: &str,
+) -> Result<Vec<ParsedArtistCandidate>, DomainInvariantError> {
+    const SEPARATORS: [&str; 6] = [
+        " featuring ",
+        " feat. ",
+        " feat ",
+        " ft. ",
+        " ft ",
+        " with ",
+    ];
+
+    let normalized = value.to_ascii_lowercase();
+    let mut separators = Vec::new();
+    let mut cursor = 0;
+    while cursor < normalized.len() {
+        let next = SEPARATORS
+            .iter()
+            .filter_map(|separator| {
+                normalized[cursor..]
+                    .find(separator)
+                    .map(|offset| (cursor + offset, separator.len()))
+            })
+            .min_by_key(|(start, _)| *start);
+        let Some((start, len)) = next else {
+            break;
+        };
+        separators.push((start, start + len));
+        cursor = start + len;
+    }
+    candidates_from_separators(value, &separators)
+}
+
+/// Extracts identity-free Artist candidates from slash-delimited billing.
+///
+/// Slash syntax is ambiguous for names such as `AC/DC`. Callers must invoke
+/// this parser only after Release-scoped evidence establishes that a component
+/// is an existing Release Artist. The parser itself deliberately performs no
+/// identity lookup.
+pub fn parse_slash_artist_billing(
+    value: &str,
+) -> Result<Vec<ParsedArtistCandidate>, DomainInvariantError> {
+    let separators = value
+        .match_indices('/')
+        .map(|(start, separator)| (start, start + separator.len()))
+        .collect::<Vec<_>>();
+    candidates_from_separators(value, &separators)
+}
+
+fn candidates_from_separators(
+    value: &str,
+    separators: &[(usize, usize)],
+) -> Result<Vec<ParsedArtistCandidate>, DomainInvariantError> {
+    let literal = || {
+        ParsedArtistCandidate::new(value.trim().to_owned(), String::new())
+            .map(|candidate| vec![candidate])
+    };
+    if separators.is_empty() {
+        return literal();
+    }
+
+    let mut segment_bounds = Vec::with_capacity(separators.len() + 1);
+    let mut start = 0;
+    for &(separator_start, separator_end) in separators {
+        segment_bounds.push((start, separator_start));
+        start = separator_end;
+    }
+    segment_bounds.push((start, value.len()));
+
+    let candidate_bounds = segment_bounds
+        .iter()
+        .map(|&(segment_start, segment_end)| {
+            let segment = &value[segment_start..segment_end];
+            let trimmed_start = segment_start + segment.len() - segment.trim_start().len();
+            let trimmed_end = segment_end - (segment.len() - segment.trim_end().len());
+            (trimmed_start, trimmed_end)
+        })
+        .collect::<Vec<_>>();
+    if candidate_bounds
+        .iter()
+        .any(|(candidate_start, candidate_end)| candidate_start >= candidate_end)
+    {
+        return literal();
+    }
+
+    candidate_bounds
+        .iter()
+        .enumerate()
+        .map(|(index, &(candidate_start, candidate_end))| {
+            let join_phrase = candidate_bounds
+                .get(index + 1)
+                .map_or_else(String::new, |&(next_start, _)| {
+                    value[candidate_end..next_start].to_owned()
+                });
+            ParsedArtistCandidate::new(
+                value[candidate_start..candidate_end].to_owned(),
+                join_phrase,
+            )
+        })
+        .collect()
+}
+
 /// Evidence dimension considered while resolving an Artist observation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

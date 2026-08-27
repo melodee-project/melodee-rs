@@ -11,9 +11,10 @@ use melodee_domain::{
     ArtistId, AudioIdentityId, CatalogImportId, CatalogSemanticOverlay, CatalogSemanticOverlayId,
     ContributionRole, DisplayArtist, DisplayArtistOwner, FailureClass, IngestionState,
     ManifestPublication, NewCatalogSemanticOverlay, ObservedArtistId, OverlayArtistResolution,
-    OverlayAudioIdentityLink, OverlayDisplayArtist, OverlayReferences, ParticipationKind,
-    PublicationPlan, ReleaseArtistId, ReleaseId, ReleaseManifest, ReleaseWorkItem, RetryPolicy,
-    TrackArtistId, TrackId, WorkErrorCode, WorkEventType,
+    OverlayAudioIdentityLink, OverlayDisplayArtist, OverlayReferences, ParsedArtistCandidate,
+    ParticipationKind, PresentationRole, PublicationPlan, ReleaseArtistId, ReleaseId,
+    ReleaseManifest, ReleaseWorkItem, RetryPolicy, TrackArtistId, TrackId, WorkErrorCode,
+    WorkEventType, parse_explicit_artist_billing, parse_slash_artist_billing,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Postgres, QueryBuilder, Transaction};
@@ -1403,11 +1404,42 @@ struct PreparedResolution {
     presentation_id: Uuid,
     track_id: Option<Uuid>,
     source_ordinal: i32,
+    presentation_role: PresentationRole,
+    join_phrase: String,
     raw_value: String,
     normalized_value: String,
     source_pointer: String,
     source_payload: serde_json::Value,
     musicbrainz_ids: Vec<(String, String)>,
+}
+
+#[derive(Clone, Copy)]
+enum ArtistBillingSyntax {
+    Literal,
+    Explicit,
+    Slash,
+}
+
+impl ArtistBillingSyntax {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Literal => "literal",
+            Self::Explicit => "explicit_phrase",
+            Self::Slash => "release_context_slash",
+        }
+    }
+}
+
+struct PreparedBillingCandidate {
+    candidate: ParsedArtistCandidate,
+    role: PresentationRole,
+    syntax: ArtistBillingSyntax,
+}
+
+struct PreparedArtistPresentation {
+    ordinal: i32,
+    role: PresentationRole,
+    join_phrase: String,
 }
 
 struct PreparedImport {
@@ -1475,13 +1507,7 @@ impl PreparedImport {
             .clone()
             .filter(|value| !value.trim().is_empty())
             .ok_or(CatalogStoreError::ImportConflict(work_item_id))?;
-        let release_artists = manifest
-            .release_observation
-            .artists
-            .iter()
-            .filter(|value| !value.trim().is_empty())
-            .cloned()
-            .collect::<Vec<_>>();
+        let release_artists = release_artist_observations(&manifest);
         if release_artists.is_empty() {
             return Err(CatalogStoreError::ImportConflict(work_item_id));
         }
@@ -1614,7 +1640,12 @@ impl PreparedImport {
             resolutions.push(PreparedResolution::new(
                 None,
                 None,
-                i32::try_from(index + 1).map_err(|_| CatalogStoreError::NumericOverflow)?,
+                PreparedArtistPresentation {
+                    ordinal: i32::try_from(index + 1)
+                        .map_err(|_| CatalogStoreError::NumericOverflow)?,
+                    role: PresentationRole::Primary,
+                    join_phrase: String::new(),
+                },
                 raw,
                 format!("/release_observation/artists/{index}"),
                 serde_json::json!({ "value": raw }),
@@ -1662,23 +1693,47 @@ impl PreparedImport {
                 .and_then(|metadata| metadata.artist.as_ref())
                 .filter(|value| !value.trim().is_empty())
             {
-                let normalized = normalize_lookup(raw);
-                let release_artist_id =
-                    matching_release_artists.get(&normalized).copied().flatten();
-                resolutions.push(PreparedResolution::new(
-                    release_artist_id,
-                    Some(prepared_track.id),
-                    1,
-                    raw,
-                    format!("/tracks/{index}/observed_metadata/artist"),
-                    serde_json::json!({ "value": raw, "source_file": manifest_track.file_path }),
-                ));
-                if let Some(resolution) = resolutions.last_mut() {
-                    resolution.musicbrainz_ids = manifest_track
-                        .observed_metadata
-                        .as_ref()
-                        .map(extract_musicbrainz_ids)
-                        .unwrap_or_default();
+                let billing = prepare_track_billing(raw, &matching_release_artists)?;
+                let preserves_embedded_ids = billing.len() == 1;
+                for (candidate_index, prepared_candidate) in billing.into_iter().enumerate() {
+                    let normalized = normalize_lookup(&prepared_candidate.candidate.raw_value);
+                    let release_artist_id =
+                        matching_release_artists.get(&normalized).copied().flatten();
+                    let source_pointer = if preserves_embedded_ids {
+                        format!("/tracks/{index}/observed_metadata/artist")
+                    } else {
+                        format!(
+                            "/tracks/{index}/observed_metadata/artist#billing/{candidate_index}"
+                        )
+                    };
+                    resolutions.push(PreparedResolution::new(
+                        release_artist_id,
+                        Some(prepared_track.id),
+                        PreparedArtistPresentation {
+                            ordinal: i32::try_from(candidate_index + 1)
+                                .map_err(|_| CatalogStoreError::NumericOverflow)?,
+                            role: prepared_candidate.role,
+                            join_phrase: prepared_candidate.candidate.join_phrase.clone(),
+                        },
+                        &prepared_candidate.candidate.raw_value,
+                        source_pointer,
+                        serde_json::json!({
+                            "value": prepared_candidate.candidate.raw_value,
+                            "display_artist": raw,
+                            "source_file": manifest_track.file_path,
+                            "candidate_index": candidate_index,
+                            "role": presentation_role_name(prepared_candidate.role),
+                            "join_phrase": prepared_candidate.candidate.join_phrase,
+                            "billing_syntax": prepared_candidate.syntax.as_str(),
+                        }),
+                    ));
+                    if preserves_embedded_ids && let Some(resolution) = resolutions.last_mut() {
+                        resolution.musicbrainz_ids = manifest_track
+                            .observed_metadata
+                            .as_ref()
+                            .map(extract_musicbrainz_ids)
+                            .unwrap_or_default();
+                    }
                 }
             }
         }
@@ -1782,7 +1837,7 @@ impl PreparedResolution {
     fn new(
         artist_id: Option<Uuid>,
         track_id: Option<Uuid>,
-        source_ordinal: i32,
+        presentation: PreparedArtistPresentation,
         raw: &str,
         source_pointer: String,
         source_payload: serde_json::Value,
@@ -1795,7 +1850,9 @@ impl PreparedResolution {
             decision_id: Uuid::now_v7(),
             presentation_id: Uuid::now_v7(),
             track_id,
-            source_ordinal,
+            source_ordinal: presentation.ordinal,
+            presentation_role: presentation.role,
+            join_phrase: presentation.join_phrase,
             raw_value: raw.to_owned(),
             normalized_value: normalize_lookup(raw),
             source_pointer,
@@ -1848,6 +1905,130 @@ async fn load_manifest_binding(
 
 fn normalize_lookup(value: &str) -> String {
     value.trim().to_lowercase()
+}
+
+fn release_artist_observations(manifest: &ReleaseManifest) -> Vec<String> {
+    let source_labels = &manifest.release_observation.source_labels;
+    let inspector_manifest = source_labels.get("observed_titles").is_some()
+        || source_labels.get("release_artist_source").is_some();
+    if !inspector_manifest {
+        return manifest
+            .release_observation
+            .artists
+            .iter()
+            .filter(|value| !value.trim().is_empty())
+            .cloned()
+            .collect();
+    }
+
+    let mut album_artists = Vec::new();
+    let mut track_artists = Vec::new();
+    for track in &manifest.tracks {
+        let Some(metadata) = &track.observed_metadata else {
+            continue;
+        };
+        push_unique_nonblank(&mut album_artists, metadata.album_artist.as_ref());
+        push_unique_nonblank(&mut track_artists, metadata.artist.as_ref());
+    }
+    if album_artists.is_empty() {
+        track_artists
+    } else {
+        album_artists
+    }
+}
+
+fn push_unique_nonblank(values: &mut Vec<String>, candidate: Option<&String>) {
+    let Some(candidate) = candidate.filter(|value| !value.trim().is_empty()) else {
+        return;
+    };
+    if !values.iter().any(|value| value == candidate) {
+        values.push(candidate.clone());
+    }
+}
+
+fn prepare_track_billing(
+    raw: &str,
+    matching_release_artists: &BTreeMap<String, Option<Uuid>>,
+) -> Result<Vec<PreparedBillingCandidate>, CatalogStoreError> {
+    let literal = || {
+        ParsedArtistCandidate::new(raw.trim().to_owned(), String::new()).map(|candidate| {
+            vec![PreparedBillingCandidate {
+                candidate,
+                role: PresentationRole::Primary,
+                syntax: ArtistBillingSyntax::Literal,
+            }]
+        })
+    };
+    if matching_release_artists
+        .get(&normalize_lookup(raw))
+        .is_some_and(Option::is_some)
+    {
+        return literal().map_err(Into::into);
+    }
+
+    let explicit = parse_explicit_artist_billing(raw)?;
+    if explicit.len() > 1 {
+        return Ok(explicit
+            .into_iter()
+            .enumerate()
+            .map(|(index, candidate)| PreparedBillingCandidate {
+                candidate,
+                role: if index == 0 {
+                    PresentationRole::Primary
+                } else {
+                    PresentationRole::Featured
+                },
+                syntax: ArtistBillingSyntax::Explicit,
+            })
+            .collect());
+    }
+
+    let slash = parse_slash_artist_billing(raw)?;
+    let slash_has_release_context = slash.len() > 1
+        && slash.iter().any(|candidate| {
+            matching_release_artists
+                .get(&normalize_lookup(&candidate.raw_value))
+                .is_some_and(Option::is_some)
+        });
+    if slash_has_release_context {
+        return Ok(slash
+            .into_iter()
+            .map(|candidate| {
+                let role = if matching_release_artists
+                    .get(&normalize_lookup(&candidate.raw_value))
+                    .is_some_and(Option::is_some)
+                {
+                    PresentationRole::Primary
+                } else {
+                    PresentationRole::Featured
+                };
+                PreparedBillingCandidate {
+                    candidate,
+                    role,
+                    syntax: ArtistBillingSyntax::Slash,
+                }
+            })
+            .collect());
+    }
+    literal().map_err(Into::into)
+}
+
+const fn presentation_role_name(role: PresentationRole) -> &'static str {
+    match role {
+        PresentationRole::Primary => "primary",
+        PresentationRole::Featured => "featured",
+        PresentationRole::Guest => "guest",
+        PresentationRole::Other => "other",
+    }
+}
+
+const fn association_type(role: PresentationRole) -> &'static str {
+    match role {
+        PresentationRole::Primary => "primary_artist",
+        PresentationRole::Featured => "featured_artist",
+        PresentationRole::Guest => "guest_artist",
+        PresentationRole::Other => "other",
+    }
 }
 
 fn extract_musicbrainz_ids(metadata: &melodee_domain::ObservedMetadata) -> Vec<(String, String)> {
@@ -2214,10 +2395,10 @@ async fn persist_prepared_import(
             .push_bind(release_id)
             .push_bind(resolution.artist_id)
             .push_bind(resolution.observation_id)
-            .push_bind("primary")
+            .push_bind(presentation_role_name(resolution.presentation_role))
             .push_bind(resolution.source_ordinal)
             .push_bind(&resolution.raw_value)
-            .push_bind("")
+            .push_bind(&resolution.join_phrase)
             .push_bind(now);
     });
     release_artist_query.build().execute(&mut **tx).await?;
@@ -2239,10 +2420,10 @@ async fn persist_prepared_import(
                 .push_bind(resolution.track_id)
                 .push_bind(resolution.artist_id)
                 .push_bind(resolution.observation_id)
-                .push_bind("primary")
+                .push_bind(presentation_role_name(resolution.presentation_role))
                 .push_bind(resolution.source_ordinal)
                 .push_bind(&resolution.raw_value)
-                .push_bind("")
+                .push_bind(&resolution.join_phrase)
                 .push_bind(now);
         });
         track_artist_query.build().execute(&mut **tx).await?;
@@ -2278,7 +2459,7 @@ async fn persist_prepared_import(
     association_query.push_values(association_rows, |mut row, (resolution, track_id)| {
         row.push_bind(resolution.artist_id)
             .push_bind(track_id)
-            .push_bind("primary_artist")
+            .push_bind(association_type(resolution.presentation_role))
             .push_bind("direct")
             .push_bind(resolution.presentation_id)
             .push_bind(6000_i32)

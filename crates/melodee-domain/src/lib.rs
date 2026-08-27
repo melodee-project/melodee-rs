@@ -36,7 +36,8 @@ pub use identity::{
     ArtistNegativeAssertion, ArtistSplit, AudioIdentityEvidence, AudioIdentityEvidenceKind,
     AudioIdentityMatchDecision, AudioIdentityMatchOutcome, DecisionAuthority, EvidenceKind,
     EvidencePolarity, NewArtistMatchDecision, NewAudioIdentityMatchDecision, ObservedArtist,
-    ParsedArtistCandidate, SplitAssignment,
+    ParsedArtistCandidate, SplitAssignment, parse_explicit_artist_billing,
+    parse_slash_artist_billing,
 };
 pub use ids::{
     ArtistAliasId, ArtistId, ArtistMatchDecisionId, ArtistMatchEvidenceId, ArtistMergeId,

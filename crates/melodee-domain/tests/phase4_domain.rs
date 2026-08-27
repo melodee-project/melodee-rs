@@ -18,8 +18,9 @@ use melodee_domain::{
     ObservedArtistId, OverlayArtistResolution, OverlayAudioIdentityLink, OverlayDisplayArtist,
     OverlayReferences, ParsedArtistCandidate, ParticipationKind, Release, ReleaseArtist,
     ReleaseArtistId, ReleaseId, ReleasePublicId, SplitAssignment, Track, TrackArtist,
-    TrackArtistId, TrackId, TrackMediaAsset, validate_release_artist_order,
-    validate_release_track_ordinals, validate_track_artist_order,
+    TrackArtistId, TrackId, TrackMediaAsset, parse_explicit_artist_billing,
+    parse_slash_artist_billing, validate_release_artist_order, validate_release_track_ordinals,
+    validate_track_artist_order,
 };
 use time::{Date, Month, OffsetDateTime};
 use uuid::Uuid;
@@ -220,6 +221,40 @@ fn parser_candidates_cannot_claim_artist_identity() {
     let parsed = ParsedArtistCandidate::new("Colin Hay".to_owned(), String::new()).unwrap();
     assert_eq!(parsed.raw_value, "Colin Hay");
     // ParsedArtistCandidate intentionally exposes no ArtistId field or conversion.
+}
+
+#[test]
+fn billing_parser_preserves_explicit_join_phrases_without_assigning_identity() {
+    let parsed = parse_explicit_artist_billing("Somebody feat. Colin Hay with Guest").unwrap();
+    assert_eq!(
+        parsed,
+        vec![
+            ParsedArtistCandidate::new("Somebody".to_owned(), " feat. ".to_owned()).unwrap(),
+            ParsedArtistCandidate::new("Colin Hay".to_owned(), " with ".to_owned()).unwrap(),
+            ParsedArtistCandidate::new("Guest".to_owned(), String::new()).unwrap(),
+        ]
+    );
+
+    let case_preserved = parse_explicit_artist_billing("Primary Featuring Guest").unwrap();
+    assert_eq!(case_preserved[0].join_phrase, " Featuring ");
+}
+
+#[test]
+fn slash_parser_preserves_spacing_and_fails_closed_on_empty_candidates() {
+    let parsed = parse_slash_artist_billing("9000 Rondae / Glockboyz Teejaee/OnFully").unwrap();
+    assert_eq!(
+        parsed,
+        vec![
+            ParsedArtistCandidate::new("9000 Rondae".to_owned(), " / ".to_owned()).unwrap(),
+            ParsedArtistCandidate::new("Glockboyz Teejaee".to_owned(), "/".to_owned()).unwrap(),
+            ParsedArtistCandidate::new("OnFully".to_owned(), String::new()).unwrap(),
+        ]
+    );
+
+    assert_eq!(
+        parse_slash_artist_billing("AC//DC").unwrap(),
+        vec![ParsedArtistCandidate::new("AC//DC".to_owned(), String::new()).unwrap()]
+    );
 }
 
 #[test]

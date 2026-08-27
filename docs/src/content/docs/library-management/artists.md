@@ -21,6 +21,27 @@ resolves them. Strong retained provider evidence may schedule an auditable recon
 never bypasses the accepted merge policy. Melodee never merges Artists from normalized-name
 equality alone.
 
+## Structured Track billing
+
+Inspection treats the **Album Artist** tag as Release billing. A differing **Artist** tag belongs to
+the individual Track, so values such as `6arelyhuman/Baby Jane` no longer create a compound Release
+Artist. When every Album Artist tag is absent, Track Artist values remain the fallback Release
+observation and may require Identity Review.
+
+For Track billing, Melodee preserves the exact tag as `DisplayArtist` and separately records ordered
+Artists. `Featuring`, `feat.`, `ft.`, and `with` phrases mark later names as featured Artists. A slash
+value is split only when one component uniquely matches a primary Artist on the same Release; this
+turns `9000 Rondae/Glockboyz Teejaee/OnFully/Roadrunner Glockboyz Tez` into one primary and three
+featured Track Artists without globally splitting literal names such as `$NOT/Jeht` or `AC/DC`.
+Every component still passes through identity resolution—parsing text never merges Artists by name.
+
+Already imported compound identities are not rewritten automatically because a separator may be
+part of a real name and the identity may have administrator or provider evidence. For disposable
+source-development catalogs, run the
+[guided fresh development setup](../installation/build-from-source/#guided-fresh-development-setup)
+and re-import the media. Retained catalogs should use Identity Review rather than deleting or
+editing identity rows directly.
+
 See [Identity Review](../admin/identity-review/) for the administrative workflow that resolves
 uncertain artist matches.
 

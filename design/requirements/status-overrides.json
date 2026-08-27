@@ -1841,7 +1841,8 @@
     "status": "tested",
     "implementation": [
       "crates/melodee-domain/src/credit.rs (ordered ReleaseArtist)",
-      "crates/melodee-persistence/migrations/0007_phase4_catalog.sql and src/catalog.rs (structured Release billing)"
+      "crates/melodee-persistence/migrations/0007_phase4_catalog.sql and src/catalog.rs (structured Release billing)",
+      "crates/melodee-media/src/lib.rs (Album Artist observations define Release billing; Track Artist values are retained separately)"
     ],
     "tests": [
       "crates/melodee-domain/tests/phase4_domain.rs",
@@ -1852,7 +1853,7 @@
     "status": "tested",
     "implementation": [
       "crates/melodee-domain/src/credit.rs (ordered TrackArtist)",
-      "crates/melodee-persistence/migrations/0007_phase4_catalog.sql and src/catalog.rs (structured Track billing)"
+      "crates/melodee-persistence/migrations/0007_phase4_catalog.sql and src/catalog.rs (structured Track billing with primary/featured roles and exact join phrases)"
     ],
     "tests": [
       "crates/melodee-domain/tests/phase4_domain.rs",
@@ -1874,7 +1875,7 @@
     "status": "tested",
     "implementation": [
       "crates/melodee-domain/src/credit.rs (exact DisplayArtist plus ordered structured associations and join phrases)",
-      "crates/melodee-persistence/src/catalog.rs (raw billing display persisted separately)",
+      "crates/melodee-persistence/src/catalog.rs (raw billing display persisted separately from parsed explicit and Release-scoped slash candidates)",
       "crates/melodee-persistence/src/catalog_mutations.rs (metadata edit: display/sort fields with in-transaction audit events and row-revision bump)"
     ],
     "tests": [
@@ -1887,17 +1888,20 @@
   "PRD-CREDIT-005": {
     "status": "tested",
     "implementation": [
-      "crates/melodee-domain/src/identity.rs (ParsedArtistCandidate cannot carry ArtistId)"
+      "crates/melodee-domain/src/identity.rs (explicit/slash parsers emit exact ParsedArtistCandidate values that cannot carry ArtistId)",
+      "crates/melodee-persistence/src/catalog.rs (Release-context resolution happens after parsing and never performs a global name merge)"
     ],
     "tests": [
-      "crates/melodee-domain/tests/phase4_domain.rs (parser candidates cannot claim identity)"
+      "crates/melodee-domain/tests/phase4_domain.rs (parser candidates cannot claim identity and retain exact join phrases)",
+      "crates/melodee-persistence/tests/catalog_import.rs (explicit/slash billing resolution plus literal slash-name protection)"
     ]
   },
   "PRD-CREDIT-006": {
     "status": "tested",
     "implementation": [
       "crates/melodee-persistence/src/catalog.rs (bounded list_artist_participation default/all-credit query)",
-      "crates/melodee-persistence/src/catalog_mutations.rs (set-based participation projection refresh)"
+      "crates/melodee-persistence/src/catalog_mutations.rs (set-based participation projection refresh)",
+      "crates/melodee-persistence/src/catalog.rs (parsed featured Track Artists emit featured_artist participation associations)"
     ],
     "tests": [
       "crates/melodee-persistence/tests/catalog_participation.rs (Colin Hay solo, guest, date-valid group inference, exclusion, and all credits)"
