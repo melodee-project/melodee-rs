@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import shlex
@@ -34,6 +35,31 @@ DEFAULT_SERVER_BIND = "127.0.0.1:8080"
 SERVER_START_TIMEOUT_SECONDS = 900
 COMMAND_OUTPUT_LINES = 30
 ENV_KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+DIRECTORY_ENVIRONMENTS = (
+    ("MELODEE__LOGGING__DIRECTORY", "Daily logs"),
+    ("MELODEE__INGEST__SOURCE_ROOT", "Inbound source"),
+    ("MELODEE__INGEST__STAGING_ROOT", "Durable staging"),
+    ("MELODEE__NORMALIZATION__WORK_AREA", "Normalization work area"),
+    ("MELODEE__STORAGE__ROOT", "Canonical storage"),
+    ("MELODEE__SEARCH__ROOT", "Search index"),
+    ("MELODEE__PODCAST__STORAGE_ROOT", "Podcast storage"),
+)
+INGEST_SOURCES_ENV = "MELODEE__INGEST__SOURCES_JSON"
+FORBIDDEN_WIPE_ROOTS = frozenset(
+    Path(path)
+    for path in (
+        "/",
+        "/etc",
+        "/media",
+        "/mnt",
+        "/opt",
+        "/srv",
+        "/tmp",
+        "/usr",
+        "/var",
+        "/var/tmp",
+    )
+)
 
 
 class SetupError(RuntimeError):
@@ -87,6 +113,14 @@ class AdminCredentials:
     password: str
 
 
+@dataclass(frozen=True)
+class ConfiguredDirectory:
+    """One deduplicated, explicitly configured directory eligible for wiping."""
+
+    path: Path
+    sources: tuple[str, ...]
+
+
 class RichUi:
     """Small Rich presentation boundary kept out of mutation and safety logic."""
 
@@ -109,8 +143,8 @@ class RichUi:
         body = self.Text()
         body.append("Fresh local setup\n", style="bold bright_cyan")
         body.append(
-            "Reset PostgreSQL, build the Admin UI and Rust binaries, start Melodee, "
-            "and create the first administrator.",
+            "Optionally empty configured local roots, reset PostgreSQL, build the Admin UI "
+            "and Rust binaries, start Melodee, and create the first administrator.",
             style="white",
         )
         self.console.print(
@@ -119,7 +153,9 @@ class RichUi:
             )
         )
 
-    def environment_summary(self, bind: BindAddress) -> None:
+    def environment_summary(
+        self, bind: BindAddress, directories: Sequence[ConfiguredDirectory]
+    ) -> None:
         table = self.Table.grid(padding=(0, 2))
         table.add_column(style="bold cyan")
         table.add_column()
@@ -127,6 +163,7 @@ class RichUi:
         table.add_row("Database", "melodee-rs-dev / melodee on 127.0.0.1:5433")
         table.add_row("Server", bind.configured)
         table.add_row("Admin UI", str(ADMIN_UI / "dist"))
+        table.add_row("Configured roots", str(len(directories)))
         self.console.print(
             self.Panel(table, title="Validated local target", border_style="cyan")
         )
@@ -136,7 +173,8 @@ class RichUi:
         message.append("This permanently removes ", style="bold yellow")
         message.append(
             "all users, catalog data, settings, and audit state from the fixed local "
-            "melodee development database. Media directories and the Docker volume are preserved."
+            "melodee development database. The Docker volume is preserved; configured "
+            "directory contents are handled by a separate confirmation."
         )
         self.console.print(
             self.Panel(message, title="Destructive reset", border_style="yellow")
@@ -151,9 +189,35 @@ class RichUi:
             )
         )
 
+    def warn_directory_wipe(
+        self, directories: Sequence[ConfiguredDirectory]
+    ) -> None:
+        table = self.Table(show_header=True, header_style="bold yellow")
+        table.add_column("Configuration")
+        table.add_column("Directory")
+        for directory in directories:
+            table.add_row(", ".join(directory.sources), str(directory.path))
+        self.console.print(
+            self.Panel(
+                table,
+                title="Optional filesystem wipe",
+                subtitle="Root directories remain; everything inside them is permanently deleted",
+                border_style="yellow",
+            )
+        )
+
+    def confirm_directory_wipe(self) -> bool:
+        return bool(
+            self.Confirm.ask(
+                "[bold red]Delete every file and subdirectory in all configured roots?[/]",
+                default=False,
+                console=self.console,
+            )
+        )
+
     def stage(self, number: int, title: str, detail: str) -> None:
         self.console.print()
-        self.console.print(f"[bold bright_cyan]{number}/6[/] [bold]{title}[/]")
+        self.console.print(f"[bold bright_cyan]{number}/7[/] [bold]{title}[/]")
         self.console.print(f"[dim]{detail}[/]")
 
     def status(self, message: str):
@@ -267,13 +331,17 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         description=__doc__,
         epilog=(
             "Safety: this command accepts only the fixed compose.dev.yaml development database, "
-            "preserves the Docker volume and media directories, and refuses to run without .env."
+            "preserves the Docker volume, separately confirms any configured-directory wipe, "
+            "and refuses to run without .env."
         ),
     )
     parser.add_argument(
         "--yes",
         action="store_true",
-        help="skip only the destructive database confirmation (administrator prompts remain interactive)",
+        help=(
+            "skip only the destructive database confirmation; the configured-directory wipe "
+            "and administrator prompts remain interactive"
+        ),
     )
     return parser.parse_args(argv)
 
@@ -322,6 +390,159 @@ def validate_development_environment(environment: dict[str, str]) -> None:
         raise SetupError(f"database reset helper was not found: {RESET_HELPER}")
     if not (ADMIN_UI / "pnpm-lock.yaml").is_file():
         raise SetupError("admin-ui/pnpm-lock.yaml was not found")
+
+
+def _validate_configured_path(raw_path: str, source: str) -> Path:
+    candidate = Path(raw_path)
+    if not candidate.is_absolute():
+        raise SetupError(f"{source} must be an absolute path before it can be wiped")
+    candidate = Path(os.path.normpath(candidate))
+    home = Path.home()
+    if candidate in FORBIDDEN_WIPE_ROOTS or candidate == home:
+        raise SetupError(f"{source} targets an unsafe broad directory: {candidate}")
+    if candidate == ROOT or candidate.is_relative_to(ROOT) or ROOT.is_relative_to(candidate):
+        raise SetupError(
+            f"{source} overlaps the repository checkout and cannot be wiped: {candidate}"
+        )
+    if home.is_relative_to(candidate):
+        raise SetupError(
+            f"{source} contains the current home directory and cannot be wiped: {candidate}"
+        )
+
+    current = Path(candidate.anchor)
+    for component in candidate.parts[1:]:
+        current /= component
+        if current.is_symlink():
+            raise SetupError(
+                f"{source} contains a symbolic link component and cannot be wiped: {current}"
+            )
+    if candidate.exists() and not candidate.is_dir():
+        raise SetupError(f"{source} is not a directory: {candidate}")
+    return candidate
+
+
+def configured_directories(
+    file_environment: dict[str, str],
+) -> list[ConfiguredDirectory]:
+    """Resolve only directory roots explicitly assigned by the repository .env."""
+    candidates: list[tuple[str, str]] = []
+    for key, _label in DIRECTORY_ENVIRONMENTS:
+        value = file_environment.get(key, "").strip()
+        if value:
+            candidates.append((key, value))
+
+    sources_value = file_environment.get(INGEST_SOURCES_ENV, "").strip()
+    if sources_value:
+        try:
+            sources = json.loads(sources_value)
+        except json.JSONDecodeError as error:
+            raise SetupError(f"{INGEST_SOURCES_ENV} is not valid JSON") from error
+        if not isinstance(sources, list):
+            raise SetupError(f"{INGEST_SOURCES_ENV} must contain a JSON array")
+        for index, source in enumerate(sources):
+            if not isinstance(source, dict):
+                raise SetupError(f"{INGEST_SOURCES_ENV}[{index}] must be an object")
+            root = source.get("root")
+            if not isinstance(root, str) or not root.strip():
+                raise SetupError(
+                    f"{INGEST_SOURCES_ENV}[{index}].root must be a non-empty string"
+                )
+            candidates.append((f"{INGEST_SOURCES_ENV}[{index}].root", root.strip()))
+
+    deduplicated: dict[Path, list[str]] = {}
+    for source, raw_path in candidates:
+        path = _validate_configured_path(raw_path, source)
+        deduplicated.setdefault(path, []).append(source)
+
+    directories = [
+        ConfiguredDirectory(path=path, sources=tuple(sources))
+        for path, sources in sorted(deduplicated.items(), key=lambda item: str(item[0]))
+    ]
+    for index, directory in enumerate(directories):
+        for other in directories[index + 1 :]:
+            if directory.path in other.path.parents or other.path in directory.path.parents:
+                raise SetupError(
+                    "configured wipe roots overlap; use distinct directories: "
+                    f"{directory.path} and {other.path}"
+                )
+    return directories
+
+
+def embedded_mount_point(root: Path) -> Path | None:
+    """Return the first mount nested below root without following symbolic links."""
+    if not root.exists():
+        return None
+    for current, directory_names, _file_names in os.walk(
+        root, topdown=True, followlinks=False
+    ):
+        retained: list[str] = []
+        for name in directory_names:
+            candidate = Path(current) / name
+            if candidate.is_symlink():
+                continue
+            if candidate.is_mount():
+                return candidate
+            retained.append(name)
+        directory_names[:] = retained
+    return None
+
+
+def wipe_configured_directories(
+    directories: Sequence[ConfiguredDirectory],
+) -> int:
+    """Empty validated roots while preserving the root directories themselves."""
+    validated: list[ConfiguredDirectory] = []
+    try:
+        for directory in directories:
+            source = ", ".join(directory.sources)
+            path = _validate_configured_path(str(directory.path), source)
+            mount = embedded_mount_point(path)
+            if mount is not None:
+                raise SetupError(
+                    f"configured directory contains an embedded mount point: {mount}"
+                )
+            validated.append(ConfiguredDirectory(path=path, sources=directory.sources))
+    except OSError as error:
+        raise SetupError(f"could not preflight configured directories: {error}") from error
+
+    removed = 0
+    for directory in validated:
+        try:
+            directory.path.mkdir(parents=True, exist_ok=True)
+            entries = list(directory.path.iterdir())
+            for entry in entries:
+                if entry.is_symlink() or not entry.is_dir():
+                    entry.unlink()
+                else:
+                    shutil.rmtree(entry)
+                removed += 1
+            if any(directory.path.iterdir()):
+                raise SetupError(
+                    f"configured directory was not empty after wiping: {directory.path}"
+                )
+        except SetupError:
+            raise
+        except OSError as error:
+            raise SetupError(
+                f"could not wipe configured directory {directory.path}: {error}"
+            ) from error
+    return removed
+
+
+def confirm_destructive_actions(
+    ui: RichUi,
+    *,
+    assume_database_yes: bool,
+    directories: Sequence[ConfiguredDirectory],
+) -> bool:
+    """Collect both destructive decisions before any local state is changed."""
+    ui.warn_reset()
+    if not assume_database_yes and not ui.confirm_reset():
+        raise SetupCancelled("database reset cancelled; no data was changed")
+    if not directories:
+        return False
+    ui.warn_directory_wipe(directories)
+    return ui.confirm_directory_wipe()
 
 
 def parse_bind_address(environment: dict[str, str]) -> BindAddress:
@@ -567,9 +788,12 @@ def tail_output(output: str) -> str:
 
 
 def run_setup(ui: RichUi, *, assume_yes: bool) -> int:
-    environment = parse_environment_file(ENV_FILE, os.environ)
+    file_environment = parse_environment_file(ENV_FILE)
+    environment = dict(os.environ)
+    environment.update(file_environment)
     environment.pop(BOOTSTRAP_PASSWORD_ENV, None)
     validate_development_environment(environment)
+    directories = configured_directories(file_environment)
     bind = parse_bind_address(environment)
     pnpm_prefix = require_commands(environment)
     ensure_server_port_available(bind)
@@ -580,15 +804,31 @@ def run_setup(ui: RichUi, *, assume_yes: bool) -> int:
         "Validate local configuration",
         "Checking .env, tools, database target, and server port.",
     )
-    ui.environment_summary(bind)
+    ui.environment_summary(bind, directories)
     ui.success("The local-development target is exact and available.")
-    ui.warn_reset()
-    if not assume_yes and not ui.confirm_reset():
-        raise SetupCancelled("database reset cancelled; no data was changed")
+    wipe_directories = confirm_destructive_actions(
+        ui, assume_database_yes=assume_yes, directories=directories
+    )
+
+    ui.stage(
+        2,
+        "Prepare configured directories",
+        "Emptying explicitly configured Melodee roots while preserving each root directory."
+        if wipe_directories
+        else "The optional directory wipe was not selected; configured contents are preserved.",
+    )
+    if wipe_directories:
+        with ui.status("Wiping configured directory contents…"):
+            removed = wipe_configured_directories(directories)
+        ui.success(
+            f"Removed {removed} top-level entries from {len(directories)} configured roots."
+        )
+    else:
+        ui.info("Configured directory contents were not changed.")
 
     run_stage(
         ui,
-        2,
+        3,
         "Reset PostgreSQL",
         "Using the repository's guarded reset helper to recreate melodee and apply migrations.",
         "The development database is empty and fully migrated.",
@@ -601,7 +841,7 @@ def run_setup(ui: RichUi, *, assume_yes: bool) -> int:
     install_command, build_command = admin_ui_commands(pnpm_prefix)
     run_stage(
         ui,
-        3,
+        4,
         "Install Admin UI dependencies",
         "Installing exactly the versions recorded in admin-ui/pnpm-lock.yaml.",
         "Admin UI dependencies match the lockfile.",
@@ -612,7 +852,7 @@ def run_setup(ui: RichUi, *, assume_yes: bool) -> int:
     )
     run_stage(
         ui,
-        3,
+        4,
         "Build the Admin UI",
         "Creating the production SPA served from admin-ui/dist.",
         "The Admin UI production build is ready.",
@@ -624,7 +864,7 @@ def run_setup(ui: RichUi, *, assume_yes: bool) -> int:
 
     run_stage(
         ui,
-        4,
+        5,
         "Build Melodee",
         "Building locked debug executables for the server and CLI.",
         "The server and CLI executables are ready.",
@@ -635,7 +875,7 @@ def run_setup(ui: RichUi, *, assume_yes: bool) -> int:
     )
 
     ui.stage(
-        5, "Start the Melodee server", f"Waiting for the listener at {bind.configured}."
+        6, "Start the Melodee server", f"Waiting for the listener at {bind.configured}."
     )
     with ui.status("Starting Melodee…"):
         monitor = launch_server(binary_path("melodee-server"), environment, ui)
@@ -648,7 +888,7 @@ def run_setup(ui: RichUi, *, assume_yes: bool) -> int:
 
     try:
         ui.stage(
-            6,
+            7,
             "Create the first administrator",
             "The CLI writes the first account only when the fresh database has no administrator.",
         )

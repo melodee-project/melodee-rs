@@ -88,6 +88,10 @@ python3 scripts/new_adr.py "short title"
 - [ADR-0144: Publish official releases as GHCR OCI images](ADR-0144-publish-official-releases-as-ghcr-oci-images.md)
 - [ADR-0169: Accept known comment-only SQLx migration checksums](ADR-0169-accept-known-comment-only-sqlx-migration-checksums.md)
 
+## Development tooling decisions
+
+- [ADR-0171: Confirm and safely wipe configured development roots](ADR-0171-confirm-and-safely-wipe-configured-development-roots.md)
+
 ## Release closure decisions (R0–R3)
 
 - [ADR-0145: Drain inbound into durable staging before ingestion](ADR-0145-drain-inbound-into-durable-staging-before-ingestion.md)

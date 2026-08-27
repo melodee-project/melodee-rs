@@ -65,14 +65,22 @@ python3 scripts/reset_and_run_server.py
 :::danger
 This launcher permanently recreates the `melodee` database in the fixed `compose.dev.yaml`
 development PostgreSQL service. It refuses any other database URL and asks for confirmation unless
-you explicitly pass `--yes`. It preserves the Docker volume and media directories.
+you explicitly pass `--yes`.
+
+The launcher separately lists every logging, inbound, staging, work, canonical-storage, search,
+podcast-storage, and JSON-configured inbound root explicitly set in `.env` and asks whether to wipe
+them. Accepting permanently deletes every file and subdirectory in those roots, including source and
+canonical media; back up anything you need first. The root directories and Docker volume remain.
+`--yes` does not bypass this separate filesystem confirmation.
 :::
 
 The launcher fails before mutation when the repository-root `.env` is absent, validates that the
-configured server port is free, installs the Admin UI lockfile, builds the Admin UI and locked Rust
-executables, starts Melodee, and securely prompts for the first administrator's username, email,
-and password. The password is passed only through the CLI's documented environment variable and is
-never placed in command arguments.
+configured server port is free, and refuses broad, relative, linked, mounted-below, or overlapping
+wipe targets. If the filesystem wipe is confirmed, it empties every eligible root before recreating
+the database. It then installs the Admin UI lockfile, builds the Admin UI and locked Rust executables,
+starts Melodee, and securely prompts for the first administrator's username, email, and password. The
+password is passed only through the CLI's documented environment variable and is never placed in
+command arguments.
 
 Run `cargo fmt --all && make check-fast` while iterating and `make check` before submitting a
 change. See [Configuration](./configuration/) and [Storage](./storage/) for the safety-critical

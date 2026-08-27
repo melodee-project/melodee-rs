@@ -174,10 +174,17 @@ python3 scripts/reset_and_run_server.py
 ```
 
 The launcher requires a configured root `.env`, accepts only the fixed `compose.dev.yaml`
-development database, and asks for confirmation before permanently recreating it. It builds the
-Admin UI and locked Rust executables, starts the server, securely prompts for the first
-administrator's username, email, and password, and keeps the server attached until Ctrl+C. Use
-`--yes` only when you intentionally want to skip the database-reset confirmation.
+development database, and asks for confirmation before permanently recreating it. It then lists the
+logging, inbound, staging, work, canonical-storage, search, podcast-storage, and JSON-configured
+inbound roots explicitly set in `.env` and separately asks whether to empty them. If confirmed, every
+file and subdirectory is permanently removed while each configured root directory is preserved.
+Unsafe, linked, mounted-below, or overlapping targets fail closed before deletion. Back up anything
+you need from those roots before accepting the wipe.
+
+The launcher builds the Admin UI and locked Rust executables, starts the server, securely prompts for
+the first administrator's username, email, and password, and keeps the server attached until Ctrl+C.
+Use `--yes` only when you intentionally want to skip the database-reset confirmation; it never skips
+the separate directory-wipe or administrator prompts.
 
 ## Interfaces and clients
 

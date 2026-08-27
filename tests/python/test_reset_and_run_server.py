@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from json import dumps
 from pathlib import Path
 from unittest import mock
 
@@ -118,6 +119,185 @@ class ResetAndRunServerTests(unittest.TestCase):
         self.assertNotIn('"createdb"', source)
         self.assertNotIn('"volume", "rm"', source)
 
+    def test_configured_directories_include_every_explicit_melodee_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            base = Path(temporary_directory)
+            environment = {
+                key: str(base / name)
+                for key, name in (
+                    ("MELODEE__LOGGING__DIRECTORY", "logs"),
+                    ("MELODEE__INGEST__SOURCE_ROOT", "inbound"),
+                    ("MELODEE__INGEST__STAGING_ROOT", "staging"),
+                    ("MELODEE__NORMALIZATION__WORK_AREA", "work"),
+                    ("MELODEE__STORAGE__ROOT", "canonical"),
+                    ("MELODEE__SEARCH__ROOT", "search"),
+                    ("MELODEE__PODCAST__STORAGE_ROOT", "podcasts"),
+                )
+            }
+            environment["MELODEE__INGEST__SOURCES_JSON"] = dumps(
+                [
+                    {"root": str(base / "inbound-two"), "name": "second"},
+                    {
+                        "root": environment["MELODEE__INGEST__SOURCE_ROOT"],
+                        "name": "duplicate",
+                    },
+                ]
+            )
+
+            directories = self.module.configured_directories(environment)
+
+        self.assertEqual(
+            {directory.path.name for directory in directories},
+            {
+                "logs",
+                "inbound",
+                "inbound-two",
+                "staging",
+                "work",
+                "canonical",
+                "search",
+                "podcasts",
+            },
+        )
+        inbound = next(
+            directory for directory in directories if directory.path.name == "inbound"
+        )
+        self.assertEqual(
+            inbound.sources,
+            (
+                "MELODEE__INGEST__SOURCE_ROOT",
+                "MELODEE__INGEST__SOURCES_JSON[1].root",
+            ),
+        )
+
+    def test_configured_directories_reject_unsafe_and_overlapping_targets(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            base = Path(temporary_directory)
+            unsafe_environments = (
+                {"MELODEE__STORAGE__ROOT": "relative/library"},
+                {"MELODEE__STORAGE__ROOT": os.path.abspath(os.sep)},
+                {"MELODEE__STORAGE__ROOT": str(Path.home())},
+                {"MELODEE__STORAGE__ROOT": str(ROOT / "local-library")},
+                {
+                    "MELODEE__INGEST__SOURCE_ROOT": str(base / "media"),
+                    "MELODEE__INGEST__STAGING_ROOT": str(base / "media" / "staging"),
+                },
+            )
+            for environment in unsafe_environments:
+                with self.subTest(environment=environment):
+                    with self.assertRaises(self.module.SetupError):
+                        self.module.configured_directories(environment)
+
+    def test_configured_directories_reject_symlinked_root_components(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            base = Path(temporary_directory)
+            actual = base / "actual"
+            actual.mkdir()
+            linked = base / "linked"
+            linked.symlink_to(actual, target_is_directory=True)
+
+            with self.assertRaisesRegex(self.module.SetupError, "symbolic link"):
+                self.module.configured_directories(
+                    {"MELODEE__STORAGE__ROOT": str(linked / "canonical")}
+                )
+
+    def test_configured_directories_reject_malformed_json_sources(self) -> None:
+        for value in ("not-json", "{}", '[{"name":"missing-root"}]'):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(
+                    self.module.SetupError, "MELODEE__INGEST__SOURCES_JSON"
+                ):
+                    self.module.configured_directories(
+                        {"MELODEE__INGEST__SOURCES_JSON": value}
+                    )
+
+    def test_directory_wipe_removes_all_contents_but_preserves_roots_and_link_targets(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            base = Path(temporary_directory)
+            root = base / "configured" / "canonical"
+            nested = root / "release" / "disc"
+            nested.mkdir(parents=True)
+            (root / ".hidden").write_text("hidden", encoding="utf-8")
+            (nested / "track.flac").write_text("media", encoding="utf-8")
+            external = base / "external"
+            external.mkdir()
+            external_file = external / "keep.txt"
+            external_file.write_text("keep", encoding="utf-8")
+            (root / "external-link").symlink_to(external, target_is_directory=True)
+            directory = self.module.ConfiguredDirectory(
+                path=root, sources=("MELODEE__STORAGE__ROOT",)
+            )
+
+            removed = self.module.wipe_configured_directories([directory])
+
+            self.assertEqual(removed, 3)
+            self.assertTrue(root.is_dir())
+            self.assertEqual(list(root.iterdir()), [])
+            self.assertEqual(external_file.read_text(encoding="utf-8"), "keep")
+
+    def test_directory_wipe_preflights_every_root_before_deleting_anything(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            base = Path(temporary_directory)
+            first = base / "configured" / "first"
+            second = base / "configured" / "second"
+            first.mkdir(parents=True)
+            second.mkdir(parents=True)
+            first_file = first / "keep-on-failure.txt"
+            first_file.write_text("keep", encoding="utf-8")
+            (second / "mounted").mkdir()
+            directories = [
+                self.module.ConfiguredDirectory(first, ("FIRST",)),
+                self.module.ConfiguredDirectory(second, ("SECOND",)),
+            ]
+
+            with (
+                mock.patch.object(
+                    self.module,
+                    "embedded_mount_point",
+                    side_effect=[None, second / "mounted"],
+                ),
+                self.assertRaisesRegex(self.module.SetupError, "mount point"),
+            ):
+                self.module.wipe_configured_directories(directories)
+
+            self.assertTrue(first_file.is_file())
+
+    def test_yes_flag_never_skips_the_directory_wipe_confirmation(self) -> None:
+        ui = mock.MagicMock()
+        ui.confirm_directory_wipe.return_value = True
+        directory = self.module.ConfiguredDirectory(
+            Path("/var/tmp/melodee-reset-test/canonical"),
+            ("MELODEE__STORAGE__ROOT",),
+        )
+
+        wipe = self.module.confirm_destructive_actions(
+            ui, assume_database_yes=True, directories=[directory]
+        )
+
+        self.assertTrue(wipe)
+        ui.confirm_reset.assert_not_called()
+        ui.warn_directory_wipe.assert_called_once_with([directory])
+        ui.confirm_directory_wipe.assert_called_once_with()
+
+    def test_declining_the_directory_wipe_preserves_the_database_reset_flow(self) -> None:
+        ui = mock.MagicMock()
+        ui.confirm_reset.return_value = True
+        ui.confirm_directory_wipe.return_value = False
+        directory = self.module.ConfiguredDirectory(
+            Path("/var/tmp/melodee-reset-test/canonical"),
+            ("MELODEE__STORAGE__ROOT",),
+        )
+
+        wipe = self.module.confirm_destructive_actions(
+            ui, assume_database_yes=False, directories=[directory]
+        )
+
+        self.assertFalse(wipe)
+        ui.confirm_reset.assert_called_once_with()
+        ui.confirm_directory_wipe.assert_called_once_with()
+
     def test_admin_password_is_never_part_of_the_cli_arguments(self) -> None:
         credentials = self.module.AdminCredentials(
             username="admin",
@@ -197,10 +377,12 @@ class ResetAndRunServerTests(unittest.TestCase):
         environment = {
             self.module.DATABASE_ENV: self.module.SAFE_DATABASE_URL,
             self.module.SERVER_BIND_ENV: bind.configured,
+            "MELODEE__STORAGE__ROOT": "/var/tmp/melodee-reset-test/canonical",
             "PATH": os.environ["PATH"],
         }
         ui = mock.MagicMock()
         ui.confirm_reset.return_value = True
+        ui.confirm_directory_wipe.return_value = True
         ui.prompt_credentials.return_value = credentials
         monitor = mock.MagicMock()
         monitor.process.poll.return_value = 0
@@ -240,6 +422,9 @@ class ResetAndRunServerTests(unittest.TestCase):
                     self.module, "require_commands", return_value=["pnpm"]
                 ),
                 mock.patch.object(self.module, "ensure_server_port_available"),
+                mock.patch.object(
+                    self.module, "wipe_configured_directories", return_value=4
+                ) as wipe_directories,
                 mock.patch.object(self.module, "run_stage", side_effect=record_stage),
                 mock.patch.object(
                     self.module, "binary_path", side_effect=fake_binary_path
@@ -265,6 +450,8 @@ class ResetAndRunServerTests(unittest.TestCase):
         self.assertEqual(commands[4][1:3], ["users", "bootstrap-admin"])
         self.assertNotIn(credentials.password, commands[4])
         self.assertEqual(observed_password, [credentials.password])
+        ui.confirm_directory_wipe.assert_called_once()
+        wipe_directories.assert_called_once()
         stop_server.assert_called_once_with(monitor)
 
 
