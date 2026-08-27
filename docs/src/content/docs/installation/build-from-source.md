@@ -52,6 +52,28 @@ The server applies SQLx migrations at startup. In another terminal, use
 `MELODEE__CLI__BOOTSTRAP_ADMIN_PASSWORD` supplied through the environment. The admin SPA is served
 from `admin-ui/dist` by default; set `MELODEE__ADMIN_UI__DIST` if you deploy it elsewhere.
 
+## Guided fresh development setup
+
+The repository also includes an interactive source-development launcher that performs the manual
+local sequence and keeps the server attached until Ctrl+C:
+
+```bash
+python3 -m pip install -r scripts/requirements.txt
+python3 scripts/reset_and_run_server.py
+```
+
+:::danger
+This launcher permanently recreates the `melodee` database in the fixed `compose.dev.yaml`
+development PostgreSQL service. It refuses any other database URL and asks for confirmation unless
+you explicitly pass `--yes`. It preserves the Docker volume and media directories.
+:::
+
+The launcher fails before mutation when the repository-root `.env` is absent, validates that the
+configured server port is free, installs the Admin UI lockfile, builds the Admin UI and locked Rust
+executables, starts Melodee, and securely prompts for the first administrator's username, email,
+and password. The password is passed only through the CLI's documented environment variable and is
+never placed in command arguments.
+
 Run `cargo fmt --all && make check-fast` while iterating and `make check` before submitting a
 change. See [Configuration](./configuration/) and [Storage](./storage/) for the safety-critical
 runtime settings.

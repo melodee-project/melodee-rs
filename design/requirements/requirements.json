@@ -3854,10 +3854,12 @@
     "status": "tested",
     "implementation": [
       "apps/melodee-server/src/main.rs (migrations before listener startup; graceful SIGTERM handling)",
+      "crates/melodee-persistence/src/migrate.rs (strict SQLx validation with exact non-mutating compatibility for known comment-only migration 24-29 histories)",
+      "design/adr/ADR-0169-accept-known-comment-only-sqlx-migration-checksums.md",
       "docs/src/content/docs/installation/upgrading.md"
     ],
     "tests": [
-      "crates/melodee-persistence migration tests",
+      "crates/melodee-persistence/tests/migrations.rs (migration 24-29 canonical checksum freeze, exact historical-lineage acceptance without metadata rewrite, and unknown-checksum rejection)",
       "local production image startup/readiness and graceful-stop smoke"
     ]
   },

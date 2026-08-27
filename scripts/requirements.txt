@@ -1,0 +1,2 @@
+# Interactive dependency for reset_and_run_server.py.
+rich==14.3.2

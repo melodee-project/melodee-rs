@@ -53,6 +53,13 @@ curl --fail http://127.0.0.1:8080/readyz
 docker compose exec melodee melodee-cli config validate
 ```
 
+Migration checksums remain fail-closed. Melodee recognizes only the exact historical,
+comment-only checksum variants of migrations 24–29 created by this repository and does not rewrite
+their migration records. Any other `VersionMismatch(<number>)` means the applied migration differs
+from the candidate image. Stop the upgrade, keep the database and backup intact, and use the
+[migration-checksum diagnostics](../troubleshooting/#migration-checksum-mismatch); never make an
+unknown mismatch disappear by editing `_sqlx_migrations`.
+
 Also run `docker compose exec melodee melodee-cli doctor --deep`, verify search status, and run a
 representative public-ID lookup, artwork request, range stream, and client journey. `/healthz`
 proves process liveness; `/readyz` proves PostgreSQL and the configured search generation are

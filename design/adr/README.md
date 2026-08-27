@@ -83,9 +83,10 @@ python3 scripts/new_adr.py "short title"
 - [ADR-0128: Capture-required native-v1 legacy bug fixes](ADR-0128-capture-required-legacy-bug-fixes-in-native-api-v1.md)
 - [ADR-0129: Secure native public-share bearers and resolvable links](ADR-0129-secure-native-public-share-bearers-and-resolvable-links.md)
 
-## Release distribution decision
+## Release distribution and upgrade decisions
 
 - [ADR-0144: Publish official releases as GHCR OCI images](ADR-0144-publish-official-releases-as-ghcr-oci-images.md)
+- [ADR-0169: Accept known comment-only SQLx migration checksums](ADR-0169-accept-known-comment-only-sqlx-migration-checksums.md)
 
 ## Release closure decisions (R0–R3)
 

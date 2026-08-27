@@ -41,6 +41,28 @@ The readiness route is deliberately narrow. It does not report disk space, media
 compatibility adapters. See
 [System and Diagnostics](../admin/system-diagnostics/) for the exact implemented boundary.
 
+## Migration checksum mismatch
+
+The server validates SQLx migration history before opening its listener. An error such as
+`VersionMismatch(24)` means the checksum stored when that migration ran differs from the migration
+embedded in the current binary.
+
+Current Melodee builds accept the repository's exact known comment-only variants of migrations
+24–29 without rerunning SQL or rewriting `_sqlx_migrations`. If a current build still reports
+`VersionMismatch(<number>)`, treat it as unknown migration drift:
+
+1. Stop the candidate server and preserve the database unchanged.
+2. Confirm that `MELODEE__DATABASE__URL` names the intended database and record the exact binary or
+   image revision.
+3. Back up PostgreSQL and validate that backup before further diagnosis.
+4. Compare the database's `_sqlx_migrations` row with the migration set from the exact release that
+   originally applied it. Do not edit the checksum row or edit an already-applied migration.
+
+For a disposable local-development database only, `make postgres-reset` can create a fresh
+database after you have explicitly accepted losing all data in the development volume. Never use
+that command as an upgrade or production recovery procedure. See [Upgrading](../installation/upgrading/)
+for backup, maintenance-window, and rollback requirements.
+
 ## Catalog import checks
 
 - Run `melodee-cli catalog status` to confirm whether the catalog worker is enabled and compare

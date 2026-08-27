@@ -145,6 +145,12 @@ set -a && . ./.env && set +a
 cargo run -p melodee-server
 ```
 
+Startup validates the complete applied SQLx migration history before opening the listener. The
+server recognizes the repository's exact known comment-only variants of migrations 24–29 without
+rewriting database metadata. Any other `VersionMismatch(<number>)` is unknown migration drift:
+keep the database intact and follow the
+[migration-checksum troubleshooting guidance](docs/src/content/docs/troubleshooting/#migration-checksum-mismatch).
+
 In a second terminal with the same environment, create the first administrator. The password is
 read from the environment rather than a command-line argument.
 
@@ -158,6 +164,20 @@ unset MELODEE__CLI__BOOTSTRAP_ADMIN_PASSWORD
 Visit `http://127.0.0.1:8080/admin` and use the onboarding flow. It checks the live database,
 storage roots, media tools, search index, administrator account, and email configuration before it
 can be completed.
+
+For a guided fresh local setup, install the script's pinned Rich dependency and run the interactive
+launcher instead of the manual PostgreSQL, Admin UI, server, and administrator commands above:
+
+```bash
+python3 -m pip install -r scripts/requirements.txt
+python3 scripts/reset_and_run_server.py
+```
+
+The launcher requires a configured root `.env`, accepts only the fixed `compose.dev.yaml`
+development database, and asks for confirmation before permanently recreating it. It builds the
+Admin UI and locked Rust executables, starts the server, securely prompts for the first
+administrator's username, email, and password, and keeps the server attached until Ctrl+C. Use
+`--yes` only when you intentionally want to skip the database-reset confirmation.
 
 ## Interfaces and clients
 

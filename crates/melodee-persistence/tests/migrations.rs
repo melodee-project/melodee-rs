@@ -6,8 +6,118 @@
 
 mod common;
 
+use std::borrow::Cow;
+
 use common::TestDb;
-use melodee_persistence::migrate;
+use melodee_persistence::{MIGRATOR, migrate};
+use sqlx::migrate::{MigrateError, Migrator};
+
+const COMMENT_ONLY_CANONICAL_CHECKSUMS: &[(i64, &str)] = &[
+    (
+        24,
+        "3aa53396b0f151b3bd65ea46f0f8ac9c13a6bee852606caec13c5c324ee10642819b5abc520c1635df1b8517aa44ce53",
+    ),
+    (
+        25,
+        "4ff37ec22e6990de431a314ae814b433c708ccf5f5a4f01b707147bafe166bf18d2f904aee21312144f05dcda1eeffa3",
+    ),
+    (
+        26,
+        "d62fdba16524b8cf6d9c49b02e4da58d74459d3f5dbb6fa54a96fd032096c5805ac27ee2f8f791cd462738af59c09e77",
+    ),
+    (
+        27,
+        "f615ea59eb70cf05d9fa5cda69d5e71d3de670e1c748bcebfa38cda5e096d70de2dcc4079b41b51ad2200c22451a5952",
+    ),
+    (
+        28,
+        "fe1bb7cbbd01ce1d5e92c8b85009525e04dbfcbe99ffe0376a3fdbebda5f5951f1f44d58d29efae2e54907a1a0e6dca7",
+    ),
+    (
+        29,
+        "cbeb431a3684ba0c307e89e6f96a17e69d671bea79c5ef1b2549eaf980b03ff662250aefa0b3769d38179a61394aad15",
+    ),
+];
+const COMMENT_ONLY_HISTORICAL_LINEAGES: &[&[(i64, &str)]] = &[
+    &[
+        (
+            24,
+            "ef2d48a7d644462526ac3b0edcae09acede7a68780bb83e5104168ede40838e813b8dafb5b68486649ea4ec15ffb9b2d",
+        ),
+        (
+            25,
+            "930549083b8d47b46209d572355e6949e8a3d35c65d8d46c289f5c6260f4132845156e41175303509dc8b3a111f753b4",
+        ),
+        (
+            26,
+            "c3683e0214abdb1e7e7455e4ad2147b5f3cd023695583b2a1d12a1f876bb9dcd5d8e90c7ce0b71122a9d6938e0b9ca91",
+        ),
+        (
+            27,
+            "a69c28d0a6c0858a1afc0e0ce22a19b14e413fc22fe3aea358fe574e0b89736cab475477127c03358ea4e0dd5313ce12",
+        ),
+        (
+            28,
+            "aff9741d36948ab4270ef82a06e812ff5e30f46f33ba7f48ce0e2774c89388bbbddf1803d9183247688b75f421ff72cf",
+        ),
+        (
+            29,
+            "e262a49d4695c56444b693f86b0ede34e20e481068533737bef5dbd5864399aafdd0e6aae22c448784d5138928c06251",
+        ),
+    ],
+    &[
+        (
+            24,
+            "db215eaedae3d7b073ec8e11529a80f37bcc3eb80434440a0b2b1451b186d99b53eece7913a4fff6ca9c26ae75ad4bdc",
+        ),
+        (
+            25,
+            "48e7e25d82831e4359150cec632b265e6423f87d72d8616639d3407b78a7b61b6427b258afce0c25c3e405ca817ed3fc",
+        ),
+        (
+            26,
+            "d7b2aca713222fa08e0d17ff68548c20834cf6a597ec516bbbdd20f528be201b0cd681d717bae60e6d7ddd2a7da6f362",
+        ),
+        (
+            27,
+            "2afde0c080b0d4ed0d62e64bedeea40d1c573a5f3b490a24692ac18c4a970e9bdf0fd82c360e8e6f62465d4770b801d4",
+        ),
+        (
+            28,
+            "dd2445592ab91b0fe06460383364b19bf20cde4c61fcec17a21332494402553b0e772fbf9121536c3f3ab0ef7e3e561e",
+        ),
+        (
+            29,
+            "b8b31795fcb8a3e6ad10e822ef31edf5c4852218f5c592b07a1465e6afe3eeb46f5733024347dffa4cdf817de1046151",
+        ),
+    ],
+    &[
+        (
+            24,
+            "519fcfb3fea9a11333051a96aa48eb098a230ae017b79bc06e3f836e18731ba74dd9ad372f6191278b17900c0dca5c86",
+        ),
+        (
+            25,
+            "67df569fcd50efd7c45e4901e719c5634ab5cffc9320961ad73fd780b8d64e44313122265af23b4e1ab6b2645ab1ca0b",
+        ),
+        (
+            26,
+            "da94503238dbc6bc5d2af03aa0e3ad1979a22ef2e527bf3f6029ed12610cf7fd0a983a4a8feea7451b45fa9be4ceb32d",
+        ),
+        (
+            27,
+            "b48fe85eeff029b19660b46fd3744d3fd8d0ffda9a7de9dae1853b23e596f11172ea3cd4b976a980ac5f530d33472465",
+        ),
+        (
+            28,
+            "7bb98df26fef9cce58c1807f9f2a1c1e1f5ef8d415507dc17937a9028d3eb065ab63993c13aa7b1cbcbfaa7a51dd4415",
+        ),
+        (
+            29,
+            "b8b31795fcb8a3e6ad10e822ef31edf5c4852218f5c592b07a1465e6afe3eeb46f5733024347dffa4cdf817de1046151",
+        ),
+    ],
+];
 
 #[tokio::test]
 async fn migrations_run_from_empty_database() {
@@ -32,6 +142,100 @@ async fn migrations_are_repeatable() {
     migrate(&db.pool).await.expect("second migrate run");
     migrate(&db.pool).await.expect("third migrate run");
     db.drop().await;
+}
+
+#[test]
+fn migrations_0024_through_0029_canonical_checksums_are_frozen() {
+    for (version, expected_checksum) in COMMENT_ONLY_CANONICAL_CHECKSUMS {
+        let migration = MIGRATOR
+            .migrations
+            .iter()
+            .find(|migration| migration.version == *version)
+            .expect("canonical migration");
+        assert_eq!(
+            checksum_hex(migration.checksum.as_ref()),
+            *expected_checksum,
+            "applied migrations are immutable; add a new migration instead"
+        );
+    }
+}
+
+#[tokio::test]
+async fn migrations_0024_through_0029_accept_exact_comment_only_histories() {
+    for (index, lineage) in COMMENT_ONLY_HISTORICAL_LINEAGES.iter().enumerate() {
+        let db = TestDb::create_unmigrated(&format!("migration_comment_history_{index}")).await;
+        let checksums: Vec<(i64, Vec<u8>)> = lineage
+            .iter()
+            .map(|(version, checksum)| (*version, decode_checksum(checksum)))
+            .collect();
+        migrator_with_checksums(&checksums)
+            .run(&db.pool)
+            .await
+            .expect("apply schema with historical migration metadata");
+
+        migrate(&db.pool)
+            .await
+            .expect("known comment-only checksums remain upgradeable");
+        let stored_checksums: Vec<(i64, Vec<u8>)> = sqlx::query_as(
+            "SELECT version, checksum FROM _sqlx_migrations \
+             WHERE version BETWEEN 24 AND 29 ORDER BY version",
+        )
+        .fetch_all(&db.pool)
+        .await
+        .expect("read stored migration checksums");
+        assert_eq!(
+            stored_checksums, checksums,
+            "compatibility must not rewrite migration metadata"
+        );
+        db.drop().await;
+    }
+}
+
+#[tokio::test]
+async fn comment_only_migration_compatibility_rejects_an_unknown_checksum() {
+    let db = TestDb::create_unmigrated("migration_unknown_checksum").await;
+    migrator_with_checksums(&[(25, vec![0xa5; 48])])
+        .run(&db.pool)
+        .await
+        .expect("apply schema with deliberately unknown migration metadata");
+
+    let error = migrate(&db.pool)
+        .await
+        .expect_err("unknown checksum must fail closed");
+    assert!(matches!(error, MigrateError::VersionMismatch(25)));
+    db.drop().await;
+}
+
+fn migrator_with_checksums(checksums: &[(i64, Vec<u8>)]) -> Migrator {
+    let mut migrations = MIGRATOR.migrations.to_vec();
+    for (version, checksum) in checksums {
+        migrations
+            .iter_mut()
+            .find(|migration| migration.version == *version)
+            .expect("migration")
+            .checksum = Cow::Owned(checksum.clone());
+    }
+    Migrator {
+        migrations: Cow::Owned(migrations),
+        ignore_missing: MIGRATOR.ignore_missing,
+        locking: MIGRATOR.locking,
+        no_tx: MIGRATOR.no_tx,
+        table_name: MIGRATOR.table_name.clone(),
+        create_schemas: MIGRATOR.create_schemas.clone(),
+    }
+}
+
+fn decode_checksum(checksum: &str) -> Vec<u8> {
+    (0..checksum.len())
+        .step_by(2)
+        .map(|index| {
+            u8::from_str_radix(&checksum[index..index + 2], 16).expect("valid checksum hex")
+        })
+        .collect()
+}
+
+fn checksum_hex(checksum: &[u8]) -> String {
+    checksum.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 #[tokio::test]
