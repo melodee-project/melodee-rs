@@ -272,6 +272,9 @@ Release for review; classification and policy does not remove media or report de
 Rule sets are immutable by name and version. When changing any policy preference, increment
 `MELODEE__POLICY__RULE_SET_VERSION`; attempting to start with different rules at an already-stored
 version fails closed instead of silently changing the meaning of historical decisions.
+Built-in version 1 is obsolete because it reviewed every Unknown classification. Local `.env`
+files must use version 2 or later; v2 accepts ordinary Unknown Releases unless an explicit
+Unknown-classification review rule is authored.
 
 Search is independently enabled with `MELODEE__SEARCH__ENABLED=true` and requires an explicit,
 absolute `MELODEE__SEARCH__ROOT`. The root must not overlap inbound, work, or canonical storage.

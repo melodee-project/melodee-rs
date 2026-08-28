@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { ApiError } from '../../api/client';
-import type { CatalogAuditEvent, SortParam } from '../../api/types';
+import type {
+  CatalogAuditEvent,
+  CatalogReleaseStatus,
+  PolicyDisposition,
+  ReleaseWorkflowState,
+  SortParam,
+} from '../../api/types';
 import type { AuditEvent } from '../../components/AuditTimeline';
 import type { StatusKind } from '../../components/StatusTag';
 
@@ -23,6 +29,42 @@ export function catalogStatusKind(status: string): StatusKind {
       return 'neutral';
     default:
       return 'neutral';
+  }
+}
+
+export interface ReleaseStatusContext {
+  status: CatalogReleaseStatus;
+  workflowState: ReleaseWorkflowState | null;
+  policyDisposition: PolicyDisposition | null;
+  policyEvidenceSummary: string | null;
+}
+
+/**
+ * Converts the catalog visibility projection into operator language. A
+ * withheld Release is described by its actionable workflow/policy state,
+ * rather than the internal `deprecated` storage value.
+ */
+export function releaseStatusPresentation(release: ReleaseStatusContext): {
+  kind: StatusKind;
+  labelKey: string;
+  description?: string;
+} {
+  const description = release.policyEvidenceSummary ?? undefined;
+  switch (release.workflowState) {
+    case 'needs_review':
+      return { kind: 'warning', labelKey: 'status.needsReview', description };
+    case 'quarantined':
+      return { kind: 'error', labelKey: 'status.quarantined', description };
+    case 'ignored':
+      return { kind: 'neutral', labelKey: 'status.ignored', description };
+    case 'deleted':
+      return { kind: 'neutral', labelKey: 'queue.state.deleted', description };
+    default:
+      return {
+        kind: catalogStatusKind(release.status),
+        labelKey: `catalog.status.${release.status}`,
+        description,
+      };
   }
 }
 

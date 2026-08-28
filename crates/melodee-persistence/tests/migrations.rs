@@ -4,7 +4,9 @@
 // failure-reporting mechanism; production-code lint stays strict.
 #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 
+mod catalog_common;
 mod common;
+mod phase5_common;
 
 use std::borrow::Cow;
 
@@ -1410,6 +1412,252 @@ async fn migration_0040_repairs_a_unique_match_on_a_multi_artist_release() {
         .await
         .expect("audited merge event"),
         1
+    );
+
+    db.drop().await;
+}
+
+/// ADR-0177 / migration 0041: only the exact obsolete built-in v1
+/// POL-UNKNOWN decision is reconciled to Accept. A custom Unknown review
+/// decision remains pending and withheld.
+#[tokio::test]
+async fn migration_0041_reconciles_only_builtin_unknown_reviews() {
+    use catalog_common::CatalogFixturePresentation;
+    use melodee_domain::{
+        Disposition, IngestionState, PolicyActor, PolicyRule, PolicyRuleSet, PolicyRuleSetId,
+        PolicyRuleType,
+    };
+    use melodee_persistence::{PolicyStore, WorkItemStore, WorkerId};
+    use serde_json::json;
+    use time::OffsetDateTime;
+
+    let db = TestDb::create_unmigrated("migrations_forward_0041_policy_unknown").await;
+    let prior: Vec<sqlx::migrate::Migration> = MIGRATOR
+        .migrations
+        .iter()
+        .filter(|migration| migration.version <= 40)
+        .cloned()
+        .collect();
+    assert_eq!(prior.len(), 40, "expected migrations 0001..=0040");
+    Migrator {
+        migrations: Cow::Owned(prior),
+        ..Migrator::DEFAULT
+    }
+    .run(&db.pool)
+    .await
+    .expect("apply pre-0041 schema");
+
+    let store = PolicyStore;
+    let now = OffsetDateTime::now_utc();
+    let v1_rules = [
+        (
+            "POL-ADMIN-OVERRIDE",
+            PolicyRuleType::AdministratorOverride,
+            Disposition::Review,
+        ),
+        (
+            "POL-CORRUPT",
+            PolicyRuleType::CorruptMedia,
+            Disposition::Quarantine,
+        ),
+        (
+            "POL-GH-UNCERTAIN",
+            PolicyRuleType::GreatestHitsUncertain,
+            Disposition::Review,
+        ),
+        (
+            "POL-GH-NOVEL",
+            PolicyRuleType::GreatestHitsNovelty,
+            Disposition::Review,
+        ),
+        (
+            "POL-GH-REDUNDANT",
+            PolicyRuleType::GreatestHitsRedundancy,
+            Disposition::Ignore,
+        ),
+        (
+            "POL-UNKNOWN",
+            PolicyRuleType::UnknownClassification,
+            Disposition::Review,
+        ),
+    ]
+    .into_iter()
+    .map(|(id, rule_type, disposition)| PolicyRule {
+        id: id.to_string(),
+        rule_type,
+        predicate_json: json!({}),
+        disposition,
+        confidence_threshold: None,
+    })
+    .collect();
+    let v1_id = PolicyRuleSetId::from_uuid(
+        uuid::Uuid::parse_str("01989f00-7000-7000-8000-000500000001")
+            .expect("stable v1 rule-set id"),
+    );
+    let v1 = PolicyRuleSet::new(PolicyRuleSet {
+        id: v1_id,
+        name: "phase5-default-rules".to_string(),
+        version: 1,
+        rules: v1_rules,
+        created_at: OffsetDateTime::UNIX_EPOCH,
+        created_by: PolicyActor::System {
+            policy_rule_set_version: 1,
+        },
+    })
+    .expect("historical v1 default rule set");
+    store
+        .ensure_rule_set(&db.pool, &v1, now)
+        .await
+        .expect("persist historical v1 defaults");
+
+    let builtin = phase5_common::seed_cataloged_release(
+        &db,
+        91,
+        CatalogFixturePresentation {
+            release_title: "Ordinary Unknown Built-in Review",
+            ..CatalogFixturePresentation::default()
+        },
+    )
+    .await;
+    let worker = WorkerId::new();
+    let mut claims = store
+        .claim_cataloged(&db.pool, &worker, &common::test_config(), now)
+        .await
+        .expect("claim built-in fixture");
+    let claim = claims.pop().expect("built-in claim");
+    let context = store
+        .load_context(&db.pool, &claim)
+        .await
+        .expect("load built-in context");
+    let mut commit = phase5_common::unknown_review_commit(&context, v1_id, now);
+    commit.decision.matched_rule_ids = vec!["POL-UNKNOWN".to_string()];
+    let builtin_decision_id = commit.decision.id.into_uuid();
+    store
+        .commit_evaluation(&db.pool, &worker, &commit)
+        .await
+        .expect("commit historical built-in review");
+
+    let custom = phase5_common::seed_cataloged_release(
+        &db,
+        92,
+        CatalogFixturePresentation {
+            release_title: "Explicit Custom Unknown Review",
+            ..CatalogFixturePresentation::default()
+        },
+    )
+    .await;
+    let custom_rules = phase5_common::policy_rule_set(PolicyRuleSetId::new(), now);
+    store
+        .ensure_rule_set(&db.pool, &custom_rules, now)
+        .await
+        .expect("persist custom rule set");
+    let custom_worker = WorkerId::new();
+    let mut claims = store
+        .claim_cataloged(&db.pool, &custom_worker, &common::test_config(), now)
+        .await
+        .expect("claim custom fixture");
+    let claim = claims.pop().expect("custom claim");
+    let context = store
+        .load_context(&db.pool, &claim)
+        .await
+        .expect("load custom context");
+    store
+        .commit_evaluation(
+            &db.pool,
+            &custom_worker,
+            &phase5_common::unknown_review_commit(&context, custom_rules.id, now),
+        )
+        .await
+        .expect("commit custom review");
+
+    assert_eq!(
+        WorkItemStore
+            .get(&db.pool, builtin.work_item_id())
+            .await
+            .expect("built-in before upgrade")
+            .state,
+        IngestionState::NeedsReview
+    );
+    migrate(&db.pool).await.expect("forward migration to 0041");
+
+    let upgraded: (String, String, serde_json::Value, String, Option<String>) = sqlx::query_as(
+        "SELECT release.status, item.state, decision.actor,
+                decision.completion_state, decision.override_reason
+           FROM policy_decisions decision
+           JOIN releases release ON release.id = decision.release_id
+           JOIN release_work_items item ON item.id = decision.work_item_id
+          WHERE decision.id = $1",
+    )
+    .bind(builtin_decision_id)
+    .fetch_one(&db.pool)
+    .await
+    .expect("read reconciled decision");
+    assert_eq!(upgraded.0, "active");
+    assert_eq!(upgraded.1, "indexing");
+    assert_eq!(
+        upgraded.2,
+        json!({
+            "authority": "system_upgrade",
+            "migration": "0041_accept_ordinary_unknown_releases",
+            "policy_rule_set_version": 1
+        })
+    );
+    assert_eq!(upgraded.3, "completed");
+    assert_eq!(
+        upgraded.4.as_deref(),
+        Some("Built-in v1 POL-UNKNOWN review was removed by ADR-0177")
+    );
+    let audit: Vec<(String, String, serde_json::Value)> = sqlx::query_as(
+        "SELECT event, disposition, actor FROM policy_decision_audit
+          WHERE id = $1 ORDER BY created_at, event",
+    )
+    .bind(builtin_decision_id)
+    .fetch_all(&db.pool)
+    .await
+    .expect("read retained decision audit");
+    assert_eq!(audit.len(), 2);
+    assert!(
+        audit
+            .iter()
+            .any(|row| row.0 == "created" && row.1 == "review")
+    );
+    assert!(audit.iter().any(|row| {
+        row.0 == "completed" && row.1 == "accept" && row.2["authority"] == "system_upgrade"
+    }));
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM release_work_item_events
+              WHERE work_item_id = $1
+                AND reason_code = 'policy.default_unknown_v2_reconciled'
+                AND from_state = 'needs_review' AND to_state = 'indexing'",
+        )
+        .bind(builtin.work_item_id())
+        .fetch_one(&db.pool)
+        .await
+        .expect("count reconciliation event"),
+        1
+    );
+
+    let untouched: (String, String, String, String) = sqlx::query_as(
+        "SELECT release.status, item.state, decision.disposition,
+                decision.completion_state
+           FROM policy_decisions decision
+           JOIN releases release ON release.id = decision.release_id
+           JOIN release_work_items item ON item.id = decision.work_item_id
+          WHERE decision.release_id = $1",
+    )
+    .bind(custom.release_id().into_uuid())
+    .fetch_one(&db.pool)
+    .await
+    .expect("read untouched custom review");
+    assert_eq!(
+        untouched,
+        (
+            "deprecated".to_string(),
+            "needs_review".to_string(),
+            "review".to_string(),
+            "pending".to_string()
+        )
     );
 
     db.drop().await;

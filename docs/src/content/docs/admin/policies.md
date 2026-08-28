@@ -24,6 +24,11 @@ The built-in rule set defaults to:
 - `Review` when any Track is new or a confirmed alternate recording; and
 - `Review` when novelty is uncertain.
 
+An ordinary Release with an `Unknown` classification does not match a built-in rule and therefore
+falls through to `Accept`. `Unknown` means Melodee did not observe reliable release-type evidence;
+it is not itself corruption or a safety finding. Administrators who want every such Release held
+for review can add an explicit `unknown_classification` rule in a new immutable rule-set version.
+
 The safe preference ranges and exact settings are listed in
 [Configuration](../installation/configuration/#policy-evaluation). A policy-produced `Delete`
 outcome is never sufficient to remove media. It creates a pending decision and routes the Release
@@ -34,6 +39,11 @@ deletion.
 Rule sets are immutable by name and version. If any configured preference changes, increment
 `MELODEE__POLICY__RULE_SET_VERSION`. Reusing a stored version with different rules fails startup
 instead of changing the meaning of historical decisions.
+
+Built-in version 1 is obsolete because it included the former catch-all Unknown review rule.
+Current installations use version 2 or later. During upgrade, Melodee reconciles only untouched,
+system-created v1 `POL-UNKNOWN` pending decisions to `Accept`; custom rules and administrator
+decisions are not changed, and the original decision remains in the append-only audit.
 
 ## Test and inspect policy
 

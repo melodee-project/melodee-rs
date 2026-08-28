@@ -102,6 +102,9 @@ Implemented normalization checks:
 - Run `melodee-cli policy config` and `melodee-cli policy rules` to confirm the configured immutable
   rule-set version and safe disposition preferences. If a preference changed, increment
   `MELODEE__POLICY__RULE_SET_VERSION`; a same-version payload conflict deliberately fails closed.
+  Version 1 is obsolete; set existing local `.env` files to version `2` or a later
+  operator-authored version. Built-in v2 accepts an ordinary Unknown classification unless an
+  explicit Unknown review rule is configured.
 - Run `melodee-cli policy test --limit 100 --actor <administrator-id>` to compare proposed dispositions, matched rules, existing
   decisions/states, and destructive impact without writing proposed decisions.
 - Run `melodee-cli policy inspect <release-id>` to inspect the current decision and append-only audit.

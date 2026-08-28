@@ -17,6 +17,11 @@ sorted, and paged server-side, with the view state in the URL. Selecting a Relea
 provenance, and history — including the recorded policy decision and its evidence where one
 exists. The Tracks tab lists each Track with its format facts and, when the Track has a
 playable media file and your administrator account may stream it, an audio preview.
+Release status is presented in operator language: a withheld policy result appears as **Needs
+review**, **Quarantined**, or **Ignored**, with its evidence when available, rather than exposing
+the internal `deprecated` catalog projection. Only accepted (`Active`) Releases serve Track audio
+and canonical artwork. An ordinary `Unknown` classification is accepted by the built-in policy;
+Unknown review occurs only when an administrator explicitly configures that rule.
 The detail view also offers an **Edit** panel with the editable metadata fields: title,
 sort title, display artist, release date, and release date text. Saves are partial updates
 (only changed fields are written), validated server-side (blank values and malformed dates are

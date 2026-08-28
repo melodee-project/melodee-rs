@@ -30,6 +30,9 @@ function makeDetail(overrides: Partial<ReleaseDetail> = {}): ReleaseDetail {
     releaseDate: '1986-05-12',
     releaseDateText: null,
     status: 'active',
+    workflowState: 'indexed',
+    policyDisposition: 'accept',
+    policyEvidenceSummary: 'No configured policy rule matched; accepting Release',
     revision: 1,
     trackCount: 1,
     durationMs: 222_000,
@@ -186,6 +189,21 @@ describe('ReleaseDetailScreen', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Tracks' }));
     expect(screen.getByRole('link', { name: 'Down Under' })).toBeInTheDocument();
     expect(screen.queryByLabelText('Audio preview: Down Under')).not.toBeInTheDocument();
+  });
+
+  it('explains a withheld policy review instead of presenting it as Deprecated', async () => {
+    renderScreen(
+      makeDetail({
+        status: 'deprecated',
+        workflowState: 'needs_review',
+        policyDisposition: 'review',
+        policyEvidenceSummary: 'Release classification is Unknown',
+      }),
+    );
+    expect(await screen.findByRole('heading', { name: 'Into the Night' })).toBeInTheDocument();
+    expect(screen.getAllByText('Needs review').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Release classification is Unknown').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Deprecated')).not.toBeInTheDocument();
   });
 
   it('shows an honest empty Classification tab when no classification exists', async () => {

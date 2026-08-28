@@ -53,7 +53,7 @@ async fn policy_test_persists_default_accept_without_a_synthetic_matched_rule() 
             "cli-policy-test-admin",
         ])
         .env(melodee_persistence::ENV_DATABASE_URL, database_url)
-        .env("MELODEE__POLICY__RULE_SET_VERSION", "1")
+        .env("MELODEE__POLICY__RULE_SET_VERSION", "2")
         .env("MELODEE__POLICY__BATCH_SIZE", "1")
         .env("MELODEE__POLICY__CONCURRENCY", "1")
         .output()

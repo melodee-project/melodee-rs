@@ -209,6 +209,9 @@ pub struct CatalogReleaseListRow {
     pub release_date: Option<Date>,
     pub release_date_text: Option<String>,
     pub status: String,
+    pub workflow_state: Option<String>,
+    pub policy_disposition: Option<String>,
+    pub policy_evidence_summary: Option<String>,
     pub track_count: i64,
     pub duration_ms: i64,
     pub created_at: OffsetDateTime,
@@ -448,6 +451,9 @@ pub struct ReleaseCatalogDetail {
     pub release_date: Option<Date>,
     pub release_date_text: Option<String>,
     pub status: String,
+    pub workflow_state: Option<String>,
+    pub policy_disposition: Option<String>,
+    pub policy_evidence_summary: Option<String>,
     pub revision: i64,
     pub track_count: i64,
     pub duration_ms: i64,
@@ -594,11 +600,17 @@ impl CatalogStore {
         let rows = sqlx::query_as::<_, CatalogReleaseListRow>(sqlx::AssertSqlSafe(format!(
             "SELECT r.public_api_id, r.title, r.display_artist, r.release_date,
                     r.release_date_text, r.status,
+                    workflow.state AS workflow_state,
+                    decision.disposition AS policy_disposition,
+                    decision.evidence_summary AS policy_evidence_summary,
                     COALESCE(aggregate.track_count, 0) AS track_count,
                     COALESCE(aggregate.duration_ms, 0) AS duration_ms,
                     r.created_at, r.updated_at
                FROM releases r
                LEFT JOIN release_catalog_aggregates aggregate ON aggregate.release_id = r.id
+               LEFT JOIN catalog_imports import ON import.release_id = r.id
+               LEFT JOIN release_work_items workflow ON workflow.id = import.work_item_id
+               LEFT JOIN policy_decisions decision ON decision.release_id = r.id
               WHERE r.status <> 'deleted'
                 AND {RELEASE_QUERY_FILTER} AND {RELEASE_ARTIST_FILTER}
               ORDER BY {}
@@ -962,14 +974,26 @@ impl CatalogStore {
                 Option<Date>,
                 Option<String>,
                 String,
+                Option<String>,
+                Option<String>,
+                Option<String>,
                 i64,
                 OffsetDateTime,
                 OffsetDateTime,
             ),
         >(
-            "SELECT id, title, sort_title, display_artist, release_date,
-                    release_date_text, status, revision, created_at, updated_at
-               FROM releases WHERE public_api_id = $1",
+            "SELECT release.id, release.title, release.sort_title,
+                    release.display_artist, release.release_date,
+                    release.release_date_text, release.status,
+                    workflow.state AS workflow_state,
+                    decision.disposition AS policy_disposition,
+                    decision.evidence_summary AS policy_evidence_summary,
+                    release.revision, release.created_at, release.updated_at
+               FROM releases release
+               LEFT JOIN catalog_imports import ON import.release_id = release.id
+               LEFT JOIN release_work_items workflow ON workflow.id = import.work_item_id
+               LEFT JOIN policy_decisions decision ON decision.release_id = release.id
+              WHERE release.public_api_id = $1",
         )
         .bind(public_api_id)
         .fetch_optional(pool)
@@ -982,6 +1006,9 @@ impl CatalogStore {
             release_date,
             release_date_text,
             status,
+            workflow_state,
+            policy_disposition,
+            policy_evidence_summary,
             revision,
             created_at,
             updated_at,
@@ -1154,6 +1181,9 @@ impl CatalogStore {
             release_date,
             release_date_text,
             status,
+            workflow_state,
+            policy_disposition,
+            policy_evidence_summary,
             revision,
             track_count: stats.0,
             duration_ms: stats.1,

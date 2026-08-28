@@ -28,6 +28,7 @@ struct CompatibilityCorpus {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct CorpusAuthority {
     decision: String,
+    policy_update: String,
     requirements: Vec<String>,
     legacy_evidence: String,
     legacy_behavior_preserved: String,
@@ -60,8 +61,9 @@ struct CompatibilityCase {
 fn greatest_hits_compatibility_corpus_executes_the_real_policy_pipeline() {
     let corpus: CompatibilityCorpus =
         serde_json::from_str(CORPUS).expect("parse committed Phase 5 compatibility corpus");
-    assert_eq!(corpus.schema_version, 1);
+    assert_eq!(corpus.schema_version, 2);
     assert_eq!(corpus.authority.decision, "ADR-0120");
+    assert_eq!(corpus.authority.policy_update, "ADR-0177");
     assert_eq!(
         corpus.authority.requirements,
         [

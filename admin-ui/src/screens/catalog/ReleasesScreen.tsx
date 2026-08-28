@@ -7,7 +7,7 @@ import { ReleaseLink } from '../../components/EntityLink';
 import type { EntityColumn } from '../../components/EntityTable';
 import { StatusTag } from '../../components/StatusTag';
 import { formatDate, formatDateTime, formatDuration, formatNumber, formatRelativeTime } from '../../i18n/format';
-import { catalogStatusKind } from './catalog';
+import { releaseStatusPresentation } from './catalog';
 import { CatalogListScreen, CellInteractive } from './CatalogListScreen';
 
 /**
@@ -34,9 +34,11 @@ export function ReleasesScreen() {
   );
 
   const toRow = useCallback(
-    (item: CatalogReleaseListItem) => ({
-      id: item.id,
-      cells: {
+    (item: CatalogReleaseListItem) => {
+      const status = releaseStatusPresentation(item);
+      return {
+        id: item.id,
+        cells: {
         title: (
           <CellInteractive>
             <ReleaseLink id={item.id} name={item.title} />
@@ -48,8 +50,9 @@ export function ReleasesScreen() {
           : (item.releaseDateText ?? t('common.none')),
         status: (
           <StatusTag
-            kind={catalogStatusKind(item.status)}
-            label={t(`catalog.status.${item.status}`, { defaultValue: item.status })}
+            kind={status.kind}
+            label={t(status.labelKey, { defaultValue: item.status })}
+            description={status.description}
           />
         ),
         trackCount: formatNumber(item.trackCount),
@@ -57,8 +60,9 @@ export function ReleasesScreen() {
         updatedAt: (
           <span title={formatDateTime(item.updatedAt)}>{formatRelativeTime(item.updatedAt)}</span>
         ),
-      },
-    }),
+        },
+      };
+    },
     [t],
   );
 

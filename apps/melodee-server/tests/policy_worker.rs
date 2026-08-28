@@ -13,8 +13,8 @@ use catalog_common::CatalogFixturePresentation;
 use common::{TestDb, test_config};
 use melodee_domain::{
     AudioIdentityEvidence, AudioIdentityEvidenceId, AudioIdentityEvidenceKind, AudioIdentityMerge,
-    AudioIdentityMergeId, Confidence, EvidencePolarity, EvidenceSource, IngestionState,
-    ReleaseTrait, TrackNoveltyCategory,
+    AudioIdentityMergeId, Confidence, Disposition, EvidencePolarity, EvidenceSource,
+    IngestionState, ReleaseTrait, TrackNoveltyCategory,
 };
 use melodee_persistence::{
     CatalogStore, PolicyAudioIdentityAlternateAssertion, PolicyAudioIdentityNoMatchAssertion,
@@ -86,6 +86,55 @@ async fn cancelled_pass_releases_every_claim_without_changing_cataloged_state() 
         0
     );
     fixture.assert_media_paths_absent();
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn ordinary_unknown_release_defaults_to_accept_and_becomes_client_visible() {
+    let db = TestDb::create("policy_worker_unknown_default_accept").await;
+    let fixture = seed_cataloged_release(
+        &db,
+        90,
+        CatalogFixturePresentation {
+            release_title: "Ordinary Release Without Type Metadata",
+            ..CatalogFixturePresentation::default()
+        },
+    )
+    .await;
+    let config = PolicyConfig::default();
+    let engine = engine(&db, &config).await;
+
+    let stats = run_policy_once(
+        &engine,
+        &config,
+        &PolicyStore,
+        &db.pool,
+        &test_config(),
+        OffsetDateTime::now_utc(),
+    )
+    .await
+    .expect("ordinary policy pass");
+    assert_eq!(stats.decisions_inserted, 1);
+    let item = WorkItemStore
+        .get(&db.pool, fixture.work_item_id())
+        .await
+        .expect("accepted work item");
+    assert_eq!(item.state, IngestionState::Indexing);
+    let (release_status, disposition, matched): (String, String, serde_json::Value) =
+        sqlx::query_as(
+            "SELECT release.status, decision.disposition, decision.matched_rule_ids
+               FROM releases release
+               JOIN policy_decisions decision ON decision.release_id = release.id
+              WHERE release.id = $1",
+        )
+        .bind(fixture.release_id().into_uuid())
+        .fetch_one(&db.pool)
+        .await
+        .expect("accepted Release projection");
+    assert_eq!(release_status, "active");
+    assert_eq!(disposition, Disposition::Accept.as_str());
+    assert_eq!(matched, serde_json::json!([]));
+
     db.drop().await;
 }
 
@@ -395,6 +444,7 @@ async fn supported_catalog_facts_flow_through_engine_and_atomic_commit_for_all_n
             decision,
             ..
         } = evaluation;
+        assert_eq!(decision.disposition, Disposition::Accept);
         let (_, novelty_evaluation, track_novelty) = novelty.into_parts();
         let committed = PolicyStore
             .commit_evaluation(
@@ -414,7 +464,7 @@ async fn supported_catalog_facts_flow_through_engine_and_atomic_commit_for_all_n
             .await
             .expect("atomically commit derived novelty facts");
         assert!(committed.inserted);
-        assert_eq!(committed.item.state, IngestionState::NeedsReview);
+        assert_eq!(committed.item.state, IngestionState::Indexing);
     }
     PolicyStore
         .release_lease(
@@ -770,7 +820,7 @@ async fn two_hundred_releases_converge_across_bounded_worker_passes() {
             (SELECT count(*) FROM release_classifications),
             (SELECT count(*) FROM release_novelty_evaluations),
             (SELECT count(*) FROM track_novelty),
-            (SELECT count(*) FROM release_work_items WHERE state = 'needs_review'),
+            (SELECT count(*) FROM release_work_items WHERE state = 'indexing'),
             (SELECT count(*) FROM policy_decision_audit WHERE event = 'created'),
             (SELECT count(*) FROM release_work_item_events
               WHERE event_type = 'transitioned'
@@ -841,7 +891,7 @@ async fn two_hundred_releases_converge_across_bounded_worker_passes() {
             "duplicate_decisions": duplicate_decisions,
             "partial_releases": partial_releases,
             "failed_items": failed_items,
-            "final_states": { "needs_review": counts.4 },
+            "final_states": { "indexing": counts.4 },
             "set_based_mutation_statement_count": set_based_mutation_statement_count,
             "peak_test_process_rss_kib": peak_rss_kib,
             "peak_test_process_rss_supported": peak_rss_supported,

@@ -166,7 +166,7 @@ or an equivalent supervisor to start MPV with the configured socket.
 | `MELODEE__POLICY__WORKER__POLL_INTERVAL_SECONDS` | `60` | Period between PostgreSQL policy-worker polls. |
 | `MELODEE__POLICY__CONCURRENCY` | `4` | Maximum policy evaluations in flight in one server process (maximum `64`). |
 | `MELODEE__POLICY__BATCH_SIZE` | `500` | Configured claim ceiling (maximum `10000`); the effective claim is the smaller of this value and concurrency. |
-| `MELODEE__POLICY__RULE_SET_VERSION` | `1` | Immutable version for the configured built-in rule set. Increment it whenever a preference changes. |
+| `MELODEE__POLICY__RULE_SET_VERSION` | `2` | Immutable version for the configured built-in rule set. Version 1 is obsolete; increment this whenever a preference changes. |
 | `MELODEE__POLICY__DESTRUCTIVE_CONFIDENCE_BPS` | `8000` | Confidence threshold in basis points (`1`–`10000`) for a rule that proposes a destructive disposition. |
 | `MELODEE__POLICY__REDUNDANT_GREATEST_HITS_DISPOSITION` | `ignore` | Outcome for fully redundant Greatest Hits Releases: `ignore` or `delete`. Delete remains pending review. |
 | `MELODEE__POLICY__NOVEL_GREATEST_HITS_DISPOSITION` | `review` | Outcome when a Greatest Hits Release contains new/alternate material: `review` or `accept`. |

@@ -917,7 +917,18 @@ export interface Section<T> {
 export type CatalogArtistStatus = 'provisional' | 'verified' | 'merged' | 'deprecated';
 
 /** Release catalog status (releases_status_check). */
-export type CatalogReleaseStatus = 'active' | 'deprecated';
+export type CatalogReleaseStatus = 'active' | 'deprecated' | 'deleted' | 'merged';
+
+/** Policy/workflow context behind the catalog visibility projection. */
+export type ReleaseWorkflowState =
+  | 'cataloged'
+  | 'indexing'
+  | 'indexed'
+  | 'needs_review'
+  | 'quarantined'
+  | 'ignored'
+  | 'deleted'
+  | string;
 
 /** Artist type taxonomy (artists_type_check). */
 export type CatalogArtistType =
@@ -955,6 +966,9 @@ export interface CatalogReleaseListItem {
   releaseDate: string | null;
   releaseDateText: string | null;
   status: CatalogReleaseStatus;
+  workflowState: ReleaseWorkflowState | null;
+  policyDisposition: PolicyDisposition | null;
+  policyEvidenceSummary: string | null;
   trackCount: number;
   durationMs: number;
   imageId: string;
@@ -1192,6 +1206,9 @@ export interface ReleaseDetail {
   country?: string | null;
   type?: string | null;
   status: CatalogReleaseStatus;
+  workflowState: ReleaseWorkflowState | null;
+  policyDisposition: PolicyDisposition | null;
+  policyEvidenceSummary: string | null;
   revision: number;
   trackCount: number;
   durationMs: number;

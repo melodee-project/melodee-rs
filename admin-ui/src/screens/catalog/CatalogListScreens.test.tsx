@@ -125,6 +125,9 @@ const RELEASE: CatalogReleaseListItem = {
   releaseDate: '1986-05-12',
   releaseDateText: null,
   status: 'active',
+  workflowState: 'indexed',
+  policyDisposition: 'accept',
+  policyEvidenceSummary: 'No configured policy rule matched; accepting Release',
   trackCount: 10,
   durationMs: 2_280_000,
   imageId: 'album_bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
@@ -338,6 +341,28 @@ describe('ReleasesScreen', () => {
       expect.objectContaining({ sort: undefined }),
       expect.any(AbortSignal),
     );
+  });
+
+  it('labels a withheld policy review by its actionable state, not Deprecated', async () => {
+    mockListReleases.mockResolvedValue(
+      page([
+        {
+          ...RELEASE,
+          status: 'deprecated',
+          workflowState: 'needs_review',
+          policyDisposition: 'review',
+          policyEvidenceSummary: 'Release classification is Unknown',
+        },
+      ]),
+    );
+    render(
+      <MemoryRouter initialEntries={['/catalog/releases']}>
+        <ReleasesScreen />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText('Needs review')).toBeInTheDocument();
+    expect(screen.queryByText('Deprecated')).not.toBeInTheDocument();
+    expect(screen.getByTitle('Release classification is Unknown')).toBeInTheDocument();
   });
 });
 

@@ -13,6 +13,7 @@ mod common;
 #[path = "../../../crates/melodee-persistence/tests/phase5_common/mod.rs"]
 mod phase5_common;
 
+use std::io::Cursor;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -27,11 +28,13 @@ use http_body_util::BodyExt;
 use melodee_auth::{NativeAccessClaims, PasswordHashAlgorithm, SecretString, issue_access_token};
 use melodee_domain::{Disposition, IngestionState, PolicyRuleSetId};
 use melodee_persistence::{AuthStore, NativeUserImport, PolicyStore, WorkerId};
+use melodee_policy::{PolicyConfig, PolicyEngine, default_rule_set};
 use melodee_server::admin_access::AdminAccessState;
 use melodee_server::admin_catalog::AdminCatalogState;
 use melodee_server::native::stream::DatabaseStreamUrlSigner;
 use melodee_server::native::{NativeState, PostgresNativeUserStateReader};
 use melodee_server::native_stream::{CanonicalAssetRoot, ClientAddressResolver, DirectPlayService};
+use melodee_server::policy_worker::run_policy_once;
 use serde_json::{Value, json};
 use time::OffsetDateTime;
 use tower::ServiceExt;
@@ -379,6 +382,9 @@ async fn release_browsing_filters_by_query_and_artist() {
     assert_eq!(item["displayArtist"], "Browse Artist A");
     assert_eq!(item["releaseDate"], "2007-08-09");
     assert_eq!(item["status"], "active");
+    assert_eq!(item["workflowState"], "cataloged");
+    assert_eq!(item["policyDisposition"], Value::Null);
+    assert_eq!(item["policyEvidenceSummary"], Value::Null);
     assert_eq!(item["trackCount"], 1);
     assert_eq!(item["durationMs"], 180_000);
     assert_eq!(
@@ -602,6 +608,12 @@ async fn release_detail_payload_includes_classification_provenance_history() {
     // The admin surface retains reviewed releases for diagnosis, while client
     // adapters exclude them through the shared non-active catalog status.
     assert_eq!(body["status"], "deprecated");
+    assert_eq!(body["workflowState"], "needs_review");
+    assert_eq!(body["policyDisposition"], "review");
+    assert_eq!(
+        body["policyEvidenceSummary"],
+        "Release classification is Unknown"
+    );
     assert_eq!(body["trackCount"], 1);
     assert!(body["mediaBytes"].as_i64().expect("mediaBytes") > 0);
     assert_eq!(body["durationMs"], 180_000);
@@ -1099,6 +1111,146 @@ async fn release_detail_track_rows_carry_signed_preview_urls() {
         stream_url.starts_with(&prefix),
         "track row streamUrl uses the frozen native stream route: {stream_url}"
     );
+
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn default_accepted_release_detail_streams_track_and_serves_canonical_artwork() {
+    let db = TestDb::create("wp15_release_default_media").await;
+    let fixture = seed_users(&db).await;
+    let admin = token_for(fixture.admin_public, "wp15-admin");
+    let release = seed_release(
+        &db,
+        12,
+        "Ordinary Unknown Media Release",
+        "Media Artist",
+        "Playable Track",
+    )
+    .await;
+    let (release_public, _, track_public) = public_ids(&db, release.release_id().into_uuid()).await;
+
+    let artwork = {
+        let image = image::DynamicImage::ImageRgba8(image::RgbaImage::from_fn(320, 320, |x, y| {
+            image::Rgba([(x % 251) as u8, (y % 241) as u8, 97, 255])
+        }));
+        let mut encoded = Cursor::new(Vec::new());
+        image
+            .write_to(&mut encoded, image::ImageFormat::Jpeg)
+            .expect("encode canonical artwork");
+        encoded.into_inner()
+    };
+    let artwork_hash = blake3::hash(&artwork).to_hex().to_string();
+    let artwork_relative = format!("artwork/{artwork_hash}.jpg");
+    sqlx::query(
+        "UPDATE release_publication_plans
+            SET plan_payload = jsonb_set(
+                plan_payload,
+                '{assets}',
+                (plan_payload->'assets') || jsonb_build_array(jsonb_build_object(
+                    'kind', 'artwork',
+                    'canonical_path', $2,
+                    'size_bytes', $3::bigint,
+                    'byte_hash', $4
+                ))
+            )
+          WHERE work_item_id = $1",
+    )
+    .bind(release.work_item_id())
+    .bind(&artwork_relative)
+    .bind(i64::try_from(artwork.len()).expect("artwork size"))
+    .bind(&artwork_hash)
+    .execute(&db.pool)
+    .await
+    .expect("append canonical artwork fixture");
+
+    let config = PolicyConfig::default();
+    let proposed = default_rule_set(&config).expect("v2 defaults");
+    let persisted = PolicyStore
+        .ensure_rule_set(&db.pool, &proposed, OffsetDateTime::now_utc())
+        .await
+        .expect("persist v2 defaults");
+    let engine = PolicyEngine::with_rule_set(config.clone(), persisted).expect("policy engine");
+    run_policy_once(
+        &engine,
+        &config,
+        &PolicyStore,
+        &db.pool,
+        &test_config(),
+        OffsetDateTime::now_utc(),
+    )
+    .await
+    .expect("accept ordinary Release");
+
+    let (status, detail) = call(
+        app(db.pool.clone()),
+        "GET",
+        &format!("/api/admin/v1/catalog/releases/{release_public}"),
+        None,
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{detail}");
+    assert_eq!(detail["status"], "active");
+    assert_eq!(detail["workflowState"], "indexing");
+    assert_eq!(detail["policyDisposition"], "accept");
+    let stream_url = detail["tracks"]["items"][0]["streamUrl"]
+        .as_str()
+        .expect("accepted Track has a signed preview URL");
+
+    let canonical_media: String = sqlx::query_scalar(
+        "SELECT media.canonical_relative_path FROM tracks track
+         JOIN media_assets media ON media.id = track.playable_media_asset_id
+         WHERE track.public_api_id = $1",
+    )
+    .bind(track_public)
+    .fetch_one(&db.pool)
+    .await
+    .expect("canonical media path");
+    let root = tempfile::tempdir().expect("canonical root");
+    let media_path = root.path().join(canonical_media);
+    std::fs::create_dir_all(media_path.parent().expect("media parent"))
+        .expect("create media directory");
+    let media_bytes = [0x4d_u8; 42];
+    std::fs::write(&media_path, media_bytes).expect("write canonical media");
+    let artwork_path = root
+        .path()
+        .join(&release.published.plan.target_relative_path)
+        .join(&artwork_relative);
+    std::fs::create_dir_all(artwork_path.parent().expect("artwork parent"))
+        .expect("create artwork directory");
+    std::fs::write(&artwork_path, &artwork).expect("write canonical artwork");
+
+    let native =
+        melodee_server::native::router().with_state(native_streaming_state(&db.pool, root.path()));
+    let (status, streamed) = replay_stream_url(native.clone(), stream_url, None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(streamed, media_bytes);
+
+    let response = native
+        .oneshot(
+            Request::builder()
+                .uri(format!("/images/album_{release_public}/96"))
+                .body(Body::empty())
+                .expect("image request"),
+        )
+        .await
+        .expect("image response");
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok()),
+        Some("image/jpeg")
+    );
+    let image_bytes = response
+        .into_body()
+        .collect()
+        .await
+        .expect("image body")
+        .to_bytes();
+    assert!(!image_bytes.is_empty(), "canonical artwork is served");
 
     db.drop().await;
 }

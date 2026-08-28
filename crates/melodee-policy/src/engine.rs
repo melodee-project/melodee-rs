@@ -15,7 +15,7 @@ use crate::classifier::{ClassificationError, ClassificationInput, Classifier};
 use crate::config::{PolicyConfig, PolicyConfigError};
 use crate::novelty::{NoveltyAssessment, NoveltyEngine, NoveltyEngineError, NoveltyInput};
 
-pub const DEFAULT_RULE_SET_VERSION: u32 = 1;
+pub use crate::config::DEFAULT_RULE_SET_VERSION;
 pub const DEFAULT_RULE_SET_NAME: &str = "phase5-default-rules";
 
 /// Stable UUIDv7 derived from the fixed default name namespace and explicit
@@ -85,13 +85,6 @@ pub fn default_rules(config: &PolicyConfig) -> Vec<PolicyRule> {
             (config.redundant_greatest_hits_disposition == Disposition::Delete)
                 .then(|| Confidence::new(config.destructive_confidence_bps).ok())
                 .flatten(),
-            json!({}),
-        ),
-        rule(
-            "POL-UNKNOWN",
-            PolicyRuleType::UnknownClassification,
-            Disposition::Review,
-            None,
             json!({}),
         ),
     ]

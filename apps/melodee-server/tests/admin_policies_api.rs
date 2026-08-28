@@ -246,7 +246,7 @@ async fn rule_listing_reports_active_version_with_priority_and_match_counts() {
         body["ruleSet"]["name"],
         melodee_policy::DEFAULT_RULE_SET_NAME
     );
-    assert_eq!(body["ruleSet"]["version"], 1);
+    assert_eq!(body["ruleSet"]["version"], 2);
     let ids = rule_ids(&body);
     assert_eq!(
         ids,
@@ -255,8 +255,7 @@ async fn rule_listing_reports_active_version_with_priority_and_match_counts() {
             "POL-CORRUPT",
             "POL-GH-UNCERTAIN",
             "POL-GH-NOVEL",
-            "POL-GH-REDUNDANT",
-            "POL-UNKNOWN"
+            "POL-GH-REDUNDANT"
         ],
         "active rules in evaluation (priority) order"
     );
@@ -265,7 +264,7 @@ async fn rule_listing_reports_active_version_with_priority_and_match_counts() {
     assert_eq!(first["ruleType"], "administrator_override");
     assert_eq!(first["enabled"], true);
     assert_eq!(first["matchCount"], 0);
-    assert_eq!(body["total"], 6);
+    assert_eq!(body["total"], 5);
 
     db.drop().await;
 }
@@ -294,9 +293,9 @@ async fn rule_crud_creates_immutable_versions_and_protects_safety_rules() {
     )
     .await;
     assert_eq!(status, StatusCode::CREATED, "{body}");
-    assert_eq!(body["ruleSet"]["version"], 2);
+    assert_eq!(body["ruleSet"]["version"], 3);
     assert_eq!(body["rule"]["id"], "POL-HOLIDAY");
-    assert_eq!(body["rule"]["priority"], 6);
+    assert_eq!(body["rule"]["priority"], 5);
     assert_eq!(body["changed"], true);
 
     // Duplicate id conflicts.
@@ -326,9 +325,9 @@ async fn rule_crud_creates_immutable_versions_and_protects_safety_rules() {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(body["ruleSet"]["version"], 3);
+    assert_eq!(body["ruleSet"]["version"], 4);
     assert_eq!(body["rule"]["disposition"], "ignore");
-    assert_eq!(body["rule"]["priority"], 6);
+    assert_eq!(body["rule"]["priority"], 5);
 
     // A destructive disposition without a confidence floor violates the
     // domain invariant and never persists.
@@ -376,7 +375,7 @@ async fn rule_crud_creates_immutable_versions_and_protects_safety_rules() {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(body["ruleSet"]["version"], 4);
+    assert_eq!(body["ruleSet"]["version"], 5);
     assert_eq!(body["enabled"], false);
     assert_eq!(body["changed"], true);
 
@@ -389,9 +388,9 @@ async fn rule_crud_creates_immutable_versions_and_protects_safety_rules() {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(body["ruleSet"]["version"], 4);
+    assert_eq!(body["ruleSet"]["version"], 5);
     assert_eq!(
-        body["total"], 7,
+        body["total"], 6,
         "disabled rules remain listed from history"
     );
     let holiday = rule_by_id(&body, "POL-HOLIDAY");
@@ -427,8 +426,8 @@ async fn rule_crud_creates_immutable_versions_and_protects_safety_rules() {
     assert_eq!(body["changed"], true);
     assert_eq!(body["rule"]["enabled"], true);
     assert_eq!(body["rule"]["disposition"], "ignore");
-    assert_eq!(body["rule"]["priority"], 6);
-    assert_eq!(body["ruleSet"]["version"], 5);
+    assert_eq!(body["rule"]["priority"], 5);
+    assert_eq!(body["ruleSet"]["version"], 6);
 
     // Enabling again is an idempotent no-op.
     let (status, body) = call(
@@ -441,7 +440,7 @@ async fn rule_crud_creates_immutable_versions_and_protects_safety_rules() {
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["changed"], false);
-    assert_eq!(body["ruleSet"]["version"], 5);
+    assert_eq!(body["ruleSet"]["version"], 6);
 
     // Delete removes the rule in a new version; history keeps it listed.
     let (status, body) = call(
@@ -454,7 +453,7 @@ async fn rule_crud_creates_immutable_versions_and_protects_safety_rules() {
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["deleted"], true);
-    assert_eq!(body["ruleSet"]["version"], 6);
+    assert_eq!(body["ruleSet"]["version"], 7);
     let (status, body) = call(
         app.clone(),
         "DELETE",
@@ -496,15 +495,15 @@ async fn rule_crud_creates_immutable_versions_and_protects_safety_rules() {
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
 
-    // History is immutable: version 1 still holds the original six rules.
+    // History is immutable: version 2 still holds the original five rules.
     let versions = PolicyStore
         .list_rule_set_versions(&db.pool, melodee_policy::DEFAULT_RULE_SET_NAME)
         .await
         .expect("version history");
     assert_eq!(versions.len(), 6);
-    assert_eq!(versions[0].version, 1);
-    assert_eq!(versions[0].rules.len(), 6);
-    assert_eq!(versions[1].rules.len(), 7);
+    assert_eq!(versions[0].version, 2);
+    assert_eq!(versions[0].rules.len(), 5);
+    assert_eq!(versions[1].rules.len(), 6);
 
     db.drop().await;
 }
@@ -519,7 +518,7 @@ async fn test_run_evaluates_catalog_and_persists_audit_for_stored_rules() {
         &db,
         1,
         CatalogFixturePresentation {
-            release_title: "Policy Test Fixture",
+            release_title: "Policy Test Greatest Hits",
             release_artist: "Policy Artist",
             track_title: "Policy Track",
             track_artist: "Policy Artist",
@@ -529,13 +528,13 @@ async fn test_run_evaluates_catalog_and_persists_audit_for_stored_rules() {
     .await;
     let app = build_app(db.pool.clone());
 
-    // Test a stored rule: the unknown-classification fixture matches
-    // POL-UNKNOWN; the run is persisted for audit.
+    // Test a stored rule: the title classifies this as Greatest Hits and its
+    // unconfirmed Track novelty matches the uncertain safety rule.
     let (status, body) = call(
         app.clone(),
         "POST",
         "/api/admin/v1/policies/rules/test",
-        Some(serde_json::json!({ "ruleId": "POL-UNKNOWN" })),
+        Some(serde_json::json!({ "ruleId": "POL-GH-UNCERTAIN" })),
         Some(&admin),
     )
     .await;
@@ -544,7 +543,7 @@ async fn test_run_evaluates_catalog_and_persists_audit_for_stored_rules() {
     assert!(body["testRunId"].is_string());
     assert_eq!(body["evaluated"], 1);
     assert_eq!(body["matchedCount"], 1);
-    assert_eq!(body["matchedRuleCounts"]["POL-UNKNOWN"], 1);
+    assert_eq!(body["matchedRuleCounts"]["POL-GH-UNCERTAIN"], 1);
     assert_eq!(body["proposedDispositionCounts"]["review"], 1);
     assert_eq!(body["destructiveImpact"], 0);
     assert_eq!(body["destructive"], false);
@@ -554,7 +553,7 @@ async fn test_run_evaluates_catalog_and_persists_audit_for_stored_rules() {
         sample[0]["releaseId"].as_str().expect("releaseId"),
         release.release_id().into_uuid().to_string()
     );
-    assert_eq!(sample[0]["title"], "Policy Test Fixture");
+    assert_eq!(sample[0]["title"], "Policy Test Greatest Hits");
     assert_eq!(sample[0]["artist"], "Policy Artist");
 
     let stored_runs: i64 = sqlx::query_scalar("SELECT COUNT(*)::bigint FROM policy_test_runs")
@@ -644,7 +643,7 @@ async fn test_run_evaluates_catalog_and_persists_audit_for_stored_rules() {
         app,
         "POST",
         "/api/admin/v1/policies/rules/test",
-        Some(serde_json::json!({ "ruleId": "POL-UNKNOWN", "rule": {
+        Some(serde_json::json!({ "ruleId": "POL-CORRUPT", "rule": {
             "id": "POL-X", "ruleType": "unknown_classification",
             "disposition": "review", "predicate": {}
         } })),

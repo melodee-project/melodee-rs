@@ -14,10 +14,11 @@ use melodee_domain::{
 };
 use melodee_policy::{
     AdministratorClassification, ClassificationInput, Classifier,
-    DEFAULT_NOVELTY_EVALUATOR_VERSION, MAX_DRY_RUN_CLASSIFICATION_FACTS, MAX_DRY_RUN_TRACK_FACTS,
-    MAX_TRACKS_PER_NOVELTY_EVALUATION, NoveltyCategory, NoveltyEngine, NoveltyEngineError,
-    NoveltyInput, NoveltyTrackFact, PolicyConfig, PolicyDryRunError, PolicyDryRunner, PolicyEngine,
-    PolicyEngineError, PolicyInput, default_rule_set_id,
+    DEFAULT_NOVELTY_EVALUATOR_VERSION, DEFAULT_RULE_SET_VERSION, MAX_DRY_RUN_CLASSIFICATION_FACTS,
+    MAX_DRY_RUN_TRACK_FACTS, MAX_TRACKS_PER_NOVELTY_EVALUATION, NoveltyCategory, NoveltyEngine,
+    NoveltyEngineError, NoveltyInput, NoveltyTrackFact, PolicyConfig, PolicyDryRunError,
+    PolicyDryRunner, PolicyEngine, PolicyEngineError, PolicyInput, default_rule_set_id,
+    default_rules,
 };
 use serde_json::json;
 use time::OffsetDateTime;
@@ -32,6 +33,17 @@ fn policy_actor_json_is_stable_tagged_and_round_trips() {
                 policy_rule_set_version: 7,
             },
             json!({"authority": "system", "policy_rule_set_version": 7}),
+        ),
+        (
+            PolicyActor::SystemUpgrade {
+                migration: "0041_accept_ordinary_unknown_releases".to_string(),
+                policy_rule_set_version: 1,
+            },
+            json!({
+                "authority": "system_upgrade",
+                "migration": "0041_accept_ordinary_unknown_releases",
+                "policy_rule_set_version": 1
+            }),
         ),
         (
             PolicyActor::Administrator {
@@ -565,8 +577,47 @@ fn default_redundant_greatest_hits_preference_is_safe_ignore() {
     assert_eq!(
         evaluation.decision.actor,
         PolicyActor::System {
-            policy_rule_set_version: 1,
+            policy_rule_set_version: DEFAULT_RULE_SET_VERSION,
         }
+    );
+}
+
+#[test]
+fn default_unknown_classification_falls_through_to_accept() {
+    let configured = config();
+    assert!(
+        default_rules(&configured)
+            .iter()
+            .all(|rule| rule.rule_type != PolicyRuleType::UnknownClassification),
+        "Unknown review remains opt-in instead of a built-in catch-all"
+    );
+    let engine = PolicyEngine::new(configured).expect("engine");
+    let release_id = ReleaseId::new();
+    let classification = classify(release_id, Some("Ordinary Release"), Vec::new(), Vec::new());
+    assert_eq!(
+        classification.traits,
+        BTreeSet::from([ReleaseTrait::Unknown])
+    );
+    let assessment = NoveltyEngine
+        .assess(&novelty_input(
+            &engine,
+            release_id,
+            vec![fact(
+                release_id,
+                melodee_domain::AudioIdentityId::new(),
+                Some(hash('b')),
+                false,
+            )],
+        ))
+        .expect("novelty");
+    let evaluation = engine
+        .evaluate(&policy_input(classification, assessment))
+        .expect("evaluation");
+    assert_eq!(evaluation.decision.disposition, Disposition::Accept);
+    assert!(evaluation.decision.matched_rule_ids.is_empty());
+    assert_eq!(
+        evaluation.decision.evidence_summary,
+        "No configured policy rule matched; accepting Release"
     );
 }
 
@@ -939,13 +990,13 @@ fn executable_rule_sets_fail_closed_on_safety_and_version_gaps() {
     };
 
     assert!(matches!(
-        PolicyEngine::with_rule_set(config(), make(vec![admin.clone()], 1)),
+        PolicyEngine::with_rule_set(config(), make(vec![admin.clone()], 2)),
         Err(PolicyEngineError::MissingCorruptMediaSafetyRule)
     ));
     let mut filtered_admin = admin.clone();
     filtered_admin.predicate_json = json!({"required_traits": ["live"]});
     assert!(matches!(
-        PolicyEngine::with_rule_set(config(), make(vec![filtered_admin, corrupt.clone()], 1)),
+        PolicyEngine::with_rule_set(config(), make(vec![filtered_admin, corrupt.clone()], 2)),
         Err(PolicyEngineError::InvalidAdministratorOverridePredicate)
     ));
     let empty_trait = PolicyRule {
@@ -958,12 +1009,12 @@ fn executable_rule_sets_fail_closed_on_safety_and_version_gaps() {
     assert!(matches!(
         PolicyEngine::with_rule_set(
             config(),
-            make(vec![admin.clone(), corrupt.clone(), empty_trait], 1)
+            make(vec![admin.clone(), corrupt.clone(), empty_trait], 2)
         ),
         Err(PolicyEngineError::EmptyTraitPredicate { .. })
     ));
     assert!(matches!(
-        PolicyEngine::with_rule_set(config(), make(vec![admin, corrupt], 2)),
+        PolicyEngine::with_rule_set(config(), make(vec![admin, corrupt], 3)),
         Err(PolicyEngineError::ConfiguredRuleSetVersionMismatch { .. })
     ));
 }
@@ -982,6 +1033,15 @@ fn policy_config_rejects_zero_bounds_and_unsafe_preferences() {
     invalid = config();
     invalid.rule_set_version = 0;
     assert!(invalid.validate().is_err());
+    invalid = config();
+    invalid.rule_set_version = 1;
+    assert!(matches!(
+        invalid.validate(),
+        Err(melodee_policy::PolicyConfigError::ObsoleteRuleSetVersion {
+            configured: 1,
+            minimum: DEFAULT_RULE_SET_VERSION,
+        })
+    ));
     invalid = config();
     invalid.redundant_greatest_hits_disposition = Disposition::Accept;
     assert!(invalid.validate().is_err());

@@ -544,7 +544,8 @@ GET /api/admin/v1/catalog/releases?query=…&artistId=…&limit=50&offset=0&sort
 ```
 
 Returns Releases with `title`, `displayArtist`, `releaseDate` (extended ISO `YYYY-MM-DD` or
-`null`), `releaseDateText`, `status`, aggregate `trackCount`/`durationMs`, and an `imageId`.
+`null`), `releaseDateText`, `status`, `workflowState`, `policyDisposition`,
+`policyEvidenceSummary`, aggregate `trackCount`/`durationMs`, and an `imageId`.
 Sort keys: `title`, `releaseDate`, `createdAt`, `updatedAt` (default `title:asc`). `query`
 matches the title; `artistId` (an Artist public id) restricts to Releases that Artist is billed
 on.
@@ -581,7 +582,8 @@ GET /api/admin/v1/catalog/releases/{id}
 ```
 
 Returns the full operator image of one Release: overview facts (title, sort title, display
-artist, release date, status, revision), aggregate stats (`trackCount`, `durationMs`,
+artist, release date, status, revision), workflow context (`workflowState`,
+`policyDisposition`, `policyEvidenceSummary`), aggregate stats (`trackCount`, `durationMs`,
 `mediaBytes`), the ordered Track list with media format facts (container, codec, byte size)
 and a per-Track `streamUrl` (see [Track detail](#track-detail) below),
 billed Artists with roles and join phrases, contributors, the distinct media files, the
@@ -608,7 +610,9 @@ library). The URL is bound to the requesting client address like any native stre
 The `imageId` values returned by these routes are consumed by the existing
 `/images/{imageId}/{size}` endpoint shared with the native API; its id prefixes (`album_`,
 `artist_`, `song_`) are that endpoint's frozen contract. Artwork bytes are never served by the
-admin API itself.
+admin API itself. Track streaming and Release/Track artwork obey the accepted-Release visibility
+boundary: a non-active policy result is intentionally unavailable until an audited Accept decision
+restores the Release to active.
 
 ### Catalog artwork overrides
 

@@ -31,6 +31,12 @@ pub const MAX_POLICY_TEST_SAMPLES: usize = 20;
 pub enum PolicyActor {
     /// Automated policy engine evaluation.
     System { policy_rule_set_version: u32 },
+    /// A narrowly scoped, versioned database upgrade correcting a prior
+    /// system decision while preserving the original audit image.
+    SystemUpgrade {
+        migration: String,
+        policy_rule_set_version: u32,
+    },
     /// An administrator override.
     Administrator { actor: String },
 }
@@ -41,6 +47,16 @@ impl PolicyActor {
             Self::System {
                 policy_rule_set_version,
             } => {
+                if *policy_rule_set_version == 0 {
+                    return Err(DomainInvariantError::InvalidPolicyVersion);
+                }
+                Ok(())
+            }
+            Self::SystemUpgrade {
+                migration,
+                policy_rule_set_version,
+            } => {
+                validate_nonblank("policy decision migration", migration)?;
                 if *policy_rule_set_version == 0 {
                     return Err(DomainInvariantError::InvalidPolicyVersion);
                 }
@@ -60,6 +76,10 @@ impl PolicyActor {
         match self {
             Self::System {
                 policy_rule_set_version,
+            }
+            | Self::SystemUpgrade {
+                policy_rule_set_version,
+                ..
             } => *policy_rule_set_version,
             Self::Administrator { .. } => 0,
         }
@@ -110,12 +130,17 @@ impl PolicyRuleSet {
             return Err(DomainInvariantError::InvalidPolicyVersion);
         }
         value.created_by.validate()?;
-        if let PolicyActor::System {
-            policy_rule_set_version,
-        } = &value.created_by
-            && *policy_rule_set_version != value.version
-        {
-            return Err(DomainInvariantError::PolicyActorVersionMismatch);
+        match &value.created_by {
+            PolicyActor::System {
+                policy_rule_set_version,
+            }
+            | PolicyActor::SystemUpgrade {
+                policy_rule_set_version,
+                ..
+            } if *policy_rule_set_version != value.version => {
+                return Err(DomainInvariantError::PolicyActorVersionMismatch);
+            }
+            _ => {}
         }
         let mut rule_ids = BTreeSet::new();
         for rule in &value.rules {
@@ -194,7 +219,7 @@ pub enum PolicyRuleType {
     CorruptMedia,
     /// Administrator override — takes precedence over all automated rules.
     AdministratorOverride,
-    /// Unknown classification requires operator review.
+    /// Optional operator-configured review of Unknown classifications.
     UnknownClassification,
     /// Explicit operator-configured outcome for named non-Greatest-Hits traits.
     TraitDisposition,
@@ -322,12 +347,17 @@ impl ReleasePolicyDecision {
             return Err(DomainInvariantError::InvalidPolicyVersion);
         }
         value.actor.validate()?;
-        if let PolicyActor::System {
-            policy_rule_set_version,
-        } = &value.actor
-            && *policy_rule_set_version != value.rule_set_version
-        {
-            return Err(DomainInvariantError::PolicyActorVersionMismatch);
+        match &value.actor {
+            PolicyActor::System {
+                policy_rule_set_version,
+            }
+            | PolicyActor::SystemUpgrade {
+                policy_rule_set_version,
+                ..
+            } if *policy_rule_set_version != value.rule_set_version => {
+                return Err(DomainInvariantError::PolicyActorVersionMismatch);
+            }
+            _ => {}
         }
         validate_nonblank("policy decision evidence summary", &value.evidence_summary)?;
         for rule_id in &value.matched_rule_ids {
@@ -396,12 +426,17 @@ impl PolicyTestSummary {
             return Err(DomainInvariantError::InvalidPolicyVersion);
         }
         value.ran_by.validate()?;
-        if let PolicyActor::System {
-            policy_rule_set_version,
-        } = &value.ran_by
-            && *policy_rule_set_version != value.rule_set_version
-        {
-            return Err(DomainInvariantError::PolicyActorVersionMismatch);
+        match &value.ran_by {
+            PolicyActor::System {
+                policy_rule_set_version,
+            }
+            | PolicyActor::SystemUpgrade {
+                policy_rule_set_version,
+                ..
+            } if *policy_rule_set_version != value.rule_set_version => {
+                return Err(DomainInvariantError::PolicyActorVersionMismatch);
+            }
+            _ => {}
         }
         if usize::try_from(value.total_releases_evaluated).map_err(|_| {
             DomainInvariantError::PolicyTestScopeExceeded {

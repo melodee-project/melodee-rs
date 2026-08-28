@@ -18,6 +18,13 @@ pub const ENV_POLICY_NOVEL_GREATEST_HITS_DISPOSITION: &str =
 pub const ENV_POLICY_UNCERTAIN_GREATEST_HITS_DISPOSITION: &str =
     "MELODEE__POLICY__UNCERTAIN_GREATEST_HITS_DISPOSITION";
 
+/// Current immutable version of the built-in policy rule set.
+///
+/// Version 2 removes the obsolete catch-all Unknown-classification review
+/// rule. Operators can still author that rule explicitly when their library
+/// requires it.
+pub const DEFAULT_RULE_SET_VERSION: u32 = 2;
+
 pub const MAX_POLICY_BATCH_SIZE: usize = 10_000;
 pub const MAX_POLICY_CONCURRENCY: usize = 64;
 const DEFAULT_BATCH_SIZE: usize = 500;
@@ -34,6 +41,10 @@ pub enum PolicyConfigError {
     Confidence(String),
     #[error("invalid policy rule-set version: {0}")]
     RuleSetVersion(String),
+    #[error(
+        "obsolete policy rule-set version {configured}; set {ENV_POLICY_RULE_SET_VERSION} to at least {minimum}"
+    )]
+    ObsoleteRuleSetVersion { configured: u32, minimum: u32 },
     #[error("invalid disposition for {field}: {value}")]
     Disposition { field: &'static str, value: String },
     #[error("unsafe policy preference for {field}: {disposition}")]
@@ -62,7 +73,7 @@ impl Default for PolicyConfig {
             batch_size: DEFAULT_BATCH_SIZE,
             concurrency: DEFAULT_CONCURRENCY,
             destructive_confidence_bps: DEFAULT_DESTRUCTIVE_CONFIDENCE_BPS,
-            rule_set_version: 1,
+            rule_set_version: DEFAULT_RULE_SET_VERSION,
             redundant_greatest_hits_disposition: Disposition::Ignore,
             novel_greatest_hits_disposition: Disposition::Review,
             uncertain_greatest_hits_disposition: Disposition::Review,
@@ -118,6 +129,12 @@ impl PolicyConfig {
             return Err(PolicyConfigError::RuleSetVersion(
                 self.rule_set_version.to_string(),
             ));
+        }
+        if self.rule_set_version < DEFAULT_RULE_SET_VERSION {
+            return Err(PolicyConfigError::ObsoleteRuleSetVersion {
+                configured: self.rule_set_version,
+                minimum: DEFAULT_RULE_SET_VERSION,
+            });
         }
         require_preference(
             "redundant greatest hits",

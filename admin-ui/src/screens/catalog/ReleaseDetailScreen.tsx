@@ -37,7 +37,13 @@ import {
   formatDuration,
   formatNumber,
 } from '../../i18n/format';
-import { catalogStatusKind, toCatalogAuditEvent, trackOrdinalLabel, useCatalogDetail } from './catalog';
+import {
+  catalogStatusKind,
+  releaseStatusPresentation,
+  toCatalogAuditEvent,
+  trackOrdinalLabel,
+  useCatalogDetail,
+} from './catalog';
 import { ArtworkManager } from './ArtworkManager';
 import { CatalogArtwork } from './CatalogArtwork';
 import { EditPanel } from './EditPanel';
@@ -142,6 +148,19 @@ export function ReleaseDetailScreen() {
       ) : null}
       {detail ? (
         <>
+          {(() => {
+            const status = releaseStatusPresentation(detail);
+            return detail.workflowState === 'needs_review' ? (
+              <ActionableNotification
+                inline
+                kind="warning"
+                lowContrast
+                title={t(status.labelKey)}
+                subtitle={status.description ?? t('queue.nextAction.needs_review')}
+                hideCloseButton
+              />
+            ) : null;
+          })()}
           <p>
             <Link className="melodee-detail-edit-link" as="button" onClick={() => setEditing((prev) => !prev)}>
               {editing ? t('catalog.edit.cancel') : t('catalog.edit')}
@@ -210,10 +229,16 @@ export function ReleaseDetailScreen() {
                   ) : null}
                 </div>
               </div>
-              <StatusTag
-                kind={catalogStatusKind(detail.status)}
-                label={t(`catalog.status.${detail.status}`, { defaultValue: detail.status })}
-              />
+              {(() => {
+                const status = releaseStatusPresentation(detail);
+                return (
+                  <StatusTag
+                    kind={status.kind}
+                    label={t(status.labelKey, { defaultValue: detail.status })}
+                    description={status.description}
+                  />
+                );
+              })()}
             </div>
           </div>
 

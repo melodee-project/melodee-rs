@@ -112,6 +112,7 @@ python3 scripts/new_adr.py "short title"
 - [ADR-0174: Require review for name-only Artist identity matches](ADR-0174-require-review-for-name-only-artist-identity-matches.md) (partially supersedes ADR-0160)
 - [ADR-0175: Converge repeated primary Release Artist credits](ADR-0175-converge-repeated-primary-release-artist-credits.md) (partially supersedes ADR-0174)
 - [ADR-0176: Complete Artist merge coalescing and multi-select administration](ADR-0176-complete-artist-merge-coalescing-and-multi-select-administration.md)
+- [ADR-0177: Accept ordinary Unknown Releases and reconcile the obsolete default review rule](ADR-0177-accept-ordinary-unknown-releases-and-reconcile-the-obsolete-default-review-rule.md)
 
 ## Feature Completion Program decisions
 
