@@ -13,8 +13,10 @@
 
 > **Partial supersession:** [ADR-0174](ADR-0174-require-review-for-name-only-artist-identity-matches.md)
 > supersedes Artist decision 1(b), decision 2, and the related automatic name-only portions of
-> decisions 5 and 8. Exact Artist name equality now creates a review proposal and never an
-> automatic cross-Release merge. The provider-ID and Release portions of this ADR remain accepted.
+> decisions 5 and 8. [ADR-0175](ADR-0175-converge-repeated-primary-release-artist-credits.md)
+> subsequently permits a narrower exact-name plus repeated-primary-Release-context predicate with
+> group-wide conflict gates. Pure name-only matches remain proposals. The provider-ID and Release
+> portions of this ADR remain accepted.
 
 ADR-0153 (Accepted) authorizes the manifest importer to **reuse the Release Artist identity for a
 Track observation** only when the match is *unambiguous and scoped to the same Release import*:

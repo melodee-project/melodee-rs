@@ -50,9 +50,10 @@ pub use catalog::{
     MAX_CATALOG_CORRECTION_OVERLAY_REFERENCES, MAX_CATALOG_CORRECTION_RELEASES,
     MAX_CATALOG_CORRECTION_TRACKS, MAX_CATALOG_SPLIT_ASSIGNMENTS,
     NameOnlyArtistMatchProposalCandidate, PolicyEligibleWorkItem, ProviderNegativeAssertion,
-    ReleaseMetadataPatch, SameReleaseTrackArtistMergeCandidate, StoredArtistCandidate,
-    StoredArtistTrackAssociation, StoredCatalogImport, StrongArtistMergeCandidate,
-    StrongReleaseMergeCandidate, TrackMetadataPatch,
+    ReleaseMetadataPatch, RepeatedPrimaryReleaseArtistMergeCandidate,
+    SameReleaseTrackArtistMergeCandidate, StoredArtistCandidate, StoredArtistTrackAssociation,
+    StoredCatalogImport, StrongArtistMergeCandidate, StrongReleaseMergeCandidate,
+    TrackMetadataPatch,
 };
 pub use catalog_browse::{
     ArtistAliasRow, ArtistCatalogDetail, ArtistContributionRow, ArtistExternalIdRow,
@@ -62,6 +63,9 @@ pub use catalog_browse::{
     ContributionRow, MAX_CATALOG_BROWSE_QUERY_CHARS, MAX_CATALOG_DETAIL_ITEMS, MediaAssetRow,
     ReleaseCatalogDetail, ReleaseProvenanceRow, ReleaseTrackRow, TrackCatalogDetail,
     contains_pattern,
+};
+pub use catalog_identity::{
+    ArtistMergeImpact, ArtistMergePreview, ArtistMergePreviewArtist, MAX_ARTIST_MERGE_SOURCES,
 };
 pub use catalog_images::{
     CatalogImageAudit, CatalogImageEntity, CatalogImageError, CatalogImageStore,

@@ -216,6 +216,21 @@ pub struct NameOnlyArtistMatchProposalCandidate {
     pub normalized_name: String,
 }
 
+/// One provisional Artist that can be consolidated with the oldest
+/// indistinguishable primary Release Artist carrying the same exact name.
+///
+/// This is not a global normalized-name key. The candidate query requires
+/// repeated primary billing on different Releases and rejects the complete
+/// name group when any identity carries differentiating evidence.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RepeatedPrimaryReleaseArtistMergeCandidate {
+    pub source_artist_id: Uuid,
+    pub source_public_api_id: Uuid,
+    pub target_artist_id: Uuid,
+    pub target_public_api_id: Uuid,
+    pub normalized_name: String,
+}
+
 /// One repeated structured Track credit that can safely reuse another
 /// provisional, track-only Artist identity inside the same immutable Release.
 ///
@@ -245,6 +260,9 @@ pub enum ArtistReconciliationEvidence {
         release_id: Uuid,
         normalized_name: String,
     },
+    /// The same exact primary Artist credit recurred on different Releases,
+    /// and the full active name group had no differentiating identity facts.
+    RepeatedPrimaryReleaseCredit { normalized_name: String },
 }
 
 impl ArtistReconciliationEvidence {
@@ -257,6 +275,9 @@ impl ArtistReconciliationEvidence {
             Self::SameReleaseTrackCredit {
                 normalized_name, ..
             } => !normalized_name.trim().is_empty(),
+            Self::RepeatedPrimaryReleaseCredit { normalized_name } => {
+                !normalized_name.trim().is_empty()
+            }
         };
         if valid {
             Ok(())
@@ -269,6 +290,7 @@ impl ArtistReconciliationEvidence {
         match self {
             Self::EmbeddedExternalId { .. } => "embedded_external_id",
             Self::SameReleaseTrackCredit { .. } => "same_release_track_credit",
+            Self::RepeatedPrimaryReleaseCredit { .. } => "repeated_primary_release_credit",
         }
     }
 
@@ -289,6 +311,13 @@ impl ArtistReconciliationEvidence {
                 "predicate": self.predicate(),
                 "release_id": release_id,
                 "normalized_name": normalized_name,
+            }),
+            Self::RepeatedPrimaryReleaseCredit { normalized_name } => serde_json::json!({
+                "predicate": self.predicate(),
+                "normalized_name": normalized_name,
+                "scope": "different_releases",
+                "role": "primary",
+                "conflict_gated": true,
             }),
         }
     }
@@ -1185,6 +1214,186 @@ impl CatalogStore {
                 target_artist_id,
                 target_public_api_id,
                 release_id,
+                normalized_name,
+            },
+        )
+        .collect())
+    }
+
+    /// Returns bounded candidates for repeated exact primary Artist billing
+    /// across different cataloged Releases.
+    ///
+    /// The whole active normalized-name group must be provisional and
+    /// indistinguishable. External identities, disambiguation, differing
+    /// types or dates, memberships, relationships, manual/locked decisions,
+    /// negative assertions, or same-Release ambiguity make the group
+    /// ineligible. This makes the predicate contextual and conflict-gated
+    /// rather than treating the normalized name as a global identity key.
+    pub async fn repeated_primary_release_artist_merge_candidates(
+        &self,
+        pool: &PgPool,
+        limit: i64,
+    ) -> Result<Vec<RepeatedPrimaryReleaseArtistMergeCandidate>, CatalogStoreError> {
+        if !(1..=1_000).contains(&limit) {
+            return Err(CatalogStoreError::InvalidRequest);
+        }
+        Ok(sqlx::query_as::<_, (Uuid, Uuid, Uuid, Uuid, String)>(
+            "WITH active_artists AS (
+                 SELECT artist.id, artist.public_api_id, artist.normalized_name,
+                        artist.artist_type, artist.begin_date, artist.end_date
+                 FROM artists artist
+                 WHERE artist.status IN ('provisional','verified')
+                   AND btrim(artist.normalized_name) <> ''
+             ), eligible_artists AS (
+                 SELECT active.*
+                 FROM active_artists active
+                 JOIN artists artist ON artist.id=active.id
+                 WHERE artist.status='provisional'
+                   AND COALESCE(btrim(artist.disambiguation), '')=''
+                   AND NOT EXISTS (
+                       SELECT 1 FROM artist_external_identities external
+                       WHERE external.artist_id=artist.id
+                   )
+                   AND NOT EXISTS (
+                       SELECT 1 FROM group_memberships membership
+                       WHERE membership.member_artist_id=artist.id
+                          OR membership.group_artist_id=artist.id
+                   )
+                   AND NOT EXISTS (
+                       SELECT 1 FROM artist_relationships relationship
+                       WHERE relationship.source_artist_id=artist.id
+                          OR relationship.target_artist_id=artist.id
+                   )
+                   AND NOT EXISTS (
+                       SELECT 1 FROM artist_aliases alias
+                       WHERE alias.artist_id=artist.id
+                         AND alias.normalized_alias <> artist.normalized_name
+                   )
+                   AND NOT EXISTS (
+                       SELECT 1 FROM artist_match_decisions decision
+                       WHERE decision.artist_id=artist.id
+                         AND (decision.is_locked OR decision.authority <> 'automated')
+                   )
+                   AND EXISTS (
+                       SELECT 1
+                       FROM artist_match_current current
+                       JOIN artist_match_decisions decision
+                         ON decision.id=current.decision_id
+                       WHERE decision.artist_id=artist.id
+                         AND decision.authority='automated'
+                         AND NOT decision.is_locked
+                   )
+                   AND NOT EXISTS (
+                       SELECT 1
+                       FROM artist_match_current current
+                       JOIN artist_match_decisions decision
+                         ON decision.id=current.decision_id
+                       JOIN observed_artists observed
+                         ON observed.id=current.observed_artist_id
+                       WHERE decision.artist_id=artist.id
+                         AND observed.normalized_value <> artist.normalized_name
+                   )
+             ), primary_context AS (
+                 SELECT DISTINCT eligible.id, eligible.public_api_id,
+                        eligible.normalized_name, eligible.artist_type,
+                        eligible.begin_date, eligible.end_date,
+                        credit.release_id
+                 FROM eligible_artists eligible
+                 JOIN release_artists credit ON credit.artist_id=eligible.id
+                 JOIN releases release ON release.id=credit.release_id
+                 WHERE credit.role='primary' AND release.status <> 'deleted'
+             ), candidate_names AS (
+                 SELECT normalized_name
+                 FROM primary_context
+                 GROUP BY normalized_name
+                 HAVING count(DISTINCT id)>1
+                    AND count(DISTINCT release_id)>1
+                    AND count(DISTINCT artist_type)=1
+                    AND count(DISTINCT COALESCE(begin_date, DATE '0001-01-01'))=1
+                    AND count(DISTINCT COALESCE(end_date, DATE '9999-12-31'))=1
+             ), blocked_names AS (
+                 SELECT DISTINCT active.normalized_name
+                 FROM active_artists active
+                 JOIN candidate_names candidate
+                   ON candidate.normalized_name=active.normalized_name
+                 LEFT JOIN eligible_artists eligible ON eligible.id=active.id
+                 WHERE eligible.id IS NULL
+             ), same_release_ambiguity AS (
+                 SELECT normalized_name
+                 FROM primary_context
+                 GROUP BY normalized_name, release_id
+                 HAVING count(DISTINCT id)>1
+             ), negative_names AS (
+                 SELECT DISTINCT owner.normalized_name
+                 FROM active_artists owner
+                 JOIN artist_match_decisions owner_decision
+                   ON owner_decision.artist_id=owner.id
+                 JOIN artist_match_current current
+                   ON current.decision_id=owner_decision.id
+                  AND current.observed_artist_id=owner_decision.observed_artist_id
+                 JOIN artist_negative_assertions negative
+                   ON negative.observed_artist_id=current.observed_artist_id
+                  AND negative.candidate_artist_id IS NOT NULL
+                 JOIN active_artists candidate
+                   ON candidate.id=negative.candidate_artist_id
+                  AND candidate.normalized_name=owner.normalized_name
+                 WHERE negative.assertion_kind='do_not_match'
+                   AND NOT EXISTS (
+                       SELECT 1 FROM artist_negative_assertions revoked
+                       WHERE revoked.predecessor_assertion_id=negative.id
+                         AND revoked.assertion_kind='revoke'
+                   )
+             ), distinct_candidates AS (
+                 SELECT DISTINCT context.id, context.public_api_id,
+                        context.normalized_name
+                 FROM primary_context context
+                 JOIN candidate_names candidate
+                   ON candidate.normalized_name=context.normalized_name
+                 WHERE NOT EXISTS (
+                     SELECT 1 FROM blocked_names blocked
+                     WHERE blocked.normalized_name=context.normalized_name
+                 )
+                   AND NOT EXISTS (
+                       SELECT 1 FROM same_release_ambiguity ambiguous
+                       WHERE ambiguous.normalized_name=context.normalized_name
+                   )
+                   AND NOT EXISTS (
+                       SELECT 1 FROM negative_names negative
+                       WHERE negative.normalized_name=context.normalized_name
+                   )
+             ), ranked AS (
+                 SELECT candidate.*,
+                        first_value(candidate.id) OVER (
+                            PARTITION BY candidate.normalized_name
+                            ORDER BY candidate.id
+                        ) AS target_artist_id
+                 FROM distinct_candidates candidate
+             )
+             SELECT source.id, source.public_api_id,
+                    target.id, target.public_api_id,
+                    source.normalized_name
+             FROM ranked source
+             JOIN distinct_candidates target ON target.id=source.target_artist_id
+             WHERE source.id <> target.id
+             ORDER BY source.normalized_name, source.id
+             LIMIT $1",
+        )
+        .bind(limit)
+        .fetch_all(pool)
+        .await?
+        .into_iter()
+        .map(
+            |(
+                source_artist_id,
+                source_public_api_id,
+                target_artist_id,
+                target_public_api_id,
+                normalized_name,
+            )| RepeatedPrimaryReleaseArtistMergeCandidate {
+                source_artist_id,
+                source_public_api_id,
+                target_artist_id,
+                target_public_api_id,
                 normalized_name,
             },
         )

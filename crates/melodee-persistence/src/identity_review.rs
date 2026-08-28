@@ -171,6 +171,37 @@ pub struct ArtistIdentityRef {
     pub status: String,
 }
 
+impl CatalogStore {
+    /// Resolves a bounded set of Artist public IDs in one deterministic query.
+    pub async fn artists_by_public_ids(
+        &self,
+        pool: &PgPool,
+        public_ids: &[Uuid],
+    ) -> Result<Vec<ArtistIdentityRef>, CatalogStoreError> {
+        if public_ids.is_empty() || public_ids.len() > crate::MAX_ARTIST_MERGE_SOURCES + 1 {
+            return Err(CatalogStoreError::InvalidRequest);
+        }
+        Ok(sqlx::query_as::<_, (Uuid, Uuid, String, String)>(
+            "SELECT id,public_api_id,canonical_name,status
+               FROM artists WHERE public_api_id=ANY($1)
+               ORDER BY public_api_id",
+        )
+        .bind(public_ids)
+        .fetch_all(pool)
+        .await?
+        .into_iter()
+        .map(
+            |(id, public_api_id, canonical_name, status)| ArtistIdentityRef {
+                id: ArtistId::from_uuid(id),
+                public_api_id,
+                canonical_name,
+                status,
+            },
+        )
+        .collect())
+    }
+}
+
 #[derive(Debug, sqlx::FromRow)]
 struct UnresolvedRow {
     id: Uuid,

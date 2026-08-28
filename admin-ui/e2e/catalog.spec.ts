@@ -10,6 +10,7 @@ import { expect, test, type Page } from '@playwright/test';
  */
 
 const ARTIST_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const DUPLICATE_ARTIST_ID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const RELEASE_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const TRACK_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 
@@ -25,6 +26,15 @@ const ARTIST_ROW = {
   imageId: `artist_${ARTIST_ID}`,
   createdAt: '2026-08-01T10:00:00Z',
   updatedAt: '2026-08-14T10:00:00Z',
+};
+
+const DUPLICATE_ARTIST_ROW = {
+  ...ARTIST_ROW,
+  id: DUPLICATE_ARTIST_ID,
+  disambiguation: null,
+  releaseCount: 2,
+  trackCount: 18,
+  imageId: `artist_${DUPLICATE_ARTIST_ID}`,
 };
 
 const RELEASE_ROW = {
@@ -214,13 +224,21 @@ const TRACK_DETAIL = {
 
 async function mockAdminApi(
   page: Page,
-  options: { artworkUploadFails?: boolean; metadataApplyFails?: boolean } = {},
+  options: {
+    artworkUploadFails?: boolean;
+    metadataApplyFails?: boolean;
+    mergeArtists?: boolean;
+  } = {},
 ) {
   const listRequests: string[] = [];
   const artworkRequests: { method: string; body: string }[] = [];
   const metadataRequests: { pathname: string; body: unknown }[] = [];
+  const mergeRequests: { pathname: string; body: Record<string, unknown> }[] = [];
   let metadataAudits: Record<string, unknown>[] = [];
   let releaseDetail = structuredClone(RELEASE_DETAIL);
+  let artistRows = options.mergeArtists
+    ? [ARTIST_ROW, DUPLICATE_ARTIST_ROW]
+    : [ARTIST_ROW];
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
     const { pathname } = url;
@@ -229,6 +247,67 @@ async function mockAdminApi(
       route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
     if (pathname === '/api/admin/v1/system/info') {
       await json({ service: 'melodee', version: 'test', status: 'ok' });
+      return;
+    }
+    if (pathname === '/api/admin/v1/identity/artists/merge/preview') {
+      const body = JSON.parse(route.request().postData() ?? 'null') as Record<string, unknown>;
+      mergeRequests.push({ pathname, body });
+      await json({
+        target: {
+          id: ARTIST_ID,
+          name: ARTIST_ROW.name,
+          sortName: ARTIST_ROW.sortName,
+          artistType: ARTIST_ROW.artistType,
+          disambiguation: ARTIST_ROW.disambiguation,
+          beginDate: null,
+          endDate: null,
+          status: ARTIST_ROW.status,
+        },
+        sources: [
+          {
+            id: DUPLICATE_ARTIST_ID,
+            name: DUPLICATE_ARTIST_ROW.name,
+            sortName: DUPLICATE_ARTIST_ROW.sortName,
+            artistType: DUPLICATE_ARTIST_ROW.artistType,
+            disambiguation: DUPLICATE_ARTIST_ROW.disambiguation,
+            beginDate: null,
+            endDate: null,
+            status: DUPLICATE_ARTIST_ROW.status,
+          },
+        ],
+        impact: {
+          releases: 2,
+          tracks: 18,
+          releaseCredits: 2,
+          trackCredits: 18,
+          contributions: 3,
+          aliases: 1,
+          externalIdentities: 1,
+          relationships: 0,
+          memberships: 0,
+          observations: 4,
+          userStates: 2,
+          userStateConflicts: 1,
+          chartLinks: 0,
+          operatorImages: 1,
+          providerImages: 1,
+          providerImageConflicts: 1,
+          providerCandidates: 1,
+          providerTasks: 1,
+        },
+        metadataConflicts: ['disambiguation'],
+      });
+      return;
+    }
+    if (pathname === '/api/admin/v1/identity/artists/merge/batch') {
+      const body = JSON.parse(route.request().postData() ?? 'null') as Record<string, unknown>;
+      mergeRequests.push({ pathname, body });
+      artistRows = [ARTIST_ROW];
+      await json({
+        mergeIds: ['ffffffff-ffff-4fff-8fff-ffffffffffff'],
+        sourceArtistIds: [DUPLICATE_ARTIST_ID],
+        targetArtistId: ARTIST_ID,
+      });
       return;
     }
     // ADR-0143 artwork override endpoints (raw-body PUT; JSON-reason DELETE).
@@ -256,7 +335,7 @@ async function mockAdminApi(
     }
     if (pathname === '/api/admin/v1/catalog/artists') {
       listRequests.push(url.search);
-      await json({ items: [ARTIST_ROW], total: 1, limit: 50, offset: 0 });
+      await json({ items: artistRows, total: artistRows.length, limit: 50, offset: 0 });
       return;
     }
     if (pathname === '/api/admin/v1/catalog/releases') {
@@ -361,7 +440,7 @@ async function mockAdminApi(
   await page.route('**/images/**', async (route) => {
     await route.fulfill({ status: 200, body: '' });
   });
-  return { listRequests, artworkRequests, metadataRequests };
+  return { listRequests, artworkRequests, mergeRequests, metadataRequests };
 }
 
 test.beforeEach(async ({ page }) => {
@@ -389,6 +468,34 @@ test('artists list loads from the envelope and the search box drives the query f
   await expect
     .poll(() => api.listRequests.some((search) => search.includes('sort=name%3Aasc')))
     .toBe(true);
+});
+
+test('artists list previews and applies an atomic multi-Artist merge', async ({ page }) => {
+  const api = await mockAdminApi(page, { mergeArtists: true });
+  await page.goto('catalog/artists');
+
+  const rowSelections = page.getByRole('checkbox', { name: 'Select row' });
+  await expect(rowSelections).toHaveCount(2);
+  // Carbon renders the visual label over the native checkbox input.
+  await rowSelections.nth(0).check({ force: true });
+  await rowSelections.nth(1).check({ force: true });
+  await page.getByRole('button', { name: 'Merge 2 selected Artists' }).click();
+
+  const dialog = page.getByRole('dialog', { name: 'Merge Artists' });
+  await expect(dialog.getByText('Merge impact')).toBeVisible();
+  await expect(dialog.getByText('Source media files are not moved or deleted')).toBeVisible();
+  await dialog.getByLabel('Reason').fill('Duplicate import identities');
+  await dialog.getByLabel('Type MERGE to confirm.').fill('MERGE');
+  await dialog.getByRole('button', { name: 'Merge Artists' }).click();
+
+  await expect(page.getByText('The selected Artists were merged successfully.')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'The Nomads' })).toHaveCount(1);
+  const batch = api.mergeRequests.find((request) => request.pathname.endsWith('/batch'));
+  expect(batch?.body).toEqual({
+    sourceArtistIds: [DUPLICATE_ARTIST_ID],
+    targetArtistId: ARTIST_ID,
+    reason: 'Duplicate import identities',
+  });
 });
 
 test('list to detail navigation flows for Artist, Release, and Track', async ({ page }) => {

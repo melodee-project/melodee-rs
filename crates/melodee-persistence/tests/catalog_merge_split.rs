@@ -16,7 +16,10 @@ use melodee_domain::{
     ExternalIdentityId, ExternalIdentityOwner, GroupMembership, GroupMembershipId, MembershipRole,
     NewArtist, SplitAssignment, TrackArtistId,
 };
-use melodee_persistence::{CatalogImportRequest, CatalogStore, WorkItemStore, WorkerId};
+use melodee_persistence::{
+    CatalogCorrectionDimension, CatalogImportRequest, CatalogStore, CatalogStoreError,
+    MAX_CATALOG_CORRECTION_RELEASES, WorkItemStore, WorkerId,
+};
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
@@ -34,6 +37,27 @@ fn test_artist(name: &str, artist_type: ArtistType, now: OffsetDateTime) -> Arti
         created_at: now,
     })
     .expect("valid test Artist")
+}
+
+async fn insert_native_user(db: &TestDb, username: &str, now: OffsetDateTime) -> Uuid {
+    let id = Uuid::now_v7();
+    sqlx::query(
+        "INSERT INTO native_users (
+             id, public_api_id, username, normalized_username, email, normalized_email,
+             password_hash, password_hash_algorithm, stream_signing_key, created_at, updated_at
+         ) VALUES ($1,$2,$3,lower($3),$4,lower($4),$5,'bcrypt',$6,$7,$7)",
+    )
+    .bind(id)
+    .bind(Uuid::now_v7())
+    .bind(username)
+    .bind(format!("{username}@example.test"))
+    .bind("$2b$04$2b2T5QECQ1vk30e7lWDS2e2FmTHdq5nssZBrJaU0KksvJsCOQmCQS")
+    .bind("artist-merge-parity-stream-key")
+    .bind(now)
+    .execute(&db.pool)
+    .await
+    .expect("insert native user");
+    id
 }
 
 #[tokio::test]
@@ -743,6 +767,460 @@ async fn legacy_only_merge_is_audited_without_overlay_but_missing_import_fails_c
             .await
             .is_err(),
         "merge rejects a relationship/member self-cycle"
+    );
+
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn batch_merge_coalesces_user_provider_image_and_discovery_data() {
+    let db = TestDb::create("catalog_artist_merge_complete_parity").await;
+    let store = CatalogStore;
+    let now = OffsetDateTime::now_utc();
+    let target = test_artist("Canonical Artist", ArtistType::Person, now);
+    let source_one = test_artist("First Duplicate", ArtistType::Unknown, now);
+    let source_two = test_artist("Second Duplicate", ArtistType::Group, now);
+    for artist in [&target, &source_one, &source_two] {
+        store
+            .create_artist(&db.pool, artist)
+            .await
+            .expect("create Artist merge fixture");
+    }
+
+    let user_one = insert_native_user(&db, "merge-user-one", now).await;
+    let user_two = insert_native_user(&db, "merge-user-two", now).await;
+    for (user_id, artist_id, starred, hated, rating, pinned, play_count) in [
+        (user_one, target.id(), false, false, 2_i16, false, 10_i64),
+        (user_one, source_one.id(), true, true, 4, false, 5),
+        (user_one, source_two.id(), false, false, 3, true, 7),
+        (user_two, source_two.id(), true, false, 5, true, 11),
+    ] {
+        sqlx::query(
+            "INSERT INTO native_artist_user_states (
+                 user_id,artist_id,starred,hated,rating,pinned,play_count,
+                 last_played_at,created_at,updated_at
+             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8,$8)",
+        )
+        .bind(user_id)
+        .bind(artist_id.into_uuid())
+        .bind(starred)
+        .bind(hated)
+        .bind(rating)
+        .bind(pinned)
+        .bind(play_count)
+        .bind(now)
+        .execute(&db.pool)
+        .await
+        .expect("seed Artist user state");
+    }
+
+    for (artist_id, bytes) in [
+        (source_one.id(), vec![0x89_u8, 0x50, 0x4e, 0x47, 1]),
+        (source_two.id(), vec![0x89_u8, 0x50, 0x4e, 0x47, 2]),
+    ] {
+        sqlx::query(
+            "INSERT INTO catalog_entity_images (
+                 entity_type,artist_id,image_mime_type,image_bytes,uploaded_by,created_at,updated_at
+             ) VALUES ('artist',$1,'image/png',$2,'merge-test',$3,$3)",
+        )
+        .bind(artist_id.into_uuid())
+        .bind(bytes)
+        .bind(now)
+        .execute(&db.pool)
+        .await
+        .expect("seed operator image");
+    }
+
+    for (artist_id, provider, confidence, marker) in [
+        (target.id(), "spotify", 5_000, 1_u8),
+        (source_one.id(), "spotify", 9_000, 2_u8),
+        (source_two.id(), "deezer", 8_000, 3_u8),
+    ] {
+        sqlx::query(
+            "INSERT INTO catalog_provider_images (
+                 id,entity_type,entity_id,provider,source_url,image_mime_type,
+                 image_bytes,confidence,observed_at
+             ) VALUES ($1,'artist',$2,$3,$4,'image/png',$5,$6,$7)",
+        )
+        .bind(Uuid::now_v7())
+        .bind(artist_id.into_uuid())
+        .bind(provider)
+        .bind(format!("https://example.test/{provider}/{marker}"))
+        .bind(vec![0x89, 0x50, 0x4e, 0x47, marker])
+        .bind(confidence)
+        .bind(now + Duration::seconds(i64::from(marker)))
+        .execute(&db.pool)
+        .await
+        .expect("seed provider image");
+    }
+
+    for (artist_id, provider, external_id, query) in [
+        (target.id(), "spotify", "shared", "duplicate"),
+        (source_one.id(), "spotify", "shared", "duplicate"),
+        (source_one.id(), "wikidata", "Q123", "first"),
+        (source_two.id(), "deezer", "456", "second"),
+    ] {
+        sqlx::query(
+            "INSERT INTO provider_identity_candidates (
+                 id,artist_id,provider,external_id,query,candidate_rank,
+                 confidence,payload,observed_at
+             ) VALUES ($1,$2,$3,$4,$5,1,8000,'{}'::jsonb,$6)",
+        )
+        .bind(Uuid::now_v7())
+        .bind(artist_id.into_uuid())
+        .bind(provider)
+        .bind(external_id)
+        .bind(query)
+        .bind(now)
+        .execute(&db.pool)
+        .await
+        .expect("seed provider identity candidate");
+    }
+
+    for (artist_id, provider, request_key) in [
+        (target.id(), "spotify", "shared-task"),
+        (source_one.id(), "spotify", "shared-task"),
+        (source_one.id(), "wikidata", "source-only-task"),
+    ] {
+        sqlx::query(
+            "INSERT INTO provider_enrichment_tasks (
+                 id,entity_type,entity_id,provider,purpose,request_key,status,
+                 attempt_count,next_attempt_at,created_at,updated_at
+             ) VALUES ($1,'artist',$2,$3,'artist_metadata',$4,'queued',0,$5,$5,$5)",
+        )
+        .bind(Uuid::now_v7())
+        .bind(artist_id.into_uuid())
+        .bind(provider)
+        .bind(request_key)
+        .bind(now)
+        .execute(&db.pool)
+        .await
+        .expect("seed provider enrichment task");
+    }
+
+    let chart_id = Uuid::now_v7();
+    sqlx::query(
+        "INSERT INTO native_charts (
+             id,public_api_id,slug,title,created_at,updated_at
+         ) VALUES ($1,$2,'merge-parity','Merge parity',$3,$3)",
+    )
+    .bind(chart_id)
+    .bind(Uuid::now_v7())
+    .bind(now)
+    .execute(&db.pool)
+    .await
+    .expect("seed native chart");
+    sqlx::query(
+        "INSERT INTO native_chart_items (
+             chart_id,rank,artist_name,release_title,linked_artist_id,created_at
+         ) VALUES ($1,1,'Second Duplicate','Fixture Release',$2,$3)",
+    )
+    .bind(chart_id)
+    .bind(source_two.id().into_uuid())
+    .bind(now)
+    .execute(&db.pool)
+    .await
+    .expect("seed chart Artist link");
+
+    let preview = store
+        .preview_artist_merge(&db.pool, &[source_one.id(), source_two.id()], target.id())
+        .await
+        .expect("preview complete Artist merge");
+    assert_eq!(
+        preview.target.public_api_id,
+        target.public_api_id().into_uuid()
+    );
+    assert_eq!(preview.sources.len(), 2);
+    assert_eq!(preview.impact.user_states, 3);
+    assert_eq!(preview.impact.user_state_conflicts, 1);
+    assert_eq!(preview.impact.operator_images, 2);
+    assert_eq!(preview.impact.provider_images, 2);
+    assert_eq!(preview.impact.provider_image_conflicts, 1);
+    assert_eq!(preview.impact.provider_candidates, 3);
+    assert_eq!(preview.impact.provider_tasks, 2);
+    assert_eq!(preview.impact.chart_links, 1);
+    assert!(
+        preview
+            .metadata_conflicts
+            .contains(&"canonicalName".to_owned())
+    );
+    assert!(
+        preview
+            .metadata_conflicts
+            .contains(&"artistType".to_owned())
+    );
+
+    let merges = [&source_one, &source_two]
+        .into_iter()
+        .map(|source| ArtistMerge {
+            id: ArtistMergeId::new(),
+            source_artist_id: source.id(),
+            source_public_api_id: source.public_api_id(),
+            target_artist_id: target.id(),
+            actor: "catalog-admin".to_owned(),
+            reason: "C# parity complete-data merge".to_owned(),
+            occurred_at: now + Duration::seconds(10),
+        })
+        .collect::<Vec<_>>();
+    store
+        .merge_artists(&db.pool, &merges, "admin-batch-merge-v1")
+        .await
+        .expect("apply complete-data batch merge");
+
+    let statuses: (i64, i64) = sqlx::query_as(
+        "SELECT count(*) FILTER (WHERE status='verified'),
+                count(*) FILTER (WHERE status='merged')
+           FROM artists WHERE id=ANY($1)",
+    )
+    .bind([
+        target.id().into_uuid(),
+        source_one.id().into_uuid(),
+        source_two.id().into_uuid(),
+    ])
+    .fetch_one(&db.pool)
+    .await
+    .expect("read merged Artist statuses");
+    assert_eq!(statuses, (1, 2));
+
+    let folded: (bool, bool, i16, bool, i64) = sqlx::query_as(
+        "SELECT starred,hated,rating,pinned,play_count
+           FROM native_artist_user_states WHERE user_id=$1 AND artist_id=$2",
+    )
+    .bind(user_one)
+    .bind(target.id().into_uuid())
+    .fetch_one(&db.pool)
+    .await
+    .expect("read folded user state");
+    assert_eq!(folded, (true, true, 4, true, 22));
+    let state_counts: (i64, i64) = sqlx::query_as(
+        "SELECT count(*) FILTER (WHERE artist_id=$1),
+                count(*) FILTER (WHERE artist_id=ANY($2))
+           FROM native_artist_user_states",
+    )
+    .bind(target.id().into_uuid())
+    .bind([source_one.id().into_uuid(), source_two.id().into_uuid()])
+    .fetch_one(&db.pool)
+    .await
+    .expect("count coalesced user states");
+    assert_eq!(state_counts, (2, 0));
+
+    let image_counts: (i64, i64) = sqlx::query_as(
+        "SELECT count(*) FILTER (WHERE artist_id=$1),
+                count(*) FILTER (WHERE artist_id=ANY($2))
+           FROM catalog_entity_images WHERE entity_type='artist'",
+    )
+    .bind(target.id().into_uuid())
+    .bind([source_one.id().into_uuid(), source_two.id().into_uuid()])
+    .fetch_one(&db.pool)
+    .await
+    .expect("count target and recoverable source images");
+    assert_eq!(image_counts, (1, 1));
+    let provider_state: (i64, i32, i64, i64, i64) = sqlx::query_as(
+        "SELECT
+            (SELECT count(*) FROM catalog_provider_images
+              WHERE entity_type='artist' AND entity_id=$1),
+            (SELECT confidence FROM catalog_provider_images
+              WHERE entity_type='artist' AND entity_id=$1 AND provider='spotify'),
+            (SELECT count(*) FROM provider_identity_candidates WHERE artist_id=$1),
+            (SELECT count(*) FROM provider_enrichment_tasks WHERE entity_id=$1),
+            (SELECT count(*) FROM provider_enrichment_tasks
+              WHERE entity_id=ANY($2) AND status='failed'
+                AND last_error_category='artist_merged')",
+    )
+    .bind(target.id().into_uuid())
+    .bind([source_one.id().into_uuid(), source_two.id().into_uuid()])
+    .fetch_one(&db.pool)
+    .await
+    .expect("read coalesced provider state");
+    assert_eq!(provider_state, (2, 9_000, 3, 2, 1));
+    let chart_owner: Uuid =
+        sqlx::query_scalar("SELECT linked_artist_id FROM native_chart_items WHERE chart_id=$1")
+            .bind(chart_id)
+            .fetch_one(&db.pool)
+            .await
+            .expect("read retargeted chart link");
+    assert_eq!(chart_owner, target.id().into_uuid());
+    let merge_events: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM artist_merge_events
+          WHERE source_artist_id=ANY($1) AND target_artist_id=$2
+            AND moved_relationships ? 'coalesced'",
+    )
+    .bind([source_one.id().into_uuid(), source_two.id().into_uuid()])
+    .bind(target.id().into_uuid())
+    .fetch_one(&db.pool)
+    .await
+    .expect("count complete-data merge events");
+    assert_eq!(merge_events, 2);
+
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn batch_merge_rolls_back_every_source_when_a_late_source_conflicts() {
+    let db = TestDb::create("catalog_artist_merge_batch_rollback").await;
+    let store = CatalogStore;
+    let now = OffsetDateTime::now_utc();
+    let target = test_artist("Batch Target", ArtistType::Person, now);
+    let first = test_artist("Batch First", ArtistType::Person, now);
+    let second = test_artist("Batch Second", ArtistType::Person, now);
+    for artist in [&target, &first, &second] {
+        store
+            .create_artist(&db.pool, artist)
+            .await
+            .expect("create rollback Artist fixture");
+    }
+    let (early, blocked) = if first.id().into_uuid() < second.id().into_uuid() {
+        (&first, &second)
+    } else {
+        (&second, &first)
+    };
+    store
+        .add_artist_relationship(
+            &db.pool,
+            &ArtistRelationship {
+                id: ArtistRelationshipId::new(),
+                subject_artist_id: blocked.id(),
+                object_artist_id: target.id(),
+                kind: ArtistRelationshipKind::new("associated_with".to_owned())
+                    .expect("valid relationship kind"),
+                active_dates: None,
+                confidence: Confidence::new(10_000).expect("valid confidence"),
+                evidence_source: "batch-rollback".to_owned(),
+            },
+            now,
+        )
+        .await
+        .expect("seed late batch conflict");
+    let merges = [early, blocked]
+        .into_iter()
+        .map(|source| ArtistMerge {
+            id: ArtistMergeId::new(),
+            source_artist_id: source.id(),
+            source_public_api_id: source.public_api_id(),
+            target_artist_id: target.id(),
+            actor: "catalog-admin".to_owned(),
+            reason: "prove all-or-nothing batch".to_owned(),
+            occurred_at: now + Duration::seconds(1),
+        })
+        .collect::<Vec<_>>();
+    assert!(matches!(
+        store
+            .merge_artists(&db.pool, &merges, "admin-batch-rollback-v1")
+            .await,
+        Err(melodee_persistence::CatalogStoreError::MutationConflict)
+    ));
+    let state: (i64, i64) = sqlx::query_as(
+        "SELECT count(*) FILTER (WHERE status='verified'),
+                (SELECT count(*) FROM artist_merge_events WHERE source_artist_id=ANY($1))
+           FROM artists WHERE id=ANY($1)",
+    )
+    .bind([first.id().into_uuid(), second.id().into_uuid()])
+    .fetch_one(&db.pool)
+    .await
+    .expect("read rolled-back batch state");
+    assert_eq!(state, (2, 0));
+
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn batch_merge_enforces_the_aggregate_release_bound_before_writing() {
+    let db = TestDb::create("catalog_artist_merge_batch_release_bound").await;
+    let store = CatalogStore;
+    let now = OffsetDateTime::now_utc();
+    let target = test_artist("Bounded Batch Target", ArtistType::Person, now);
+    let source_one = test_artist("Bounded Batch One", ArtistType::Person, now);
+    let source_two = test_artist("Bounded Batch Two", ArtistType::Person, now);
+    for artist in [&target, &source_one, &source_two] {
+        store
+            .create_artist(&db.pool, artist)
+            .await
+            .expect("create aggregate bound Artist fixture");
+    }
+
+    let scope_size = MAX_CATALOG_CORRECTION_RELEASES + 1;
+    let release_ids = (0..scope_size).map(|_| Uuid::now_v7()).collect::<Vec<_>>();
+    let credit_ids = (0..scope_size).map(|_| Uuid::now_v7()).collect::<Vec<_>>();
+    let source_ids = (0..scope_size)
+        .map(|index| {
+            if index % 2 == 0 {
+                source_one.id().into_uuid()
+            } else {
+                source_two.id().into_uuid()
+            }
+        })
+        .collect::<Vec<_>>();
+    sqlx::query(
+        "INSERT INTO releases (
+             id,public_api_id,title,normalized_title,sort_title,display_artist,
+             created_at,updated_at
+         )
+         SELECT release_id,release_id,'Bounded Batch','BOUNDEDBATCH',
+                'Bounded Batch','Bounded Batch Artist',$2,$2
+           FROM unnest($1::uuid[]) release_id",
+    )
+    .bind(&release_ids)
+    .bind(now)
+    .execute(&db.pool)
+    .await
+    .expect("set-wise seed aggregate-bound Releases");
+    sqlx::query(
+        "INSERT INTO release_artists (
+             id,release_id,artist_id,observed_artist_id,role,presentation_order,
+             display_value,join_phrase,created_at
+         )
+         SELECT fixture.credit_id,fixture.release_id,fixture.artist_id,NULL,
+                'primary',1,'Bounded Batch Artist','',$4
+           FROM unnest($1::uuid[],$2::uuid[],$3::uuid[])
+                fixture(credit_id,release_id,artist_id)",
+    )
+    .bind(&credit_ids)
+    .bind(&release_ids)
+    .bind(&source_ids)
+    .bind(now)
+    .execute(&db.pool)
+    .await
+    .expect("set-wise attach aggregate-bound Artist credits");
+
+    let merges = [&source_one, &source_two]
+        .into_iter()
+        .map(|source| ArtistMerge {
+            id: ArtistMergeId::new(),
+            source_artist_id: source.id(),
+            source_public_api_id: source.public_api_id(),
+            target_artist_id: target.id(),
+            actor: "catalog-admin".to_owned(),
+            reason: "prove aggregate batch correction bound".to_owned(),
+            occurred_at: now + Duration::seconds(1),
+        })
+        .collect::<Vec<_>>();
+    match store
+        .merge_artists(&db.pool, &merges, "admin-batch-bound-v1")
+        .await
+    {
+        Err(CatalogStoreError::CorrectionScopeExceeded { dimension, limit }) => {
+            assert_eq!(dimension, CatalogCorrectionDimension::Releases);
+            assert_eq!(limit, MAX_CATALOG_CORRECTION_RELEASES);
+        }
+        other => panic!("expected aggregate Release correction bound, got {other:?}"),
+    }
+    let unchanged: (i64, i64, i64) = sqlx::query_as(
+        "SELECT count(*) FILTER (WHERE status='verified'),
+                (SELECT count(*) FROM artist_merge_events WHERE source_artist_id=ANY($1)),
+                (SELECT count(*) FROM release_artists WHERE artist_id=ANY($1))
+           FROM artists WHERE id=ANY($1)",
+    )
+    .bind([source_one.id().into_uuid(), source_two.id().into_uuid()])
+    .fetch_one(&db.pool)
+    .await
+    .expect("read aggregate-bound rollback state");
+    assert_eq!(
+        unchanged,
+        (
+            2,
+            0,
+            i64::try_from(scope_size).expect("scope size fits i64"),
+        )
     );
 
     db.drop().await;

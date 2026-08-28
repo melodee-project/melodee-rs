@@ -3,11 +3,13 @@ import type {
   AccessGroup,
   AccessGroupDetail,
   AdminScript,
+  ArtistMergePreview,
   ArtistMetadataPatch,
   ArtistDetail,
   CatalogArtistListItem,
   CatalogReleaseListItem,
   CatalogTrackListItem,
+  BatchMergeArtistsResult,
   ConfigExport,
   ConfigImportResult,
   Dashboard,
@@ -351,6 +353,27 @@ export function mergeArtists(request: {
   reason: string;
 }): Promise<MergeArtistsResult> {
   return apiFetch<MergeArtistsResult>(`${ADMIN}/identity/artists/merge`, {
+    method: 'POST',
+    body: request,
+  });
+}
+
+export function previewArtistMerge(request: {
+  sourceArtistIds: string[];
+  targetArtistId: string;
+}): Promise<ArtistMergePreview> {
+  return apiFetch<ArtistMergePreview>(`${ADMIN}/identity/artists/merge/preview`, {
+    method: 'POST',
+    body: request,
+  });
+}
+
+export function batchMergeArtists(request: {
+  sourceArtistIds: string[];
+  targetArtistId: string;
+  reason: string;
+}): Promise<BatchMergeArtistsResult> {
+  return apiFetch<BatchMergeArtistsResult>(`${ADMIN}/identity/artists/merge/batch`, {
     method: 'POST',
     body: request,
   });

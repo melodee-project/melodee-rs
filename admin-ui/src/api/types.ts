@@ -647,6 +647,51 @@ export interface MergeArtistsResult {
   targetArtistId: string;
 }
 
+export interface ArtistMergePreviewArtist {
+  id: string;
+  name: string;
+  sortName: string;
+  artistType: CatalogArtistType;
+  disambiguation: string | null;
+  beginDate: string | null;
+  endDate: string | null;
+  status: CatalogArtistStatus;
+}
+
+export interface ArtistMergeImpact {
+  releases: number;
+  tracks: number;
+  releaseCredits: number;
+  trackCredits: number;
+  contributions: number;
+  aliases: number;
+  externalIdentities: number;
+  relationships: number;
+  memberships: number;
+  observations: number;
+  userStates: number;
+  userStateConflicts: number;
+  chartLinks: number;
+  operatorImages: number;
+  providerImages: number;
+  providerImageConflicts: number;
+  providerCandidates: number;
+  providerTasks: number;
+}
+
+export interface ArtistMergePreview {
+  target: ArtistMergePreviewArtist;
+  sources: ArtistMergePreviewArtist[];
+  impact: ArtistMergeImpact;
+  metadataConflicts: string[];
+}
+
+export interface BatchMergeArtistsResult {
+  mergeIds: string[];
+  sourceArtistIds: string[];
+  targetArtistId: string;
+}
+
 /** Split assignment kinds accepted by the backend (SplitAssignment). */
 export type SplitAssignmentKind =
   | 'releaseArtist'

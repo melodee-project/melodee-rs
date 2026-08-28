@@ -718,11 +718,13 @@
     "status": "tested",
     "implementation": [
       "crates/melodee-domain/src/ids.rs (separate immutable internal and public Artist IDs)",
-      "crates/melodee-persistence/migrations/0007_phase4_catalog.sql (immutable public_api_id and merge tombstone constraints)"
+      "crates/melodee-persistence/migrations/0007_phase4_catalog.sql (immutable public_api_id and merge tombstone constraints)",
+      "crates/melodee-persistence/src/catalog_identity.rs (bounded atomic multi-source merge preserves each source public ID as a redirect tombstone)"
     ],
     "tests": [
       "crates/melodee-persistence/tests/catalog_identity.rs",
-      "crates/melodee-persistence/tests/catalog_legacy.rs (all frozen Artist public UUIDs round-trip verbatim)"
+      "crates/melodee-persistence/tests/catalog_legacy.rs (all frozen Artist public UUIDs round-trip verbatim)",
+      "crates/melodee-persistence/tests/catalog_merge_split.rs (batch merge preserves and redirects every source public ID)"
     ]
   },
   {
@@ -748,11 +750,13 @@
     "status": "tested",
     "implementation": [
       "crates/melodee-domain/src/artist.rs (ArtistAlias belongs to one Artist identity)",
-      "crates/melodee-persistence/src/catalog_mutations.rs (durable alias mutation)"
+      "crates/melodee-persistence/src/catalog_mutations.rs (durable alias mutation)",
+      "crates/melodee-persistence/src/catalog_identity.rs (batch merge deduplicates aliases and preserves source canonical names as search aliases)"
     ],
     "tests": [
       "crates/melodee-domain/tests/phase4_domain.rs (aliases are not global identity keys)",
-      "crates/melodee-persistence/tests/catalog_identity.rs (alias evidence and constraints)"
+      "crates/melodee-persistence/tests/catalog_identity.rs (alias evidence and constraints)",
+      "crates/melodee-persistence/tests/catalog_merge_split.rs (alias coalescing during multi-source merge)"
     ]
   },
   {
@@ -763,11 +767,12 @@
     "status": "tested",
     "implementation": [
       "crates/melodee-domain/src/artist.rs (provider-neutral ExternalIdentity rows)",
-      "crates/melodee-persistence/migrations/0007_phase4_catalog.sql (normalized provider/external_id uniqueness)"
+      "crates/melodee-persistence/migrations/0007_phase4_catalog.sql (normalized provider/external_id uniqueness)",
+      "crates/melodee-persistence/src/catalog_identity.rs (external identities and provider candidates/images/tasks coalesce without violating provider uniqueness)"
     ],
     "tests": [
       "crates/melodee-persistence/tests/catalog_identity.rs (provider scope and uniqueness fail closed)",
-      "crates/melodee-persistence/tests/catalog_merge_split.rs (external identity survives correction)"
+      "crates/melodee-persistence/tests/catalog_merge_split.rs (external identity and provider evidence survive batch correction)"
     ]
   },
   {
@@ -778,11 +783,13 @@
     "status": "tested",
     "implementation": [
       "crates/melodee-domain/src/artist.rs (ArtistRelationship connects distinct identities)",
-      "crates/melodee-persistence/migrations/0007_phase4_catalog.sql (relationship self-link rejection)"
+      "crates/melodee-persistence/migrations/0007_phase4_catalog.sql (relationship self-link rejection)",
+      "crates/melodee-persistence/src/catalog_identity.rs (merge rewrites both relationship endpoints, deduplicates, and rejects self-links atomically)"
     ],
     "tests": [
       "crates/melodee-domain/tests/phase4_domain.rs",
-      "crates/melodee-persistence/tests/catalog_schema.rs"
+      "crates/melodee-persistence/tests/catalog_schema.rs",
+      "crates/melodee-persistence/tests/catalog_merge_split.rs (relationship transfer and whole-batch rollback on a self-link conflict)"
     ]
   },
   {
@@ -793,11 +800,13 @@
     "status": "tested",
     "implementation": [
       "crates/melodee-domain/src/artist.rs (date-bounded GroupMembership)",
-      "crates/melodee-persistence/src/catalog_mutations.rs (membership persistence and scoped projection rebuild)"
+      "crates/melodee-persistence/src/catalog_mutations.rs (membership persistence and scoped projection rebuild)",
+      "crates/melodee-persistence/src/catalog_identity.rs (merge coalesces dated membership rows and refreshes affected participation)"
     ],
     "tests": [
       "crates/melodee-domain/tests/phase4_domain.rs (inclusive/open membership date invariants)",
-      "crates/melodee-persistence/tests/catalog_participation.rs (date-valid Colin Hay inference)"
+      "crates/melodee-persistence/tests/catalog_participation.rs (date-valid Colin Hay inference)",
+      "crates/melodee-persistence/tests/catalog_merge_split.rs (membership transfer and participation refresh)"
     ]
   },
   {
@@ -841,13 +850,17 @@
     "status": "tested",
     "implementation": [
       "crates/melodee-domain/src/identity.rs (merge tombstone and selected split assignment invariants)",
-      "crates/melodee-persistence/src/catalog_identity.rs (fenced Artist merge/split with audit, outbox, redirect, scoped reassignment, and correctly attributed unlocked automated reconciliation decisions for strong-ID and Release-context evidence)",
-      "design/adr/ADR-0119-use-audit-only-corrections-for-legacy-releases-without-manifest-v3.md"
+      "crates/melodee-persistence/src/catalog_identity.rs (fenced single and atomic multi-source Artist merge/split with complete catalog, user-state, artwork, discovery, provider, audit, outbox, redirect, and scoped reassignment handling)",
+      "apps/melodee-server/src/admin_identity.rs and admin-ui/src/screens/catalog/ArtistsScreen.tsx (bounded preview/batch API and page-scoped multi-select merge workflow)",
+      "design/adr/ADR-0119-use-audit-only-corrections-for-legacy-releases-without-manifest-v3.md",
+      "design/adr/ADR-0176-complete-artist-merge-coalescing-and-multi-select-administration.md"
     ],
     "tests": [
-      "crates/melodee-persistence/tests/catalog_merge_split.rs (redirect, selected relationships, public IDs, overlays, and media immutability)",
+      "crates/melodee-persistence/tests/catalog_merge_split.rs (complete-data coalescing, redirect, relationships, public IDs, overlays, media immutability, and whole-batch rollback)",
+      "apps/melodee-server/tests/admin_identity_api.rs (authorized preview/apply, validation, and multi-source response)",
+      "admin-ui/src/screens/catalog/CatalogListScreens.test.tsx (selection, preview, reason, typed confirmation, apply, and refresh)",
       "crates/melodee-persistence/tests/catalog_audio_identity.rs (correction safety for related recording identity)",
-      "crates/melodee-persistence/tests/catalog_import.rs (strong-ID and same-Release repeated Track-credit reconciliation preserve raw observations and write automated merge audits)"
+      "crates/melodee-persistence/tests/catalog_import.rs (strong-ID, repeated primary Release-credit, and same-Release repeated Track-credit reconciliation preserve raw observations and write automated merge audits)"
     ]
   },
   {
@@ -858,12 +871,13 @@
     "status": "tested",
     "implementation": [
       "crates/melodee-catalog/src/resolver.rs (bounded evidence scoring retains provisional identity on weak or ambiguous input)",
-      "crates/melodee-persistence/src/catalog.rs (strong provider-ID Artist merge candidates, non-authoritative exact-name proposal candidates, and ADR-0173 Release-bounded repeated track-only credit candidates with locked, negative, compilation, mixed-scope, provider, type, date, and membership conflict fences)",
-      "crates/melodee-catalog/src/importer.rs and scheduler.rs (bounded strong-ID reconciliation, same-Release contextual reconciliation, and name-only proposals after import and once at server startup)",
+      "crates/melodee-persistence/src/catalog.rs (strong provider-ID candidates, ADR-0175 repeated primary Release-credit candidates, non-authoritative name-only proposals, and ADR-0173 Release-bounded repeated track-only candidates with group-wide conflict fences)",
+      "crates/melodee-catalog/src/importer.rs and scheduler.rs (bounded strong-ID, repeated primary Release-credit, and same-Release contextual reconciliation plus remaining name-only proposals after import and once at server startup)",
       "design/adr/ADR-0160-cross-release-artist-release-identity-reuse.md",
       "design/adr/ADR-0170-reuse-uniquely-matching-release-artist-identities-for-tracks.md (same-Release exact-match reuse with conflict gating)",
       "design/adr/ADR-0173-reconcile-repeated-track-artist-credits-within-one-release.md (repeated structured Track-credit co-resolution and startup repair)",
-      "design/adr/ADR-0174-require-review-for-name-only-artist-identity-matches.md (name equality creates review proposals and never cross-Release automatic merges)",
+      "design/adr/ADR-0174-require-review-for-name-only-artist-identity-matches.md (pure name equality creates review proposals)",
+      "design/adr/ADR-0175-converge-repeated-primary-release-artist-credits.md (exact name plus repeated primary Release context converges only an indistinguishable provisional group)",
       "crates/melodee-persistence/migrations/0040_repair_multi_artist_release_track_identities.sql (audited repair of old importer-created duplicates)"
     ],
     "tests": [
@@ -872,8 +886,8 @@
       "crates/melodee-persistence/tests/migrations.rs (migration 0040 preserves observations and predecessor decisions while creating merge tombstones)",
       "crates/melodee-persistence/tests/catalog_performance.rs (same names across Releases remain separate without N+1 lookup)",
       "crates/melodee-persistence/tests/catalog_import.rs (trusted Release evidence convergence and reversible merge/split)",
-      "crates/melodee-persistence/tests/catalog_import.rs (Alice Cooper and provider-conflicted exact names remain distinct review candidates; repeated Glockboyz Teejaee Track-credit convergence; compilation and same-Release ambiguity; provider, date, negative, and locked conflict gates; audit authority; and idempotency)",
-      "crates/melodee-catalog/tests/importer.rs (trusted provider-ID automatic convergence, 4Trey post-import proposals, startup proposals for older Alice Cooper identities, and repeated Glockboyz Teejaee startup repair)"
+      "crates/melodee-persistence/tests/catalog_import.rs (repeated Alice Cooper primary credits converge; disambiguated Nirvana and provider-conflicted names remain distinct; repeated Glockboyz Teejaee Track-credit convergence; compilation, ambiguity, provider, date, negative, and lock gates; audit authority; and idempotency)",
+      "crates/melodee-catalog/tests/importer.rs (trusted provider-ID convergence, two-row 4Trey post-import repair, fourteen-row Alice Cooper startup repair, and repeated Glockboyz Teejaee startup repair)"
     ]
   },
   {
@@ -915,11 +929,11 @@
     "implementation": [
       "crates/melodee-domain/src/identity.rs (accepted evidence dimensions and polarity)",
       "crates/melodee-catalog/src/resolver.rs (deterministic scoring across name, alias, external ID, release/track, type/date/area/membership, and provider evidence)",
-      "crates/melodee-persistence/src/catalog.rs (one exact match among the same Release's primary Artist observations and repeated exact track-only credits inside a non-compilation Release are contextual co-resolution evidence; cross-Release exact names are proposal-only under ADR-0174)"
+      "crates/melodee-persistence/src/catalog.rs (one exact same-Release match, repeated track-only credits inside a non-compilation Release, and repeated exact primary credits across different Releases are contextual evidence; pure cross-Release name matches remain proposals)"
     ],
     "tests": [
       "crates/melodee-catalog/src/resolver.rs (alias/context, external ID, conflict, ambiguity, and provider cases)",
-      "crates/melodee-persistence/tests/catalog_import.rs (Release-context, compilation, mixed-scope, provider/date-conflict, negative-assertion, and locked-decision gates for automatic candidates and name-only proposals)"
+      "crates/melodee-persistence/tests/catalog_import.rs (Release-context convergence plus compilation, disambiguation, mixed-scope, provider/date-conflict, negative-assertion, and locked-decision gates)"
     ]
   },
   {
@@ -933,18 +947,19 @@
       "crates/melodee-catalog/src/resolver.rs (name-only evidence cannot confirm)",
       "crates/melodee-persistence/src/catalog.rs (unique exact-match identity reuse is bounded to one immutable Release context rather than global name equality)",
       "crates/melodee-persistence/src/catalog.rs (ADR-0173 repeated Track-credit reconciliation is bounded to provisional track-only identities within one non-compilation Release and fails closed on mixed scope or durable conflicts)",
-      "crates/melodee-persistence/src/catalog.rs and crates/melodee-catalog/src/importer.rs (ADR-0174 exact-name cross-Release matches append non-authoritative proposals without merging or changing artist_match_current)",
+      "crates/melodee-persistence/src/catalog.rs and crates/melodee-catalog/src/importer.rs (ADR-0174 pure name-only matches append proposals; ADR-0175 requires repeated primary Release context and a fully indistinguishable provisional group for audited convergence)",
       "design/adr/ADR-0160-cross-release-artist-release-identity-reuse.md",
       "design/adr/ADR-0170-reuse-uniquely-matching-release-artist-identities-for-tracks.md",
       "design/adr/ADR-0173-reconcile-repeated-track-artist-credits-within-one-release.md",
-      "design/adr/ADR-0174-require-review-for-name-only-artist-identity-matches.md"
+      "design/adr/ADR-0174-require-review-for-name-only-artist-identity-matches.md",
+      "design/adr/ADR-0175-converge-repeated-primary-release-artist-credits.md"
     ],
     "tests": [
       "crates/melodee-domain/tests/phase4_domain.rs",
       "crates/melodee-catalog/src/resolver.rs (weak and same-name cases retain provisional identity)",
       "crates/melodee-persistence/tests/catalog_import.rs (multiple equal same-Release Release Artist candidates remain separate)",
-      "crates/melodee-persistence/tests/catalog_import.rs (cross-Release exact names and conflicting provider IDs preserve distinct Artists; compilation, mixed-scope, verified/locked, negative, provider, and date conflicts prevent unsafe automatic convergence)",
-      "crates/melodee-catalog/tests/importer.rs (name-only matches create Identity Review proposals with no merge event, while a shared trusted provider ID still converges automatically)"
+      "crates/melodee-persistence/tests/catalog_import.rs (repeated primary Release context converges conflict-free Artists while disambiguation, ambiguous same-Release billing, compilation, mixed scope, verified/locked, negative, provider, and date conflicts prevent unsafe convergence)",
+      "crates/melodee-catalog/tests/importer.rs (4Trey and Alice Cooper contextual duplicates converge with audit while shared trusted provider IDs remain the stronger path)"
     ]
   },
   {
@@ -1288,11 +1303,13 @@
       "crates/melodee-domain/src/manifest.rs (immutable ReleaseId and canonical layout invariants)",
       "crates/melodee-ingestion/src/publication.rs (ID/hash-derived canonical paths without Artist/title components)",
       "design/adr/ADR-0106-use-release-centric-canonical-storage.md",
-      "design/adr/ADR-0116-use-immutable-release-ids-and-convergent-canonical-publication.md"
+      "design/adr/ADR-0116-use-immutable-release-ids-and-convergent-canonical-publication.md",
+      "crates/melodee-persistence/src/catalog_identity.rs and design/adr/ADR-0176-complete-artist-merge-coalescing-and-multi-select-administration.md (Artist correction changes catalog ownership and projections without moving canonical media)"
     ],
     "tests": [
       "crates/melodee-domain/tests/manifest_versions.rs (stable UUID-to-layout golden vector)",
-      "crates/melodee-ingestion/tests/publication.rs (canonical publication from Unicode/display-derived source observations uses lowercase ID/hash path)"
+      "crates/melodee-ingestion/tests/publication.rs (canonical publication from Unicode/display-derived source observations uses lowercase ID/hash path)",
+      "crates/melodee-persistence/tests/catalog_merge_split.rs (multi-source merge preserves every source and target media path)"
     ]
   },
   {
@@ -1406,7 +1423,7 @@
     "status": "tested",
     "implementation": [
       "crates/melodee-persistence/migrations/0007_phase4_catalog.sql (transactional catalog_projection_outbox)",
-      "crates/melodee-persistence/src/catalog.rs, catalog_mutations.rs, and catalog_identity.rs (catalog writes and matching projection work commit together)",
+      "crates/melodee-persistence/src/catalog.rs, catalog_mutations.rs, and catalog_identity.rs (catalog writes, atomic multi-source correction, and matching projection work commit together)",
       "crates/melodee-persistence/src/provider_enrichment.rs (durable provider task and attempt transitions)",
       "crates/melodee-persistence/src/search.rs and crates/melodee-search/src/worker.rs (leased revision-fenced consumer acknowledges only after durable Tantivy commit)"
     ],
@@ -2719,10 +2736,12 @@
     "status": "tested",
     "implementation": [
       "admin-ui screens expose one Release lifecycle (Discovered/Processing/Review/Cataloged); no /Data vs /Media concepts",
-      "design/ui/UI-SPEC.md section 10 rule 6"
+      "design/ui/UI-SPEC.md section 10 rule 6",
+      "admin-ui/src/screens/catalog/ArtistsScreen.tsx (duplicate correction starts from the Catalog Artists table without a separate data/media workflow)"
     ],
     "tests": [
-      "admin-ui/e2e/ suite (lifecycle states rendered via ProcessingStateTag)"
+      "admin-ui/e2e/ suite (lifecycle states rendered via ProcessingStateTag)",
+      "admin-ui/src/screens/catalog/CatalogListScreens.test.tsx (catalog-scoped multi-Artist merge workflow)"
     ]
   },
   {
@@ -2792,11 +2811,12 @@
       "admin-api pagination envelopes + sort whitelists (admin.rs, admin_catalog.rs, admin_identity.rs, admin_review.rs)",
       "apps/melodee-server/src/admin_catalog.rs (bounded offset plus cancel-safe list-query deadline)",
       "admin-ui EntityTable server-side only; migration 0029 admin browse indexes (ADR-0142)",
-      "admin-ui/src/screens/catalog and api/client.ts (AbortController cancellation reaches fetch for superseded/unmounted catalog requests)"
+      "admin-ui/src/screens/catalog and api/client.ts (AbortController cancellation reaches fetch for superseded/unmounted catalog requests)",
+      "apps/melodee-server/src/admin_identity.rs (bounded set-based public-ID resolution and 100-source maximum for merge preview/apply)"
     ],
     "tests": [
       "crates/melodee-persistence/tests/ (envelope/sort whitelist tests)",
-      "admin-ui/src/api/client.test.ts and screens/catalog/CatalogListScreens.test.tsx"
+      "admin-ui/src/api/client.test.ts and screens/catalog/CatalogListScreens.test.tsx (including page-scoped Artist selection and bounded batch merge)"
     ]
   },
   {

@@ -29,7 +29,8 @@ use melodee_domain::{
     DecisionAuthority, NewArtist, NewArtistMatchDecision, SplitAssignment,
 };
 use melodee_persistence::{
-    ArtistIdentityRef, CatalogStore, CatalogStoreError, IdentityDecisionFeedEntry,
+    ArtistIdentityRef, ArtistMergeImpact, ArtistMergePreview, ArtistMergePreviewArtist,
+    CatalogStore, CatalogStoreError, IdentityDecisionFeedEntry, MAX_ARTIST_MERGE_SOURCES,
     ObservedArtistDetail, ObservedArtistSort, UnresolvedObservedArtist,
 };
 use serde::{Deserialize, Serialize};
@@ -322,6 +323,125 @@ pub struct MergeResponseDto {
     pub target_artist_id: Uuid,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchMergeSelectionRequest {
+    pub source_artist_ids: Vec<Uuid>,
+    pub target_artist_id: Uuid,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchMergeRequest {
+    pub source_artist_ids: Vec<Uuid>,
+    pub target_artist_id: Uuid,
+    pub reason: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtistMergePreviewArtistDto {
+    pub id: Uuid,
+    pub name: String,
+    pub sort_name: String,
+    pub artist_type: String,
+    pub disambiguation: Option<String>,
+    pub begin_date: Option<time::Date>,
+    pub end_date: Option<time::Date>,
+    pub status: String,
+}
+
+impl From<ArtistMergePreviewArtist> for ArtistMergePreviewArtistDto {
+    fn from(artist: ArtistMergePreviewArtist) -> Self {
+        Self {
+            id: artist.public_api_id,
+            name: artist.canonical_name,
+            sort_name: artist.sort_name,
+            artist_type: artist.artist_type,
+            disambiguation: artist.disambiguation,
+            begin_date: artist.begin_date,
+            end_date: artist.end_date,
+            status: artist.status,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtistMergeImpactDto {
+    pub releases: i64,
+    pub tracks: i64,
+    pub release_credits: i64,
+    pub track_credits: i64,
+    pub contributions: i64,
+    pub aliases: i64,
+    pub external_identities: i64,
+    pub relationships: i64,
+    pub memberships: i64,
+    pub observations: i64,
+    pub user_states: i64,
+    pub user_state_conflicts: i64,
+    pub chart_links: i64,
+    pub operator_images: i64,
+    pub provider_images: i64,
+    pub provider_image_conflicts: i64,
+    pub provider_candidates: i64,
+    pub provider_tasks: i64,
+}
+
+impl From<ArtistMergeImpact> for ArtistMergeImpactDto {
+    fn from(impact: ArtistMergeImpact) -> Self {
+        Self {
+            releases: impact.releases,
+            tracks: impact.tracks,
+            release_credits: impact.release_credits,
+            track_credits: impact.track_credits,
+            contributions: impact.contributions,
+            aliases: impact.aliases,
+            external_identities: impact.external_identities,
+            relationships: impact.relationships,
+            memberships: impact.memberships,
+            observations: impact.observations,
+            user_states: impact.user_states,
+            user_state_conflicts: impact.user_state_conflicts,
+            chart_links: impact.chart_links,
+            operator_images: impact.operator_images,
+            provider_images: impact.provider_images,
+            provider_image_conflicts: impact.provider_image_conflicts,
+            provider_candidates: impact.provider_candidates,
+            provider_tasks: impact.provider_tasks,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtistMergePreviewDto {
+    pub target: ArtistMergePreviewArtistDto,
+    pub sources: Vec<ArtistMergePreviewArtistDto>,
+    pub impact: ArtistMergeImpactDto,
+    pub metadata_conflicts: Vec<String>,
+}
+
+impl From<ArtistMergePreview> for ArtistMergePreviewDto {
+    fn from(preview: ArtistMergePreview) -> Self {
+        Self {
+            target: preview.target.into(),
+            sources: preview.sources.into_iter().map(Into::into).collect(),
+            impact: preview.impact.into(),
+            metadata_conflicts: preview.metadata_conflicts,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchMergeResponseDto {
+    pub merge_ids: Vec<Uuid>,
+    pub source_artist_ids: Vec<Uuid>,
+    pub target_artist_id: Uuid,
+}
+
 /// One explicitly selected link to move during a split. `id` is the
 /// internal durable row identity of the selected link.
 #[derive(Debug, Deserialize)]
@@ -374,6 +494,14 @@ pub fn router() -> Router<AdminAccessState> {
         )
         .route("/api/admin/v1/identity/decisions", get(identity_decisions))
         .route("/api/admin/v1/identity/artists/merge", post(merge_artists))
+        .route(
+            "/api/admin/v1/identity/artists/merge/preview",
+            post(preview_artist_merge),
+        )
+        .route(
+            "/api/admin/v1/identity/artists/merge/batch",
+            post(batch_merge_artists),
+        )
         .route(
             "/api/admin/v1/identity/artists/{id}/split",
             post(split_artist),
@@ -759,6 +887,175 @@ async fn merge_artists(
             Json(MergeResponseDto {
                 merge_id: merge.id.into_uuid(),
                 source_artist_id: request.source_artist_id,
+                target_artist_id: request.target_artist_id,
+            })
+            .into_response()
+        }
+        Err(error) => catalog_error(error),
+    }
+}
+
+async fn resolve_merge_selection(
+    pool: &sqlx::PgPool,
+    source_artist_ids: &[Uuid],
+    target_artist_id: Uuid,
+) -> Result<(Vec<ArtistIdentityRef>, ArtistIdentityRef), Response> {
+    if source_artist_ids.is_empty() || source_artist_ids.len() > MAX_ARTIST_MERGE_SOURCES {
+        return Err(identity_error(
+            StatusCode::BAD_REQUEST,
+            "invalid_sources",
+            format!("select between 1 and {MAX_ARTIST_MERGE_SOURCES} source Artists"),
+        ));
+    }
+    let source_ids = source_artist_ids
+        .iter()
+        .copied()
+        .collect::<std::collections::BTreeSet<_>>();
+    if source_ids.len() != source_artist_ids.len() {
+        return Err(identity_error(
+            StatusCode::BAD_REQUEST,
+            "duplicate_source",
+            "source Artist ids must be distinct",
+        ));
+    }
+    if source_ids.contains(&target_artist_id) {
+        return Err(identity_error(
+            StatusCode::BAD_REQUEST,
+            "self_merge",
+            "the target Artist cannot also be a source",
+        ));
+    }
+    let mut requested = source_ids.iter().copied().collect::<Vec<_>>();
+    requested.push(target_artist_id);
+    let artists = CatalogStore
+        .artists_by_public_ids(pool, &requested)
+        .await
+        .map_err(|error| store_failure("Artist merge selection read failed", &error))?;
+    if artists.len() != requested.len() {
+        let found = artists
+            .iter()
+            .map(|artist| artist.public_api_id)
+            .collect::<std::collections::BTreeSet<_>>();
+        let missing = requested
+            .into_iter()
+            .find(|id| !found.contains(id))
+            .unwrap_or(target_artist_id);
+        return Err(identity_error(
+            StatusCode::NOT_FOUND,
+            "not_found",
+            format!("artist not found: {missing}"),
+        ));
+    }
+    if let Some(unresolvable) = artists
+        .iter()
+        .find(|artist| matches!(artist.status.as_str(), "merged" | "deprecated"))
+    {
+        return Err(identity_error(
+            StatusCode::CONFLICT,
+            "artist_not_resolvable",
+            format!(
+                "artist {} is {} and cannot participate",
+                unresolvable.public_api_id, unresolvable.status
+            ),
+        ));
+    }
+    let target = artists
+        .iter()
+        .find(|artist| artist.public_api_id == target_artist_id)
+        .cloned()
+        .ok_or_else(|| {
+            identity_error(
+                StatusCode::NOT_FOUND,
+                "not_found",
+                format!("artist not found: {target_artist_id}"),
+            )
+        })?;
+    let sources = artists
+        .into_iter()
+        .filter(|artist| source_ids.contains(&artist.public_api_id))
+        .collect::<Vec<_>>();
+    Ok((sources, target))
+}
+
+/// POST /api/admin/v1/identity/artists/merge/preview — validates a bounded
+/// multi-source selection and returns exact impact without mutation.
+async fn preview_artist_merge(
+    State(state): State<AdminAccessState>,
+    _admin: AdminPrincipal,
+    Json(request): Json<BatchMergeSelectionRequest>,
+) -> Response {
+    let (sources, target) = match resolve_merge_selection(
+        &state.pool,
+        &request.source_artist_ids,
+        request.target_artist_id,
+    )
+    .await
+    {
+        Ok(selection) => selection,
+        Err(response) => return response,
+    };
+    let source_ids = sources.iter().map(|artist| artist.id).collect::<Vec<_>>();
+    match CatalogStore
+        .preview_artist_merge(&state.pool, &source_ids, target.id)
+        .await
+    {
+        Ok(preview) => Json(ArtistMergePreviewDto::from(preview)).into_response(),
+        Err(error) => catalog_error(error),
+    }
+}
+
+/// POST /api/admin/v1/identity/artists/merge/batch — coalesces every selected
+/// source into the target in one audited PostgreSQL transaction.
+async fn batch_merge_artists(
+    State(state): State<AdminAccessState>,
+    admin: AdminPrincipal,
+    Json(request): Json<BatchMergeRequest>,
+) -> Response {
+    let reason = request.reason.trim().to_owned();
+    if reason.is_empty() {
+        return identity_error(
+            StatusCode::BAD_REQUEST,
+            "invalid_reason",
+            "a non-blank reason is required",
+        );
+    }
+    let (sources, target) = match resolve_merge_selection(
+        &state.pool,
+        &request.source_artist_ids,
+        request.target_artist_id,
+    )
+    .await
+    {
+        Ok(selection) => selection,
+        Err(response) => return response,
+    };
+    let now = OffsetDateTime::now_utc();
+    let merges = sources
+        .iter()
+        .map(|source| ArtistMerge {
+            id: melodee_domain::ArtistMergeId::new(),
+            source_artist_id: source.id,
+            source_public_api_id: ArtistPublicId::from_uuid(source.public_api_id),
+            target_artist_id: target.id,
+            actor: admin.public_api_id.to_string(),
+            reason: reason.clone(),
+            occurred_at: now,
+        })
+        .collect::<Vec<_>>();
+    match CatalogStore
+        .merge_artists(&state.pool, &merges, ADMIN_RESOLVER_VERSION)
+        .await
+    {
+        Ok(()) => {
+            tracing::info!(
+                actor=%admin.public_api_id,
+                source_count=merges.len(),
+                target=%request.target_artist_id,
+                "admin batch merged Artists"
+            );
+            Json(BatchMergeResponseDto {
+                merge_ids: merges.iter().map(|merge| merge.id.into_uuid()).collect(),
+                source_artist_ids: sources.iter().map(|artist| artist.public_api_id).collect(),
                 target_artist_id: request.target_artist_id,
             })
             .into_response()

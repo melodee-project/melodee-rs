@@ -7,7 +7,12 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { CatalogListParams } from '../../api/admin';
 import type { ApiError } from '../../api/client';
 import type { Page } from '../../api/types';
-import { EntityTable, type EntityColumn, type EntityRow } from '../../components/EntityTable';
+import {
+  EntityTable,
+  type EntityColumn,
+  type EntityRow,
+  type EntityTableSelection,
+} from '../../components/EntityTable';
 import { PageHeader } from '../../components/PageHeader';
 import {
   parseCatalogSort,
@@ -35,6 +40,11 @@ export interface CatalogListScreenProps<T extends { id: string }> {
   columns: EntityColumn[];
   toRow: (item: T) => EntityRow;
   detailPath: (item: T) => string;
+  selection?: EntityTableSelection;
+  toolbarActions?: ReactNode;
+  notice?: ReactNode;
+  refreshToken?: number;
+  onItemsChange?: (items: T[]) => void;
 }
 
 /** Debounce so typing does not issue one catalog query per keystroke. */
@@ -65,6 +75,11 @@ export function CatalogListScreen<T extends { id: string }>({
   columns,
   toRow,
   detailPath,
+  selection,
+  toolbarActions,
+  notice,
+  refreshToken = 0,
+  onItemsChange,
 }: CatalogListScreenProps<T>) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -134,6 +149,7 @@ export function CatalogListScreen<T extends { id: string }>({
         .then((result) => {
           if (!controller.signal.aborted) {
             setPageData(result);
+            onItemsChange?.(result.items);
             setListError(null);
             setLoading(false);
           }
@@ -145,30 +161,34 @@ export function CatalogListScreen<T extends { id: string }>({
           }
         });
     },
-    [fetchPage, queryParam, page, pageSize, sort],
+    [fetchPage, queryParam, page, pageSize, sort, onItemsChange],
   );
 
   useEffect(() => {
     void fetchCurrentPage();
     return () => request.current?.abort();
-  }, [fetchCurrentPage]);
+  }, [fetchCurrentPage, refreshToken]);
 
   const rows: EntityRow[] = (pageData?.items ?? []).map(toRow);
 
   const toolbar = (
-    <Search
-      labelText={t(searchLabelKey)}
-      placeholder={t(searchLabelKey)}
-      size="md"
-      value={searchText}
-      onChange={(event) => setSearchText(event.target.value)}
-      onClear={() => setSearchText('')}
-    />
+    <>
+      <Search
+        labelText={t(searchLabelKey)}
+        placeholder={t(searchLabelKey)}
+        size="md"
+        value={searchText}
+        onChange={(event) => setSearchText(event.target.value)}
+        onClear={() => setSearchText('')}
+      />
+      {toolbarActions}
+    </>
   );
 
   return (
     <div className="melodee-queue-main">
       <PageHeader title={t(titleKey)} subtitle={t(subtitleKey)} />
+      {notice}
       {listError ? (
         <ActionableNotification
           inline
@@ -190,6 +210,7 @@ export function CatalogListScreen<T extends { id: string }>({
           rows={rows}
           totalRows={pageData?.total ?? 0}
           toolbar={toolbar}
+          selection={selection}
           emptyTitle={t(emptyTitleKey)}
           emptyDescription={t(emptyDescriptionKey)}
           onRowActivate={(id) => {

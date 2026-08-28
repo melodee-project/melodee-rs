@@ -847,8 +847,8 @@ async fn negative_assertions_and_locked_decisions_block_same_release_track_recon
 }
 
 #[tokio::test]
-async fn cross_release_exact_names_are_review_candidates_not_merge_candidates() {
-    let db = TestDb::create("catalog_cross_release_name_proposal").await;
+async fn repeated_primary_release_artist_credits_are_conflict_gated_and_audited() {
+    let db = TestDb::create("catalog_repeated_primary_artist").await;
     let first = seed_published_release(
         &db,
         96,
@@ -893,22 +893,38 @@ async fn cross_release_exact_names_are_review_candidates_not_merge_candidates() 
             .await
             .expect("import cross-Release fixture");
     }
+    sqlx::query("UPDATE releases SET status='deprecated' WHERE id=ANY($1)")
+        .bind([first.release_id.into_uuid(), second.release_id.into_uuid()])
+        .execute(&db.pool)
+        .await
+        .expect("model retained deprecated Releases from the live catalog");
 
     let candidates = catalog
-        .name_only_artist_match_proposal_candidates(&db.pool, 64)
+        .repeated_primary_release_artist_merge_candidates(&db.pool, 64)
         .await
-        .expect("scan exact-name review candidates");
-    assert_eq!(
-        candidates.len(),
-        4,
-        "each raw occurrence retains a review path"
-    );
-    assert!(
-        candidates
-            .iter()
-            .all(|candidate| candidate.normalized_name == "alice cooper"
-                && candidate.current_artist_id != candidate.candidate_artist_id)
-    );
+        .expect("scan repeated primary Release credits");
+    assert_eq!(candidates.len(), 1);
+    let candidate = &candidates[0];
+    assert_eq!(candidate.normalized_name, "alice cooper");
+    catalog
+        .reconcile_artist(
+            &db.pool,
+            &ArtistMerge {
+                id: ArtistMergeId::new(),
+                source_artist_id: ArtistId::from_uuid(candidate.source_artist_id),
+                source_public_api_id: ArtistPublicId::from_uuid(candidate.source_public_api_id),
+                target_artist_id: ArtistId::from_uuid(candidate.target_artist_id),
+                actor: "catalog-reconciler".to_owned(),
+                reason: "repeated exact primary Release Artist credit".to_owned(),
+                occurred_at: time::OffsetDateTime::now_utc(),
+            },
+            "repeated-primary-release-v1",
+            &ArtistReconciliationEvidence::RepeatedPrimaryReleaseCredit {
+                normalized_name: candidate.normalized_name.clone(),
+            },
+        )
+        .await
+        .expect("reconcile repeated primary Release Artist");
 
     let statuses: (i64, i64) = sqlx::query_as(
         "SELECT count(*) FILTER (WHERE status='provisional'),
@@ -918,14 +934,18 @@ async fn cross_release_exact_names_are_review_candidates_not_merge_candidates() 
     .fetch_one(&db.pool)
     .await
     .expect("read same-name Artist statuses");
-    assert_eq!(statuses, (2, 0));
+    assert_eq!(statuses, (1, 1));
     assert_eq!(
-        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM artist_merge_events")
-            .fetch_one(&db.pool)
-            .await
-            .expect("count merge events"),
-        0,
-        "name equality must never mutate Artist identity"
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM artist_merge_events
+              WHERE moved_relationships #>> '{reconciliation,evidence,predicate}'
+                    = 'repeated_primary_release_credit'",
+        )
+        .fetch_one(&db.pool)
+        .await
+        .expect("count merge events"),
+        1,
+        "the contextual merge remains audited"
     );
     db.drop().await;
 }
@@ -1001,6 +1021,14 @@ async fn conflicting_provider_ids_preserve_same_name_identities_and_allow_review
             .len(),
         0,
         "different IDs from the same provider block automatic convergence"
+    );
+    assert!(
+        catalog
+            .repeated_primary_release_artist_merge_candidates(&db.pool, 64)
+            .await
+            .expect("scan contextual candidates with provider conflict")
+            .is_empty(),
+        "provider evidence blocks weaker primary-credit convergence"
     );
     assert!(
         !catalog
@@ -1125,6 +1153,105 @@ async fn conflicting_active_dates_block_strong_provider_id_reconciliation() {
             .is_empty(),
         "disjoint active ranges block even an otherwise strong provider-ID merge"
     );
+    assert!(
+        catalog
+            .repeated_primary_release_artist_merge_candidates(&db.pool, 64)
+            .await
+            .expect("scan contextual candidates with date conflict")
+            .is_empty(),
+        "active-date evidence also blocks primary-credit convergence"
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn disambiguated_same_name_primary_artists_remain_distinct() {
+    let db = TestDb::create("catalog_primary_artist_disambiguation").await;
+    let fixtures = [
+        seed_published_release(
+            &db,
+            110,
+            CatalogFixturePresentation {
+                release_title: "British Psychedelic Release",
+                release_artist: "Nirvana",
+                track_title: "First Track",
+                track_artist: "Nirvana",
+                release_date: "1968-01-01",
+            },
+        )
+        .await,
+        seed_published_release(
+            &db,
+            111,
+            CatalogFixturePresentation {
+                release_title: "American Grunge Release",
+                release_artist: "Nirvana",
+                track_title: "Second Track",
+                track_artist: "Nirvana",
+                release_date: "1991-01-01",
+            },
+        )
+        .await,
+    ];
+    let catalog = CatalogStore;
+    let worker = WorkerId::new();
+    let now = time::OffsetDateTime::now_utc();
+    assert_eq!(
+        catalog
+            .claim_cataloging(&db.pool, &worker, &test_config(), now)
+            .await
+            .expect("claim homonym fixtures")
+            .len(),
+        2
+    );
+    for fixture in &fixtures {
+        catalog
+            .import_manifest_v3(
+                &db.pool,
+                fixture.work_item_id,
+                &worker,
+                &CatalogImportRequest::new("homonym-v1", "catalog-test"),
+                now,
+            )
+            .await
+            .expect("import homonym fixture");
+    }
+    let updated = sqlx::query(
+        "UPDATE artists artist
+            SET disambiguation=CASE release.title
+                WHEN 'British Psychedelic Release' THEN 'UK psychedelic group'
+                ELSE 'US grunge band'
+            END
+           FROM release_artists credit
+           JOIN releases release ON release.id=credit.release_id
+          WHERE credit.artist_id=artist.id
+            AND credit.role='primary'
+            AND artist.normalized_name='nirvana'",
+    )
+    .execute(&db.pool)
+    .await
+    .expect("add homonym disambiguation")
+    .rows_affected();
+    assert_eq!(updated, 2);
+
+    assert!(
+        catalog
+            .repeated_primary_release_artist_merge_candidates(&db.pool, 64)
+            .await
+            .expect("scan disambiguated homonyms")
+            .is_empty(),
+        "explicit disambiguation blocks contextual convergence"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM artists
+              WHERE normalized_name='nirvana' AND status='provisional'",
+        )
+        .fetch_one(&db.pool)
+        .await
+        .expect("count distinct homonyms"),
+        2
+    );
     db.drop().await;
 }
 
@@ -1187,6 +1314,14 @@ async fn negative_assertions_and_locked_decisions_suppress_name_only_proposals()
         .into_iter()
         .next()
         .expect("same provisional billing is initially eligible");
+    assert_eq!(
+        catalog
+            .repeated_primary_release_artist_merge_candidates(&db.pool, 64)
+            .await
+            .expect("scan initial contextual candidate")
+            .len(),
+        1
+    );
     let source_observation = candidate.observed_artist_id;
     let assertion_id = ArtistNegativeAssertionId::new();
     catalog
@@ -1215,6 +1350,13 @@ async fn negative_assertions_and_locked_decisions_suppress_name_only_proposals()
             .all(|other| other.observed_artist_id != source_observation
                 || other.candidate_artist_id != candidate.candidate_artist_id)
     );
+    assert!(
+        catalog
+            .repeated_primary_release_artist_merge_candidates(&db.pool, 64)
+            .await
+            .expect("scan contextual candidates after rejection")
+            .is_empty()
+    );
 
     catalog
         .revoke_artist_negative_assertion(
@@ -1236,6 +1378,14 @@ async fn negative_assertions_and_locked_decisions_suppress_name_only_proposals()
             .iter()
             .any(|other| other.observed_artist_id == source_observation
                 && other.candidate_artist_id == candidate.candidate_artist_id)
+    );
+    assert_eq!(
+        catalog
+            .repeated_primary_release_artist_merge_candidates(&db.pool, 64)
+            .await
+            .expect("scan contextual candidates after revocation")
+            .len(),
+        1
     );
 
     let locked = ArtistMatchDecision::new(
@@ -1270,6 +1420,13 @@ async fn negative_assertions_and_locked_decisions_suppress_name_only_proposals()
             .expect("scan locked-decision candidates")
             .iter()
             .all(|other| other.observed_artist_id != source_observation)
+    );
+    assert!(
+        catalog
+            .repeated_primary_release_artist_merge_candidates(&db.pool, 64)
+            .await
+            .expect("scan contextual candidates after manual lock")
+            .is_empty()
     );
     db.drop().await;
 }

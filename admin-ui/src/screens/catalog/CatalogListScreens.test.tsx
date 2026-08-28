@@ -3,6 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type {
+  ArtistMergePreview,
   CatalogArtistListItem,
   CatalogReleaseListItem,
   CatalogTrackListItem,
@@ -19,15 +20,23 @@ vi.mock('../../api/admin', async (importOriginal) => {
     listCatalogArtists: vi.fn(),
     listCatalogReleases: vi.fn(),
     listCatalogTracks: vi.fn(),
+    previewArtistMerge: vi.fn(),
+    batchMergeArtists: vi.fn(),
   };
 });
 
-const { listCatalogArtists, listCatalogReleases, listCatalogTracks } = await import(
-  '../../api/admin'
-);
+const {
+  batchMergeArtists,
+  listCatalogArtists,
+  listCatalogReleases,
+  listCatalogTracks,
+  previewArtistMerge,
+} = await import('../../api/admin');
+const mockBatchMergeArtists = vi.mocked(batchMergeArtists);
 const mockListArtists = vi.mocked(listCatalogArtists);
 const mockListReleases = vi.mocked(listCatalogReleases);
 const mockListTracks = vi.mocked(listCatalogTracks);
+const mockPreviewArtistMerge = vi.mocked(previewArtistMerge);
 
 const ARTIST: CatalogArtistListItem = {
   id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
@@ -41,6 +50,72 @@ const ARTIST: CatalogArtistListItem = {
   imageId: 'artist_aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   createdAt: '2026-08-01T10:00:00Z',
   updatedAt: '2026-08-14T10:00:00Z',
+};
+
+const DUPLICATE_ARTIST: CatalogArtistListItem = {
+  ...ARTIST,
+  id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+  disambiguation: null,
+  releaseCount: 2,
+  trackCount: 18,
+  imageId: 'artist_dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+};
+
+const OTHER_ARTIST: CatalogArtistListItem = {
+  ...ARTIST,
+  id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+  name: 'Unrelated Artist',
+  sortName: 'Unrelated Artist',
+  disambiguation: null,
+  releaseCount: 1,
+  trackCount: 5,
+  imageId: 'artist_eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+};
+
+const MERGE_PREVIEW: ArtistMergePreview = {
+  target: {
+    id: ARTIST.id,
+    name: ARTIST.name,
+    sortName: ARTIST.sortName,
+    artistType: ARTIST.artistType,
+    disambiguation: ARTIST.disambiguation,
+    beginDate: null,
+    endDate: null,
+    status: ARTIST.status,
+  },
+  sources: [
+    {
+      id: DUPLICATE_ARTIST.id,
+      name: DUPLICATE_ARTIST.name,
+      sortName: DUPLICATE_ARTIST.sortName,
+      artistType: DUPLICATE_ARTIST.artistType,
+      disambiguation: DUPLICATE_ARTIST.disambiguation,
+      beginDate: null,
+      endDate: null,
+      status: DUPLICATE_ARTIST.status,
+    },
+  ],
+  impact: {
+    releases: 2,
+    tracks: 18,
+    releaseCredits: 2,
+    trackCredits: 18,
+    contributions: 3,
+    aliases: 1,
+    externalIdentities: 1,
+    relationships: 0,
+    memberships: 0,
+    observations: 4,
+    userStates: 2,
+    userStateConflicts: 1,
+    chartLinks: 0,
+    operatorImages: 1,
+    providerImages: 1,
+    providerImageConflicts: 1,
+    providerCandidates: 1,
+    providerTasks: 1,
+  },
+  metadataConflicts: ['disambiguation'],
 };
 
 const RELEASE: CatalogReleaseListItem = {
@@ -80,6 +155,12 @@ beforeEach(() => {
   mockListArtists.mockResolvedValue(page([ARTIST], 137));
   mockListReleases.mockResolvedValue(page([RELEASE], 137));
   mockListTracks.mockResolvedValue(page([TRACK], 137));
+  mockPreviewArtistMerge.mockResolvedValue(MERGE_PREVIEW);
+  mockBatchMergeArtists.mockResolvedValue({
+    mergeIds: ['ffffffff-ffff-4fff-8fff-ffffffffffff'],
+    targetArtistId: ARTIST.id,
+    sourceArtistIds: [DUPLICATE_ARTIST.id],
+  });
 });
 
 describe('ArtistsScreen', () => {
@@ -166,6 +247,58 @@ describe('ArtistsScreen', () => {
         expect.any(AbortSignal),
       );
     });
+  });
+
+  it('previews and confirms a page-scoped multi-Artist merge', async () => {
+    mockListArtists.mockResolvedValue(
+      page([ARTIST, DUPLICATE_ARTIST, OTHER_ARTIST], 3),
+    );
+    render(
+      <MemoryRouter initialEntries={['/catalog/artists']}>
+        <ArtistsScreen />
+      </MemoryRouter>,
+    );
+    await screen.findByRole('link', { name: 'Unrelated Artist' });
+
+    const mergeButton = screen.getByRole('button', { name: 'Merge 0 selected Artists' });
+    expect(mergeButton).toBeDisabled();
+    const rowSelections = screen.getAllByRole('checkbox', { name: 'Select row' });
+    fireEvent.click(rowSelections[0]);
+    fireEvent.click(rowSelections[1]);
+    expect(screen.getByRole('button', { name: 'Merge 2 selected Artists' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Merge 2 selected Artists' }));
+
+    expect(await screen.findByRole('heading', { name: 'Merge Artists' })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mockPreviewArtistMerge).toHaveBeenCalledWith({
+        sourceArtistIds: [DUPLICATE_ARTIST.id],
+        targetArtistId: ARTIST.id,
+      });
+    });
+    expect(await screen.findByText('Merge impact')).toBeInTheDocument();
+    const confirmButton = screen.getByRole('button', { name: 'Merge Artists' });
+    expect(confirmButton).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText('Reason'), {
+      target: { value: 'Duplicate import identity' },
+    });
+    fireEvent.change(screen.getByLabelText('Type MERGE to confirm.'), {
+      target: { value: 'MERGE' },
+    });
+    expect(confirmButton).toBeEnabled();
+    fireEvent.click(confirmButton);
+
+    await waitFor(() => {
+      expect(mockBatchMergeArtists).toHaveBeenCalledWith({
+        sourceArtistIds: [DUPLICATE_ARTIST.id],
+        targetArtistId: ARTIST.id,
+        reason: 'Duplicate import identity',
+      });
+    });
+    expect(
+      await screen.findByText('The selected Artists were merged successfully.'),
+    ).toBeInTheDocument();
+    expect(mockListArtists).toHaveBeenCalledTimes(2);
   });
 });
 

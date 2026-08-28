@@ -17,20 +17,30 @@ that same Release has the same normalized value. Other differently named Artists
 Release do not make that exact match ambiguous. If no Release Artist or multiple Release Artist
 observations match, the Track keeps a separate provisional identity for review.
 
-Across Releases, exact name equality never merges Artists automatically. The catalog keeps each
-provisional identity and records the other same-name identities as non-authoritative proposals in
-Identity Review. A later administrator confirmation or merge can resolve a true duplicate, while a
-**Never Match** decision durably suppresses an incorrect candidate. Candidate cards include Artist
-disambiguation text, so legitimate same-name identities such as `Nirvana — UK psychedelic group`
-and `Nirvana — US grunge band` can be reviewed without changing their canonical names.
+Across Releases, exact name equality by itself never merges Artists automatically. When that exact
+name recurs specifically as the primary Artist credit on different non-deleted Releases, however,
+Melodee converges the provisional rows if the complete same-name group has no differentiating
+evidence. This repairs ordinary import duplicates such as one `Alice Cooper` row per Release,
+including rows left by older binaries; the bounded repair runs after imports and when the catalog
+scheduler starts. Every consolidation is audited and reversible, and the surviving Artist remains
+provisional.
 
-The catalog automatically converges cross-Release Artists only when both carry the same trusted,
-well-formed provider identifier. Known conflicts—different IDs from the same provider,
+External IDs, disambiguation, Artist type, active dates, memberships, relationships, manual or
+locked decisions, **Never Match** assertions, differing aliases, and ambiguous same-Release billing
+block that contextual rule for the complete name group. Blocked and name-only candidates remain
+separate in Identity Review. Candidate cards include Artist disambiguation text, so legitimate
+same-name identities such as `Nirvana — UK psychedelic group` and `Nirvana — US grunge band` can be
+reviewed without changing their canonical names. When source tags provide neither disambiguation
+nor other identity evidence, two real homonyms are unknowable; an administrator can split an
+incorrect provisional consolidation without losing raw observations or public-ID redirects.
+
+The stronger cross-Release path converges Artists when both carry the same trusted, well-formed
+provider identifier. Known conflicts—different IDs from the same provider,
 incompatible Artist types, disjoint active dates, disjoint known group membership, locked decisions,
 or do-not-match assertions—block that merge. Successful strong-evidence convergence retains raw
 observations, writes a reversible merge tombstone and automated audit history, and leaves the
-surviving identity provisional. The bounded strong-ID and proposal checks run after imports and
-once at server startup.
+surviving identity provisional. Strong-ID reconciliation runs before the contextual primary-credit
+rule so provider evidence wins whenever it is available.
 
 Repeated structured Track credits inside one Release use a separate, narrower rule. If the same
 exact normalized credit received several provisional track-only identities, Melodee converges them
@@ -66,6 +76,30 @@ editing identity rows directly.
 See [Identity Review](../admin/identity-review/) for the administrative workflow that resolves
 uncertain artist matches.
 
+## Merging duplicate Artists
+
+From **Catalog → Artists**, select between two and 101 Artists on the current page and choose
+**Merge selected Artists**. Pick the identity that should survive, enter an audit reason, review
+the server-calculated impact, and type `MERGE` to confirm. The apply step is one transaction: if
+any selected source cannot be merged, none of the selected Artists are changed.
+
+The selected target keeps its canonical name, sort name, Artist type, disambiguation, active dates,
+and existing operator-selected image. Melodee coalesces Release and Track billing, contributions,
+aliases, external identities, relationships, memberships, raw observations, discovery links,
+compatible provider records, and per-user Artist state. Conflicting per-user flags are preserved,
+ratings use the higher value, and play counts are summed. If the target has no operator image, one
+source image is adopted deterministically; other source overrides remain recoverable on the merge
+tombstones. The preview identifies counts and target-wins metadata conflicts before confirmation.
+
+Each merged source remains a tombstone whose public ID redirects to the surviving Artist, and its
+name becomes a search alias. Audit and provider histories stay attributable to their original
+identity. Merging changes catalog relationships and rebuildable projections only: it never moves or
+deletes canonical media files.
+
+The single-source UUID form under **Identity Review → Artist operations** remains available for
+advanced correction work. Splitting an incorrect consolidation is also performed there by moving
+explicitly selected assignments to a new Artist.
+
 ## Browsing and detail
 
 Open **Catalog → Artists** (`/admin/catalog/artists`) in the admin UI. The list is searched,
@@ -78,9 +112,9 @@ artist type. Saves are partial updates validated server-side (blank names and un
 types are rejected with `400`), recorded as an audit event in the entity's history, and applied
 with last-write-wins semantics — each save bumps the row revision, and a concurrent edit by
 another administrator simply wins if it lands last; the other editor sees the current values on
-refresh. Edits change display metadata only: they never alter
-Artist identity, and merges and splits remain decision actions in
-[Identity Review](../admin/identity-review/) (confirm/create-new/never-match and merge/split).
+refresh. Edits change display metadata only: they never alter Artist identity. Multi-Artist merge
+is available from the Artist list; merge/split and observation decisions remain available in
+[Identity Review](../admin/identity-review/).
 
 The same browsing and detail routes are available over
 [Admin API — Catalog browsing and detail](../api/admin-api/#catalog-browsing-and-detail).

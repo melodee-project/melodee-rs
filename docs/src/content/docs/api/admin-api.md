@@ -458,6 +458,45 @@ into the target; the source's public id is preserved as a redirect and the merge
 longer participate in identity mutations (`409 artist_not_resolvable`). Merging an Artist into
 itself returns `400 self_merge`.
 
+### Preview and merge multiple Artists
+
+```http
+POST /api/admin/v1/identity/artists/merge/preview
+POST /api/admin/v1/identity/artists/merge/batch
+```
+
+Preview body:
+
+```json
+{
+  "sourceArtistIds": ["…", "…"],
+  "targetArtistId": "…"
+}
+```
+
+The preview accepts one through 100 distinct source public IDs, none equal to the target, and
+returns the resolved target and sources, affected Release/Track/credit and identity-row counts,
+user/provider/image conflict counts, and the scalar metadata fields for which the selected target
+will win. Unknown, merged, or deprecated identities fail closed without changing data.
+
+The batch route accepts the same selection plus a required audit reason:
+
+```json
+{
+  "sourceArtistIds": ["…", "…"],
+  "targetArtistId": "…",
+  "reason": "Duplicate import identities"
+}
+```
+
+Every source is merged in one PostgreSQL transaction. Release and Track billing, contributions,
+aliases, external identities, relationships, memberships, observations, discovery links, native
+per-user Artist state, compatible artwork, and provider data are coalesced. The selected target's
+scalar identity metadata and existing operator artwork win conflicts. Each source becomes a
+redirecting tombstone and each merge receives a distinct audit ID; the response returns
+`mergeIds`, `sourceArtistIds`, and `targetArtistId`. A validation or correction-bound failure rolls
+back the complete batch. No canonical media is moved or deleted.
+
 ### Split an Artist
 
 ```http

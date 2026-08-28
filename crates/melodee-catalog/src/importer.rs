@@ -221,6 +221,7 @@ pub(crate) async fn import_once_with_cancellation(
 pub(crate) async fn reconcile_artist_identities_once(store: &CatalogStore, pool: &PgPool) {
     reconcile_strong_artist_identities(store, pool).await;
     reconcile_same_release_track_artist_identities(store, pool).await;
+    reconcile_repeated_primary_release_artist_identities(store, pool).await;
     propose_name_only_artist_matches(store, pool).await;
 }
 
@@ -354,6 +355,59 @@ async fn reconcile_same_release_track_artist_identities(store: &CatalogStore, po
             }
             Err(error) => {
                 warn!(%error, source_artist_id=%candidate.source_artist_id, "same-Release Track Artist candidate was preserved without mutation")
+            }
+        }
+    }
+}
+
+/// Consolidates repeated, exact primary Release Artist credits only when the
+/// complete active name group is still provisional and carries no
+/// differentiating identity evidence. The persisted Release role is the
+/// contextual evidence that keeps this separate from a name-only match.
+async fn reconcile_repeated_primary_release_artist_identities(store: &CatalogStore, pool: &PgPool) {
+    let candidates = match store
+        .repeated_primary_release_artist_merge_candidates(pool, 64)
+        .await
+    {
+        Ok(candidates) => candidates,
+        Err(error) => {
+            warn!(%error, "repeated primary Release Artist reconciliation scan failed; import remains durable");
+            return;
+        }
+    };
+    for candidate in candidates {
+        let merge = ArtistMerge {
+            id: ArtistMergeId::new(),
+            source_artist_id: ArtistId::from_uuid(candidate.source_artist_id),
+            source_public_api_id: melodee_domain::ArtistPublicId::from_uuid(
+                candidate.source_public_api_id,
+            ),
+            target_artist_id: ArtistId::from_uuid(candidate.target_artist_id),
+            actor: "catalog-reconciler".to_owned(),
+            reason: format!(
+                "exact primary Release Artist credit {} recurred without differentiating evidence",
+                candidate.normalized_name
+            ),
+            occurred_at: OffsetDateTime::now_utc(),
+        };
+        let evidence = ArtistReconciliationEvidence::RepeatedPrimaryReleaseCredit {
+            normalized_name: candidate.normalized_name.clone(),
+        };
+        match store
+            .reconcile_artist(pool, &merge, LOCAL_RESOLVER_VERSION, &evidence)
+            .await
+        {
+            Ok(()) => info!(
+                source_artist_id=%candidate.source_artist_id,
+                target_artist_id=%candidate.target_artist_id,
+                normalized_name=%candidate.normalized_name,
+                "repeated primary Release Artist identity converged"
+            ),
+            Err(CatalogStoreError::MutationConflict) => {
+                debug!(source_artist_id=%candidate.source_artist_id, "repeated primary Release Artist merge was already reconciled or fenced")
+            }
+            Err(error) => {
+                warn!(%error, source_artist_id=%candidate.source_artist_id, "repeated primary Release Artist candidate was preserved without mutation")
             }
         }
     }

@@ -70,7 +70,7 @@ async fn successful_import_auto_merges_only_shared_trusted_artist_ids() {
 }
 
 #[tokio::test]
-async fn successful_import_proposes_cross_release_exact_names_without_merging() {
+async fn successful_import_converges_repeated_primary_release_artist_credits() {
     let db = TestDb::create("catalog_scheduler_cross_release_artist").await;
     for (ordinal, release_title) in [(101, "The Aim"), (102, "Play Your Roll")] {
         seed_published_release(
@@ -115,57 +115,69 @@ async fn successful_import_proposes_cross_release_exact_names_without_merging() 
     .fetch_one(&db.pool)
     .await
     .expect("read scheduler reconciliation result");
-    assert_eq!(statuses, (2, 0, 0, 4));
+    assert_eq!(statuses, (1, 1, 1, 0));
     assert_eq!(
         CatalogStore
             .count_unresolved_observations(&db.pool)
             .await
-            .expect("count review proposals"),
-        4
+            .expect("count unresolved observations"),
+        0
     );
 
     db.drop().await;
 }
 
 #[tokio::test]
-async fn scheduler_startup_proposes_older_same_name_identities_without_merging() {
+async fn scheduler_startup_repairs_older_repeated_primary_artist_identities() {
     let db = TestDb::create("catalog_startup_cross_release_artist").await;
-    let fixtures = [
-        seed_published_release(
-            &db,
-            103,
-            CatalogFixturePresentation {
-                release_title: "Alice Cooper Goes to Hell",
-                release_artist: "Alice Cooper",
-                track_title: "Go to Hell",
-                track_artist: "Alice Cooper",
-                release_date: "1976-06-25",
-            },
-        )
-        .await,
-        seed_published_release(
-            &db,
-            104,
-            CatalogFixturePresentation {
-                release_title: "Brutal Planet",
-                release_artist: "Alice Cooper",
-                track_title: "Brutal Planet",
-                track_artist: "Alice Cooper",
-                release_date: "2000-06-06",
-            },
-        )
-        .await,
+    let release_titles = [
+        "Along Came a Spider",
+        "Alice Cooper Goes to Hell",
+        "Brutal Planet",
+        "Constrictor",
+        "Detroit Stories",
+        "Dirty Diamonds",
+        "Dragontown",
+        "Easy Action",
+        "Flush the Fashion",
+        "From the Inside",
+        "Pretties for You",
+        "Lace and Whiskey",
+        "Raise Your Fist and Yell",
+        "Special Forces",
     ];
+    let mut fixtures = Vec::with_capacity(release_titles.len());
+    for (offset, release_title) in release_titles.iter().enumerate() {
+        let ordinal = 103_u32 + u32::try_from(offset).expect("fixture offset fits u32");
+        fixtures.push(
+            seed_published_release(
+                &db,
+                ordinal,
+                CatalogFixturePresentation {
+                    release_title,
+                    release_artist: "Alice Cooper",
+                    track_title: release_title,
+                    track_artist: "Alice Cooper",
+                    release_date: "2000-01-01",
+                },
+            )
+            .await,
+        );
+    }
     let catalog = CatalogStore;
     let worker = WorkerId::new();
     let now = time::OffsetDateTime::now_utc();
+    let work_config = WorkEngineConfig {
+        claim_batch_size: 14,
+        ..WorkEngineConfig::default()
+    };
     assert_eq!(
         catalog
-            .claim_cataloging(&db.pool, &worker, &test_config(), now)
+            .claim_cataloging(&db.pool, &worker, &work_config, now)
             .await
             .expect("claim old-binary fixtures")
             .len(),
-        2
+        14
     );
     for fixture in &fixtures {
         catalog
@@ -179,6 +191,16 @@ async fn scheduler_startup_proposes_older_same_name_identities_without_merging()
             .await
             .expect("import without scheduler reconciliation");
     }
+    sqlx::query("UPDATE releases SET status='deprecated' WHERE id=ANY($1)")
+        .bind(
+            fixtures
+                .iter()
+                .map(|fixture| fixture.release_id.into_uuid())
+                .collect::<Vec<_>>(),
+        )
+        .execute(&db.pool)
+        .await
+        .expect("model retained deprecated Releases from the live catalog");
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
             "SELECT count(*) FROM artists
@@ -187,7 +209,7 @@ async fn scheduler_startup_proposes_older_same_name_identities_without_merging()
         .fetch_one(&db.pool)
         .await
         .expect("count pre-startup duplicates"),
-        2
+        14
     );
 
     let handle = start_catalog_loop(
@@ -197,21 +219,22 @@ async fn scheduler_startup_proposes_older_same_name_identities_without_merging()
         },
         db.pool.clone(),
         catalog,
-        WorkEngineConfig::default(),
+        work_config,
     );
     let _ = handle.stop().await;
 
     let statuses: (i64, i64, i64) = sqlx::query_as(
         "SELECT count(*) FILTER (WHERE status='provisional'),
                 count(*) FILTER (WHERE status='merged'),
-                (SELECT count(*) FROM artist_match_decisions
-                  WHERE outcome='proposed' AND authority='automated')
+                (SELECT count(*) FROM artist_merge_events
+                  WHERE moved_relationships #>> '{reconciliation,evidence,predicate}'
+                        = 'repeated_primary_release_credit')
            FROM artists WHERE normalized_name='alice cooper'",
     )
     .fetch_one(&db.pool)
     .await
     .expect("read startup reconciliation result");
-    assert_eq!(statuses, (2, 0, 4));
+    assert_eq!(statuses, (1, 13, 13));
     db.drop().await;
 }
 

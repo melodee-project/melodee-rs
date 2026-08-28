@@ -897,6 +897,102 @@ async fn merge_redirects_source_and_blocks_further_source_mutations() {
 }
 
 #[tokio::test]
+async fn batch_merge_previews_impact_and_applies_all_sources_atomically() {
+    let db = TestDb::create("wp13_identity_batch_merge").await;
+    let fixture = seed_users(&db).await;
+    let admin = token_for(fixture.admin_public, "wp13-admin");
+    let source_one = seed_artist(&db, "Batch Source One").await;
+    let source_two = seed_artist(&db, "Batch Source Two").await;
+    let target = seed_artist(&db, "Batch Target").await;
+    let app = app(db.pool.clone());
+    let selection = serde_json::json!({
+        "sourceArtistIds": [source_one, source_two],
+        "targetArtistId": target
+    });
+
+    let (status, _) = call(
+        app.clone(),
+        "POST",
+        "/api/admin/v1/identity/artists/merge/preview",
+        Some(selection.clone()),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+
+    let (status, body) = call(
+        app.clone(),
+        "POST",
+        "/api/admin/v1/identity/artists/merge/preview",
+        Some(selection.clone()),
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["target"]["id"], target.to_string());
+    assert_eq!(body["sources"].as_array().expect("sources").len(), 2);
+    assert_eq!(body["impact"]["releases"], 0);
+    assert!(
+        body["metadataConflicts"]
+            .as_array()
+            .expect("metadata conflicts")
+            .contains(&serde_json::json!("canonicalName"))
+    );
+
+    let (status, body) = call(
+        app.clone(),
+        "POST",
+        "/api/admin/v1/identity/artists/merge/preview",
+        Some(serde_json::json!({
+            "sourceArtistIds": [source_one, source_one],
+            "targetArtistId": target
+        })),
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(body["code"], "duplicate_source");
+
+    let (status, body) = call(
+        app,
+        "POST",
+        "/api/admin/v1/identity/artists/merge/batch",
+        Some(serde_json::json!({
+            "sourceArtistIds": [source_one, source_two],
+            "targetArtistId": target,
+            "reason": "confirmed duplicate Artists"
+        })),
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["targetArtistId"], target.to_string());
+    assert_eq!(body["mergeIds"].as_array().expect("merge ids").len(), 2);
+    assert_eq!(
+        body["sourceArtistIds"]
+            .as_array()
+            .expect("source ids")
+            .len(),
+        2
+    );
+
+    let merged: (i64, i64) = sqlx::query_as(
+        "SELECT count(*) FILTER (WHERE status='merged'),
+                (SELECT count(*) FROM artist_merge_events
+                  WHERE source_artist_id=ANY(
+                      SELECT id FROM artists WHERE public_api_id=ANY($1)))
+           FROM artists WHERE public_api_id=ANY($1)",
+    )
+    .bind([source_one, source_two])
+    .fetch_one(&db.pool)
+    .await
+    .expect("read batch merge result");
+    assert_eq!(merged, (2, 2));
+
+    db.drop().await;
+}
+
+#[tokio::test]
 async fn split_moves_only_the_selected_assignments() {
     let db = TestDb::create("wp13_identity_split").await;
     let fixture = seed_users(&db).await;

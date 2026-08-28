@@ -4,12 +4,18 @@
 - **Status:** Accepted
 - **Decision owners:** User-directed same-name Artist identity correction
 - **Supersedes:** ADR-0160 decision 1(b), decision 2, and the name-only portions of decisions 5 and 8
-- **Superseded by:** None
+- **Superseded by:** ADR-0175 partially supersedes decision 1 for repeated primary Release Artist
+  context
 - **Related requirements:** PRD-ARTIST-001, PRD-ARTIST-002, PRD-ARTIST-005,
   PRD-ARTIST-010, PRD-ARTIST-011, PRD-ARTIST-012, PRD-RESOLVE-001,
   PRD-RESOLVE-002, PRD-RESOLVE-003, PRD-RESOLVE-005
 
 ## Context
+
+> **Partial supersession:** [ADR-0175](ADR-0175-converge-repeated-primary-release-artist-credits.md)
+> permits audited consolidation when exact names recur specifically as primary credits on
+> different Releases and the complete provisional name group has no differentiating evidence.
+> Pure name-only matches and all conflicted groups remain proposals under this ADR.
 
 ADR-0160 allowed exact normalized-name equality plus the absence of known conflicts to merge
 provisional Artists across Releases. That rule conflicts with the higher-authority
