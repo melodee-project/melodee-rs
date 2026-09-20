@@ -7,6 +7,8 @@
 
 mod legacy_support;
 
+use std::fs;
+
 use legacy_support::{
     SEED_MIXED, count, create_source, create_target, drop_db, map_arg, run_legacy,
     run_legacy_failing, source_args,
@@ -898,6 +900,105 @@ async fn second_full_import_creates_no_duplicate_authority() {
     assert_eq!(count(&target.pool, "native_track_plays").await, plays_first);
     assert_eq!(count(&target.pool, "artists").await, 2);
 
+    drop_db(&source.name).await;
+    drop_db(&target.name).await;
+}
+
+#[tokio::test]
+async fn mel2_profile_fields_and_user_images_avatar_are_safe_and_idempotent() {
+    let user_images = tempfile::tempdir().expect("user images directory");
+    let gif = b"GIF89a\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff\x00\x00\x00!\xf9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;";
+    fs::write(user_images.path().join("00000001.gif"), gif).expect("legacy gif");
+    fs::write(
+        user_images.path().join("00000002.png"),
+        b"not a supported legacy name",
+    )
+    .expect("unsupported avatar");
+    fs::write(user_images.path().join("00000003.gif"), gif).expect("unmapped avatar");
+    let seed = format!(
+        "{SEED_MIXED}\nINSERT INTO \"Libraries\" (\"Id\",\"Name\",\"Path\",\"Type\",\"IsLocked\",\"SortOrder\",\"ApiKey\",\"CreatedAt\") VALUES (4,'User Images','{}',4,false,0,'aaaaaaaa-0000-0000-0000-000000000004',now());",
+        user_images.path().display()
+    );
+    let source = create_source("mel2_avatar", &seed).await;
+    let target = create_target("mel2_avatar").await;
+    let mut args = vec![
+        "import".to_string(),
+        "--batch-size".to_string(),
+        "1".to_string(),
+    ];
+    args.extend(source_args(&source.url));
+    args.push("--library-path-map".to_string());
+    args.push(map_arg());
+    run_legacy(&target.url, &args);
+
+    let profile: (Option<String>, String, Option<String>, Option<String>) = sqlx::query_as(
+        "SELECT description,time_zone_id,preferred_language,preferred_theme
+           FROM native_users WHERE public_api_id='77777777-7777-7777-7777-777777777777'",
+    )
+    .fetch_one(&target.pool)
+    .await
+    .expect("migrated profile");
+    assert_eq!(profile.0.as_deref(), Some("C# migration bio"));
+    assert_eq!(profile.1, "UTC");
+    assert_eq!(profile.2.as_deref(), Some("en-US"));
+    assert_eq!(profile.3.as_deref(), Some("dark"));
+
+    let (content_type, image): (String, Vec<u8>) = sqlx::query_as(
+        "SELECT avatar.content_type,avatar.image
+           FROM native_user_avatars avatar
+           JOIN native_users user_record ON user_record.id=avatar.user_id
+          WHERE user_record.public_api_id='77777777-7777-7777-7777-777777777777'",
+    )
+    .fetch_one(&target.pool)
+    .await
+    .expect("migrated avatar");
+    assert_eq!(content_type, "image/png");
+    assert!(image.starts_with(b"\x89PNG\r\n\x1a\n"));
+    assert!(image.len() <= 1024 * 1024);
+    assert_eq!(count(&target.pool, "native_user_avatars").await, 1);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM legacy_migration.issues WHERE domain='user_avatars' AND code='avatar.unsupported_filename'",
+        )
+        .fetch_one(&target.pool)
+        .await
+        .expect("unsupported avatar issue"),
+        1
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM legacy_migration.issues WHERE domain='user_avatars' AND code='avatar.unmapped_owner'",
+        )
+        .fetch_one(&target.pool)
+        .await
+        .expect("unmapped avatar issue"),
+        1
+    );
+    let audit_first = count(&target.pool, "native_user_profile_audits").await;
+
+    let run_id: String = sqlx::query_scalar("SELECT id::text FROM legacy_migration.runs LIMIT 1")
+        .fetch_one(&target.pool)
+        .await
+        .expect("run id");
+    let mut resume = vec!["import".to_string(), "--run".to_string(), run_id];
+    resume.extend(source_args(&source.url));
+    resume.push("--library-path-map".to_string());
+    resume.push(map_arg());
+    run_legacy(&target.url, &resume);
+    assert_eq!(count(&target.pool, "native_user_avatars").await, 1);
+    assert_eq!(
+        count(&target.pool, "native_user_profile_audits").await,
+        audit_first
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM legacy_migration.issues WHERE domain='user_avatars'",
+        )
+        .fetch_one(&target.pool)
+        .await
+        .expect("issue count"),
+        2
+    );
     drop_db(&source.name).await;
     drop_db(&target.name).await;
 }

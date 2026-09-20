@@ -11,6 +11,7 @@ mod baseline;
 mod delta;
 mod freeze;
 mod import;
+mod import_avatars;
 mod import_catalog;
 mod import_contrib;
 mod import_state;

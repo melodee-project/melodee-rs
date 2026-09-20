@@ -24,7 +24,7 @@ use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
 use melodee_auth::{
     NativeAccessClaims, PasswordHashAlgorithm, RefreshTokenDigest, SecretString, issue_access_token,
 };
-use melodee_persistence::{AuthStore, NativeUserImport, SocialLoginLink};
+use melodee_persistence::{AuthStore, NativeUserImport, SettingsStore, SocialLoginLink};
 use melodee_server::native::{
     NativeFuture, NativeState, NativeStreamUrlSigner, PostgresNativeUserStateReader,
     auth::NativeAuthService,
@@ -1380,5 +1380,174 @@ async fn login_rotation_replay_and_logout_match_the_captured_lifecycle() {
     assert_eq!(revoked_status, StatusCode::UNAUTHORIZED);
     assert_eq!(revoked["code"], "refresh_token_replayed");
     assert!(!access.is_empty());
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn mel2_registration_profile_is_self_only_and_setting_controlled() {
+    let db = common::TestDb::create("server_mel2_profile").await;
+    let state = state(&db).await;
+    let settings = SettingsStore::new();
+    let now = OffsetDateTime::now_utc();
+    settings
+        .set(
+            &db.pool,
+            "register.disabled",
+            &serde_json::json!(true),
+            None,
+            now,
+        )
+        .await
+        .expect("disable registration");
+    let (disabled_status, _) = request(
+        state.clone(),
+        "/api/v1/auth/register",
+        serde_json::json!({
+            "userName":"mel2-user", "email":"mel2@example.test", "password":"correct horse"
+        }),
+        None,
+    )
+    .await;
+    assert_eq!(disabled_status, StatusCode::FORBIDDEN);
+
+    settings
+        .set(
+            &db.pool,
+            "register.disabled",
+            &serde_json::json!(false),
+            None,
+            now,
+        )
+        .await
+        .expect("enable registration");
+    settings
+        .set(
+            &db.pool,
+            "register.privateCode",
+            &serde_json::json!("invite-code"),
+            None,
+            now,
+        )
+        .await
+        .expect("set private code");
+    let (missing_code_status, _) = request(
+        state.clone(),
+        "/api/v1/auth/register",
+        serde_json::json!({
+            "userName":"mel2-user", "email":"mel2@example.test", "password":"correct horse"
+        }),
+        None,
+    )
+    .await;
+    assert_eq!(missing_code_status, StatusCode::UNAUTHORIZED);
+    let (registered_status, _) = request(
+        state.clone(),
+        "/api/v1/auth/register",
+        serde_json::json!({
+            "userName":"mel2-user", "email":"mel2@example.test", "password":"correct horse",
+            "registerPrivateCode":"invite-code"
+        }),
+        None,
+    )
+    .await;
+    assert_eq!(registered_status, StatusCode::CREATED);
+
+    let (login_status, login) = request(
+        state.clone(),
+        "/api/v1/auth/authenticate",
+        serde_json::json!({"userName":"mel2-user","password":"correct horse"}),
+        None,
+    )
+    .await;
+    assert_eq!(login_status, StatusCode::OK);
+    let user_token = login["token"].as_str().expect("registered access token");
+    let profile = response_json(
+        raw_authenticated(
+            state.clone(),
+            "GET",
+            "/api/v1/user/me/profile",
+            serde_json::json!({}),
+            user_token,
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(profile["username"], "mel2-user");
+    assert_eq!(profile["timeZoneId"], "UTC");
+    assert_eq!(profile["isAdmin"], false);
+
+    let updated = raw_authenticated(
+        state.clone(),
+        "PATCH",
+        "/api/v1/user/me/profile",
+        serde_json::json!({
+            "username":"mel2-renamed", "email":"mel2-renamed@example.test",
+            "description":"bio", "timeZoneId":"America/Chicago",
+            "preferredLanguage":"en-US", "preferredTheme":"dark"
+        }),
+        user_token,
+    )
+    .await;
+    assert_eq!(updated.status(), StatusCode::OK);
+    let forbidden_role_field = raw_authenticated(
+        state.clone(),
+        "PATCH",
+        "/api/v1/user/me/profile",
+        serde_json::json!({"isAdmin":true}),
+        user_token,
+    )
+    .await;
+    assert_eq!(
+        forbidden_role_field.status(),
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+    let cross_user_attempt = raw_authenticated(
+        state.clone(),
+        "PATCH",
+        "/api/v1/user/me/profile",
+        serde_json::json!({
+            "publicApiId":"f78448cc-82ec-5864-877c-6c6163b00065",
+            "username":"should-not-change-admin"
+        }),
+        user_token,
+    )
+    .await;
+    assert_eq!(
+        cross_user_attempt.status(),
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+    let anonymous = request(
+        state.clone(),
+        "/api/v1/user/me/profile",
+        serde_json::json!({}),
+        None,
+    )
+    .await;
+    assert_eq!(anonymous.0, StatusCode::UNAUTHORIZED);
+    let (admin_login_status, admin_login) = request(
+        state.clone(),
+        "/api/v1/auth/authenticate",
+        serde_json::json!({"userName":"phase0-fixture","password":"Mel0deeR0cks!"}),
+        None,
+    )
+    .await;
+    assert_eq!(admin_login_status, StatusCode::OK);
+    let admin_token = admin_login["token"].as_str().expect("admin access token");
+    let admin_profile = raw_authenticated(
+        state.clone(),
+        "PATCH",
+        "/api/v1/user/me/profile",
+        serde_json::json!({"description":"administrator self-service"}),
+        admin_token,
+    )
+    .await;
+    assert_eq!(admin_profile.status(), StatusCode::OK);
+    let persisted_admin: bool = sqlx::query_scalar(
+        "SELECT is_admin FROM native_users WHERE normalized_username='PHASE0-FIXTURE'",
+    )
+    .fetch_one(&db.pool)
+    .await
+    .expect("admin remains unchanged");
+    assert!(persisted_admin);
     db.drop().await;
 }

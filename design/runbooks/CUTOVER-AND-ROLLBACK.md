@@ -102,6 +102,16 @@ Never start a second run to hide an unresolved issue. Review every durable issue
 unsupported credentials, secret reseal failures, media mismatches, exclusions, and
 unrepresentable fields.
 
+For account cutover, also review the `users` and `user_avatars` domains. Confirm that every
+representable `Description`, `TimeZoneId`, language, and theme value is present in the target;
+resolve every `profile.*` issue; and verify representative `native_user_avatars` rows have
+`image/png` content, decodable normalized bytes, and no legacy filesystem path in identity data.
+Mount the C# User Images directory read-only at the exact source `Libraries.Path` before import.
+The source directory must remain unchanged through the final delta. MeloAmp owns the listener
+account screens after cutover and should exercise registration, disabled-registration, self-profile,
+and avatar journeys against the additive native routes. Do not interpret the absence of a Rust
+Blazor page as a cutover defect.
+
 The media validator is read-only by default and emits path digests, not private paths:
 
 ```bash

@@ -171,6 +171,29 @@ issues with field names, rather than being copied into unrelated catalog fields 
 synthetic play events. Review those issues before cutover; the final 1.0 disposition is governed
 by ADR-0150.
 
+#### Account profiles and User Images avatars
+
+The users importer preserves the C# `Description`, `TimeZoneId`, `PreferredLanguage`, and
+`PreferredTheme` values within their C# storage bounds. A malformed but bounded timezone is
+retained with a `profile.time_zone_invalid` warning; an over-bound value is not truncated and
+becomes an explicit `profile.*_unsupported` issue.
+
+The avatar importer reads the one C# `Libraries` row with `Type = 4` (`UserImages`) from its
+recorded `Path`. The operator must mount that directory read-only at the same path visible to the
+migration process. Only a direct regular file named `<legacy numeric user id padded to eight
+digits>.gif` is eligible. The importer validates ownership, file type, source size, image decoding,
+and normalized output bounds, then stores normalized `image/png` bytes of at most 1 MiB in
+`native_user_avatars`. It reports `avatar.library_*`, `avatar.unsupported_filename`,
+`avatar.unsafe_file`, `avatar.unmapped_owner`, `avatar.source_size_unsupported`, and
+`avatar.image_unsupported` issues as applicable. It never writes, renames, deletes, or uses a
+legacy filesystem path as identity.
+
+The avatar phase is checkpointed as `user_avatars` and compares normalized target bytes before
+writing, so a resumed import does not create duplicate avatar data or audit events. Before cutover,
+review every profile/avatar issue and verify representative target rows and PNG content. The
+importer does not recreate per-user device-profile semantics; those remain the reference-only
+disposition accepted by ADR-0148 and assigned to MEL-5.
+
 ### `legacy verify`
 
 Compares source and target for a run: per-domain counts, exact unmatched samples, public-ID

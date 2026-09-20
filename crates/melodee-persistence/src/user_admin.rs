@@ -173,6 +173,7 @@ impl UserAdminStore {
         if image.is_empty() || image.len() > MAX_AVATAR_BYTES {
             return Err(UserAdminError::InvalidRequest("avatar size"));
         }
+        let mut tx = pool.begin().await?;
         let updated = sqlx::query(
             "INSERT INTO native_user_avatars (user_id, content_type, image, updated_at)
              VALUES ($1,$2,$3,$4)
@@ -183,9 +184,21 @@ impl UserAdminStore {
         .bind(content_type)
         .bind(image)
         .bind(now)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
         debug_assert_eq!(updated.rows_affected(), 1);
+        sqlx::query(
+            "INSERT INTO native_user_profile_audits
+                (id,user_id,actor_user_id,event,changed_fields,created_at)
+             VALUES ($1,$2,$2,'avatar_updated',$3,$4)",
+        )
+        .bind(Uuid::now_v7())
+        .bind(user_id)
+        .bind(vec!["avatar".to_owned()])
+        .bind(now)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
         self.avatar_by_user_id(pool, user_id)
             .await?
             .ok_or(UserAdminError::NotFound)
@@ -197,14 +210,28 @@ impl UserAdminStore {
         pool: &PgPool,
         user_id: Uuid,
     ) -> Result<bool, UserAdminError> {
-        Ok(
-            sqlx::query("DELETE FROM native_user_avatars WHERE user_id=$1")
-                .bind(user_id)
-                .execute(pool)
-                .await?
-                .rows_affected()
-                == 1,
-        )
+        let mut tx = pool.begin().await?;
+        let deleted = sqlx::query("DELETE FROM native_user_avatars WHERE user_id=$1")
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await?
+            .rows_affected()
+            == 1;
+        if deleted {
+            sqlx::query(
+                "INSERT INTO native_user_profile_audits
+                    (id,user_id,actor_user_id,event,changed_fields,created_at)
+                 VALUES ($1,$2,$2,'avatar_deleted',$3,$4)",
+            )
+            .bind(Uuid::now_v7())
+            .bind(user_id)
+            .bind(vec!["avatar".to_owned()])
+            .bind(OffsetDateTime::now_utc())
+            .execute(&mut *tx)
+            .await?;
+        }
+        tx.commit().await?;
+        Ok(deleted)
     }
 
     // ------------------------------------------------------------------
@@ -238,7 +265,8 @@ impl UserAdminStore {
         // carry client-influenced values.
         let rows = sqlx::query_as::<_, UserRow>(sqlx::AssertSqlSafe(format!(
             "SELECT id, public_api_id, username, email, is_admin, is_editor, enabled, locked,
-                    blacklisted, preferred_language, preferred_theme, auth_revision,
+                    blacklisted, description, time_zone_id, preferred_language, preferred_theme,
+                    auth_revision,
                     created_at, updated_at FROM native_users
              WHERE ($1::text IS NULL OR username ILIKE $1 ESCAPE '\\' OR email ILIKE $1 ESCAPE '\\')
              ORDER BY {} LIMIT $2 OFFSET $3",
@@ -490,7 +518,8 @@ async fn load_user_by_public_id(
 ) -> Result<Option<StoredNativeUser>, UserAdminError> {
     let row = sqlx::query_as::<_, UserRow>(
         "SELECT id, public_api_id, username, email, is_admin, is_editor, enabled, locked,
-                blacklisted, preferred_language, preferred_theme, auth_revision,
+                blacklisted, description, time_zone_id, preferred_language, preferred_theme,
+                auth_revision,
                 created_at, updated_at FROM native_users WHERE public_api_id=$1",
     )
     .bind(public_api_id)

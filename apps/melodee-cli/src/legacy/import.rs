@@ -70,6 +70,7 @@ pub async fn import_all(
     }
 
     super::import_users::import_users(source, target, run_id, &owner, batch_size).await?;
+    super::import_avatars::import_user_avatars(source, target, run_id, &owner, batch_size).await?;
     super::import_state4::import_opensubsonic_secrets(
         source,
         target,

@@ -7,6 +7,10 @@ use uuid::Uuid;
 use super::map;
 use super::runs;
 use super::source::SourceDb;
+use melodee_persistence::{
+    MAX_DESCRIPTION_CHARS, MAX_LANGUAGE_CHARS, MAX_THEME_CHARS, MAX_TIME_ZONE_CHARS,
+    valid_time_zone_id,
+};
 
 pub async fn import_users(
     source: &SourceDb,
@@ -25,7 +29,7 @@ pub async fn import_users(
                       "HasPlaylistRole", "HasShareRole", "HasCoverArtRole",
                       "HasCommentRole", "HasPodcastRole", "HasSettingsRole",
                       "HasJukeboxRole",
-                      "PreferredLanguage", "PreferredTheme", "CreatedAt",
+                      "PreferredLanguage", "PreferredTheme", "TimeZoneId", "Description", "CreatedAt",
                       "LastUpdatedAt"
                FROM "Users" WHERE "Id" > $1 ORDER BY "Id" LIMIT $2"#,
         )
@@ -83,6 +87,25 @@ pub async fn import_users(
             };
             let created: OffsetDateTime = row.get("CreatedAt");
             let updated = map::clamp_updated(created, row.get("LastUpdatedAt"));
+            let source_description = row.get::<Option<String>, _>("Description");
+            let description = source_description
+                .as_deref()
+                .filter(|value| value.chars().count() <= MAX_DESCRIPTION_CHARS)
+                .map(str::to_owned);
+            let source_time_zone = row.get::<String, _>("TimeZoneId");
+            let time_zone_id = if source_time_zone.is_empty() {
+                "UTC".to_owned()
+            } else if source_time_zone.chars().count() <= MAX_TIME_ZONE_CHARS {
+                source_time_zone.clone()
+            } else {
+                "UTC".to_owned()
+            };
+            let preferred_language = row
+                .get::<Option<String>, _>("PreferredLanguage")
+                .filter(|value| value.chars().count() <= MAX_LANGUAGE_CHARS);
+            let preferred_theme = row
+                .get::<Option<String>, _>("PreferredTheme")
+                .filter(|value| value.chars().count() <= MAX_THEME_CHARS);
 
             let legacy_hash = row.get::<Option<String>, _>("PasswordHash");
             let legacy_algo = row.get::<Option<String>, _>("PasswordHashAlgorithm");
@@ -107,9 +130,9 @@ pub async fn import_users(
                     id, public_api_id, username, normalized_username, email,
                     normalized_email, password_hash, password_hash_algorithm,
                     stream_signing_key, is_admin, is_editor, enabled, locked,
-                    preferred_language, preferred_theme, auth_revision,
-                    created_at, updated_at
-                 ) VALUES ($1,$2,$3,$4,$5,$6,$7,'bcrypt',$8,$9,$10,true,$11,$12,$13,1,$14,$15)
+                    description, time_zone_id, preferred_language, preferred_theme,
+                    auth_revision, created_at, updated_at
+                 ) VALUES ($1,$2,$3,$4,$5,$6,$7,'bcrypt',$8,$9,$10,true,$11,$12,$13,$14,$15,1,$16,$17)
                  ON CONFLICT (public_api_id) DO NOTHING",
             )
             .bind(target_id)
@@ -125,8 +148,10 @@ pub async fn import_users(
             // editors even when the stored IsEditor bit is false.
             .bind(row.get::<bool, _>("IsEditor") || row.get::<bool, _>("IsAdmin"))
             .bind(row.get::<bool, _>("IsLocked"))
-            .bind(row.get::<Option<String>, _>("PreferredLanguage"))
-            .bind(row.get::<Option<String>, _>("PreferredTheme"))
+            .bind(&description)
+            .bind(&time_zone_id)
+            .bind(&preferred_language)
+            .bind(&preferred_theme)
             .bind(created)
             .bind(updated)
             .execute(&mut *tx)
@@ -163,6 +188,73 @@ pub async fn import_users(
                     &mut tx, run_id, "users", Some(source_pk), "warning",
                     "credential.unsupported",
                     "legacy credential is not portable bcrypt; user must reset password before cutover",
+                    None,
+                )
+                .await?;
+                issues += 1;
+            }
+            if source_description.is_some() && description.is_none() {
+                runs::record_issue(
+                    &mut tx,
+                    run_id,
+                    "users",
+                    Some(source_pk),
+                    "error",
+                    "profile.description_unsupported",
+                    "legacy Description exceeds the C# profile storage bound and was not imported",
+                    None,
+                )
+                .await?;
+                issues += 1;
+            }
+            if source_time_zone.chars().count() > MAX_TIME_ZONE_CHARS {
+                runs::record_issue(
+                    &mut tx,
+                    run_id,
+                    "users",
+                    Some(source_pk),
+                    "error",
+                    "profile.time_zone_unsupported",
+                    "legacy TimeZoneId exceeds the C# profile storage bound; target uses UTC",
+                    None,
+                )
+                .await?;
+                issues += 1;
+            } else if !source_time_zone.is_empty() && !valid_time_zone_id(&source_time_zone) {
+                runs::record_issue(
+                    &mut tx,
+                    run_id,
+                    "users",
+                    Some(source_pk),
+                    "warning",
+                    "profile.time_zone_invalid",
+                    "legacy TimeZoneId was preserved but does not match the safe timezone grammar",
+                    None,
+                )
+                .await?;
+                issues += 1;
+            }
+            if row
+                .get::<Option<String>, _>("PreferredLanguage")
+                .is_some_and(|value| value.chars().count() > MAX_LANGUAGE_CHARS)
+            {
+                runs::record_issue(
+                    &mut tx, run_id, "users", Some(source_pk), "error",
+                    "profile.language_unsupported",
+                    "legacy PreferredLanguage exceeds the C# profile storage bound and was not imported",
+                    None,
+                )
+                .await?;
+                issues += 1;
+            }
+            if row
+                .get::<Option<String>, _>("PreferredTheme")
+                .is_some_and(|value| value.chars().count() > MAX_THEME_CHARS)
+            {
+                runs::record_issue(
+                    &mut tx, run_id, "users", Some(source_pk), "error",
+                    "profile.theme_unsupported",
+                    "legacy PreferredTheme exceeds the C# profile storage bound and was not imported",
                     None,
                 )
                 .await?;

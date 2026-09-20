@@ -35,8 +35,8 @@ obligations that must be closed before cutover: **59 rows** total.
 
 | Disposition | Count |
 |---|---:|
-| PARITY | 39 |
-| PARTIAL | 5 |
+| PARITY | 40 |
+| PARTIAL | 4 |
 | MISSING | 1 |
 | APPROVED DIFFERENCE | 5 |
 | UNVERIFIED | 9 |
@@ -97,7 +97,7 @@ project.
 | Podcasts | pages/jobs/library | worker, native/OS/JF APIs | UNVERIFIED | no candidate real-feed/retry/retention acceptance | MEL-11 |
 | Admin users/roles | user pages/services | admin/native/OS management | PARITY | API/UI/compatibility tests | — |
 | Groups/ACL | groups/pages/library bindings | membership and predicate store | PARITY | integration tests | — |
-| Account profile/avatar | `/account/profile`, User Images library | avatar API; read-only `/user/me` | PARTIAL | no self-register/edit, bio/time-zone, or avatar-file import | MEL-2 |
+| Account profile/avatar | `/account/profile`, User Images library | additive native self-service profile routes; avatar API; read-only frozen `/user/me`; read-only User Images import | PARITY | ADR-0178; migration/cutover evidence | — |
 | Per-user device profiles | profile tab/service | global admin metadata only | PARTIAL | ADR-0148 records every source row reference-only | MEL-5 |
 | Party Mode | `/party`, SignalR hub | frozen native absence | APPROVED DIFFERENCE | ADR-0133/ADR-0141 | — |
 | Jukebox | `/jukebox` | OS 410 | APPROVED DIFFERENCE | ADR-0133/ADR-0140 | — |
@@ -224,19 +224,23 @@ below were then created. No existing item was changed and no item was marked In 
 - **Legacy behavior:** `/account/register` calls `UserProfileService.RegisterAsync`; `/account/profile`
   edits username, email, `Description`, `TimeZoneId`, language/theme, avatar, and device tab data.
   Avatars live in `LibraryType.UserImages` via `ToAvatarFileName`.
-- **Current Rust state:** `native/auth.rs` exposes authentication and read-only `/api/v1/user/me`;
-  `native/avatars.rs` supports current uploads. `legacy/import_users.rs` imports language/theme
-  but not bio/time zone and never reads avatar files.
-- **Gap / required behavior:** add an authorized, configuration-controlled self-service surface and
-  explicit migration/cutover handling for every representable C# account field/avatar, or obtain
-  an Accepted ADR for an intentional field retirement before cutover.
+- **Current Rust state:** `native/auth.rs` retains the frozen `/api/v1/user/me` contract;
+  `native/profile.rs` supplies additive registration and self-only profile mutation routes;
+  `native/avatars.rs` handles current uploads; and `legacy/import_users.rs` plus
+  `legacy/import_avatars.rs` preserve bounded profile values and User Images files.
+- **Disposition:** complete under ADR-0178. The target stores representable `Description`,
+  `TimeZoneId`, language/theme, and normalized PNG avatar bytes, records value-free audit events,
+  and reports unsafe or unmappable migration inputs. MeloAmp owns the listener account UI; browser
+  password-reset completion remains MEL-3 and per-user device-profile semantics remain MEL-5.
 - **Acceptance criteria:** normal and disabled registration paths; self-only authorization; profile
   validation/audit/restart behavior; migrated image-byte/content-type verification; explicit
   reports for non-representable fields; native/OS/JF compatibility unchanged; Admin UI/MeloAmp and
   public docs updated; unit, PostgreSQL integration, and migration fixture tests pass.
 - **Compatibility impact:** Native API, OpenSubsonic avatar behavior, Admin UI, MeloAmp, migration.
-- **Evidence required:** C# fixture with profile data/avatar migrated and exercised after restart;
-  route/API authorization tests; a documented cutover report.
+- **Evidence:** [MEL-2 account/profile evidence](MEL-2-ACCOUNT-PROFILE-EVIDENCE.md),
+  `crates/melodee-persistence/tests/user_profile_mel2.rs`,
+  `apps/melodee-server/tests/native_auth_api.rs`, and the C# User Images fixture in
+  `apps/melodee-cli/tests/legacy.rs`.
 - **Out of scope:** recreating the legacy Blazor listener SPA or silently granting admin rights.
 
 ### Child MEL-3: provide browser password-reset completion

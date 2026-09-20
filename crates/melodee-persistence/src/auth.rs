@@ -45,6 +45,8 @@ pub struct StoredNativeUser {
     pub enabled: bool,
     pub locked: bool,
     pub blacklisted: bool,
+    pub description: Option<String>,
+    pub time_zone_id: String,
     pub preferred_language: Option<String>,
     pub preferred_theme: Option<String>,
     pub auth_revision: i64,
@@ -273,6 +275,8 @@ pub(crate) struct UserRow {
     enabled: bool,
     locked: bool,
     blacklisted: bool,
+    description: Option<String>,
+    time_zone_id: String,
     preferred_language: Option<String>,
     preferred_theme: Option<String>,
     auth_revision: i64,
@@ -291,6 +295,8 @@ struct AuthenticationRow {
     enabled: bool,
     locked: bool,
     blacklisted: bool,
+    description: Option<String>,
+    time_zone_id: String,
     preferred_language: Option<String>,
     preferred_theme: Option<String>,
     auth_revision: i64,
@@ -406,7 +412,8 @@ impl AuthStore {
             AuthLookup::Username(value) => {
                 sqlx::query_as::<_, AuthenticationRow>(
                     "SELECT id, public_api_id, username, email, is_admin, is_editor, enabled, locked, blacklisted,
-                        preferred_language, preferred_theme, auth_revision, created_at, updated_at,
+                        description, time_zone_id, preferred_language, preferred_theme,
+                        auth_revision, created_at, updated_at,
                         password_hash, password_hash_algorithm
                  FROM native_users WHERE normalized_username = $1",
                 )
@@ -417,7 +424,8 @@ impl AuthStore {
             AuthLookup::Email(value) => {
                 sqlx::query_as::<_, AuthenticationRow>(
                     "SELECT id, public_api_id, username, email, is_admin, is_editor, enabled, locked, blacklisted,
-                        preferred_language, preferred_theme, auth_revision, created_at, updated_at,
+                        description, time_zone_id, preferred_language, preferred_theme,
+                        auth_revision, created_at, updated_at,
                         password_hash, password_hash_algorithm
                  FROM native_users WHERE normalized_email = $1",
                 )
@@ -529,7 +537,8 @@ impl AuthStore {
     ) -> Result<Option<StoredNativeUser>, AuthStoreError> {
         let row = sqlx::query_as::<_, UserRow>(
             "SELECT id, public_api_id, username, email, is_admin, is_editor, enabled, locked, blacklisted,
-                    preferred_language, preferred_theme, auth_revision, created_at, updated_at
+                    description, time_zone_id, preferred_language, preferred_theme,
+                    auth_revision, created_at, updated_at
              FROM native_users WHERE public_api_id = $1",
         )
         .bind(public_api_id)
@@ -552,7 +561,8 @@ impl AuthStore {
     ) -> Result<Option<StoredNativeUser>, AuthStoreError> {
         let row = sqlx::query_as::<_, UserRow>(
             "SELECT id, public_api_id, username, email, is_admin, is_editor, enabled, locked,
-                    blacklisted, preferred_language, preferred_theme, auth_revision,
+                    blacklisted, description, time_zone_id, preferred_language, preferred_theme,
+                    auth_revision,
                     created_at, updated_at FROM native_users WHERE id=$1",
         )
         .bind(user_id)
@@ -1333,6 +1343,8 @@ pub(crate) fn stored_user_from_row(row: UserRow, roles: Vec<String>) -> StoredNa
         enabled: row.enabled,
         locked: row.locked,
         blacklisted: row.blacklisted,
+        description: row.description,
+        time_zone_id: row.time_zone_id,
         preferred_language: row.preferred_language,
         preferred_theme: row.preferred_theme,
         auth_revision: row.auth_revision,
@@ -1359,6 +1371,8 @@ fn authentication_from_row(
             enabled: row.enabled,
             locked: row.locked,
             blacklisted: row.blacklisted,
+            description: row.description,
+            time_zone_id: row.time_zone_id,
             preferred_language: row.preferred_language,
             preferred_theme: row.preferred_theme,
             auth_revision: row.auth_revision,

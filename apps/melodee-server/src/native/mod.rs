@@ -12,6 +12,7 @@ pub mod images;
 pub mod playlists;
 pub mod podcasts;
 pub mod preferences;
+pub mod profile;
 pub mod stream;
 
 use std::{future::Future, pin::Pin, sync::Arc};
@@ -507,6 +508,7 @@ pub fn router() -> Router<NativeState> {
         .merge(preferences::router())
         .merge(podcasts::router())
         .merge(auth::protected_router())
+        .merge(profile::protected_router())
         .merge(avatars::router())
         .merge(discovery::cookie_protected_router())
         .merge(auth::cookie_protected_router())
@@ -517,6 +519,7 @@ pub fn router() -> Router<NativeState> {
         .merge(excluded_router())
         .merge(community::public_router())
         .merge(auth::public_router())
+        .merge(profile::public_router())
         .merge(images::router())
         .merge(protected)
         .merge(stream::router())
@@ -535,6 +538,7 @@ pub fn configured_router(state: NativeState) -> Router {
         .merge(preferences::router())
         .merge(podcasts::router())
         .merge(auth::protected_router())
+        .merge(profile::protected_router())
         .merge(avatars::router())
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
@@ -552,6 +556,7 @@ pub fn configured_router(state: NativeState) -> Router {
         .merge(excluded_router())
         .merge(community::public_router())
         .merge(auth::public_router())
+        .merge(profile::public_router())
         .merge(images::router())
         .merge(protected)
         .merge(cookie_protected)

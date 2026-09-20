@@ -47,6 +47,29 @@ linked only after its ID token passes the configured issuer, audience, lifetime,
 and optional hosted-domain checks. A provider subject is owned by at most one user and is never
 exposed in API responses or logs.
 
+## Account self-service
+
+MeloAmp owns the listener-facing account screens. It uses the additive native account routes; the
+Rust server does not recreate the legacy Blazor listener SPA:
+
+```http
+POST /api/v1/auth/register
+GET /api/v1/user/me/profile
+PATCH /api/v1/user/me/profile
+```
+
+Registration is enabled by default and is controlled by the `register.disabled` setting. When
+`register.privateCode` has a value, registration also requires that access code. The first
+successful registration is bootstrapped as the administrator; later registrations cannot assign
+roles or administrator authority. Browser password-reset completion remains a separate security
+surface.
+
+The profile route can update only the authenticated user's username, email, description/bio,
+timezone, preferred language, and preferred theme. Values are bounded and validated, including
+safe timezone identifier syntax. Role, account-state, public-ID, and password fields are not
+accepted by the profile request. Each actual change creates a value-free audit event in the same
+PostgreSQL transaction.
+
 ## Avatars
 
 Users manage their own avatar through the native API:
@@ -63,6 +86,12 @@ limits, downscaled to at most 1024 pixels per edge, and re-encoded to at most 1 
 `GET` returns the stored bytes with their content type and an ETag, and `DELETE` removes the avatar
 (`404` when none is stored). OpenSubsonic clients read the same image through `getAvatar`, and the
 `getUser` `avatarLastChanged` field reflects the time of the last avatar change.
+
+During legacy migration, the importer reads the configured C# User Images library read-only and
+accepts only direct regular files named `<legacy-user-id padded to 8>.gif`. Accepted images are
+decoded and normalized to bounded PNG bytes before storage. Unsafe, unsupported, unmapped, or
+unreadable files become migration issues; the source path is never used as identity or copied into
+the Rust database.
 
 ## Operator CLI
 

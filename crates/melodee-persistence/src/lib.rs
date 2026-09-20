@@ -32,6 +32,7 @@ mod scripts;
 mod search;
 mod settings;
 mod user_admin;
+mod user_profile;
 mod work_items;
 mod worker;
 mod worker_pool;
@@ -172,6 +173,11 @@ pub use settings::{
 pub use user_admin::{
     MAX_AVATAR_BYTES, MAX_USER_IDENTITY_CHARS, MAX_USER_ROLES, NativeUserAdminUpdate,
     NativeUserCreate, StoredAvatar, UserAdminError, UserAdminStore, UserListPage, UserSort,
+};
+pub use user_profile::{
+    MAX_DESCRIPTION_CHARS, MAX_EMAIL_CHARS, MAX_LANGUAGE_CHARS, MAX_THEME_CHARS,
+    MAX_TIME_ZONE_CHARS, MAX_USERNAME_CHARS, MIN_PASSWORD_CHARS, ProfileUpdate,
+    RegistrationRequest, UserProfileError, UserProfileStore, valid_time_zone_id,
 };
 pub use work_items::{
     ActiveLease, HourlyCompletionCount, PublicationJournalEntry, SettlingSnapshot,

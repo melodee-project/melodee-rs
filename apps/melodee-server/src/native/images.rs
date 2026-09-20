@@ -167,7 +167,7 @@ struct ImageAdmission {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ImageUploadValidationError {
+pub enum ImageUploadValidationError {
     Invalid,
     Busy,
 }
@@ -306,6 +306,14 @@ pub(super) async fn normalize_avatar_image(
     })
     .await
     .map_err(|_| ImageUploadValidationError::Invalid)?
+}
+
+/// Normalizes a legacy User Images avatar through the same bounded pipeline
+/// as native uploads, with PNG as the durable migration representation.
+pub async fn normalize_legacy_avatar_image(
+    input: Vec<u8>,
+) -> Result<Vec<u8>, ImageUploadValidationError> {
+    normalize_avatar_image(input, ImageFormat::Png).await
 }
 
 fn decode_image(input: &[u8]) -> Result<image::DynamicImage, ImageProcessingError> {
