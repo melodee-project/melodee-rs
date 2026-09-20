@@ -23,11 +23,10 @@ program's exact vocabulary.  `UNVERIFIED` is not a claim that a feature is
 absent: it means the implementation is present but the listed evidence is not
 enough to authorize retirement of the C# application.
 
-The requested Hamstik project **Melodee RS** was not present in the configured
-`sph` organization (active or archived) at reconciliation time.  The similarly
-named `MEL` project was not used.  Consequently the tracker column is an
-intentional blocker rather than an invented key; the dated reconciliation
-report contains ready-to-create child specifications.
+The confirmed Hamstik project is **`MEL` / `Melodee`** in the configured `sph`
+organization. The project was empty when reconciled, so Backlog epic `MEL-1`
+and its evidence-backed child items were created without duplicating or changing
+existing work. The tracker column links every incomplete row to its child.
 
 | Capability | Reconciliation disposition | Current evidence and concrete remaining boundary | Hamstik |
 |---|---|---|---|
@@ -37,7 +36,7 @@ report contains ready-to-create child specifications.
 | Staging/manual review | PARITY | Rust durable `NeedsReview`/`Quarantined` staged source, audited review actions, CLI/Admin UI, restart tests. | — |
 | Media conversion/normalization | PARITY | Rust normalization/publication and real-media tests replace the legacy converter. | — |
 | Artwork management | PARITY | C# artwork paths; Rust publication artwork plus audited Admin UI overrides and compatibility image precedence. | — |
-| Metadata editing and safe transforms | UNVERIFIED | `admin_metadata.rs` is routed, has bounded preview/apply/revert and decoded-audio verification; media unit tests and mocked Admin UI E2E exist. A PostgreSQL-backed, canonical-file end-to-end apply/restart/revert proof is not present. | BLOCKED: no Melodee RS project |
+| Metadata editing and safe transforms | UNVERIFIED | `admin_metadata.rs` is routed, has bounded preview/apply/revert and decoded-audio verification; media unit tests and mocked Admin UI E2E exist. A PostgreSQL-backed, canonical-file end-to-end apply/restart/revert proof is not present. | MEL-8 |
 | Production storage/catalog indexing | PARITY | Immutable canonical publication, PostgreSQL authority, outbox, and rebuildable search are wired/tested. Migration qualification remains a separate gate. | — |
 | Artist browsing/editing/merge | PARITY | C# artist workflows; Rust catalog mutations, Admin API/UI, and merge/split integrity tests. | — |
 | Listener web application ownership | APPROVED DIFFERENCE | ADR-0161 relocates browsing, playback, playlists, ratings, and recommendations to MeloAmp; `/admin` remains server-owned. | — |
@@ -50,8 +49,8 @@ report contains ready-to-create child specifications.
 | Smart/dynamic playlists | PARITY | Rust bounded MQL CRUD/evaluation replaces the C# workflow. | — |
 | Play queue persistence | APPROVED DIFFERENCE | ADR-0123 preserves the frozen native v1 absence while OpenSubsonic/Jellyfin queue support remains available. | — |
 | Scrobbling/now-playing | PARITY | Rust native/OpenSubsonic/Jellyfin paths and differential evidence replace C# cache behavior. | — |
-| Last.fm linking/scrobbling | UNVERIFIED | The sealed-link store and mocked protocol/error tests are wired, but current-C# configured-state and real-account/rate-limit acceptance are absent. | BLOCKED: no Melodee RS project |
-| External metadata providers | UNVERIFIED | Runtime descriptors, cache, enrichment worker, parser fixtures, and rate-limit tests exist; representative real credentials, quotas, and C# comparison remain unrun. | BLOCKED: no Melodee RS project |
+| Last.fm linking/scrobbling | UNVERIFIED | The sealed-link store and mocked protocol/error tests are wired, but current-C# configured-state and real-account/rate-limit acceptance are absent. | MEL-9 |
+| External metadata providers | UNVERIFIED | Runtime descriptors, cache, enrichment worker, parser fixtures, and rate-limit tests exist; representative real credentials, quotas, and C# comparison remain unrun. | MEL-10 |
 | Charts | PARITY | Rust chart import/refresh replaces C# charts. Historical chart aggregates/images are regenerable under ADR-0148. | — |
 | Recommendations | PARITY | Rust materialized recommendation paths and tests replace C# behavior. | — |
 | Listening analytics/statistics | PARITY | Rust indexed facts and user-stat APIs replace C# aggregates. | — |
@@ -60,36 +59,36 @@ report contains ready-to-create child specifications.
 | Internet radio | PARITY | Rust OpenSubsonic/Admin API store and tests replace C# radio management. | — |
 | Public/private shares | APPROVED DIFFERENCE | ADR-0129 intentionally keeps `/share/{token}` as the secure bounded JSON compatibility representation, not the legacy HTML player. | — |
 | User requests/comments/activity | PARITY | Rust native/API state and admin relocation cover C# request workflows. | — |
-| Podcasts/subscriptions/downloads/resume/history | UNVERIFIED | Worker, API, OPML, recovery, and fixture feed tests are wired; real-feed/retry/retention acceptance at the candidate deployment is absent. Host-specific downloaded paths requeue per ADR-0148. | BLOCKED: no Melodee RS project |
+| Podcasts/subscriptions/downloads/resume/history | UNVERIFIED | Worker, API, OPML, recovery, and fixture feed tests are wired; real-feed/retry/retention acceptance at the candidate deployment is absent. Host-specific downloaded paths requeue per ADR-0148. | MEL-11 |
 | Users/roles | PARITY | Rust native/OpenSubsonic/admin user and role management is wired/tested. Self-service account/profile is assessed separately. | — |
 | User groups/library ACL | PARITY | Rust ACL predicates, membership CRUD, Admin UI and tests replace current C# behavior. | — |
-| User avatars/profile/settings | PARTIAL | C# self-service profile edits username/email/bio/time zone/language/theme and stores avatars in the User Images library. Rust exposes avatar mutation and read-only `/user/me`, but lacks self-registration/profile mutation, has no bio/time-zone representation, and its legacy importer does not enumerate avatar files. | BLOCKED: no Melodee RS project |
-| Device profiles | PARTIAL | C# per-user profile CRUD/default/priority is reachable from `/account/profile`. Rust has global admin metadata only; importer deliberately emits `device_profile.reference_only` issues (ADR-0148). | BLOCKED: no Melodee RS project |
+| User avatars/profile/settings | PARTIAL | C# self-service profile edits username/email/bio/time zone/language/theme and stores avatars in the User Images library. Rust exposes avatar mutation and read-only `/user/me`, but lacks self-registration/profile mutation, has no bio/time-zone representation, and its legacy importer does not enumerate avatar files. | MEL-2 |
+| Device profiles | PARTIAL | C# per-user profile CRUD/default/priority is reachable from `/account/profile`. Rust has global admin metadata only; importer deliberately emits `device_profile.reference_only` issues (ADR-0148). | MEL-5 |
 | Party Mode | APPROVED DIFFERENCE | ADR-0133/ADR-0141 retire the unreachable frozen native surface and C# party routes. | — |
 | Jukebox/server playback | APPROVED DIFFERENCE | ADR-0133/ADR-0140 retire the C# page; frozen OpenSubsonic `410` behavior remains. | — |
 | Playback backend management | PARITY | Rust endpoint/backend API and tests replace exposed C# management behavior. | — |
 | JavaScript event scripting hooks | PARITY | Rust's bounded sandbox preserves the live hook and records inert legacy registrations with an explicit migration path. | — |
 | Config import/export | PARITY | Rust settings resolution, redacted export, preview import, API and CLI are wired/tested. | — |
-| Email/notification templates | PARTIAL | Rust DB-backed notification templates/delivery are implemented. C# actively loads operator-authored reset templates from the Templates library; no legacy filesystem template importer or approved retirement exists. | BLOCKED: no Melodee RS project |
+| Email/notification templates | PARTIAL | Rust DB-backed notification templates/delivery are implemented. C# actively loads operator-authored reset templates from the Templates library; no legacy filesystem template importer or approved retirement exists. | MEL-6 |
 | API documentation/explorer | PARITY | Current docs cover shipped APIs; explorer is explicitly not required for C# capability replacement. | — |
 | Admin diagnostics/Doctor | PARITY | Rust health/readiness/doctor/system UI and tests replace C# diagnostics. | — |
 | Scheduled maintenance | PARITY | Rust reconciliation/policy/podcast/discovery scheduling is wired and tested; non-equivalent jobs are documented. | — |
 | Job history/manual trigger/pause/resume | PARITY | Durable history, worker controls, CLI and Admin UI are wired/tested. | — |
-| Themes/custom theme packs | PARTIAL | Rust database-owned theme import/export and Admin UI are implemented. C# Theme library packs are operator-owned filesystem data; legacy import has no theme-library inventory/import or approved regeneration/retirement. | BLOCKED: no Melodee RS project |
+| Themes/custom theme packs | PARTIAL | Rust database-owned theme import/export and Admin UI are implemented. C# Theme library packs are operator-owned filesystem data; legacy import has no theme-library inventory/import or approved regeneration/retirement. | MEL-7 |
 | Light/dark/system appearance | PARITY | Rust Admin UI theme provider has persistence and visual coverage. | — |
 | Localization | PARITY | Rust Admin UI locale stack, source harvest, and tests are implemented. | — |
 | RTL supported cultures | PARITY | Rust Admin UI RTL derivation and visual coverage are implemented. | — |
 | OpenSubsonic API | PARITY | Route evidence, differential captures, and client smoke cover the declared current subset. | — |
 | Melodee API v1 | PARITY | Route matrix, captures, compatibility tests, and client acceptance cover the frozen native surface. | — |
 | Jellyfin music compatibility | PARITY | Route evidence and differential/client tests cover the declared music subset. | — |
-| Container images amd64/arm64 | UNVERIFIED | Dockerfile/workflow/local amd64 smoke exist; no exact-current-SHA multi-arch artifact, SBOM/scan/attestation, or arm64 execution proof exists. | BLOCKED: no Melodee RS project |
+| Container images amd64/arm64 | UNVERIFIED | Dockerfile/workflow/local amd64 smoke exist; no exact-current-SHA multi-arch artifact, SBOM/scan/attestation, or arm64 execution proof exists. | MEL-12 |
 | CLI administrative operations | PARITY | Rust CLI command families, tests, and operator-facing diagnostics replace C# administrative actions. | — |
-| Browser password-reset completion | PARTIAL | C# exposes anonymous `/account/forgot-password` and `/account/reset-password`. Rust API reset request/validate/confirm is wired, but the generated `{publicOrigin}/reset-password?token=…` URL has no Rust browser handler. | BLOCKED: no Melodee RS project |
-| Legacy custom content blocks | MISSING | C# `FileCustomBlockService` renders active Templates-library Markdown blocks on dashboard/login/register/recovery pages. Rust has no custom-block store, render path, migration, or accepted retirement. | BLOCKED: no Melodee RS project |
-| Authorized legacy migration/data-preservation rehearsal | UNVERIFIED | CLI importer and synthetic tests exist, but no operator-authorized production/private snapshot and filesystem-library rehearsal proves public IDs, media, user assets, templates, and theme packs survive. | BLOCKED: no Melodee RS project |
-| Cutover and rollback rehearsal | UNVERIFIED | Freeze/rollback tooling and synthetic drill exist; production backup/restore, traffic rollback, and restored legacy-authority proof are external and unexecuted. | BLOCKED: no Melodee RS project |
-| Current-candidate C# differential qualification | UNVERIFIED | Golden/capture tooling exists, but no complete current candidate vs this C# SHA replay and classified residual report exists. | BLOCKED: no Melodee RS project |
-| Scale and fault acceptance at replacement target | UNVERIFIED | Unit/integration load and fault suites exist; documented production-scale/performance budget acceptance is not recorded. | BLOCKED: no Melodee RS project |
+| Browser password-reset completion | PARTIAL | C# exposes anonymous `/account/forgot-password` and `/account/reset-password`. Rust API reset request/validate/confirm is wired, but the generated `{publicOrigin}/reset-password?token=…` URL has no Rust browser handler. | MEL-3 |
+| Legacy custom content blocks | MISSING | C# `FileCustomBlockService` renders active Templates-library Markdown blocks on dashboard/login/register/recovery pages. Rust has no custom-block store, render path, migration, or accepted retirement. | MEL-4 |
+| Authorized legacy migration/data-preservation rehearsal | UNVERIFIED | CLI importer and synthetic tests exist, but no operator-authorized production/private snapshot and filesystem-library rehearsal proves public IDs, media, user assets, templates, and theme packs survive. | MEL-13 |
+| Cutover and rollback rehearsal | UNVERIFIED | Freeze/rollback tooling and synthetic drill exist; production backup/restore, traffic rollback, and restored legacy-authority proof are external and unexecuted. | MEL-14 |
+| Current-candidate C# differential qualification | UNVERIFIED | Golden/capture tooling exists, but no complete current candidate vs this C# SHA replay and classified residual report exists. | MEL-15 |
+| Scale and fault acceptance at replacement target | UNVERIFIED | Unit/integration load and fault suites exist; documented production-scale/performance budget acceptance is not recorded. | MEL-16 |
 
 ## Current catalog and identity reconciliation and closeout (2026-08-25)
 

@@ -9,10 +9,9 @@
   reference (`d91342e5`) and is the frozen compatibility-oracle commit used by this
   repository. This reconciliation deliberately evaluates the checked-out C# source,
   not the older remote reference.
-- **Hamstik organization:** `sph`
-- **Requested Hamstik project:** `Melodee RS` — **not found** in either active or
-  archived projects. The organization has a different project, `MEL` / `Melodee`;
-  it was not used. Its work-item list was empty, but it is not a substitute target.
+- **Hamstik organization/project:** `sph` / `MEL` (`Melodee`)
+- **Parity-closure epic:** `MEL-1` — *Complete remaining C# feature parity for Rust
+  replacement* (Backlog)
 
 `IMPLEMENTATION.md`, requested as governing material, is not present in this checkout.
 The audit used `AGENTS.md`, `PRD.md`, `SPEC.md`, the definition of done, the
@@ -60,9 +59,9 @@ reconcile obsolete default review rule`.
 
 ## Capability reconciliation
 
-`—` in the Hamstik column means no backlog work is appropriate. `BLOCKED` is not a
-work-item key: creating the requested epic or any child was impossible without an
-actual **Melodee RS** project, and no identifier has been invented.
+`—` in the Hamstik column means no backlog work is appropriate. Every incomplete
+row maps to a child of Backlog epic `MEL-1` in the confirmed `MEL` / `Melodee`
+project.
 
 | Capability | Legacy evidence | Rust implementation and wiring | Disposition | Concrete gap / proof boundary | Hamstik |
 |---|---|---|---|---|---|
@@ -72,7 +71,7 @@ actual **Melodee RS** project, and no identifier has been invented.
 | Staging/review | C# staging jobs/pages | review state/history, CLI, Admin UI | PARITY | durable review tests | — |
 | Media normalization | converter services | media + ingestion crates | PARITY | real-media tests | — |
 | Artwork | C# artwork/file paths | catalog image overrides/publication | PARITY | API/compatibility tests | — |
-| Metadata transforms | `MediaEditService` | routed `admin_metadata.rs`, `TagRewrite`, panel | UNVERIFIED | no DB-backed canonical-file apply/restart/revert proof | BLOCKED |
+| Metadata transforms | `MediaEditService` | routed `admin_metadata.rs`, `TagRewrite`, panel | UNVERIFIED | no DB-backed canonical-file apply/restart/revert proof | MEL-8 |
 | Storage/indexing | C# media/storage coupling | immutable publication, Postgres/outbox/Tantivy | PARITY | direct integration evidence | — |
 | Artists | artist pages/service | catalog APIs/Admin UI merge/split | PARITY | transaction tests | — |
 | Listener UI | Blazor listener pages | MeloAmp native client | APPROVED DIFFERENCE | ADR-0161 relocation | — |
@@ -85,8 +84,8 @@ actual **Melodee RS** project, and no identifier has been invented.
 | Smart playlists | C# smart-playlist service | bounded MQL CRUD/evaluation | PARITY | runtime tests | — |
 | Native play queue | frozen controller absence | frozen 404; OS/JF queues | APPROVED DIFFERENCE | ADR-0123 | — |
 | Scrobbling | native/OS scrobble paths | transactional Rust paths | PARITY | differential tests | — |
-| Last.fm | link/session/scrobble service | `lastfm.rs`, sealed links, dispatch | UNVERIFIED | no real account/configured-state acceptance | BLOCKED |
-| Metadata providers | nine provider services | descriptors/cache/enrichment worker | UNVERIFIED | no real credentials/quota/current-C# evidence | BLOCKED |
+| Last.fm | link/session/scrobble service | `lastfm.rs`, sealed links, dispatch | UNVERIFIED | no real account/configured-state acceptance | MEL-9 |
+| Metadata providers | nine provider services | descriptors/cache/enrichment worker | UNVERIFIED | no real credentials/quota/current-C# evidence | MEL-10 |
 | Charts | chart pages/jobs/files | chart store/import/refresh | PARITY | generated aggregates accepted by ADR-0148 | — |
 | Recommendations | C# discovery | materialized candidates | PARITY | route/store tests | — |
 | Analytics | stats/activity pages | listening facts and stats | PARITY | API/store tests | — |
@@ -95,35 +94,35 @@ actual **Melodee RS** project, and no identifier has been invented.
 | Radio | stations page/service | Admin/OS store | PARITY | API/store tests | — |
 | Shares | anonymous `/share/{id}` player | secure bounded JSON resolver | APPROVED DIFFERENCE | ADR-0129 deliberately rejects HTML player | — |
 | Requests/comments | request pages/services | native/community state | PARITY | API/store tests | — |
-| Podcasts | pages/jobs/library | worker, native/OS/JF APIs | UNVERIFIED | no candidate real-feed/retry/retention acceptance | BLOCKED |
+| Podcasts | pages/jobs/library | worker, native/OS/JF APIs | UNVERIFIED | no candidate real-feed/retry/retention acceptance | MEL-11 |
 | Admin users/roles | user pages/services | admin/native/OS management | PARITY | API/UI/compatibility tests | — |
 | Groups/ACL | groups/pages/library bindings | membership and predicate store | PARITY | integration tests | — |
-| Account profile/avatar | `/account/profile`, User Images library | avatar API; read-only `/user/me` | PARTIAL | no self-register/edit, bio/time-zone, or avatar-file import | BLOCKED |
-| Per-user device profiles | profile tab/service | global admin metadata only | PARTIAL | ADR-0148 records every source row reference-only | BLOCKED |
+| Account profile/avatar | `/account/profile`, User Images library | avatar API; read-only `/user/me` | PARTIAL | no self-register/edit, bio/time-zone, or avatar-file import | MEL-2 |
+| Per-user device profiles | profile tab/service | global admin metadata only | PARTIAL | ADR-0148 records every source row reference-only | MEL-5 |
 | Party Mode | `/party`, SignalR hub | frozen native absence | APPROVED DIFFERENCE | ADR-0133/ADR-0141 | — |
 | Jukebox | `/jukebox` | OS 410 | APPROVED DIFFERENCE | ADR-0133/ADR-0140 | — |
 | Playback backend | legacy backend management | endpoint/backend routes | PARITY | API tests | — |
 | Script hooks | C# scripting/events | bounded Boa sandbox | PARITY | live/inert mapping documented/tested | — |
 | Config import/export | settings/onboarding import | preview import, redacted export, API/CLI | PARITY | tests | — |
-| Notification templates | `EmailTemplateService` Templates library | DB templates/SMTP/admin/CLI | PARTIAL | custom library bodies have no importer/disposition | BLOCKED |
+| Notification templates | `EmailTemplateService` Templates library | DB templates/SMTP/admin/CLI | PARTIAL | custom library bodies have no importer/disposition | MEL-6 |
 | API docs | legacy OpenAPI | docs site/API reference | PARITY | docs validation | — |
 | Diagnostics | Doctor page/service | health, doctor, system UI | PARITY | API/UI tests | — |
 | Maintenance jobs | Quartz jobs | periodic workers | PARITY | scheduler/worker tests | — |
 | Job controls/history | admin jobs page | durable controls/history | PARITY | API/UI tests | — |
-| Custom themes | Theme library/service | DB pack import/export/Admin UI | PARTIAL | no C# theme-files inventory/import/disposition | BLOCKED |
+| Custom themes | Theme library/service | DB pack import/export/Admin UI | PARTIAL | no C# theme-files inventory/import/disposition | MEL-7 |
 | Appearance | C# themes | Admin UI provider | PARITY | visual tests | — |
 | Localization/RTL | C# resources | i18next/RTL Admin UI | PARITY | UI tests | — |
 | OpenSubsonic | controllers/contracts | independent adapter | PARITY | route evidence + differential | — |
 | Native API v1 | controllers/contracts | independent native adapter | PARITY | route matrix + differential | — |
 | Jellyfin | controller subset | independent Jellyfin adapter | PARITY | route evidence + differential | — |
-| OCI artifacts | deployment image | Dockerfile/release workflow | UNVERIFIED | no exact-SHA multiarch, scan, SBOM, attestation, arm64 run | BLOCKED |
+| OCI artifacts | deployment image | Dockerfile/release workflow | UNVERIFIED | no exact-SHA multiarch, scan, SBOM, attestation, arm64 run | MEL-12 |
 | CLI administration | C# admin operations | Rust CLI | PARITY | command/integration tests | — |
-| Browser reset completion | anonymous C# account pages | reset API only | PARTIAL | reset URL targets an unserved Rust HTML path | BLOCKED |
-| Custom content blocks | `FileCustomBlockService` and Templates library | no Rust search hit/store/render/migration | MISSING | no approved retirement | BLOCKED |
-| Migration rehearsal | production C# state/media | CLI importer + synthetic drill | UNVERIFIED | no authorized private snapshot/filesystem rehearsal | BLOCKED |
-| Cutover/rollback | legacy authority switch | freeze/rollback tooling | UNVERIFIED | no production backup/restore/traffic rollback drill | BLOCKED |
-| Candidate differential | current C# behaviors | capture/compare harness | UNVERIFIED | no complete replay/report for the two SHAs above | BLOCKED |
-| Scale/fault acceptance | production-scale C# replacement | load/fault suites | UNVERIFIED | no documented target-scale budget acceptance | BLOCKED |
+| Browser reset completion | anonymous C# account pages | reset API only | PARTIAL | reset URL targets an unserved Rust HTML path | MEL-3 |
+| Custom content blocks | `FileCustomBlockService` and Templates library | no Rust search hit/store/render/migration | MISSING | no approved retirement | MEL-4 |
+| Migration rehearsal | production C# state/media | CLI importer + synthetic drill | UNVERIFIED | no authorized private snapshot/filesystem rehearsal | MEL-13 |
+| Cutover/rollback | legacy authority switch | freeze/rollback tooling | UNVERIFIED | no production backup/restore/traffic rollback drill | MEL-14 |
+| Candidate differential | current C# behaviors | capture/compare harness | UNVERIFIED | no complete replay/report for the two SHAs above | MEL-15 |
+| Scale/fault acceptance | production-scale C# replacement | load/fault suites | UNVERIFIED | no documented target-scale budget acceptance | MEL-16 |
 
 ## C# Blazor route/page audit
 
@@ -210,22 +209,16 @@ preserve it sufficiently for C# retirement:
 - Legacy downloaded podcast files require a proven, operator-approved relative-root adoption or
   intentionally re-downloadable cutover handling; absolute paths requeue by design.
 
-## Hamstik inventory and blocker
+## Hamstik inventory and backlog
 
-Hamstik CLI discovery used the installed skill, `--help`, and explicit `--org sph` read commands.
-The active project list contained `MEL` / `Melodee` but no exact **Melodee RS** name; the archived
-list was empty. A read-only `MEL` work list was also empty. No equivalent target-project epic or
-child can therefore be searched, reused, created, or linked without violating the instruction not
-to use a similarly named project. No status was changed anywhere.
+Hamstik CLI discovery used the installed skill, `--help`, and explicit `--org sph --project MEL`
+commands. The confirmed target is `MEL` / `Melodee`; it had no existing work items, so there was no
+duplicate epic or child to reuse. Backlog epic `MEL-1` and the fifteen evidence-backed child items
+below were then created. No existing item was changed and no item was marked In Progress or Done.
 
-The requested epic **“Complete remaining C# feature parity for Rust replacement”** and all child
-items below are **not created**. If the exact project is provisioned, create that epic at backlog
-status and attach only the following evidence-backed children; do not change an unrelated item's
-status.
+### Child MEL-2: complete C# account self-service and profile-data preservation
 
-### Prepared child: complete C# account self-service and profile-data preservation
-
-- **Type / priority / parent:** feature / high / requested parity-closure epic (key pending).
+- **Type / priority / parent:** feature / high / `MEL-1`.
 - **Outcome:** C# users can register when enabled, edit their own supported profile values, and
   retain avatar/profile data through migration without expanding admin authority.
 - **Legacy behavior:** `/account/register` calls `UserProfileService.RegisterAsync`; `/account/profile`
@@ -246,9 +239,9 @@ status.
   route/API authorization tests; a documented cutover report.
 - **Out of scope:** recreating the legacy Blazor listener SPA or silently granting admin rights.
 
-### Prepared child: provide browser password-reset completion
+### Child MEL-3: provide browser password-reset completion
 
-- **Type / priority / parent:** feature / high / requested parity-closure epic (key pending).
+- **Type / priority / parent:** feature / high / `MEL-1`.
 - **Outcome:** the password-reset URL emitted by Rust is usable in a bounded browser security flow.
 - **Legacy behavior:** anonymous `/account/forgot-password` and `/account/reset-password` request,
   validate, and complete token-based resets.
@@ -263,9 +256,9 @@ status.
 - **Evidence required:** browser-level end-to-end reset from emitted message URL and security-log review.
 - **Out of scope:** a general listener web application.
 
-### Prepared child: decide and preserve legacy custom content blocks
+### Child MEL-4: decide and preserve legacy custom content blocks
 
-- **Type / priority / parent:** feature / medium / requested parity-closure epic (key pending).
+- **Type / priority / parent:** feature / medium / `MEL-1`.
 - **Outcome:** every active C# Templates-library `custom-blocks/**/*.md` asset is migrated/rendered
   in its replacement surface or is retired by a new Accepted product decision with owner notice.
 - **Legacy behavior:** `FileCustomBlockService` resolves and sanitizes active blocks such as
@@ -279,9 +272,9 @@ status.
 - **Evidence required:** fixture tree imported or an Accepted ADR with affected-file inventory.
 - **Out of scope:** recreating arbitrary server-side Blazor components.
 
-### Prepared child: preserve or replace per-user device profiles
+### Child MEL-5: preserve or replace per-user device profiles
 
-- **Type / priority / parent:** feature / high / requested parity-closure epic (key pending).
+- **Type / priority / parent:** feature / high / `MEL-1`.
 - **Outcome:** C# per-user device profiles/defaults/priority survive with explicit target semantics.
 - **Legacy behavior:** `/account/profile` has per-user CRUD/default/priority through
   `UserDeviceProfileService`.
@@ -295,9 +288,9 @@ status.
 - **Evidence required:** multi-user migration fixture proving no cross-user leakage and cutover report.
 - **Out of scope:** implementing transcoding/device-selection policy unless the accepted design needs it.
 
-### Prepared child: migrate legacy notification-template library content
+### Child MEL-6: migrate legacy notification-template library content
 
-- **Type / priority / parent:** feature / high / requested parity-closure epic (key pending).
+- **Type / priority / parent:** feature / high / `MEL-1`.
 - **Outcome:** operator-authored C# localized reset templates survive into Rust notification templates.
 - **Legacy behavior:** `EmailTemplateService` reads `Templates/<culture>/PasswordReset.{txt,html}`
   before falling back to built-ins.
@@ -311,9 +304,9 @@ status.
 - **Evidence required:** fixture custom template sends the expected redacted body after migration.
 - **Out of scope:** unrelated notification-channel expansion.
 
-### Prepared child: preserve legacy custom theme packs through cutover
+### Child MEL-7: preserve legacy custom theme packs through cutover
 
-- **Type / priority / parent:** feature / medium / requested parity-closure epic (key pending).
+- **Type / priority / parent:** feature / medium / `MEL-1`.
 - **Outcome:** Theme-library packs are imported into Rust's database-owned pack format or have an
   Accepted, operator-visible retirement/export plan.
 - **Legacy behavior:** `ThemeService` discovers, imports, exports, serves, and deletes packs under
@@ -328,9 +321,9 @@ status.
 - **Evidence required:** real-format legacy pack fixture imported/exported and applied after restart.
 - **Out of scope:** new visual theme features.
 
-### Prepared child: qualify metadata transforms against canonical storage
+### Child MEL-8: qualify metadata transforms against canonical storage
 
-- **Type / priority / parent:** validation / high / requested parity-closure epic (key pending).
+- **Type / priority / parent:** task (validation) / high / `MEL-1`.
 - **Outcome:** prove the implemented safe metadata transformations are safe and recoverable on the
   actual PostgreSQL/canonical-file path; implement only defects the validation exposes.
 - **Legacy behavior:** `MediaEditService` mutates current library tags for the listed operations.
@@ -345,9 +338,9 @@ status.
 - **Evidence required:** committed integration/fault evidence and an operator runbook.
 - **Out of scope:** arbitrary free-form tag editing.
 
-### Prepared child: qualify Last.fm configured-state behavior
+### Child MEL-9: qualify Last.fm configured-state behavior
 
-- **Type / priority / parent:** validation / medium / requested parity-closure epic (key pending).
+- **Type / priority / parent:** task (validation) / medium / `MEL-1`.
 - **Outcome:** prove real account linking/scrobbling against current C# behavior and provider limits.
 - **Legacy behavior:** C# provider/session lifecycle and scrobbling are active.
 - **Current Rust state:** `lastfm.rs`, encrypted/digested link store, and dispatch are wired; tests
@@ -360,9 +353,9 @@ status.
 - **Evidence required:** redacted live acceptance report linked from the matrix.
 - **Out of scope:** a new queue/retry architecture unless a defect demands it.
 
-### Prepared child: qualify external metadata providers
+### Child MEL-10: qualify external metadata providers
 
-- **Type / priority / parent:** validation / medium / requested parity-closure epic (key pending).
+- **Type / priority / parent:** task (validation) / medium / `MEL-1`.
 - **Outcome:** qualify all enabled external enrichment providers using representative controlled
   credentials and current-C# comparison; implement only defects exposed.
 - **Legacy behavior:** current C# provider inventory/settings and graceful-disable behavior.
@@ -376,9 +369,9 @@ status.
 - **Evidence required:** redacted live-provider acceptance plus classified C# differences.
 - **Out of scope:** adding additional providers.
 
-### Prepared child: qualify podcast feeds and downloaded-media cutover
+### Child MEL-11: qualify podcast feeds and downloaded-media cutover
 
-- **Type / priority / parent:** validation / medium / requested parity-closure epic (key pending).
+- **Type / priority / parent:** task (validation) / medium / `MEL-1`.
 - **Outcome:** prove real feed refresh/download/retention/recovery and intentional existing-download
   cutover handling.
 - **Legacy behavior:** C# podcast jobs use the Podcast library; users retain subscriptions,
@@ -393,9 +386,9 @@ status.
 - **Evidence required:** redacted deployment acceptance report and cutover issue counts.
 - **Out of scope:** a new podcast product model.
 
-### Prepared child: publish and execute current-candidate multi-architecture release artifacts
+### Child MEL-12: publish and execute current-candidate multi-architecture release artifacts
 
-- **Type / priority / parent:** validation / high / requested parity-closure epic (key pending).
+- **Type / priority / parent:** task (validation) / high / `MEL-1`.
 - **Outcome:** immutable current-SHA amd64/arm64 OCI artifacts are built, scanned, attested, and
   executed before C# replacement.
 - **Legacy behavior:** deployable C# container/server is a current replacement prerequisite.
@@ -407,9 +400,9 @@ status.
 - **Evidence required:** immutable artifact identifiers and attached redacted release evidence.
 - **Out of scope:** force-publishing an unapproved release.
 
-### Prepared child: rehearse authorized C# migration and filesystem-data preservation
+### Child MEL-13: rehearse authorized C# migration and filesystem-data preservation
 
-- **Type / priority / parent:** validation / urgent / requested parity-closure epic (key pending).
+- **Type / priority / parent:** task (validation) / urgent / `MEL-1`.
 - **Outcome:** an authorized representative C# snapshot and file libraries migrate safely into a
   disposable Rust target with reconciled identities/media/user-owned data and explicit issues.
 - **Legacy behavior:** C# database plus canonical media and listed Library roots hold cutover data.
@@ -422,9 +415,9 @@ status.
 - **Evidence required:** access-controlled rehearsal report with counts and approval sign-off.
 - **Out of scope:** production cutover or destructive source cleanup.
 
-### Prepared child: rehearse cutover and rollback under operator control
+### Child MEL-14: rehearse cutover and rollback under operator control
 
-- **Type /priority / parent:** validation / urgent / requested parity-closure epic (key pending).
+- **Type / priority / parent:** task (validation) / urgent / `MEL-1`.
 - **Outcome:** operators can freeze, switch traffic, validate Rust, roll back traffic/authority, and
   prove legacy authority remains intact.
 - **Legacy behavior:** C# remains source of authority until a successful cutover.
@@ -437,9 +430,9 @@ status.
 - **Evidence required:** signed operator rehearsal record and durable rollback audit ID.
 - **Out of scope:** actual production cutover without separate approval.
 
-### Prepared child: run full current-candidate C# differential qualification
+### Child MEL-15: run full current-candidate C# differential qualification
 
-- **Type / priority / parent:** validation / high / requested parity-closure epic (key pending).
+- **Type / priority / parent:** task (validation) / high / `MEL-1`.
 - **Outcome:** every supported native, OpenSubsonic, and Jellyfin scenario is replayed against the
   stated C# and Rust SHAs with every difference classified.
 - **Legacy behavior:** C# controllers/API contracts are the behavioral oracle.
@@ -452,9 +445,9 @@ status.
 - **Evidence required:** committed/redacted differential report and updated route evidence.
 - **Out of scope:** changing a wire contract solely to satisfy a fixture.
 
-### Prepared child: accept performance and fault-recovery budgets at replacement scale
+### Child MEL-16: accept performance and fault-recovery budgets at replacement scale
 
-- **Type / priority / parent:** validation / high / requested parity-closure epic (key pending).
+- **Type / priority / parent:** task (validation) / high / `MEL-1`.
 - **Outcome:** documented scale, latency, resource, failure, restart, and recovery budgets are met
   on a representative replacement topology.
 - **Legacy behavior:** C# is a running production baseline whose replacement must not regress unsafe
@@ -472,9 +465,9 @@ status.
 ## Validation performed for this audit
 
 - Read-only baseline Git state/branch/HEAD/log/remotes recorded for both repositories.
-- Hamstik skill installed/checked; CLI project and work-item reads performed with `--no-input` and
-  explicit organization/project values. No Hamstik mutation was attempted after discovering the
-  exact project is absent.
+- Hamstik skill installed/checked; CLI project and work-item reads used `--no-input` with explicit
+  organization/project values. The confirmed `MEL` project was empty, then received Backlog epic
+  `MEL-1` and its 15 scoped Backlog children (`MEL-2` through `MEL-16`).
 - Current C# route extraction found 62 page files/67 route declarations; services/controllers/jobs,
   libraries, account pages, and controllers were inspected directly.
 - Rust router composition, Admin UI calls, migration importer, filesystem configuration, ingress
@@ -500,6 +493,5 @@ status.
 replacement obligations remain: self-service registration/profile data and avatar migration,
 per-user device profiles, operator-authored Templates/Theme-library content, custom content
 blocks, usable browser reset completion, and the validation/qualification boundaries above.
-Every one is mapped to a prepared Hamstik child specification, but no actual Hamstik key can be
-created until the required **Melodee RS** project exists. Approved differences are listed above
-and are not backlog items.
+Every one maps to a concrete Backlog child of `MEL-1` in the confirmed `MEL` / `Melodee` project.
+Approved differences are listed above and are not backlog items.
