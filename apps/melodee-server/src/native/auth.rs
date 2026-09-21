@@ -625,6 +625,29 @@ fn bad_request(code: &'static str, message: &'static str) -> Response {
         .into_response()
 }
 
+/// Password-reset responses carry credential-adjacent state and must never be
+/// retained by a browser or intermediary. This is deliberately scoped to the
+/// reset routes so the frozen contracts of other native endpoints remain
+/// unchanged.
+fn no_store(mut response: Response) -> Response {
+    response.headers_mut().insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("no-store, private"),
+    );
+    response
+        .headers_mut()
+        .insert(header::PRAGMA, HeaderValue::from_static("no-cache"));
+    response.headers_mut().insert(
+        header::EXPIRES,
+        HeaderValue::from_static("Thu, 01 Jan 1970 00:00:00 GMT"),
+    );
+    response.headers_mut().insert(
+        header::REFERRER_POLICY,
+        HeaderValue::from_static("no-referrer"),
+    );
+    response
+}
+
 fn account_unavailable(user: &StoredNativeUser) -> Option<Response> {
     let (code, message) = if !user.enabled {
         ("account_disabled", "Account is disabled")
@@ -1212,14 +1235,14 @@ async fn password_reset_request(
     Json(request): Json<PasswordResetRequest>,
 ) -> Response {
     if let Some(response) = enforce_auth_rate(&state, peer, &headers, &request.email).await {
-        return response;
+        return no_store(response);
     }
     if request.email.trim().is_empty() {
-        return bad_request("VALIDATION_ERROR", "Email is required");
+        return no_store(bad_request("VALIDATION_ERROR", "Email is required"));
     }
     let clear = match generate_password_reset_token() {
         Ok(token) => token,
-        Err(_) => return unavailable(),
+        Err(_) => return no_store(unavailable()),
     };
     let now = OffsetDateTime::now_utc();
     let digest = RefreshTokenDigest::from_token(clear.expose_secret().as_bytes());
@@ -1238,7 +1261,7 @@ async fn password_reset_request(
         .await
     {
         Ok(exists) => exists,
-        Err(_) => return unavailable(),
+        Err(_) => return no_store(unavailable()),
     };
     if exists {
         // notify the account email with the reset URL. Fire-and-record:
@@ -1267,17 +1290,21 @@ async fn password_reset_request(
             "{}/reset-password?token={token}",
             state.public_origin.trim_end_matches('/')
         );
-        return Json(DevelopmentResetBody {
-            message: "Password reset link generated (development mode).",
-            reset_token: token,
-            reset_url: url,
-        })
-        .into_response();
+        return no_store(
+            Json(DevelopmentResetBody {
+                message: "Password reset link generated (development mode).",
+                reset_token: token,
+                reset_url: url,
+            })
+            .into_response(),
+        );
     }
-    Json(MessageBody {
-        message: "If an account with that email exists, a password reset link has been sent.",
-    })
-    .into_response()
+    no_store(
+        Json(MessageBody {
+            message: "If an account with that email exists, a password reset link has been sent.",
+        })
+        .into_response(),
+    )
 }
 
 async fn password_reset_validate(
@@ -1285,14 +1312,18 @@ async fn password_reset_validate(
     Path(token): Path<String>,
 ) -> Response {
     let digest = RefreshTokenDigest::from_token(token.as_bytes());
-    match AuthStore::new()
-        .validate_password_reset(&state.pool, &digest, OffsetDateTime::now_utc())
-        .await
-    {
-        Ok(PasswordResetOutcome::Valid) => Json(serde_json::json!({"valid":true})).into_response(),
-        Ok(_) => bad_request("BAD_REQUEST", "Invalid token"),
-        Err(_) => unavailable(),
-    }
+    no_store(
+        match AuthStore::new()
+            .validate_password_reset(&state.pool, &digest, OffsetDateTime::now_utc())
+            .await
+        {
+            Ok(PasswordResetOutcome::Valid) => {
+                Json(serde_json::json!({"valid":true})).into_response()
+            }
+            Ok(_) => bad_request("BAD_REQUEST", "Invalid token"),
+            Err(_) => unavailable(),
+        },
+    )
 }
 
 async fn password_reset_confirm(
@@ -1302,33 +1333,38 @@ async fn password_reset_confirm(
     Json(request): Json<PasswordResetConfirmRequest>,
 ) -> Response {
     if let Some(response) = enforce_auth_rate(&state, peer, &headers, "password-reset").await {
-        return response;
+        return no_store(response);
     }
     if request.token.trim().is_empty() {
-        return bad_request("VALIDATION_ERROR", "Token is required");
+        return no_store(bad_request("VALIDATION_ERROR", "Token is required"));
     }
     if request.new_password.trim().is_empty() {
-        return bad_request("VALIDATION_ERROR", "New password is required");
+        return no_store(bad_request("VALIDATION_ERROR", "New password is required"));
     }
     if request.new_password.chars().count() < 8 {
-        return bad_request("VALIDATION_ERROR", "Password must be at least 8 characters");
+        return no_store(bad_request(
+            "VALIDATION_ERROR",
+            "Password must be at least 8 characters",
+        ));
     }
     let hash = match hash_password(request.new_password.as_bytes()) {
         Ok(hash) => hash,
-        Err(_) => return unavailable(),
+        Err(_) => return no_store(unavailable()),
     };
     let digest = RefreshTokenDigest::from_token(request.token.as_bytes());
-    match AuthStore::new()
-        .consume_password_reset(&state.pool, &digest, &hash, OffsetDateTime::now_utc())
-        .await
-    {
-        Ok(PasswordResetOutcome::Consumed { .. }) => Json(MessageBody {
-            message: "Password has been reset successfully",
-        })
-        .into_response(),
-        Ok(_) => bad_request("BAD_REQUEST", "Invalid token"),
-        Err(_) => unavailable(),
-    }
+    no_store(
+        match AuthStore::new()
+            .consume_password_reset(&state.pool, &digest, &hash, OffsetDateTime::now_utc())
+            .await
+        {
+            Ok(PasswordResetOutcome::Consumed { .. }) => Json(MessageBody {
+                message: "Password has been reset successfully",
+            })
+            .into_response(),
+            Ok(_) => bad_request("BAD_REQUEST", "Invalid token"),
+            Err(_) => unavailable(),
+        },
+    )
 }
 
 async fn refresh_token(

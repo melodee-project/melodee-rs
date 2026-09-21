@@ -543,6 +543,10 @@ async fn password_reset_is_non_enumerating_one_use_and_revokes_refresh() {
     )
     .await;
     assert_eq!(unknown.status(), StatusCode::OK);
+    assert_eq!(
+        unknown.headers().get(header::CACHE_CONTROL),
+        Some(&HeaderValue::from_static("no-store, private"))
+    );
     let unknown_body: serde_json::Value = serde_json::from_slice(
         &unknown
             .into_body()
@@ -567,12 +571,20 @@ async fn password_reset_is_non_enumerating_one_use_and_revokes_refresh() {
     )
     .await;
     assert_eq!(known.status(), StatusCode::OK);
+    assert_eq!(
+        known.headers().get(header::CACHE_CONTROL),
+        Some(&HeaderValue::from_static("no-store, private"))
+    );
     let known_json: serde_json::Value =
         serde_json::from_slice(&known.into_body().collect().await.expect("body").to_bytes())
             .expect("reset json");
     let token = known_json["resetToken"]
         .as_str()
         .expect("development token");
+    assert_eq!(
+        known_json["resetUrl"],
+        format!("http://melodee.test/reset-password?token={token}")
+    );
 
     let mut validate = Request::builder()
         .method("GET")
@@ -587,6 +599,10 @@ async fn password_reset_is_non_enumerating_one_use_and_revokes_refresh() {
         .await
         .expect("validate");
     assert_eq!(valid.status(), StatusCode::OK);
+    assert_eq!(
+        valid.headers().get(header::CACHE_CONTROL),
+        Some(&HeaderValue::from_static("no-store, private"))
+    );
 
     let mut invalid_validate = Request::builder()
         .method("GET")
@@ -601,6 +617,10 @@ async fn password_reset_is_non_enumerating_one_use_and_revokes_refresh() {
         .await
         .expect("invalid validate");
     assert_eq!(invalid_validate.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(
+        invalid_validate.headers().get(header::CACHE_CONTROL),
+        Some(&HeaderValue::from_static("no-store, private"))
+    );
     let invalid_validate_body: serde_json::Value = serde_json::from_slice(
         &invalid_validate
             .into_body()
@@ -622,6 +642,10 @@ async fn password_reset_is_non_enumerating_one_use_and_revokes_refresh() {
     )
     .await;
     assert_eq!(confirmed.status(), StatusCode::OK);
+    assert_eq!(
+        confirmed.headers().get(header::CACHE_CONTROL),
+        Some(&HeaderValue::from_static("no-store, private"))
+    );
     let reused = raw_post(
         state.clone(),
         "/api/v1/auth/password-reset/confirm",
@@ -631,6 +655,10 @@ async fn password_reset_is_non_enumerating_one_use_and_revokes_refresh() {
     )
     .await;
     assert_eq!(reused.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(
+        reused.headers().get(header::CACHE_CONTROL),
+        Some(&HeaderValue::from_static("no-store, private"))
+    );
     let reused_body: serde_json::Value = serde_json::from_slice(
         &reused
             .into_body()
@@ -678,6 +706,43 @@ async fn native_auth_rate_limit_is_cluster_backed_and_has_retry_after() {
     .await;
     assert_eq!(limited.status(), StatusCode::TOO_MANY_REQUESTS);
     assert!(limited.headers().contains_key(header::RETRY_AFTER));
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn password_reset_request_is_rate_limited_without_enumeration() {
+    let db = common::TestDb::create("server_native_password_reset_rate_limit").await;
+    let state = state(&db).await;
+    for ordinal in 0..10 {
+        let response = raw_post(
+            state.clone(),
+            "/api/v1/auth/password-reset/request",
+            serde_json::json!({"email":"unknown-reset@example.test"}),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK, "{ordinal}");
+        assert_eq!(
+            response.headers().get(header::CACHE_CONTROL),
+            Some(&HeaderValue::from_static("no-store, private")),
+            "{ordinal}"
+        );
+    }
+    let limited = raw_post(
+        state,
+        "/api/v1/auth/password-reset/request",
+        serde_json::json!({"email":"unknown-reset@example.test"}),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(limited.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert!(limited.headers().contains_key(header::RETRY_AFTER));
+    assert_eq!(
+        limited.headers().get(header::CACHE_CONTROL),
+        Some(&HeaderValue::from_static("no-store, private"))
+    );
     db.drop().await;
 }
 

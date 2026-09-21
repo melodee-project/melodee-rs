@@ -14,7 +14,7 @@ use melodee_server::enrichment_worker::{EnrichmentWorkerConfig, start_enrichment
 use melodee_server::policy_worker::{PolicyWorkerConfig, start_policy_loop};
 use melodee_server::{
     admin, admin_ui, discovery_worker, enrichment_worker, jellyfin, native, native_stream,
-    opensubsonic, podcast_worker, policy_worker, system,
+    opensubsonic, password_reset, podcast_worker, policy_worker, system,
 };
 use tokio::sync::oneshot;
 use tower_http::trace::TraceLayer;
@@ -590,6 +590,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .merge(melodee_server::admin_policies::router().with_state(admin_access_state.clone()))
         .merge(melodee_server::admin_system::router().with_state(admin_system_state))
         .merge(melodee_server::admin_onboarding::router().with_state(admin_access_state))
+        // ADR-0161 permits this one anonymous browser security page; it is
+        // intentionally not a listener-facing web application.
+        .merge(password_reset::router())
         .merge(native_app)
         .merge(opensubsonic_app)
         .merge(jellyfin_app);

@@ -217,7 +217,7 @@ facts. Every pass is bounded, set-based, and idempotent, so the worker is safe t
 
 | Key | Default | Effect |
 | --- | --- | --- |
-| `MELODEE__NATIVE__PUBLIC_ORIGIN` | Listener origin | External origin used in native-v1 image, stream, and browser-login redirect URLs. It must be an absolute `http` or `https` origin without credentials, a path, or a query. Set it to the reverse proxy's public origin in production. |
+| `MELODEE__NATIVE__PUBLIC_ORIGIN` | Listener origin | External origin used in native-v1 image, stream, browser-login redirect, and password-reset notification URLs. It must be an absolute `http` or `https` origin without credentials, a path, or a query. Set it to the reverse proxy's public origin in production. |
 | `MELODEE__NATIVE__STREAM_CONCURRENCY` | `32` | Maximum direct media responses open concurrently in one server process (`1`–`4096`). Additional requests wait with bounded backpressure. |
 | `MELODEE__NATIVE__AUTH__JWT_KEY` | — (required) | HS256 signing secret for native-v1 15-minute access tokens and protected browser session cookies. Generate at least 32 random bytes (for example, `openssl rand -base64 48`) and keep the same secret on every server process. The example placeholder is rejected at startup. |
 | `MELODEE__NATIVE__AUTH__MAX_SESSION_DAYS` | `90` | Absolute refresh-family lifetime (`30`–`365` days); individual refresh tokens remain valid for at most 30 days and rotate on use. |
@@ -287,6 +287,12 @@ notifications) through a configured SMTP relay. Delivery is disabled by default;
 every notification is still recorded in the delivery audit as `skipped` and the operation that
 triggered it is unaffected. Delivery failures are likewise recorded and logged, never rolled back
 into the triggering request. The password is never logged and never returned by any API.
+
+Password-reset messages link to the bounded Rust `/reset-password` security page. The page
+validates the one-use token through the native API and does not create a listener web application.
+Keep the public-origin setting aligned with the reverse proxy; otherwise notification links will
+point at the wrong origin. See [Users & Access](../admin/users-and-access/) for the user-facing
+completion flow and its token-handling protections.
 
 | Key | Default | Effect |
 | --- | --- | --- |

@@ -35,8 +35,8 @@ obligations that must be closed before cutover: **59 rows** total.
 
 | Disposition | Count |
 |---|---:|
-| PARITY | 40 |
-| PARTIAL | 4 |
+| PARITY | 41 |
+| PARTIAL | 3 |
 | MISSING | 1 |
 | APPROVED DIFFERENCE | 5 |
 | UNVERIFIED | 9 |
@@ -117,7 +117,7 @@ project.
 | Jellyfin | controller subset | independent Jellyfin adapter | PARITY | route evidence + differential | — |
 | OCI artifacts | deployment image | Dockerfile/release workflow | UNVERIFIED | no exact-SHA multiarch, scan, SBOM, attestation, arm64 run | MEL-12 |
 | CLI administration | C# admin operations | Rust CLI | PARITY | command/integration tests | — |
-| Browser reset completion | anonymous C# account pages | reset API only | PARTIAL | reset URL targets an unserved Rust HTML path | MEL-3 |
+| Browser reset completion | anonymous C# account pages | bounded Rust `/reset-password` security page plus reset API | PARITY | MEL-3 browser/API/security evidence | — |
 | Custom content blocks | `FileCustomBlockService` and Templates library | no Rust search hit/store/render/migration | MISSING | no approved retirement | MEL-4 |
 | Migration rehearsal | production C# state/media | CLI importer + synthetic drill | UNVERIFIED | no authorized private snapshot/filesystem rehearsal | MEL-13 |
 | Cutover/rollback | legacy authority switch | freeze/rollback tooling | UNVERIFIED | no production backup/restore/traffic rollback drill | MEL-14 |
@@ -136,7 +136,7 @@ be listed as partial where a separate C#-specific behavior remains, such as cust
 | `/account/login`, `/login`, `/account/logout` | browser authentication/session | native client auth/cookie APIs | core parity; login custom blocks remain missing |
 | `/account/register` | public account creation, optional invite/first-admin behavior | no public Rust registration route | MISSING |
 | `/account/profile` | self edit, avatar, language/theme/bio/time zone, device profiles | avatar APIs; global device admin metadata | PARTIAL |
-| `/account/forgot-password`, `/account/reset-password` | anonymous reset request and browser token completion | native reset request/validate/confirm API | PARTIAL |
+| `/account/forgot-password`, `/account/reset-password` | anonymous reset request and browser token completion | native reset request/validate/confirm API plus bounded `/reset-password` page | PARITY |
 | `/onboarding`, `/onboarding/blocking` | setup state/checks | admin onboarding API/UI/CLI | PARITY |
 | `/admin/dashboard`, `/admin/doctor`, `/admin/jobs`, `/admin/settings`, `/admin/scripts[/{EventName}]`, `/admin/themes`, `/admin/usergroups` | administration/diagnostics | Rust Admin UI and API | PARITY |
 | `/data/artists*`, `/media/artist*`, `/data/artist*` | artist browse/edit | Admin UI + catalog APIs | PARITY |
@@ -152,9 +152,9 @@ be listed as partial where a separate C#-specific behavior remains, such as cust
 | `/party`, `/party/{Session}` | party sessions | retired | APPROVED DIFFERENCE, ADR-0133/0141 |
 | `/jukebox` | server-side playback | retired | APPROVED DIFFERENCE, ADR-0133/0140 |
 
-The page accounting is **52 fully replaced, 5 partially replaced pages/workflows, 1 missing
+The page accounting is **52 fully replaced, 4 partially replaced pages/workflows, 1 missing
 page/workflow, and 4 approved relocations/retirements**. The partial count is dashboard/login
-custom-block placement plus profile and the two reset pages; the approved group is the secure
+custom-block placement plus profile; the approved group is the secure
 public-share representation and the three Party/Jukebox retirements. It does not mean a second
 server listener SPA is required.
 
@@ -249,15 +249,22 @@ below were then created. No existing item was changed and no item was marked In 
 - **Outcome:** the password-reset URL emitted by Rust is usable in a bounded browser security flow.
 - **Legacy behavior:** anonymous `/account/forgot-password` and `/account/reset-password` request,
   validate, and complete token-based resets.
-- **Current Rust state:** `native/auth.rs` routes reset request/validate/confirm but sends
-  `{publicOrigin}/reset-password?token=…`, for which no handler is registered.
-- **Gap / required behavior:** serve a minimal accessible completion page (or make a supported
-  client endpoint the emitted URL) that validates and confirms without token leakage or a listener SPA.
+- **Current Rust state:** `password_reset.rs` serves the exact `{publicOrigin}/reset-password?token=…`
+  URL emitted by `native/auth.rs` as a minimal accessible completion page. It validates and confirms
+  through the existing Native API, scrubs browser history, uses no ambient session credentials or
+  third-party resources, and applies no-store/security headers. `native/auth.rs` preserves the
+  frozen API bodies/statuses/messages while adding cache/referrer protections.
+- **Disposition:** parity under ADR-0161. This is intentionally a bounded security page rather
+  than a listener SPA; after success it directs the user to sign in from MeloAmp or another native
+  client. No `/account/login` browser redirect is introduced.
 - **Acceptance criteria:** valid/expired/replayed/malformed tokens; generic request response;
   rate-limit and CSRF/session boundary; localized error states; notification link round-trip;
   browser and API tests; public docs.
 - **Compatibility impact:** Native API, Admin UI, MeloAmp, notification templates.
-- **Evidence required:** browser-level end-to-end reset from emitted message URL and security-log review.
+- **Evidence:** [MEL-3 browser password-reset evidence](MEL-3-BROWSER-PASSWORD-RESET-EVIDENCE.md),
+  `apps/melodee-server/tests/password_reset_page.rs`, the reset API tests in
+  `apps/melodee-server/tests/native_auth_api.rs`, and `apps/melodee-server/tests/notification_wiring.rs`.
+- **OpenSubsonic/Jellyfin:** no route, DTO, authentication, or ownership changes.
 - **Out of scope:** a general listener web application.
 
 ### Child MEL-4: decide and preserve legacy custom content blocks

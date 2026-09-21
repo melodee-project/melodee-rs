@@ -27,6 +27,7 @@ pub mod native_stream;
 pub mod notifications;
 pub mod onboarding;
 pub mod opensubsonic;
+pub mod password_reset;
 pub mod playback;
 pub mod podcast_worker;
 pub mod policy_worker;

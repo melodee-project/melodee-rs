@@ -239,12 +239,14 @@
     "status": "tested",
     "implementation": [
       "apps/melodee-server/src/native/auth.rs",
+      "apps/melodee-server/src/password_reset.rs",
       "crates/melodee-persistence/src/auth.rs",
       "apps/melodee-server/src/lastfm.rs + native/catalog.rs (Last.fm account linking/session lifecycle: auth-url, session exchange, idempotent disconnect; ADR-0134 section 7 amended)",
       "crates/melodee-persistence/src/providers.rs (LastfmLinkStore: digest + AEAD-sealed session key, never plaintext at rest)"
     ],
     "tests": [
       "apps/melodee-server/tests/native_auth_api.rs (JWT, refresh, cookie, reset, logout and Google OIDC flows)",
+      "apps/melodee-server/tests/password_reset_page.rs",
       "crates/melodee-persistence/tests/auth_phase7.rs",
       "apps/melodee-server/tests/lastfm_scrobble.rs (Last.fm link/exchange/disconnect lifecycle against a local mock server)",
       "crates/melodee-persistence/tests/providers.rs (link round-trip, cascade, plaintext-never-persisted)"
@@ -277,11 +279,13 @@
     "implementation": [
       "crates/melodee-auth/src/lib.rs (redacted secret values and hash-only tokens)",
       "apps/melodee-server/src/native/error.rs (stable public errors)",
+      "apps/melodee-server/src/password_reset.rs (no raw token reflection, same-origin browser flow, and history scrubbing)",
       "apps/melodee-server/src/lib.rs (method plus MatchedPath request spans; raw URI and query are never recorded)"
     ],
     "tests": [
       "crates/melodee-auth tests",
       "apps/melodee-server/tests/native_auth_api.rs",
+      "apps/melodee-server/tests/password_reset_page.rs and live log redaction scan",
       "apps/melodee-server/src/lib.rs::tests::http_request_span_never_records_raw_path_or_query_secrets"
     ]
   },
@@ -293,7 +297,7 @@
     ],
     "tests": [
       "crates/melodee-persistence/tests/auth_phase7.rs (postgres_rate_limit_is_atomic_expiring_and_capacity_bounded)",
-      "apps/melodee-server/tests/native_auth_api.rs (native_auth_rate_limit_is_cluster_backed_and_has_retry_after)"
+      "apps/melodee-server/tests/native_auth_api.rs (native_auth_rate_limit_is_cluster_backed_and_has_retry_after; password_reset_request_is_rate_limited_without_enumeration)"
     ]
   },
   "PRD-AUTH-007": {
@@ -913,10 +917,12 @@
     "status": "tested",
     "implementation": [
       "apps/melodee-server/src/security_headers.rs (scoped Admin API/SPA CSP, nosniff, frame, referrer, and permissions policy; compatibility surfaces excluded)",
+      "apps/melodee-server/src/password_reset.rs (bounded reset-page CSP, no-store, no-referrer, frame, and permissions policy)",
       "docs/src/content/docs/api/admin-api.md (operator-facing header and TLS-termination boundary)"
     ],
     "tests": [
-      "apps/melodee-server/src/security_headers.rs unit tests (policy values, Admin path scope, actual middleware response, and unchanged compatibility response)"
+      "apps/melodee-server/src/security_headers.rs unit tests (policy values, Admin path scope, actual middleware response, and unchanged compatibility response)",
+      "apps/melodee-server/tests/password_reset_page.rs (reset-page security headers and no-token response evidence)"
     ],
     "note": "The new browser-facing administration surface receives defensive headers without modifying frozen native v1, OpenSubsonic, Jellyfin, media, or health responses. HSTS remains an explicit TLS-terminating proxy responsibility."
   },
@@ -2874,10 +2880,12 @@
   "PRD-I18N-001": {
     "status": "tested",
     "implementation": [
-      "admin-ui/src/i18n/index.ts (20-culture inventory preserved)"
+      "admin-ui/src/i18n/index.ts (20-culture inventory preserved)",
+      "apps/melodee-server/src/password_reset.rs (same culture inventory, English fallback, and Arabic/Persian RTL page direction)"
     ],
     "tests": [
-      "admin-ui/e2e/localization.spec.ts (all 20 cultures load without errors)"
+      "admin-ui/e2e/localization.spec.ts (all 20 cultures load without errors)",
+      "apps/melodee-server/tests/password_reset_page.rs (localized reset page and RTL evidence)"
     ]
   },
   "PRD-I18N-002": {
@@ -2893,7 +2901,8 @@
   "PRD-I18N-003": {
     "status": "tested",
     "implementation": [
-      "admin-ui/src/i18n/locales/en-US.json (1100+ externalized keys; all visible strings via useTranslation)"
+      "admin-ui/src/i18n/locales/en-US.json (1100+ externalized keys; all visible strings via useTranslation)",
+      "apps/melodee-server/src/password_reset.rs (browser-flow copy is centralized in the page locale table)"
     ],
     "tests": [
       "admin-ui/scripts/check-locales.mjs (structural validation gate)"
@@ -2911,20 +2920,24 @@
   "PRD-I18N-005": {
     "status": "tested",
     "implementation": [
-      "admin-ui/src/i18n/index.ts dirFor() (ar-SA/fa-IR -> rtl, document.dir sync); logical CSS properties throughout"
+      "admin-ui/src/i18n/index.ts dirFor() (ar-SA/fa-IR -> rtl, document.dir sync); logical CSS properties throughout",
+      "apps/melodee-server/src/password_reset.rs (ar-SA/fa-IR page direction)"
     ],
     "tests": [
       "admin-ui/e2e/ RTL smoke specs on all canonical screens (ar-SA + fa-IR)",
-      "admin-ui/e2e/visual.spec.ts RTL baselines"
+      "admin-ui/e2e/visual.spec.ts RTL baselines",
+      "apps/melodee-server/tests/password_reset_page.rs"
     ]
   },
   "PRD-I18N-006": {
     "status": "tested",
     "implementation": [
-      "ADR-0137 fallback semantics (en-US source+fallback); check-locales.mjs key validation"
+      "ADR-0137 fallback semantics (en-US source+fallback); check-locales.mjs key validation",
+      "apps/melodee-server/src/password_reset.rs (English fallback for incomplete browser-flow translations)"
     ],
     "tests": [
-      "admin-ui/e2e/localization.spec.ts (fallback rendering assertions)"
+      "admin-ui/e2e/localization.spec.ts (fallback rendering assertions)",
+      "apps/melodee-server/tests/password_reset_page.rs (English fallback assertion)"
     ]
   },
   "PRD-API-ADMIN-001": {
@@ -3034,9 +3047,12 @@
   "PRD-TEST-008": {
     "status": "implemented",
     "implementation": [
-      "admin-ui Vitest component/unit suite (232 tests) + Playwright e2e (259 runs, 3 viewports) + visual regression baselines (light/dark/RTL) + axe accessibility specs"
+      "admin-ui Vitest component/unit suite (232 tests) + Playwright e2e (259 runs, 3 viewports) + visual regression baselines (light/dark/RTL) + axe accessibility specs",
+      "apps/melodee-server/tests/password_reset_page.rs and design/evidence/feature-parity/MEL-3-BROWSER-PASSWORD-RESET-EVIDENCE.md (browser security-flow coverage)"
     ],
-    "tests": []
+    "tests": [
+      "local Playwright browser run from the emitted reset notification URL"
+    ]
   },
   "PRD-TEST-003": {
     "status": "tested",

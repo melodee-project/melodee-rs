@@ -70,6 +70,26 @@ safe timezone identifier syntax. Role, account-state, public-ID, and password fi
 accepted by the profile request. Each actual change creates a value-free audit event in the same
 PostgreSQL transaction.
 
+### Browser password reset
+
+Password-reset completion is the one bounded anonymous security page served by Rust. When email
+delivery is enabled, a reset notification links to `/reset-password?token=…`; opening that link
+validates the one-use token and presents an accessible new-password form. Passwords must contain
+at least 8 characters. A successful reset revokes the account's existing refresh/session
+authority, and the user can then sign in again from MeloAmp or another native client.
+
+The request API deliberately returns the same success message for known and unknown email
+addresses. Reset links expire after one hour by default, are invalid after use, and are rate
+limited. The page removes the token from browser history before validation, makes only same-origin
+API requests, sends no ambient session credentials, loads no third-party assets, and returns
+`no-store`/`no-referrer` security headers. Invalid, expired, replayed, malformed, and missing
+tokens share stable localized error states. Rust does not recreate the legacy listener SPA or
+redirect to an unserved browser login page.
+
+Operators should set `MELODEE__NATIVE__PUBLIC_ORIGIN` to the externally reachable origin so
+notification links resolve correctly. `MELODEE__NATIVE__AUTH__DEVELOPMENT_RESET_TOKENS` exposes a
+clear token only for isolated development testing and must remain disabled in production.
+
 ## Avatars
 
 Users manage their own avatar through the native API:
