@@ -10,12 +10,13 @@ The `melodee-cli legacy` command group is implemented and covered by the reposit
 suites (import-twice idempotency, crash/restart convergence, fencing, read-only source
 enforcement, unsupported-schema fail-closed, and production-shaped cardinality). The
 production-sized rehearsal, dual-run differential, cutover, and rollback proof against a real
-C# production snapshot is the remaining release gate before this path is called fully
+C# production snapshot remains a release gate before this path is called fully
 supported. Treat the tooling as rehearsal-ready, not cutover-proven.
 :::
 
-The Rust server migrates an existing C# (legacy) Melodee PostgreSQL installation in place at
-the database level while **adopting the canonical media library without moving, re-encoding,
+The migration CLI reads an existing C# (legacy) Melodee PostgreSQL snapshot without modifying it
+and imports into a separate Rust target database, while **adopting the canonical media library
+in place without moving, re-encoding,
 re-hashing, or deleting it**. The migration is governed by the accepted migration contract
 (ADR-0148) and is designed to be repeatable, restart-safe, and auditable.
 

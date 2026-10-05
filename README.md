@@ -2,7 +2,6 @@
 
 [![CI](https://github.com/melodee-project/melodee-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/melodee-project/melodee-rs/actions/workflows/ci.yml)
 [![Documentation build](https://github.com/melodee-project/melodee-rs/actions/workflows/docs.yml/badge.svg)](https://github.com/melodee-project/melodee-rs/actions/workflows/docs.yml)
-[![Documentation](https://github.com/melodee-project/melodee-rs/actions/workflows/docs.yml/badge.svg)](https://melodee-project.github.io/melodee-rs/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Melodee is a self-hosted, free and open-source music server for a library you own. It ingests
@@ -15,10 +14,38 @@ The Rust implementation is a ground-up replacement for the
 The legacy application remains a behavior oracle for compatibility; this repository owns the
 current architecture and implementation.
 
-> **Project status:** the core server, catalog and processing pipeline, client adapters,
-> user-domain parity, and admin SPA are implemented here. Legacy import, production cutover,
-> and rollback rehearsal are still planned and are **not yet available**. Do not replace a
-> running legacy server with this checkout until that migration release gate has been completed.
+> **Project status: pre-release, working toward v1.0.0.** The core server, ingestion/catalog
+> pipeline, API adapters, and Admin UI are implemented. Legacy migration tooling is implemented
+> and ready for isolated rehearsal, but feature/data-preservation gaps and release qualification
+> remain. This checkout is **not yet a qualified production replacement** for the C# server.
+
+Start with the [user documentation](https://melodee-project.github.io/melodee-rs/),
+[source-build guide](docs/src/content/docs/installation/build-from-source.md), or
+[legacy migration guide](docs/src/content/docs/installation/legacy-migration.md).
+
+## Compatibility and v1.0.0 readiness
+
+Compatibility is measured against the frozen C# behavioral baseline at commit
+`4028b58dbd3302ed431e2c5b32d9dde5634db218`, with intentional differences governed by accepted
+ADRs. It does not imply compatibility with every later C# change or every Jellyfin feature.
+
+Remaining work includes:
+
+- Preserving or explicitly resolving legacy custom content blocks, per-user device profiles,
+  notification-template files, and custom theme packs.
+- Qualifying metadata transforms against canonical files and PostgreSQL, configured integrations,
+  and performance/fault recovery at representative scale.
+- Rehearsing migration, backup/restore, cutover, and rollback with authorized representative data.
+- Completing current-candidate differential replay and Android phone, Android Auto/DHU, MeloAmp,
+  OpenSubsonic, and Jellyfin client acceptance.
+- Accepting the exact amd64/arm64 release images, security/supply-chain evidence, and final
+  documentation before approved publication.
+
+The [feature-parity matrix](design/requirements/FEATURE-PARITY-MATRIX.md),
+[requirements index](design/requirements/REQUIREMENTS-INDEX.md), and
+[PRD release gates](PRD.md#57-release-gates) define the remaining obligations. Hamstik project
+`MEL`, epic `MEL-1`, tracks the v1.0.0 work program. Passing local checks or closing an
+implementation ticket does not replace candidate-specific client and operator acceptance.
 
 ## Highlights
 
@@ -42,6 +69,9 @@ current architecture and implementation.
 - **Operations and administration.** Health/readiness probes, durable worker diagnostics,
   quarantine and reprocessing, native authentication, library access groups, and the Carbon-based
   admin SPA at `/admin` are included.
+- **Account self-service.** Configuration-controlled registration, self-profile and avatar APIs,
+  and a localized browser password-reset completion page are implemented. MeloAmp owns the
+  listener account experience.
 - **FOSS by design.** Melodee is MIT-licensed and its dependency policy is checked with
   `cargo deny`.
 
@@ -69,34 +99,54 @@ invariants.
 
 ## Deploy with the official container image
 
-Melodee production releases are distributed exclusively as OCI images from:
+The official release distribution policy is OCI images at:
 
 ```text
 ghcr.io/melodee-project/melodee
 ```
 
-GitHub Releases provide the version record, release notes, and GitHub-generated source archives.
-They do **not** include precompiled Linux, Windows, or macOS binaries; installers; `.deb`/`.rpm`;
-AppImages; Homebrew artifacts; or ZIP/TAR native binary bundles. Official images support
-`linux/amd64` and `linux/arm64` and run with FOSS Docker Engine/Moby plus Compose-compatible tooling
+Published GitHub Releases provide the version record, release notes, and GitHub-generated source
+archives. They do **not** include precompiled Linux, Windows, or macOS binaries; installers; `.deb`/`.rpm`;
+AppImages; Homebrew artifacts; or ZIP/TAR native binary bundles. The release platform matrix is
+`linux/amd64` and `linux/arm64`, using FOSS Docker Engine/Moby plus Compose-compatible tooling
 on Linux. Docker Desktop is not required.
 
-The primary deployment path is the committed reference Compose file:
+The following is the deployment procedure **for a published, qualified release**. Check its
+release notes and available image tag first; the workflow and Compose file alone do not establish
+that a v1.0.0 image or `latest` tag is available. For development before release, use the source
+workflow below.
+
+Use the committed [reference Compose file](compose.yml):
 
 ```bash
 git clone https://github.com/melodee-project/melodee-rs.git
 cd melodee-rs
 cp compose.env.example .env
-# Set unique secrets, a public HTTPS origin, and an absolute writable inbound-media path.
+# Edit .env: set a published MELODEE_IMAGE_TAG, unique secrets, public HTTPS origin,
+# matching PostgreSQL password/URL, and an absolute writable inbound-media path.
 docker compose pull
 docker compose up -d
 curl --fail http://127.0.0.1:8080/readyz
+
+# Run in Bash; enter the administrator password without echoing it.
+read -r -s -p 'Administrator password: ' MELODEE__CLI__BOOTSTRAP_ADMIN_PASSWORD
+export MELODEE__CLI__BOOTSTRAP_ADMIN_PASSWORD
+docker compose exec -e MELODEE__CLI__BOOTSTRAP_ADMIN_PASSWORD \
+  melodee melodee-cli users bootstrap-admin --username admin --email admin@example.test
+unset MELODEE__CLI__BOOTSTRAP_ADMIN_PASSWORD
 ```
 
 The Compose file pulls `ghcr.io/melodee-project/melodee:${MELODEE_IMAGE_TAG:-latest}`, persists
 PostgreSQL, staging, canonical media, normalization work, and Tantivy separately. Inbound is
-writable only for candidate-directory rename/removal after verified acquisition. For a reproducible production deployment, set `MELODEE_IMAGE_TAG` to an exact `X.Y.Z`
-release (or a digest), not `latest`. See the [container deployment guide](docs/src/content/docs/installation/docker.md)
+writable for candidate-directory rename/removal after verified acquisition; inbound bytes are
+not rewritten. Set `MELODEE_IMAGE_TAG` to an exact published version. Digest pinning requires
+overriding the service's full `image` reference with `ghcr.io/melodee-project/melodee@sha256:…`;
+the tag variable does not accept a bare digest.
+
+The runtime uses UID/GID `10001`; the inbound directory must permit that user to read media and
+rename/remove acquired candidates. The default HTTP binding is loopback. Configure a TLS reverse
+proxy for remote access, then open `/admin` at the configured public origin and complete onboarding.
+See the [container deployment guide](docs/src/content/docs/installation/docker.md)
 for required configuration, image tags, upgrades, backups, attestation verification, and first-time
 GHCR package visibility.
 
@@ -110,15 +160,24 @@ commands.
 
 ## Quick start for contributors
 
-The pinned toolchain is Rust **1.97.1**. For a full local environment you also need Python 3.11+,
-Docker Compose, PostgreSQL tooling, FFmpeg (`ffmpeg` and `ffprobe`), Chromaprint (`fpcalc`),
-Node.js 22.12+ and pnpm 11 for the admin UI and documentation.
+The pinned toolchain is Rust **1.97.1**. For a full local environment you also need:
+
+- Python 3.11+ and Make for repository commands.
+- A native C/C++ build toolchain and Clang/libclang for dependencies; the
+  [Dockerfile](Dockerfile) records the reference Linux builder setup.
+- Docker Compose for the reference PostgreSQL **18** development service, plus PostgreSQL
+  client tools for backup/restore and migration exercises. Its host port is **5433**.
+- FFmpeg (`ffmpeg` with `libmp3lame`, and `ffprobe`) and Chromaprint (`fpcalc`), including for
+  media unit tests.
+- Node.js 22.12+ and pnpm 11 for the Admin UI and documentation; exact pnpm versions are recorded
+  in each `package.json`.
+- `cargo-deny` for the complete dependency-policy gate.
 
 ```bash
 git clone https://github.com/melodee-project/melodee-rs.git
 cd melodee-rs
 
-# Run repository validation and database-free Rust unit tests.
+# Run repository validation, Python tests, and database-free Rust unit tests.
 make bootstrap
 
 # PostgreSQL is required to run the server, integration tests, and full gate.
@@ -129,41 +188,46 @@ corepack enable
 (cd admin-ui && pnpm install --frozen-lockfile && pnpm build)
 ```
 
-Copy [`.env.example`](.env.example) to `.env`, replace both authentication-secret placeholders,
-and set the inbound, staging, work, canonical-storage, and (when enabled) search roots to distinct absolute
-paths. `MELODEE__LOGGING__LEVEL` controls server verbosity; optionally set
+For this native development workflow, copy [`.env.example`](.env.example) to `.env` (the Compose
+workflow uses the separate `compose.env.example` format). Replace both authentication-secret
+placeholders, and set the inbound, staging, work, canonical-storage, and (when enabled) search
+roots to distinct absolute paths. `MELODEE__LOGGING__LEVEL` controls server verbosity; optionally set
 `MELODEE__LOGGING__DIRECTORY` to append console-equivalent output to daily UTC files named
 `YYYY-MM-DD.log` in that directory. The example is deliberately local-development-only;
-it must not contain real credentials.
+it must not be committed with real credentials. Create the inbound directory and ensure all
+configured storage roots are accessible to your runtime user. Search and podcast downloads are
+disabled in this example; enabling either worker requires its dedicated storage root.
 
 ```bash
 cp .env.example .env
 # Edit .env. Generate each secret with: openssl rand -base64 48
-# Then export the values for a local process:
-set -a && . ./.env && set +a
-
-cargo run -p melodee-server
+# Server and CLI load .env automatically when run from this checkout.
+cargo run --locked -p melodee-server
 ```
 
-Startup validates the complete applied SQLx migration history before opening the listener. The
-server recognizes the repository's exact known comment-only variants of migrations 24–29 without
+Startup validates the complete applied SQLx migration history and applies pending migrations
+before opening the listener. For an existing database, follow the
+[upgrade and maintenance-fencing procedure](docs/src/content/docs/installation/upgrading.md).
+The server recognizes the repository's exact known comment-only variants of migrations 24–29 without
 rewriting database metadata. Any other `VersionMismatch(<number>)` is unknown migration drift:
 keep the database intact and follow the
 [migration-checksum troubleshooting guidance](docs/src/content/docs/troubleshooting/#migration-checksum-mismatch).
 
-In a second terminal with the same environment, create the first administrator. The password is
+In a second terminal at the repository root, create the first administrator. The password is
 read from the environment rather than a command-line argument.
 
 ```bash
-export MELODEE__CLI__BOOTSTRAP_ADMIN_PASSWORD='use-a-long-unique-password'
-cargo run -p melodee-cli -- users bootstrap-admin \
+read -r -s -p 'Administrator password: ' MELODEE__CLI__BOOTSTRAP_ADMIN_PASSWORD
+export MELODEE__CLI__BOOTSTRAP_ADMIN_PASSWORD
+cargo run --locked -p melodee-cli -- users bootstrap-admin \
   --username admin --email admin@example.test
 unset MELODEE__CLI__BOOTSTRAP_ADMIN_PASSWORD
 ```
 
 Visit `http://127.0.0.1:8080/admin` and use the onboarding flow. It checks the live database,
-storage roots, media tools, search index, administrator account, and email configuration before it
-can be completed.
+storage roots, media tools, search configuration, administrator account, and email configuration.
+Database and administrator checks block completion; storage, tools, search, and email checks are
+advisory. Completing onboarding does not prove that every optional feature is configured.
 
 For a guided fresh local setup, install the script's pinned Rich dependency and run the interactive
 launcher instead of the manual PostgreSQL, Admin UI, server, and administrator commands above:
@@ -174,12 +238,13 @@ python3 scripts/reset_and_run_server.py
 ```
 
 The launcher requires a configured root `.env`, accepts only the fixed `compose.dev.yaml`
-development database, and asks for confirmation before permanently recreating it. It then lists the
+development database, and asks for confirmation before permanently recreating it. It also lists the
 logging, inbound, staging, work, canonical-storage, search, podcast-storage, and JSON-configured
 inbound roots explicitly set in `.env` and separately asks whether to empty them. If confirmed, every
 file and subdirectory is permanently removed while each configured root directory is preserved.
 Unsafe, linked, mounted-below, or overlapping targets fail closed before deletion. Back up anything
-you need from those roots before accepting the wipe.
+you need from those roots before accepting the wipe. The optional filesystem wipe runs before
+the database is recreated.
 
 The launcher builds the Admin UI and locked Rust executables, starts the server, securely prompts for
 the first administrator's username, email, and password, and keeps the server attached until Ctrl+C.
@@ -188,17 +253,26 @@ the separate directory-wipe or administrator prompts.
 
 ## Interfaces and clients
 
+[MeloAmp](docs/src/content/docs/clients/meloamp.md) owns listener browsing, playback, playlists,
+ratings, and recommendations. The server serves the Admin UI at `/admin`, APIs, and narrow
+browser security flows such as `/reset-password`; it does not include a second listener SPA at
+`/`. Jellyfin compatibility covers the declared music subset, not the full Jellyfin server.
+
 | Surface               | Scope                                                                                                                  | Reference                                                     |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | Native Melodee API v1 | First-party catalog, user, playback, sharing, request, podcast, and administration features                            | [Native API](docs/src/content/docs/api/melodee-api.md)        |
 | OpenSubsonic          | Captured protocol routes, JSON/XML/JSONP forms, auth variants, direct streaming, and music-client behavior             | [OpenSubsonic API](docs/src/content/docs/api/opensubsonic.md) |
-| Jellyfin              | Music-focused discovery, login, catalog, artwork, playlists, sessions, and direct-play compatibility                   | [Jellyfin API](docs/src/content/docs/api/jellyfin.md)         |
+| Jellyfin              | Music-focused discovery, login, catalog, artwork, playlists, sessions, direct play, and configured transcoding        | [Jellyfin API](docs/src/content/docs/api/jellyfin.md)         |
 | Admin UI              | Localized, accessible Carbon SPA for processing, catalog, identity, policy, access, settings, workers, and diagnostics | [Admin overview](docs/src/content/docs/admin/overview.md)     |
 
 The three API adapters intentionally do not share wire DTOs. Compatibility means preserving
 observable contracts, not retaining known security defects. Consult
 [`compatibility/`](compatibility/) before changing any externally visible route, field, error,
 identifier, or authentication behavior.
+
+The [current migrated-client acceptance matrix](compatibility/clients/r4/README.md) records the
+remaining release-candidate exercises. Historical client smoke tests are not a claim that every
+current client/version has passed against this checkout.
 
 ## Development workflow
 
@@ -210,18 +284,24 @@ make check-fast
 ```
 
 It validates repository metadata and requirement traceability, checks Rust formatting and
-Clippy, and runs workspace library tests. It deliberately omits PostgreSQL integration,
-compatibility captures, the Admin UI static gate, and dependency auditing.
+Clippy, and runs workspace library and binary unit tests. It deliberately omits PostgreSQL
+integration, compatibility captures, the Admin UI static gate, and dependency auditing.
 
-Run the complete gate before merge, release, or changes that affect those omitted areas:
+Run the full repository gate before merge, release, or changes that affect those omitted areas:
 
 ```bash
+cargo fmt --all
 make check
 ```
 
 `make check` validates the repository and requirement index, runs Python contract tests, the admin
 UI type/lint/i18n/unit/build gate when pnpm is available, Rust formatting and Clippy, the full
 Rust test suite, and `cargo deny` when installed. CI supplies PostgreSQL and media tools.
+For release validation, install pnpm and cargo-deny rather than accepting local skips. Run
+`make admin-ui-e2e` and `make docs-site-check` separately for browser/visual tests and the public
+documentation build. Full-size benchmarks, fresh differential captures, real-client acceptance,
+and operator rehearsals also require their documented explicit runs; `make check` does not
+complete those release gates.
 
 GitHub runs the fast gate for pushes and pull requests. The full validation workflow runs every
 night and can be started manually from the Actions tab before a release.
@@ -235,7 +315,7 @@ make postgres-reset                      # DESTROYS and recreates only the devel
 cargo test -p melodee-domain             # one Rust crate
 make test-unit                           # database-free Rust unit tests
 make test-integration                    # PostgreSQL-backed Rust integration tests
-make check                               # complete local release gate; requires PostgreSQL
+make check                               # full repository gate; requires PostgreSQL
 make lint                                # full workspace Clippy gate
 make docs                                # repository/documentation metadata checks
 make admin-ui-check                      # Admin UI static checks, unit tests, and build
@@ -254,6 +334,15 @@ and [accepted ADRs](design/adr/README.md).
 
 ## Documentation, compatibility, and migration
 
+The `melodee-cli legacy` command group provides inventory, planning, baseline, import, verification,
+delta, freeze, validation, and status operations. It reads the legacy source without modifying it,
+imports into a separate Rust target database, and adopts canonical media without mandatory
+re-encoding. The source snapshot, public IDs, user state, filesystem assets, and explicit issue
+dispositions must be verified before cutover. Start with the
+[migration guide](docs/src/content/docs/installation/legacy-migration.md) and
+[cutover/rollback runbook](design/runbooks/CUTOVER-AND-ROLLBACK.md). Production access, traffic
+switching, rollback activation, and cleanup retain their documented operator approvals.
+
 - Public documentation source lives in [`docs/`](docs/). The documentation workflow validates and
   builds it; GitHub Pages deployment is opt-in through `MELODEE_PAGES_ENABLED` repository
   configuration.
@@ -266,6 +355,10 @@ and [accepted ADRs](design/adr/README.md).
   [Withdrawn evidence reports](design/adr/README.md#withdrawn-evidence-reports)).
 - The legacy C# repository is valuable compatibility evidence, but its classes and service
   boundaries must not be copied into the Rust implementation.
+
+For changes, follow [CONTRIBUTING.md](CONTRIBUTING.md) and keep user-facing documentation current.
+See [CHANGELOG.md](CHANGELOG.md) for recorded changes. Report suspected vulnerabilities privately
+as described in [SECURITY.md](SECURITY.md).
 
 ## License
 

@@ -19,6 +19,12 @@ need a host-native executable.
 
 ## Quick deployment with Compose
 
+:::caution[Release availability]
+This procedure requires a published image tag. The project is still qualifying its initial
+v1.0.0 release; the Compose file and release workflow do not establish that a qualified image or
+`latest` tag is available. Check the release notes first, or use a source build for development.
+:::
+
 The repository's [`compose.yml`](../../../../../compose.yml) is the reference deployment. It uses
 the released GHCR image, PostgreSQL 18, named volumes for Melodee-owned state, and an inbound bind
 mount that permits only candidate-directory rename/removal after verified acquisition.
@@ -27,7 +33,8 @@ mount that permits only candidate-directory rename/removal after verified acquis
 git clone https://github.com/melodee-project/melodee-rs.git
 cd melodee-rs
 cp compose.env.example .env
-# Edit .env: set distinct random secrets, a public origin, and an absolute inbound path.
+# Edit .env: set a published MELODEE_IMAGE_TAG, distinct random secrets,
+# a matching PostgreSQL password/URL, a public origin, and an absolute inbound path.
 docker compose pull
 docker compose up -d
 docker compose ps
@@ -40,7 +47,8 @@ example permits the exact local origins used by MeloAmp through
 the native API.
 
 The Compose example binds the HTTP port only to `127.0.0.1` by default. Put a TLS-terminating
-reverse proxy in front of it and set `MELODEE__NATIVE__PUBLIC_ORIGIN` to that public HTTPS origin.
+reverse proxy in front of it and set `MELODEE_NATIVE_PUBLIC_ORIGIN` in the Compose `.env` to that
+public HTTPS origin (Compose passes it to `MELODEE__NATIVE__PUBLIC_ORIGIN` in the container).
 Only set `MELODEE_BIND_ADDRESS=0.0.0.0` for a deliberately firewalled direct deployment.
 
 After startup, verify the server and create the first administrator:
@@ -48,8 +56,12 @@ After startup, verify the server and create the first administrator:
 ```bash
 curl --fail http://127.0.0.1:8080/healthz
 curl --fail http://127.0.0.1:8080/readyz
-docker compose exec -e MELODEE__CLI__BOOTSTRAP_ADMIN_PASSWORD='a-long-unique-password' \
+# Bash: read the password without echoing it, then pass the environment variable by name.
+read -r -s -p 'Administrator password: ' MELODEE__CLI__BOOTSTRAP_ADMIN_PASSWORD
+export MELODEE__CLI__BOOTSTRAP_ADMIN_PASSWORD
+docker compose exec -e MELODEE__CLI__BOOTSTRAP_ADMIN_PASSWORD \
   melodee melodee-cli users bootstrap-admin --username admin --email admin@example.test
+unset MELODEE__CLI__BOOTSTRAP_ADMIN_PASSWORD
 ```
 
 The password is supplied through the process environment rather than a command-line argument.
@@ -67,6 +79,10 @@ Open `https://your-public-origin/admin` and finish the server-side onboarding ch
 For reproducible production deployments, pin `X.Y.Z` or the published image digest rather than
 `latest`. Set `MELODEE_IMAGE_TAG=X.Y.Z` in `.env` before `docker compose pull && docker compose
 up -d`.
+
+`MELODEE_IMAGE_TAG` accepts a tag, not a bare digest: the reference Compose file inserts a colon
+before its value. To pin a digest, override the `melodee` service's full `image` value with
+`ghcr.io/melodee-project/melodee@sha256:<published-manifest-digest>` in your deployment configuration.
 
 ## Persistent state and mounts
 

@@ -17,11 +17,16 @@ hero:
       icon: information
 ---
 
-:::note[Project status]
-This documentation describes the Rust Melodee server and its official GHCR
-container deployment. Legacy C# migration tooling is documented under
-[Installation](./installation/legacy-migration/); its production cutover/rollback rehearsal is
-the remaining release gate and is identified where relevant.
+:::caution[Pre-release status]
+The Rust server is working toward its initial v1.0.0 release and is not yet a qualified production
+replacement for the C# server. Legacy custom content blocks, per-user device profiles,
+notification-template files, and theme-pack preservation still need implementation or explicit
+release dispositions. Current-candidate client/integration acceptance, performance and recovery
+qualification, release artifacts, and migration/cutover/rollback rehearsal also remain.
+
+The [migration tooling](./installation/legacy-migration/) is implemented and ready for isolated
+rehearsal. Container instructions describe deployment of a published release; verify its release
+notes and image availability before using them. Source builds are available for development.
 :::
 
 ## Documentation map

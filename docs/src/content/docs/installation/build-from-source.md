@@ -16,7 +16,9 @@ promise support for every operating system or architecture.
 ## Prerequisites
 
 - Rust `1.97.1` (the repository's pinned toolchain).
-- PostgreSQL 17 or 18.
+- A native C/C++ build toolchain and Clang/libclang for native dependencies; the repository
+  Dockerfile records the reference Linux builder setup.
+- PostgreSQL; the reference development and CI environments use PostgreSQL 18.
 - FFmpeg with the `libmp3lame` encoder, `ffprobe`, and Chromaprint `fpcalc`.
 - Node.js 22.12+ and pnpm 11 to build the admin SPA.
 - Python 3.11+ for repository validation. Docker Compose is useful for the development PostgreSQL
@@ -29,21 +31,23 @@ git clone https://github.com/melodee-project/melodee-rs.git
 cd melodee-rs
 corepack enable
 (cd admin-ui && pnpm install --frozen-lockfile && pnpm build)
-cargo build --release -p melodee-server -p melodee-cli
+cargo build --locked --release -p melodee-server -p melodee-cli
 ```
 
-For a database-free checkout validation, run `make bootstrap`. It runs repository checks and Rust
-unit-test targets only. PostgreSQL-backed integration tests are available through
+For a database-free checkout validation, run `make bootstrap`. It runs repository checks, Python
+tests, formatting checks, and Rust library/binary unit tests. Media tools are required for the media
+tests. PostgreSQL-backed integration tests are available through
 `make test-integration` and are part of the full `make check` gate. They require the development
 database or an explicitly configured test database.
 
 Copy [`.env.example`](../../../../../.env.example) to a private local `.env`, replace the secret
-placeholders, and configure separate absolute inbound, work, canonical-storage, and search roots.
-Start PostgreSQL (for example `make postgres-up` for the repository's development service), export
-the configuration, and run the server from the checkout:
+placeholders, and configure separate absolute inbound, staging, work, canonical-storage, and
+(when enabled) search roots. Create the inbound directory and give your runtime user access to
+the configured roots. Start PostgreSQL (for example `make postgres-up`, which exposes the
+development service on host port 5433) and run the server from the checkout. The server and CLI
+load `.env` automatically; existing environment variables take precedence:
 
 ```bash
-set -a && . ./.env && set +a
 target/release/melodee-server
 ```
 
