@@ -29,15 +29,23 @@ remain fully FOSS.
 | Fingerprint | Chromaprint/fpcalc | 1.6.1 at PRD audit | MIT library | Proposed ADR-0108 |
 | Admin UI | React + Carbon | Carbon v11 / `@carbon/react` 1.x | MIT + Apache-2.0 | Proposed ADR-0109 |
 | Dependency audit | cargo-deny | 0.20.2 at audit | MIT/Apache-2.0 | Required tooling |
-| Documentation site | Astro + Starlight | astro 7.2.7, @astrojs/starlight 0.41.9 | MIT | Proposed ADR-0112 |
+| Documentation site | Astro + Starlight | astro 7.2.8, @astrojs/starlight 0.41.9 | MIT | Proposed ADR-0112 |
 | Docs validation | @astrojs/check, starlight-links-validator | 0.9.10, 0.25.3 | MIT | Proposed ADR-0112 |
-| Docs image pipeline | sharp | 0.35.3 | Apache-2.0 | Proposed ADR-0112 |
+| Docs image pipeline | sharp | 0.35.4 | Apache-2.0 | Proposed ADR-0112 |
 | Docs toolchain | Node.js + pnpm + TypeScript | Node 22.12+, pnpm 11.24.0, TS 6.0.3 | MIT / Apache-2.0 | Proposed ADR-0112 |
 | Docs search | Pagefind (via Starlight) | bundled by Starlight | MIT | Proposed ADR-0112 |
 
 Documentation-site versions were verified against the npm registry on 2026-08-26 (all packages
 active, current stable line, licenses as listed, no paid/open-core requirement for any feature
 Melodee uses). The committed `docs/pnpm-lock.yaml` is the authoritative lock.
+
+The October 2026 security refresh updates Astro to 7.2.8 and sharp to 0.35.4, with
+patched transitive dependencies in both JavaScript lockfiles. Astro's replacement process lookup
+dependency, `find-proc` 0.1.0, is MIT licensed (verified against npm metadata).
+The docs workspace temporarily
+overrides vulnerable js-yaml 4.x versions to 4.3.2 because `@astrojs/internal-helpers` 0.10.4
+pins 4.3.1 (GHSA-2883-xcg3-v3hh). Local docs/Admin UI gates and their CI workflows audit all
+dependencies, including development tooling; advisories fail the gates without suppressions.
 
 Reqwest 0.13.4 was revalidated against the crates.io package metadata on 2026-08-12. Melodee
 disables its default features and enables only JSON, query encoding, streaming response bodies,

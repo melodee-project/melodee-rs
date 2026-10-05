@@ -62,6 +62,8 @@ def run_admin_ui_checks(*, required: bool = False) -> None:
         return
 
     run([pnpm, "install", "--frozen-lockfile"], cwd=ADMIN_UI)
+    # Build and test tooling is part of the supply chain, so include dev dependencies.
+    run([pnpm, "audit"], cwd=ADMIN_UI)
     for command in ("check", "lint", "i18n:check", "test", "build"):
         run([pnpm, command], cwd=ADMIN_UI)
 
@@ -71,6 +73,7 @@ def run_docs_site_checks() -> None:
     if pnpm is None:
         raise CheckError("pnpm not installed; cannot run the documentation-site gate")
     run([pnpm, "install", "--frozen-lockfile"], cwd=DOCS)
+    run([pnpm, "audit"], cwd=DOCS)
     for command in ("check", "check:links", "build"):
         run([pnpm, command], cwd=DOCS)
 

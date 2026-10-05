@@ -71,8 +71,8 @@ jobs:
           pnpm check
           pnpm check:links
 
-      - name: Audit production dependencies
-        run: pnpm audit --prod
+      - name: Audit all dependencies
+        run: pnpm audit
 
       - name: Build site
         run: pnpm build

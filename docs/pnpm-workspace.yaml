@@ -6,3 +6,6 @@ allowBuilds:
   sharp: true
 overrides:
   nanoid: 3.3.18
+  # @astrojs/internal-helpers 0.10.4 pins vulnerable js-yaml 4.3.1.
+  # Remove when the upstream dependency moves past GHSA-2883-xcg3-v3hh.
+  'js-yaml@>=4.0.0 <4.3.2': 4.3.2

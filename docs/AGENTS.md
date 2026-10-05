@@ -113,6 +113,7 @@ and text embedded in images. Do not break the multilingual architecture.
 
 ```bash
 pnpm install --frozen-lockfile   # install (CI uses exactly this)
+pnpm audit                       # all dependency advisories, including development tools
 pnpm dev                         # local dev server
 pnpm check                       # Astro/TypeScript diagnostics
 pnpm check:links                 # relative link + asset validation

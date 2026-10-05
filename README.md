@@ -295,11 +295,13 @@ make check
 ```
 
 `make check` validates the repository and requirement index, runs Python contract tests, the admin
-UI type/lint/i18n/unit/build gate when pnpm is available, Rust formatting and Clippy, the full
-Rust test suite, and `cargo deny` when installed. CI supplies PostgreSQL and media tools.
+UI dependency audit and type/lint/i18n/unit/build gate when pnpm is available, Rust formatting
+and Clippy, the full Rust test suite, and `cargo deny` when installed. CI supplies PostgreSQL
+and media tools.
 For release validation, install pnpm and cargo-deny rather than accepting local skips. Run
 `make admin-ui-e2e` and `make docs-site-check` separately for browser/visual tests and the public
-documentation build. Full-size benchmarks, fresh differential captures, real-client acceptance,
+documentation audit and build. Both JavaScript audits include development dependencies.
+Full-size benchmarks, fresh differential captures, real-client acceptance,
 and operator rehearsals also require their documented explicit runs; `make check` does not
 complete those release gates.
 

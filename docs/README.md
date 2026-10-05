@@ -39,12 +39,14 @@ This starts the Astro dev server with live reload and prints the local URL.
 Run all checks before submitting a change:
 
 ```bash
+pnpm audit        # production and development dependency advisories
 pnpm check        # Astro/TypeScript diagnostics (content schemas, frontmatter, TS errors)
 pnpm check:links  # relative internal link and image-asset validation
 pnpm build        # production build; also runs starlight-links-validator and Pagefind
 ```
 
-A change is valid only when all three commands succeed.
+A change is valid only when all four commands succeed. From the repository root,
+`make docs-site-check` installs the frozen lockfile and runs these same checks.
 
 ## Build output
 
@@ -55,7 +57,7 @@ generated output, is listed in the repository `.gitignore`, and must never be co
 
 `.github/workflows/docs.yml` builds the site on every pull request that touches `docs/` and on
 the corresponding pushes to `main`. The workflow installs Node and pnpm deterministically, runs
-`pnpm install --frozen-lockfile`, `pnpm check`, `pnpm check:links`, and `pnpm build`.
+`pnpm install --frozen-lockfile`, `pnpm check`, `pnpm check:links`, `pnpm audit`, and `pnpm build`.
 
 To enable GitHub Pages publication on a repository and plan that support it:
 

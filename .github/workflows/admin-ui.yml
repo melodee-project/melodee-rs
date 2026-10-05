@@ -52,8 +52,8 @@ jobs:
         run: pnpm build
         working-directory: admin-ui
 
-      - name: Dependency audit
-        run: pnpm audit --prod
+      - name: Audit all dependencies
+        run: pnpm audit
         working-directory: admin-ui
 
   e2e:

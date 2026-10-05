@@ -212,7 +212,8 @@ class DeveloperCommandTests(unittest.TestCase):
             mock.patch.object(self.check.shutil, "which", return_value="pnpm"),
         ):
             self.check.run_checks("admin-ui")
-        self.assertEqual(len(run.call_args_list), 6)
+        self.assertEqual(len(run.call_args_list), 7)
+        run.assert_any_call(["pnpm", "audit"], cwd=self.check.ADMIN_UI)
         self.assertTrue(
             all(
                 call.kwargs["cwd"] == self.check.ADMIN_UI
@@ -230,10 +231,30 @@ class DeveloperCommandTests(unittest.TestCase):
             mock.patch.object(self.check.shutil, "which", return_value="pnpm"),
         ):
             self.check.run_checks("docs")
-        self.assertEqual(len(run.call_args_list), 4)
+        self.assertEqual(len(run.call_args_list), 5)
+        run.assert_any_call(["pnpm", "audit"], cwd=self.check.DOCS)
         self.assertTrue(
             all(call.kwargs["cwd"] == self.check.DOCS for call in run.call_args_list)
         )
+
+    def test_dependency_audit_failure_stops_site_gates_before_build(self) -> None:
+        for mode in ("admin-ui", "docs"):
+            with self.subTest(mode=mode):
+                def reject_vulnerable_dependencies(command, **kwargs):
+                    if command == ["pnpm", "audit"]:
+                        raise subprocess.CalledProcessError(1, command)
+
+                with (
+                    mock.patch.object(
+                        self.check, "run", side_effect=reject_vulnerable_dependencies
+                    ) as run,
+                    mock.patch.object(self.check.shutil, "which", return_value="pnpm"),
+                    self.assertRaises(subprocess.CalledProcessError),
+                ):
+                    self.check.run_checks(mode)
+                self.assertNotIn(
+                    ["pnpm", "build"], [call.args[0] for call in run.call_args_list]
+                )
 
     def test_admin_ui_e2e_make_mode_is_python_orchestrated(self) -> None:
         with (
