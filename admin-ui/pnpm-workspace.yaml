@@ -27,3 +27,7 @@ allowBuilds:
   '@ibm/plex-serif': false
   '@parcel/watcher': true
   esbuild: true
+overrides:
+  # Sass 1.103.1 pins 1.2.1, affected by GHSA-68fv-2mgg-jv7q.
+  # Remove when Sass permits a patched source-map-js release.
+  'source-map-js@>=1.0.0 <1.2.2': 1.2.2

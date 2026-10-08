@@ -6,6 +6,11 @@ template.
 
 ## Commands and environment
 
+- **Pre-commit/PR gate: `python3 scripts/do-prechecks.py`** (or `make prechecks`) checks
+  unstaged/staged Git diffs, runs the full repository gate and docs-site gate, and stops on
+  failure. Requires pnpm, cargo-deny, and media tools rather than allowing local skips.
+  Requires development/test PostgreSQL and network access for dependency installs/audits.
+  Add `--include-e2e` for Admin UI work (requires Playwright Chromium).
 - **Fast gate: `make check-fast`** (`python3 scripts/check.py fast`) gives broad feedback:
   repository/doc and requirement-index validation, Rust formatting, workspace Clippy, and Rust
   library tests. It intentionally excludes PostgreSQL integration, compatibility captures, UI

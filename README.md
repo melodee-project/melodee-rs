@@ -276,6 +276,14 @@ current client/version has passed against this checkout.
 
 ## Development workflow
 
+Before a commit or PR, run `python3 scripts/do-prechecks.py` (or `make prechecks`). It checks
+unstaged/staged Git diffs, runs the full repository gate and documentation-site gate, and
+stops at the first failure with live output and timings. All gate tools are required,
+including pnpm and cargo-deny; prepare development/test PostgreSQL and the media tools first.
+Dependency installs and audits need network access. For Admin UI changes, add
+`--include-e2e` to run Playwright end-to-end/visual tests with Chromium installed.
+The script checks the working checkout and does not install a Git hook or fix formatting.
+
 Use the fast gate for ordinary iteration:
 
 ```bash

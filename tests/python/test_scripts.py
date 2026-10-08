@@ -95,6 +95,7 @@ class DeveloperCommandTests(unittest.TestCase):
                 "postgres-down",
                 "postgres-reset",
                 "postgres-up",
+                "prechecks",
                 "test",
                 "test-integration",
                 "test-unit",
@@ -201,7 +202,7 @@ class DeveloperCommandTests(unittest.TestCase):
     def test_developer_orchestration_defaults_to_python(self) -> None:
         self.assertEqual(list((ROOT / "scripts").glob("*.sh")), [])
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
-        for script in ("bootstrap.py", "check.py", "reset_dev_database.py"):
+        for script in ("bootstrap.py", "check.py", "do-prechecks.py", "reset_dev_database.py"):
             with self.subTest(script=script):
                 self.assertIn(f"$(PYTHON) scripts/{script}", makefile)
         self.assertNotIn("\tcd ", makefile)

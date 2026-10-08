@@ -40,11 +40,26 @@ Every PR should identify:
 
 ## Quality gates
 
-Run:
+Before committing or opening a PR, run:
 
 ```bash
-make check
+python3 scripts/do-prechecks.py
 ```
+
+`make prechecks` is the same entry point. The script checks unstaged and staged Git diffs,
+runs the full `make check` gate, and validates/builds the documentation site. It streams
+output, reports timings, and stops at the first failure. It requires pnpm and cargo-deny
+instead of accepting the full gate's local tool skips. Install the pinned Rust toolchain,
+Node.js/pnpm, cargo-deny, FFmpeg/ffprobe, and fpcalc first, and prepare the development/test
+PostgreSQL instance as described in [the source-build guide](docs/src/content/docs/installation/build-from-source.md).
+Dependency installs and audits require network access.
+
+For Admin UI changes, run `python3 scripts/do-prechecks.py --include-e2e` to also run
+Playwright end-to-end/visual tests; install its Chromium browser first. Prechecks validate
+the working checkout, not an isolated snapshot of the staged files, and do not install Git
+hooks. Run `cargo fmt --all` to fix formatting before retrying a formatting failure.
+Release benchmarks, fresh compatibility captures, real-client acceptance, and authorized
+operator rehearsals remain separate gates.
 
 The first dependency-resolving change must generate and commit `Cargo.lock`.
 

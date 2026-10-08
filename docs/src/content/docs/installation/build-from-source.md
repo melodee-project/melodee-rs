@@ -86,6 +86,25 @@ starts Melodee, and securely prompts for the first administrator's username, ema
 password is passed only through the CLI's documented environment variable and is never placed in
 command arguments.
 
-Run `cargo fmt --all && make check-fast` while iterating and `make check` before submitting a
-change. See [Configuration](./configuration/) and [Storage](./storage/) for the safety-critical
+Run `cargo fmt --all` and `make check-fast` while iterating. Before committing or submitting
+a change, run:
+
+```bash
+python3 scripts/do-prechecks.py
+```
+
+`make prechecks` runs the same script. It checks staged and unstaged Git diffs, runs the full
+repository gate, and validates/builds the documentation site, stopping at the first failure
+with live output and timings. Install cargo-deny in addition to the prerequisites above;
+prechecks require all tools rather than skipping missing pnpm or cargo-deny. PostgreSQL must
+be available for integration tests, and dependency installs and audits need network access.
+Formatting is checked without rewriting source files. Tests run against the working checkout,
+including unstaged edits; this command does not install a Git hook.
+
+For Admin UI changes, install Playwright's Chromium browser and run
+`python3 scripts/do-prechecks.py --include-e2e` to include end-to-end/visual tests. Release
+benchmarks, fresh compatibility captures, real-client acceptance, and authorized operator
+rehearsals still require their separate documented runs.
+
+See [Configuration](./configuration/) and [Storage](./storage/) for the safety-critical
 runtime settings.

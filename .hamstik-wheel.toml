@@ -1,0 +1,81 @@
+[hamstik]
+cli_path = "/home/steven/.local/bin/hamstik"
+statuses = ["backlog", "todo"]
+item_types = ["task", "bug", "story", "feature"]
+label_names = []
+
+[models]
+#implement = "gb10/qwen3.6-35b-a3b"
+#review = "gb10/bonsai2-27b"
+implement = "openrouter/deepseek/deepseek-v4.1-flash"
+review = "openrouter/z-ai/glm-5.3-flash"
+
+[sandbox]
+# Provision these existing, pinned tools before running Wheel. No host services
+# or credentials are exposed; caches and databases are private to each command.
+read_only_paths = [
+    "/home/steven/.local/share/hamstik-wheel/toolchain",
+    "/home/steven/.cache/node/corepack/v1/pnpm/11.24.0",
+    "/home/steven/.cache/ms-playwright",
+    "/home/steven/.local/share/pnpm/store/v11",
+]
+
+[validation]
+execution = "sandbox"
+preflight_commands = ["python3 scripts/wheel-validate.py preflight"]
+commands = ["python3 scripts/wheel-validate.py base"]
+require_rules_for = [
+    "drizzle/",
+    "src/db/",
+    "src/components/",
+    "docs/",
+    "docs-site/",
+]
+
+[[validation.rules]]
+path_prefixes = [
+    "drizzle/",
+    "src/db/",
+    "scripts/lib/migrations",
+    "scripts/test-migrations",
+]
+commands = ["python3 scripts/wheel-validate.py migrations"]
+
+[[validation.rules]]
+path_prefixes = ["src/", "drizzle/", "scripts/lib/migrations"]
+commands = ["python3 scripts/wheel-validate.py postgres"]
+
+[[validation.rules]]
+path_prefixes = [
+    "src/",
+    "e2e/",
+    "public/",
+    "assets/fonts/",
+    "playwright.config",
+    "next.config",
+]
+commands = [
+    "python3 scripts/wheel-validate.py components",
+    "python3 scripts/wheel-validate.py browser",
+]
+
+[[validation.rules]]
+path_prefixes = ["docs/", "docs-site/"]
+commands = ["python3 scripts/wheel-validate.py docs"]
+
+[loop]
+max_items = 1
+max_review_cycles = 3
+on_failure = "halt"
+max_consecutive_skips = 3
+agent_timeout_minutes = 105
+implement_retry = true
+
+[git]
+require_clean_start = true
+commit = true
+commit_message = "{key}: {title}"
+
+[comments]
+post_started = true
+post_completed = true
