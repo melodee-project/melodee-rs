@@ -4,7 +4,7 @@
   "private": true,
   "description": "Melodee public user documentation (Astro Starlight)",
   "type": "module",
-  "packageManager": "pnpm@11.24.0",
+  "packageManager": "pnpm@12.10.1",
   "engines": {
     "node": ">=22.12.0"
   },
@@ -18,10 +18,10 @@
     "sync": "astro sync"
   },
   "dependencies": {
-    "@astrojs/starlight": "0.41.9",
-    "astro": "7.2.8",
-    "sharp": "0.35.4",
-    "starlight-links-validator": "0.25.3"
+    "@astrojs/starlight": "0.42.5",
+    "astro": "7.3.7",
+    "sharp": "0.35.5",
+    "starlight-links-validator": "0.26.0"
   },
   "devDependencies": {
     "@astrojs/check": "0.9.10",

@@ -359,7 +359,7 @@ class ResetAndRunServerTests(unittest.TestCase):
         requirements = (ROOT / "scripts" / "requirements.txt").read_text(
             encoding="utf-8"
         )
-        self.assertIn("rich==14.3.2", requirements.splitlines())
+        self.assertIn("rich==15.0.0", requirements.splitlines())
 
     def test_setup_orchestrates_the_documented_sequence_and_scopes_the_password(
         self,

@@ -13,8 +13,8 @@ Agents and contributors changing files under `/docs` must read [`AGENTS.md`](AGE
 
 ## Requirements
 
-- Node.js ≥ 22.12
-- pnpm 11 (via Corepack: `corepack enable`, or see <https://pnpm.io/installation>)
+- Node.js ≥ 26.11.1
+- pnpm 12 (install with: `npm install --global pnpm@12.10.1`, or see <https://pnpm.io/installation>)
 
 ## Install
 
@@ -25,6 +25,10 @@ pnpm install --frozen-lockfile
 
 The lockfile (`pnpm-lock.yaml`) is committed and is the only dependency source of truth. Never
 install with npm or yarn.
+
+TypeScript stays at 6.0.3 for `astro check`: the current stable Astro checker rejects
+TypeScript 7. The dependency refresh and this compatibility exception are recorded in
+[ADR-0179](../design/adr/ADR-0179-refresh-pinned-runtime-dependencies-while-preserving-execution-boundaries.md).
 
 ## Run locally
 

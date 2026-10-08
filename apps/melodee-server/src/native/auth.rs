@@ -1155,25 +1155,25 @@ async fn cookie_sign_out() -> Response {
 async fn verified_google_user(
     state: &NativeState,
     request: &GoogleAuthRequest,
-) -> Result<StoredNativeUser, Response> {
+) -> Result<StoredNativeUser, Box<Response>> {
     let Some(google) = state.auth.google.as_ref() else {
-        return Err(bad_request(
+        return Err(Box::new(bad_request(
             "BAD_REQUEST",
             "Google authentication is not enabled",
-        ));
+        )));
     };
     let Some(claims) = google.validate(&request.id_token).await else {
-        return Err(bad_request(
+        return Err(Box::new(bad_request(
             "invalid_google_token",
             "Google token validation failed",
-        ));
+        )));
     };
     match AuthStore::new()
         .user_for_social_login(&state.pool, "google", &claims.sub, OffsetDateTime::now_utc())
         .await
     {
         Ok(Some(user)) if user.can_authenticate() => Ok(user),
-        Ok(_) => Err((
+        Ok(_) => Err(Box::new((
             StatusCode::CONFLICT,
             Json(AuthErrorBody {
                 code: "google_account_not_linked",
@@ -1181,8 +1181,8 @@ async fn verified_google_user(
                 correlation_id: crate::correlation::envelope_id(),
             }),
         )
-            .into_response()),
-        Err(_) => Err(unavailable()),
+            .into_response())),
+        Err(_) => Err(Box::new(unavailable())),
     }
 }
 
@@ -1197,7 +1197,7 @@ async fn google_authenticate(
     }
     let user = match verified_google_user(&state, &request).await {
         Ok(user) => user,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     match issue_login(
         &state,
@@ -1223,7 +1223,7 @@ async fn google_cookie_authenticate(
     }
     let user = match verified_google_user(&state, &request).await {
         Ok(user) => user,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     issue_cookie_response(&state, &user)
 }

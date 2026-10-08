@@ -39,8 +39,8 @@ jobs:
 
       - name: Install pinned Rust toolchain
         run: |
-          rustup toolchain install 1.97.1 --profile minimal --component rustfmt --component clippy
-          rustup default 1.97.1
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy
+          rustup default 1.99.0
 
       - name: Show tool versions
         run: |

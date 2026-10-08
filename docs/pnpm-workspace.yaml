@@ -5,7 +5,6 @@ allowBuilds:
   esbuild: true
   sharp: true
 overrides:
-  nanoid: 3.3.18
-  # @astrojs/internal-helpers 0.10.4 pins vulnerable js-yaml 4.3.1.
-  # Remove when the upstream dependency moves past GHSA-2883-xcg3-v3hh.
-  'js-yaml@>=4.0.0 <4.3.2': 4.3.2
+  # Expressive Code still brings postcss-nested 6 and its vulnerable parser.
+  # Remove when upstream resolves GHSA-rj75-hqrm-r3gf without an override.
+  'postcss-selector-parser@<7.1.6': 7.1.6

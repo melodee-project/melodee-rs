@@ -37,8 +37,8 @@ jobs:
 
       - name: Install pinned Rust toolchain
         run: |
-          rustup toolchain install 1.97.1 --profile minimal
-          rustup default 1.97.1
+          rustup toolchain install 1.99.0 --profile minimal
+          rustup default 1.99.0
 
       - name: Validate SemVer and Cargo package versions
         id: version
@@ -117,8 +117,8 @@ jobs:
 
       - name: Install pinned Rust toolchain
         run: |
-          rustup toolchain install 1.97.1 --profile minimal --component rustfmt --component clippy
-          rustup default 1.97.1
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy
+          rustup default 1.99.0
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6
@@ -129,7 +129,7 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 26.11.1
           cache: pnpm
           cache-dependency-path: admin-ui/pnpm-lock.yaml
 
@@ -211,7 +211,7 @@ jobs:
         if: success()
         uses: anchore/sbom-action/download-syft@v0
         with:
-          syft-version: v1.51.0
+          syft-version: v1.54.1
 
       - name: Record image identity and generate SPDX SBOM
         if: success()

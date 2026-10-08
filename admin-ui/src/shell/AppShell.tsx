@@ -291,7 +291,6 @@ export function AppShell() {
         <button
           type="button"
           className="melodee-shell__command-entry"
-          aria-label={t('shell.openSearch', { shortcut: '⌘K' })}
           onClick={() => setSearchOpen(true)}
         >
           <SearchIcon size={16} aria-hidden />

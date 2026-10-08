@@ -49,6 +49,10 @@ a retryable error banner appears instead of a blank screen.
 
 ## Navigation map
 
+Use **Search or jump to a screen** in the header, or press **Ctrl+K** (**⌘K** on macOS),
+to open the screen picker. The search button's accessible name includes its visible label,
+so it can also be identified by that text with assistive technology.
+
 | Section | Path | What it is |
 |---|---|---|
 | Overview | `/admin` | Dashboard described above |

@@ -1,10 +1,10 @@
 # ADR-0168: Upgrade pinned DecentDB replica reader to 2.17.1
 
 - **Date:** 2026-08-26
-- **Status:** Accepted
+- **Status:** Superseded
 - **Decision owners:** Repository dependency maintenance
 - **Supersedes:** ADR-0163
-- **Superseded by:** None
+- **Superseded by:** ADR-0179
 - **Related requirements:** PRD-ARTIST-012, PRD-EXT-001, PRD-EXT-003, PRD-CONFIG-001
 
 ## Context

@@ -4,8 +4,8 @@
 # than the developer workstation.  ADR-0108 requires explicit, FOSS media
 # tooling; Debian's ffmpeg and libchromaprint-tools packages provide ffmpeg,
 # ffprobe, and fpcalc respectively.
-ARG RUST_VERSION=1.97.1
-ARG NODE_VERSION=22
+ARG RUST_VERSION=1.99.0
+ARG NODE_VERSION=26.11.1
 
 FROM node:${NODE_VERSION}-bookworm-slim AS admin-ui-build
 
@@ -14,7 +14,8 @@ WORKDIR /src/admin-ui
 # pnpm's frozen lockfile commits to both its workspace build-script policy and
 # the dependency-rewrite hook, so they must be present before installation.
 COPY admin-ui/package.json admin-ui/pnpm-lock.yaml admin-ui/pnpm-workspace.yaml admin-ui/.pnpmfile.cjs ./
-RUN corepack enable && pnpm install --frozen-lockfile
+RUN npm install --global pnpm@12.10.1
+RUN pnpm install --frozen-lockfile
 
 COPY admin-ui/ ./
 RUN pnpm build

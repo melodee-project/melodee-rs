@@ -15,12 +15,12 @@ promise support for every operating system or architecture.
 
 ## Prerequisites
 
-- Rust `1.97.1` (the repository's pinned toolchain).
+- Rust `1.99.0` (the repository's pinned toolchain).
 - A native C/C++ build toolchain and Clang/libclang for native dependencies; the repository
   Dockerfile records the reference Linux builder setup.
 - PostgreSQL; the reference development and CI environments use PostgreSQL 18.
 - FFmpeg with the `libmp3lame` encoder, `ffprobe`, and Chromaprint `fpcalc`.
-- Node.js 22.12+ and pnpm 11 to build the admin SPA.
+- Node.js 26.11.1+ and pnpm 12 to build the admin SPA.
 - Python 3.11+ for repository validation. Docker Compose is useful for the development PostgreSQL
   service but is not required for a native build.
 
@@ -29,7 +29,7 @@ promise support for every operating system or architecture.
 ```bash
 git clone https://github.com/melodee-project/melodee-rs.git
 cd melodee-rs
-corepack enable
+npm install --global pnpm@12.10.1
 (cd admin-ui && pnpm install --frozen-lockfile && pnpm build)
 cargo build --locked --release -p melodee-server -p melodee-cli
 ```

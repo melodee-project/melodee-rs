@@ -72,7 +72,8 @@ test('renders the shell navigation groups in English', async ({ page }) => {
   // UI-SPEC §8: below lg the side nav starts collapsed to icons/overlay;
   // expand it via the header control before asserting labels.
   const expandButton = page.getByRole('button', { name: 'Expand navigation' }).first();
-  if (await expandButton.isVisible()) {
+  if ((page.viewportSize()?.width ?? 1600) < 1056) {
+    await expect(expandButton).toBeVisible();
     await expandButton.click();
   }
 

@@ -135,7 +135,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
             workflow,
         )
         self.assertIn("anchore/sbom-action/download-syft@v0", workflow)
-        self.assertIn("syft-version: v1.51.0", workflow)
+        self.assertIn("syft-version: v1.54.1", workflow)
         self.assertIn("format: json", workflow)
         self.assertIn("output: trivy-critical.json", workflow)
         self.assertIn("output: trivy-high.json", workflow)

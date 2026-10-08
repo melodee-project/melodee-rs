@@ -113,15 +113,15 @@ async fn require_self(
     uri: &Uri,
     user_id: &str,
     other_user_detail: &str,
-) -> Result<super::auth::JfPrincipal, Response> {
+) -> Result<super::auth::JfPrincipal, Box<Response>> {
     let Some(principal) = resolve_token(state, headers, uri).await else {
-        return Err(unauthorized());
+        return Err(Box::new(unauthorized()));
     };
     // Captured: the path userId is the public id and must equal the bearer's
     // public id (not the internal row id).
     let parsed = model::parse_id(user_id);
     if parsed != Some(principal.public_api_id) {
-        return Err(forbidden(other_user_detail));
+        return Err(Box::new(forbidden(other_user_detail)));
     }
     Ok(principal)
 }
@@ -142,7 +142,7 @@ async fn add_favorite(
     .await
     {
         Ok(principal) => principal,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     let Some(item_id) = model::parse_id(&item_id) else {
         return bad_request("Invalid item ID format.");
@@ -216,7 +216,7 @@ async fn remove_favorite(
     .await
     {
         Ok(principal) => principal,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     let Some(item_id) = model::parse_id(&item_id) else {
         return bad_request("Invalid item ID format.");
@@ -337,7 +337,7 @@ async fn mark_played(
     .await
     {
         Ok(principal) => principal,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     let Some(item_id) = model::parse_id(&item_id) else {
         return bad_request("Invalid item ID format.");
@@ -411,7 +411,7 @@ async fn mark_unplayed(
     .await
     {
         Ok(principal) => principal,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     let Some(item_id) = model::parse_id(&item_id) else {
         return bad_request("Invalid item ID format.");

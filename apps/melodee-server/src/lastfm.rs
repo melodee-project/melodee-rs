@@ -846,27 +846,44 @@ impl LastfmDispatch {
     }
 }
 
+/// Internal session-link failures; callers preserve the captured HTTP error.
+#[derive(Debug, Error)]
+pub enum LastfmLinkError {
+    #[error("Last.fm sealing key resolution failed")]
+    Settings(#[source] SettingsError),
+    #[error("Last.fm sealing key is not configured")]
+    MissingKey,
+    #[error("Last.fm session sealing failed")]
+    Seal(#[source] melodee_auth::CipherError),
+    #[error("Last.fm link persistence failed")]
+    Store(#[source] ProviderStoreError),
+}
+
 /// Persists a completed session exchange as the user's Last.fm link. The raw
 /// session key is sealed and digested here and never reaches the store.
 ///
 /// # Errors
-/// Returns `None`-equivalent errors as `Err(())` with a warning logged;
+/// Returns a typed failure with a warning logged;
 /// callers map every failure to the captured 400 shapes.
 pub async fn store_linked_session(
     pool: &PgPool,
     user_id: Uuid,
     session: &LastfmSession,
-) -> Result<(), ()> {
+) -> Result<(), LastfmLinkError> {
     let Some(cipher) = sealing_cipher(pool).await.map_err(|error| {
         tracing::warn!(%error, "last.fm sealing key resolution failed");
+        LastfmLinkError::Settings(error)
     })?
     else {
         tracing::warn!("security.secretKey is not configured; cannot store last.fm link");
-        return Err(());
+        return Err(LastfmLinkError::MissingKey);
     };
     let ciphertext = cipher
         .seal(session.key.expose_secret().as_bytes())
-        .map_err(|error| tracing::warn!(%error, "last.fm session key sealing failed"))?;
+        .map_err(|error| {
+            tracing::warn!(%error, "last.fm session key sealing failed");
+            LastfmLinkError::Seal(error)
+        })?;
     let digest = lastfm_session_key_digest(session.key.expose_secret().as_bytes());
     LastfmLinkStore::new()
         .link(
@@ -880,6 +897,7 @@ pub async fn store_linked_session(
         .await
         .map_err(|error: ProviderStoreError| {
             tracing::warn!(%error, "last.fm link persistence failed");
+            LastfmLinkError::Store(error)
         })
 }
 

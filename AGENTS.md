@@ -28,7 +28,7 @@ template.
 - **Focused runs:** `cargo test -p melodee-domain` for one crate; `make test-unit` (database-free
   Rust library and binary unit tests), `make test-integration` (PostgreSQL-backed integration
   tests), `make lint`, `make test`, `make docs` (doc validation only), `make deny`.
-- **Toolchain:** pinned `1.97.1` in `rust-toolchain.toml`. Workspace dependencies use exact `=`
+- **Toolchain:** pinned `1.99.0` in `rust-toolchain.toml`. Workspace dependencies use exact `=`
   versions in `Cargo.toml [workspace.dependencies]`; keep versions centralized there.
   `Cargo.lock` is committed — regenerate and commit it with dependency changes.
 - **Clippy lint groups need explicit priority:** a bare `all = "warn"` in

@@ -615,7 +615,7 @@ pub async fn lastfm_session(
     // raw key is never persisted, logged, or returned (ADR-0134 §7 amended).
     crate::lastfm::store_linked_session(&state.pool, principal.user_id, &session)
         .await
-        .map_err(|()| NativeApiError::CapturedBadRequest("Unable to save Last.fm session key"))?;
+        .map_err(|_| NativeApiError::CapturedBadRequest("Unable to save Last.fm session key"))?;
     Ok(Json(serde_json::json!({"message": "Last.fm linked"})))
 }
 

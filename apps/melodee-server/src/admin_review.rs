@@ -498,14 +498,14 @@ async fn review_detail(
 ) -> Response {
     match load_review_detail(&state.admin.pool, work_item_id).await {
         Ok(detail) => Json(detail).into_response(),
-        Err(response) => response,
+        Err(response) => *response,
     }
 }
 
 async fn load_review_detail(
     pool: &sqlx::PgPool,
     work_item_id: Uuid,
-) -> Result<ReviewDetailDto, Response> {
+) -> Result<ReviewDetailDto, Box<Response>> {
     let item = WorkItemStore
         .get(pool, work_item_id)
         .await
@@ -524,7 +524,7 @@ async fn load_review_detail(
             Some(manifest_summary(&stored, &parsed))
         }
         Ok(None) => None,
-        Err(error) => return Err(store_failure("manifest read failed", &error)),
+        Err(error) => return Err(Box::new(store_failure("manifest read failed", &error))),
     };
     let events = WorkItemStore
         .list_events(pool, item.id)
@@ -533,7 +533,12 @@ async fn load_review_detail(
     let release_id = match CatalogStore.get_import(pool, item.id).await {
         Ok(Some(import)) => Some(import.release_id),
         Ok(None) => None,
-        Err(error) => return Err(store_failure("catalog binding read failed", &error)),
+        Err(error) => {
+            return Err(Box::new(store_failure(
+                "catalog binding read failed",
+                &error,
+            )));
+        }
     };
     let (classification, catalog_comparison, decision) = if let Some(release_uuid) = release_id {
         let release_id = melodee_domain::ReleaseId::from_uuid(release_uuid);

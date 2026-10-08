@@ -160,7 +160,7 @@ commands.
 
 ## Quick start for contributors
 
-The pinned toolchain is Rust **1.97.1**. For a full local environment you also need:
+The pinned toolchain is Rust **1.99.0**. For a full local environment you also need:
 
 - Python 3.11+ and Make for repository commands.
 - A native C/C++ build toolchain and Clang/libclang for dependencies; the
@@ -169,7 +169,7 @@ The pinned toolchain is Rust **1.97.1**. For a full local environment you also n
   client tools for backup/restore and migration exercises. Its host port is **5433**.
 - FFmpeg (`ffmpeg` with `libmp3lame`, and `ffprobe`) and Chromaprint (`fpcalc`), including for
   media unit tests.
-- Node.js 22.12+ and pnpm 11 for the Admin UI and documentation; exact pnpm versions are recorded
+- Node.js 26.11.1+ and pnpm 12 for the Admin UI and documentation; exact pnpm versions are recorded
   in each `package.json`.
 - `cargo-deny` for the complete dependency-policy gate.
 
@@ -184,7 +184,7 @@ make bootstrap
 make postgres-up
 
 # The admin SPA is served from admin-ui/dist at /admin.
-corepack enable
+npm install --global pnpm@12.10.1
 (cd admin-ui && pnpm install --frozen-lockfile && pnpm build)
 ```
 

@@ -283,15 +283,15 @@ pub fn router() -> Router<AdminAccessState> {
         .route_layer(axum::extract::DefaultBodyLimit::max(64 * 1024))
 }
 
-async fn load_active_rule_set(pool: &sqlx::PgPool) -> Result<PolicyRuleSet, Response> {
+async fn load_active_rule_set(pool: &sqlx::PgPool) -> Result<PolicyRuleSet, Box<Response>> {
     match PolicyStore.load_rule_set(pool, DEFAULT_RULE_SET_NAME).await {
         Ok(Some(rule_set)) => Ok(rule_set),
-        Ok(None) => Err(policy_error(
+        Ok(None) => Err(Box::new(policy_error(
             StatusCode::CONFLICT,
             "rule_set_not_found",
             "no policy rule set is persisted yet; start the policy worker once to provision the default rule set",
-        )),
-        Err(error) => Err(store_failure("rule set read failed", &error)),
+        ))),
+        Err(error) => Err(Box::new(store_failure("rule set read failed", &error))),
     }
 }
 
@@ -324,7 +324,9 @@ async fn mutate_rule_set(
     admin: &AdminPrincipal,
     mutate: impl FnOnce(&PolicyRuleSet) -> Result<Vec<PolicyRule>, Response>,
 ) -> Result<PolicyRuleSet, Response> {
-    let latest = load_active_rule_set(pool).await?;
+    let latest = load_active_rule_set(pool)
+        .await
+        .map_err(|response| *response)?;
     let rules = mutate(&latest)?;
     let new_version = latest.version.saturating_add(1);
     let now = OffsetDateTime::now_utc();
@@ -389,7 +391,7 @@ async fn list_rules(State(state): State<AdminAccessState>, _admin: AdminPrincipa
     let pool = &state.pool;
     let latest = match load_active_rule_set(pool).await {
         Ok(rule_set) => rule_set,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     let versions = match PolicyStore.list_rule_set_versions(pool, &latest.name).await {
         Ok(versions) => versions,
@@ -619,7 +621,7 @@ async fn enable_rule(
     let pool = &state.pool;
     let latest = match load_active_rule_set(pool).await {
         Ok(rule_set) => rule_set,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     if let Some(rule) = latest.find_rule(&id) {
         let priority = latest.rules.iter().position(|existing| existing.id == id);
@@ -688,7 +690,7 @@ async fn disable_rule(
     let pool = &state.pool;
     let latest = match load_active_rule_set(pool).await {
         Ok(rule_set) => rule_set,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     if latest.find_rule(&id).is_none() {
         return Json(serde_json::json!({
@@ -747,7 +749,7 @@ async fn test_rule(
     let pool = &state.pool;
     let latest = match load_active_rule_set(pool).await {
         Ok(rule_set) => rule_set,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     let (candidate, tested_rule_id, persistable) = match (request.rule_id, request.rule) {
         (Some(rule_id), None) => {

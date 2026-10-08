@@ -51,29 +51,29 @@ async fn resolve_track_param(
     state: &OsState,
     params: &Option<Extension<Params>>,
     raw_id: Option<&str>,
-) -> Result<Uuid, Response> {
+) -> Result<Uuid, Box<Response>> {
     let Some(raw_id) = raw_id else {
-        return Err(error_reply(
+        return Err(Box::new(error_reply(
             state,
             params,
             10,
             "Required parameter is missing.",
-        ));
+        )));
     };
     let Some(EntityRef::Track(public_id)) = parse_prefixed_id(raw_id) else {
-        return Err(error_reply(state, params, 44, "Invalid API key."));
+        return Err(Box::new(error_reply(state, params, 44, "Invalid API key.")));
     };
     match track_id_for_public_id(&state.pool, public_id).await {
         Ok(Some(track_id)) => Ok(track_id),
-        Ok(None) => Err(error_reply(
+        Ok(None) => Err(Box::new(error_reply(
             state,
             params,
             70,
             "The requested data was not found.",
-        )),
+        ))),
         Err(error) => {
             tracing::error!(%error, "opensubsonic bookmark track resolution failed");
-            Err(error_reply(state, params, 0, "A generic error."))
+            Err(Box::new(error_reply(state, params, 0, "A generic error.")))
         }
     }
 }
@@ -167,7 +167,7 @@ pub async fn create_bookmark(
         .map(str::to_string);
     let track_id = match resolve_track_param(&state, &params, raw_id).await {
         Ok(track_id) => track_id,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     if position < 0 {
         return error_reply(&state, &params, 10, "Position must not be negative.");
@@ -205,7 +205,7 @@ pub async fn delete_bookmark(
     let raw_id = params.as_ref().and_then(|Extension(p)| p.get("id"));
     let track_id = match resolve_track_param(&state, &params, raw_id).await {
         Ok(track_id) => track_id,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     // Deleting an absent bookmark is a captured no-op ok.
     if let Err(error) =

@@ -241,7 +241,16 @@ async fn scheduler_runs_periodically_and_stops_gracefully() {
     // without any explicit trigger.
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
     loop {
-        if popularity(&db, "track", seeded.track_id).await == Some(1) {
+        // A projection statement commits before the maintenance pass returns.
+        // Stopping on that statement alone can cancel the first pass, leaving
+        // no completed statistics to report. Wait for its durable completion.
+        let completed: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM job_run_history WHERE job_name='discovery' AND success=true AND completed_at IS NOT NULL)",
+        )
+        .fetch_one(&db.pool)
+        .await
+        .expect("completed discovery pass");
+        if completed && popularity(&db, "track", seeded.track_id).await == Some(1) {
             break;
         }
         assert!(

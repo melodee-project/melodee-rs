@@ -551,18 +551,21 @@ async fn list_unresolved(
 async fn load_detail(
     pool: &sqlx::PgPool,
     observation_id: Uuid,
-) -> Result<ObservedArtistDetail, Response> {
+) -> Result<ObservedArtistDetail, Box<Response>> {
     match CatalogStore
         .observed_artist_detail(pool, observation_id)
         .await
     {
         Ok(Some(detail)) => Ok(detail),
-        Ok(None) => Err(identity_error(
+        Ok(None) => Err(Box::new(identity_error(
             StatusCode::NOT_FOUND,
             "not_found",
             format!("observed artist not found: {observation_id}"),
-        )),
-        Err(error) => Err(store_failure("observation detail read failed", &error)),
+        ))),
+        Err(error) => Err(Box::new(store_failure(
+            "observation detail read failed",
+            &error,
+        ))),
     }
 }
 
@@ -575,7 +578,7 @@ async fn observation_detail(
 ) -> Response {
     match load_detail(&state.pool, id).await {
         Ok(detail) => Json(detail_dto(detail)).into_response(),
-        Err(response) => response,
+        Err(response) => *response,
     }
 }
 
@@ -598,7 +601,7 @@ async fn resolve_observation(
     }
     let detail = match load_detail(&state.pool, id).await {
         Ok(detail) => detail,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     let now = OffsetDateTime::now_utc();
     match request.resolution.as_str() {
@@ -612,7 +615,7 @@ async fn resolve_observation(
             };
             let artist = match resolvable_artist(&state.pool, public_id).await {
                 Ok(artist) => artist,
-                Err(response) => return response,
+                Err(response) => return *response,
             };
             match record_confirmation(&state.pool, id, artist.id, &admin, &reason, now).await {
                 Ok(()) => {
@@ -630,7 +633,7 @@ async fn resolve_observation(
                     })
                     .into_response()
                 }
-                Err(response) => response,
+                Err(response) => *response,
             }
         }
         "create-new" => {
@@ -678,7 +681,7 @@ async fn resolve_observation(
                     })
                     .into_response()
                 }
-                Err(response) => response,
+                Err(response) => *response,
             }
         }
         "leave-provisional" => {
@@ -722,7 +725,7 @@ async fn record_confirmation(
     admin: &AdminPrincipal,
     reason: &str,
     now: OffsetDateTime,
-) -> Result<(), Response> {
+) -> Result<(), Box<Response>> {
     let decision = ArtistMatchDecision::new(
         NewArtistMatchDecision {
             id: melodee_domain::ArtistMatchDecisionId::new(),
@@ -749,7 +752,7 @@ async fn record_confirmation(
             serde_json::json!({ "surface": "admin-api/v1/identity" }),
         )
         .await
-        .map_err(catalog_error)
+        .map_err(|error| Box::new(catalog_error(error)))
 }
 
 /// POST /api/admin/v1/identity/observations/{id}/never-match — durable
@@ -769,11 +772,11 @@ async fn never_match(
         );
     }
     if let Err(response) = load_detail(&state.pool, id).await {
-        return response;
+        return *response;
     }
     let artist = match resolvable_artist(&state.pool, request.artist_id).await {
         Ok(artist) => artist,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     let assertion = ArtistNegativeAssertion {
         id: melodee_domain::ArtistNegativeAssertionId::new(),
@@ -858,11 +861,11 @@ async fn merge_artists(
     }
     let source = match resolvable_artist(&state.pool, request.source_artist_id).await {
         Ok(artist) => artist,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     let target = match resolvable_artist(&state.pool, request.target_artist_id).await {
         Ok(artist) => artist,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     let merge = ArtistMerge {
         id: melodee_domain::ArtistMergeId::new(),
@@ -899,31 +902,31 @@ async fn resolve_merge_selection(
     pool: &sqlx::PgPool,
     source_artist_ids: &[Uuid],
     target_artist_id: Uuid,
-) -> Result<(Vec<ArtistIdentityRef>, ArtistIdentityRef), Response> {
+) -> Result<(Vec<ArtistIdentityRef>, ArtistIdentityRef), Box<Response>> {
     if source_artist_ids.is_empty() || source_artist_ids.len() > MAX_ARTIST_MERGE_SOURCES {
-        return Err(identity_error(
+        return Err(Box::new(identity_error(
             StatusCode::BAD_REQUEST,
             "invalid_sources",
             format!("select between 1 and {MAX_ARTIST_MERGE_SOURCES} source Artists"),
-        ));
+        )));
     }
     let source_ids = source_artist_ids
         .iter()
         .copied()
         .collect::<std::collections::BTreeSet<_>>();
     if source_ids.len() != source_artist_ids.len() {
-        return Err(identity_error(
+        return Err(Box::new(identity_error(
             StatusCode::BAD_REQUEST,
             "duplicate_source",
             "source Artist ids must be distinct",
-        ));
+        )));
     }
     if source_ids.contains(&target_artist_id) {
-        return Err(identity_error(
+        return Err(Box::new(identity_error(
             StatusCode::BAD_REQUEST,
             "self_merge",
             "the target Artist cannot also be a source",
-        ));
+        )));
     }
     let mut requested = source_ids.iter().copied().collect::<Vec<_>>();
     requested.push(target_artist_id);
@@ -940,24 +943,24 @@ async fn resolve_merge_selection(
             .into_iter()
             .find(|id| !found.contains(id))
             .unwrap_or(target_artist_id);
-        return Err(identity_error(
+        return Err(Box::new(identity_error(
             StatusCode::NOT_FOUND,
             "not_found",
             format!("artist not found: {missing}"),
-        ));
+        )));
     }
     if let Some(unresolvable) = artists
         .iter()
         .find(|artist| matches!(artist.status.as_str(), "merged" | "deprecated"))
     {
-        return Err(identity_error(
+        return Err(Box::new(identity_error(
             StatusCode::CONFLICT,
             "artist_not_resolvable",
             format!(
                 "artist {} is {} and cannot participate",
                 unresolvable.public_api_id, unresolvable.status
             ),
-        ));
+        )));
     }
     let target = artists
         .iter()
@@ -992,7 +995,7 @@ async fn preview_artist_merge(
     .await
     {
         Ok(selection) => selection,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     let source_ids = sources.iter().map(|artist| artist.id).collect::<Vec<_>>();
     match CatalogStore
@@ -1027,7 +1030,7 @@ async fn batch_merge_artists(
     .await
     {
         Ok(selection) => selection,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     let now = OffsetDateTime::now_utc();
     let merges = sources
@@ -1097,7 +1100,7 @@ async fn split_artist(
     }
     let source = match resolvable_artist(&state.pool, id).await {
         Ok(artist) => artist,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     let mut assignments = Vec::with_capacity(request.assignments.len());
     for assignment in &request.assignments {
@@ -1203,25 +1206,25 @@ async fn split_artist(
 async fn resolvable_artist(
     pool: &sqlx::PgPool,
     public_id: Uuid,
-) -> Result<ArtistIdentityRef, Response> {
+) -> Result<ArtistIdentityRef, Box<Response>> {
     match CatalogStore.artist_by_public_id(pool, public_id).await {
         Ok(Some(artist)) if matches!(artist.status.as_str(), "merged" | "deprecated") => {
-            Err(identity_error(
+            Err(Box::new(identity_error(
                 StatusCode::CONFLICT,
                 "artist_not_resolvable",
                 format!(
                     "artist {public_id} is {} and cannot participate",
                     artist.status
                 ),
-            ))
+            )))
         }
         Ok(Some(artist)) => Ok(artist),
-        Ok(None) => Err(identity_error(
+        Ok(None) => Err(Box::new(identity_error(
             StatusCode::NOT_FOUND,
             "not_found",
             format!("artist not found: {public_id}"),
-        )),
-        Err(error) => Err(store_failure("artist resolution failed", &error)),
+        ))),
+        Err(error) => Err(Box::new(store_failure("artist resolution failed", &error))),
     }
 }
 

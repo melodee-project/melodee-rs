@@ -102,7 +102,7 @@ fn store_error(error: RadioStoreError) -> Response {
 async fn authenticate(
     parts: &Parts,
     state: &AdminAccessState,
-) -> Result<StoredNativeUser, Response> {
+) -> Result<StoredNativeUser, Box<Response>> {
     let now = OffsetDateTime::now_utc();
     let public_api_id = if let Some(token) = parts
         .headers
@@ -128,18 +128,34 @@ async fn authenticate(
             .ok_or_else(|| admin_error(StatusCode::UNAUTHORIZED, "unauthenticated"))?
             .public_api_id
     } else {
-        return Err(admin_error(StatusCode::UNAUTHORIZED, "unauthenticated"));
+        return Err(Box::new(admin_error(
+            StatusCode::UNAUTHORIZED,
+            "unauthenticated",
+        )));
     };
     let user = match melodee_persistence::AuthStore::new()
         .user_by_public_id(&state.pool, public_api_id)
         .await
     {
         Ok(Some(user)) => user,
-        Ok(None) => return Err(admin_error(StatusCode::UNAUTHORIZED, "unauthenticated")),
-        Err(_) => return Err(admin_error(StatusCode::SERVICE_UNAVAILABLE, "store_error")),
+        Ok(None) => {
+            return Err(Box::new(admin_error(
+                StatusCode::UNAUTHORIZED,
+                "unauthenticated",
+            )));
+        }
+        Err(_) => {
+            return Err(Box::new(admin_error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "store_error",
+            )));
+        }
     };
     if !user.can_authenticate() {
-        return Err(admin_error(StatusCode::UNAUTHORIZED, "account_unavailable"));
+        return Err(Box::new(admin_error(
+            StatusCode::UNAUTHORIZED,
+            "account_unavailable",
+        )));
     }
     Ok(user)
 }
@@ -151,7 +167,9 @@ impl FromRequestParts<AdminAccessState> for AuthenticatedPrincipal {
         parts: &mut Parts,
         state: &AdminAccessState,
     ) -> Result<Self, Self::Rejection> {
-        let user = authenticate(parts, state).await?;
+        let user = authenticate(parts, state)
+            .await
+            .map_err(|response| *response)?;
         Ok(Self {
             public_api_id: user.public_api_id,
         })
@@ -165,7 +183,9 @@ impl FromRequestParts<AdminAccessState> for RadioAdminPrincipal {
         parts: &mut Parts,
         state: &AdminAccessState,
     ) -> Result<Self, Self::Rejection> {
-        let user = authenticate(parts, state).await?;
+        let user = authenticate(parts, state)
+            .await
+            .map_err(|response| *response)?;
         let is_admin = user.is_admin
             || user
                 .roles

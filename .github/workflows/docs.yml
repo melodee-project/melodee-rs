@@ -52,14 +52,14 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v6
         with:
-          # Version comes from the packageManager field (pnpm 11.x).
+          # Version comes from the packageManager field (pnpm 12.x).
           package_json_file: docs/package.json
           run_install: false
 
       - name: Install Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 26.11.1
           cache: pnpm
           cache-dependency-path: docs/pnpm-lock.yaml
 
