@@ -56,6 +56,35 @@ The server applies SQLx migrations at startup. In another terminal, use
 `MELODEE__CLI__BOOTSTRAP_ADMIN_PASSWORD` supplied through the environment. The admin SPA is served
 from `admin-ui/dist` by default; set `MELODEE__ADMIN_UI__DIST` if you deploy it elsewhere.
 
+## Start and stop the local development stack
+
+After installing the prerequisites and configuring the repository-root `.env` as described above,
+use these commands for everyday development:
+
+```bash
+make up
+make down
+```
+
+`make up` installs the frozen Admin UI dependencies, builds the UI and debug Rust server/CLI,
+starts PostgreSQL through `compose.dev.yaml`, and waits for server readiness before returning.
+Database startup can take up to ten minutes when an existing development volume is large.
+The server runs in the background, including the workers enabled by your configuration, and serves
+the Admin UI at `http://127.0.0.1:8080/admin` by default. Console logs are appended to
+`.local-dev/server.log`. Create the first administrator once using the CLI instructions above.
+
+This workflow requires Docker Compose and the reference development database URL from `.env.example`
+on host port 5433. Exported environment variables take precedence over `.env`. Ingestion and other
+enabled workers operate on the configured roots as usual. The launcher always serves the checkout's
+newly built `admin-ui/dist`.
+
+`make down` stops the managed server and then PostgreSQL, preserving database volumes, accounts,
+catalog data, and media directories. It works even if `.env` has been removed. Repeating either
+command is safe; an already running stack is left running. To rebuild code or apply configuration
+changes, run `make down` followed by `make up`. If the server port belongs to a manually launched
+process, stop that process before using `make up`. The documentation site and separate MeloAmp
+project retain their own development commands.
+
 ## Guided fresh development setup
 
 The repository also includes an interactive source-development launcher that performs the manual

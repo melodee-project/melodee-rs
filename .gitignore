@@ -27,6 +27,7 @@ Cargo.lock.tmp
 Thumbs.db
 
 # Runtime data
+/.local-dev/
 /data/
 /logs/
 /search-index/

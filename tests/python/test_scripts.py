@@ -90,6 +90,7 @@ class DeveloperCommandTests(unittest.TestCase):
                 "deny",
                 "docs",
                 "docs-site-check",
+                "down",
                 "fmt",
                 "lint",
                 "postgres-down",
@@ -99,6 +100,7 @@ class DeveloperCommandTests(unittest.TestCase):
                 "test",
                 "test-integration",
                 "test-unit",
+                "up",
             },
         )
 

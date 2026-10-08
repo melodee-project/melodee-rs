@@ -6,6 +6,10 @@ template.
 
 ## Commands and environment
 
+- **Local stack:** `make up` builds and starts PostgreSQL, the Rust server/workers, and the
+  served Admin UI in the background using the configured root `.env`. `make down` stops the
+  managed server and development PostgreSQL while preserving database/media state. Logs:
+  `.local-dev/server.log`. Restart with down/up to apply source or environment changes.
 - **Pre-commit/PR gate: `python3 scripts/do-prechecks.py`** (or `make prechecks`) checks
   unstaged/staged Git diffs, runs the full repository gate and docs-site gate, and stops on
   failure. Requires pnpm, cargo-deny, and media tools rather than allowing local skips.

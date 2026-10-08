@@ -180,12 +180,7 @@ cd melodee-rs
 # Run repository validation, Python tests, and database-free Rust unit tests.
 make bootstrap
 
-# PostgreSQL is required to run the server, integration tests, and full gate.
-make postgres-up
-
-# The admin SPA is served from admin-ui/dist at /admin.
 npm install --global pnpm@12.10.1
-(cd admin-ui && pnpm install --frozen-lockfile && pnpm build)
 ```
 
 For this native development workflow, copy [`.env.example`](.env.example) to `.env` (the Compose
@@ -201,9 +196,29 @@ disabled in this example; enabling either worker requires its dedicated storage 
 ```bash
 cp .env.example .env
 # Edit .env. Generate each secret with: openssl rand -base64 48
-# Server and CLI load .env automatically when run from this checkout.
-cargo run --locked -p melodee-server
+# Build and start PostgreSQL, the server, its workers, and the Admin UI.
+make up
+# Stop the local stack when finished; retain the database and media.
+make down
 ```
+
+`make up` installs the frozen Admin UI dependencies, builds the SPA and locked Rust server/CLI,
+starts the fixed `compose.dev.yaml` PostgreSQL service, and returns when `/readyz` succeeds.
+The server runs in the background and serves the Admin UI at `http://127.0.0.1:8080/admin`
+(or your configured bind address). Console logs are appended to `.local-dev/server.log`.
+The configured `.env` is required; exported environment variables take precedence. The database
+URL must select the reference development database on port 5433. Enabled workers use your existing
+configuration, including ingestion of files placed in the configured inbound roots.
+
+Repeated `make up` calls keep the current server running. To rebuild source changes or apply `.env`
+changes, run `make down` followed by `make up`. Shutdown stops the managed server before PostgreSQL
+and preserves the database volume, accounts, catalog, and media roots. It also works without `.env`.
+Both commands serialize concurrent invocations. An occupied server port is reported as an error;
+stop a manually launched server yourself before switching to this workflow. The docs site and the
+separate MeloAmp project have their own development commands.
+
+For manual foreground development, use `make postgres-up`, build `admin-ui/dist`, and run
+`cargo run --locked -p melodee-server` instead.
 
 Startup validates the complete applied SQLx migration history and applies pending migrations
 before opening the listener. For an existing database, follow the
@@ -213,7 +228,7 @@ rewriting database metadata. Any other `VersionMismatch(<number>)` is unknown mi
 keep the database intact and follow the
 [migration-checksum troubleshooting guidance](docs/src/content/docs/troubleshooting/#migration-checksum-mismatch).
 
-In a second terminal at the repository root, create the first administrator. The password is
+With the server running, create the first administrator once from the repository root. The password is
 read from the environment rather than a command-line argument.
 
 ```bash
@@ -321,6 +336,8 @@ Useful focused commands:
 ```bash
 make bootstrap                           # database-free repository and unit-test bootstrap
 make postgres-up                         # development PostgreSQL on localhost:5433
+make up                                  # build and start the local stack in the background
+make down                                # stop the local stack, retaining database and media
 make postgres-reset                      # DESTROYS and recreates only the development database
 cargo test -p melodee-domain             # one Rust crate
 make test-unit                           # database-free Rust unit tests
