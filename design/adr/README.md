@@ -130,6 +130,7 @@ python3 scripts/new_adr.py "short title"
 - [ADR-0168: Upgrade pinned DecentDB replica reader to 2.17.1](ADR-0168-upgrade-pinned-decentdb-replica-reader-to-2-17-1.md) (supersedes ADR-0163; superseded by ADR-0179)
 
 - [ADR-0179: Refresh pinned runtime dependencies while preserving execution boundaries](ADR-0179-refresh-pinned-runtime-dependencies-while-preserving-execution-boundaries.md) (supersedes ADR-0168)
+- [ADR-0180: Allow configured browser origins for OpenSubsonic](ADR-0180-allow-configured-browser-origins-for-opensubsonic.md)
 
 ## ADR quality rules
 

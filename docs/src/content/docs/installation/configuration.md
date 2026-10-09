@@ -232,6 +232,20 @@ facts. Every pass is bounded, set-based, and idempotent, so the worker is safe t
 | `MELODEE__NATIVE__AUTH__GOOGLE__JWKS_URL` | Google v3 certificates URL | HTTPS JWKS endpoint. Redirects are rejected and the response/cache are bounded. |
 | `MELODEE__NATIVE__AUTH__GOOGLE__HOSTED_DOMAINS` | empty | Optional comma-separated lowercase hosted-domain allowlist checked after signature, issuer, audience, lifetime, and verified-email validation. |
 
+### OpenSubsonic browser clients
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `MELODEE__OPENSUBSONIC__CORS__ALLOWED_ORIGINS` | empty | Comma-separated exact HTTP(S) origins allowed to read OpenSubsonic responses from browsers, for example `https://feishin.vercel.app`. Rejects wildcards, credentials, trailing slashes, paths, queries, fragments, and more than 100 origins. Applies to API and media requests with `Origin`, including OPTIONS preflight, and admits GET/POST/HEAD with authentication, content-type, conditional, and range request headers. Exposes paging, range, duration, disposition, and cache-validation response headers. Cookie credentials are not enabled. |
+
+This is independent of native API CORS. Browser streaming requires an allowed origin; non-browser
+stream headers remain unchanged. `make up` reads the Feishin development default from
+`compose.dev.yaml` (`x-melodee-server-environment`). Root `.env` and then exported variables
+override this default; an explicitly empty value disables browser access.
+For the packaged Compose deployment, set
+`MELODEE_OPENSUBSONIC_CORS_ALLOWED_ORIGINS` in its environment file. Restart after configuration
+changes. See [OpenSubsonic browser clients](../api/opensubsonic/#browser-clients-and-cors).
+
 ### Transcoding
 
 Melodee can transcode audio on demand for OpenSubsonic and Jellyfin-compatible clients.

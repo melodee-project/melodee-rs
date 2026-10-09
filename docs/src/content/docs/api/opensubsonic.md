@@ -15,6 +15,35 @@ Requests authenticate with the OpenSubsonic token scheme (`u`, `t`, `s` query pa
 equivalent POST form fields). Per-user API tokens are managed in Melodee. Requests from the
 server's own host and image URLs are exempt, matching the captured compatibility behavior.
 
+## Browser clients and CORS
+
+For a browser client hosted on another origin, allow that application's origin in the server
+configuration. `make up` includes hosted Feishin through the
+`x-melodee-server-environment` defaults in `compose.dev.yaml`. To configure the setting
+explicitly, add this to the repository-root `.env`:
+
+```dotenv
+MELODEE__OPENSUBSONIC__CORS__ALLOWED_ORIGINS=https://feishin.vercel.app
+```
+
+Restart with `make down` followed by `make up`. For the packaged Compose deployment, set
+`MELODEE_OPENSUBSONIC_CORS_ALLOWED_ORIGINS` in its environment file and recreate the Melodee
+service. Use comma-separated exact origins without trailing slashes or URL paths. Only add
+browser applications you trust to read your OpenSubsonic data. The server's default list is
+empty; the development launcher supplies Feishin. Root `.env` overrides the development
+default, and exported variables take precedence over `.env`. Set the value to empty to
+disable browser access.
+
+This setting covers OpenSubsonic API, artwork, and streaming requests. It supports preflight
+requests and preserves the existing token authentication scheme; cookie credentials are not
+enabled. The native API's `MELODEE__NATIVE__CORS__ALLOWED_ORIGINS` setting is separate and does
+not apply to `/rest` routes. Non-browser clients do not require a CORS origin setting.
+
+If the browser reports HTTP `200` together with “No Access-Control-Allow-Origin header,” the
+server answered but the browser could not expose that response to the client. Check that the
+client's exact origin is in this list and restart the server after changing it. See
+[Configuration](../installation/configuration/) for the complete setting reference.
+
 ## Supported endpoint groups
 
 - **System:** `ping`, `getLicense`, `getMusicFolders`, `getOpenSubsonicExtensions`.

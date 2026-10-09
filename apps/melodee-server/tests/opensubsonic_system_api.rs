@@ -163,6 +163,134 @@ fn json_body(bytes: &[u8]) -> serde_json::Value {
 }
 
 #[tokio::test]
+async fn browser_cors_preserves_get_user_auth_and_scopes_preflight_to_opensubsonic() {
+    const ORIGIN: &str = "https://feishin.vercel.app";
+    let db = common::TestDb::create("os_browser_cors").await;
+    let state = state(&db).await;
+    let path = format!(
+        "/rest/getUser.view?c=Feishin&f=json&v=1.13.0&username=phase0-fixture&u=phase0-fixture&s=test&t={}",
+        token_for("test")
+    );
+    let request = || {
+        let mut request = enforced_get(&path);
+        request
+            .headers_mut()
+            .insert(header::ORIGIN, ORIGIN.parse().expect("origin"));
+        request
+    };
+    // Record the prior failure: a successful authenticated envelope with no
+    // CORS header, which browsers cannot give to the client application.
+    let (status, headers, baseline) = respond(state.clone(), request()).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(!headers.contains_key(header::ACCESS_CONTROL_ALLOW_ORIGIN));
+    assert_eq!(json_body(&baseline)["subsonic-response"]["status"], "ok");
+    let app = melodee_server::opensubsonic::configured_router_with_cors(state, ORIGIN)
+        .expect("browser policy")
+        .merge(axum::Router::new().route(
+            "/api/admin/v1/test",
+            axum::routing::get(|| async { "admin" }),
+        ));
+    let response = app
+        .clone()
+        .oneshot(request())
+        .await
+        .expect("browser response");
+    assert_eq!(response.status(), status);
+    assert_eq!(
+        response.headers()[header::ACCESS_CONTROL_ALLOW_ORIGIN],
+        ORIGIN
+    );
+    assert_eq!(
+        response
+            .into_body()
+            .collect()
+            .await
+            .expect("body")
+            .to_bytes()
+            .as_ref(),
+        baseline
+    );
+
+    // Preflight contains no query credentials and must precede auth/parameter parsing.
+    for route in ["/rest/getUser", "/rest/getUser.view"] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("OPTIONS")
+                    .uri(route)
+                    .header(header::ORIGIN, ORIGIN)
+                    .header(header::ACCESS_CONTROL_REQUEST_METHOD, "POST")
+                    .header(header::ACCESS_CONTROL_REQUEST_HEADERS, "content-type,range")
+                    .body(Body::empty())
+                    .expect("preflight"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.headers()[header::ACCESS_CONTROL_ALLOW_ORIGIN],
+            ORIGIN
+        );
+        assert!(
+            response.headers()[header::ACCESS_CONTROL_ALLOW_METHODS]
+                .to_str()
+                .expect("methods")
+                .contains("POST")
+        );
+    }
+    let mut denied = request();
+    denied.headers_mut().insert(
+        header::ORIGIN,
+        "https://untrusted.example".parse().expect("origin"),
+    );
+    let response = app.clone().oneshot(denied).await.expect("denied origin");
+    assert!(
+        !response
+            .headers()
+            .contains_key(header::ACCESS_CONTROL_ALLOW_ORIGIN)
+    );
+
+    let mut unauthenticated = enforced_get("/rest/getUser.view?f=json&username=phase0-fixture");
+    unauthenticated
+        .headers_mut()
+        .insert(header::ORIGIN, ORIGIN.parse().expect("origin"));
+    let response = app
+        .clone()
+        .oneshot(unauthenticated)
+        .await
+        .expect("auth error");
+    assert_eq!(
+        response.headers()[header::ACCESS_CONTROL_ALLOW_ORIGIN],
+        ORIGIN
+    );
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body")
+        .to_bytes();
+    assert_eq!(json_body(&body)["subsonic-response"]["status"], "error");
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/admin/v1/test")
+                .header(header::ORIGIN, ORIGIN)
+                .body(Body::empty())
+                .expect("admin request"),
+        )
+        .await
+        .expect("admin response");
+    assert!(
+        !response
+            .headers()
+            .contains_key(header::ACCESS_CONTROL_ALLOW_ORIGIN)
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
 async fn ping_matches_the_captured_envelope_in_all_formats() {
     let db = common::TestDb::create("os_ping_formats").await;
     let state = state(&db).await;

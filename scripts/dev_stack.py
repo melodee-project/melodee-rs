@@ -28,6 +28,7 @@ LOG = RUNTIME / "server.log"
 START_TIMEOUT = 120
 DATABASE_START_TIMEOUT = 600
 STOP_TIMEOUT = 40
+CORS_ENV = "MELODEE__OPENSUBSONIC__CORS__ALLOWED_ORIGINS"
 
 
 class StackError(RuntimeError):
@@ -125,6 +126,18 @@ def load_environment() -> dict[str, str]:
         raise StackError(
             f"{setup.DATABASE_ENV} must select the compose.dev.yaml development database"
         )
+    config = json.loads(run(compose("config", "--format", "json"), capture=True))
+    defaults = config.get("x-melodee-server-environment", {})
+    # Only the documented browser setting can enter the host process through
+    # Compose defaults; database and process-control settings stay explicit.
+    if (
+        not isinstance(defaults, dict)
+        or set(defaults) - {CORS_ENV}
+        or any(not isinstance(value, str) for value in defaults.values())
+    ):
+        raise StackError("invalid x-melodee-server-environment in compose.dev.yaml")
+    for key, value in defaults.items():
+        environment.setdefault(key, value)
     # Build/run the checkout's SPA and binaries even if another checkout was exported.
     environment["MELODEE__ADMIN_UI__DIST"] = str(ROOT / "admin-ui" / "dist")
     environment["CARGO_TARGET_DIR"] = str(ROOT / "target")

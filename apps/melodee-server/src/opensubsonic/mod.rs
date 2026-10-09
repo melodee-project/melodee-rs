@@ -8,6 +8,7 @@ pub mod annotation;
 pub mod auth;
 pub mod bookmarks;
 pub mod browse;
+pub mod cors;
 pub mod envelope;
 pub mod lists;
 pub mod media;
@@ -241,4 +242,15 @@ pub fn configured_router(state: OsState) -> Router {
         .merge(protected)
         .layer(middleware::from_fn(auth::parse_params))
         .with_state(state)
+}
+
+/// Adds the protocol-owned, explicitly configured browser policy (ADR-0180).
+///
+/// # Errors
+/// Rejects malformed or unbounded origin configuration before serving traffic.
+pub fn configured_router_with_cors(
+    state: OsState,
+    allowed_origins: &str,
+) -> Result<Router, cors::CorsConfigError> {
+    cors::apply(configured_router(state), allowed_origins)
 }

@@ -479,7 +479,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         native_stream::ClientAddressResolver::new(trusted_proxies.clone()),
         search_config.enabled.then_some(search_config.clone()),
     )?;
-    let opensubsonic_app = opensubsonic::configured_router(opensubsonic_state);
+    let opensubsonic_app = opensubsonic::configured_router_with_cors(
+        opensubsonic_state,
+        &env::var(opensubsonic::cors::ENV_ALLOWED_ORIGINS).unwrap_or_default(),
+    )?;
     let jellyfin_state = jellyfin::JfState {
         pool: pool.clone(),
         server_name: "Melodee".to_string(),

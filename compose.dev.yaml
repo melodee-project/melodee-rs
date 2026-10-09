@@ -1,5 +1,10 @@
 name: melodee-rs-dev
 
+# Defaults for the host-run server, read by scripts/dev_stack.py (make up).
+# Root .env and exported variables override these, including an empty allowlist.
+x-melodee-server-environment:
+  MELODEE__OPENSUBSONIC__CORS__ALLOWED_ORIGINS: https://feishin.vercel.app
+
 services:
   postgres:
     image: postgres:18.4-alpine

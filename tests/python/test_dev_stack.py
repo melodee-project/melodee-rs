@@ -62,7 +62,7 @@ class DevStackTests(unittest.TestCase):
             f"{stack.setup.DATABASE_ENV}={stack.setup.SAFE_DATABASE_URL}\n"
             "MELODEE__SERVER__BIND=127.0.0.1:8080\n"
         )
-        with mock.patch.dict(
+        with mock.patch.object(stack, "run", return_value="{}"), mock.patch.dict(
             os.environ,
             {
                 "MELODEE__SERVER__BIND": "127.0.0.1:8081",
@@ -73,6 +73,44 @@ class DevStackTests(unittest.TestCase):
             environment = stack.load_environment()
         self.assertEqual(environment["MELODEE__SERVER__BIND"], "127.0.0.1:8081")
         self.assertNotIn(stack.setup.BOOTSTRAP_PASSWORD_ENV, environment)
+
+    def test_compose_cors_default_respects_env_file_exports_and_empty_override(self):
+        default = "https://feishin.vercel.app"
+        for file_value, exported, expected in (
+            (None, None, default),
+            ("https://file.example", None, "https://file.example"),
+            ("https://file.example", "https://export.example", "https://export.example"),
+            ("", None, ""),
+            (default, "", ""),
+        ):
+            with self.subTest(file_value=file_value, exported=exported):
+                contents = f"{stack.setup.DATABASE_ENV}={stack.setup.SAFE_DATABASE_URL}\n"
+                if file_value is not None:
+                    contents += f"{stack.CORS_ENV}={file_value}\n"
+                (self.root / ".env").write_text(contents)
+                config = {"x-melodee-server-environment": {stack.CORS_ENV: default}}
+                exports = {} if exported is None else {stack.CORS_ENV: exported}
+                with (
+                    mock.patch.dict(os.environ, exports, clear=True),
+                    mock.patch.object(stack, "run", return_value=json.dumps(config)),
+                ):
+                    self.assertEqual(stack.load_environment()[stack.CORS_ENV], expected)
+
+    def test_compose_defaults_reject_unrelated_environment_and_invalid_types(self):
+        (self.root / ".env").write_text(
+            f"{stack.setup.DATABASE_ENV}={stack.setup.SAFE_DATABASE_URL}\n"
+        )
+        for defaults in (None, [], {"PATH": "/other"}, {stack.CORS_ENV: None}):
+            with (
+                self.subTest(defaults=defaults),
+                mock.patch.dict(os.environ, {}, clear=True),
+                mock.patch.object(
+                    stack, "run",
+                    return_value=json.dumps({"x-melodee-server-environment": defaults}),
+                ),
+            ):
+                with self.assertRaisesRegex(stack.StackError, "invalid x-melodee"):
+                    stack.load_environment()
 
     def test_external_database_and_missing_env_fail_before_commands(self):
         with mock.patch.object(stack, "run") as run:
