@@ -111,7 +111,7 @@ uuid = { version = "=1.27.0", features = ["serde", "v7"] }
 # ADR-0123: bounded in-memory native-v1 theme-pack import/export. Only the
 # standard DEFLATE codec is enabled; encrypted and exotic archive codecs are
 # intentionally outside the compatibility boundary.
-zip = { version = "=8.6.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+zip = { version = "=9.0.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
@@ -126,3 +126,10 @@ panic = "deny"
 todo = "deny"
 unimplemented = "deny"
 unwrap_used = "deny"
+
+[profile.coverage]
+inherits = "dev"
+codegen-units = 1
+debug = 2
+debug-assertions = true
+panic = "unwind"

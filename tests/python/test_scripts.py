@@ -98,6 +98,7 @@ class DeveloperCommandTests(unittest.TestCase):
                 "postgres-up",
                 "prechecks",
                 "test",
+                "test-coverage",
                 "test-integration",
                 "test-unit",
                 "up",

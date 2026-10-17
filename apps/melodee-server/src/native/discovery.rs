@@ -1595,7 +1595,10 @@ fn parse_theme_archive(bytes: Vec<u8>) -> Result<ParsedThemeArchive, &'static st
         {
             return Err("Theme archive links and special files are not allowed");
         }
-        let name = entry.name().to_owned();
+        let name = entry
+            .name()
+            .map_err(|_| "Invalid ZIP archive entry")?
+            .into_owned();
         if entry.enclosed_name().is_none() || !safe_theme_entry_name(&name) {
             return Err("Theme archive contains an unsafe path");
         }

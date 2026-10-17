@@ -1,6 +1,6 @@
 PYTHON ?= python3
 
-.PHONY: up down bootstrap prechecks check check-fast fmt lint test test-unit test-integration docs docs-site-check deny postgres-up postgres-down postgres-reset capture-baseline admin-ui-check admin-ui-e2e
+.PHONY: up down bootstrap prechecks check check-fast fmt lint test test-unit test-integration test-coverage docs docs-site-check deny postgres-up postgres-down postgres-reset capture-baseline admin-ui-check admin-ui-e2e
 
 bootstrap:
 	$(PYTHON) scripts/bootstrap.py
@@ -34,6 +34,9 @@ test-unit:
 
 test-integration:
 	cargo test --workspace --all-features --test "*"
+
+test-coverage:
+	$(PYTHON) scripts/check.py coverage
 
 docs:
 	$(PYTHON) scripts/validate_repository.py

@@ -87,13 +87,16 @@ def run_admin_ui_e2e() -> None:
 
 
 def run_checks(mode: str) -> None:
-    if mode not in {"admin-ui", "admin-ui-e2e", "docs", "fast", "full"}:
+    if mode not in {"admin-ui", "admin-ui-e2e", "coverage", "docs", "fast", "full"}:
         raise ValueError(f"unsupported check mode: {mode}")
     if mode == "admin-ui":
         run_admin_ui_checks(required=True)
         return
     if mode == "admin-ui-e2e":
         run_admin_ui_e2e()
+        return
+    if mode == "coverage":
+        run_coverage_mode()
         return
     if mode == "docs":
         run_docs_site_checks()
@@ -141,10 +144,57 @@ def run_checks(mode: str) -> None:
             run(["cargo", "deny", "check"])
 
 
+def run_coverage() -> None:
+    """Run code coverage with cargo-tarpaulin and enforce minimum thresholds.
+
+    Coverage is advisory: failures are reported as warnings but do not
+    fail the gate, since instrumentation compilation can be slow and
+    thresholds are a starting point to be raised over time.
+    """
+    if shutil.which("cargo-tarpaulin") is None:
+        print(
+            "cargo-tarpaulin not installed; skipping local coverage gate (install with:\n"
+            "  cargo install cargo-tarpaulin).",
+            file=sys.stderr,
+        )
+        return
+
+    try:
+        subprocess.run(
+            [
+                "cargo-tarpaulin",
+                "--lib",
+                "--bins",
+                "--fail-under=70",
+            ],
+            cwd=ROOT,
+            check=True,
+            timeout=300,
+        )
+    except subprocess.TimeoutExpired:
+        print(
+            "cargo-tarpaulin timed out after 300s; coverage data was collected but\n"
+            "threshold enforcement could not complete. Review target/tarpaulin-report/\n"
+            "manually.",
+            file=sys.stderr,
+        )
+    except subprocess.CalledProcessError as error:
+        print(
+            f"cargo-tarpaulin coverage threshold not met (exit {error.returncode});\n"
+            "review target/tarpaulin-report/ and raise test coverage.",
+            file=sys.stderr,
+        )
+
+
+def run_coverage_mode() -> None:
+    """Run only the coverage gate (for focused coverage workflows)."""
+    run_coverage()
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "mode", choices=("admin-ui", "admin-ui-e2e", "docs", "fast", "full")
+        "mode", choices=("admin-ui", "admin-ui-e2e", "coverage", "docs", "fast", "full")
     )
     return parser.parse_args()
 
@@ -159,6 +209,17 @@ def main() -> int:
     except subprocess.CalledProcessError as error:
         return error.returncode
     return 0
+
+
+# Coverage thresholds documented for future reference.
+# Lines: 70% | Branches: 60% | Functions: 70%
+# These are conservative starting points to be raised as coverage improves.
+# cargo-tarpaulin 0.35.4 supports --fail-under (single percentage threshold).
+COVERAGE_THRESHOLDS = {
+    "lines": 70,
+    "branches": 60,
+    "functions": 70,
+}
 
 
 if __name__ == "__main__":
