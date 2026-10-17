@@ -14,10 +14,12 @@ mod import;
 mod import_avatars;
 mod import_catalog;
 mod import_contrib;
+mod import_notification_templates;
 mod import_state;
 mod import_state2;
 mod import_state3;
 mod import_state4;
+mod import_theme_packs;
 mod import_tracks;
 mod import_users;
 mod map;
@@ -94,6 +96,10 @@ pub struct LegacyFreezeArgs {
     /// during the final delta (see `import`).
     #[arg(long)]
     legacy_secret_key: Option<String>,
+    /// Legacy installation root for file-based legacy assets (notification
+    /// templates, theme packs, custom content blocks).
+    #[arg(long)]
+    legacy_root: Option<std::path::PathBuf>,
     /// Record the operator cutover acknowledgement and transition the run to
     /// `cutover-ready`. Requires --note.
     #[arg(long)]
@@ -145,6 +151,12 @@ pub struct LegacyRunArgs {
     /// logged or persisted.
     #[arg(long)]
     legacy_secret_key: Option<String>,
+    /// Legacy installation root for file-based legacy assets (notification
+    /// templates, theme packs, custom content blocks). The Templates library
+    /// lives under `<legacy-root>/Templates/<culture>/` and the Theme library
+    /// under `<legacy-root>/Themes/`.
+    #[arg(long)]
+    legacy_root: Option<std::path::PathBuf>,
 }
 
 #[derive(Debug, Args)]
@@ -312,6 +324,7 @@ pub async fn run(command: LegacyCommands, target: PgPool) -> Result<(), String> 
                 true,
                 validator.as_ref(),
                 args.legacy_secret_key.as_deref(),
+                args.legacy_root.as_deref(),
             )
             .await
         }
@@ -349,6 +362,7 @@ pub async fn run(command: LegacyCommands, target: PgPool) -> Result<(), String> 
                 validator.as_ref(),
                 true,
                 args.legacy_secret_key.as_deref(),
+                args.legacy_root.as_deref(),
             )
             .await
         }
@@ -373,6 +387,7 @@ pub async fn run(command: LegacyCommands, target: PgPool) -> Result<(), String> 
                 &maps,
                 validator.as_ref(),
                 args.legacy_secret_key.as_deref(),
+                args.legacy_root.as_deref(),
                 args.acknowledge_cutover,
                 args.note.as_deref(),
                 args.source.json,

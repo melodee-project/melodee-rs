@@ -25,6 +25,7 @@ pub async fn freeze(
     maps: &[LibraryPathMap],
     media_validation: Option<&CanonicalRootValidator>,
     legacy_secret_key: Option<&str>,
+    legacy_root: Option<&std::path::Path>,
     acknowledge: bool,
     note: Option<&str>,
     json: bool,
@@ -68,6 +69,7 @@ pub async fn freeze(
         media_validation,
         false,
         legacy_secret_key,
+        legacy_root,
     )
     .await?;
 

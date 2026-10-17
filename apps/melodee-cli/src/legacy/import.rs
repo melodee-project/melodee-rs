@@ -26,6 +26,7 @@ pub async fn import_all(
     release_lease: bool,
     media_validation: Option<&super::media::CanonicalRootValidator>,
     legacy_secret_key: Option<&str>,
+    legacy_root: Option<&std::path::Path>,
 ) -> Result<(), String> {
     let owner = super::default_owner();
     let run_id = match run {
@@ -120,6 +121,29 @@ pub async fn import_all(
     )
     .await?;
     super::import_state4::record_excluded_summaries(source, target, run_id, &owner).await?;
+
+    // Legacy file-based notification templates: import operator-authored
+    // Templates/<culture>/PasswordReset.{txt,html} into the Rust
+    // notification_templates table. Idempotent via upsert; missing or
+    // malformed files are recorded as issues, never silently dropped.
+    if let Some(root) = legacy_root {
+        super::import_notification_templates::import_notification_templates(
+            source, target, run_id, &owner, batch_size, root,
+        )
+        .await?;
+    }
+
+    // Legacy theme packs: import operator-authored Theme library packs into
+    // the Rust native_themes / native_theme_assets tables. Idempotent via
+    // existence check; missing or malformed packs are recorded as issues,
+    // never silently dropped. No replacement surface is created for custom
+    // content blocks (ADR-0181); theme packs are preserved through cutover.
+    if let Some(root) = legacy_root {
+        super::import_theme_packs::import_theme_packs(
+            source, target, run_id, &owner, batch_size, root,
+        )
+        .await?;
+    }
 
     // The migration writes the normalized catalog in set-sized batches, so
     // no ordinary catalog mutation has had a chance to maintain the derived

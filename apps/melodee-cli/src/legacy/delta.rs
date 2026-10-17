@@ -29,6 +29,7 @@ pub async fn apply_delta(
     media_validation: Option<&super::media::CanonicalRootValidator>,
     release_lease: bool,
     legacy_secret_key: Option<&str>,
+    legacy_root: Option<&std::path::Path>,
 ) -> Result<(), String> {
     let Some(run_id) = run else {
         return Err("delta requires --run <uuid> of the verified import run".to_string());
@@ -64,6 +65,7 @@ pub async fn apply_delta(
         false,
         media_validation,
         legacy_secret_key,
+        legacy_root,
     )
     .await?;
 

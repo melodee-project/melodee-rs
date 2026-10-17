@@ -192,8 +192,19 @@ legacy filesystem path as identity.
 The avatar phase is checkpointed as `user_avatars` and compares normalized target bytes before
 writing, so a resumed import does not create duplicate avatar data or audit events. Before cutover,
 review every profile/avatar issue and verify representative target rows and PNG content. The
-importer does not recreate per-user device-profile semantics; those remain the reference-only
-disposition accepted by ADR-0148 and assigned to MEL-5.
+The importer does not recreate per-user device-profile semantics; those remain the reference-only disposition accepted by ADR-0148 and assigned to MEL-5.
+
+#### Device profile recreation guidance (MEL-5)
+
+Legacy per-user `UserDeviceProfiles` rows are not imported as target rows because the 1.0 `device_profiles` table is global metadata with no per-user ownership (ADR-0134 §5). Each legacy profile is recorded as a `device_profile.reference_only` issue containing the profile name, target codec, max bitrate, direct-play flag, and priority.
+
+Operators who still need per-user device profiles should:
+
+1. Review the `legacy_migration.issues` rows for `device_profile.reference_only` after import.
+2. Recreate each profile in the Admin UI at `/api/admin/v1/device-profiles`, using the issue detail as the name and the `client_match`/`profile` JSON as the client matcher and transcoding-intent metadata.
+3. Set `is_default` on the profile that should be the server-wide default (the unique-default index enforces this at the database).
+
+The migration never deletes or modifies legacy device profiles; source data is preserved for forensic review. Profile-driven stream selection remains post-parity (PRD-DEVICE-003) and is not wired to this surface.
 
 ### `legacy verify`
 

@@ -2331,6 +2331,7 @@ dependencies = [
  "time",
  "tokio",
  "uuid",
+ "zip",
 ]
 
 [[package]]
