@@ -16,7 +16,7 @@ use melodee_domain::{
 use melodee_mql::parse_and_plan;
 use melodee_persistence::{
     CatalogImportRequest, CatalogStore, SEARCH_PROJECTION_NAME, SearchCatalogRecord,
-    SearchProjectionStore, WorkerId,
+    SearchEntityType, SearchOperation, SearchProjectionStore, WorkerId,
 };
 use melodee_search::{
     ArtistDoc, ReleaseDoc, SearchConfig, SearchRoot, SearchStore, TrackDoc, apply_outbox_once,
@@ -1282,5 +1282,319 @@ async fn public_identity_correction_merges_aliases_into_real_search_workers() {
     assert!(!std::path::Path::new(&fixture.source_path).exists());
     assert!(!std::path::Path::new(&fixture.canonical_asset_path).exists());
 
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn outbox_apply_pass_survives_repeated_process_termination() {
+    let db = TestDb::create("phase6_outbox_termination").await;
+    let fixture = seed_published_release(
+        &db,
+        701,
+        CatalogFixturePresentation {
+            release_title: "Termination Proof Release",
+            release_artist: "Termination Source Artist",
+            track_title: "Termination Proof Track",
+            track_artist: "Termination Track Artist",
+            release_date: "2008-08-08",
+        },
+    )
+    .await;
+
+    let directory = TempDir::new().expect("search temp root");
+    let search_path = directory.path().join("search");
+    let config = SearchConfig {
+        search_root: search_path,
+        enabled: true,
+        // Short lease so a terminated worker's claimed outbox items expire
+        // quickly and are reclaimed by the next pass.
+        lease_seconds: 1,
+        claim_batch_size: 256,
+        poll_interval_ms: 1_000,
+        ..SearchConfig::default()
+    };
+
+    let catalog = CatalogStore;
+    let worker = WorkerId::new();
+    let now = time::OffsetDateTime::now_utc();
+    let claimed = catalog
+        .claim_cataloging(&db.pool, &worker, &test_config(), now)
+        .await
+        .expect("claim published fixture");
+    assert_eq!(claimed.len(), 1);
+    catalog
+        .import_manifest_v3(
+            &db.pool,
+            fixture.work_item_id,
+            &worker,
+            &CatalogImportRequest::new("phase6.outbox-termination.v1", "phase6-test"),
+            now,
+        )
+        .await
+        .expect("catalog fixture");
+
+    // Request and run a rebuild to create an active owned generation.
+    let requested = request_rebuild(&config, &db.pool, "phase6-outbox-termination")
+        .await
+        .expect("request rebuild");
+    assert_eq!(requested.status, "requested");
+    let _rebuild_job = run_rebuild_once(&config, &db.pool)
+        .await
+        .expect("run rebuild");
+
+    // Read the seeded catalog identities so we can seed outbox rows.
+    let artist_id: uuid::Uuid =
+        sqlx::query_scalar("SELECT id FROM artists WHERE canonical_name = $1")
+            .bind("Termination Source Artist")
+            .fetch_one(&db.pool)
+            .await
+            .expect("read source artist id");
+    let release_id: uuid::Uuid = sqlx::query_scalar("SELECT id FROM releases WHERE title = $1")
+        .bind("Termination Proof Release")
+        .fetch_one(&db.pool)
+        .await
+        .expect("read release id");
+    let track_id: uuid::Uuid = sqlx::query_scalar("SELECT id FROM tracks WHERE title = $1")
+        .bind("Termination Proof Track")
+        .fetch_one(&db.pool)
+        .await
+        .expect("read track id");
+
+    // Seed outbox rows that the apply pass must process. These mirror the
+    // rows a catalog correction would emit after the initial rebuild. Use a
+    // higher revision than the initial snapshot so the upsert actually writes
+    // into the owned generation.
+    let mut seed_tx = db.pool.begin().await.expect("begin outbox seed");
+    sqlx::query("UPDATE artists SET revision = 2, updated_at = $1 WHERE id = $2")
+        .bind(now)
+        .bind(artist_id)
+        .execute(&mut *seed_tx)
+        .await
+        .expect("bump artist revision");
+    sqlx::query("UPDATE releases SET revision = 2, updated_at = $1 WHERE id = $2")
+        .bind(now)
+        .bind(release_id)
+        .execute(&mut *seed_tx)
+        .await
+        .expect("bump release revision");
+    sqlx::query("UPDATE tracks SET revision = 2, updated_at = $1 WHERE id = $2")
+        .bind(now)
+        .bind(track_id)
+        .execute(&mut *seed_tx)
+        .await
+        .expect("bump track revision");
+    sqlx::query(
+        "INSERT INTO catalog_projection_outbox (
+            projection_name, entity_type, entity_id, operation,
+            entity_revision, available_at, created_at
+         ) VALUES ($1, 'artist', $2, 'upsert', $3, $4, $4)",
+    )
+    .bind(SEARCH_PROJECTION_NAME)
+    .bind(artist_id)
+    .bind(2i64)
+    .bind(now)
+    .execute(&mut *seed_tx)
+    .await
+    .expect("seed artist outbox row");
+    sqlx::query(
+        "INSERT INTO catalog_projection_outbox (
+            projection_name, entity_type, entity_id, operation,
+            entity_revision, available_at, created_at
+         ) VALUES ($1, 'release', $2, 'upsert', $3, $4, $4)",
+    )
+    .bind(SEARCH_PROJECTION_NAME)
+    .bind(release_id)
+    .bind(2i64)
+    .bind(now)
+    .execute(&mut *seed_tx)
+    .await
+    .expect("seed release outbox row");
+    sqlx::query(
+        "INSERT INTO catalog_projection_outbox (
+            projection_name, entity_type, entity_id, operation,
+            entity_revision, available_at, created_at
+         ) VALUES ($1, 'track', $2, 'upsert', $3, $4, $4)",
+    )
+    .bind(SEARCH_PROJECTION_NAME)
+    .bind(track_id)
+    .bind(2i64)
+    .bind(now)
+    .execute(&mut *seed_tx)
+    .await
+    .expect("seed track outbox row");
+    seed_tx.commit().await.expect("commit outbox seed");
+
+    let root = SearchRoot::open(&config.search_root).expect("open search root");
+    let active =
+        SearchProjectionStore::active_generation(&db.pool, root.path().to_string_lossy().as_ref())
+            .await
+            .expect("read active generation")
+            .expect("active generation");
+    let generation_path = root.generation_path(active.generation_id);
+    let rebuild_counts = active.document_counts;
+
+    // Repeatedly simulate whole-process termination during the outbox apply
+    // pass: claim a batch, apply rows to Tantivy, then abandon the lease
+    // without acknowledging. The lease expires and the next pass reclaims
+    // the items, proving exactly-once reclamation across repeated
+    // terminations.
+    let round_count = 5;
+    for round in 0..round_count {
+        let round_now = time::OffsetDateTime::now_utc();
+        let items = SearchProjectionStore::claim_outbox(
+            &db.pool,
+            SEARCH_PROJECTION_NAME,
+            &format!("search-termination-worker-{round}"),
+            config.claim_batch_size,
+            std::time::Duration::from_secs(config.lease_seconds),
+            round_now,
+        )
+        .await
+        .expect("claim outbox batch");
+        assert!(
+            !items.is_empty(),
+            "round {round}: expected pending outbox items to be reclaimable"
+        );
+        let mut store = SearchStore::open(&generation_path).expect("open generation for apply");
+        for item in &items {
+            let record = SearchProjectionStore::load_catalog_record(
+                &db.pool,
+                item.entity_type,
+                item.entity_id,
+            )
+            .await
+            .expect("load catalog record");
+            match (item.operation, record) {
+                (SearchOperation::Upsert, Some(SearchCatalogRecord::Artist(inner))) => {
+                    store
+                        .upsert_artist(&ArtistDoc::from(inner.clone()))
+                        .expect("upsert artist");
+                }
+                (SearchOperation::Upsert, Some(SearchCatalogRecord::Release(inner))) => {
+                    store
+                        .upsert_release(&ReleaseDoc::from(inner.clone()))
+                        .expect("upsert release");
+                }
+                (SearchOperation::Upsert, Some(SearchCatalogRecord::Track(inner))) => {
+                    store
+                        .upsert_track(&TrackDoc::from(inner.clone()))
+                        .expect("upsert track");
+                }
+                (SearchOperation::Delete, _) | (SearchOperation::Upsert, None) => {
+                    if item.entity_type == SearchEntityType::AudioIdentity {
+                        continue;
+                    }
+                    store
+                        .delete(
+                            item.entity_type.as_str(),
+                            &item.entity_id.to_string(),
+                            item.entity_revision,
+                        )
+                        .expect("delete");
+                }
+                (SearchOperation::Upsert, Some(SearchCatalogRecord::NoDocument)) => {}
+            }
+        }
+        store.commit().expect("commit applied rows");
+        // Simulate whole-process termination: drop the worker, do NOT release
+        // the outbox lease. The lease expires and the items are reclaimable.
+        drop(store);
+        tokio::time::sleep(std::time::Duration::from_secs(config.lease_seconds + 1)).await;
+    }
+
+    // Final pass: reclaim expired leases and re-apply exactly once.
+    // The outbox holds the three seeded rows plus any rows left over from
+    // the initial rebuild load, so assert it reclaims at least the seeded
+    // rows and then fully drains the queue.
+    let final_pass = apply_outbox_once(&config, &db.pool)
+        .await
+        .expect("final outbox pass");
+    assert!(
+        final_pass.claimed >= 3,
+        "final pass should reclaim expired-lease outbox items: {final_pass:?}"
+    );
+    let drained = apply_outbox_once(&config, &db.pool)
+        .await
+        .expect("confirm outbox drain");
+    assert_eq!(
+        drained.claimed, 0,
+        "outbox queue should be drained after final pass"
+    );
+
+    // Verify convergence: no duplicates, no lost documents, query results
+    // correct. The owned index must contain the same document counts as the
+    // post-rebuild baseline even though the outbox apply pass was terminated
+    // and reclaimed repeatedly, proving exactly-once reclamation.
+    let store = SearchStore::open(&generation_path).expect("open converged generation");
+    let stats = store.stats().expect("converged counts");
+    assert_eq!(
+        (
+            stats.artists as u64,
+            stats.releases as u64,
+            stats.tracks as u64
+        ),
+        (
+            rebuild_counts.artists,
+            rebuild_counts.releases,
+            rebuild_counts.tracks
+        ),
+        "document counts must not change across termination rounds"
+    );
+    // Each entity must be queryable exactly once (no duplicate documents).
+    let artist_hits = store
+        .search(
+            &parse_and_plan("artist:\"Termination Source Artist\"").expect("valid MQL"),
+            20,
+            0,
+        )
+        .expect("query source artist");
+    let artist_matches: Vec<_> = artist_hits
+        .iter()
+        .filter(|hit| hit.kind == "artist")
+        .filter(|hit| hit.internal_id == artist_id.to_string())
+        .cloned()
+        .collect();
+    assert_eq!(
+        artist_matches.len(),
+        1,
+        "source artist should be present exactly once: {artist_hits:?}"
+    );
+    let release_hits = store
+        .search(
+            &parse_and_plan("title:\"Termination Proof Release\"").expect("valid MQL"),
+            20,
+            0,
+        )
+        .expect("query release");
+    let release_matches: Vec<_> = release_hits
+        .iter()
+        .filter(|hit| hit.kind == "release")
+        .filter(|hit| hit.internal_id == release_id.to_string())
+        .cloned()
+        .collect();
+    assert_eq!(
+        release_matches.len(),
+        1,
+        "release should be present exactly once: {release_hits:?}"
+    );
+    let track_hits = store
+        .search(
+            &parse_and_plan("title:\"Termination Proof Track\"").expect("valid MQL"),
+            20,
+            0,
+        )
+        .expect("query track");
+    let track_matches: Vec<_> = track_hits
+        .iter()
+        .filter(|hit| hit.kind == "track")
+        .filter(|hit| hit.internal_id == track_id.to_string())
+        .cloned()
+        .collect();
+    assert_eq!(
+        track_matches.len(),
+        1,
+        "track should be present exactly once: {track_hits:?}"
+    );
+    drop(store);
     db.drop().await;
 }

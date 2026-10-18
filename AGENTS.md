@@ -129,6 +129,12 @@ artifacts, authorized migration verification, public-ID and media preservation, 
 and scale acceptance, differential validation, fault recovery, cutover, and rollback. They are
 release-readiness and operator-acceptance obligations, not missing runtime workflows.
 
+Several capabilities remain `UNVERIFIED` pending live/provider qualification (Last.fm
+configured-state acceptance MEL-9, external provider real-credential acceptance MEL-10,
+podcast real-feed acceptance MEL-11, target-scale fault acceptance MEL-16, and OIDC/SMTP/
+MPD/MPV acceptance MEL-19); those legs require controlled credentials or operator-authorized
+production-shaped evidence and are not runtime defects.
+
 Allowed without new user direction: corrections to existing evidence and documentation. An explicit
 request to implement the next substantive work program authorizes all safe in-repository work needed
 for that outcome.
