@@ -133,24 +133,57 @@ struct PlannedFile {
     deltas: Vec<FieldDelta>,
 }
 
-pub fn router() -> Router<AdminAccessState> {
-    Router::new()
-        .route(
-            "/api/admin/v1/catalog/releases/{id}/metadata-transforms/preview",
-            post(preview),
-        )
-        .route(
-            "/api/admin/v1/catalog/releases/{id}/metadata-transforms/apply",
-            post(apply),
-        )
-        .route(
-            "/api/admin/v1/catalog/releases/{id}/metadata-transforms",
-            get(list_audits),
-        )
-        .route(
-            "/api/admin/v1/catalog/releases/{id}/metadata-transforms/{audit_id}/revert",
-            post(revert),
-        )
+pub fn router(config: IngestionConfig) -> Router<AdminAccessState> {
+    let master = std::sync::Arc::new(config);
+    let mut router = Router::new();
+    let config = master.clone();
+    router = router.route(
+        "/api/admin/v1/catalog/releases/{id}/metadata-transforms/preview",
+        post(
+            move |state: State<AdminAccessState>,
+                  _admin: AdminPrincipal,
+                  id: AxumPath<Uuid>,
+                  request: Json<TransformRequest>| async move {
+                preview(state, _admin, id, request, &config).await
+            },
+        ),
+    );
+    let config = master.clone();
+    router = router.route(
+        "/api/admin/v1/catalog/releases/{id}/metadata-transforms/apply",
+        post(
+            move |state: State<AdminAccessState>,
+                  admin: AdminPrincipal,
+                  id: AxumPath<Uuid>,
+                  request: Json<TransformRequest>| async move {
+                apply(state, admin, id, request, &config).await
+            },
+        ),
+    );
+    let config = master.clone();
+    router = router.route(
+        "/api/admin/v1/catalog/releases/{id}/metadata-transforms",
+        get(
+            move |state: State<AdminAccessState>,
+                  _admin: AdminPrincipal,
+                  id: AxumPath<Uuid>,
+                  query: Query<AuditQuery>| async move {
+                list_audits(state, _admin, id, query, &config).await
+            },
+        ),
+    );
+    let config = master.clone();
+    router = router.route(
+        "/api/admin/v1/catalog/releases/{id}/metadata-transforms/{audit_id}/revert",
+        post(
+            move |state: State<AdminAccessState>,
+                  admin: AdminPrincipal,
+                  id: AxumPath<(Uuid, Uuid)>| async move {
+                revert(state, admin, id, &config).await
+            },
+        ),
+    );
+    router
 }
 
 fn error_response(error: MetadataEditError) -> Response {
@@ -176,6 +209,7 @@ fn error_response(error: MetadataEditError) -> Response {
             "metadata transformation failed validation",
         ),
         MetadataEditError::Database(_) | MetadataEditError::Io(_) | MetadataEditError::Tag(_) => {
+            eprintln!("DEBUG METADATA ERROR: {:?}", error);
             tracing::error!(error = ?error, "metadata transformation failed");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -200,8 +234,9 @@ async fn preview(
     _admin: AdminPrincipal,
     AxumPath(id): AxumPath<Uuid>,
     Json(request): Json<TransformRequest>,
+    config: &IngestionConfig,
 ) -> Response {
-    match build_plan(&state.pool, id, &request).await {
+    match build_plan(&state.pool, id, &request, config).await {
         Ok((hash, plan)) => Json(PreviewResponse {
             preview_hash: hash,
             operation: request.operation,
@@ -219,8 +254,17 @@ async fn apply(
     admin: AdminPrincipal,
     AxumPath(id): AxumPath<Uuid>,
     Json(request): Json<TransformRequest>,
+    config: &IngestionConfig,
 ) -> Response {
-    match apply_inner(&state.pool, id, &request, admin.public_api_id.to_string()).await {
+    match apply_inner(
+        &state.pool,
+        id,
+        &request,
+        admin.public_api_id.to_string(),
+        config,
+    )
+    .await
+    {
         Ok(response) => Json(response).into_response(),
         Err(error) => error_response(error),
     }
@@ -231,6 +275,7 @@ async fn list_audits(
     _admin: AdminPrincipal,
     AxumPath(id): AxumPath<Uuid>,
     Query(query): Query<AuditQuery>,
+    _config: &IngestionConfig,
 ) -> Response {
     let limit = query.limit.unwrap_or(50).clamp(1, 200);
     let result = sqlx::query_as::<_, AuditRow>(
@@ -253,12 +298,14 @@ async fn revert(
     State(state): State<AdminAccessState>,
     admin: AdminPrincipal,
     AxumPath((release_public_id, audit_id)): AxumPath<(Uuid, Uuid)>,
+    config: &IngestionConfig,
 ) -> Response {
     match revert_inner(
         &state.pool,
         release_public_id,
         audit_id,
         admin.public_api_id.to_string(),
+        config,
     )
     .await
     {
@@ -272,9 +319,10 @@ async fn apply_inner(
     release_public_id: Uuid,
     request: &TransformRequest,
     actor: String,
+    config: &IngestionConfig,
 ) -> Result<TransformResponse, MetadataEditError> {
     let params = bounded_params(&request.params)?;
-    let (preview_hash, plan) = build_plan(pool, release_public_id, request).await?;
+    let (preview_hash, plan) = build_plan(pool, release_public_id, request, config).await?;
     if request.preview_hash.as_deref() != Some(preview_hash.as_str()) {
         return Err(MetadataEditError::PreviewMismatch);
     }
@@ -300,8 +348,16 @@ async fn apply_inner(
     .execute(pool)
     .await?;
 
-    let result =
-        apply_files_and_commit(pool, release_id, audit_id, &request.operation, &plan, actor).await;
+    let result = apply_files_and_commit(
+        pool,
+        release_id,
+        audit_id,
+        &request.operation,
+        &plan,
+        actor,
+        config,
+    )
+    .await;
     match result {
         Ok(recovery) => Ok(TransformResponse {
             audit_id,
@@ -332,25 +388,24 @@ async fn apply_files_and_commit(
     operation: &str,
     plan: &[PlannedFile],
     actor: String,
+    config: &IngestionConfig,
 ) -> Result<Value, MetadataEditError> {
     let mut tx = pool.begin().await?;
     sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))")
         .bind(release_id.to_string())
         .execute(&mut *tx)
         .await?;
-    let config = IngestionConfig::from_env()
-        .map_err(|error| MetadataEditError::Configuration(error.to_string()))?;
-    let ffmpeg = config.ffmpeg_path;
+    let ffmpeg = &config.ffmpeg_path;
     let timeout = std::time::Duration::from_secs(
         u64::try_from(config.ffmpeg_timeout.whole_seconds()).unwrap_or(300),
     );
     let mut evidence = Vec::new();
     let mut changed = Vec::new();
     for item in plan.iter().filter(|file| !file.deltas.is_empty()) {
-        let record = match atomic_rewrite(item, audit_id, &ffmpeg, timeout) {
+        let record = match atomic_rewrite(item, audit_id, ffmpeg, timeout) {
             Ok(record) => record,
             Err(error) => {
-                rollback_files(&evidence);
+                rollback_files(&evidence, config);
                 tx.rollback().await?;
                 return Err(error);
             }
@@ -364,7 +419,7 @@ async fn apply_files_and_commit(
                 .execute(&mut *tx)
                 .await
         {
-            rollback_files(&evidence);
+            rollback_files(&evidence, config);
             tx.rollback().await?;
             return Err(MetadataEditError::Database(error));
         }
@@ -383,7 +438,7 @@ async fn apply_files_and_commit(
             .execute(&mut *tx)
             .await
     {
-        rollback_files(&evidence);
+        rollback_files(&evidence, config);
         tx.rollback().await?;
         return Err(MetadataEditError::Database(error));
     }
@@ -397,12 +452,12 @@ async fn apply_files_and_commit(
     .execute(&mut *tx)
     .await
     {
-        rollback_files(&evidence);
+        rollback_files(&evidence, config);
         tx.rollback().await?;
         return Err(MetadataEditError::Database(error));
     }
     if let Err(error) = tx.commit().await {
-        rollback_files(&evidence);
+        rollback_files(&evidence, config);
         let _ = sqlx::query(
             "UPDATE metadata_edit_audits SET status='failed',completed_at=$2,recovery_evidence=$3 WHERE id=$1",
         )
@@ -440,13 +495,13 @@ fn atomic_rewrite(
         .file_name()
         .and_then(|name| name.to_str())
         .ok_or(MetadataEditError::InvalidRequest)?;
-    let temp_name = format!(".{file_name}.melodee-edit-{audit_id}.tmp");
+    let temp_name = format!(".{file_name}.melodee-edit-{audit_id}.wav");
     let backup_name = format!(".{file_name}.melodee-edit-{audit_id}.original");
     let temp = parent.join(&temp_name);
     let backup = parent.join(&backup_name);
     fs::copy(&item.path, &temp)?;
     let result = (|| {
-        apply_tag_rewrite(&temp, &item.rewrite)?;
+        let _ = apply_tag_rewrite(&temp, &item.rewrite)?;
         // Re-open the rewritten container before any rename. This catches a
         // writer that returned success but produced a file the normal reader
         // cannot parse.
@@ -504,15 +559,12 @@ fn atomic_rewrite(
     result
 }
 
-fn rollback_files(evidence: &[Value]) {
+fn rollback_files(evidence: &[Value], config: &IngestionConfig) {
     for value in evidence {
         let Some(relative) = value.get("relativePath").and_then(Value::as_str) else {
             continue;
         };
         let Some(backup_name) = value.get("backupName").and_then(Value::as_str) else {
-            continue;
-        };
-        let Ok(config) = IngestionConfig::from_env() else {
             continue;
         };
         let Ok(Some(roots)) = config.storage_roots().map(|roots| roots.storage_root) else {
@@ -588,6 +640,7 @@ async fn revert_inner(
     release_public_id: Uuid,
     audit_id: Uuid,
     actor: String,
+    config: &IngestionConfig,
 ) -> Result<TransformResponse, MetadataEditError> {
     let audit = sqlx::query_as::<_, AuditRow>(
         "SELECT a.id,a.release_id,a.operation_name,a.operation_params,a.affected_files,
@@ -612,8 +665,6 @@ async fn revert_inner(
         .ok_or(MetadataEditError::Operation(
             "recovery evidence is incomplete".to_owned(),
         ))?;
-    let config = IngestionConfig::from_env()
-        .map_err(|error| MetadataEditError::Configuration(error.to_string()))?;
     let roots = config
         .storage_roots()
         .map_err(|error| MetadataEditError::Configuration(error.to_string()))?
@@ -626,7 +677,7 @@ async fn revert_inner(
         .bind(audit.release_id.to_string())
         .execute(&mut *tx)
         .await?;
-    let ffmpeg = config.ffmpeg_path;
+    let ffmpeg = &config.ffmpeg_path;
     let timeout = std::time::Duration::from_secs(
         u64::try_from(config.ffmpeg_timeout.whole_seconds()).unwrap_or(300),
     );
@@ -676,7 +727,7 @@ async fn revert_inner(
                     if let Some(expected_audio) =
                         value.get("beforeAudioFingerprint").and_then(Value::as_str)
                     {
-                        let actual = decoded_audio_fingerprint(&temp, &ffmpeg, timeout)
+                        let actual = decoded_audio_fingerprint(&temp, ffmpeg, timeout)
                             .map_err(MetadataEditError::Integrity)?;
                         if actual != expected_audio {
                             return Err(MetadataEditError::Integrity(
@@ -789,10 +840,9 @@ async fn build_plan(
     pool: &PgPool,
     release_public_id: Uuid,
     request: &TransformRequest,
+    config: &IngestionConfig,
 ) -> Result<(String, Vec<PlannedFile>), MetadataEditError> {
     let params = bounded_params(&request.params)?;
-    let config = IngestionConfig::from_env()
-        .map_err(|error| MetadataEditError::Configuration(error.to_string()))?;
     let roots = config
         .storage_roots()
         .map_err(|error| MetadataEditError::Configuration(error.to_string()))?

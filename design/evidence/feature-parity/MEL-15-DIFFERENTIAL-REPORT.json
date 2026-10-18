@@ -1,0 +1,2356 @@
+{
+  "baseUrl": "http://127.0.0.1:37300",
+  "unexpected": [],
+  "known": [
+    {
+      "scenario": "jf-root-no-markers",
+      "field": "response.status",
+      "reason": "legacy Blazor shell absent by design"
+    },
+    {
+      "scenario": "jf-root-no-markers",
+      "field": "response.headers",
+      "reason": "legacy Blazor shell absent by design"
+    },
+    {
+      "scenario": "jf-root-no-markers",
+      "field": "response.body",
+      "reason": "legacy Blazor shell absent by design"
+    },
+    {
+      "scenario": "jf-system-info",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-system-info-fallthrough",
+      "field": "response.headers",
+      "reason": "legacy Blazor shell absent by design"
+    },
+    {
+      "scenario": "jf-system-info-fallthrough",
+      "field": "response.body",
+      "reason": "legacy Blazor shell absent by design"
+    },
+    {
+      "scenario": "jf-system-info-public",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-system-info-public-explicit",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-users-public",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-auth-negative/me-garbage-token",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-auth-negative/me-no-token",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-auth-negative/missing-fields",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-auth-negative/password-field-not-read",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-auth-negative/unknown-user",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-auth-negative/wrong-password",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-auth/login",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-auth/me-after-logout",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-auth/me-api-key-query",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-auth/me-mediabrowser-header",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-auth/me-x-emby-authorization",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-auth/me-x-emby-token",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-auth/me-x-mediabrowser-token",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-artists-genres/albumartists-list",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-artists-genres/artist-detail",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-artists-genres/artist-similar",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-artists-genres/artists-list",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-artists-genres/genres-list",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-artists-genres/login",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-artists-genres/musicgenres-list",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-browse/item-album-detail",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-browse/item-artist-detail",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-browse/item-song-detail",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-browse/item-unknown",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-browse/items-albums",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-browse/items-artists",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-browse/items-filters",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-browse/items-instantmix-song",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-browse/items-instantmix-unknown",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-browse/items-parent-album",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-browse/items-parent-artist",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-browse/items-searchterm-dune",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-browse/items-similar-artist-id",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-browse/items-similar-song",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-browse/items-songs",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-browse/items-video-type-empty",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-browse/login",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-browse/user-views-by-id",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-browse/user-views-by-id",
+      "field": "response.body$.Items[0].DateCreated",
+      "reason": "configured-source creation time is boot time"
+    },
+    {
+      "scenario": "jf-browse/user-views-by-id",
+      "field": "response.body$.Items[0].Etag",
+      "reason": "etag derives from creation time (ADR-0131 D10)"
+    },
+    {
+      "scenario": "jf-browse/user-views-by-id",
+      "field": "response.body$.Items[1].Etag",
+      "reason": "deterministic Storage library id replaces legacy random (ADR-0131 D10)"
+    },
+    {
+      "scenario": "jf-browse/user-views-by-id",
+      "field": "response.body$.Items[1].Id",
+      "reason": "deterministic Storage library id replaces legacy random (ADR-0131 D10)"
+    },
+    {
+      "scenario": "jf-browse/user-views-by-id",
+      "field": "response.body$.Items[1].UserData.Key",
+      "reason": "deterministic Storage library id replaces legacy random (ADR-0131 D10)"
+    },
+    {
+      "scenario": "jf-browse/userviews",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-browse/userviews",
+      "field": "response.body$.Items[0].DateCreated",
+      "reason": "configured-source creation time is boot time"
+    },
+    {
+      "scenario": "jf-browse/userviews",
+      "field": "response.body$.Items[0].Etag",
+      "reason": "etag derives from creation time (ADR-0131 D10)"
+    },
+    {
+      "scenario": "jf-browse/userviews",
+      "field": "response.body$.Items[1].Etag",
+      "reason": "deterministic Storage library id replaces legacy random (ADR-0131 D10)"
+    },
+    {
+      "scenario": "jf-browse/userviews",
+      "field": "response.body$.Items[1].Id",
+      "reason": "deterministic Storage library id replaces legacy random (ADR-0131 D10)"
+    },
+    {
+      "scenario": "jf-browse/userviews",
+      "field": "response.body$.Items[1].UserData.Key",
+      "reason": "deterministic Storage library id replaces legacy random (ADR-0131 D10)"
+    },
+    {
+      "scenario": "jf-playback/stream-extension-no-static",
+      "field": "scenario",
+      "reason": "ADR-0147: stream.{container} without static=true now honors configured transcoding; frozen 400 rejection golden is historical"
+    },
+    {
+      "scenario": "jf-playback/login",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-playback/playbackinfo",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-playback/stream-range-invalid",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-playback/stream-range-unsatisfiable",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-playback/stream-unknown",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-userstate/favorite-song",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-userstate/favorite-unknown",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-userstate/login",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-userstate/played-album",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-userstate/sessions-list",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-userstate/sessions-list-after-stop",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-userstate/unfavorite-song",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-userstate/unplayed-album",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-userstate/verify-favorite",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-userstate/verify-unfavorite",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-playlists/add-second-nonempty",
+      "field": "scenario",
+      "reason": "D4: legacy 500 on second add intentionally not preserved"
+    },
+    {
+      "scenario": "jf-playlists-create-with-songs/create-with-songs",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-playlists-create-with-songs/items-of-created",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-playlists-create-with-songs/login",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-playlists/create-playlist-empty",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-playlists/detail-after-delete",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-playlists/items-after-first-add",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-playlists/items-after-move",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-playlists/items-after-remove",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-playlists/items-after-remove",
+      "field": "response.body$.Items[0].Album",
+      "reason": "D4 family: legacy remove corrupted surviving PlaylistOrder"
+    },
+    {
+      "scenario": "jf-playlists/items-after-remove",
+      "field": "response.body$.Items[0].AlbumId",
+      "reason": "D4 family: legacy remove corrupted surviving PlaylistOrder"
+    },
+    {
+      "scenario": "jf-playlists/items-after-remove",
+      "field": "response.body$.Items[0].ArtistItems[0].Id",
+      "reason": "D4 family: legacy remove corrupted surviving PlaylistOrder"
+    },
+    {
+      "scenario": "jf-playlists/items-after-remove",
+      "field": "response.body$.Items[0].ArtistItems[0].Name",
+      "reason": "D4 family: legacy remove corrupted surviving PlaylistOrder"
+    },
+    {
+      "scenario": "jf-playlists/items-after-remove",
+      "field": "response.body$.Items[0].Artists[0]",
+      "reason": "D4 family: legacy remove corrupted surviving PlaylistOrder"
+    },
+    {
+      "scenario": "jf-playlists/items-after-remove",
+      "field": "response.body$.Items[0].DateCreated",
+      "reason": "D4 family: legacy remove corrupted surviving PlaylistOrder"
+    },
+    {
+      "scenario": "jf-playlists/items-after-remove",
+      "field": "response.body$.Items[0].Etag",
+      "reason": "D4 family: legacy remove corrupted surviving PlaylistOrder"
+    },
+    {
+      "scenario": "jf-playlists/items-after-remove",
+      "field": "response.body$.Items[0].Id",
+      "reason": "D4 family: legacy remove corrupted surviving PlaylistOrder"
+    },
+    {
+      "scenario": "jf-playlists/items-after-remove",
+      "field": "response.body$.Items[0].IndexNumber",
+      "reason": "D4 family: legacy remove corrupted surviving PlaylistOrder"
+    },
+    {
+      "scenario": "jf-playlists/items-after-remove",
+      "field": "response.body$.Items[0].Name",
+      "reason": "D4 family: legacy remove corrupted surviving PlaylistOrder"
+    },
+    {
+      "scenario": "jf-playlists/items-after-remove",
+      "field": "response.body$.Items[0].RunTimeTicks",
+      "reason": "D4 family: legacy remove corrupted surviving PlaylistOrder"
+    },
+    {
+      "scenario": "jf-playlists/items-after-remove",
+      "field": "response.body$.Items[0].SortName",
+      "reason": "D4 family: legacy remove corrupted surviving PlaylistOrder"
+    },
+    {
+      "scenario": "jf-playlists/items-after-remove",
+      "field": "response.body$.Items[1].Album",
+      "reason": "D4 family: legacy remove corrupted surviving PlaylistOrder"
+    },
+    {
+      "scenario": "jf-playlists/items-after-remove",
+      "field": "response.body$.Items[1].AlbumId",
+      "reason": "D4 family: legacy remove corrupted surviving PlaylistOrder"
+    },
+    {
+      "scenario": "jf-playlists/items-after-remove",
+      "field": "response.body$.Items[1].ArtistItems[0].Id",
+      "reason": "D4 family: legacy remove corrupted surviving PlaylistOrder"
+    },
+    {
+      "scenario": "jf-playlists/items-after-remove",
+      "field": "response.body$.Items[1].ArtistItems[0].Name",
+      "reason": "D4 family: legacy remove corrupted surviving PlaylistOrder"
+    },
+    {
+      "scenario": "jf-playlists/items-after-remove",
+      "field": "response.body$.Items[1].Artists[0]",
+      "reason": "D4 family: legacy remove corrupted surviving PlaylistOrder"
+    },
+    {
+      "scenario": "jf-playlists/items-after-remove",
+      "field": "response.body$.Items[1].DateCreated",
+      "reason": "D4 family: legacy remove corrupted surviving PlaylistOrder"
+    },
+    {
+      "scenario": "jf-playlists/items-after-remove",
+      "field": "response.body$.Items[1].Etag",
+      "reason": "D4 family: legacy remove corrupted surviving PlaylistOrder"
+    },
+    {
+      "scenario": "jf-playlists/items-after-remove",
+      "field": "response.body$.Items[1].Id",
+      "reason": "D4 family: legacy remove corrupted surviving PlaylistOrder"
+    },
+    {
+      "scenario": "jf-playlists/items-after-remove",
+      "field": "response.body$.Items[1].Name",
+      "reason": "D4 family: legacy remove corrupted surviving PlaylistOrder"
+    },
+    {
+      "scenario": "jf-playlists/items-after-remove",
+      "field": "response.body$.Items[1].RunTimeTicks",
+      "reason": "D4 family: legacy remove corrupted surviving PlaylistOrder"
+    },
+    {
+      "scenario": "jf-playlists/items-after-remove",
+      "field": "response.body$.Items[1].SortName",
+      "reason": "D4 family: legacy remove corrupted surviving PlaylistOrder"
+    },
+    {
+      "scenario": "jf-playlists/items-after-remove",
+      "field": "response.body$.Items[2].Album",
+      "reason": "D4 family: legacy remove corrupted surviving PlaylistOrder"
+    },
+    {
+      "scenario": "jf-playlists/items-after-remove",
+      "field": "response.body$.Items[2].AlbumId",
+      "reason": "D4 family: legacy remove corrupted surviving PlaylistOrder"
+    },
+    {
+      "scenario": "jf-playlists/items-after-remove",
+      "field": "response.body$.Items[2].ArtistItems[0].Id",
+      "reason": "D4 family: legacy remove corrupted surviving PlaylistOrder"
+    },
+    {
+      "scenario": "jf-playlists/items-after-remove",
+      "field": "response.body$.Items[2].ArtistItems[0].Name",
+      "reason": "D4 family: legacy remove corrupted surviving PlaylistOrder"
+    },
+    {
+      "scenario": "jf-playlists/items-after-remove",
+      "field": "response.body$.Items[2].Artists[0]",
+      "reason": "D4 family: legacy remove corrupted surviving PlaylistOrder"
+    },
+    {
+      "scenario": "jf-playlists/items-after-remove",
+      "field": "response.body$.Items[2].DateCreated",
+      "reason": "D4 family: legacy remove corrupted surviving PlaylistOrder"
+    },
+    {
+      "scenario": "jf-playlists/items-after-remove",
+      "field": "response.body$.Items[2].Etag",
+      "reason": "D4 family: legacy remove corrupted surviving PlaylistOrder"
+    },
+    {
+      "scenario": "jf-playlists/items-after-remove",
+      "field": "response.body$.Items[2].Id",
+      "reason": "D4 family: legacy remove corrupted surviving PlaylistOrder"
+    },
+    {
+      "scenario": "jf-playlists/items-after-remove",
+      "field": "response.body$.Items[2].IndexNumber",
+      "reason": "D4 family: legacy remove corrupted surviving PlaylistOrder"
+    },
+    {
+      "scenario": "jf-playlists/items-after-remove",
+      "field": "response.body$.Items[2].Name",
+      "reason": "D4 family: legacy remove corrupted surviving PlaylistOrder"
+    },
+    {
+      "scenario": "jf-playlists/items-after-remove",
+      "field": "response.body$.Items[2].RunTimeTicks",
+      "reason": "D4 family: legacy remove corrupted surviving PlaylistOrder"
+    },
+    {
+      "scenario": "jf-playlists/items-after-remove",
+      "field": "response.body$.Items[2].SortName",
+      "reason": "D4 family: legacy remove corrupted surviving PlaylistOrder"
+    },
+    {
+      "scenario": "jf-playlists/login",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-playlists/playlist-detail",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-playlists/playlist-items",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-playlists/playlists-list",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-images/item-image-304",
+      "field": "scenario",
+      "reason": "artwork storage evidence gap"
+    },
+    {
+      "scenario": "jf-images/artist-image",
+      "field": "response.status",
+      "reason": "artwork storage evidence gap"
+    },
+    {
+      "scenario": "jf-images/artist-image",
+      "field": "response.headers",
+      "reason": "artwork storage evidence gap"
+    },
+    {
+      "scenario": "jf-images/artist-image",
+      "field": "response.body",
+      "reason": "artwork storage evidence gap"
+    },
+    {
+      "scenario": "jf-images/image-maxwidth-bucket",
+      "field": "response.status",
+      "reason": "artwork storage evidence gap"
+    },
+    {
+      "scenario": "jf-images/image-maxwidth-bucket",
+      "field": "response.headers",
+      "reason": "artwork storage evidence gap"
+    },
+    {
+      "scenario": "jf-images/image-maxwidth-bucket",
+      "field": "response.body",
+      "reason": "artwork storage evidence gap"
+    },
+    {
+      "scenario": "jf-images/image-no-artwork-404",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-images/image-unknown",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-images/item-image-head",
+      "field": "response.status",
+      "reason": "artwork storage evidence gap"
+    },
+    {
+      "scenario": "jf-images/item-image-head",
+      "field": "response.headers",
+      "reason": "artwork storage evidence gap"
+    },
+    {
+      "scenario": "jf-images/item-image-indexed",
+      "field": "response.status",
+      "reason": "artwork storage evidence gap"
+    },
+    {
+      "scenario": "jf-images/item-image-indexed",
+      "field": "response.headers",
+      "reason": "artwork storage evidence gap"
+    },
+    {
+      "scenario": "jf-images/item-image-indexed",
+      "field": "response.body",
+      "reason": "artwork storage evidence gap"
+    },
+    {
+      "scenario": "jf-images/item-image-primary",
+      "field": "response.status",
+      "reason": "artwork storage evidence gap"
+    },
+    {
+      "scenario": "jf-images/item-image-primary",
+      "field": "response.headers",
+      "reason": "artwork storage evidence gap"
+    },
+    {
+      "scenario": "jf-images/item-image-primary",
+      "field": "response.body",
+      "reason": "artwork storage evidence gap"
+    },
+    {
+      "scenario": "jf-images/login",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-extra/audio-lyrics",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-extra/audio-lyrics-none",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-extra/create-for-items-delete",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-extra/delete-song-via-items-404",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-extra/login",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-extra/playbackinfo-post",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-extra/songs-instantmix",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-extra/users-by-id",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "jf-extra/users-list-admin",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getlicense-json",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getlicense-xml",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getmusicfolders-json",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getmusicfolders-json",
+      "field": "response.body$.subsonic-response.musicFolders.musicFolder[1].id",
+      "reason": "deterministic Storage folder id replaces legacy random (ADR-0131 D10)"
+    },
+    {
+      "scenario": "os-getmusicfolders-xml",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getmusicfolders-xml",
+      "field": "response.body",
+      "reason": "deterministic Storage folder id replaces legacy random (ADR-0131 D10)"
+    },
+    {
+      "scenario": "os-getopensubsonicextensions-json",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getopensubsonicextensions-xml",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-ping-json",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-ping-jsonp",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-ping-jsonp-no-callback",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-ping-plain-route",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-ping-root-alias",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-ping-xml",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-auth-apikey-only",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-auth-bypass-localhost",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-auth-bypass-localhost",
+      "field": "response.body$.subsonic-response.musicFolders.musicFolder[1].id",
+      "reason": "deterministic Storage folder id replaces legacy random (ADR-0131 D10)"
+    },
+    {
+      "scenario": "os-auth-form-post",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-auth-form-post",
+      "field": "response.body$.subsonic-response.musicFolders.musicFolder[1].id",
+      "reason": "deterministic Storage folder id replaces legacy random (ADR-0131 D10)"
+    },
+    {
+      "scenario": "os-auth-invalid-token",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-auth-invalid-username",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-auth-jwt-forged-unsigned",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-auth-jwt-forged-unsigned",
+      "field": "response.body$.subsonic-response.musicFolders",
+      "reason": "R1: legacy unsigned-JWT auth bypass intentionally not preserved"
+    },
+    {
+      "scenario": "os-auth-jwt-forged-unsigned",
+      "field": "response.body$.subsonic-response.error",
+      "reason": "R1: legacy unsigned-JWT auth bypass intentionally not preserved"
+    },
+    {
+      "scenario": "os-auth-jwt-forged-unsigned",
+      "field": "response.body$.subsonic-response.status",
+      "reason": "R1: legacy unsigned-JWT auth bypass intentionally not preserved"
+    },
+    {
+      "scenario": "os-auth-jwt-only-unreachable",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-auth-malformed-token",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-auth-missing",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-auth-missing-xml",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-auth-no-version-param",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-auth-no-version-param",
+      "field": "response.body$.subsonic-response.musicFolders.musicFolder[1].id",
+      "reason": "deterministic Storage folder id replaces legacy random (ADR-0131 D10)"
+    },
+    {
+      "scenario": "os-auth-token-without-salt",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-auth-valid-password-enc-hex",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-auth-valid-password-enc-hex",
+      "field": "response.body$.subsonic-response.musicFolders.musicFolder[1].id",
+      "reason": "deterministic Storage folder id replaces legacy random (ADR-0131 D10)"
+    },
+    {
+      "scenario": "os-auth-valid-password-plain",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-auth-valid-password-plain",
+      "field": "response.body$.subsonic-response.musicFolders.musicFolder[1].id",
+      "reason": "deterministic Storage folder id replaces legacy random (ADR-0131 D10)"
+    },
+    {
+      "scenario": "os-auth-valid-token",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-auth-valid-token",
+      "field": "response.body$.subsonic-response.musicFolders.musicFolder[1].id",
+      "reason": "deterministic Storage folder id replaces legacy random (ADR-0131 D10)"
+    },
+    {
+      "scenario": "os-auth-valid-token-uppercase",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-auth-valid-token-uppercase",
+      "field": "response.body$.subsonic-response.musicFolders.musicFolder[1].id",
+      "reason": "deterministic Storage folder id replaces legacy random (ADR-0131 D10)"
+    },
+    {
+      "scenario": "os-getalbum",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getalbum",
+      "field": "response.body$.subsonic-response.album.song[1].averageRating",
+      "reason": "fixture-seeded ratings bypassed legacy CalculatedRating (seeding artifact)"
+    },
+    {
+      "scenario": "os-getalbum-compilation",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getalbum-compilation",
+      "field": "response.body$.subsonic-response.album.sortName",
+      "reason": "legacy null-SortName omission artifact; Rust requires non-empty sort values"
+    },
+    {
+      "scenario": "os-getalbum-minimal",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getalbum-minimal",
+      "field": "response.body$.subsonic-response.album.sortName",
+      "reason": "legacy null-SortName omission artifact; Rust requires non-empty sort values"
+    },
+    {
+      "scenario": "os-getalbum-minimal",
+      "field": "response.body$.subsonic-response.album.song[0].albumArtists[0].sortName",
+      "reason": "legacy null-SortName omission artifact; Rust requires non-empty sort values"
+    },
+    {
+      "scenario": "os-getalbum-multidisc",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getalbum-multidisc",
+      "field": "response.body$.subsonic-response.album.sortName",
+      "reason": "legacy null-SortName omission artifact; Rust requires non-empty sort values"
+    },
+    {
+      "scenario": "os-getalbum-multidisc",
+      "field": "response.body$.subsonic-response.album.originalAlbumDate.day",
+      "reason": "legacy Album.OriginalReleaseDate column absent from Rust schema (deferred schema ADR); exact captured field"
+    },
+    {
+      "scenario": "os-getalbum-multidisc",
+      "field": "response.body$.subsonic-response.album.originalAlbumDate.month",
+      "reason": "legacy Album.OriginalReleaseDate column absent from Rust schema (deferred schema ADR); exact captured field"
+    },
+    {
+      "scenario": "os-getalbum-multidisc",
+      "field": "response.body$.subsonic-response.album.originalAlbumDate.year",
+      "reason": "legacy Album.OriginalReleaseDate column absent from Rust schema (deferred schema ADR); exact captured field"
+    },
+    {
+      "scenario": "os-getalbum-multidisc",
+      "field": "response.body$.subsonic-response.album.originalReleaseDate.day",
+      "reason": "legacy Album.OriginalReleaseDate column absent from Rust schema (deferred schema ADR); exact captured field"
+    },
+    {
+      "scenario": "os-getalbum-multidisc",
+      "field": "response.body$.subsonic-response.album.originalReleaseDate.month",
+      "reason": "legacy Album.OriginalReleaseDate column absent from Rust schema (deferred schema ADR); exact captured field"
+    },
+    {
+      "scenario": "os-getalbum-multidisc",
+      "field": "response.body$.subsonic-response.album.originalReleaseDate.year",
+      "reason": "legacy Album.OriginalReleaseDate column absent from Rust schema (deferred schema ADR); exact captured field"
+    },
+    {
+      "scenario": "os-getalbum-multidisc",
+      "field": "response.body$.subsonic-response.album.song[2].averageRating",
+      "reason": "fixture-seeded ratings bypassed legacy CalculatedRating (seeding artifact)"
+    },
+    {
+      "scenario": "os-getalbum-unknown",
+      "field": "response.headers",
+      "reason": "redirect Location embeds per-run forwarded host; credential strip per ADR-0130"
+    },
+    {
+      "scenario": "os-getalbuminfo",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getalbuminfo",
+      "field": "response.body$.subsonic-response.albumInfo.largeImageUrl",
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
+    },
+    {
+      "scenario": "os-getalbuminfo",
+      "field": "response.body$.subsonic-response.albumInfo.mediumImageUrl",
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
+    },
+    {
+      "scenario": "os-getalbuminfo",
+      "field": "response.body$.subsonic-response.albumInfo.smallImageUrl",
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
+    },
+    {
+      "scenario": "os-getalbuminfo2",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getalbuminfo2",
+      "field": "response.body$.subsonic-response.albumInfo.largeImageUrl",
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
+    },
+    {
+      "scenario": "os-getalbuminfo2",
+      "field": "response.body$.subsonic-response.albumInfo.mediumImageUrl",
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
+    },
+    {
+      "scenario": "os-getalbuminfo2",
+      "field": "response.body$.subsonic-response.albumInfo.smallImageUrl",
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
+    },
+    {
+      "scenario": "os-getartist",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getartist",
+      "field": "response.body$.subsonic-response.artist.artistImageUrl",
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
+    },
+    {
+      "scenario": "os-getartist-collision",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getartist-collision",
+      "field": "response.body$.subsonic-response.artist.artistImageUrl",
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
+    },
+    {
+      "scenario": "os-getartist-unknown",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getartist-various",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getartist-various",
+      "field": "response.body$.subsonic-response.artist.artistImageUrl",
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
+    },
+    {
+      "scenario": "os-getartistinfo",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getartistinfo",
+      "field": "response.body$.subsonic-response.artistInfo.largeImageUrl",
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
+    },
+    {
+      "scenario": "os-getartistinfo",
+      "field": "response.body$.subsonic-response.artistInfo.mediumImageUrl",
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
+    },
+    {
+      "scenario": "os-getartistinfo",
+      "field": "response.body$.subsonic-response.artistInfo.smallImageUrl",
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
+    },
+    {
+      "scenario": "os-getartistinfo2",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getartistinfo2",
+      "field": "response.body$.subsonic-response.artistInfo2.largeImageUrl",
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
+    },
+    {
+      "scenario": "os-getartistinfo2",
+      "field": "response.body$.subsonic-response.artistInfo2.mediumImageUrl",
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
+    },
+    {
+      "scenario": "os-getartistinfo2",
+      "field": "response.body$.subsonic-response.artistInfo2.smallImageUrl",
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
+    },
+    {
+      "scenario": "os-getartists",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getartists",
+      "field": "response.body$.subsonic-response.artists.index.length",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getartists",
+      "field": "response.body$.subsonic-response.artists.index[0].artist[0].artistImageUrl",
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
+    },
+    {
+      "scenario": "os-getartists",
+      "field": "response.body$.subsonic-response.artists.index[1].artist[0].artistImageUrl",
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
+    },
+    {
+      "scenario": "os-getartists",
+      "field": "response.body$.subsonic-response.artists.index[2].artist.length",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getartists",
+      "field": "response.body$.subsonic-response.artists.index[2].artist[0].artistImageUrl",
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
+    },
+    {
+      "scenario": "os-getartists",
+      "field": "response.body$.subsonic-response.artists.index[2].artist[0].coverArt",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getartists",
+      "field": "response.body$.subsonic-response.artists.index[2].artist[0].id",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getartists",
+      "field": "response.body$.subsonic-response.artists.index[2].artist[0].name",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getartists",
+      "field": "response.body$.subsonic-response.artists.index[2].name",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getartists",
+      "field": "response.body$.subsonic-response.artists.index[3].artist.length",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getartists",
+      "field": "response.body$.subsonic-response.artists.index[3].artist[0].albumCount",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getartists",
+      "field": "response.body$.subsonic-response.artists.index[3].artist[0].artistImageUrl",
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
+    },
+    {
+      "scenario": "os-getartists",
+      "field": "response.body$.subsonic-response.artists.index[3].artist[0].coverArt",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getartists",
+      "field": "response.body$.subsonic-response.artists.index[3].artist[0].id",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getartists",
+      "field": "response.body$.subsonic-response.artists.index[3].artist[0].name",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getartists",
+      "field": "response.body$.subsonic-response.artists.index[3].name",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getartists",
+      "field": "response.body$.subsonic-response.artists.index[4].artist[0].albumCount",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getartists",
+      "field": "response.body$.subsonic-response.artists.index[4].artist[0].artistImageUrl",
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
+    },
+    {
+      "scenario": "os-getartists",
+      "field": "response.body$.subsonic-response.artists.index[4].artist[0].coverArt",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getartists",
+      "field": "response.body$.subsonic-response.artists.index[4].artist[0].id",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getartists",
+      "field": "response.body$.subsonic-response.artists.index[4].artist[0].name",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getartists",
+      "field": "response.body$.subsonic-response.artists.index[4].name",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getartists",
+      "field": "response.body$.subsonic-response.artists.index[5].artist[0].albumCount",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getartists",
+      "field": "response.body$.subsonic-response.artists.index[5].artist[0].artistImageUrl",
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
+    },
+    {
+      "scenario": "os-getartists",
+      "field": "response.body$.subsonic-response.artists.index[5].artist[0].coverArt",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getartists",
+      "field": "response.body$.subsonic-response.artists.index[5].artist[0].id",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getartists",
+      "field": "response.body$.subsonic-response.artists.index[5].artist[0].name",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getartists",
+      "field": "response.body$.subsonic-response.artists.index[5].name",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getartists",
+      "field": "response.body$.subsonic-response.artists.index[6].artist[0].artistImageUrl",
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
+    },
+    {
+      "scenario": "os-getartists",
+      "field": "response.body$.subsonic-response.artists.index[6].artist[0].coverArt",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getartists",
+      "field": "response.body$.subsonic-response.artists.index[6].artist[0].id",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getartists",
+      "field": "response.body$.subsonic-response.artists.index[6].artist[0].name",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getartists",
+      "field": "response.body$.subsonic-response.artists.index[6].name",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getartists",
+      "field": "response.body$.subsonic-response.artists.index[7].artist.length",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getartists",
+      "field": "response.body$.subsonic-response.artists.index[7].artist[0].artistImageUrl",
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
+    },
+    {
+      "scenario": "os-getartists",
+      "field": "response.body$.subsonic-response.artists.index[7].name",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getartists-xml",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getartists-xml",
+      "field": "response.body",
+      "reason": "legacy null-SortName empty-index artifact in the XML serializer"
+    },
+    {
+      "scenario": "os-getgenres",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getindexes",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getindexes",
+      "field": "response.body$.subsonic-response.indexes.index.length",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getindexes",
+      "field": "response.body$.subsonic-response.indexes.index[0].artist[0].artistImageUrl",
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
+    },
+    {
+      "scenario": "os-getindexes",
+      "field": "response.body$.subsonic-response.indexes.index[1].artist[0].artistImageUrl",
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
+    },
+    {
+      "scenario": "os-getindexes",
+      "field": "response.body$.subsonic-response.indexes.index[2].artist.length",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getindexes",
+      "field": "response.body$.subsonic-response.indexes.index[2].artist[0].artistImageUrl",
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
+    },
+    {
+      "scenario": "os-getindexes",
+      "field": "response.body$.subsonic-response.indexes.index[2].artist[0].coverArt",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getindexes",
+      "field": "response.body$.subsonic-response.indexes.index[2].artist[0].id",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getindexes",
+      "field": "response.body$.subsonic-response.indexes.index[2].artist[0].name",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getindexes",
+      "field": "response.body$.subsonic-response.indexes.index[2].name",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getindexes",
+      "field": "response.body$.subsonic-response.indexes.index[3].artist.length",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getindexes",
+      "field": "response.body$.subsonic-response.indexes.index[3].artist[0].albumCount",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getindexes",
+      "field": "response.body$.subsonic-response.indexes.index[3].artist[0].artistImageUrl",
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
+    },
+    {
+      "scenario": "os-getindexes",
+      "field": "response.body$.subsonic-response.indexes.index[3].artist[0].coverArt",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getindexes",
+      "field": "response.body$.subsonic-response.indexes.index[3].artist[0].id",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getindexes",
+      "field": "response.body$.subsonic-response.indexes.index[3].artist[0].name",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getindexes",
+      "field": "response.body$.subsonic-response.indexes.index[3].name",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getindexes",
+      "field": "response.body$.subsonic-response.indexes.index[4].artist[0].albumCount",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getindexes",
+      "field": "response.body$.subsonic-response.indexes.index[4].artist[0].artistImageUrl",
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
+    },
+    {
+      "scenario": "os-getindexes",
+      "field": "response.body$.subsonic-response.indexes.index[4].artist[0].coverArt",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getindexes",
+      "field": "response.body$.subsonic-response.indexes.index[4].artist[0].id",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getindexes",
+      "field": "response.body$.subsonic-response.indexes.index[4].artist[0].name",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getindexes",
+      "field": "response.body$.subsonic-response.indexes.index[4].name",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getindexes",
+      "field": "response.body$.subsonic-response.indexes.index[5].artist[0].albumCount",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getindexes",
+      "field": "response.body$.subsonic-response.indexes.index[5].artist[0].artistImageUrl",
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
+    },
+    {
+      "scenario": "os-getindexes",
+      "field": "response.body$.subsonic-response.indexes.index[5].artist[0].coverArt",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getindexes",
+      "field": "response.body$.subsonic-response.indexes.index[5].artist[0].id",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getindexes",
+      "field": "response.body$.subsonic-response.indexes.index[5].artist[0].name",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getindexes",
+      "field": "response.body$.subsonic-response.indexes.index[5].name",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getindexes",
+      "field": "response.body$.subsonic-response.indexes.index[6].artist[0].artistImageUrl",
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
+    },
+    {
+      "scenario": "os-getindexes",
+      "field": "response.body$.subsonic-response.indexes.index[6].artist[0].coverArt",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getindexes",
+      "field": "response.body$.subsonic-response.indexes.index[6].artist[0].id",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getindexes",
+      "field": "response.body$.subsonic-response.indexes.index[6].artist[0].name",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getindexes",
+      "field": "response.body$.subsonic-response.indexes.index[6].name",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getindexes",
+      "field": "response.body$.subsonic-response.indexes.index[7].artist.length",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getindexes",
+      "field": "response.body$.subsonic-response.indexes.index[7].artist[0].artistImageUrl",
+      "reason": "image URL embeds per-run origin; exact captured field is volatile"
+    },
+    {
+      "scenario": "os-getindexes",
+      "field": "response.body$.subsonic-response.indexes.index[7].name",
+      "reason": "legacy null-SortName empty-index artifact; Rust requires sort_name"
+    },
+    {
+      "scenario": "os-getmusicdirectory-album",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getmusicdirectory-album",
+      "field": "response.body$.subsonic-response.directory.child[2].averageRating",
+      "reason": "fixture-seeded ratings bypassed legacy CalculatedRating (seeding artifact)"
+    },
+    {
+      "scenario": "os-getmusicdirectory-artist",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getmusicdirectory-library",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getsimilarsongs",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getsimilarsongs2",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getsong",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getsong",
+      "field": "response.body$.subsonic-response.song.averageRating",
+      "reason": "fixture-seeded ratings bypassed legacy CalculatedRating (seeding artifact)"
+    },
+    {
+      "scenario": "os-getsong-malformed-id",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getsong-unknown",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-gettopsongs",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-stream-range-middle",
+      "field": "scenario",
+      "reason": "ADR-0130 decision 4 (risk D2/R2): legacy double-range 416 bug intentionally not preserved"
+    },
+    {
+      "scenario": "os-download-unknown",
+      "field": "response.headers",
+      "reason": "redirect Location embeds per-run forwarded host; credential strip per ADR-0130"
+    },
+    {
+      "scenario": "os-getlyrics",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getlyrics-missing",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getlyricsbysongid",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getlyricsbysongid-none",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-stream-maxbitrate-ignored",
+      "field": "response.headers",
+      "reason": "ADR-0147: maxBitRate=64 on a 705 kbps WAV source now transcodes to mp3 at the cap; frozen silent-ignore golden is historical"
+    },
+    {
+      "scenario": "os-stream-maxbitrate-ignored",
+      "field": "response.body",
+      "reason": "ADR-0147: maxBitRate=64 on a 705 kbps WAV source now transcodes to mp3 at the cap; frozen silent-ignore golden is historical"
+    },
+    {
+      "scenario": "os-stream-range-end",
+      "field": "response.headers",
+      "reason": "ADR-0130 decision 4 (risk D2/R2): legacy suffix-range first-N bug intentionally not preserved"
+    },
+    {
+      "scenario": "os-stream-range-end",
+      "field": "response.body",
+      "reason": "ADR-0130 decision 4 (risk D2/R2): legacy suffix-range first-N bug intentionally not preserved"
+    },
+    {
+      "scenario": "os-stream-range-invalid",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-stream-range-middle-mangled",
+      "field": "response.headers",
+      "reason": "ADR-0130 decision 4 (risk D2/R2): legacy double-range 416 bug intentionally not preserved"
+    },
+    {
+      "scenario": "os-stream-range-middle-mangled",
+      "field": "response.body",
+      "reason": "ADR-0130 decision 4 (risk D2/R2): legacy double-range 416 bug intentionally not preserved"
+    },
+    {
+      "scenario": "os-stream-range-start",
+      "field": "response.headers",
+      "reason": "ADR-0130 decision 4 (risk D2/R2): legacy Content-Range total equaled the requested length"
+    },
+    {
+      "scenario": "os-stream-range-unsatisfiable",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-stream-timeoffset",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-stream-unknown",
+      "field": "response.headers",
+      "reason": "redirect Location embeds per-run forwarded host; credential strip per ADR-0130"
+    },
+    {
+      "scenario": "os-playlists/update-playlist-add-remove",
+      "field": "scenario",
+      "reason": "legacy cover-resolution 302 rollback not preserved (phase-0 \u00a77)"
+    },
+    {
+      "scenario": "os-bookmarks/create-bookmark",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-bookmarks/delete-bookmark",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-bookmarks/getbookmarks-empty",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-bookmarks/verify-bookmarks",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-bookmarks/verify-bookmarks-empty",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-playlists/create-playlist",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-playlists/create-playlist",
+      "field": "response.body$.subsonic-response.playlist.entry[1].albumArtists[0].sortName",
+      "reason": "legacy null-SortName omission artifact; Rust requires non-empty sort values"
+    },
+    {
+      "scenario": "os-playlists/delete-created",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-playlists/delete-playlist",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-playlists/get-private-playlist",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-playlists/get-private-playlist",
+      "field": "response.body$.subsonic-response.playlist.entry[1].albumArtists[0].sortName",
+      "reason": "legacy null-SortName omission artifact; Rust requires non-empty sort values"
+    },
+    {
+      "scenario": "os-playlists/getplaylist",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-playlists/getplaylist",
+      "field": "response.body$.subsonic-response.playlist.entry[2].albumArtists[0].sortName",
+      "reason": "legacy null-SortName omission artifact; Rust requires non-empty sort values"
+    },
+    {
+      "scenario": "os-playlists/getplaylist",
+      "field": "response.body$.subsonic-response.playlist.entry[3].averageRating",
+      "reason": "fixture-seeded ratings bypassed legacy CalculatedRating (seeding artifact)"
+    },
+    {
+      "scenario": "os-playlists/getplaylist-unknown",
+      "field": "response.headers",
+      "reason": "redirect Location embeds per-run forwarded host; credential strip per ADR-0130"
+    },
+    {
+      "scenario": "os-playlists/getplaylists",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-playlists/verify-created",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-playlists/verify-created",
+      "field": "response.body$.subsonic-response.playlist.entry[1].albumArtists[0].sortName",
+      "reason": "legacy null-SortName omission artifact; Rust requires non-empty sort values"
+    },
+    {
+      "scenario": "os-playlists/verify-deleted",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-playlists/verify-updated",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-playlists/verify-updated",
+      "field": "response.body$.subsonic-response.playlist.entry[0].album",
+      "reason": "legacy cover-resolution 302 rollback not preserved (phase-0 \u00a77)"
+    },
+    {
+      "scenario": "os-playlists/verify-updated",
+      "field": "response.body$.subsonic-response.playlist.entry[0].albumArtists[0].albumCount",
+      "reason": "legacy cover-resolution 302 rollback not preserved (phase-0 \u00a77)"
+    },
+    {
+      "scenario": "os-playlists/verify-updated",
+      "field": "response.body$.subsonic-response.playlist.entry[0].albumArtists[0].coverArt",
+      "reason": "legacy cover-resolution 302 rollback not preserved (phase-0 \u00a77)"
+    },
+    {
+      "scenario": "os-playlists/verify-updated",
+      "field": "response.body$.subsonic-response.playlist.entry[0].albumArtists[0].id",
+      "reason": "legacy cover-resolution 302 rollback not preserved (phase-0 \u00a77)"
+    },
+    {
+      "scenario": "os-playlists/verify-updated",
+      "field": "response.body$.subsonic-response.playlist.entry[0].albumArtists[0].name",
+      "reason": "legacy cover-resolution 302 rollback not preserved (phase-0 \u00a77)"
+    },
+    {
+      "scenario": "os-playlists/verify-updated",
+      "field": "response.body$.subsonic-response.playlist.entry[0].albumArtists[0].sortName",
+      "reason": "legacy null-SortName omission artifact; Rust requires non-empty sort values"
+    },
+    {
+      "scenario": "os-playlists/verify-updated",
+      "field": "response.body$.subsonic-response.playlist.entry[0].albumId",
+      "reason": "legacy cover-resolution 302 rollback not preserved (phase-0 \u00a77)"
+    },
+    {
+      "scenario": "os-playlists/verify-updated",
+      "field": "response.body$.subsonic-response.playlist.entry[0].artist",
+      "reason": "legacy cover-resolution 302 rollback not preserved (phase-0 \u00a77)"
+    },
+    {
+      "scenario": "os-playlists/verify-updated",
+      "field": "response.body$.subsonic-response.playlist.entry[0].artistId",
+      "reason": "legacy cover-resolution 302 rollback not preserved (phase-0 \u00a77)"
+    },
+    {
+      "scenario": "os-playlists/verify-updated",
+      "field": "response.body$.subsonic-response.playlist.entry[0].bpm",
+      "reason": "legacy cover-resolution 302 rollback not preserved (phase-0 \u00a77)"
+    },
+    {
+      "scenario": "os-playlists/verify-updated",
+      "field": "response.body$.subsonic-response.playlist.entry[0].coverArt",
+      "reason": "legacy cover-resolution 302 rollback not preserved (phase-0 \u00a77)"
+    },
+    {
+      "scenario": "os-playlists/verify-updated",
+      "field": "response.body$.subsonic-response.playlist.entry[0].created",
+      "reason": "legacy cover-resolution 302 rollback not preserved (phase-0 \u00a77)"
+    },
+    {
+      "scenario": "os-playlists/verify-updated",
+      "field": "response.body$.subsonic-response.playlist.entry[0].displayAlbumArtist",
+      "reason": "legacy cover-resolution 302 rollback not preserved (phase-0 \u00a77)"
+    },
+    {
+      "scenario": "os-playlists/verify-updated",
+      "field": "response.body$.subsonic-response.playlist.entry[0].displayArtist",
+      "reason": "legacy cover-resolution 302 rollback not preserved (phase-0 \u00a77)"
+    },
+    {
+      "scenario": "os-playlists/verify-updated",
+      "field": "response.body$.subsonic-response.playlist.entry[0].genre",
+      "reason": "legacy cover-resolution 302 rollback not preserved (phase-0 \u00a77)"
+    },
+    {
+      "scenario": "os-playlists/verify-updated",
+      "field": "response.body$.subsonic-response.playlist.entry[0].genres.length",
+      "reason": "legacy cover-resolution 302 rollback not preserved (phase-0 \u00a77)"
+    },
+    {
+      "scenario": "os-playlists/verify-updated",
+      "field": "response.body$.subsonic-response.playlist.entry[0].genres[0].value",
+      "reason": "legacy cover-resolution 302 rollback not preserved (phase-0 \u00a77)"
+    },
+    {
+      "scenario": "os-playlists/verify-updated",
+      "field": "response.body$.subsonic-response.playlist.entry[0].id",
+      "reason": "legacy cover-resolution 302 rollback not preserved (phase-0 \u00a77)"
+    },
+    {
+      "scenario": "os-playlists/verify-updated",
+      "field": "response.body$.subsonic-response.playlist.entry[0].parent",
+      "reason": "legacy cover-resolution 302 rollback not preserved (phase-0 \u00a77)"
+    },
+    {
+      "scenario": "os-playlists/verify-updated",
+      "field": "response.body$.subsonic-response.playlist.entry[0].path",
+      "reason": "legacy cover-resolution 302 rollback not preserved (phase-0 \u00a77)"
+    },
+    {
+      "scenario": "os-playlists/verify-updated",
+      "field": "response.body$.subsonic-response.playlist.entry[0].playCount",
+      "reason": "legacy cover-resolution 302 rollback not preserved (phase-0 \u00a77)"
+    },
+    {
+      "scenario": "os-playlists/verify-updated",
+      "field": "response.body$.subsonic-response.playlist.entry[0].size",
+      "reason": "legacy cover-resolution 302 rollback not preserved (phase-0 \u00a77)"
+    },
+    {
+      "scenario": "os-playlists/verify-updated",
+      "field": "response.body$.subsonic-response.playlist.entry[0].sortName",
+      "reason": "legacy null-SortName omission artifact; Rust requires non-empty sort values"
+    },
+    {
+      "scenario": "os-playlists/verify-updated",
+      "field": "response.body$.subsonic-response.playlist.entry[0].title",
+      "reason": "legacy cover-resolution 302 rollback not preserved (phase-0 \u00a77)"
+    },
+    {
+      "scenario": "os-playlists/verify-updated",
+      "field": "response.body$.subsonic-response.playlist.entry[0].year",
+      "reason": "legacy cover-resolution 302 rollback not preserved (phase-0 \u00a77)"
+    },
+    {
+      "scenario": "os-playlists/verify-updated",
+      "field": "response.body$.subsonic-response.playlist.entry[1].albumArtists[0].sortName",
+      "reason": "legacy null-SortName omission artifact; Rust requires non-empty sort values"
+    },
+    {
+      "scenario": "os-playlists/verify-updated",
+      "field": "response.body$.subsonic-response.playlist.name",
+      "reason": "legacy cover-resolution 302 rollback not preserved (phase-0 \u00a77)"
+    },
+    {
+      "scenario": "os-playqueue/clear-playqueue",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-playqueue/getplayqueue-empty",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-playqueue/saveplayqueue",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-playqueue/verify-playqueue",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-playqueue/verify-playqueue",
+      "field": "response.body$.subsonic-response.playQueue.entry[1].albumArtists[0].sortName",
+      "reason": "legacy null-SortName omission artifact; Rust requires non-empty sort values"
+    },
+    {
+      "scenario": "os-playqueue/verify-playqueue-empty",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-annotation-rating/setrating-clear",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-annotation-rating/setrating-invalid-id",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-annotation-rating/setrating-song-4",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-annotation-rating/verify-rating",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-annotation-rating/verify-rating-cleared",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-annotation-scrobble/scrobble-default-submission",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-annotation-scrobble/scrobble-nowplaying",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-annotation-scrobble/scrobble-submission",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-annotation-scrobble/scrobble-submission-repeat",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-annotation-scrobble/scrobble-time-mismatch",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-annotation-scrobble/verify-nowplaying",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-annotation-star/star-album-via-albumid",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-annotation-star/star-malformed-id",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-annotation-star/star-song",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-annotation-star/unstar-album",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-annotation-star/unstar-song",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-annotation-star/verify-starred2-after-star",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-annotation-star/verify-starred2-after-star",
+      "field": "response.body$.subsonic-response.starred2.song[0].averageRating",
+      "reason": "fixture-seeded ratings bypassed legacy CalculatedRating (seeding artifact)"
+    },
+    {
+      "scenario": "os-annotation-star/verify-starred2-after-unstar",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-annotation-star/verify-starred2-after-unstar",
+      "field": "response.body$.subsonic-response.starred2.song[0].averageRating",
+      "reason": "fixture-seeded ratings bypassed legacy CalculatedRating (seeding artifact)"
+    },
+    {
+      "scenario": "os-annotation-star/verify-starred2-album",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-annotation-star/verify-starred2-album",
+      "field": "response.body$.subsonic-response.starred2.song[0].averageRating",
+      "reason": "fixture-seeded ratings bypassed legacy CalculatedRating (seeding artifact)"
+    },
+    {
+      "scenario": "os-getalbumlist-newest",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getalbumlist-newest",
+      "field": "response.body$.subsonic-response.albumList.album[9].averageRating",
+      "reason": "fixture-seeded ratings bypassed legacy CalculatedRating (seeding artifact)"
+    },
+    {
+      "scenario": "os-getalbumlist2-alphabetical",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getalbumlist2-bygenre",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getalbumlist2-byyear",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getalbumlist2-frequent",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getalbumlist2-newest",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getalbumlist2-recent",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getalbumlist2-starred",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getnowplaying-empty",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getsongsbygenre-none",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getsongsbygenre-rock",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getsongsbygenre-unicode",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getsongsbygenre-unicode",
+      "field": "response.body$.subsonic-response.songsByGenre.song[0].albumArtists[0].sortName",
+      "reason": "legacy null-SortName omission artifact; Rust requires non-empty sort values"
+    },
+    {
+      "scenario": "os-getsongsbygenre-unicode",
+      "field": "response.body$.subsonic-response.songsByGenre.song[1].albumArtists[0].sortName",
+      "reason": "legacy null-SortName omission artifact; Rust requires non-empty sort values"
+    },
+    {
+      "scenario": "os-getstarred",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getstarred",
+      "field": "response.body$.subsonic-response.starred.artist[0].averageRating",
+      "reason": "fixture-seeded ratings bypassed legacy CalculatedRating (seeding artifact)"
+    },
+    {
+      "scenario": "os-getstarred",
+      "field": "response.body$.subsonic-response.starred.song[0].averageRating",
+      "reason": "fixture-seeded ratings bypassed legacy CalculatedRating (seeding artifact)"
+    },
+    {
+      "scenario": "os-getstarred2",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getstarred2",
+      "field": "response.body$.subsonic-response.starred2.song[0].averageRating",
+      "reason": "fixture-seeded ratings bypassed legacy CalculatedRating (seeding artifact)"
+    },
+    {
+      "scenario": "os-search2-dune",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-search3-dune",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-search3-none",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-search3-unicode",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-searchforartist",
+      "field": "response.headers",
+      "reason": "redirect Location embeds per-run forwarded host; credential strip per ADR-0130"
+    },
+    {
+      "scenario": "os-searchforartistimage",
+      "field": "response.headers",
+      "reason": "redirect Location embeds per-run forwarded host; credential strip per ADR-0130"
+    },
+    {
+      "scenario": "os-radio/create-radio",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-radio/delete-radio",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-radio/getradio-empty",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-radio/update-radio",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-radio/verify-radio",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-radio/verify-radio-empty",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-scan/getscanstatus",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-scan/getscanstatus-after",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-scan/startscan",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-shares/create-share",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-shares/create-share",
+      "field": "response.body$.subsonic-response.shares.share.entry[1].averageRating",
+      "reason": "fixture-seeded ratings bypassed legacy CalculatedRating (seeding artifact)"
+    },
+    {
+      "scenario": "os-shares/create-share-bad-id",
+      "field": "response.headers",
+      "reason": "redirect Location embeds per-run forwarded host; credential strip per ADR-0130"
+    },
+    {
+      "scenario": "os-shares/delete-share",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-shares/getshares-empty",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-shares/update-share",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-shares/verify-shares",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-shares/verify-shares",
+      "field": "response.body$.subsonic-response.shares.share[0].entry[1].averageRating",
+      "reason": "fixture-seeded ratings bypassed legacy CalculatedRating (seeding artifact)"
+    },
+    {
+      "scenario": "os-shares/verify-shares-empty",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-shares/verify-shares-empty",
+      "field": "response.body$.subsonic-response.shares.share[0].entry[1].averageRating",
+      "reason": "fixture-seeded ratings bypassed legacy CalculatedRating (seeding artifact)"
+    },
+    {
+      "scenario": "os-createuser/create-duplicate-user",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-createuser/create-new-user",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getnewestpodcasts",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getpodcasts",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getpodcasts-norole",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-getuser",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-podcasts-delete-channel-missing",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-podcasts-delete-episode-missing",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-podcasts-download-episode-missing",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-podcasts-refresh",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-podcasts-stream-episode-missing",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-searchforalbumimage",
+      "field": "response.headers",
+      "reason": "redirect Location embeds per-run forwarded host; credential strip per ADR-0130"
+    },
+    {
+      "scenario": "os-podcasts-disabled-create",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-podcasts-disabled-getnewest",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    },
+    {
+      "scenario": "os-podcasts-disabled-getpodcasts",
+      "field": "response.headers",
+      "reason": "content-length reflects unmasked volatile byte lengths; body tree matches"
+    }
+  ]
+}

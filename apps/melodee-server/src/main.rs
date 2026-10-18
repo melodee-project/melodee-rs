@@ -588,7 +588,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .merge(melodee_server::admin_config::router().with_state(admin_access_state.clone()))
         .merge(melodee_server::admin_review::router().with_state(admin_review_state))
         .merge(melodee_server::admin_identity::router().with_state(admin_access_state.clone()))
-        .merge(melodee_server::admin_metadata::router().with_state(admin_access_state.clone()))
+        .merge(melodee_server::admin_metadata::router(ingestion_config.clone()).with_state(admin_access_state.clone()))
         .merge(melodee_server::admin_catalog::router().with_state(admin_catalog_state))
         .merge(melodee_server::admin_policies::router().with_state(admin_access_state.clone()))
         .merge(melodee_server::admin_system::router().with_state(admin_system_state))
