@@ -914,9 +914,11 @@ beyond the one-hour grace) or a durable queue whose oldest ready item is more th
 old.
 
 `postgresqlPool` reports the SQLx pool's point-in-time `maxConnections`, `openConnections`,
-`idleConnections`, `inUseConnections`, and `utilizationPercent`. It contains no URL, database name,
-hostname, username, or credential. The PostgreSQL subsystem detail repeats the current in-use/open/
-idle counts so the Admin health panel surfaces saturation without requiring raw JSON inspection.
+`idleConnections`, `inUseConnections`, `utilizationPercent`, and `queryTimingMs`. It contains no URL,
+database name, hostname, username, or credential. `queryTimingMs` is the round-trip latency of a
+bounded `SELECT 1` probe, in milliseconds, giving operators a per-request PostgreSQL latency
+signal. The PostgreSQL subsystem detail repeats the current in-use/open/idle counts so the Admin
+health panel surfaces saturation without requiring raw JSON inspection.
 
 The payload also carries a `resourceBounds` array: a point-in-time snapshot of every
 semaphore-bounded request-path resource class (`streams.direct_play`, `streams.transcoding`,

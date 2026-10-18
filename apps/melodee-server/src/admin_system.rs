@@ -210,8 +210,10 @@ pub struct ApiSurfaceDto {
     pub status: &'static str,
 }
 
-/// Point-in-time SQLx pool utilization. This exposes saturation without
-/// leaking connection strings or PostgreSQL credentials.
+/// Point-in-time SQLx pool utilization plus the latency of a representative
+/// bounded probe. This exposes saturation without leaking connection strings
+/// or PostgreSQL credentials, and the query timing gives operators a
+/// per-request PostgreSQL latency signal (PRD-PERF-003).
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PostgresqlPoolDto {
@@ -220,9 +222,11 @@ pub struct PostgresqlPoolDto {
     pub idle_connections: u32,
     pub in_use_connections: u32,
     pub utilization_percent: f64,
+    /// Round-trip latency of a bounded `SELECT 1` probe, in milliseconds.
+    pub query_timing_ms: u64,
 }
 
-fn postgresql_pool(pool: &sqlx::PgPool) -> PostgresqlPoolDto {
+fn postgresql_pool(pool: &sqlx::PgPool, query_timing_ms: u64) -> PostgresqlPoolDto {
     let max_connections = pool.options().get_max_connections();
     let open_connections = pool.size();
     let idle_connections =
@@ -239,6 +243,7 @@ fn postgresql_pool(pool: &sqlx::PgPool) -> PostgresqlPoolDto {
         idle_connections,
         in_use_connections,
         utilization_percent,
+        query_timing_ms,
     }
 }
 
@@ -279,15 +284,17 @@ const STALE_LEASE_GRACE: time::Duration = time::Duration::hours(1);
 const QUEUE_AGE_WARN: time::Duration = time::Duration::hours(24);
 
 async fn postgresql_health(pool: &sqlx::PgPool) -> SubsystemHealthDto {
-    let snapshot = postgresql_pool(pool);
+    let started = std::time::Instant::now();
     let probe = sqlx::query_scalar::<_, i32>("SELECT 1").fetch_one(pool);
+    let query_timing_ms = started.elapsed().as_millis() as u64;
     match tokio::time::timeout(HEALTH_PROBE_TIMEOUT, probe).await {
         Ok(Ok(1)) => SubsystemHealthDto::ok(format!(
-            "postgresql answered a bounded probe; pool {}/{} in use ({} open, {} idle)",
-            snapshot.in_use_connections,
-            snapshot.max_connections,
-            snapshot.open_connections,
-            snapshot.idle_connections
+            "postgresql answered a bounded probe in {} ms; pool {}/{} in use ({} open, {} idle)",
+            query_timing_ms,
+            postgresql_pool(pool, query_timing_ms).in_use_connections,
+            postgresql_pool(pool, query_timing_ms).max_connections,
+            postgresql_pool(pool, query_timing_ms).open_connections,
+            postgresql_pool(pool, query_timing_ms).idle_connections
         )),
         Ok(Ok(_)) | Ok(Err(_)) | Err(_) => {
             SubsystemHealthDto::unavailable("postgresql probe failed or timed out")
@@ -498,7 +505,15 @@ async fn aggregate_health(
     resource_bounds: &Option<std::sync::Arc<crate::resource_bounds::ResourceBounds>>,
 ) -> HealthDto {
     let postgresql = postgresql_health(pool).await;
-    let postgresql_pool = postgresql_pool(pool);
+    // Measure a representative bounded probe to surface per-request
+    // PostgreSQL latency alongside pool saturation (PRD-PERF-003).
+    let started = std::time::Instant::now();
+    let _probe: i32 = sqlx::query_scalar("SELECT 1")
+        .fetch_one(pool)
+        .await
+        .unwrap_or(1);
+    let query_timing_ms = started.elapsed().as_millis() as u64;
+    let postgresql_pool = postgresql_pool(pool, query_timing_ms);
     let tantivy = tantivy_health(pool, search).await;
     // The onboarding preflight checks are configuration/filesystem reads
     // plus bounded `-version` probes — exactly what the onboarding surface

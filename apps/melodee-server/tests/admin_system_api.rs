@@ -823,6 +823,8 @@ async fn system_health_exposes_registered_resource_bounds() {
             .as_f64()
             .is_some()
     );
+    // Per-request PostgreSQL query timing is exposed (PRD-PERF-003).
+    assert!(body["postgresqlPool"]["queryTimingMs"].as_u64().is_some());
     let bounds = body["resourceBounds"]
         .as_array()
         .expect("resourceBounds array");
