@@ -1,0 +1,510 @@
+{
+  "drill": "legacy_rehearsal",
+  "songs_requested": 4000,
+  "started_at": "2026-10-18T02:35:09Z",
+  "steps": {
+    "create_target": {
+      "wall_s": 1.32,
+      "disk": {
+        "path_fingerprint": "a77254f52538ef75021e3a45d86cb2824c039e361f4f04829c18f95b974553b6",
+        "total_bytes": 33653919744,
+        "used_bytes": 1343991808,
+        "free_bytes": 32309927936,
+        "headroom_ratio": 0.960064
+      }
+    },
+    "inventory": {
+      "wall_s": 0.25,
+      "table_count": 52,
+      "media_file_count": 4000,
+      "media_total_bytes": 4000000000,
+      "source_read_only": {
+        "transaction_read_only": true,
+        "default_transaction_read_only": true,
+        "in_recovery": false
+      }
+    },
+    "plan": {
+      "run_id": "01a14cdc-f681-74d3-b738-4c79bcf9d3aa",
+      "wall_s": 0.3
+    },
+    "import": {
+      "wall_s": 31.02,
+      "peak_rss_bytes": 37744640
+    },
+    "verify": {
+      "wall_s": 0.7,
+      "peak_rss_bytes": 32444416,
+      "total_mismatch_gaps": 0,
+      "duplicate_public_ids": 0
+    },
+    "media_validate": {
+      "wall_s": 0.25,
+      "checked": 4000,
+      "valid": 16,
+      "missing": 3984,
+      "size_mismatch": 0,
+      "unsafe": 0,
+      "repair_rows": 0,
+      "read_only": true
+    },
+    "search_rebuild": {
+      "wall_s": 1.51,
+      "peak_rss_bytes": 125747200,
+      "output": "rebuild requested: 01a14cdd-760b-75ea-afcd-c239cbf30bf2\nrebuild activated: 01a14cdd-760b-75ea-afcd-c239cbf30bf2"
+    },
+    "backup_restore": {
+      "wall_s": 3.92,
+      "dump_bytes": 2642263,
+      "restored_tracks": 4000,
+      "restore_matches": true,
+      "backup": {
+        "bytes": 2642263,
+        "sha256": "f833c7a0e55456c59c06392fcbb773f771873887c8d06d0393dc559c664f2ea3",
+        "toc_entries": 1048
+      },
+      "restored_counts": {
+        "artists": 166,
+        "releases": 333,
+        "tracks": 4000,
+        "users": 16
+      },
+      "restored_media": {
+        "file_count": 4000,
+        "bytes": 4000000000
+      }
+    },
+    "freeze": {
+      "wall_s": 1.06,
+      "state": "cutover-ready",
+      "freeze_window_ms": 810,
+      "cutover_acknowledged": true,
+      "pre_marker_write_imported": true
+    },
+    "rollback": {
+      "source_counts_after": {
+        "artists": 167,
+        "songs": 4000
+      },
+      "media_tree_after": 16,
+      "media_tree_bytes_after": 16000000,
+      "failed_target_preserved": true,
+      "objective_trigger": "cutover target unavailable; restore traffic to legacy",
+      "decision_window_seconds": 300,
+      "forensic_target": "legacy_rehearsal_target",
+      "source_mutated_by_harness": false,
+      "audit_recorded": true,
+      "audit_scope": "synthetic durable audit only",
+      "canonical_tree_unchanged": true
+    }
+  },
+  "measurement_schema_version": 1,
+  "source_mode": "synthetic",
+  "preflight": {
+    "disk": {
+      "path_fingerprint": "a77254f52538ef75021e3a45d86cb2824c039e361f4f04829c18f95b974553b6",
+      "total_bytes": 33653919744,
+      "used_bytes": 1343991808,
+      "free_bytes": 32309927936,
+      "headroom_ratio": 0.960064,
+      "minimum_free_bytes": 0,
+      "minimum_headroom_ratio": 0.0
+    }
+  },
+  "baseline": {
+    "artifact": "melodee.legacy-baseline",
+    "schema_version": 1,
+    "captured_at": "2026-10-18 2:35:12.174802843 +00:00:00",
+    "source_identity": "pg-source-sha256:fe2754d45655f40d871f228c340820300e7862db71de0a0977ae43ffbd75855e:schema:20260714155936_AddDeleteSourceResidueAfterIngestSetting",
+    "schema_fingerprint": "20260714155936_AddDeleteSourceResidueAfterIngestSetting",
+    "table_count": 52,
+    "snapshot_marker": "legacy-marker-v2:ff92285da60a420a5aa6b1bc791d48c1f64de1ec8562608eab5ec56f1e4f4b6a",
+    "source_read_only": {
+      "transaction_read_only": true,
+      "default_transaction_read_only": true,
+      "in_recovery": false
+    },
+    "domains": [
+      {
+        "domain": "users",
+        "rows": 16,
+        "min_pk": 1,
+        "max_pk": 16
+      },
+      {
+        "domain": "libraries",
+        "rows": 1,
+        "min_pk": 1,
+        "max_pk": 1
+      },
+      {
+        "domain": "artists",
+        "rows": 166,
+        "min_pk": 1,
+        "max_pk": 166
+      },
+      {
+        "domain": "releases",
+        "rows": 333,
+        "min_pk": 1,
+        "max_pk": 333
+      },
+      {
+        "domain": "tracks",
+        "rows": 4000,
+        "min_pk": 1,
+        "max_pk": 4000
+      },
+      {
+        "domain": "contributions",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "playlists",
+        "rows": 33,
+        "min_pk": 1,
+        "max_pk": 33
+      },
+      {
+        "domain": "playlist_items",
+        "rows": 800,
+        "min_pk": 1000001,
+        "max_pk": 33000024
+      },
+      {
+        "domain": "shares",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "bookmarks",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "user_track_states",
+        "rows": 2000,
+        "min_pk": 1,
+        "max_pk": 2000
+      },
+      {
+        "domain": "user_release_states",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "user_artist_states",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "track_plays",
+        "rows": 4000,
+        "min_pk": 1,
+        "max_pk": 4000
+      },
+      {
+        "domain": "podcast_channels",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "podcast_episodes",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "podcast_episode_bookmarks",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "podcast_play_history",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "radio_stations",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "settings",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "smart_playlists",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "user_groups",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "user_group_members",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "playback_settings",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "equalizer_presets",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "social_logins",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "user_pins",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "device_profiles",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "requests",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "request_comments",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "request_seen",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "party_sessions_excluded",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      },
+      {
+        "domain": "play_queues_excluded",
+        "rows": 0,
+        "min_pk": null,
+        "max_pk": null
+      }
+    ],
+    "anomalies": [],
+    "media": {
+      "file_count": 4000,
+      "total_bytes": 4000000000
+    },
+    "configuration_fingerprint": {
+      "algorithm": "sha256-v1",
+      "settings_keys": [],
+      "settings": [],
+      "library_root_count": 1
+    }
+  },
+  "target_counts": {
+    "artists": 166,
+    "releases": 333,
+    "tracks": 4000,
+    "users": 16
+  },
+  "migration_metrics": {
+    "database_counts": {
+      "artists": 166,
+      "releases": 333,
+      "tracks": 4000,
+      "users": 16
+    },
+    "media": {
+      "file_count": 4000,
+      "bytes": 4000000000
+    },
+    "issues": {
+      "total": 4002,
+      "errors": 0,
+      "warnings": 4001
+    },
+    "retries": {
+      "observed": 0,
+      "scope": "rehearsal command process",
+      "source": "no retry injection; checkpoint schema has no attempt counter"
+    },
+    "queue_age_seconds": 32.523796,
+    "failures": 0,
+    "oldest_issue_age_seconds": 31.883328,
+    "disk": {
+      "path_fingerprint": "a77254f52538ef75021e3a45d86cb2824c039e361f4f04829c18f95b974553b6",
+      "total_bytes": 33653919744,
+      "used_bytes": 1343991808,
+      "free_bytes": 32309927936,
+      "headroom_ratio": 0.960064
+    }
+  },
+  "target_db_bytes": 47814335,
+  "search_index_bytes": 2213324,
+  "search_status": {
+    "projection": {
+      "pending": 0,
+      "failed": 0,
+      "oldest_available_at": null,
+      "leased": 0,
+      "last_processed_outbox_id": 0,
+      "active_generation_id": "01a14cdd-764b-74cc-912b-a08201c10337",
+      "latest_rebuild_status": "activated",
+      "latest_rebuild_error": null,
+      "latest_failure_kind": null,
+      "latest_failure_message": null
+    },
+    "generation": {
+      "artists": 166,
+      "releases": 333,
+      "tracks": 4000,
+      "total": 4499,
+      "schema_version": 3
+    },
+    "generation_error_code": null,
+    "generation_error": null
+  },
+  "search_prefix": {
+    "kind": "artist",
+    "prefix": "reh",
+    "limit": 20,
+    "values": [
+      "Rehearsal Artist 11",
+      "Rehearsal Artist 14",
+      "Rehearsal Artist 17",
+      "Rehearsal Artist 18",
+      "Rehearsal Artist 21",
+      "Rehearsal Artist 24",
+      "Rehearsal Artist 25",
+      "Rehearsal Artist 28",
+      "Rehearsal Artist 3",
+      "Rehearsal Artist 31",
+      "Rehearsal Artist 32",
+      "Rehearsal Artist 35",
+      "Rehearsal Artist 38",
+      "Rehearsal Artist 39",
+      "Rehearsal Artist 42",
+      "Rehearsal Artist 45",
+      "Rehearsal Artist 48",
+      "Rehearsal Artist 49",
+      "Rehearsal Artist 5",
+      "Rehearsal Artist 8"
+    ],
+    "minimum_values": 1
+  },
+  "search_validation": {
+    "queries": [
+      {
+        "kind": "exact",
+        "hit_count": 28,
+        "minimum_hits": 1,
+        "limit": 100,
+        "wall_s": 0.1,
+        "peak_rss_bytes": 30846976,
+        "expression": "artist:\"Rehearsal Artist 3\"",
+        "expected_display": "Rehearsal Artist 3"
+      },
+      {
+        "kind": "normalized",
+        "hit_count": 100,
+        "minimum_hits": 1,
+        "limit": 100,
+        "wall_s": 0.2,
+        "peak_rss_bytes": 43077632,
+        "expression": "artist:REHEARSAL",
+        "expected_display": "Rehearsal"
+      },
+      {
+        "kind": "unicode",
+        "hit_count": 41,
+        "minimum_hits": 1,
+        "limit": 100,
+        "wall_s": 0.1,
+        "peak_rss_bytes": 30588928,
+        "expression": "artist:\u6771\u4eac\u4e8b\u5909",
+        "expected_display": "\u6771\u4eac\u4e8b\u5909"
+      },
+      {
+        "kind": "punctuation",
+        "hit_count": 28,
+        "minimum_hits": 1,
+        "limit": 100,
+        "wall_s": 0.1,
+        "peak_rss_bytes": 31014912,
+        "expression": "artist:\"AC/DC Rehearsal\"",
+        "expected_display": "AC/DC Rehearsal"
+      },
+      {
+        "kind": "broad",
+        "hit_count": 100,
+        "minimum_hits": 1,
+        "limit": 100,
+        "wall_s": 0.15,
+        "peak_rss_bytes": 40443904,
+        "expression": "rehearsal",
+        "expected_display": "Rehearsal"
+      },
+      {
+        "kind": "low_selectivity",
+        "hit_count": 100,
+        "minimum_hits": 10,
+        "limit": 100,
+        "wall_s": 0.2,
+        "peak_rss_bytes": 43393024,
+        "expression": "artist:Rehearsal",
+        "expected_display": "Rehearsal"
+      }
+    ],
+    "p50_ms": 100.0,
+    "p95_ms": 200.0
+  },
+  "canonical_media": {
+    "files": 16,
+    "bytes": 16000000,
+    "before_after_match": true,
+    "content_hash_collected": true
+  },
+  "finished_at": "2026-10-18T02:35:53Z",
+  "result": "pass",
+  "source_counts": {
+    "artists": 166,
+    "albums": 333,
+    "songs": 4000,
+    "users": 16
+  }
+}
