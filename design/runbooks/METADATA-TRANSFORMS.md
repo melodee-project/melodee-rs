@@ -11,9 +11,10 @@ mutates the canonical file atomically (write-to-temp then rename) and records an
 audit row. Revert restores the exact pre-apply bytes and hash. No command here
 deletes a source, target, backup, snapshot, or rollback asset.
 
-References: [ADR-0161](../adr/ADR-0161-meloamp-listener-facing-web-workflows.md),
+References:
+[ADR-0161](../adr/ADR-0161-meloamp-owns-listener-workflows-and-the-server-exposes-only-admin-and-narrow-html-surfaces.md),
 `apps/melodee-server/src/admin_metadata.rs`, and the
-[admin metadata API docs](../../docs/src/content/docs/admin-api/metadata.md).
+[admin metadata API docs](../../docs/src/content/docs/api/admin-api.md).
 
 ## Roles and approval gates
 
