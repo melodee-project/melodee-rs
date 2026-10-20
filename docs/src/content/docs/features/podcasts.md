@@ -34,8 +34,13 @@ Downloads use just-in-time PostgreSQL leases, claimant-specific temporary files,
 body sizes, and no-replace publication. Expired leases are recoverable without allowing a stale
 worker to remove its successor's temporary file;
 retention excludes bookmarked episodes; cleanup removes only verified direct children of the owned
-podcast root in bounded, set-based batches. Feed and enclosure requests reject redirects and
-non-public IPv4/IPv6 destinations, including translated or embedded private addresses. Responses
+podcast root in bounded, set-based batches. Feed and enclosure requests follow redirects
+only under the legacy-shaped bounded policy: each hop is independently scheme-checked and
+DNS-validated against non-public IPv4/IPv6 destinations (including translated or embedded
+private addresses), and the hop count is capped by the configured `podcast.http.maxRedirects`
+bound (default 10). Feed size (`podcast.http.maxFeedBytes`, default 10 MiB) and per-channel
+episode caps (`podcast.refresh.maxItemsPerChannel`, default 500, truncating like the legacy
+implementation) are honored from settings. Responses
 that do not carry the complete body are rejected rather than stored: error statuses fail the
 refresh or download, and partial (`206`) answers — which the worker never requests — are treated
 as failures. Interrupted enclosure transfers are retried with backoff up to the attempt limit and

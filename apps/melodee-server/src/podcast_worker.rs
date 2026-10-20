@@ -21,10 +21,39 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 const ROOT_MARKER: &str = ".melodee-podcast-root";
-const MAX_FEED_BYTES: usize = 2 * 1024 * 1024;
-const MAX_FEED_ITEMS: usize = 500;
+const SETTING_MAX_FEED_BYTES: &str = "podcast.http.maxFeedBytes";
+const SETTING_MAX_ITEMS_PER_CHANNEL: &str = "podcast.refresh.maxItemsPerChannel";
+const SETTING_MAX_REDIRECTS: &str = "podcast.http.maxRedirects";
+/// Hard safety caps for the operator-configured `podcast.http.maxFeedBytes`
+/// and `podcast.refresh.maxItemsPerChannel` settings. Legacy C# read both
+/// from configuration at refresh time (`PodcastService.RefreshChannelAsync`);
+/// the defaults coincide with the legacy registry defaults, while the caps
+/// keep one refresh bounded regardless of misconfiguration.
+const MAX_FEED_BYTES_HARD_CAP: usize = 64 * 1024 * 1024;
+const MAX_FEED_ITEMS_HARD_CAP: usize = 1000;
+/// The configured-default fallbacks, matching the settings registry.
+const DEFAULT_MAX_FEED_BYTES: usize = 10 * 1024 * 1024;
+const DEFAULT_MAX_FEED_ITEMS: usize = 500;
 const MAX_RECONCILE_FILES_PER_BATCH: usize = 256;
 const MAX_RECONCILE_ENTRIES_PER_BATCH: usize = 1024;
+
+/// Per-refresh feed bounds resolved from the layered settings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FeedLimits {
+    pub max_feed_bytes: usize,
+    pub max_items_per_channel: usize,
+    pub max_redirects: usize,
+}
+
+impl Default for FeedLimits {
+    fn default() -> Self {
+        Self {
+            max_feed_bytes: DEFAULT_MAX_FEED_BYTES,
+            max_items_per_channel: DEFAULT_MAX_FEED_ITEMS,
+            max_redirects: DEFAULT_MAX_REDIRECTS,
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct PodcastConfig {
@@ -443,6 +472,8 @@ fn create_root_marker(root: &Path) -> Result<(), PodcastConfigError> {
 pub enum PodcastWorkerError {
     #[error("database operation failed")]
     Database(#[from] sqlx::Error),
+    #[error("settings resolution failed")]
+    Settings(#[from] melodee_persistence::SettingsError),
     #[error("outbound podcast request failed")]
     Http(#[from] reqwest::Error),
     #[error("podcast response was invalid or exceeded a configured bound")]
@@ -462,36 +493,80 @@ fn http_client(host: &str, resolved: &[SocketAddr]) -> Result<reqwest::Client, P
         .map_err(PodcastWorkerError::Http)
 }
 
-async fn outbound_get(
+/// Legacy C# follows redirects manually (`PodcastHttpClient.GetAsync`):
+/// every hop re-runs SSRF validation (scheme/loopback policy, DNS public-
+/// address checks) and the hop count is bounded by the configured
+/// `podcast.http.maxRedirects` (default 10). Real enclosure/feed hosts
+/// (e.g. blubrry/libsyn CDN fronts) routinely 302, so redirects must be
+/// followed with the same per-hop protections, not rejected. The client
+/// keeps `Policy::none()`: redirect targets are validated and DNS-pinned
+/// here, hop by hop, exactly like the legacy `ValidateRedirectAsync` chain.
+const MAX_REDIRECTS_HARD_CAP: usize = 10;
+const DEFAULT_MAX_REDIRECTS: usize = 10;
+
+/// Pure clamp/fallback for the configured redirect bound; non-positive
+/// values are treated as unset (legacy default), never as "unbounded".
+fn max_redirects_from_value(value: Option<i64>) -> usize {
+    value
+        .filter(|redirects| *redirects > 0)
+        .map(|redirects| usize::try_from(redirects).unwrap_or(MAX_REDIRECTS_HARD_CAP))
+        .unwrap_or(DEFAULT_MAX_REDIRECTS)
+        .clamp(0, MAX_REDIRECTS_HARD_CAP)
+}
+
+/// One validated, DNS-pinned GET with bounded, SSRF-validated redirect
+/// following (legacy `PodcastHttpClient.GetAsync` redirect loop).
+async fn outbound_get_following(
     value: &str,
     allow_loopback_http: bool,
+    max_redirects: usize,
 ) -> Result<reqwest::Response, PodcastWorkerError> {
-    let url = validate_outbound_url(value, allow_loopback_http)?;
-    let host = url.host_str().ok_or(PodcastWorkerError::InvalidResponse)?;
-    let port = url
-        .port_or_known_default()
-        .ok_or(PodcastWorkerError::InvalidResponse)?;
-    let resolved = tokio::time::timeout(
-        Duration::from_secs(3),
-        tokio::net::lookup_host((host, port)),
-    )
-    .await
-    .map_err(|_| PodcastWorkerError::InvalidResponse)??
-    .take(17)
-    .collect::<Vec<_>>();
-    if resolved.is_empty()
-        || resolved.len() > 16
-        || resolved
-            .iter()
-            .any(|address| !allow_loopback_http && !is_public_address(address.ip()))
-    {
-        return Err(PodcastWorkerError::InvalidResponse);
-    }
-    http_client(host, &resolved)?
-        .get(url)
-        .send()
+    let mut current =
+        reqwest::Url::parse(value).map_err(|_| PodcastWorkerError::InvalidResponse)?;
+    let mut redirects = 0_usize;
+    loop {
+        let url = validate_outbound_url(current.as_str(), allow_loopback_http)?;
+        let host = url.host_str().ok_or(PodcastWorkerError::InvalidResponse)?;
+        let port = url
+            .port_or_known_default()
+            .ok_or(PodcastWorkerError::InvalidResponse)?;
+        let resolved = tokio::time::timeout(
+            Duration::from_secs(3),
+            tokio::net::lookup_host((host, port)),
+        )
         .await
-        .map_err(Into::into)
+        .map_err(|_| PodcastWorkerError::InvalidResponse)??
+        .take(17)
+        .collect::<Vec<_>>();
+        if resolved.is_empty()
+            || resolved.len() > 16
+            || resolved
+                .iter()
+                .any(|address| !allow_loopback_http && !is_public_address(address.ip()))
+        {
+            return Err(PodcastWorkerError::InvalidResponse);
+        }
+        let response = http_client(host, &resolved)?
+            .get(url.clone())
+            .send()
+            .await?;
+        if response.status().is_redirection() {
+            if redirects >= max_redirects {
+                return Err(PodcastWorkerError::InvalidResponse);
+            }
+            let location = response
+                .headers()
+                .get(reqwest::header::LOCATION)
+                .and_then(|header| header.to_str().ok())
+                .ok_or(PodcastWorkerError::InvalidResponse)?;
+            current = url
+                .join(location)
+                .map_err(|_| PodcastWorkerError::InvalidResponse)?;
+            redirects += 1;
+            continue;
+        }
+        return Ok(response);
+    }
 }
 
 fn is_public_address(address: IpAddr) -> bool {
@@ -559,8 +634,9 @@ async fn fetch_bounded(
     url: &str,
     maximum: usize,
     allow_loopback_http: bool,
+    max_redirects: usize,
 ) -> Result<Vec<u8>, PodcastWorkerError> {
-    let response = outbound_get(url, allow_loopback_http).await?;
+    let response = outbound_get_following(url, allow_loopback_http, max_redirects).await?;
     // Fail closed on 206: the worker never sends `Range`, so a partial
     // response is by definition not the complete feed and must not be
     // parsed as one.
@@ -603,7 +679,7 @@ struct FeedEpisode {
     enclosure_url: Option<String>,
 }
 
-fn parse_feed(bytes: &[u8]) -> Result<Feed, PodcastWorkerError> {
+fn parse_feed_with_limits(bytes: &[u8], max_items: usize) -> Result<Feed, PodcastWorkerError> {
     let mut reader = Reader::from_reader(bytes);
     reader.config_mut().trim_text(true);
     let mut feed = Feed::default();
@@ -614,8 +690,12 @@ fn parse_feed(bytes: &[u8]) -> Result<Feed, PodcastWorkerError> {
             Ok(Event::Start(start)) => {
                 current = start.local_name().as_ref().to_ascii_lowercase();
                 if matches!(current.as_str(), "item" | "entry") {
-                    if feed.episodes.len() >= MAX_FEED_ITEMS {
-                        return Err(PodcastWorkerError::InvalidResponse);
+                    if feed.episodes.len() >= max_items {
+                        // Legacy parity: `feed.Items.Take(maxItemsPerChannel)`
+                        // truncates rather than failing the whole refresh.
+                        // Stop collecting so the trailing channel markup
+                        // cannot create an episode.
+                        break;
                     }
                     episode = Some(FeedEpisode::default());
                 }
@@ -672,9 +752,9 @@ fn parse_feed(bytes: &[u8]) -> Result<Feed, PodcastWorkerError> {
             Err(_) => return Err(PodcastWorkerError::InvalidResponse),
         }
     }
-    if feed.episodes.len() > MAX_FEED_ITEMS {
-        return Err(PodcastWorkerError::InvalidResponse);
-    }
+    // Defensive: with the collect-then-break above this cannot trigger, but
+    // the legacy contract is "at most max items", never a failed refresh.
+    feed.episodes.truncate(max_items);
     Ok(feed)
 }
 
@@ -728,6 +808,60 @@ fn parse_duration(value: &str) -> Option<i64> {
     seconds.checked_mul(1000).filter(|value| *value >= 0)
 }
 
+/// Resolves the operator-configured feed bounds from the layered settings,
+/// clamped to hard caps (legacy C# read both at refresh time). A settings
+/// failure is fatal for the refresh attempt: proceeding with the smaller
+/// legacy-derived defaults could reject a feed the operator explicitly
+/// sized the deployment for.
+pub async fn resolve_feed_limits(pool: &PgPool) -> Result<FeedLimits, PodcastWorkerError> {
+    let resolver = melodee_persistence::SettingsResolver::new(pool);
+    let bytes = resolver
+        .resolve(SETTING_MAX_FEED_BYTES)
+        .await?
+        .value
+        .and_then(|value| value.as_i64());
+    let items = resolver
+        .resolve(SETTING_MAX_ITEMS_PER_CHANNEL)
+        .await?
+        .value
+        .and_then(|value| value.as_i64());
+    let redirects = resolver
+        .resolve(SETTING_MAX_REDIRECTS)
+        .await?
+        .value
+        .and_then(|value| value.as_i64());
+    Ok(feed_limits_from_values(bytes, items, redirects))
+}
+
+/// Pure clamp/fallback mapping from raw setting values to effective limits.
+/// Absent/non-numeric values fall back to the legacy defaults; values are
+/// clamped into `[1, hard_cap]` so a misconfiguration cannot remove the
+/// refresh bounds (negative/zero values are treated as unset).
+fn feed_limits_from_values(
+    bytes: Option<i64>,
+    items: Option<i64>,
+    redirects: Option<i64>,
+) -> FeedLimits {
+    // Non-positive values are treated as unset (fall back to the legacy
+    // defaults) rather than clamped to 1: a zero bound would make every
+    // refresh fail, which is never a useful operator intent.
+    let effective_bytes = bytes
+        .filter(|value| *value > 0)
+        .map(|value| usize::try_from(value).unwrap_or(MAX_FEED_BYTES_HARD_CAP))
+        .unwrap_or(DEFAULT_MAX_FEED_BYTES)
+        .clamp(1, MAX_FEED_BYTES_HARD_CAP);
+    let effective_items = items
+        .filter(|value| *value > 0)
+        .map(|value| usize::try_from(value).unwrap_or(MAX_FEED_ITEMS_HARD_CAP))
+        .unwrap_or(DEFAULT_MAX_FEED_ITEMS)
+        .clamp(1, MAX_FEED_ITEMS_HARD_CAP);
+    FeedLimits {
+        max_feed_bytes: effective_bytes,
+        max_items_per_channel: effective_items,
+        max_redirects: max_redirects_from_value(redirects),
+    }
+}
+
 pub async fn refresh_channel(
     pool: &PgPool,
     owner: Uuid,
@@ -738,7 +872,17 @@ pub async fn refresh_channel(
         "SELECT feed_url FROM native_podcast_channels WHERE id=$1 AND owner_user_id=$2 AND soft_deleted_at IS NULL",
     ).bind(channel_id).bind(owner).fetch_optional(pool).await?
         .ok_or(PodcastWorkerError::InvalidResponse)?;
-    let parsed = parse_feed(&fetch_bounded(&feed_url, MAX_FEED_BYTES, allow_loopback_http).await?)?;
+    let limits = resolve_feed_limits(pool).await?;
+    let parsed = parse_feed_with_limits(
+        &fetch_bounded(
+            &feed_url,
+            limits.max_feed_bytes,
+            allow_loopback_http,
+            limits.max_redirects,
+        )
+        .await?,
+        limits.max_items_per_channel,
+    )?;
     let mut tx = pool.begin().await?;
     sqlx::query(
         "UPDATE native_podcast_channels SET title=COALESCE($3,title),description=COALESCE($4,description),\
@@ -827,7 +971,12 @@ async fn download_one(
         .await;
     }
     remove_owned_file(root, &temporary).await?;
-    let response = outbound_get(&claim.enclosure_url, config.allow_loopback_http).await?;
+    let response = outbound_get_following(
+        &claim.enclosure_url,
+        config.allow_loopback_http,
+        resolve_feed_limits(pool).await?.max_redirects,
+    )
+    .await?;
     // Fail closed on 206: without a sent `Range` a partial enclosure is not
     // authoritative bytes and must never be published as complete media.
     if !response.status().is_success()
@@ -1507,13 +1656,59 @@ mod tests {
     use super::*;
 
     #[test]
+    fn feed_limits_fall_back_and_clamp() {
+        // Unset values fall back to the legacy defaults (10 MiB / 500 / 10).
+        let defaults = feed_limits_from_values(None, None, None);
+        assert_eq!(defaults.max_feed_bytes, 10 * 1024 * 1024);
+        assert_eq!(defaults.max_items_per_channel, 500);
+        assert_eq!(defaults.max_redirects, 10);
+        // A configured larger value (the operator's deployment, e.g. the
+        // 2.1 MB Lex Fridman feed rejected by the old hardcode) is honored.
+        let configured = feed_limits_from_values(Some(10 * 1024 * 1024), Some(500), Some(8));
+        assert_eq!(configured.max_feed_bytes, 10 * 1024 * 1024);
+        assert_eq!(configured.max_redirects, 8);
+        // Zero/negative values are treated as unset (fall back), not as
+        // "unbounded" or "zero".
+        let zeroed = feed_limits_from_values(Some(0), Some(-5), Some(0));
+        assert_eq!(zeroed.max_feed_bytes, DEFAULT_MAX_FEED_BYTES);
+        assert_eq!(zeroed.max_items_per_channel, DEFAULT_MAX_FEED_ITEMS);
+        assert_eq!(zeroed.max_redirects, DEFAULT_MAX_REDIRECTS);
+        // Misconfiguration is clamped to the hard caps, never unbounded.
+        let huge = feed_limits_from_values(Some(i64::MAX), Some(i64::MAX), Some(i64::MAX));
+        assert_eq!(huge.max_feed_bytes, MAX_FEED_BYTES_HARD_CAP);
+        assert_eq!(huge.max_items_per_channel, MAX_FEED_ITEMS_HARD_CAP);
+        assert_eq!(huge.max_redirects, MAX_REDIRECTS_HARD_CAP);
+    }
+
+    #[test]
+    fn parser_truncates_at_the_item_limit_like_legacy_take() {
+        // Legacy `feed.Items.Take(maxItemsPerChannel)`: an over-limit feed is
+        // truncated to the limit, never a failed refresh (a real corpus feed
+        // with 502 items must still refresh with the default bound of 500).
+        let item = "<item><guid>g</guid><title>T</title><enclosure url=\"https://example.test/x.mp3\"/></item>";
+        let feed_xml = format!(
+            "<rss><channel><title>Big</title>{}</channel></rss>",
+            item.repeat(502)
+        );
+        let feed = parse_feed_with_limits(feed_xml.as_bytes(), 500).expect("truncated feed");
+        assert_eq!(feed.episodes.len(), 500);
+        // Every truncated item still carries its enclosure identity.
+        assert!(
+            feed.episodes
+                .iter()
+                .all(|episode| episode.enclosure_url.is_some())
+        );
+    }
+
+    #[test]
     fn rss_parser_is_bounded_and_preserves_enclosure_identity() {
-        let feed = parse_feed(
+        let feed = parse_feed_with_limits(
             br#"<?xml version="1.0"?><rss><channel><title><![CDATA[Example & Audio]]></title>
           <item><guid>episode-1</guid><title><![CDATA[First <Episode>]]></title><description>Details</description>
           <pubDate>Wed, 12 Aug 2026 12:00:00 +0000</pubDate>
           <itunes:duration>01:02:03</itunes:duration>
           <enclosure url="https://example.test/one.mp3"/></item></channel></rss>"#,
+            DEFAULT_MAX_FEED_ITEMS,
         )
         .expect("feed");
         assert_eq!(feed.title.as_deref(), Some("Example & Audio"));
