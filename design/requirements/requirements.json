@@ -1899,8 +1899,16 @@
     "source": "PRD.md",
     "line": 1402,
     "status": "in-progress",
-    "implementation": [],
-    "tests": []
+    "implementation": [
+      "apps/melodee-server/src/jellyfin/ (independent Jellyfin music adapter; music-only subset frozen per phase-8 route evidence)",
+      "compatibility/jellyfin/contracts/phase8-route-evidence.json (60/60 routes implemented-and-differentially-tested)",
+      "apps/melodee-server/src/jellyfin_images.rs + Admin UI ADR-0143 artwork extension"
+    ],
+    "tests": [
+      "apps/melodee-server/tests/jellyfin_core_api.rs and jellyfin_media_api.rs (route/golden coverage incl. 404 fallback)",
+      "scripts/run_phase8_differential.py (zero unexpected differences vs C# capture)",
+      "Feishin v1.15.1 real-client smoke (recorded in FEATURE-PARITY-MATRIX.md Jellyfin row)"
+    ]
   },
   {
     "id": "PRD-API-ADMIN-001",
@@ -2554,8 +2562,17 @@
     "source": "PRD.md",
     "line": 1665,
     "status": "in-progress",
-    "implementation": [],
-    "tests": []
+    "implementation": [
+      "docs/src/content/docs/admin/scripting-hooks.md (current event inventory: one live enforcement hook, six inert UI-gate registrations, shell-hook do-not-preserve with re-expression paths and open-on-fail semantic difference)",
+      "design/adr/ADR-0135-boa-javascript-runtime-and-sandboxing-for-scripting-hooks.md (runtime selection + security review)",
+      "design/adr/ADR-0134-phase-9-parity-domain-schema-for-radio-device-profiles-onboarding-notifications-scripts-and-providers.md section 6 (script_registry/script_runs schema)",
+      "design/requirements/FEATURE-PARITY-MATRIX.md JavaScript event scripting hooks row (inventory provenance incl. withdrawn historical inventory, recoverable from git history)"
+    ],
+    "tests": [
+      "apps/melodee-server/src/scripting.rs unit tests (sandbox, timeout, circuit breaker)",
+      "apps/melodee-server/tests/scripting_service.rs and admin_scripts_api.rs",
+      "crates/melodee-persistence/tests/scripts.rs and apps/melodee-cli/tests/scripts.rs"
+    ]
   },
   {
     "id": "PRD-SCRIPT-003",

@@ -115,10 +115,16 @@ The issue template is reserved for explicitly assigned narrow issues.
 
 ## Current project state
 
-The Rust server and Admin UI are functionally feature complete relative to the current C# product,
-subject to accepted differences recorded in `PRD.md`. MeloAmp owns
+The Rust server and Admin UI implement the runtime workflows of the current C# product,
+subject to accepted differences recorded in `PRD.md`; "feature complete" describes runtime
+coverage only and never implies release qualification. MeloAmp owns
 listener-facing web workflows under ADR-0161. The active roadmap is
-`PRD.md`.
+`PRD.md`. Release qualification is tracked in Hamstik epic `MEL-1`: children MEL-2..8
+(data preservation and metadata transforms), MEL-13..15 (migration, cutover/rollback,
+and current-candidate differential rehearsal) are done with committed evidence;
+MEL-9..12 and MEL-16..19 remain open (see
+`design/evidence/feature-parity/CURRENT-CSHARP-RECONCILIATION.md` for the reconciled
+ledger).
 
 Non-terminal requirements remaining: **15** (status `in-progress` in
 `design/requirements/REQUIREMENTS-INDEX.md`; `implemented`, `tested`, and `deferred` are the
@@ -131,9 +137,9 @@ release-readiness and operator-acceptance obligations, not missing runtime workf
 
 Several capabilities remain `UNVERIFIED` pending live/provider qualification (Last.fm
 configured-state acceptance MEL-9, external provider real-credential acceptance MEL-10,
-podcast real-feed acceptance MEL-11, target-scale fault acceptance MEL-16, and OIDC/SMTP/
-MPD/MPV acceptance MEL-19); those legs require controlled credentials or operator-authorized
-production-shaped evidence and are not runtime defects.
+podcast real-feed acceptance MEL-11, target-scale fault acceptance MEL-16, five-client
+acceptance MEL-17, and OIDC/SMTP/MPD/MPV acceptance MEL-19); those legs require controlled
+credentials or operator-authorized production-shaped evidence and are not runtime defects.
 
 Allowed without new user direction: corrections to existing evidence and documentation. An explicit
 request to implement the next substantive work program authorizes all safe in-repository work needed

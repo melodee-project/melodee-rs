@@ -18,6 +18,62 @@ The audit used `AGENTS.md`, `PRD.md`, `SPEC.md`, the definition of done, the
 requirements index and overrides, accepted relevant ADRs, compatibility contracts,
 existing docs, source, runtime router composition, migrations, and tests instead.
 
+## Addendum (2026-10-19): superseded conclusions after MEL-4..8, MEL-13..15
+
+This addendum is a factual status update under MEL-18. The audit sections below are
+preserved verbatim as the 2026-09-20 record; where a conclusion named a gap that a
+later MEL item has since closed, the addendum supersedes that conclusion and links the
+current evidence. Nothing here changes the canonical ledger
+([`FEATURE-PARITY-MATRIX.md`](../../requirements/FEATURE-PARITY-MATRIX.md)), which was
+updated for the same items.
+
+### Program status at the addendum date
+
+- **Done (evidence-backed):** MEL-2 (account self-service/profile/avatar —
+  [evidence](MEL-2-ACCOUNT-PROFILE-EVIDENCE.md), ADR-0178), MEL-3 (browser reset
+  completion — [evidence](MEL-3-BROWSER-PASSWORD-RESET-EVIDENCE.md)), MEL-4 (custom
+  content blocks retired by decision — ADR-0181, which itself carries the affected-file
+  inventory), MEL-5 (per-user device-profile preservation superseded by the server-wide
+  ADR-0134 §5 shape; migration records device-profile issues by design), MEL-6
+  (notification-template library import — commit `bca206e`), MEL-7 (legacy custom theme
+  pack import — same commit), MEL-8 (metadata transforms against canonical storage —
+  `design/runbooks/METADATA-TRANSFORMS.md`), MEL-13 (authorized migration rehearsal —
+  [rehearsal report](../../../MEL-13-rehearsal-report.md)), MEL-14 (cutover/rollback drill —
+  [evidence](MEL-14-CUTOVER-ROLLBACK-EVIDENCE.md) + drill JSON), MEL-15 (full
+  current-candidate differential — [evidence](MEL-15-DIFFERENTIAL-EVIDENCE.md) + report
+  JSON).
+- **Open:** MEL-9 (Last.fm configured state), MEL-10 (external metadata providers),
+  MEL-11 (podcast real feeds/downloaded-media cutover), MEL-12 (candidate preparation,
+  release gates, approved publication), MEL-16 (target-scale performance/fault
+  acceptance; a 100-release local rehearsal is recorded in
+  [MEL-16 rehearsal evidence](MEL-16-SCALE-RECOVERY-REHEARSAL-EVIDENCE.md) and is NOT
+  the target-scale acceptance), MEL-17 (five-client qualification), MEL-18 (this
+  reconciliation), MEL-19 (configured OIDC/SMTP/MPD/MPV).
+- The audit's "15 scoped Backlog children (`MEL-2` through `MEL-16`)" inventory is
+  superseded: the epic now carries 18 children (`MEL-2` through `MEL-19`; MEL-17/18/19
+  were added later as client-qualification, reconciliation, and configured-integration
+  scopes).
+
+### Superseded rows and narratives
+
+| Stale audit conclusion | Current state |
+|---|---|
+| "Custom content blocks … MISSING … no approved retirement" (capability table and route audit) | Approved retirement by ADR-0181; the Rust surface intentionally has no custom-block search/store/render equivalent. The MISSING disposition is now an approved difference. |
+| `/account/register` … "no public Rust registration route … MISSING" | Additive registration routes exist (self-service, enabled/disabled/private-code paths) per MEL-2/ADR-0178. |
+| Browser reset completion "remains MEL-3"; profile/avatar partial rows | MEL-3 done (bounded `/reset-password` page + API evidence); avatars and profile fields imported per MEL-2 evidence. |
+| Data-migration gaps: avatars, `Users.Description`/`TimeZoneId`, per-user device profiles, Templates-library email bodies, Theme-library packs | All closed by MEL-2/5/6/7 evidence cited above. Remaining migration-side residuals are only the explicit ADR-0148 dispositions (podcast downloaded paths requeue; Party/Jukebox excluded by ADR-0133/0140/0141). |
+| Data-migration gaps: "Custom-block Markdown has no target representation or decision" | Decision exists: ADR-0181 retirement. |
+| "Final answer" paragraph (losses remain for registration/profile data, device profiles, Templates/Theme content, custom blocks, browser reset) | Those named losses no longer exist; the remaining unproven obligations are exactly the open MEL items listed above plus the operator-accepted ADR-0148 dispositions. |
+
+### Still-accurate audit content
+
+The 2026-09-20 route/page inventory, filesystem/library audit, approved-difference list,
+and per-child scope descriptions below remain accurate as historical facts and were the
+basis for the later MEL items. Withdrawn evidence reports cited in the matrix remain
+recoverable from git history per `design/adr/README.md`; current acceptance evidence for
+release purposes is the per-MEL evidence linked in this addendum and the parity matrix's
+current-evidence columns, never a withdrawn report or an old candidate SHA.
+
 ## Method and scope
 
 Each conclusion follows the required chain: current C# source behavior → Rust
