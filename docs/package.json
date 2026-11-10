@@ -18,7 +18,7 @@
     "sync": "astro sync"
   },
   "dependencies": {
-    "@astrojs/starlight": "0.42.5",
+    "@astrojs/starlight": "0.42.10",
     "astro": "7.3.7",
     "sharp": "0.35.5",
     "starlight-links-validator": "0.26.0"

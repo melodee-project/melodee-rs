@@ -65,6 +65,3 @@ tempfile.workspace = true
 
 [lints]
 workspace = true
-
-[lint.rust]
-unsafe_code = "allow"

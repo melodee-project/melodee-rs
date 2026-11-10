@@ -48,6 +48,10 @@ export default defineConfig({
       },
       // Starlight's built-in Pagefind search is fully static and FOSS; it
       // works on GitHub Pages without any external service.
+      // The 404 page is a content entry (`src/content/docs/404.md`) so its
+      // text is translatable with the rest of the docs; disabling Starlight's
+      // injected 404 avoids a duplicate `/404` route.
+      disable404Route: true,
       pagefind: true,
       customCss: ['./src/styles/custom.css'],
       sidebar: [

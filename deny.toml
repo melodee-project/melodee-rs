@@ -10,6 +10,11 @@ unsound = "workspace"
 [licenses]
 version = 2
 confidence-threshold = 0.93
+# Keep the pre-approved FOSS license list stable: an allowance that no current
+# dependency uses (e.g. BSD-2-Clause today) is a deliberate forward
+# pre-approval, not a configuration error. Advisories/bans/sources still fail
+# closed on unknown licenses.
+unused-allowed-license = "allow"
 allow = [
   # 0BSD: OSI-approved public-domain-equivalent; pulled in by quoted_printable
   # via lettre (notification SMTP transport, PRD-NOTIF-002).
@@ -28,7 +33,12 @@ allow = [
 ]
 
 [bans]
-multiple-versions = "warn"
+# Multiple major versions are expected in this graph: sqlx/rustls/rand pull
+# distinct major lines (e.g. base64 0.21+0.22, getrandom 0.2/0.3/0.4) that
+# cannot be unified without risky feature-flag changes. Duplicate versions are
+# therefore allowed; advisories, bans on wildcards, licences, and sources stay
+# enforced. Review this list when upgrading the driver/crypto stack.
+multiple-versions = "allow"
 wildcards = "deny"
 
 [sources]

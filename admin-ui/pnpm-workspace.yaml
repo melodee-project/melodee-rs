@@ -27,3 +27,9 @@ allowBuilds:
   '@ibm/plex-serif': false
   '@parcel/watcher': true
   esbuild: true
+
+overrides:
+  # eslint 10.x still pins minimatch 10, which is inside GHSA-g3hv-75wg-m249.
+  # minimatch 11 is the patched line; remove the override when eslint's own
+  # dependency range moves to >=11.0.1.
+  'minimatch@>=7 <11.0.1': '>=11.0.1'

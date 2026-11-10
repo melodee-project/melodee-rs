@@ -22,6 +22,17 @@ const plexRoot = dirname(
 export default defineConfig({
   base: '/admin/',
   plugins: [react()],
+  css: {
+    preprocessorOptions: {
+      scss: {
+        // Carbon 1.x stylesheets still use the deprecated Sass if() function
+        // form. quietDeps silences deprecation notices originating in
+        // dependency stylesheets only; a deprecation in this repository's own
+        // SCSS still fails loudly.
+        quietDeps: true,
+      },
+    },
+  },
   build: {
     // lightningcss (Vite 8's bundled CSS minifier) rejects Carbon's
     // @position-try nested rules, and esbuild is not bundled by rolldown-vite.

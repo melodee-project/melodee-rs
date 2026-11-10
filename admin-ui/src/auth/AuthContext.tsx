@@ -140,6 +140,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
+// The context hook is intentionally colocated with its provider: consumers
+// import one module, and the hook is the only non-component export here. The
+// react-refresh rule is an HMR fast-refresh optimization, not a correctness
+// requirement, so the warning is suppressed for this export.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth(): AuthContextValue {
   const context = useContext(AuthContext);
   if (!context) {

@@ -158,6 +158,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// The context hook is intentionally colocated with its provider (one import
+// for consumers, hook is the only non-component export). See AuthContext.tsx.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useThemeState(): ThemeState {
   const context = useContext(ThemeStateContext);
   if (!context) {
