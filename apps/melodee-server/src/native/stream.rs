@@ -278,7 +278,12 @@ async fn stream_inner(
         .as_ref()
         .ok_or(StreamRouteError::Unavailable)?;
     direct_play
-        .response(&asset, range, method == Method::HEAD)
+        .response(
+            &asset,
+            range,
+            method == Method::HEAD,
+            Some(principal.user_id),
+        )
         .await
         .map_err(StreamRouteError::from)
 }
@@ -333,6 +338,7 @@ enum StreamRouteError {
     Unauthorized,
     UnknownUser,
     UnableToLoad,
+    TooManyStreams,
     Unavailable,
 }
 
@@ -340,6 +346,7 @@ impl From<StreamError> for StreamRouteError {
     fn from(error: StreamError) -> Self {
         match error {
             StreamError::InvalidRange | StreamError::AssetUnavailable => Self::UnableToLoad,
+            StreamError::TooManyStreams => Self::TooManyStreams,
             StreamError::CapacityClosed | StreamError::InvalidAssetMetadata => Self::Unavailable,
         }
     }
@@ -370,6 +377,11 @@ impl IntoResponse for StreamRouteError {
                 StatusCode::BAD_REQUEST,
                 "BAD_REQUEST",
                 "Unable to load song",
+            ),
+            Self::TooManyStreams => (
+                StatusCode::TOO_MANY_REQUESTS,
+                "TOO_MANY_REQUESTS",
+                "Too many concurrent streams",
             ),
             Self::Unavailable => (
                 StatusCode::SERVICE_UNAVAILABLE,

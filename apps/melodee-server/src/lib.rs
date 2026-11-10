@@ -5,8 +5,10 @@
 pub mod admin;
 pub mod admin_access;
 pub mod admin_catalog;
+pub mod admin_charts;
 pub mod admin_config;
 pub mod admin_device_profiles;
+pub mod admin_diagnostics;
 pub mod admin_identity;
 pub mod admin_metadata;
 pub mod admin_notifications;
@@ -18,6 +20,7 @@ pub mod admin_scripts;
 pub mod admin_system;
 pub mod admin_ui;
 pub mod correlation;
+pub mod diagnostics;
 pub mod discovery_worker;
 pub mod enrichment_worker;
 pub mod jellyfin;
@@ -34,7 +37,9 @@ pub mod policy_worker;
 pub mod providers;
 pub mod resource_bounds;
 pub mod scripting;
+pub mod security;
 pub mod security_headers;
+pub mod settings_inventory;
 pub mod system;
 pub mod transcode;
 

@@ -1037,7 +1037,10 @@ async fn track_preview(
         let Some(service) = DirectPlayService::new(root, PREVIEW_STREAM_CONCURRENCY) else {
             return store_failure("preview stream service unavailable", &"zero concurrency");
         };
-        return match service.response(&asset, range_header, false).await {
+        return match service
+            .response(&asset, range_header, false, Some(admin.user_id))
+            .await
+        {
             Ok(mut response) => {
                 response.headers_mut().insert(
                     header::CACHE_CONTROL,
@@ -1061,6 +1064,11 @@ async fn track_preview(
                 StatusCode::SERVICE_UNAVAILABLE,
                 "stream_unavailable",
                 "preview capacity is unavailable",
+            ),
+            Err(StreamError::TooManyStreams) => review_error(
+                StatusCode::TOO_MANY_REQUESTS,
+                "too_many_streams",
+                "too many concurrent admin preview streams",
             ),
             Err(StreamError::AssetUnavailable) => preview_not_found(),
             Err(StreamError::InvalidAssetMetadata) => {

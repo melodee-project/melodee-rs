@@ -17,13 +17,29 @@ use time::{
     format_description::well_known::{Rfc2822, Rfc3339},
 };
 use tokio::{io::AsyncWriteExt, sync::watch, task::JoinHandle};
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 const ROOT_MARKER: &str = ".melodee-podcast-root";
 const SETTING_MAX_FEED_BYTES: &str = "podcast.http.maxFeedBytes";
 const SETTING_MAX_ITEMS_PER_CHANNEL: &str = "podcast.refresh.maxItemsPerChannel";
 const SETTING_MAX_REDIRECTS: &str = "podcast.http.maxRedirects";
+const SETTING_HTTP_TIMEOUT_SECONDS: &str = "podcast.http.timeoutSeconds";
+const SETTING_MAX_ENCLOSURE_BYTES: &str = "podcast.download.maxEnclosureBytes";
+const SETTING_MAX_CONCURRENT_GLOBAL: &str = "podcast.download.maxConcurrent.global";
+const SETTING_MAX_CONCURRENT_PER_USER: &str = "podcast.download.maxConcurrent.perUser";
+const SETTING_QUOTA_BYTES_PER_USER: &str = "podcast.quota.maxBytesPerUser";
+const SETTING_RETENTION_DAYS: &str = "podcast.retention.downloadedEpisodesInDays";
+const SETTING_RETENTION_KEEP_LAST_N: &str = "podcast.retention.keepLastNEpisodes";
+const SETTING_RETENTION_KEEP_UNPLAYED_ONLY: &str = "podcast.retention.keepUnplayedOnly";
+/// Legacy registry defaults (C# `MelodeeDbContext` seed values).
+const DEFAULT_HTTP_TIMEOUT_SECONDS: u64 = 30;
+const MAX_HTTP_TIMEOUT_SECONDS: u64 = 600;
+const DEFAULT_MAX_ENCLOSURE_BYTES: u64 = 2_147_483_648;
+const MAX_ENCLOSURE_BYTES_HARD_CAP: u64 = 4_294_967_296;
+const DEFAULT_MAX_CONCURRENT_GLOBAL: i64 = 2;
+const DEFAULT_MAX_CONCURRENT_PER_USER: i64 = 1;
+const DEFAULT_QUOTA_BYTES_PER_USER: i64 = 5_368_709_120;
 /// Hard safety caps for the operator-configured `podcast.http.maxFeedBytes`
 /// and `podcast.refresh.maxItemsPerChannel` settings. Legacy C# read both
 /// from configuration at refresh time (`PodcastService.RefreshChannelAsync`);
@@ -43,6 +59,9 @@ pub struct FeedLimits {
     pub max_feed_bytes: usize,
     pub max_items_per_channel: usize,
     pub max_redirects: usize,
+    /// Outbound HTTP timeout (`podcast.http.timeoutSeconds`, legacy default
+    /// 30 s).
+    pub timeout_seconds: u64,
 }
 
 impl Default for FeedLimits {
@@ -51,6 +70,7 @@ impl Default for FeedLimits {
             max_feed_bytes: DEFAULT_MAX_FEED_BYTES,
             max_items_per_channel: DEFAULT_MAX_FEED_ITEMS,
             max_redirects: DEFAULT_MAX_REDIRECTS,
+            timeout_seconds: DEFAULT_HTTP_TIMEOUT_SECONDS,
         }
     }
 }
@@ -482,10 +502,14 @@ pub enum PodcastWorkerError {
     Io(#[from] std::io::Error),
 }
 
-fn http_client(host: &str, resolved: &[SocketAddr]) -> Result<reqwest::Client, PodcastWorkerError> {
+fn http_client(
+    host: &str,
+    resolved: &[SocketAddr],
+    timeout_seconds: u64,
+) -> Result<reqwest::Client, PodcastWorkerError> {
     reqwest::Client::builder()
-        .connect_timeout(Duration::from_secs(5))
-        .timeout(Duration::from_secs(30))
+        .connect_timeout(Duration::from_secs(5.min(timeout_seconds.max(1))))
+        .timeout(Duration::from_secs(timeout_seconds.max(1)))
         .redirect(reqwest::redirect::Policy::none())
         .user_agent(concat!("melodee/", env!("CARGO_PKG_VERSION")))
         .resolve_to_addrs(host, resolved)
@@ -520,6 +544,7 @@ async fn outbound_get_following(
     value: &str,
     allow_loopback_http: bool,
     max_redirects: usize,
+    timeout_seconds: u64,
 ) -> Result<reqwest::Response, PodcastWorkerError> {
     let mut current =
         reqwest::Url::parse(value).map_err(|_| PodcastWorkerError::InvalidResponse)?;
@@ -546,7 +571,7 @@ async fn outbound_get_following(
         {
             return Err(PodcastWorkerError::InvalidResponse);
         }
-        let response = http_client(host, &resolved)?
+        let response = http_client(host, &resolved, timeout_seconds)?
             .get(url.clone())
             .send()
             .await?;
@@ -635,8 +660,10 @@ async fn fetch_bounded(
     maximum: usize,
     allow_loopback_http: bool,
     max_redirects: usize,
+    timeout_seconds: u64,
 ) -> Result<Vec<u8>, PodcastWorkerError> {
-    let response = outbound_get_following(url, allow_loopback_http, max_redirects).await?;
+    let response =
+        outbound_get_following(url, allow_loopback_http, max_redirects, timeout_seconds).await?;
     // Fail closed on 206: the worker never sends `Range`, so a partial
     // response is by definition not the complete feed and must not be
     // parsed as one.
@@ -830,7 +857,12 @@ pub async fn resolve_feed_limits(pool: &PgPool) -> Result<FeedLimits, PodcastWor
         .await?
         .value
         .and_then(|value| value.as_i64());
-    Ok(feed_limits_from_values(bytes, items, redirects))
+    let timeout = resolver
+        .resolve(SETTING_HTTP_TIMEOUT_SECONDS)
+        .await?
+        .value
+        .and_then(|value| value.as_i64());
+    Ok(feed_limits_from_values(bytes, items, redirects, timeout))
 }
 
 /// Pure clamp/fallback mapping from raw setting values to effective limits.
@@ -841,6 +873,7 @@ fn feed_limits_from_values(
     bytes: Option<i64>,
     items: Option<i64>,
     redirects: Option<i64>,
+    timeout_seconds: Option<i64>,
 ) -> FeedLimits {
     // Non-positive values are treated as unset (fall back to the legacy
     // defaults) rather than clamped to 1: a zero bound would make every
@@ -855,11 +888,169 @@ fn feed_limits_from_values(
         .map(|value| usize::try_from(value).unwrap_or(MAX_FEED_ITEMS_HARD_CAP))
         .unwrap_or(DEFAULT_MAX_FEED_ITEMS)
         .clamp(1, MAX_FEED_ITEMS_HARD_CAP);
+    let effective_timeout = timeout_seconds
+        .filter(|value| *value > 0)
+        .map_or(DEFAULT_HTTP_TIMEOUT_SECONDS, |value| {
+            u64::try_from(value).unwrap_or(MAX_HTTP_TIMEOUT_SECONDS)
+        })
+        .clamp(1, MAX_HTTP_TIMEOUT_SECONDS);
     FeedLimits {
         max_feed_bytes: effective_bytes,
         max_items_per_channel: effective_items,
+        timeout_seconds: effective_timeout,
         max_redirects: max_redirects_from_value(redirects),
     }
+}
+
+/// Runtime download/retention policy resolved from the layered settings
+/// (`podcast.download.*`, `podcast.retention.*`, ADR-0161 operator surface).
+/// All bounds are *upper* bounds: the process keeps its own conservative
+/// ceiling, so a misconfigured value can never remove a safety limit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PodcastPolicy {
+    /// Effective maximum enclosure size: the smaller of the process cap
+    /// (env/`PodcastConfig`) and the configured setting, capped at 4 GiB.
+    pub max_enclosure_bytes: u64,
+    /// Maximum claimed downloads per pass
+    /// (`podcast.download.maxConcurrent.global`, legacy default 2).
+    pub download_concurrency: usize,
+    /// Maximum concurrently-downloading episodes per user
+    /// (`podcast.download.maxConcurrent.perUser`, legacy default 1; `0`
+    /// disables the per-user bound).
+    pub per_user_concurrency: i64,
+    /// Per-user downloaded-bytes quota (`podcast.quota.maxBytesPerUser`,
+    /// legacy default 5 GiB). Claims stop at the quota; `0` disables it.
+    pub quota_bytes_per_user: i64,
+    /// Legacy cleanup policies (`PodcastCleanupJob`): delete downloads older
+    /// than N days (`0` disables).
+    pub retention_days: i64,
+    /// Keep only the newest N downloaded episodes per channel (`0` keeps the
+    /// per-channel bounds only).
+    pub retention_keep_last_n: i64,
+    /// Delete episodes the user has already played (`is_now_playing = false`
+    /// history rows).
+    pub retention_keep_unplayed_only: bool,
+}
+
+impl PodcastPolicy {
+    #[must_use]
+    pub const fn fallback(process_max_bytes: u64) -> Self {
+        Self {
+            max_enclosure_bytes: process_max_bytes,
+            download_concurrency: DEFAULT_MAX_CONCURRENT_GLOBAL as usize,
+            per_user_concurrency: DEFAULT_MAX_CONCURRENT_PER_USER,
+            quota_bytes_per_user: DEFAULT_QUOTA_BYTES_PER_USER,
+            retention_days: 0,
+            retention_keep_last_n: 0,
+            retention_keep_unplayed_only: false,
+        }
+    }
+
+    /// Pure mapping from raw setting values plus the process cap. Exposed for
+    /// unit tests so the clamp/fallback rules are locked.
+    #[must_use]
+    pub fn from_inputs(process_max_bytes: u64, inputs: PodcastPolicyInputs) -> Self {
+        let setting_bytes = inputs
+            .max_enclosure_bytes
+            .filter(|value| *value > 0)
+            .map_or(DEFAULT_MAX_ENCLOSURE_BYTES, |value| {
+                u64::try_from(value).unwrap_or(MAX_ENCLOSURE_BYTES_HARD_CAP)
+            })
+            .min(MAX_ENCLOSURE_BYTES_HARD_CAP);
+        let download_concurrency = inputs
+            .global_concurrency
+            .filter(|value| *value > 0)
+            .unwrap_or(DEFAULT_MAX_CONCURRENT_GLOBAL)
+            .clamp(1, 32);
+        let per_user_concurrency = inputs
+            .per_user_concurrency
+            .filter(|value| *value >= 0)
+            .unwrap_or(DEFAULT_MAX_CONCURRENT_PER_USER)
+            .clamp(0, 32);
+        let quota_bytes_per_user = inputs
+            .quota_bytes_per_user
+            .filter(|value| *value >= 0)
+            .unwrap_or(DEFAULT_QUOTA_BYTES_PER_USER);
+        Self {
+            max_enclosure_bytes: process_max_bytes.min(setting_bytes).max(1),
+            download_concurrency: usize::try_from(download_concurrency).unwrap_or(1),
+            per_user_concurrency,
+            quota_bytes_per_user,
+            retention_days: inputs
+                .retention_days
+                .filter(|value| *value > 0)
+                .unwrap_or(0),
+            retention_keep_last_n: inputs.keep_last_n.filter(|value| *value > 0).unwrap_or(0),
+            retention_keep_unplayed_only: inputs.keep_unplayed_only.unwrap_or(false),
+        }
+    }
+}
+
+/// Raw setting values feeding [`PodcastPolicy::from_inputs`].
+#[derive(Debug, Clone, Copy, Default)]
+pub struct PodcastPolicyInputs {
+    pub max_enclosure_bytes: Option<i64>,
+    pub global_concurrency: Option<i64>,
+    pub per_user_concurrency: Option<i64>,
+    pub quota_bytes_per_user: Option<i64>,
+    pub retention_days: Option<i64>,
+    pub keep_last_n: Option<i64>,
+    pub keep_unplayed_only: Option<bool>,
+}
+
+/// Resolves [`PodcastPolicy`] from the layered settings store.
+pub async fn resolve_podcast_policy(
+    pool: &PgPool,
+    config: &PodcastConfig,
+) -> Result<PodcastPolicy, PodcastWorkerError> {
+    let resolver = melodee_persistence::SettingsResolver::new(pool);
+    let max_enclosure = resolver
+        .resolve(SETTING_MAX_ENCLOSURE_BYTES)
+        .await?
+        .value
+        .and_then(|value| value.as_i64());
+    let global = resolver
+        .resolve(SETTING_MAX_CONCURRENT_GLOBAL)
+        .await?
+        .value
+        .and_then(|value| value.as_i64());
+    let per_user = resolver
+        .resolve(SETTING_MAX_CONCURRENT_PER_USER)
+        .await?
+        .value
+        .and_then(|value| value.as_i64());
+    let quota = resolver
+        .resolve(SETTING_QUOTA_BYTES_PER_USER)
+        .await?
+        .value
+        .and_then(|value| value.as_i64());
+    let days = resolver
+        .resolve(SETTING_RETENTION_DAYS)
+        .await?
+        .value
+        .and_then(|value| value.as_i64());
+    let keep_last_n = resolver
+        .resolve(SETTING_RETENTION_KEEP_LAST_N)
+        .await?
+        .value
+        .and_then(|value| value.as_i64());
+    let keep_unplayed = resolver
+        .resolve(SETTING_RETENTION_KEEP_UNPLAYED_ONLY)
+        .await?
+        .value
+        .and_then(|value| value.as_bool());
+    Ok(PodcastPolicy::from_inputs(
+        config.max_download_bytes,
+        PodcastPolicyInputs {
+            max_enclosure_bytes: max_enclosure,
+            global_concurrency: global,
+            per_user_concurrency: per_user,
+            quota_bytes_per_user: quota,
+            retention_days: days,
+            keep_last_n,
+            keep_unplayed_only: keep_unplayed,
+        },
+    ))
 }
 
 pub async fn refresh_channel(
@@ -879,6 +1070,7 @@ pub async fn refresh_channel(
             limits.max_feed_bytes,
             allow_loopback_http,
             limits.max_redirects,
+            limits.timeout_seconds,
         )
         .await?,
         limits.max_items_per_channel,
@@ -926,6 +1118,7 @@ async fn claim_download(
     pool: &PgPool,
     config: &PodcastConfig,
     worker: Uuid,
+    policy: &PodcastPolicy,
 ) -> Result<Option<DownloadClaim>, PodcastWorkerError> {
     let lease_seconds = i64::try_from(config.lease_duration.as_secs())
         .map_err(|_| PodcastWorkerError::InvalidResponse)?;
@@ -936,16 +1129,33 @@ async fn claim_download(
          AND channel.soft_deleted_at IS NULL AND episode.download_available_at<=now()
          AND (episode.download_status='Queued' OR
               (episode.download_status='Downloading' AND episode.download_lease_expires_at<=now())) \
+         AND ($3::bigint <= 0 OR (SELECT count(*) FROM native_podcast_episodes active
+              JOIN native_podcast_channels active_channel ON active_channel.id=active.channel_id
+              WHERE active_channel.owner_user_id=channel.owner_user_id
+                AND active.download_status='Downloading'
+                AND active.download_lease_expires_at > now()) < $3::bigint) \
+         AND ($4::bigint <= 0 OR (SELECT coalesce(sum(used.downloaded_bytes),0) \
+              FROM native_podcast_episodes used \
+              JOIN native_podcast_channels used_channel ON used_channel.id=used.channel_id \
+              WHERE used_channel.owner_user_id=channel.owner_user_id \
+                AND used.download_status='Downloaded') < $4::bigint) \
          ORDER BY episode.download_available_at,episode.id FOR UPDATE OF episode SKIP LOCKED LIMIT 1) \
          UPDATE native_podcast_episodes e SET download_status='Downloading',download_lease_owner=$1,\
          download_lease_expires_at=now()+make_interval(secs=>$2::double precision),updated_at=now() \
          FROM claimed WHERE e.id=claimed.id RETURNING e.id,e.public_api_id,e.enclosure_url,e.download_attempt_count",
-    ).bind(worker).bind(lease_seconds as f64).fetch_optional(pool).await?)
+    )
+    .bind(worker)
+    .bind(lease_seconds as f64)
+    .bind(policy.per_user_concurrency)
+    .bind(policy.quota_bytes_per_user)
+    .fetch_optional(pool)
+    .await?)
 }
 
 async fn download_one(
     pool: &PgPool,
     config: &PodcastConfig,
+    policy: &PodcastPolicy,
     worker: Uuid,
     claim: DownloadClaim,
 ) -> Result<(), PodcastWorkerError> {
@@ -971,10 +1181,12 @@ async fn download_one(
         .await;
     }
     remove_owned_file(root, &temporary).await?;
+    let feed_limits = resolve_feed_limits(pool).await?;
     let response = outbound_get_following(
         &claim.enclosure_url,
         config.allow_loopback_http,
-        resolve_feed_limits(pool).await?.max_redirects,
+        feed_limits.max_redirects,
+        feed_limits.timeout_seconds,
     )
     .await?;
     // Fail closed on 206: without a sent `Range` a partial enclosure is not
@@ -983,7 +1195,7 @@ async fn download_one(
         || response.status() == reqwest::StatusCode::PARTIAL_CONTENT
         || response
             .content_length()
-            .is_some_and(|length| length > config.max_download_bytes)
+            .is_some_and(|length| length > policy.max_enclosure_bytes)
     {
         return Err(PodcastWorkerError::InvalidResponse);
     }
@@ -995,7 +1207,7 @@ async fn download_one(
         total = total
             .checked_add(chunk.len() as u64)
             .ok_or(PodcastWorkerError::InvalidResponse)?;
-        if total > config.max_download_bytes {
+        if total > policy.max_enclosure_bytes {
             drop(file);
             remove_owned_file(root, &temporary).await?;
             return Err(PodcastWorkerError::InvalidResponse);
@@ -1263,21 +1475,42 @@ pub async fn run_podcast_once(
         return Ok(0);
     }
     refresh_due_channels(pool, config).await?;
+    // Legacy `PodcastDownloadJob`: one pass processes at most
+    // `podcast.download.maxConcurrent.global` episodes. The Rust worker also
+    // processes claims sequentially, and the per-user cap plus the per-user
+    // byte quota are enforced inside the claim query so one user cannot
+    // starve others across worker processes.
+    let policy = resolve_podcast_policy(pool, config).await?;
+    let batch = config.claim_batch_size.clamp(
+        1,
+        i64::try_from(policy.download_concurrency)
+            .unwrap_or(1)
+            .max(1),
+    );
+    debug!(
+        download_concurrency = policy.download_concurrency,
+        per_user_concurrency = policy.per_user_concurrency,
+        retention_days = policy.retention_days,
+        retention_keep_last_n = policy.retention_keep_last_n,
+        retention_keep_unplayed_only = policy.retention_keep_unplayed_only,
+        "podcast pass policy resolved"
+    );
     let worker = Uuid::now_v7();
     let mut completed = 0;
-    for _ in 0..config.claim_batch_size {
+    for _ in 0..batch {
         // Re-check between claims so a pause mid-batch stops new claims
         // immediately without touching in-flight leases.
         if melodee_persistence::is_pool_paused(pool, melodee_persistence::POOL_PODCAST).await? {
             info!("podcast worker pool paused mid-batch; stopping new claims");
             break;
         }
-        let Some(claim) = claim_download(pool, config, worker).await? else {
+        let Some(claim) = claim_download(pool, config, worker, &policy).await? else {
             break;
         };
         match download_one(
             pool,
             config,
+            &policy,
             worker,
             DownloadClaim {
                 id: claim.id,
@@ -1302,7 +1535,7 @@ pub async fn run_podcast_once(
             "podcast orphan reconciliation removed unreferenced files"
         );
     }
-    cleanup_retention(pool, config).await?;
+    cleanup_retention(pool, config, &policy).await?;
     Ok(completed)
 }
 
@@ -1522,15 +1755,22 @@ fn owned_file_kind(name: &str) -> Option<OwnedFileKind> {
     })
 }
 
+/// Applies the legacy `PodcastCleanupJob` policies plus the per-channel
+/// bounds: keep-for-N-days, keep-last-N-per-channel, keep-unplayed-only, and
+/// the channel storage/count limits. Bookmarked episodes are always retained
+/// (a deliberate safety improvement: deleting a file a user bookmarked would
+/// silently break resume state), and every deletion re-validates ownership and
+/// the recorded path inside a row-locked transaction.
 async fn cleanup_retention(
     pool: &PgPool,
     config: &PodcastConfig,
+    policy: &PodcastPolicy,
 ) -> Result<(), PodcastWorkerError> {
     let Some(root) = config.storage_root.as_deref() else {
         return Ok(());
     };
     let rows = sqlx::query_as::<_, (i64, Uuid, String)>(
-        "WITH ranked AS (SELECT e.id,e.public_api_id,e.local_path,c.max_downloaded_episodes,\
+        "WITH ranked AS (SELECT e.id,e.public_api_id,e.local_path,e.downloaded_at,c.max_downloaded_episodes,\
          c.max_storage_bytes,row_number() OVER(PARTITION BY c.id ORDER BY e.published_at DESC NULLS LAST,e.id DESC) AS ordinal,\
          sum(COALESCE(e.downloaded_bytes,0)) OVER(PARTITION BY c.id ORDER BY e.published_at DESC NULLS LAST,e.id DESC) AS cumulative \
          FROM native_podcast_episodes e JOIN native_podcast_channels c ON c.id=e.channel_id \
@@ -1539,10 +1779,28 @@ async fn cleanup_retention(
          AND NOT EXISTS(SELECT 1 FROM native_podcast_bookmarks b WHERE b.episode_id=e.id)) \
          SELECT id,public_api_id,local_path FROM ranked WHERE \
          (max_downloaded_episodes IS NOT NULL AND ordinal>max_downloaded_episodes) OR \
-         (max_storage_bytes IS NOT NULL AND cumulative>max_storage_bytes) ORDER BY id LIMIT 100",
+         (max_storage_bytes IS NOT NULL AND cumulative>max_storage_bytes) OR \
+         ($1::bigint > 0 AND ordinal > $1::bigint) OR \
+         ($2::bigint > 0 AND downloaded_at IS NOT NULL
+             AND downloaded_at < now() - make_interval(days => $2::integer)) OR \
+         ($3::boolean AND EXISTS(SELECT 1 FROM native_podcast_play_history h
+             WHERE h.episode_id=ranked.id AND NOT h.is_now_playing)) \
+         ORDER BY id LIMIT 100",
     )
+    .bind(policy.retention_keep_last_n)
+    .bind(policy.retention_days)
+    .bind(policy.retention_keep_unplayed_only)
     .fetch_all(pool)
     .await?;
+    if !rows.is_empty() {
+        info!(
+            candidates = rows.len(),
+            retention_days = policy.retention_days,
+            retention_keep_last_n = policy.retention_keep_last_n,
+            retention_keep_unplayed_only = policy.retention_keep_unplayed_only,
+            "podcast retention cleanup candidates selected"
+        );
+    }
     for (id, public_id, stored_path) in rows {
         let path = PathBuf::from(stored_path);
         if path != root.join(format!("{public_id}.media")) {
@@ -1577,6 +1835,10 @@ async fn cleanup_retention(
         .await?;
         tx.commit().await?;
         remove_owned_file(root, &path).await?;
+        debug!(
+            episode_id = id,
+            "podcast retention removed downloaded episode"
+        );
     }
     Ok(())
 }
@@ -1658,26 +1920,104 @@ mod tests {
     #[test]
     fn feed_limits_fall_back_and_clamp() {
         // Unset values fall back to the legacy defaults (10 MiB / 500 / 10).
-        let defaults = feed_limits_from_values(None, None, None);
+        let defaults = feed_limits_from_values(None, None, None, None);
         assert_eq!(defaults.max_feed_bytes, 10 * 1024 * 1024);
         assert_eq!(defaults.max_items_per_channel, 500);
         assert_eq!(defaults.max_redirects, 10);
         // A configured larger value (the operator's deployment, e.g. the
         // 2.1 MB Lex Fridman feed rejected by the old hardcode) is honored.
-        let configured = feed_limits_from_values(Some(10 * 1024 * 1024), Some(500), Some(8));
+        let configured =
+            feed_limits_from_values(Some(10 * 1024 * 1024), Some(500), Some(8), Some(45));
         assert_eq!(configured.max_feed_bytes, 10 * 1024 * 1024);
         assert_eq!(configured.max_redirects, 8);
+        assert_eq!(configured.timeout_seconds, 45);
         // Zero/negative values are treated as unset (fall back), not as
         // "unbounded" or "zero".
-        let zeroed = feed_limits_from_values(Some(0), Some(-5), Some(0));
+        let zeroed = feed_limits_from_values(Some(0), Some(-5), Some(0), Some(0));
         assert_eq!(zeroed.max_feed_bytes, DEFAULT_MAX_FEED_BYTES);
         assert_eq!(zeroed.max_items_per_channel, DEFAULT_MAX_FEED_ITEMS);
         assert_eq!(zeroed.max_redirects, DEFAULT_MAX_REDIRECTS);
+        assert_eq!(zeroed.timeout_seconds, DEFAULT_HTTP_TIMEOUT_SECONDS);
         // Misconfiguration is clamped to the hard caps, never unbounded.
-        let huge = feed_limits_from_values(Some(i64::MAX), Some(i64::MAX), Some(i64::MAX));
+        let huge = feed_limits_from_values(
+            Some(i64::MAX),
+            Some(i64::MAX),
+            Some(i64::MAX),
+            Some(i64::MAX),
+        );
         assert_eq!(huge.max_feed_bytes, MAX_FEED_BYTES_HARD_CAP);
         assert_eq!(huge.max_items_per_channel, MAX_FEED_ITEMS_HARD_CAP);
         assert_eq!(huge.max_redirects, MAX_REDIRECTS_HARD_CAP);
+        assert_eq!(huge.timeout_seconds, MAX_HTTP_TIMEOUT_SECONDS);
+    }
+
+    #[test]
+    fn podcast_policy_clamps_and_keeps_the_process_ceiling() {
+        // Unset values fall back to the legacy defaults; the process cap wins
+        // when it is smaller (a configured setting can only tighten a bound).
+        let defaults =
+            PodcastPolicy::from_inputs(512 * 1024 * 1024, PodcastPolicyInputs::default());
+        assert_eq!(defaults.max_enclosure_bytes, 512 * 1024 * 1024);
+        assert_eq!(defaults.download_concurrency, 2);
+        assert_eq!(defaults.per_user_concurrency, 1);
+        assert_eq!(defaults.retention_days, 0);
+        assert_eq!(defaults.quota_bytes_per_user, DEFAULT_QUOTA_BYTES_PER_USER);
+        assert_eq!(defaults.retention_keep_last_n, 0);
+        assert!(!defaults.retention_keep_unplayed_only);
+
+        // A configured lower bound is honored; a larger one cannot exceed the
+        // process cap.
+        let tightened = PodcastPolicy::from_inputs(
+            512 * 1024 * 1024,
+            PodcastPolicyInputs {
+                max_enclosure_bytes: Some(64 * 1024 * 1024),
+                global_concurrency: Some(1),
+                per_user_concurrency: Some(1),
+                quota_bytes_per_user: Some(1024),
+                retention_days: Some(30),
+                keep_last_n: Some(1),
+                keep_unplayed_only: Some(true),
+            },
+        );
+        assert_eq!(tightened.max_enclosure_bytes, 64 * 1024 * 1024);
+        assert_eq!(tightened.download_concurrency, 1);
+        assert_eq!(tightened.retention_days, 30);
+        assert_eq!(tightened.quota_bytes_per_user, 1024);
+        assert_eq!(tightened.retention_keep_last_n, 1);
+        assert!(tightened.retention_keep_unplayed_only);
+        let capped = PodcastPolicy::from_inputs(
+            512 * 1024 * 1024,
+            PodcastPolicyInputs {
+                max_enclosure_bytes: Some(i64::MAX),
+                global_concurrency: Some(1000),
+                per_user_concurrency: Some(1000),
+                quota_bytes_per_user: Some(-1),
+                retention_days: Some(-1),
+                keep_last_n: Some(-1),
+                keep_unplayed_only: None,
+            },
+        );
+        assert_eq!(capped.max_enclosure_bytes, 512 * 1024 * 1024);
+        assert_eq!(capped.download_concurrency, 32);
+        assert_eq!(capped.per_user_concurrency, 32);
+        assert_eq!(capped.retention_days, 0);
+        assert_eq!(capped.retention_keep_last_n, 0);
+        // 0 disables the per-user bound (legacy "unlimited") but never the
+        // process-wide download cap.
+        let unlimited_per_user = PodcastPolicy::from_inputs(
+            1024,
+            PodcastPolicyInputs {
+                max_enclosure_bytes: Some(1024),
+                global_concurrency: Some(0),
+                per_user_concurrency: Some(0),
+                quota_bytes_per_user: Some(0),
+                retention_days: Some(0),
+                keep_last_n: Some(0),
+                keep_unplayed_only: Some(false),
+            },
+        );
+        assert_eq!(unlimited_per_user.per_user_concurrency, 0);
+        assert_eq!(unlimited_per_user.download_concurrency, 2);
     }
 
     #[test]

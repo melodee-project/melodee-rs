@@ -24,6 +24,10 @@ families, and optional library-access group membership. Access tokens do not con
 lists; each catalog or streaming operation evaluates the current PostgreSQL membership, so an
 administrator can revoke access without waiting for a token to expire.
 
+Library IDs are access scopes over the configured storage roots, not editable path records; media
+roots are configured at deployment time
+([storage](../installation/storage.md#libraries-are-access-scopes-not-mutable-path-records)).
+
 A library with no group binding is available to authenticated users. As soon as one or more
 groups are bound to a library, only members of at least one bound group can browse, search,
 favorite/rate, scrobble, or stream its Releases and Tracks. Restricted facts are also removed from

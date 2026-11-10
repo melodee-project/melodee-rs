@@ -199,6 +199,23 @@ fn deterministic_jellyfin_library_id(name: &str) -> uuid::Uuid {
     uuid::Uuid::from_bytes(digest[..16].try_into().unwrap_or([0u8; 16]))
 }
 
+/// Reads a boolean setting value with the documented default.
+fn bool_setting_value(value: Option<&serde_json::Value>, default: bool) -> bool {
+    value
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(default)
+}
+
+/// `system.siteName` with the legacy default and empty-value fallback.
+fn site_name_value(value: Option<&serde_json::Value>) -> String {
+    value
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .unwrap_or("Melodee")
+        .to_string()
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let _ = dotenvy::dotenv();
@@ -406,7 +423,28 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let bind = system::configured_bind();
     let address: SocketAddr = bind.parse()?;
     let public_origin = native_public_origin(address)?;
-    let native_auth = Arc::new(native::auth::NativeAuthService::from_env()?);
+    // Operator security policy resolved from the layered settings store:
+    // password-reset token lifetime (legacy `UserPasswordResetService`) and
+    // the configuration deny lists (legacy `BlacklistService`). Both were
+    // registered in the Rust settings registry but previously had no runtime
+    // consumer.
+    let password_reset_ttl_minutes = {
+        let resolved = settings_resolver
+            .resolve("security.passwordResetTokenExpiryMinutes")
+            .await
+            .map_err(|error| format!("invalid security configuration: {error}"))?;
+        resolved
+            .value
+            .as_ref()
+            .and_then(serde_json::Value::as_i64)
+            .unwrap_or(60)
+            .max(1)
+    };
+    let blacklist = Arc::new(melodee_server::security::BlacklistCache::new(pool.clone()));
+    let native_auth = Arc::new(
+        native::auth::NativeAuthService::from_env()?
+            .with_security_settings(password_reset_ttl_minutes, blacklist.clone()),
+    );
     let native_cors = native::auth::cors_from_env()?;
     let trusted_proxies = env::var("MELODEE__NATIVE__TRUSTED_PROXIES")
         .unwrap_or_default()
@@ -415,12 +453,52 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .filter(|value| !value.is_empty())
         .map(str::parse)
         .collect::<Result<Vec<_>, _>>()?;
-    let stream_concurrency = env::var(ENV_NATIVE_STREAM_CONCURRENCY)
-        .map_or_else(
-            |_| Ok(DEFAULT_NATIVE_STREAM_CONCURRENCY),
-            |value| parse_native_stream_concurrency(&value),
-        )
+    // Direct-play admission (`streaming.maxConcurrentStreams.global` /
+    // `.perUser`, legacy `StreamingLimiter`). Legacy `0` means unlimited; the
+    // Rust process keeps a bounded safety default instead of an unbounded
+    // semaphore, and the environment override
+    // (`MELODEE__NATIVE__STREAM_CONCURRENCY`) remains available for operators
+    // who need a process-level cap below the setting.
+    let env_stream_concurrency = env::var(ENV_NATIVE_STREAM_CONCURRENCY)
+        .ok()
+        .map(|value| parse_native_stream_concurrency(&value))
+        .transpose()
         .map_err(|error| -> Box<dyn Error + Send + Sync> { error.into() })?;
+    let global_stream_setting = settings_resolver
+        .resolve("streaming.maxConcurrentStreams.global")
+        .await
+        .map_err(|error| format!("invalid streaming configuration: {error}"))?
+        .value
+        .as_ref()
+        .and_then(serde_json::Value::as_i64)
+        .unwrap_or(0);
+    let stream_concurrency = if global_stream_setting > 0 {
+        usize::try_from(global_stream_setting)
+            .map_err(|_| "streaming.maxConcurrentStreams.global exceeds platform usize")?
+            .clamp(1, MAX_NATIVE_STREAM_CONCURRENCY)
+    } else {
+        env_stream_concurrency.unwrap_or(DEFAULT_NATIVE_STREAM_CONCURRENCY)
+    };
+    let per_user_stream_setting = settings_resolver
+        .resolve("streaming.maxConcurrentStreams.perUser")
+        .await
+        .map_err(|error| format!("invalid streaming configuration: {error}"))?
+        .value
+        .as_ref()
+        .and_then(serde_json::Value::as_i64)
+        .unwrap_or(0);
+    let per_user_stream_limit = if per_user_stream_setting > 0 {
+        usize::try_from(per_user_stream_setting)
+            .map_err(|_| "streaming.maxConcurrentStreams.perUser exceeds platform usize")?
+            .clamp(1, MAX_NATIVE_STREAM_CONCURRENCY)
+    } else {
+        0
+    };
+    info!(
+        global_stream_cap = stream_concurrency,
+        per_user_stream_cap = per_user_stream_limit,
+        "direct-play admission configured"
+    );
     let shutdown_grace_seconds = env::var(ENV_SHUTDOWN_GRACE_SECONDS)
         .map_or_else(
             |_| Ok(DEFAULT_SHUTDOWN_GRACE_SECONDS),
@@ -431,7 +509,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .as_ref()
         .map(|roots| native_stream::CanonicalAssetRoot::open(&roots.storage_root))
         .transpose()?
-        .and_then(|root| native_stream::DirectPlayService::new(root, stream_concurrency))
+        .and_then(|root| {
+            native_stream::DirectPlayService::new(root, stream_concurrency)
+                .map(|service| service.with_per_user_limit(per_user_stream_limit))
+        })
         .map(|service| {
             service.with_gauge(
                 resource_bounds.register("streams.direct_play", stream_concurrency.max(1)),
@@ -469,7 +550,38 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         });
     let direct_play_shutdown = direct_play.clone();
     let transcoding_shutdown = transcoding.clone();
-    let opensubsonic_state = opensubsonic::OsState::from_env(
+    // Compatibility-surface settings (legacy `jellyfin.enabled`,
+    // `system.siteName`, `system.isDownloadingEnabled`). Defaults preserve the
+    // captured behavior: Jellyfin enabled, "Melodee" server name, downloads on.
+    let jellyfin_enabled = bool_setting_value(
+        settings_resolver
+            .resolve("jellyfin.enabled")
+            .await
+            .map_err(|error| format!("invalid jellyfin configuration: {error}"))?
+            .value
+            .as_ref(),
+        true,
+    );
+    let server_site_name = site_name_value(
+        settings_resolver
+            .resolve("system.siteName")
+            .await
+            .map_err(|error| format!("invalid system configuration: {error}"))?
+            .value
+            .as_ref(),
+    );
+    let downloads_enabled_setting = settings_resolver
+        .resolve("system.isDownloadingEnabled")
+        .await
+        .map_err(|error| format!("invalid system configuration: {error}"))?
+        .value
+        .as_ref()
+        .and_then(serde_json::Value::as_bool);
+    if !jellyfin_enabled {
+        info!("jellyfin compatibility routes disabled by settings (jellyfin.enabled=false)");
+    }
+
+    let mut opensubsonic_state = opensubsonic::OsState::from_env(
         pool.clone(),
         public_origin.clone(),
         &ingestion_config,
@@ -479,13 +591,16 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         native_stream::ClientAddressResolver::new(trusted_proxies.clone()),
         search_config.enabled.then_some(search_config.clone()),
     )?;
+    if let Some(enabled) = downloads_enabled_setting {
+        opensubsonic_state.downloads_enabled = enabled;
+    }
     let opensubsonic_app = opensubsonic::configured_router_with_cors(
         opensubsonic_state,
         &env::var(opensubsonic::cors::ENV_ALLOWED_ORIGINS).unwrap_or_default(),
     )?;
     let jellyfin_state = jellyfin::JfState {
         pool: pool.clone(),
-        server_name: "Melodee".to_string(),
+        server_name: server_site_name.clone(),
         server_version: env!("CARGO_PKG_VERSION").to_string(),
         server_id: "93cd3cc3a120127ccfda124620290cae".to_string(),
         local_address: public_origin.clone(),
@@ -523,7 +638,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             public_origin.clone(),
         )),
         user_state: Arc::new(native::PostgresNativeUserStateReader::new(pool.clone())),
-        direct_play,
+        direct_play: direct_play.clone(),
         client_addresses: native_stream::ClientAddressResolver::new(trusted_proxies.clone()),
         auth: native_auth.clone(),
         lastfm_api_base_url: None,
@@ -572,6 +687,15 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         )),
         native_stream::ClientAddressResolver::new(trusted_proxies),
     );
+    let diagnostics_started_at = time::OffsetDateTime::now_utc();
+    let admin_diagnostics_state = melodee_server::admin_diagnostics::AdminDiagnosticsState {
+        admin: admin_access_state.clone(),
+        search: search_config.enabled.then_some(search_config.clone()),
+        direct_play: direct_play.clone(),
+        global_stream_cap: stream_concurrency,
+        per_user_stream_cap: per_user_stream_limit,
+        started_at: diagnostics_started_at,
+    };
     let readiness = system::ReadinessState::new(pool.clone())
         .with_search(search_config.enabled.then_some(search_config.clone()));
     let app = Router::new()
@@ -590,15 +714,21 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .merge(melodee_server::admin_identity::router().with_state(admin_access_state.clone()))
         .merge(melodee_server::admin_metadata::router(ingestion_config.clone()).with_state(admin_access_state.clone()))
         .merge(melodee_server::admin_catalog::router().with_state(admin_catalog_state))
+        .merge(melodee_server::admin_charts::router().with_state(admin_access_state.clone()))
         .merge(melodee_server::admin_policies::router().with_state(admin_access_state.clone()))
         .merge(melodee_server::admin_system::router().with_state(admin_system_state))
+        .merge(melodee_server::admin_diagnostics::router().with_state(admin_diagnostics_state))
         .merge(melodee_server::admin_onboarding::router().with_state(admin_access_state))
         // ADR-0161 permits this one anonymous browser security page; it is
         // intentionally not a listener-facing web application.
         .merge(password_reset::router())
         .merge(native_app)
-        .merge(opensubsonic_app)
-        .merge(jellyfin_app);
+        .merge(opensubsonic_app);
+    let app = if jellyfin_enabled {
+        app.merge(jellyfin_app)
+    } else {
+        app
+    };
     // Admin SPA static serving (ADR-0138): built assets at /admin with an
     // index.html fallback for client-side deep links. A missing dist is not
     // fatal — the APIs keep serving and /admin falls through to the 404
@@ -608,6 +738,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         // The Jellyfin routing middleware must see unmatched paths (the
         // bare-root probe), so it is an outer layer, matching the captured
         // ASP.NET pipeline placement (ADR-0131).
+        .layer(axum::middleware::from_fn(
+            melodee_server::diagnostics::request_logging,
+        ))
         .layer(axum::middleware::from_fn(jellyfin::routing_middleware))
         // correlation sourcing runs inside the TraceLayer span (added
         // first, so the layer wraps it) so the span recording lands.
@@ -689,8 +822,23 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 #[cfg(test)]
 mod native_configuration_tests {
     use super::{
-        parse_native_stream_concurrency, parse_shutdown_grace_seconds, validate_public_origin,
+        bool_setting_value, parse_native_stream_concurrency, parse_shutdown_grace_seconds,
+        site_name_value, validate_public_origin,
     };
+
+    #[test]
+    fn compatibility_surface_settings_have_documented_defaults() {
+        assert!(bool_setting_value(None, true));
+        assert!(!bool_setting_value(None, false));
+        assert!(!bool_setting_value(Some(&serde_json::json!(false)), true));
+        assert!(bool_setting_value(Some(&serde_json::json!(true)), false));
+        assert_eq!(site_name_value(None), "Melodee");
+        assert_eq!(site_name_value(Some(&serde_json::json!("  "))), "Melodee");
+        assert_eq!(
+            site_name_value(Some(&serde_json::json!("  Home Melodee  "))),
+            "Home Melodee"
+        );
+    }
 
     #[test]
     fn native_stream_concurrency_is_strictly_bounded() {

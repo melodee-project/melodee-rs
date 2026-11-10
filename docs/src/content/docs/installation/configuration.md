@@ -22,7 +22,7 @@ Effective values resolve through four layers, highest precedence first:
    API);
 4. built-in defaults (the legacy registry's seeded values).
 
-Only documented keys are supported. The database layer covers the 190-key legacy settings
+Only documented keys are supported. The database layer covers the 209-key legacy settings
 registry plus the Rust provider runtime settings (including provider endpoints, timeouts, cache
 freshness, and enrichment controls); the fixed keys in the tables below (worker, ingestion,
 search, auth, and email transport plumbing) remain environment-driven.
@@ -218,7 +218,7 @@ facts. Every pass is bounded, set-based, and idempotent, so the worker is safe t
 | Key | Default | Effect |
 | --- | --- | --- |
 | `MELODEE__NATIVE__PUBLIC_ORIGIN` | Listener origin | External origin used in native-v1 image, stream, browser-login redirect, and password-reset notification URLs. It must be an absolute `http` or `https` origin without credentials, a path, or a query. Set it to the reverse proxy's public origin in production. |
-| `MELODEE__NATIVE__STREAM_CONCURRENCY` | `32` | Maximum direct media responses open concurrently in one server process (`1`–`4096`). Additional requests wait with bounded backpressure. |
+| `MELODEE__NATIVE__STREAM_CONCURRENCY` | `32` | Maximum direct media responses open concurrently in one server process (`1`–`4096`). Additional requests wait with bounded backpressure. Used when `streaming.maxConcurrentStreams.global` is `0`; see [Streaming admission](#streaming-admission). |
 | `MELODEE__NATIVE__AUTH__JWT_KEY` | — (required) | HS256 signing secret for native-v1 15-minute access tokens and protected browser session cookies. Generate at least 32 random bytes (for example, `openssl rand -base64 48`) and keep the same secret on every server process. The example placeholder is rejected at startup. |
 | `MELODEE__NATIVE__AUTH__MAX_SESSION_DAYS` | `90` | Absolute refresh-family lifetime (`30`–`365` days); individual refresh tokens remain valid for at most 30 days and rotate on use. |
 | `MELODEE__NATIVE__AUTH__DEVELOPMENT_RESET_TOKENS` | `false` | Includes the one-time reset token and URL in a successful password-reset request. Enable only on isolated development systems. |
@@ -237,6 +237,9 @@ facts. Every pass is bounded, set-based, and idempotent, so the worker is safe t
 | Key | Default | Effect |
 | --- | --- | --- |
 | `MELODEE__OPENSUBSONIC__CORS__ALLOWED_ORIGINS` | empty | Comma-separated exact HTTP(S) origins allowed to read OpenSubsonic responses from browsers, for example `https://feishin.vercel.app`. Rejects wildcards, credentials, trailing slashes, paths, queries, fragments, and more than 100 origins. Applies to API and media requests with `Origin`, including OPTIONS preflight, and admits GET/POST/HEAD with authentication, content-type, conditional, and range request headers. Exposes paging, range, duration, disposition, and cache-validation response headers. Cookie credentials are not enabled. |
+
+OpenSubsonic `download` is gated by `system.isDownloadingEnabled` (default `true`); the legacy
+environment switch `MELODEE__OPENSUBSONIC__DOWNLOADS_ENABLED` is used when the setting is absent.
 
 This is independent of native API CORS. Browser streaming requires an allowed origin; non-browser
 stream headers remain unchanged. `make up` reads the Feishin development default from
@@ -293,6 +296,8 @@ pepper; changing it intentionally invalidates all existing Jellyfin access token
 | --- | --- | --- |
 | `MELODEE__JELLYFIN__TOKEN_PEPPER` | — (required) | Secret HMAC pepper for stored Jellyfin access-token digests. Supply at least 32 random bytes, for example `openssl rand -base64 48`. The server refuses to start when it is missing or too short; never log, commit, or share it. |
 | `MELODEE__JELLYFIN__TOKEN_EXPIRES_AFTER_HOURS` | `168` | Jellyfin access-token lifetime in hours (`1`–`8760`). At most ten active tokens are retained per user; issuing another revokes the oldest active token. |
+| `jellyfin.enabled` | `true` | When `false`, the Jellyfin-compatible routes are not mounted (requests fall through to the normal 404 behavior). Changing it requires a restart. |
+| `system.siteName` | `Melodee` | Server name reported by Jellyfin `System/Info` and `System/Info/Public`. |
 
 ### Email notifications
 
@@ -333,6 +338,71 @@ Last.fm integration is disabled by default. The registry keys `scrobbling.lastFm
 `scrobbling.lastFm.sharedSecret`, and `security.secretKey` control it; the API key and shared
 secret are classified secret and are redacted from every API, export, and log. See
 [Last.fm scrobbling](../features/lastfm/) for the linking flow and failure behavior.
+
+### Streaming admission
+
+The database-backed keys `streaming.maxConcurrentStreams.global` and
+`streaming.maxConcurrentStreams.perUser` are enforced on every streaming surface (native v1,
+OpenSubsonic, Jellyfin) and on Admin review previews.
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `streaming.maxConcurrentStreams.global` | `0` (registry) | Global direct-play admission. `0` resolves to the process safety default of 32 (or `MELODEE__NATIVE__STREAM_CONCURRENCY` when set); a positive value is used directly. Values are clamped to `1`–`4096`. Additional requests wait with bounded backpressure. |
+| `streaming.maxConcurrentStreams.perUser` | `0` | Per-user concurrent direct-play cap. `0` disables the cap. When a user exceeds it, the request is rejected with the legacy `429` shape (`TOO_MANY_REQUESTS` / `"Too many concurrent streams"`) instead of queued, so a client retries. |
+
+Melodee deliberately keeps a bounded global default where the legacy server was unlimited (the
+decision and its trade-offs are recorded in the repository ADR set, `design/adr/` — ADR-0183).
+Operators migrating a deployment that relied on more than 32 simultaneous streams should set
+the global key explicitly.
+
+### Security policy settings
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `security.blacklistedEmails` | empty | JSON array (stored as a JSON string) of email addresses denied on native authentication and on every authenticated native-v1 request. Matching is case-insensitive. A match returns `403` with code `BLACKLISTED`. |
+| `security.blacklistedIPs` | empty | JSON array (stored as a JSON string) of exact client IPs denied the same way. The IP is the trusted-proxy-resolved client address. |
+| `security.passwordResetTokenExpiryMinutes` | `60` | Lifetime of a one-time password-reset token. Values below `1` are clamped to `1`. The confirmation page and API honor the same expiry. |
+
+The deny lists are cached for 10 seconds; an operator change takes effect without a restart. A
+transient database failure keeps the last successfully loaded lists. Blocked requests are
+logged at `WARN` with the rule name only — never the address or email.
+
+### Podcast retention and download policy
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `podcast.download.maxEnclosureBytes` | `2147483648` | Per-episode download ceiling. The process keeps its own lower cap, so configuring a larger value cannot exceed the deployment's `MELODEE__PODCAST__MAX_DOWNLOAD_BYTES`. |
+| `podcast.download.maxConcurrent.global` | `2` | Maximum downloads claimed per worker pass. |
+| `podcast.download.maxConcurrent.perUser` | `1` | Maximum episodes one user may have downloading at once across channels and worker processes. `0` disables the per-user bound. |
+| `podcast.http.timeoutSeconds` | `30` | Outbound feed/enclosure HTTP timeout. |
+| `podcast.quota.maxBytesPerUser` | `5368709120` | Per-user downloaded-bytes quota. Once a user's downloaded episodes reach the quota, no further episodes are claimed for that user. `0` disables the quota. |
+| `podcast.retention.downloadedEpisodesInDays` | `0` | Delete downloads older than N days. `0` disables the age policy. |
+| `podcast.retention.keepLastNEpisodes` | `0` | Keep only the newest N downloaded episodes per channel. `0` relies on each channel's own limits. |
+| `podcast.retention.keepUnplayedOnly` | `false` | Delete episodes the user has finished playing. |
+
+Retention runs after each worker pass. Bookmarked episodes are always retained: deleting a file
+a user bookmarked would silently break resume state. Every deletion re-validates the recorded
+owned path inside a row-locked transaction before removing the file.
+
+### Playlist artwork uploads
+
+`system.maxUploadSize` (default `5242880` bytes) bounds playlist artwork uploads. The process
+hard cap is 10 MiB; a larger configured value is clamped, and an unreadable settings layer falls
+back to the legacy default rather than unbounded.
+
+### Logging
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `MELODEE__LOGGING__LEVEL` | `info` | `trace`, `debug`, `info`, `warn`, or `error` for Melodee and HTTP server targets. |
+| `MELODEE__LOGGING__FORMAT` | `text` | `text` for human-readable lines, `json` for one structured JSON object per event (for log shippers and automation). |
+| `MELODEE__LOGGING__DIRECTORY` | unset | Additionally append to `<directory>/YYYY-MM-DD.log` (UTC daily files). |
+
+Every request records method, normalized route, status, latency, and correlation id. `5xx`
+responses, `429` responses, and requests slower than 10 seconds are logged at `WARN`; other
+completed requests at `DEBUG`. The most recent 200 `WARN`/`ERROR` events are also kept in memory
+and exposed through the [diagnostics API](../api/admin-api/#runtime-diagnostics) and the bundled
+support report, so a troubleshooting agent does not need container log access.
 
 ### Notes
 

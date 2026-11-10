@@ -99,6 +99,21 @@ pub fn forbidden(detail: &str) -> Response {
     problem.into_json_response(StatusCode::FORBIDDEN)
 }
 
+/// 429 ProblemDetails for the operator-configured per-user concurrent stream
+/// cap (`streaming.maxConcurrentStreams.perUser`). Reached only when the
+/// operator configures a limit; the default has no cap.
+pub fn too_many_requests(detail: &str) -> Response {
+    let problem = JellyfinProblemDetails {
+        r#type: "about:blank".to_string(),
+        title: "Too Many Requests".to_string(),
+        status: 429,
+        detail: detail.to_string(),
+        trace_id: Uuid::now_v7(),
+        error_code: None,
+    };
+    problem.into_json_response(StatusCode::TOO_MANY_REQUESTS)
+}
+
 /// 500 ProblemDetails for unexpected internal failures.
 pub fn internal_server_error() -> Response {
     let problem = JellyfinProblemDetails {

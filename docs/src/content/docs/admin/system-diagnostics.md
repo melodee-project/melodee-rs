@@ -8,6 +8,42 @@ sidebar:
 The Rust server exposes service health and version metadata plus durable queue diagnostics,
 surfaced both in the admin UI and over the [Admin API](../api/admin-api/).
 
+## Troubleshooting with the diagnostics API
+
+Four read-only administrator routes cover most setup and runtime questions and are safe to use
+from automation (an agent, a runbook, or a support script):
+
+```bash
+# 1. Is anything failing? One verdict per subsystem with hints.
+curl -sH "Authorization: Bearer $ADMIN_TOKEN" \
+  https://melodee.example/api/admin/v1/diagnostics/selftest | jq
+
+# 2. What is this setting's effective value, layer, and consumer?
+curl -sH "Authorization: Bearer $ADMIN_TOKEN" \
+  https://melodee.example/api/admin/v1/diagnostics/settings | jq '.settings[] | select(.key=="streaming.maxConcurrentStreams.perUser")'
+
+# 3. What just went wrong? Recent WARN/ERROR events with correlation ids.
+curl -sH "Authorization: Bearer $ADMIN_TOKEN" \
+  https://melodee.example/api/admin/v1/diagnostics/events?limit=50 | jq
+
+# 4. One redacted support report (version, health, settings summary, events).
+curl -sH "Authorization: Bearer $ADMIN_TOKEN" \
+  https://melodee.example/api/admin/v1/diagnostics/bundle | jq
+```
+
+When a Track does not play, probe the exact stream resolution path:
+
+```bash
+curl -s -X POST -H "Authorization: Bearer $ADMIN_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"trackId":"<track public id>"}' \
+  https://melodee.example/api/admin/v1/diagnostics/stream-probe | jq
+```
+
+The response distinguishes a missing Track/active Release, a disabled direct-play configuration,
+and a file whose size no longer matches the catalog record. Every route requires an administrator
+token; none mutates state. See
+[Admin API — Runtime diagnostics](../api/admin-api/#runtime-diagnostics) for the schemas.
+
 ## System → Workers screen
 
 Open **System → Workers** (`/admin/system/workers`). The screen aggregates the operational

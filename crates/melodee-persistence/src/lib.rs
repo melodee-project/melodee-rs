@@ -165,9 +165,9 @@ pub use settings::{
     CONFIG_EXPORT_FORMAT, CONFIG_EXPORT_WARNING, ConfigExportDocument, ConfigImportPlan,
     ENV_CONFIG_FILE, KNOWN_SETTINGS, KnownSetting, MAX_IMPORT_AUDIT_ENTRIES,
     MAX_IMPORT_DOCUMENT_BYTES, MAX_IMPORT_KEYS, MAX_SETTING_KEY_CHARS, MAX_SETTING_VALUE_BYTES,
-    MAX_SETTINGS_LIST, OnboardingState, OnboardingStore, SECRET_REDACTION_MARKER, ServerSetting,
-    SettingKind, SettingSource, SettingValueView, SettingsError, SettingsResolver, SettingsStore,
-    apply_config_import, env_var_name, export_config, is_secret_key, known_setting,
+    MAX_SETTINGS_LIST, OnboardingState, OnboardingStore, ResolvedSetting, SECRET_REDACTION_MARKER,
+    ServerSetting, SettingKind, SettingSource, SettingValueView, SettingsError, SettingsResolver,
+    SettingsStore, apply_config_import, env_var_name, export_config, is_secret_key, known_setting,
     plan_config_import,
 };
 pub use user_admin::{

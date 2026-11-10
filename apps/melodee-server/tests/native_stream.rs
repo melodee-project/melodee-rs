@@ -360,7 +360,7 @@ async fn full_get_and_head_have_exact_length_type_and_range_headers() {
     let fixture = Fixture::new(2);
     let response = fixture
         .service
-        .response(&fixture.asset, None, false)
+        .response(&fixture.asset, None, false, None)
         .await
         .expect("full response");
     assert_eq!(response.status(), StatusCode::OK);
@@ -380,7 +380,7 @@ async fn full_get_and_head_have_exact_length_type_and_range_headers() {
 
     let response = fixture
         .service
-        .response(&fixture.asset, None, true)
+        .response(&fixture.asset, None, true, None)
         .await
         .expect("head response");
     assert_eq!(response.status(), StatusCode::OK);
@@ -404,14 +404,14 @@ async fn bounded_asset_reads_share_the_no_follow_stream_boundary() {
     let fixture = Fixture::new(2);
     let bytes = fixture
         .service
-        .read_asset_bounded(&fixture.asset, CONTENT.len() as u64)
+        .read_asset_bounded(&fixture.asset, CONTENT.len() as u64, None)
         .await
         .expect("bounded asset read");
     assert_eq!(bytes, CONTENT);
     assert!(
         fixture
             .service
-            .read_asset_bounded(&fixture.asset, (CONTENT.len() - 1) as u64)
+            .read_asset_bounded(&fixture.asset, (CONTENT.len() - 1) as u64, None)
             .await
             .is_err()
     );
@@ -429,7 +429,7 @@ async fn initial_middle_suffix_and_open_ranges_return_exact_bytes() {
     for (range, content_range, expected) in cases {
         let response = fixture
             .service
-            .response(&fixture.asset, Some(range), false)
+            .response(&fixture.asset, Some(range), false, None)
             .await
             .expect("range response");
         assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
@@ -448,12 +448,12 @@ async fn dropping_a_body_releases_bounded_stream_capacity() {
     let fixture = Fixture::new(1);
     let first = fixture
         .service
-        .response(&fixture.asset, None, false)
+        .response(&fixture.asset, None, false, None)
         .await
         .expect("first response");
     let service = fixture.service.clone();
     let asset = fixture.asset.clone();
-    let mut second = tokio::spawn(async move { service.response(&asset, None, false).await });
+    let mut second = tokio::spawn(async move { service.response(&asset, None, false, None).await });
 
     assert!(
         tokio::time::timeout(Duration::from_millis(25), &mut second)
@@ -566,7 +566,7 @@ async fn direct_play_gauge_reports_in_flight_waiters_and_release() {
     let service = fixture.service.with_gauge(gauge.clone());
 
     let first = service
-        .response(&fixture.asset, None, false)
+        .response(&fixture.asset, None, false, None)
         .await
         .expect("first stream admitted");
     let snapshot = gauge.snapshot();
@@ -578,7 +578,7 @@ async fn direct_play_gauge_reports_in_flight_waiters_and_release() {
     let queued = {
         let service = service.clone();
         let asset = fixture.asset.clone();
-        tokio::spawn(async move { service.response(&asset, None, false).await })
+        tokio::spawn(async move { service.response(&asset, None, false, None).await })
     };
     tokio::time::sleep(Duration::from_millis(50)).await;
     let snapshot = gauge.snapshot();
@@ -596,4 +596,60 @@ async fn direct_play_gauge_reports_in_flight_waiters_and_release() {
     assert_eq!(snapshot.admitted_total, 2);
     drop(second);
     assert_eq!(gauge.snapshot().in_flight, 0);
+}
+
+#[tokio::test]
+async fn per_user_stream_cap_rejects_only_the_over_limit_user() {
+    let fixture = Fixture::new(4);
+    let service = fixture.service.clone().with_per_user_limit(1);
+    let first_user = Uuid::now_v7();
+    let second_user = Uuid::now_v7();
+
+    // First admission for the user holds its slot until the body is dropped.
+    let first = service
+        .response(&fixture.asset, None, false, Some(first_user))
+        .await
+        .expect("first admission");
+    let second = service
+        .response(&fixture.asset, None, false, Some(first_user))
+        .await;
+    assert!(
+        matches!(second, Err(StreamError::TooManyStreams)),
+        "second concurrent stream for the same user must be rejected"
+    );
+
+    // Another user is unaffected by the first user's cap.
+    let other = service
+        .response(&fixture.asset, None, false, Some(second_user))
+        .await
+        .expect("independent user admission");
+
+    // Dropping the bodies releases both slots.
+    drop(first);
+    drop(other);
+    service
+        .response(&fixture.asset, None, false, Some(first_user))
+        .await
+        .expect("slot released after body drop");
+}
+
+#[tokio::test]
+async fn per_user_cap_zero_disables_the_admission_bound() {
+    let fixture = Fixture::new(8);
+    let service = fixture.service.clone().with_per_user_limit(0);
+    assert_eq!(service.per_user_limit(), None);
+    let user = Uuid::now_v7();
+    let first = service
+        .response(&fixture.asset, None, false, Some(user))
+        .await
+        .expect("no per-user bound");
+    let second = service
+        .response(&fixture.asset, None, false, Some(user))
+        .await
+        .expect("no per-user bound");
+    let third = service
+        .response(&fixture.asset, None, false, Some(user))
+        .await
+        .expect("no per-user bound");
+    drop((first, second, third));
 }

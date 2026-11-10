@@ -305,7 +305,7 @@
     "implementation": [
       ".env.example and docs/src/content/docs/installation/configuration.md (secret-safe native configuration guidance)",
       "crates/melodee-persistence/migrations/0025_phase9_onboarding_settings.sql (server_settings.is_secret)",
-      "crates/melodee-persistence/src/settings.rs (14 secret/credential-adjacent keys from the 190-key inventory; write-only-over-API reads, fixed-marker export redaction with header warning, fail-closed marker rejection on import, secrets named only in import previews)",
+      "crates/melodee-persistence/src/settings.rs (14 secret/credential-adjacent keys from the 209-key inventory; write-only-over-API reads, fixed-marker export redaction with header warning, fail-closed marker rejection on import, secrets named only in import previews)",
       "apps/melodee-server/src/admin_config.rs (admin-gated export/import)"
     ],
     "tests": [

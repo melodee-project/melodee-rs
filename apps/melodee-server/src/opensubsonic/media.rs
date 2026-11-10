@@ -90,6 +90,17 @@ fn redirect_to_error(state: &OsState) -> Response {
 /// envelope (the legacy 416 path is unreachable; the service re-wraps the
 /// error). The captured error envelopes carried no `x-total-count` header,
 /// unlike the success/other-error envelopes.
+/// The captured legacy streaming-limit response: plain `429` with an
+/// `error` string, not the Subsonic envelope (C# `MediaRetrievalController`).
+/// Reached only when `streaming.maxConcurrentStreams.perUser` is configured.
+fn too_many_streams() -> Response {
+    (
+        axum::http::StatusCode::TOO_MANY_REQUESTS,
+        axum::Json(serde_json::json!({"error": "Too many concurrent streams"})),
+    )
+        .into_response()
+}
+
 fn stream_not_found(state: &OsState, params: &Option<Extension<Params>>) -> Response {
     OsReply::error(70, "The requested data was not found.")
         .without_total_count_header()
@@ -384,7 +395,7 @@ async fn stream_impl(
     // The captured bypass synthesizes no user; a bypassed stream request has
     // no captured behavior beyond the unknown-id 302 class, so require a
     // principal (the fixture authenticated stream requests).
-    let _ = match principal {
+    let principal = match principal {
         Some(Extension(p)) => p,
         None => return stream_not_found(state, params),
     };
@@ -431,7 +442,7 @@ async fn stream_impl(
     let range_header = headers.get(header::RANGE).and_then(|v| v.to_str().ok());
     let head_only = method == Method::HEAD;
     let response = match direct_play
-        .response(&row.asset, range_header, head_only)
+        .response(&row.asset, range_header, head_only, Some(principal.user_id))
         .await
     {
         Ok(response) => response,
@@ -440,6 +451,11 @@ async fn stream_impl(
             // captured 404 + error 70 (ADR-0130 decision 4: correct
             // single-pass range handling; the legacy double-range bug —
             // frozen in the os-stream-range-* goldens — is NOT preserved).
+            return stream_not_found(state, params);
+        }
+        Err(StreamError::TooManyStreams) => return too_many_streams(),
+        Err(StreamError::CapacityClosed) => {
+            tracing::warn!("opensubsonic stream capacity closed during shutdown");
             return stream_not_found(state, params);
         }
         Err(error) => {
@@ -496,7 +512,7 @@ async fn download_impl(
     method: &Method,
     headers: &axum::http::HeaderMap,
 ) -> Response {
-    let _ = match principal {
+    let principal = match principal {
         Some(Extension(p)) => p,
         None => return stream_not_found(state, params),
     };
@@ -560,11 +576,16 @@ async fn download_impl(
     let range_header = headers.get(header::RANGE).and_then(|v| v.to_str().ok());
     let head_only = method == Method::HEAD;
     let mut response = match direct_play
-        .response(&row.asset, range_header, head_only)
+        .response(&row.asset, range_header, head_only, Some(principal.user_id))
         .await
     {
         Ok(response) => response,
         Err(StreamError::InvalidRange) | Err(StreamError::AssetUnavailable) => {
+            return stream_not_found(state, params);
+        }
+        Err(StreamError::TooManyStreams) => return too_many_streams(),
+        Err(StreamError::CapacityClosed) => {
+            tracing::warn!("opensubsonic download capacity closed during shutdown");
             return stream_not_found(state, params);
         }
         Err(error) => {

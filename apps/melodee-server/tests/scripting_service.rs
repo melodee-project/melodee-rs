@@ -14,7 +14,9 @@ use std::sync::Arc;
 
 use common::TestDb;
 use melodee_ingestion::{CandidateSnapshot, DirectoryGateOutcome, DirectoryProcessingGate};
-use melodee_persistence::{ScriptRegistryStore, ScriptRunOutcome, ScriptRunStore, ScriptUpsert};
+use melodee_persistence::{
+    ScriptRegistryStore, ScriptRunOutcome, ScriptRunStore, ScriptUpsert, SettingsStore,
+};
 use melodee_server::scripting::{
     CIRCUIT_BREAKER_WINDOW, EVENT_DIRECTORY_PROCESSING_START, ScriptingDirectoryGate,
     ScriptingService,
@@ -31,6 +33,21 @@ fn upsert<'a>(name: &'a str, source: &'a str, timeout_ms: i32) -> ScriptUpsert<'
         timeout_ms,
         memory_bytes: 16 * 1024 * 1024,
     }
+}
+
+/// Enables the legacy master switch (`scripting.enabled`, default `false`)
+/// for tests that exercise the ingestion gate.
+async fn enable_scripting(db: &TestDb) {
+    SettingsStore::new()
+        .set(
+            &db.pool,
+            "scripting.enabled",
+            &serde_json::json!(true),
+            None,
+            OffsetDateTime::now_utc(),
+        )
+        .await
+        .expect("enable scripting");
 }
 
 async fn register(db: &TestDb, name: &str, source: &str, timeout_ms: i32) -> uuid::Uuid {
@@ -226,6 +243,7 @@ fn snapshot_of(files: &[(&str, i64)]) -> CandidateSnapshot {
 #[tokio::test]
 async fn gate_maps_deny_to_skip_with_the_script_message() {
     let db = TestDb::create("scripting_gate_deny").await;
+    enable_scripting(&db).await;
     let service = Arc::new(ScriptingService::new(db.pool.clone()));
     register(
         &db,
@@ -262,6 +280,7 @@ async fn gate_maps_deny_to_skip_with_the_script_message() {
 #[tokio::test]
 async fn gate_allows_when_the_ctx_satisfies_the_script() {
     let db = TestDb::create("scripting_gate_allow").await;
+    enable_scripting(&db).await;
     let service = Arc::new(ScriptingService::new(db.pool.clone()));
     register(&db, "min-size", "ctx.totalSizeMegabytes >= 1", 250).await;
     let gate = ScriptingDirectoryGate::new(service);
@@ -281,6 +300,41 @@ async fn gate_allows_when_the_ctx_satisfies_the_script() {
             .expect("runs")[0]
             .outcome,
         "allow"
+    );
+    std::fs::remove_dir_all(&root).ok();
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn gate_is_inert_while_scripting_is_disabled() {
+    // Legacy `scripting.enabled` defaults to false: the gate must not evaluate
+    // installed scripts or write audit rows until an operator enables it.
+    let db = TestDb::create("scripting_gate_disabled").await;
+    let service = Arc::new(ScriptingService::new(db.pool.clone()));
+    register(
+        &db,
+        "always-deny",
+        "{ result: false, message: \"disabled\" }",
+        250,
+    )
+    .await;
+    let gate = ScriptingDirectoryGate::new(service);
+    let root = std::env::temp_dir().join(format!(
+        "melodee-gate-test-{}",
+        uuid::Uuid::now_v7().simple()
+    ));
+    std::fs::create_dir_all(&root).expect("temp root");
+    let snapshot = snapshot_of(&[("01 - a.mp3", 2048)]);
+
+    let outcome = gate.evaluate(&root, &snapshot).await;
+    assert_eq!(outcome, DirectoryGateOutcome::Allow);
+    assert!(
+        ScriptRunStore::new()
+            .list_recent(&db.pool, None, 50, 0)
+            .await
+            .expect("runs")
+            .is_empty(),
+        "disabled scripting must not produce evaluation audit rows"
     );
     std::fs::remove_dir_all(&root).ok();
     db.drop().await;

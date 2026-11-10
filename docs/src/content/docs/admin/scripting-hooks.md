@@ -62,6 +62,15 @@ Anything else — a number, a string, an exception, a timeout — is recorded as
 equivalent in the Rust engine; runaway CPU is bounded by the wall-clock timeout and the circuit
 breaker instead.
 
+## The master switch
+
+Scripting is disabled by default, exactly like the legacy server: the registry key
+`scripting.enabled` (environment `MELODEE__SCRIPTING__ENABLED`) defaults to `false`. While it is
+false, installed scripts are **not evaluated** by the ingestion gate and no `script_runs` audit
+rows are written. Admin test-runs still work so you can validate a script before enabling it.
+The switch is resolved through the layered settings on each candidate, so a change takes effect
+without a restart. The Admin UI Scripts tab and `melodee-cli scripts` show the same registry.
+
 ## The wired hook: `directoryProcessingStart`
 
 This is the one hook with live server-side enforcement. It fires once per stable inbound

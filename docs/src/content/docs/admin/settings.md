@@ -27,6 +27,15 @@ The CLI equivalents are `melodee-cli config list|validate|export|import`; the AP
 secret-handling rules are in
 [Configuration — Import and export](../installation/configuration/#import-and-export).
 
+### Does this setting actually do anything?
+
+`GET /api/admin/v1/diagnostics/settings` lists every effective setting with its winning layer, its
+registered kind, and either the runtime consumer that reads it or the reason it is deliberately
+inert (retired capability, frozen compatibility constant, and so on). Use it when you changed a
+value and saw no effect: a key with an `inertReason` never had a runtime effect; a key with a
+`consumer` names the module that reads it. See
+[Admin API — Runtime diagnostics](../api/admin-api/#runtime-diagnostics).
+
 ## Notifications
 
 Lists the stored notification templates (key, locale, version, subject) and renders a **test

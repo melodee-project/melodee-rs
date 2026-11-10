@@ -36,6 +36,13 @@ when its Artist, Release title, and optional year identify exactly one active ca
 Ambiguous or missing observations remain unlinked for later review; names are never treated as
 catalog identity.
 
+Administrators can also curate a chart over the admin API without a CSV: create a chart, replace
+its ranked items, resolve individual items to an existing catalog Artist/Release, and read the
+ranked and missing reports. See
+[Chart curation](../api/admin-api.md#chart-curation). Linking an item never creates or merges
+catalog entities — an unlinked row stays a string observation.
+
+
 A periodic maintenance worker (see
 [discovery maintenance settings](../installation/configuration.md#discovery-maintenance)) keeps the
 discovery projections current. It reconciles stored recommendation popularity against committed

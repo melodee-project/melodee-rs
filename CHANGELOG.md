@@ -65,6 +65,31 @@ by an accepted ADR and release gate.
 - Astro Starlight public documentation platform under `/docs`, with GitHub Pages deployment,
   PR validation, and documentation-impact rules in the Definition of Done.
 
+### Settings, diagnostics, and curation parity (pre-v1.0.0 correction set)
+
+- Registered-but-unhonored settings now have runtime consumers: password-reset token lifetime
+  and the `security.blacklistedEmails`/`.blacklistedIPs` deny lists (native auth + authenticated
+  native requests, `403 BLACKLISTED`), `streaming.maxConcurrentStreams.global`/`.perUser`
+  (settings-driven admission on native/OpenSubsonic/Jellyfin, legacy `429` rejection for the
+  per-user cap), `scripting.enabled` (ingestion-gate master switch, default disabled),
+  the three legacy podcast retention policies plus enclosure/download-concurrency/HTTP-timeout
+  bounds, and `system.maxUploadSize` for playlist artwork uploads.
+- New administrator-gated troubleshooting API: `GET /api/admin/v1/diagnostics/{selftest,settings,
+  events,bundle}` with pass/warn/fail checks, per-setting consumer/inert classification, a bounded
+  recent WARN/ERROR ring buffer with correlation ids, and a redacted support bundle.
+- New admin chart curation API (`/api/admin/v1/charts*`): create/update/delete charts, replace
+  ranked items, resolve items to catalog Artists/Releases, and ranked/missing reports.
+- `settings_inventory.rs` classifies all 209 registry keys as consumed or deliberately inert, with a
+  test preventing drift from the registry.
+- Structured JSON logging (`MELODEE__LOGGING__FORMAT=json`), request completion logs (normalized
+  route, status, latency, correlation id; WARN for 5xx/429/slow), and a client-contract route guard
+  covering every route the shipped Android Auto and MeloAmp clients call.
+- ADR-0182 (library administration is configured roots plus ACL scopes) and ADR-0183 (bounded
+  direct-play admission replaces the legacy unlimited streaming default).
+- Parity-matrix corrections for metadata transforms, template/theme import, custom-block
+  retirement, library administration, and chart curation, with a 2026-11-09 reconciliation
+  addendum.
+
 ### Operational (R6: Hardening & Closure)
 
 - `melodee doctor --deep`: extended health probe with PostgreSQL connectivity + SELECT 1

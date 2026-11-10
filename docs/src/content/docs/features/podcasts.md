@@ -33,8 +33,13 @@ RSS/Atom feeds, including CDATA metadata, and idempotently upsert episodes by fe
 Downloads use just-in-time PostgreSQL leases, claimant-specific temporary files, bounded retries and
 body sizes, and no-replace publication. Expired leases are recoverable without allowing a stale
 worker to remove its successor's temporary file;
-retention excludes bookmarked episodes; cleanup removes only verified direct children of the owned
-podcast root in bounded, set-based batches. Feed and enclosure requests follow redirects
+retention excludes bookmarked episodes (a bookmarked download is never deleted, because removing
+it would silently break resume state); cleanup removes only verified direct children of the owned
+podcast root in bounded, set-based batches. The legacy cleanup policies are honored from settings:
+delete downloads older than `podcast.retention.downloadedEpisodesInDays`, keep only the newest
+`podcast.retention.keepLastNEpisodes` per channel, and delete already-played episodes when
+`podcast.retention.keepUnplayedOnly` is enabled, in addition to each channel's own
+`maxDownloadedEpisodes`/`maxStorageBytes` limits ([settings](../installation/configuration.md#podcast-retention-and-download-policy)). Feed and enclosure requests follow redirects
 only under the legacy-shaped bounded policy: each hop is independently scheme-checked and
 DNS-validated against non-public IPv4/IPv6 destinations (including translated or embedded
 private addresses), and the hop count is capped by the configured `podcast.http.maxRedirects`

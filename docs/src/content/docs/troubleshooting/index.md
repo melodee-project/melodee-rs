@@ -12,6 +12,8 @@ the relevant feature or configuration documentation.
 
 - Melodee always writes server logs to the console. Set `MELODEE__LOGGING__LEVEL` to `trace`,
   `debug`, `info`, `warn`, or `error` to choose the verbosity.
+- Set `MELODEE__LOGGING__FORMAT=json` to emit one structured JSON object per event for a log
+  shipper or an automation agent. The default is human-readable text.
 - Set `MELODEE__LOGGING__DIRECTORY` to additionally append the same events to
   `<directory>/YYYY-MM-DD.log`. The date is UTC; the server creates the directory,
   reports the current file at startup, and switches files after UTC midnight. Older files are
@@ -22,6 +24,39 @@ the relevant feature or configuration documentation.
   Failed**, read the **Last error** column, select the row for its inspector/history, or run
   `melodee-cli work show <id>`. Worker warning events also include the durable error code and
   message, so the reason does not disappear when a retry is scheduled.
+
+## Runtime diagnostics API
+
+When you have an administrator token, `GET /api/admin/v1/diagnostics/*` answers most "is this
+deployment healthy, and what does this setting actually do?" questions without shell access:
+
+| Route | Use it for |
+| --- | --- |
+| `GET /api/admin/v1/diagnostics/selftest` | One pass/warn/fail verdict per subsystem (database, migrations, settings, storage/media tools, search, streaming, deny lists, notifications) with an actionable hint. |
+| `GET /api/admin/v1/diagnostics/settings` | Every effective setting, its winning layer (`environment`, `config-file`, `database`, `default`), its registered kind, and its runtime consumer or the reason it is inert. Use this when a configured value appears to have no effect. |
+| `GET /api/admin/v1/diagnostics/events?limit=100` | The most recent 200 `WARN`/`ERROR` events with correlation ids, without reading container logs. |
+| `GET /api/admin/v1/diagnostics/bundle` | A single redacted support report (version, uptime, selftest, settings summary, streaming admission, recent events) to attach to an issue. |
+
+See the [Admin API](../api/admin-api/#runtime-diagnostics) for the exact response shapes. Every
+route requires an administrator token (`401` anonymous, `403` non-administrator).
+
+## Requests that return `429`
+
+- `429` from a native, OpenSubsonic, or Jellyfin stream means the per-user concurrent stream cap
+  (`streaming.maxConcurrentStreams.perUser`) is configured and this user exceeded it. Stop the
+  extra stream and retry; the response body is the legacy `"Too many concurrent streams"` shape.
+- `429` from authentication means the authentication rate window was exceeded. Respect
+  `Retry-After`.
+- The global direct-play cap queues requests with backpressure rather than rejecting; check
+  `GET /api/admin/v1/diagnostics/bundle` → `streaming` for admitted/available capacity.
+
+## Requests that return `403 BLACKLISTED`
+
+An operator deny list matched: `security.blacklistedEmails` or `security.blacklistedIPs`.
+The settings are cached for 10 seconds, so a change takes effect without a restart. Check
+`GET /api/admin/v1/diagnostics/selftest` → `blacklist` for loaded counts, and
+`GET /api/admin/v1/diagnostics/settings` for the winning layer of each list. A blocked request
+logs `WARN` with the rule name only.
 
 ## Server and queue checks
 

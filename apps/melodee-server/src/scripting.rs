@@ -52,7 +52,7 @@ use melodee_ingestion::{
 };
 use melodee_persistence::{
     MAX_TIMEOUT_MS, NewScriptRun, RegisteredScript, ScriptRegistryStore, ScriptRun,
-    ScriptRunOutcome, ScriptRunStore, ScriptStoreError,
+    ScriptRunOutcome, ScriptRunStore, ScriptStoreError, SettingsResolver,
 };
 use serde::Serialize;
 use serde_json::Value as JsonValue;
@@ -66,6 +66,13 @@ use tracing::warn;
 /// inspection.
 pub const EVENT_DIRECTORY_PROCESSING_START: &str = "directoryProcessingStart";
 
+/// Legacy master switch for hook execution (`scripting.enabled`, registered
+/// default `false`). The shell/JS hook path was previously always live in the
+/// Rust server regardless of this setting, so an operator who disabled
+/// scripting still saw hooks run. It is read through the layered settings on
+/// each candidate so a config change takes effect without a restart, and it
+/// gates [`EVENT_DIRECTORY_PROCESSING_START`] evaluation.
+///
 /// Events with a live server-side evaluation point in this build. The
 /// registry accepts any event name (operator forward-compatibility), but
 /// only wired events ever fire; the admin API reports this list so operators
@@ -620,6 +627,26 @@ impl ScriptingService {
         }
     }
 
+    /// Legacy `scripting.enabled` master switch. A resolution failure keeps
+    /// the documented legacy default (disabled) and is logged: an unreadable
+    /// settings layer must not silently enable script execution.
+    async fn global_enabled(&self) -> bool {
+        match SettingsResolver::new(&self.pool)
+            .resolve("scripting.enabled")
+            .await
+        {
+            Ok(resolved) => resolved
+                .value
+                .as_ref()
+                .and_then(JsonValue::as_bool)
+                .unwrap_or(false),
+            Err(error) => {
+                warn!(%error, "unable to resolve scripting.enabled; treating scripting as disabled");
+                false
+            }
+        }
+    }
+
     /// Builds the `directoryProcessingStart` ctx from the verified candidate
     /// snapshot (blocking tag I/O off the runtime) and evaluates the hook.
     pub async fn evaluate_directory_processing_start(
@@ -627,6 +654,9 @@ impl ScriptingService {
         candidate_root: &Path,
         snapshot: &CandidateSnapshot,
     ) -> Result<HookVerdict, ScriptingError> {
+        if !self.global_enabled().await {
+            return Ok(HookVerdict::allow());
+        }
         // The enabled-script lookup is the cheap pre-gate: with no scripts
         // installed (the default) the pipeline pays one indexed query per
         // claimed candidate and no ctx is ever built.

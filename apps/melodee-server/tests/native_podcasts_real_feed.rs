@@ -427,12 +427,19 @@ async fn real_itunes_feed_drives_refresh_download_and_playback_state_end_to_end(
         allow_loopback_http: true,
         ..melodee_server::podcast_worker::PodcastConfig::default()
     };
+    // Legacy `PodcastDownloadJob` processes at most
+    // `podcast.download.maxConcurrent.global` episodes per pass (default 2),
+    // so three queued enclosures need two bounded passes.
+    let first_pass = melodee_server::podcast_worker::run_podcast_once(&db.pool, &worker_config)
+        .await
+        .expect("first download pass");
+    let second_pass = melodee_server::podcast_worker::run_podcast_once(&db.pool, &worker_config)
+        .await
+        .expect("second download pass");
     assert_eq!(
-        melodee_server::podcast_worker::run_podcast_once(&db.pool, &worker_config)
-            .await
-            .expect("download pass"),
-        3,
-        "all three queued enclosures download in one bounded pass"
+        (first_pass, second_pass),
+        (2, 1),
+        "downloads respect the configured per-pass bound"
     );
 
     // Byte-identical storage and durable download rows per episode.

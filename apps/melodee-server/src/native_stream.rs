@@ -370,6 +370,8 @@ pub enum StreamError {
     InvalidRange,
     #[error("stream capacity is unavailable")]
     CapacityClosed,
+    #[error("too many concurrent streams for this user")]
+    TooManyStreams,
     #[error("media asset is unavailable")]
     AssetUnavailable,
     #[error("media asset metadata is invalid")]
@@ -523,15 +525,71 @@ fn validate_relative_asset_path(path: &Path) -> Result<(), StreamError> {
 pub struct DirectPlayService {
     root: CanonicalAssetRoot,
     permits: Arc<Semaphore>,
+    capacity: usize,
+    per_user: Option<Arc<PerUserStreams>>,
     gauge: Option<Arc<crate::resource_bounds::ResourceGauge>>,
 }
 
-/// A held direct-play admission: the semaphore permit plus the optional
-/// resource gauge guard, released together when the response body (or a
-/// cancelled handler) drops.
+/// Per-user concurrent direct-play admission
+/// (`streaming.maxConcurrentStreams.perUser`). Legacy rejects over-limit
+/// requests with `429` instead of queueing them, so admission here is
+/// non-blocking: a client that opens too many streams gets a deterministic
+/// error rather than an unbounded wait.
+#[derive(Debug)]
+struct PerUserStreams {
+    limit: usize,
+    active: std::sync::Mutex<std::collections::HashMap<Uuid, usize>>,
+}
+
+impl PerUserStreams {
+    fn try_enter(self: &Arc<Self>, user: Uuid) -> Result<UserStreamGuard, StreamError> {
+        let mut active = self
+            .active
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let count = active.entry(user).or_insert(0);
+        if *count >= self.limit {
+            return Err(StreamError::TooManyStreams);
+        }
+        *count += 1;
+        Ok(UserStreamGuard {
+            tracker: Arc::clone(self),
+            user,
+        })
+    }
+}
+
+/// Releases one per-user slot when the response body (or a cancelled
+/// handler) drops.
+#[derive(Debug)]
+struct UserStreamGuard {
+    tracker: Arc<PerUserStreams>,
+    user: Uuid,
+}
+
+impl Drop for UserStreamGuard {
+    fn drop(&mut self) {
+        let mut active = self
+            .tracker
+            .active
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(count) = active.get_mut(&self.user) {
+            *count = count.saturating_sub(1);
+            if *count == 0 {
+                active.remove(&self.user);
+            }
+        }
+    }
+}
+
+/// A held direct-play admission: the semaphore permit, the optional per-user
+/// slot, and the optional resource gauge guard, released together when the
+/// response body (or a cancelled handler) drops.
 #[derive(Debug)]
 struct Admission {
     _semaphore: OwnedSemaphorePermit,
+    _user: Option<UserStreamGuard>,
     _gauge: Option<crate::resource_bounds::GaugePermit>,
 }
 
@@ -541,8 +599,41 @@ impl DirectPlayService {
         (max_concurrent_streams > 0).then(|| Self {
             root,
             permits: Arc::new(Semaphore::new(max_concurrent_streams)),
+            capacity: max_concurrent_streams,
+            per_user: None,
             gauge: None,
         })
+    }
+
+    /// Enables the per-user concurrent stream cap. `0` disables it and
+    /// preserves the legacy default (no per-user cap).
+    #[must_use]
+    pub fn with_per_user_limit(mut self, limit: usize) -> Self {
+        self.per_user = (limit > 0).then(|| {
+            Arc::new(PerUserStreams {
+                limit,
+                active: std::sync::Mutex::new(std::collections::HashMap::new()),
+            })
+        });
+        self
+    }
+
+    /// Whether a per-user cap is active (diagnostics).
+    #[must_use]
+    pub fn per_user_limit(&self) -> Option<usize> {
+        self.per_user.as_ref().map(|tracker| tracker.limit)
+    }
+
+    /// Configured process-wide direct-play capacity.
+    #[must_use]
+    pub const fn capacity(&self) -> usize {
+        self.capacity
+    }
+
+    /// Currently free direct-play permits (capacity minus admitted streams).
+    #[must_use]
+    pub fn available_permits(&self) -> usize {
+        self.permits.available_permits()
     }
 
     /// Attaches the process resource-bounds gauge for the direct-play class
@@ -561,9 +652,15 @@ impl DirectPlayService {
         self.permits.close();
     }
 
-    /// Blocking acquisition with gauge instrumentation: waiters are visible
-    /// while queued and cancellation of the future simply never admits.
-    async fn acquire(&self) -> Result<Admission, StreamError> {
+    /// Admission with gauge instrumentation. The per-user cap is checked
+    /// first and fails fast (legacy `429`); the global cap then queues with
+    /// cancellation-safe waiting, so waiters are visible in the gauge while
+    /// queued.
+    async fn acquire(&self, user: Option<Uuid>) -> Result<Admission, StreamError> {
+        let user_guard = match (&self.per_user, user) {
+            (Some(tracker), Some(user)) => Some(tracker.try_enter(user)?),
+            _ => None,
+        };
         if let Some(gauge) = &self.gauge {
             gauge.begin_wait();
         }
@@ -580,6 +677,7 @@ impl DirectPlayService {
         let gauge = self.gauge.as_ref().map(ResourceGauge::admit);
         Ok(Admission {
             _semaphore: permit,
+            _user: user_guard,
             _gauge: gauge,
         })
     }
@@ -590,6 +688,7 @@ impl DirectPlayService {
         asset: &PlayableAsset,
         range_header: Option<&str>,
         head_only: bool,
+        user: Option<Uuid>,
     ) -> Result<Response<Body>, StreamError> {
         let range = range_header
             .map(|value| parse_byte_range(value, asset.byte_size))
@@ -603,7 +702,7 @@ impl DirectPlayService {
         });
         let content_type = HeaderValue::from_str(&asset.mime_type)
             .map_err(|_| StreamError::InvalidAssetMetadata)?;
-        let permit = self.acquire().await?;
+        let permit = self.acquire(user).await?;
         let file = self.root.open_asset(asset)?;
 
         let status = if range.is_some() {
@@ -645,11 +744,12 @@ impl DirectPlayService {
         &self,
         asset: &PlayableAsset,
         max_bytes: u64,
+        user: Option<Uuid>,
     ) -> Result<Vec<u8>, StreamError> {
         if asset.byte_size == 0 || asset.byte_size > max_bytes {
             return Err(StreamError::AssetUnavailable);
         }
-        let permit = self.acquire().await?;
+        let permit = self.acquire(user).await?;
         let mut file = self.root.open_asset(asset)?;
         let capacity =
             usize::try_from(asset.byte_size).map_err(|_| StreamError::AssetUnavailable)?;
@@ -676,11 +776,12 @@ impl DirectPlayService {
         asset: &PlayableAsset,
         start: u64,
         end_inclusive: u64,
+        user: Option<Uuid>,
     ) -> Result<Body, StreamError> {
         if asset.byte_size == 0 || end_inclusive < start || end_inclusive >= asset.byte_size {
             return Err(StreamError::InvalidRange);
         }
-        let permit = self.acquire().await?;
+        let permit = self.acquire(user).await?;
         let file = self.root.open_asset(asset)?;
         stream_file(
             file,
@@ -694,11 +795,15 @@ impl DirectPlayService {
     }
 
     /// Streams the whole asset (no Range handling).
-    pub async fn stream_full(&self, asset: &PlayableAsset) -> Result<Body, StreamError> {
+    pub async fn stream_full(
+        &self,
+        asset: &PlayableAsset,
+        user: Option<Uuid>,
+    ) -> Result<Body, StreamError> {
         if asset.byte_size == 0 {
             return Err(StreamError::AssetUnavailable);
         }
-        self.stream_range(asset, 0, asset.byte_size - 1).await
+        self.stream_range(asset, 0, asset.byte_size - 1, user).await
     }
 
     /// Whether the catalog-recorded asset currently exists on disk with the
@@ -718,6 +823,7 @@ impl DirectPlayService {
         &self,
         canonical_relative_path: &str,
         max_bytes: u64,
+        user: Option<Uuid>,
     ) -> Result<Option<Vec<u8>>, StreamError> {
         let Some(byte_len) = self.root.relative_len(canonical_relative_path)? else {
             return Ok(None);
@@ -725,7 +831,7 @@ impl DirectPlayService {
         if byte_len == 0 || byte_len > max_bytes {
             return Err(StreamError::AssetUnavailable);
         }
-        let permit = self.acquire().await?;
+        let permit = self.acquire(user).await?;
         let mut file = self.root.open_relative_file(canonical_relative_path)?;
         let capacity = usize::try_from(byte_len).map_err(|_| StreamError::AssetUnavailable)?;
         tokio::task::spawn_blocking(move || {

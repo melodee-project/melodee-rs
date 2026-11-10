@@ -28,6 +28,7 @@ use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use super::{Authenticated, NativeClientBinding, NativePrincipal, NativeState, dto::UserDto};
+use crate::security::{BlacklistCache, forbidden_blacklisted};
 
 pub const ENV_NATIVE_JWT_KEY: &str = "MELODEE__NATIVE__AUTH__JWT_KEY";
 pub const ENV_NATIVE_MAX_SESSION_DAYS: &str = "MELODEE__NATIVE__AUTH__MAX_SESSION_DAYS";
@@ -45,6 +46,11 @@ pub const ENV_GOOGLE_HOSTED_DOMAINS: &str = "MELODEE__NATIVE__AUTH__GOOGLE__HOST
 const ACCESS_LIFETIME: Duration = Duration::minutes(15);
 const REFRESH_LIFETIME: Duration = Duration::days(30);
 const COOKIE_LIFETIME: Duration = Duration::days(14);
+/// Legacy `security.passwordResetTokenExpiryMinutes` default (minutes).
+const DEFAULT_PASSWORD_RESET_TTL_MINUTES: i64 = 60;
+/// Legacy registry bound: a non-positive value would issue already-expired
+/// tokens, so it is clamped to one minute rather than failing startup.
+const MIN_PASSWORD_RESET_TTL_MINUTES: i64 = 1;
 pub const NATIVE_COOKIE_NAME: &str = "melodee_auth";
 const DUMMY_BCRYPT: &str = "$2b$12$BP5HSYGph9ZF1C7Jco2fieFhmgb1LzWDjT5V8ZrL4Pk3C9Drn5lDW";
 const MAX_AUTH_BODY_BYTES: usize = 64 * 1024;
@@ -62,6 +68,8 @@ pub struct NativeAuthService {
     rate_attempts: i32,
     rate_window_seconds: i64,
     rate_max_keys: i64,
+    password_reset_ttl_minutes: i64,
+    blacklist: Option<Arc<BlacklistCache>>,
     google: Option<Arc<GoogleOidcService>>,
 }
 
@@ -91,6 +99,11 @@ impl fmt::Debug for NativeAuthService {
             .field("rate_attempts", &self.rate_attempts)
             .field("rate_window_seconds", &self.rate_window_seconds)
             .field("rate_max_keys", &self.rate_max_keys)
+            .field(
+                "password_reset_ttl_minutes",
+                &self.password_reset_ttl_minutes,
+            )
+            .field("configured_blacklist", &self.blacklist.is_some())
             .field("google_enabled", &self.google.is_some())
             .finish()
     }
@@ -302,8 +315,38 @@ impl NativeAuthService {
             rate_attempts: 10,
             rate_window_seconds: 60,
             rate_max_keys: 100_000,
+            password_reset_ttl_minutes: DEFAULT_PASSWORD_RESET_TTL_MINUTES,
+            blacklist: None,
             google: None,
         })
+    }
+
+    /// Applies the operator security settings resolved from the layered
+    /// settings store: `security.passwordResetTokenExpiryMinutes` (legacy
+    /// `UserPasswordResetService` parity) and the configuration deny lists
+    /// (`security.blacklistedEmails` / `security.blacklistedIPs`).
+    #[must_use]
+    pub fn with_security_settings(
+        mut self,
+        password_reset_ttl_minutes: i64,
+        blacklist: Arc<BlacklistCache>,
+    ) -> Self {
+        self.password_reset_ttl_minutes =
+            password_reset_ttl_minutes.max(MIN_PASSWORD_RESET_TTL_MINUTES);
+        self.blacklist = Some(blacklist);
+        self
+    }
+
+    /// Reset-token lifetime in minutes (`security.passwordResetTokenExpiryMinutes`).
+    #[must_use]
+    pub const fn password_reset_ttl_minutes(&self) -> i64 {
+        self.password_reset_ttl_minutes
+    }
+
+    /// Configuration deny-list cache, when the process installed one.
+    #[must_use]
+    pub fn blacklist(&self) -> Option<&Arc<BlacklistCache>> {
+        self.blacklist.as_ref()
     }
 
     /// Loads configuration without ever including the secret value in errors.
@@ -671,6 +714,60 @@ fn account_unavailable(user: &StoredNativeUser) -> Option<Response> {
     )
 }
 
+/// Resolves the trusted client binding for audit/deny-list checks. `None`
+/// means the forwarding chain could not be trusted; callers that already
+/// reject such requests keep their existing handling.
+fn resolve_binding(
+    state: &NativeState,
+    peer: SocketAddr,
+    headers: &axum::http::HeaderMap,
+) -> Option<String> {
+    state
+        .client_addresses
+        .resolve(
+            peer,
+            header_value(headers, "forwarded"),
+            header_value(headers, "x-forwarded-for"),
+        )
+        .ok()
+        .map(|binding| binding.to_string())
+}
+
+/// Applies the operator's configuration deny lists
+/// (`security.blacklistedEmails` / `security.blacklistedIPs`). The per-user
+/// `blacklisted` column is a separate authority and stays in
+/// [`account_unavailable`].
+async fn config_blacklisted(state: &NativeState, email: &str, client: &str) -> bool {
+    let Some(cache) = state.auth.blacklist() else {
+        return false;
+    };
+    match cache.evaluate(email, client).await {
+        Some(reason) => {
+            tracing::warn!(
+                reason = reason.as_str(),
+                "request denied by configured security blacklist"
+            );
+            true
+        }
+        None => false,
+    }
+}
+
+/// The combined account-state gate for credential issuance: per-user state
+/// first, then the operator deny list. Returns the frozen 403 envelope.
+async fn account_denied(
+    state: &NativeState,
+    user: &StoredNativeUser,
+    client: &str,
+) -> Option<Response> {
+    if let Some(response) = account_unavailable(user) {
+        return Some(response);
+    }
+    config_blacklisted(state, &user.email, client)
+        .await
+        .then(forbidden_blacklisted)
+}
+
 async fn enforce_auth_rate(
     state: &NativeState,
     peer: SocketAddr,
@@ -955,6 +1052,12 @@ pub async fn authenticate_request(
         Ok(binding) => binding.to_string(),
         Err(_) => return StatusCode::UNAUTHORIZED.into_response(),
     };
+    // Operator deny lists apply to authenticated traffic exactly as the
+    // legacy API filter did (403 BLACKLISTED, empty body replaced by the
+    // frozen envelope).
+    if config_blacklisted(&state, &user.email, &binding).await {
+        return forbidden_blacklisted();
+    }
     request.extensions_mut().insert(NativePrincipal {
         user_id: user.id,
         public_api_id: user.public_api_id,
@@ -1000,6 +1103,11 @@ pub async fn authenticate_cookie_request(
         Ok(binding) => binding.to_string(),
         Err(_) => return cookie_challenge(&state, request.uri()),
     };
+    if config_blacklisted(&state, &user.email, &binding).await {
+        // Cookie sign-in mirrors the API filter: deny the request without
+        // issuing a redirect loop into the login page.
+        return forbidden_blacklisted();
+    }
     request.extensions_mut().insert(NativePrincipal {
         user_id: user.id,
         public_api_id: user.public_api_id,
@@ -1031,6 +1139,10 @@ async fn authenticate(
         Ok(None) => return invalid_credentials(),
         Err(()) => return unavailable(),
     };
+    let client = resolve_binding(&state, peer, &headers).unwrap_or_default();
+    if let Some(response) = account_denied(&state, &user, &client).await {
+        return response;
+    }
     match issue_login(&state, &user, None, OffsetDateTime::now_utc()).await {
         Ok(response) => Json(response).into_response(),
         Err(()) => unavailable(),
@@ -1105,6 +1217,10 @@ async fn cookie_sign_in(
         Ok(None) => return invalid_credentials(),
         Err(()) => return unavailable(),
     };
+    let client = resolve_binding(&state, peer, &headers).unwrap_or_default();
+    if let Some(response) = account_denied(&state, &user, &client).await {
+        return response;
+    }
     issue_cookie_response(&state, &user)
 }
 
@@ -1199,6 +1315,10 @@ async fn google_authenticate(
         Ok(user) => user,
         Err(response) => return *response,
     };
+    let client = resolve_binding(&state, peer, &headers).unwrap_or_default();
+    if let Some(response) = account_denied(&state, &user, &client).await {
+        return response;
+    }
     match issue_login(
         &state,
         &user,
@@ -1225,6 +1345,10 @@ async fn google_cookie_authenticate(
         Ok(user) => user,
         Err(response) => return *response,
     };
+    let client = resolve_binding(&state, peer, &headers).unwrap_or_default();
+    if let Some(response) = account_denied(&state, &user, &client).await {
+        return response;
+    }
     issue_cookie_response(&state, &user)
 }
 
@@ -1255,7 +1379,7 @@ async fn password_reset_request(
                 normalized_email: &normalized,
                 token_digest: &digest,
                 issued_at: now,
-                expires_at: now + Duration::hours(1),
+                expires_at: now + Duration::minutes(state.auth.password_reset_ttl_minutes()),
             },
         )
         .await
@@ -1403,6 +1527,17 @@ async fn refresh_token(
             ..
         }) => match AuthStore::new().user_by_id(&state.pool, user_id).await {
             Ok(Some(user)) => {
+                let client = resolve_binding(&state, peer, &headers).unwrap_or_default();
+                if account_unavailable(&user).is_none()
+                    && config_blacklisted(&state, &user.email, &client).await
+                {
+                    // Legacy revokes every refresh token when a blacklisted
+                    // account tries to refresh; keep that containment.
+                    let _ = AuthStore::new()
+                        .revoke_all_refresh_tokens(&state.pool, user.id, now, "blacklisted")
+                        .await;
+                    return forbidden_blacklisted();
+                }
                 if let Some(response) = account_unavailable(&user) {
                     response
                 } else {

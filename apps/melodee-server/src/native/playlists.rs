@@ -33,7 +33,13 @@ use super::{
 
 const DEFAULT_PAGE_SIZE: u16 = 50;
 const MAX_PAGE_SIZE: u16 = 500;
+/// Hard process cap for playlist artwork. The operator-facing bound is
+/// `system.maxUploadSize` (legacy default 5 MiB), enforced per request in the
+/// handler; this constant keeps the route layer from buffering more than a
+/// bounded amount regardless of configuration.
 const MAX_IMAGE_BYTES: usize = 10 * 1024 * 1024;
+/// Legacy `system.maxUploadSize` default (`MelodeeDbContext` seed).
+const DEFAULT_MAX_UPLOAD_BYTES: i64 = 5_242_880;
 const MAX_M3U_BYTES: usize = 2 * 1024 * 1024;
 
 #[derive(Debug, Deserialize)]
@@ -453,8 +459,9 @@ pub async fn upload_playlist_image(
     multipart: Result<Multipart, MultipartRejection>,
 ) -> Result<StatusCode, NativeApiError> {
     require_playlist_owner(&state, principal.user_id, id).await?;
+    let max_upload_bytes = configured_max_upload_bytes(&state).await;
     let multipart = multipart.map_err(|_| NativeApiError::CapturedMissingFile)?;
-    let upload = read_file_part(multipart, MAX_IMAGE_BYTES).await?;
+    let upload = read_file_part(multipart, max_upload_bytes).await?;
     let mime = image_mime_from_magic(&upload.bytes).ok_or(NativeApiError::BadRequest)?;
     let bytes = validate_uploaded_image(upload.bytes)
         .await
@@ -997,6 +1004,28 @@ fn playlist_updated_at(playlist: &NativePlaylist) -> Result<String, NativeApiErr
 struct UploadedFile {
     file_name: Option<String>,
     bytes: Vec<u8>,
+}
+
+/// Effective playlist-upload bound: `system.maxUploadSize` (legacy default
+/// 5 MiB), clamped to the process hard cap. A settings failure falls back to
+/// the legacy default rather than unbounded.
+async fn configured_max_upload_bytes(state: &NativeState) -> usize {
+    let resolved = melodee_persistence::SettingsResolver::new(&state.pool)
+        .resolve("system.maxUploadSize")
+        .await;
+    match resolved {
+        Ok(setting) => setting
+            .value
+            .and_then(|value| value.as_i64())
+            .filter(|value| *value > 0)
+            .unwrap_or(DEFAULT_MAX_UPLOAD_BYTES)
+            .clamp(1, i64::try_from(MAX_IMAGE_BYTES).unwrap_or(i64::MAX))
+            as usize,
+        Err(error) => {
+            tracing::warn!(%error, "unable to resolve system.maxUploadSize; using legacy default");
+            usize::try_from(DEFAULT_MAX_UPLOAD_BYTES).unwrap_or(MAX_IMAGE_BYTES)
+        }
+    }
 }
 
 async fn read_file_part(

@@ -1616,3 +1616,145 @@ async fn mel2_registration_profile_is_self_only_and_setting_controlled() {
     assert!(persisted_admin);
     db.drop().await;
 }
+
+/// Installs the operator security policy on an existing fixture state
+/// (configured deny lists + a settings-driven reset-token lifetime).
+fn install_security(state: &mut NativeState, db: &common::TestDb, reset_ttl_minutes: i64) {
+    state.auth = Arc::new(
+        NativeAuthService::new(
+            "test-native-jwt-key-that-is-at-least-32-bytes".to_string(),
+            90,
+        )
+        .expect("auth config")
+        .with_development_reset_tokens_for_tests()
+        .with_security_settings(
+            reset_ttl_minutes,
+            Arc::new(melodee_server::security::BlacklistCache::new(
+                db.pool.clone(),
+            )),
+        ),
+    );
+}
+
+#[tokio::test]
+async fn configured_email_blacklist_denies_login_and_authenticated_requests() {
+    let db = common::TestDb::create("server_native_auth_blacklist").await;
+    let mut state = state(&db).await;
+    install_security(&mut state, &db, 60);
+
+    // A normal login first, so the bearer path can be exercised afterwards.
+    let (status, login) = request(
+        state.clone(),
+        "/api/v1/auth/authenticate",
+        serde_json::json!({"userName":"phase0-fixture","password":"Mel0deeR0cks!"}),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let token = login["token"].as_str().expect("token").to_string();
+
+    melodee_persistence::SettingsStore::new()
+        .set(
+            &db.pool,
+            "security.blacklistedEmails",
+            &serde_json::json!("[\"phase0-fixture@example.test\"]"),
+            None,
+            time::OffsetDateTime::now_utc(),
+        )
+        .await
+        .expect("store blacklist");
+    // The policy cache is short-lived; a fresh cache sees the stored value.
+    install_security(&mut state, &db, 60);
+    state.auth.blacklist().expect("blacklist cache");
+
+    let (status, body) = request(
+        state.clone(),
+        "/api/v1/auth/authenticate",
+        serde_json::json!({"userName":"phase0-fixture","password":"Mel0deeR0cks!"}),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["code"], "BLACKLISTED");
+
+    // Authenticated bearer traffic is denied with the same envelope.
+    let response = raw_authenticated(
+        state.clone(),
+        "GET",
+        "/api/v1/user/me",
+        serde_json::json!({}),
+        &token,
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    let body: serde_json::Value = serde_json::from_slice(
+        &response
+            .into_body()
+            .collect()
+            .await
+            .expect("body")
+            .to_bytes(),
+    )
+    .expect("json");
+    assert_eq!(body["code"], "BLACKLISTED");
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn configured_blacklisted_ip_denies_login() {
+    let db = common::TestDb::create("server_native_auth_blacklist_ip").await;
+    let mut state = state(&db).await;
+    install_security(&mut state, &db, 60);
+    melodee_persistence::SettingsStore::new()
+        .set(
+            &db.pool,
+            "security.blacklistedIPs",
+            &serde_json::json!("[\"127.0.0.1\"]"),
+            None,
+            time::OffsetDateTime::now_utc(),
+        )
+        .await
+        .expect("store blacklist");
+    install_security(&mut state, &db, 60);
+
+    let (status, body) = request(
+        state,
+        "/api/v1/auth/authenticate",
+        serde_json::json!({"userName":"phase0-fixture","password":"Mel0deeR0cks!"}),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["code"], "BLACKLISTED");
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn configured_reset_token_lifetime_is_honored() {
+    let db = common::TestDb::create("server_native_auth_reset_ttl").await;
+    let mut state = state(&db).await;
+    install_security(&mut state, &db, 5);
+    let (status, body) = request(
+        state,
+        "/api/v1/auth/password-reset/request",
+        serde_json::json!({"email":"phase0-fixture@example.test"}),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body["resetToken"].as_str().is_some(),
+        "development token: {body}"
+    );
+
+    let (issued_at, expires_at): (time::OffsetDateTime, time::OffsetDateTime) = sqlx::query_as(
+        "SELECT issued_at, expires_at FROM native_password_reset_tokens \
+         ORDER BY issued_at DESC LIMIT 1",
+    )
+    .fetch_one(&db.pool)
+    .await
+    .expect("reset token row");
+    let lifetime_minutes = (expires_at - issued_at).whole_minutes();
+    assert_eq!(lifetime_minutes, 5, "settings-driven reset lifetime");
+    db.drop().await;
+}

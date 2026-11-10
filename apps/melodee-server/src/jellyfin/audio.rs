@@ -311,8 +311,14 @@ async fn stream(
                 return ranged_response_416(asset.byte_size, true);
             }
             RangeResolution::Resolved { start, end } => {
-                let body = match direct_play.stream_range(&asset, start, end).await {
+                let body = match direct_play
+                    .stream_range(&asset, start, end, Some(principal.user_id))
+                    .await
+                {
                     Ok(body) => body,
+                    Err(crate::native_stream::StreamError::TooManyStreams) => {
+                        return super::error::too_many_requests("Too many concurrent streams.");
+                    }
                     Err(_) => return not_found("Audio file not found."),
                 };
                 let length = end - start + 1;
@@ -330,8 +336,14 @@ async fn stream(
         }
     }
 
-    let body = match direct_play.stream_full(&asset).await {
+    let body = match direct_play
+        .stream_full(&asset, Some(principal.user_id))
+        .await
+    {
         Ok(body) => body,
+        Err(crate::native_stream::StreamError::TooManyStreams) => {
+            return super::error::too_many_requests("Too many concurrent streams.");
+        }
         Err(_) => return not_found("Audio file not found."),
     };
     let mut response = (StatusCode::OK, body).into_response();
@@ -460,7 +472,7 @@ async fn lyrics(state: JfState, id: String, headers: HeaderMap, uri: Uri) -> Res
         _ => format!("{}.lrc", asset.canonical_relative_path),
     };
     let bytes = match direct_play
-        .read_relative_bounded(&lrc_path, MAX_LYRIC_BYTES)
+        .read_relative_bounded(&lrc_path, MAX_LYRIC_BYTES, None)
         .await
     {
         Ok(Some(bytes)) => bytes,
@@ -545,8 +557,14 @@ async fn download_file(
                 return ranged_response_416(asset.byte_size, true);
             }
             RangeResolution::Resolved { start, end } => {
-                let body = match direct_play.stream_range(&asset, start, end).await {
+                let body = match direct_play
+                    .stream_range(&asset, start, end, Some(principal.user_id))
+                    .await
+                {
                     Ok(body) => body,
+                    Err(crate::native_stream::StreamError::TooManyStreams) => {
+                        return super::error::too_many_requests("Too many concurrent streams.");
+                    }
                     Err(_) => return not_found("File not found."),
                 };
                 let length = end - start + 1;
@@ -565,8 +583,14 @@ async fn download_file(
         }
     }
 
-    let body = match direct_play.stream_full(&asset).await {
+    let body = match direct_play
+        .stream_full(&asset, Some(principal.user_id))
+        .await
+    {
         Ok(body) => body,
+        Err(crate::native_stream::StreamError::TooManyStreams) => {
+            return super::error::too_many_requests("Too many concurrent streams.");
+        }
         Err(_) => return not_found("File not found."),
     };
     let mut response = (StatusCode::OK, body).into_response();

@@ -11,17 +11,23 @@ use time::{Date, OffsetDateTime};
 use tracing_subscriber::{
     EnvFilter,
     fmt::writer::{BoxMakeWriter, MakeWriterExt},
+    layer::SubscriberExt,
+    util::SubscriberInitExt,
 };
 
 pub(crate) const ENV_LOGGING_DIRECTORY: &str = "MELODEE__LOGGING__DIRECTORY";
 pub(crate) const ENV_LOGGING_LEVEL: &str = "MELODEE__LOGGING__LEVEL";
+pub(crate) const ENV_LOGGING_FORMAT: &str = "MELODEE__LOGGING__FORMAT";
 
 const DEFAULT_LOGGING_LEVEL: &str = "info";
+const DEFAULT_LOGGING_FORMAT: &str = "text";
 
 #[derive(Debug, Error)]
 pub(crate) enum LoggingError {
     #[error("{ENV_LOGGING_LEVEL} must be one of trace, debug, info, warn, or error; got {value:?}")]
     InvalidLevel { value: String },
+    #[error("{ENV_LOGGING_FORMAT} must be text or json; got {value:?}")]
+    InvalidFormat { value: String },
     #[error("unable to create logging directory {path}: {source}")]
     CreateDirectory {
         path: PathBuf,
@@ -77,16 +83,43 @@ pub(crate) fn init() -> Result<(), LoggingError> {
         None => (BoxMakeWriter::new(std::io::stderr), None),
     };
 
-    tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        .with_target(true)
-        .with_ansi(false)
-        .with_writer(writer)
+    let format = env::var(ENV_LOGGING_FORMAT)
+        .ok()
+        .map(|value| value.trim().to_ascii_lowercase())
+        .unwrap_or_else(|| DEFAULT_LOGGING_FORMAT.to_string());
+    if !matches!(format.as_str(), "text" | "json") {
+        return Err(LoggingError::InvalidFormat { value: format });
+    }
+
+    // Retain recent WARN/ERROR events for the admin diagnostics API. Installing
+    // before the subscriber guarantees events emitted during startup are kept.
+    let events = melodee_server::diagnostics::install(melodee_server::diagnostics::EVENT_CAPACITY);
+    let fmt_layer: Box<dyn tracing_subscriber::Layer<_> + Send + Sync> = if format == "json" {
+        Box::new(
+            tracing_subscriber::fmt::layer()
+                .json()
+                .with_target(true)
+                .with_ansi(false)
+                .with_writer(writer),
+        )
+    } else {
+        Box::new(
+            tracing_subscriber::fmt::layer()
+                .with_target(true)
+                .with_ansi(false)
+                .with_writer(writer),
+        )
+    };
+    tracing_subscriber::registry()
+        .with(filter)
+        .with(fmt_layer)
+        .with(melodee_server::diagnostics::EventBufferLayer::new(events))
         .try_init()
         .map_err(|error| LoggingError::InstallSubscriber(error.to_string()))?;
 
     tracing::info!(
         filter = %filter_description,
+        format = %format,
         log_file = log_file.as_ref().map(|path| path.display().to_string()),
         "logging initialized"
     );

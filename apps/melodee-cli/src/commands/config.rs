@@ -33,7 +33,7 @@ pub(crate) enum ConfigCommands {
         /// Apply the validated import (default: preview only).
         #[arg(long, default_value_t = false)]
         apply: bool,
-        /// Admit keys outside the 190-key registry as custom rows.
+        /// Admit keys outside the 209-key registry as custom rows.
         #[arg(long, default_value_t = false)]
         allow_unknown: bool,
     },

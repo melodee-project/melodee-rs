@@ -930,6 +930,134 @@ semaphore-bounded request-path resource class (`streams.direct_play`, `streams.t
 observational only — they never change admission decisions. Background worker classes are
 bounded separately and reported through the durable queue metrics on the workers surface.
 
+## Chart curation
+
+Charts are curated ranking records. An item that is not linked to a catalog Release is a
+*string observation*, never an identity: resolving an item links it to an existing Artist or
+Release and never merges or creates catalog entities.
+
+```http
+GET    /api/admin/v1/charts
+POST   /api/admin/v1/charts
+GET    /api/admin/v1/charts/{id}
+PATCH  /api/admin/v1/charts/{id}
+DELETE /api/admin/v1/charts/{id}
+PUT    /api/admin/v1/charts/{id}/items
+PUT    /api/admin/v1/charts/{id}/items/{rank}/link
+GET    /api/admin/v1/charts/{id}/ranked
+GET    /api/admin/v1/charts/{id}/missing
+```
+
+Create body (camelCase):
+
+```json
+{
+  "slug": "chart-2026-01",
+  "title": "January 2026",
+  "sourceName": "Example Source",
+  "sourceUrl": "https://example.test/chart",
+  "chartYear": 2026,
+  "description": "Operator notes",
+  "tags": ["curated"],
+  "visible": true,
+  "generatedPlaylistEnabled": false,
+  "items": [
+    {"rank": 1, "artistName": "Artist Name", "releaseTitle": "Release Title", "releaseYear": 2025},
+    {"rank": 2, "artistName": "Another Artist", "releaseTitle": "Another Release",
+     "artistId": "0192…", "releaseId": "0193…"}
+  ]
+}
+```
+
+- `slug` must be non-empty, unique, and contain no whitespace; `title` is required. Strings are
+  bounded (slug 255, title 500, source URL 4096, description 10 000, up to 50 tags of 100
+  characters). A duplicate slug returns `409 chart_exists`.
+- Item ranks must be positive and unique; at most 500 items per request. Item `artistName` and
+  `releaseTitle` are required strings (max 500 characters).
+- Supplying an unknown `artistId` or `releaseId` returns `404 catalog_entity_not_found` and the
+  transaction rolls back — a typo never creates a silently unlinked item.
+- `GET /charts/{id}/ranked` returns every item with `linkedReleaseId`, `catalogReleaseTitle`, and
+  `missing`; `GET /charts/{id}/missing` returns only unresolved items. These are the operator
+  "missing/ranked" reports.
+- `PATCH` is a partial update. Fields you omit are kept; sending `null` for
+  `sourceName`/`sourceUrl`/`chartYear`/`description` clears that field. Changing `slug` to an
+  existing value returns `409`.
+- `DELETE` removes the chart and its items; the action is logged with the acting administrator.
+- `PUT /charts/{id}/items` replaces the whole ranked list atomically.
+
+The chart editor is available through this API and `melodee-cli charts import` (CSV). A dedicated
+Admin UI chart screen is not part of this release; the API is the supported operator surface.
+
+## Runtime diagnostics
+
+These read-only routes are designed for troubleshooting a deployment — by an operator or by an
+automation agent — without shell access. All require an administrator token.
+
+```http
+GET /api/admin/v1/diagnostics/selftest
+GET /api/admin/v1/diagnostics/settings
+GET /api/admin/v1/diagnostics/events?limit=100
+GET /api/admin/v1/diagnostics/bundle
+POST /api/admin/v1/diagnostics/stream-probe
+```
+
+**Selftest** returns `overall` (`pass`/`warn`/`fail`) plus a stable check list:
+
+| Code | Passes when |
+| --- | --- |
+| `database` | a PostgreSQL round trip succeeds |
+| `migrations` | applied migrations equal the binary's head and none failed |
+| `settings` | every effective setting resolves and each has a documented consumer (warn when some are unverified) |
+| `storage` | onboarding storage-path and media-tool checks pass |
+| `search` | search is configured and its projection root exists (warn when disabled) |
+| `streaming` | direct play is configured (fail when the canonical root is missing) |
+| `blacklist` | the configured deny-list cache is installed |
+| `notifications` | email is enabled with SMTP configured (warn otherwise; delivery is fail-degraded) |
+
+Each check carries a `summary`, optional redacted `detail`, and an actionable `hint`.
+
+**Settings** returns every effective setting with its winning layer
+(`environment`, `config-file`, `database`, `default`), redacted value, registered kind, and the
+inventory entry: `consumer` (the Rust module that reads it) or `inertReason` (why it is
+deliberately inert, e.g. retired or a frozen compatibility constant). A key with neither is
+reported as unverified rather than silently ignored. Secrets are always `[REDACTED]`.
+
+```json
+{
+  "generatedAt": "2026-11-09T12:00:00Z",
+  "total": 209,
+  "secretCount": 12,
+  "settings": [
+    {"key": "podcast.retention.keepUnplayedOnly", "value": false, "source": "default",
+     "isSecret": false, "consumer": "podcast_worker", "inertReason": null, "kind": "boolean"}
+  ]
+}
+```
+
+**Events** returns the bounded in-memory ring buffer of the most recent 200 `WARN`/`ERROR`
+events: `timestamp`, `level`, `target` (module path), `message`, and `correlationId`. Only the
+rendered message is retained — never structured field values — and messages are truncated. Use
+it to confirm what failed without reading container logs.
+
+**Stream probe** answers "why will this Track not play?" for the exact resolution path every
+streaming adapter uses. Send `{"trackId": "<track public id>"}`; the response reports a stable
+`verdict`:
+
+| Verdict | Meaning |
+| --- | --- |
+| `ok` | active Release, playable media asset, file present with the recorded byte size |
+| `track_not_found` | no active Release with a playable media asset for that Track |
+| `direct_play_disabled` | canonical storage/publication root is not configured |
+| `asset_file_missing` | the catalog records the asset but the file is missing or its size differs |
+
+It also reports the recorded asset path/size/MIME type, the current admission count and capacity,
+the effective per-user cap, and an actionable `hint`. The probe is read-only and never streams bytes.
+
+**Bundle** combines version/build identity, uptime, the full selftest, settings source counts,
+streaming admission state, and the last 50 events into one redacted document suitable for
+attaching to an issue or handing to an agent. It contains no secrets and no raw paths beyond
+what the selftest checks already report.
+
 ## Error behavior
 
 Errors use a stable JSON envelope with a machine-readable `code`, an operator-safe `message`, and

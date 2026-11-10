@@ -14,7 +14,7 @@
 //!   env/file keep winning at runtime — see `melodee-persistence`
 //!   `settings` module docs).
 //! - `POST /api/admin/v1/config/import?preview=…&allowUnknown=…` validates a
-//!   document against the 190-key registry classification (kinds, numeric
+//!   document against the 209-key registry classification (kinds, numeric
 //!   ranges, enums) and returns the preview diff (added / changed /
 //!   unchanged / secrets by name only / unknown). `preview` defaults to
 //!   `true` — an import never applies silently. The redaction marker is
@@ -86,7 +86,7 @@ pub struct ImportParams {
     /// Defaults to true: imports preview unless explicitly applied.
     #[serde(default = "default_preview")]
     pub preview: bool,
-    /// Admit keys outside the 190-key registry as custom rows.
+    /// Admit keys outside the 209-key registry as custom rows.
     #[serde(default)]
     pub allow_unknown: bool,
 }

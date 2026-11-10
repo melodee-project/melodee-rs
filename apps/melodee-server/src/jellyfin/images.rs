@@ -206,7 +206,10 @@ async fn canonical_artwork_bytes(
         byte_size,
         mime_type: "image/jpeg".to_string(),
     };
-    let Ok(bytes) = service.read_asset_bounded(&asset, MAX_IMAGE_BYTES).await else {
+    let Ok(bytes) = service
+        .read_asset_bounded(&asset, MAX_IMAGE_BYTES, None)
+        .await
+    else {
         return Ok(None);
     };
     Ok(Some(bytes))

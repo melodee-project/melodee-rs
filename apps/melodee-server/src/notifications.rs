@@ -467,8 +467,33 @@ impl NotificationTransport for NoopTransport {
 
 /// Renders stored templates and delivers them through the configured
 /// transport, always recording the outcome in the delivery audit.
+/// Redacted delivery configuration for diagnostics (never includes the SMTP
+/// password or username).
+#[derive(Debug, Clone)]
+pub struct NotificationSettingsSummary {
+    pub enabled: bool,
+    pub from_email: String,
+    pub smtp_host: String,
+    pub smtp_port: u16,
+    pub smtp_configured: bool,
+}
+
+impl NotificationSettingsSummary {
+    fn from_settings(settings: &EmailSettings) -> Self {
+        Self {
+            enabled: settings.enabled,
+            from_email: settings.from_email.clone(),
+            smtp_host: settings.smtp_host.clone(),
+            smtp_port: settings.smtp_port,
+            smtp_configured: !settings.smtp_host.trim().is_empty()
+                && !settings.from_email.trim().is_empty(),
+        }
+    }
+}
+
 pub struct NotificationService {
     pool: PgPool,
+    summary: NotificationSettingsSummary,
     transport: Arc<dyn NotificationTransport>,
     /// Process bound on concurrent SMTP round-trips (PRD-INGEST-009).
     /// Dispatches queue on this semaphore instead of spawning an unbounded
@@ -500,6 +525,7 @@ impl NotificationService {
         if settings.enabled {
             Ok(Self {
                 pool,
+                summary: NotificationSettingsSummary::from_settings(settings),
                 transport: Arc::new(SmtpTransport::new(settings)?),
                 permits: Arc::new(tokio::sync::Semaphore::new(
                     NOTIFICATION_DISPATCH_CONCURRENCY,
@@ -518,6 +544,13 @@ impl NotificationService {
     pub fn noop(pool: PgPool) -> Self {
         Self {
             pool,
+            summary: NotificationSettingsSummary {
+                enabled: false,
+                from_email: String::new(),
+                smtp_host: String::new(),
+                smtp_port: 587,
+                smtp_configured: false,
+            },
             transport: Arc::new(NoopTransport),
             permits: Arc::new(tokio::sync::Semaphore::new(
                 NOTIFICATION_DISPATCH_CONCURRENCY,
@@ -526,6 +559,12 @@ impl NotificationService {
                 registry.register("notifications.dispatch", NOTIFICATION_DISPATCH_CONCURRENCY)
             }),
         }
+    }
+
+    /// Redacted delivery configuration for the admin diagnostics surface.
+    #[must_use]
+    pub const fn settings_summary(&self) -> &NotificationSettingsSummary {
+        &self.summary
     }
 
     /// Renders `template_key` for `locale` (falling back to `en`) and

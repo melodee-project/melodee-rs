@@ -18,6 +18,80 @@ The audit used `AGENTS.md`, `PRD.md`, `SPEC.md`, the definition of done, the
 requirements index and overrides, accepted relevant ADRs, compatibility contracts,
 existing docs, source, runtime router composition, migrations, and tests instead.
 
+## Addendum (2026-11-09): settings-consumer, curation and library-truth corrections
+
+This addendum records a corrective change set. It does not rewrite the 2026-09-20 audit or the
+2026-10-19 addendum; it supersedes specific conclusions that no longer match the code.
+
+### Settings that were registered but not honored
+
+The Rust settings registry (209 keys) promised behavior that several runtime components did not
+consume. The following were wired in this change set and are now covered by tests:
+
+- `security.passwordResetTokenExpiryMinutes` — the reset-token TTL was hardcoded to one hour;
+  it now resolves from layered settings (`apps/melodee-server/src/native/auth.rs`).
+- `security.blacklistedEmails` / `security.blacklistedIPs` — the legacy `BlacklistService`
+  deny lists had no Rust consumer; they now deny native authentication and authenticated
+  native-v1 requests with the frozen `403 BLACKLISTED` envelope, cached for 10 seconds
+  (`apps/melodee-server/src/security.rs`).
+- `streaming.maxConcurrentStreams.global/perUser` — the global cap came only from an env var and
+  the per-user cap did not exist. Both are now settings-driven, the per-user cap rejects with
+  the legacy `429` shapes across native/OpenSubsonic/Jellyfin/preview surfaces, and the bounded
+  global default is recorded as an accepted difference (ADR-0183).
+- `scripting.enabled` — the legacy master switch (default `false`) was not enforced; the
+  ingestion gate now skips evaluation and audit while it is disabled
+  (`apps/melodee-server/src/scripting.rs`).
+- `podcast.retention.*`, `podcast.download.maxEnclosureBytes`,
+  `podcast.download.maxConcurrent.*`, `podcast.http.timeoutSeconds` — the worker used only env
+  configuration and per-channel limits. The three legacy `PodcastCleanupJob` policies, the
+  enclosure/size and download-concurrency bounds, and the outbound timeout are now honored
+  (`apps/melodee-server/src/podcast_worker.rs`, `apps/melodee-server/tests/podcast_retention.rs`).
+- `system.maxUploadSize` — playlist artwork uploads now honor the legacy bound instead of a
+  fixed 10 MiB ceiling (`apps/melodee-server/src/native/playlists.rs`).
+- `jellyfin.enabled`, `system.siteName`, `system.isDownloadingEnabled` — Jellyfin routing is now
+  gated by settings (C# `JellyfinRoutingMiddleware`), Jellyfin `System/Info` reports the
+  configured server name, and OpenSubsonic `download` honors the legacy download switch
+  (`apps/melodee-server/src/main.rs`).
+- `podcast.quota.maxBytesPerUser` — the legacy per-user downloaded-bytes quota is enforced in
+  the download claim (`apps/melodee-server/tests/podcast_retention.rs`).
+
+The four remaining settings inventory categories are: 105 consumed keys, 103 deliberately inert
+keys with recorded reasons, and 1 unverified key (`defaults.batchSize`, whose C# housekeeping
+consumers have per-worker Rust configuration); the diagnostics selftest reports the unverified
+count rather than hiding it.
+
+`apps/melodee-server/src/settings_inventory.rs` now classifies every registered key as consumed
+(module) or deliberately inert (reason), and
+`GET /api/admin/v1/diagnostics/settings` exposes the classification next to the effective value
+and winning layer. A selftest check reports keys that remain unverified.
+
+### Capability-truth corrections
+
+| Stale conclusion | Current state |
+|---|---|
+| Metadata editing `UNVERIFIED` | `PARITY`: `apps/melodee-server/tests/admin_metadata_api.rs` proves PostgreSQL-backed, canonical-file apply/restart/revert, so MEL-8's evidence is a test, not only a runbook. |
+| Email templates `PARTIAL` (no importer) | `PARITY`: `apps/melodee-cli/src/legacy/import_notification_templates.rs` is wired into `melodee legacy import` for local evidence; MEL-6 is done. |
+| Theme packs `PARTIAL` (no importer) | `PARITY`: `apps/melodee-cli/src/legacy/import_theme_packs.rs` is wired into `melodee legacy import`; MEL-7 is done. |
+| Custom content blocks `MISSING` | `APPROVED DIFFERENCE`: ADR-0181 retirement; MEL-4 is done. |
+| "Multiple media libraries admin management" claimed as PARITY | `PARITY (approved difference)`: storage topology is configuration and library IDs are ACL scopes; no library-entity CRUD is planned (ADR-0182). |
+| Charts claimed as full parity with the C# curation UI | `PARITY` at the API/CLI level: the new `apps/melodee-server/src/admin_charts.rs` replaces chart editor/import/resolve/ranked/missing workflows. A dedicated Admin UI chart screen is explicitly not claimed. |
+| No direct-play admission row | Row added and classified `PARITY (approved difference)`: settings-driven global/per-user admission with the legacy rejection shape and a bounded global default (ADR-0183). |
+
+The summary table above was also arithmetically inconsistent with the rows (41/3/1/5/9 versus the
+actual 43/3/1/5/7 before this change set); both now report the same 60-row inventory.
+
+### New operator surfaces (no C# equivalent required)
+
+- `GET /api/admin/v1/diagnostics/selftest|settings|events|bundle` and
+  `POST /api/admin/v1/diagnostics/stream-probe` — read-only, administrator-gated troubleshooting
+  API designed for operators and automation agents (redacted, correlation-aware, bounded in-memory
+  event buffer, and a streamability probe for "why will this Track not play?"). See
+  `docs/src/content/docs/api/admin-api.md`.
+- Structured JSON logging (`MELODEE__LOGGING__FORMAT=json`), request completion logging with
+  normalized routes/latency/correlation ids, and WARN/ERROR retention for the diagnostics API.
+- `apps/melodee-server/tests/client_contract_routes.rs` guards every route the shipped Android
+  Auto and MeloAmp clients call, so a compatibility suite cannot silently lose a client route.
+
 ## Addendum (2026-10-19): superseded conclusions after MEL-4..8, MEL-13..15
 
 This addendum is a factual status update under MEL-18. The audit sections below are
@@ -87,15 +161,17 @@ The canonical ledger is the updated
 [`FEATURE-PARITY-MATRIX.md`](../../requirements/FEATURE-PARITY-MATRIX.md). This
 report does not replace it. The counts below include its 53 pre-existing capability
 rows, two newly identified C# capabilities, and four replacement-qualification
-obligations that must be closed before cutover: **59 rows** total.
+obligations that must be closed before cutover: **60 rows** total (one row, direct-play admission,
+was added with the 2026-11-09 correction below).
 
 | Disposition | Count |
 |---|---:|
-| PARITY | 41 |
-| PARTIAL | 3 |
-| MISSING | 1 |
-| APPROVED DIFFERENCE | 5 |
-| UNVERIFIED | 9 |
+| PARITY | 45 |
+| PARITY (approved difference) | 2 |
+| PARTIAL | 1 |
+| MISSING | 0 |
+| APPROVED DIFFERENCE | 6 |
+| UNVERIFIED | 6 |
 | NOT APPLICABLE | 0 |
 
 ## Baseline capture

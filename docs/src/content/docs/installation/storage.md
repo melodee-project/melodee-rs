@@ -25,6 +25,19 @@ Across filesystems it copies under a hidden staging directory, verifies streamed
 fsyncs, finalizes without replacement, records the receipt, then removes the matching inbound
 candidate. A crash converges from that receipt without reopening historical inbound paths.
 
+## Libraries are access scopes, not mutable path records
+
+Unlike the C# server, Melodee does not store a mutable library entity with a name, type, and
+filesystem path. Storage topology is deployment configuration (the four roles above), while a
+*library ID* is an authorization scope used by group bindings and per-library browse, search, and
+stream fencing. Adding a new media source is a configuration change plus a restart; library IDs and
+group bindings are managed at runtime in **System → Users** (or the group admin API/CLI).
+
+Legacy library rows are preserved for ACL bindings during migration; their names and paths are
+reference-only configuration evidence and never become runtime truth. The decision and its
+trade-offs are recorded in the repository ADR set (`design/adr/` — ADR-0182). The legacy
+system-export `libraries` array is likewise imported as evidence only.
+
 Important rules:
 
 - Filesystem paths never determine semantic identity.
