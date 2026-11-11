@@ -42,8 +42,14 @@ queue mutation in this build is a per-item, audited decision made from the
 - **Processing → Quarantine** (`/admin/processing/quarantine`) lists quarantined work items —
   Releases held out of the catalog by policy or by an operator decision — with the same paging
   and inspector behavior as the main queue.
-- **Processing → History** (`/admin/processing/history`) is the queue-wide transition feed: the
-  append-only record of state changes across work items, newest first.
+- **Processing → History** (`/admin/processing/history`) lists work items in a terminal state —
+  `indexed`, `cataloged`, `ignored`, and `deleted` — over the append-only transition record, so a
+  Release disappears from the active queue exactly when its processing is finished or its
+  disposition is final.
+
+`Indexed` is the successful end of the lifecycle: the search projection for the Release, its
+Tracks, and its billed Artists is durable and queryable, and the work item is marked complete.
+A work item that is still `indexing` is unfinished work and is deliberately not shown in History.
 
 ## Steering processing
 

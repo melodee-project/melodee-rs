@@ -1598,3 +1598,325 @@ async fn outbox_apply_pass_survives_repeated_process_termination() {
     drop(store);
     db.drop().await;
 }
+
+/// `SPEC.md` §11.2 ends the Release lifecycle at `Indexed`, and
+/// `IngestionState::is_terminal` names it as the successful terminal state. The
+/// search worker owns the only durable evidence that indexing finished, so it
+/// must also perform `Indexing -> Indexed`; otherwise every accepted Release
+/// parks in `indexing` forever (never terminal, never claimable, invisible to
+/// the terminal-state History view).
+#[tokio::test]
+async fn projection_completion_advances_release_to_terminal_indexed_state() {
+    use melodee_persistence::WorkItemStore;
+
+    let db = TestDb::create("phase6_lifecycle_completion").await;
+    let fixture = seed_published_release(
+        &db,
+        611,
+        CatalogFixturePresentation {
+            release_title: "Lifecycle Completion Release",
+            release_artist: "Lifecycle Artist",
+            track_title: "Lifecycle Track",
+            track_artist: "Lifecycle Artist",
+            release_date: "2007-08-09",
+        },
+    )
+    .await;
+    let catalog = CatalogStore;
+    let worker = WorkerId::new();
+    let now = time::OffsetDateTime::now_utc();
+    catalog
+        .claim_cataloging(&db.pool, &worker, &test_config(), now)
+        .await
+        .expect("claim published fixture");
+    catalog
+        .import_manifest_v3(
+            &db.pool,
+            fixture.work_item_id,
+            &worker,
+            &CatalogImportRequest::new("phase6.lifecycle.v1", "phase6-test"),
+            now,
+        )
+        .await
+        .expect("catalog fixture");
+
+    // Simulate the policy worker accepting the Release: `Accept` targets
+    // `Indexing` and the projection rows are already enqueued by the import.
+    sqlx::query(
+        "UPDATE release_work_items
+            SET state = 'indexing', state_reason = 'policy.disposition.accept', updated_at = $2
+          WHERE id = $1",
+    )
+    .bind(fixture.work_item_id)
+    .bind(now)
+    .execute(&db.pool)
+    .await
+    .expect("park fixture in indexing");
+
+    let directory = TempDir::new().expect("search temp root");
+    let config = activate_empty_generation(&db, &directory).await;
+
+    // Nothing is projected yet, so completion must not fire.
+    let completed = WorkItemStore
+        .complete_indexed(
+            &db.pool,
+            time::OffsetDateTime::now_utc(),
+            100,
+            "test.pending",
+        )
+        .await
+        .expect("completion attempt with pending projection");
+    assert!(
+        completed.is_empty(),
+        "a Release with pending projection rows must not complete"
+    );
+
+    // Drain the projection: this is the durable evidence that indexing finished.
+    let pass = apply_outbox_once(&config, &db.pool)
+        .await
+        .expect("apply projection");
+    assert!(pass.acknowledged > 0, "fixture projection was applied");
+
+    let state: (String, bool) = sqlx::query_as(
+        "SELECT state, completed_at IS NOT NULL FROM release_work_items WHERE id = $1",
+    )
+    .bind(fixture.work_item_id)
+    .fetch_one(&db.pool)
+    .await
+    .expect("read work item");
+    assert_eq!(
+        state.0, "indexed",
+        "drained projection completes the lifecycle"
+    );
+    assert!(state.1, "the terminal state records completed_at");
+
+    // The terminal hop is auditable exactly like a worker transition, so
+    // history, timelines and the activity series can see it.
+    let events: Vec<(String, Option<String>, Option<String>)> = sqlx::query_as(
+        "SELECT event_type, from_state::text, to_state::text
+           FROM release_work_item_events
+          WHERE work_item_id = $1 AND event_type IN ('transitioned', 'completed')
+          ORDER BY id DESC LIMIT 2",
+    )
+    .bind(fixture.work_item_id)
+    .fetch_all(&db.pool)
+    .await
+    .expect("read completion events");
+    assert_eq!(events.len(), 2);
+    assert_eq!(events[0].0, "completed");
+    assert_eq!(events[1].0, "transitioned");
+    assert_eq!(events[1].1.as_deref(), Some("indexing"));
+    assert_eq!(events[1].2.as_deref(), Some("indexed"));
+
+    // Idempotent: an already-terminal Release is never re-completed.
+    let again = WorkItemStore
+        .complete_indexed(&db.pool, time::OffsetDateTime::now_utc(), 100, "test.again")
+        .await
+        .expect("second completion pass");
+    assert!(again.is_empty(), "completion must be idempotent");
+
+    db.drop().await;
+}
+
+/// A pending projection row for any entity of the Release (its own row, a
+/// Track, or a billed Artist) blocks completion until it is applied — otherwise
+/// the UI would report `Indexed` while the index is still missing documents.
+#[tokio::test]
+async fn projection_completion_waits_for_every_entity_of_the_release() {
+    use melodee_persistence::WorkItemStore;
+
+    let db = TestDb::create("phase6_lifecycle_blocks").await;
+    let fixture = seed_published_release(
+        &db,
+        612,
+        CatalogFixturePresentation {
+            release_title: "Blocking Projection Release",
+            release_artist: "Blocking Artist",
+            track_title: "Blocking Track",
+            track_artist: "Blocking Artist",
+            release_date: "2008-09-10",
+        },
+    )
+    .await;
+    let worker = WorkerId::new();
+    let now = time::OffsetDateTime::now_utc();
+    CatalogStore
+        .claim_cataloging(&db.pool, &worker, &test_config(), now)
+        .await
+        .expect("claim published fixture");
+    CatalogStore
+        .import_manifest_v3(
+            &db.pool,
+            fixture.work_item_id,
+            &worker,
+            &CatalogImportRequest::new("phase6.blocks.v1", "phase6-test"),
+            now,
+        )
+        .await
+        .expect("catalog fixture");
+    sqlx::query(
+        "UPDATE release_work_items
+            SET state = 'indexing', state_reason = 'policy.disposition.accept', updated_at = $2
+          WHERE id = $1",
+    )
+    .bind(fixture.work_item_id)
+    .bind(now)
+    .execute(&db.pool)
+    .await
+    .expect("park fixture in indexing");
+
+    let directory = TempDir::new().expect("search temp root");
+    let config = activate_empty_generation(&db, &directory).await;
+    apply_outbox_once(&config, &db.pool)
+        .await
+        .expect("drain initial projection");
+
+    // A later Track revision is queued but not yet applied.
+    let (track_id, revision): (uuid::Uuid, i64) = sqlx::query_as(
+        "UPDATE tracks SET revision = revision + 1 WHERE release_id = (
+             SELECT release_id FROM catalog_imports WHERE work_item_id = $1
+         ) RETURNING id, revision",
+    )
+    .bind(fixture.work_item_id)
+    .fetch_one(&db.pool)
+    .await
+    .expect("queue track revision");
+    sqlx::query(
+        "INSERT INTO catalog_projection_outbox (
+            projection_name, entity_type, entity_id, operation,
+            entity_revision, available_at, created_at
+         ) VALUES ($1, 'track', $2, 'upsert', $3, $4, $4)",
+    )
+    .bind(SEARCH_PROJECTION_NAME)
+    .bind(track_id)
+    .bind(revision)
+    .bind(now)
+    .execute(&db.pool)
+    .await
+    .expect("enqueue pending track row");
+
+    let blocked = WorkItemStore
+        .complete_indexed(
+            &db.pool,
+            time::OffsetDateTime::now_utc(),
+            100,
+            "test.blocked",
+        )
+        .await
+        .expect("completion attempt while a Track is pending");
+    assert!(
+        blocked.is_empty(),
+        "a pending Track projection must block completion"
+    );
+
+    apply_outbox_once(&config, &db.pool)
+        .await
+        .expect("apply the pending track row");
+    let state: String = sqlx::query_scalar("SELECT state FROM release_work_items WHERE id = $1")
+        .bind(fixture.work_item_id)
+        .fetch_one(&db.pool)
+        .await
+        .expect("read work item");
+    assert_eq!(
+        state, "indexed",
+        "completion follows the last applied entity"
+    );
+
+    db.drop().await;
+}
+
+/// Guard against unbounded index fragmentation.
+///
+/// Each projection batch opens its own writer and commits, so a busy catalog
+/// produces many small commits. Tantivy's log-merge policy consolidates them
+/// asynchronously; this test pins the property that matters — after N batches
+/// the generation still holds fewer segments than batches, so fragmentation
+/// cannot grow without bound. (Measured on this workload: 30 batches leave 3
+/// segments.)
+#[tokio::test]
+async fn repeated_projection_passes_do_not_abandon_one_segment_per_batch() {
+    let db = TestDb::create("phase6_segment_growth").await;
+    let fixture = seed_published_release(
+        &db,
+        613,
+        CatalogFixturePresentation {
+            release_title: "Segment Growth Release",
+            release_artist: "Segment Artist",
+            track_title: "Segment Track",
+            track_artist: "Segment Artist",
+            release_date: "2009-10-11",
+        },
+    )
+    .await;
+    let worker = WorkerId::new();
+    let now = time::OffsetDateTime::now_utc();
+    CatalogStore
+        .claim_cataloging(&db.pool, &worker, &test_config(), now)
+        .await
+        .expect("claim published fixture");
+    CatalogStore
+        .import_manifest_v3(
+            &db.pool,
+            fixture.work_item_id,
+            &worker,
+            &CatalogImportRequest::new("phase6.segments.v1", "phase6-test"),
+            now,
+        )
+        .await
+        .expect("catalog fixture");
+
+    let directory = TempDir::new().expect("search temp root");
+    let config = activate_empty_generation(&db, &directory).await;
+    apply_outbox_once(&config, &db.pool)
+        .await
+        .expect("initial projection");
+
+    let passes = 30;
+    for index in 0..passes {
+        let (artist_id, revision): (uuid::Uuid, i64) = sqlx::query_as(
+            "UPDATE artists
+                SET revision = revision + 1, updated_at = $1
+              RETURNING id, revision",
+        )
+        .bind(time::OffsetDateTime::now_utc())
+        .fetch_one(&db.pool)
+        .await
+        .expect("queue artist revision");
+        sqlx::query(
+            "INSERT INTO catalog_projection_outbox (
+                projection_name, entity_type, entity_id, operation,
+                entity_revision, available_at, created_at
+             ) VALUES ($1, 'artist', $2, 'upsert', $3, $4, $4)",
+        )
+        .bind(SEARCH_PROJECTION_NAME)
+        .bind(artist_id)
+        .bind(revision)
+        .bind(time::OffsetDateTime::now_utc())
+        .execute(&db.pool)
+        .await
+        .expect("enqueue artist revision");
+        let pass = apply_outbox_once(&config, &db.pool)
+            .await
+            .expect("apply revision batch");
+        assert_eq!(pass.acknowledged, 1, "pass {index} applied its revision");
+    }
+
+    let root = SearchRoot::open(&config.search_root).expect("owned search root");
+    let active =
+        SearchProjectionStore::active_generation(&db.pool, root.path().to_string_lossy().as_ref())
+            .await
+            .expect("read active generation")
+            .expect("an active generation exists");
+    let generation_path = root.generation_path(active.generation_id);
+    let segments = std::fs::read_dir(&generation_path)
+        .expect("read generation")
+        .filter_map(Result::ok)
+        .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "term"))
+        .count();
+    assert!(
+        segments < passes,
+        "projection passes must consolidate segments, found {segments} after {passes} passes"
+    );
+
+    db.drop().await;
+}

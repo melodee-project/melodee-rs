@@ -2408,6 +2408,117 @@ impl WorkItemStore {
         ReleaseWorkItem::try_from(row)
     }
 
+    /// Completes the Release lifecycle once its search projection is durable.
+    ///
+    /// `SPEC.md` §11.2 and `PRD.md` define `Cataloged → Indexing → Indexed`, and
+    /// `IngestionState::is_terminal` names `Indexed` as the successful end
+    /// state. The search worker owns the durable projection (and therefore the
+    /// only evidence that indexing finished), but it leases *outbox rows*, not
+    /// work items, so [`Self::transition`] — which requires a work-item lease
+    /// for worker transitions — cannot express this hop. This method performs it
+    /// under its own invariant instead:
+    ///
+    /// * only from `indexing` (never re-completes an item);
+    /// * only when the projection outbox holds **no pending row** for the
+    ///   Release, any of its Tracks, or any of its billed Artists, so the
+    ///   queryable index is complete for that Release;
+    /// * bounded by `limit` and ordered oldest-updated first, so a backlog
+    ///   cannot produce one unbounded statement;
+    /// * records the same `transitioned` + `completed` evidence a worker
+    ///   transition would, so history, timelines, and the dashboard activity
+    ///   series see the completion.
+    ///
+    /// Idempotent: an item that already left `indexing` is never touched.
+    pub async fn complete_indexed(
+        &self,
+        pool: &PgPool,
+        now: OffsetDateTime,
+        limit: u32,
+        reason: &str,
+    ) -> Result<Vec<Uuid>, WorkStoreError> {
+        let limit = i64::from(limit.max(1));
+        let mut tx = pool.begin().await?;
+        // Set-based and bounded: candidates are the unfinished tail of the
+        // lifecycle, and only those whose projection rows are all processed
+        // advance. `NOT IN` over a DISTINCT sub-select avoids the row-multiply a
+        // LEFT JOIN against three entity families would cause.
+        let rows: Vec<(Uuid, Uuid)> = sqlx::query_as(
+            "WITH candidates AS (
+                 SELECT w.id, w.correlation_id, ci.release_id, w.updated_at
+                   FROM release_work_items w
+                   JOIN catalog_imports ci ON ci.work_item_id = w.id
+                  WHERE w.state = 'indexing'
+                  ORDER BY w.updated_at, w.id
+                  LIMIT $2
+             ),
+             pending AS (
+                 SELECT DISTINCT c.id
+                   FROM candidates c
+                   LEFT JOIN tracks t ON t.release_id = c.release_id
+                   LEFT JOIN release_artists ra ON ra.release_id = c.release_id
+                   JOIN catalog_projection_outbox o
+                     ON o.processed_at IS NULL
+                    AND (
+                           (o.entity_type = 'release' AND o.entity_id = c.release_id)
+                        OR (o.entity_type = 'track' AND o.entity_id = t.id)
+                        OR (o.entity_type = 'artist' AND o.entity_id = ra.artist_id)
+                    )
+             )
+             UPDATE release_work_items w
+                SET state = 'indexed',
+                    state_reason = $1,
+                    completed_at = $3,
+                    updated_at = $3
+               FROM candidates c
+              WHERE w.id = c.id
+                AND c.id NOT IN (SELECT id FROM pending)
+             RETURNING w.id, w.correlation_id",
+        )
+        .bind(reason)
+        .bind(limit)
+        .bind(now)
+        .fetch_all(&mut *tx)
+        .await?;
+
+        for (id, correlation_id) in &rows {
+            insert_event(
+                &mut tx,
+                *id,
+                WorkEventType::Transitioned,
+                Some(IngestionState::Indexing),
+                Some(IngestionState::Indexed),
+                Some(reason),
+                None,
+                *correlation_id,
+                now,
+                None,
+            )
+            .await?;
+            insert_event(
+                &mut tx,
+                *id,
+                WorkEventType::Completed,
+                None,
+                Some(IngestionState::Indexed),
+                None,
+                None,
+                *correlation_id,
+                now,
+                None,
+            )
+            .await?;
+        }
+        tx.commit().await?;
+        let completed: Vec<Uuid> = rows.into_iter().map(|(id, _)| id).collect();
+        if !completed.is_empty() {
+            info!(
+                completed = completed.len(),
+                "work items completed indexing and reached the terminal Indexed state"
+            );
+        }
+        Ok(completed)
+    }
+
     /// Records a processing failure with durable evidence and computes retry
     /// eligibility. Clears the lease. Classification decides the outcome:
     /// retryable (scheduled or exhausted), permanent, or review-required.

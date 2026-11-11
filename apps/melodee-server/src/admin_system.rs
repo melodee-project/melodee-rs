@@ -33,8 +33,8 @@ use axum::{
 };
 use melodee_domain::IngestionState;
 use melodee_persistence::{
-    CatalogStore, JobRunHistory, JobRunHistoryStore, PolicyStore, WorkItemSort, WorkItemStore,
-    WorkerPoolState, WorkerPoolStore, WorkerPoolStoreError,
+    CatalogStore, JobRunHistory, JobRunHistoryStore, PolicyStore, SearchProjectionStore,
+    WorkItemSort, WorkItemStore, WorkerPoolState, WorkerPoolStore, WorkerPoolStoreError,
 };
 use melodee_search::SearchConfig;
 use serde::{Deserialize, Serialize};
@@ -858,14 +858,12 @@ async fn dashboard(State(state): State<AdminSystemState>, _admin: AdminPrincipal
         Ok(hourly) => hourly,
         Err(error) => return store_failure("activity series failed", &error),
     };
-    // ADR-0184: the reference activity chart plots two series, and its KPI
-    // cards carry "today"/"new" counters. Both read the append-only transition
-    // log inside the same bounded window, so nothing here scans a growing
-    // table without a range predicate.
-    let indexed_hourly = match WorkItemStore
-        .transitions_hourly(pool, since, IngestionState::Indexed.as_str())
-        .await
-    {
+    // ADR-0184: the reference activity chart plots two series over the same
+    // window. "Releases processed" is completed work items; "Tracks indexed"
+    // reads the search projection outbox, whose rows are marked processed only
+    // after the Tantivy commit that made the document queryable — the only
+    // durable evidence of index work. Both queries are window-bounded.
+    let indexed_hourly = match SearchProjectionStore::processed_tracks_hourly(pool, since).await {
         Ok(hourly) => hourly,
         Err(error) => return store_failure("indexed activity series failed", &error),
     };

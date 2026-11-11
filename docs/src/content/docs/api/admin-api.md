@@ -72,10 +72,27 @@ Returns a bounded, server-side paginated list of work items inside a pagination 
 }
 ```
 
-`total` is the row count for the current filter (it respects `state` but ignores `limit`/`offset`),
-so clients can render paging honestly. Supports optional `state` filtering and `limit`/`offset`
-pagination. `limit` defaults to 50 and is clamped to a server maximum (500); clients cannot pull
-the whole queue in one request.
+`total` is the row count for the current filter (it respects `state` and `query` but ignores
+`limit`/`offset`), so clients can render paging honestly. Supports optional `state` filtering and
+`limit`/`offset` pagination. `limit` defaults to 50 and is clamped to a server maximum (500);
+clients cannot pull the whole queue in one request.
+
+The optional `query` parameter is a bounded case-insensitive substring filter over the bound
+Release title, its billed artist, and the work item's current path — an operator convenience over
+the active queue, not a catalog search.
+
+Each item also carries display-only enrichment for the rows of an operator queue, present once the
+work item has a catalog import binding and absent before that (they are never part of the work
+item's identity, which is its id):
+
+| Field | Meaning |
+|---|---|
+| `releaseId` | Catalog Release the work item was imported into |
+| `releaseTitle` | Display title of that Release |
+| `artistName` | Billed display artist of that Release |
+| `mediaBytes` | Media bytes recorded by the Release aggregates |
+
+Clients must render a missing field as absent, never as a zero or an empty title.
 
 The optional `sort` parameter is a strict whitelist in `key:asc|desc` form; keys are `addedAt`,
 `updatedAt`, `state`, and `attemptCount`. An omitted `sort` keeps the newest-first ordering
@@ -752,8 +769,15 @@ bounded, set-based queries:
   strings without an authoritative match decision), `pendingPolicyDecisions` (durable decisions
   awaiting completion), `failedProcessing`, and `quarantined`.
 - `health` — the subsystem panel described under [System health](#system-health) below.
-- `activity.completedPerHour` — completed work items per hour over the trailing 24 hours
-  (`[{hour, count}]`, oldest first; hours without completions are omitted).
+- `deltas` — recent-change counters behind the KPI cards: `inboundToday` (work items that entered
+  the pipeline since UTC midnight, from the append-only `created` events) and `newForReview24h`
+  (transitions into `needs_review` in the last 24 hours). There is no historical catalog counter,
+  so catalog "this week" deltas are deliberately absent rather than approximated.
+- `activity.completedPerHour` — Releases that completed processing per hour over the trailing
+  24 hours (`[{hour, count}]`, oldest first; hours without completions are omitted).
+- `activity.indexedPerHour` — distinct Tracks indexed per hour over the trailing 24 hours, read
+  from the search projection outbox: a row is counted only after the Tantivy commit that made the
+  document queryable, so this measures real index work rather than a work-item state.
 
 ## Policies
 

@@ -115,6 +115,19 @@ by an accepted ADR and release gate.
 - `design/adr/ADR-0184-admin-ui-reference-alignment-and-surface-system.md`,
   `design/ui/REDESIGN-PLAN.md`, and amended `UI-SPEC.md` / `DESIGN-SYSTEM.md` / `MOCKUPS.md`.
 
+### Fixed
+
+- Releases no longer park forever in `indexing`. `Indexing -> Indexed` is the terminal hop of the
+  Release lifecycle (`SPEC.md` §11.2, `PRD.md`), and no code performed it: accepted Releases were
+  neither claimable nor terminal, so they never completed, never appeared in the terminal-state
+  History view, and kept counting as active processing. The search worker — which owns the only
+  durable evidence that indexing finished — now completes a Release once the projection outbox has
+  no pending row for its Release, Tracks, or billed Artists, recording the same `transitioned` and
+  `completed` events a worker transition would (`WorkItemStore::complete_indexed`).
+- `activity.indexedPerHour` now measures Tracks indexed per hour from the search projection outbox
+  (rows are marked processed only after the Tantivy commit that makes the document queryable)
+  instead of counting transitions into a state nothing reached.
+
 ### Security
 
 - `rustix` 1.1.6 (was 1.1.5) for RUSTSEC-2026-0486: the extended-attribute functions marked

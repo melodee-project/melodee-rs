@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use melodee_persistence::{
     SEARCH_PROJECTION_NAME, SearchCatalogRecord, SearchDocumentCounts, SearchEntityType,
-    SearchOperation, SearchOutboxItem, SearchProjectionStore,
+    SearchOperation, SearchOutboxItem, SearchProjectionStore, WorkItemStore,
 };
 use serde::Serialize;
 use sqlx::PgPool;
@@ -23,6 +23,11 @@ use crate::error::SearchError;
 use crate::generation::SearchRoot;
 use crate::rebuild::run_rebuild_once_with_cancel;
 use crate::store::SearchStore;
+
+/// Upper bound on lifecycles completed per projection pass. Completions are set
+/// based and cheap; the bound keeps one pass from monopolising a worker while a
+/// large batch drains.
+const COMPLETION_BATCH_LIMIT: u32 = 500;
 
 #[cfg(feature = "test-support")]
 static INJECTED_DOCUMENT_FAILURE: std::sync::OnceLock<std::sync::Mutex<Option<Uuid>>> =
@@ -270,6 +275,37 @@ pub fn start_search_loop(config: SearchConfig, pool: PgPool) -> SearchSchedulerH
     SearchSchedulerHandle { cancel, task }
 }
 
+/// Advance Releases whose search projection is durable from `indexing` to the
+/// terminal `indexed` state (SPEC §11.2, `WorkItemStore::complete_indexed`).
+///
+/// The search worker owns the only durable evidence that indexing finished, so
+/// it owns this hop. It runs on every pass with an active generation — including
+/// passes that claimed nothing — so a queue that was already drained still
+/// completes. Best-effort: a failure here must never roll back an acknowledged,
+/// durable index, and the next pass retries the (idempotent) completion.
+async fn complete_projected_releases(pool: &PgPool) {
+    match WorkItemStore
+        .complete_indexed(
+            pool,
+            OffsetDateTime::now_utc(),
+            COMPLETION_BATCH_LIMIT,
+            "search.projection.complete",
+        )
+        .await
+    {
+        Ok(completed) if !completed.is_empty() => {
+            info!(
+                completed = completed.len(),
+                "search projection completed Releases"
+            );
+        }
+        Ok(_) => {}
+        Err(error) => {
+            warn!(error = ?error, "could not advance completed search projections to Indexed");
+        }
+    }
+}
+
 async fn ensure_initial_rebuild(config: &SearchConfig, pool: &PgPool) -> Result<(), SearchError> {
     let root = SearchRoot::open(&config.search_root)?;
     let root_text = root.path().to_string_lossy();
@@ -352,6 +388,9 @@ async fn apply_outbox_once_with_cancel(
     .await?;
     pass_span.record("claimed", items.len() as u64);
     if items.is_empty() {
+        // Nothing to project, but a Release whose projection was already
+        // durable still has to reach the terminal state.
+        complete_projected_releases(pool).await;
         return Ok(SearchPassStats::default());
     }
     let ids = items.iter().map(|item| item.id).collect::<Vec<_>>();
@@ -550,6 +589,7 @@ async fn apply_outbox_once_with_cancel(
             {
                 warn!(%release_error, "search outbox lease owner could not be released after batch application");
             }
+            complete_projected_releases(pool).await;
             Ok(SearchPassStats {
                 claimed: ids.len(),
                 applied: batch.applied,

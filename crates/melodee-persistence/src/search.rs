@@ -13,6 +13,8 @@ use thiserror::Error;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
+use crate::work_items::HourlyCompletionCount;
+
 pub const SEARCH_PROJECTION_NAME: &str = "tantivy.catalog";
 pub const MAX_SEARCH_OUTBOX_BATCH: usize = 512;
 pub const MAX_SEARCH_SNAPSHOT_PAGE: usize = 1_000;
@@ -1345,6 +1347,40 @@ impl SearchProjectionStore {
                 .map(|record| record.map(SearchCatalogRecord::Track)),
             SearchEntityType::AudioIdentity => Ok(Some(SearchCatalogRecord::NoDocument)),
         }
+    }
+
+    /// Per-hour counts of Track projection rows processed since `since`,
+    /// oldest first.
+    ///
+    /// This is the durable evidence behind "Tracks indexed per hour": the
+    /// outbox row is marked `processed_at` only after the Tantivy commit that
+    /// made the document queryable, so the series measures real index work
+    /// rather than a work-item state. Counts distinct Tracks per hour, so a
+    /// Track re-projected several times in one hour is not counted repeatedly.
+    /// Bounded by the window (the `processed_at` index backs the range) and
+    /// grouped to one row per hour.
+    pub async fn processed_tracks_hourly(
+        pool: &PgPool,
+        since: OffsetDateTime,
+    ) -> Result<Vec<HourlyCompletionCount>, SearchStoreError> {
+        let rows: Vec<(OffsetDateTime, i64)> = sqlx::query_as(
+            "SELECT date_trunc('hour', processed_at) AS hour,
+                    COUNT(DISTINCT entity_id)::bigint AS count
+               FROM catalog_projection_outbox
+              WHERE projection_name = $1
+                AND entity_type = 'track'
+                AND processed_at IS NOT NULL
+                AND processed_at >= $2
+              GROUP BY 1 ORDER BY 1",
+        )
+        .bind(SEARCH_PROJECTION_NAME)
+        .bind(since)
+        .fetch_all(pool)
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(|(hour, count)| HourlyCompletionCount { hour, count })
+            .collect())
     }
 
     pub async fn max_outbox_id(pool: &PgPool) -> Result<i64, SearchStoreError> {

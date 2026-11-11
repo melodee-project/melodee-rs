@@ -49,6 +49,27 @@ Important rules:
 - Watchers (if enabled in future work) are accelerators only; reconciliation scans and durable work items are
   the source of truth.
 
+### Retained copies and disk planning
+
+A processed Release exists in up to four places, and only one of them is the library:
+
+| Location | Content | Reclaimed? |
+|---|---|---|
+| canonical storage root | the published bundle (`manifest.json`, `media/`, `artwork/`) | never (it *is* the library) |
+| staging root | the verified staged source the publication receipt points at | not automatically |
+| normalization work area | generated output from inspection/normalization | not automatically |
+| search root | the Tantivy generation | replaced on rebuild |
+
+Measured on a 25-Release / 1.8 GB batch: 1.8 GB published, 1.8 GB retained staged source, 1.8 GB
+in the work area — about **3× the inbound bytes**. Size the host for roughly 3× the largest batch
+you intend to ingest in one go, on top of the library itself.
+
+There is no automatic garbage collector for the staging root or the work area: staged source is
+retained deliberately because the publication receipt references it as recovery evidence, and the
+work area has no reclamation path yet. Removing either is an operator decision made with the
+server stopped — it costs recovery evidence, never catalog correctness. Until a retention policy
+exists, treat both roots as append-only when planning capacity.
+
 ## Path safety rules
 
 - Candidate roots are canonicalized and path containment is enforced against each inbound root.
