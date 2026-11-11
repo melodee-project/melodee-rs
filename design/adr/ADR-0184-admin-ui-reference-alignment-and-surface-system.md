@@ -57,8 +57,9 @@ PRD-UI-REF-002 baselines that currently act as the regression gate.
 
 3. **Shell dimensions stay UI-SPEC §3** (256 px expanded / 48 px collapsed navigation, 48 px
    header). The mockups' 220 px/72 px proportions are treated as directional. The content
-   gutter becomes 24 px at ≥ lg (was 16 px), and the status strip in the navigation footer
-   is canonical while the header carries a compact mirror.
+   gutter becomes 24 px at ≥ lg (was 16 px). Server status is reported once, by the header
+   indicator; the navigation footer carries only locale, appearance, and the collapse control, so
+   the shell never shows the same status twice.
 
 4. **No fabricated values.** Every element the mockups show must trace to an API field. Where
    the data does not exist, the element is omitted and recorded in `DESIGN-SYSTEM.md` — never

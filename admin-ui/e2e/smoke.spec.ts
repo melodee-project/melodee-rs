@@ -88,6 +88,36 @@ test('renders the shell navigation groups in English', async ({ page }) => {
   await expect(page.locator('html')).toHaveAttribute('lang', 'en-US');
 });
 
+/**
+ * Shell chrome invariants (ADR-0184). These are asserted structurally, not only
+ * by the visual baselines: the screenshot tolerance (1% of pixels) is wider than
+ * a status line or a brand glyph, so a duplicated status or the wrong brand mark
+ * could otherwise pass unnoticed.
+ */
+test('server status is reported once, by the header, and the rail shows the badge', async ({
+  page,
+}) => {
+  await page.goto('/');
+
+  // One status indicator, in the header.
+  const headerStatus = page.locator('.melodee-shell__health');
+  await expect(headerStatus).toBeVisible();
+  await expect(headerStatus).toContainText(/server status unknown|server online/i);
+
+  // The rail footer carries locale, appearance, and collapse only.
+  const footer = page.locator('.melodee-shell__footer');
+  await expect(footer).toBeVisible();
+  await expect(footer).not.toContainText(/server online|server offline|checking server status/i);
+
+  // The brand mark is the official circular badge, not an interim monogram.
+  await expect(page.locator('.melodee-shell__brand-mark')).toHaveAttribute(
+    'src',
+    '/admin/brand/melodee-circular-badge.svg',
+  );
+  // Count the status indicators in the whole shell: exactly one.
+  await expect(page.locator('.melodee-shell__health')).toHaveCount(1);
+});
+
 test('switching to ar-SA sets dir=rtl on the document root', async ({ page }) => {
   await page.goto('/');
 

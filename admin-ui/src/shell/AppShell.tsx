@@ -49,7 +49,7 @@ import { useAuth } from '../auth/AuthContext';
 import { CULTURES, dirFor } from '../i18n';
 import i18n from '../i18n';
 import { useThemeState, type Appearance } from '../theme/ThemeProvider';
-import { HealthDot, HealthIndicator, type HealthState } from '../components/HealthIndicator';
+import { HealthIndicator, type HealthState } from '../components/HealthIndicator';
 import { RouteErrorBoundary } from '../components/RouteErrorBoundary';
 import { useScrollRegionFocus } from '../components/scrollRegions';
 
@@ -269,7 +269,7 @@ export function AppShell() {
         >
           <img
             className="melodee-shell__brand-mark"
-            src="/admin/brand/melodee-mark-tile.svg"
+            src="/admin/brand/melodee-circular-badge.svg"
             alt=""
           />
           <span className="melodee-shell__brand-wordmark">
@@ -455,22 +455,8 @@ export function AppShell() {
           )}
         </SideNavItems>
         <div className="melodee-shell__footer">
-          {/* Status strip (reference): the canonical server-status location. */}
-          <span className="melodee-shell__footer-health">
-            <HealthDot
-              state={health}
-              label={t(
-                health === 'online'
-                  ? 'health.online'
-                  : health === 'offline'
-                    ? 'health.offline'
-                    : health === 'checking'
-                      ? 'health.checking'
-                      : 'health.unknown',
-              )}
-              className="melodee-health-row__dot-label"
-            />
-          </span>
+          {/* Server status lives once, in the header. The footer carries only the
+              locale, appearance, and the collapse control. */}
           <span className="melodee-shell__footer-controls">
             {expanded ? (
               <span className="melodee-shell__footer-meta">

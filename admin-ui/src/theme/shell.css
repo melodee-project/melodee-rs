@@ -42,10 +42,13 @@
   outline-offset: 3px;
 }
 
+/* Official Melodee circular badge (assets/logo/svg/melodee-circular-badge.svg):
+   it carries its own dark circular ground, so it needs no radius and reads as
+   the brand mark on the rail rather than a rounded tile. */
 .melodee-shell__brand-mark {
   display: block;
-  inline-size: 2rem;
-  block-size: 2rem;
+  inline-size: 2.25rem;
+  block-size: 2.25rem;
   flex-shrink: 0;
 }
 
@@ -290,30 +293,14 @@
   margin-inline-start: 16rem;
 }
 
-/* Status strip at the foot of the rail (canonical server-status location). */
+/* Foot of the rail: locale, appearance, and the collapse control. Server
+   status is reported once, by the header indicator. */
 .melodee-shell__footer {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: var(--melodee-space-2);
   padding-inline: var(--melodee-space-3);
   padding-block: var(--melodee-space-3);
   border-block-start: 1px solid color-mix(in srgb, var(--melodee-shell-muted) 25%, transparent);
   color: var(--melodee-shell-muted);
   font-size: var(--melodee-font-micro);
-}
-
-.melodee-shell__footer-health {
-  display: inline-flex;
-  align-items: center;
-  color: var(--melodee-shell-text);
-}
-
-/* The status strip renders its dot on the dark rail: brighten the neutral
-   state so it stays visible, and keep the label readable at 11px. */
-.melodee-shell__footer-health .melodee-health-row__dot-label {
-  gap: var(--melodee-space-2);
-  font-size: var(--melodee-font-label);
 }
 
 .melodee-shell__footer-controls {
@@ -396,8 +383,14 @@
     display: none;
   }
 
-  .melodee-shell__health {
+  /* Server status is header-only now, so at sm the chip keeps its icon and
+     accessible name but drops the visible label to fit the action row. */
+  .melodee-shell__health .melodee-chip > span:not(.cds--visually-hidden) {
     display: none;
+  }
+
+  .melodee-shell__health .melodee-chip {
+    padding-inline: var(--melodee-space-1);
   }
 
   .melodee-shell__user-name,

@@ -48,15 +48,17 @@ pills, status chips, progress bars), Melodee owns a primitive built on Carbon to
 
 - Left navigation: 256 px expanded, 48 px collapsed (Carbon UI shell side nav), persistent.
 - Header: 48 px (Carbon UI shell header) containing one inset global search entry (`⌘K`/`Ctrl+K`),
-  a compact server status indicator, notifications, language selector, appearance toggle, and user
-  menu. The language control shows the current locale name at ≥ lg; the user control shows avatar
-  and username at ≥ lg (ADR-0184).
-- Brand block: monogram tile + `melodee` wordmark + `ADMIN` micro-label; the collapsed rail shows
-  the monogram only.
+  the server status indicator, notifications, language selector, appearance toggle, and user menu.
+  The language control shows the current locale name at ≥ lg; the user control shows avatar and
+  username at ≥ lg (ADR-0184). Below `lg` the language and user controls drop their labels and the
+  status chip drops its label (icon only, accessible name intact).
+- Brand block: the official Melodee circular badge (`assets/logo/svg/melodee-circular-badge.svg`,
+  served from `admin-ui/public/brand/`) + `melodee` wordmark + `ADMIN` micro-label; the collapsed
+  rail shows the badge only.
 - Content region: max width none (data-heavy), **24 px padding at ≥ lg** (was 16 px), 16 px below.
 - Inspector panel: 400 px right rail rendered as a `Surface` card (dismissible; content reflows).
-- Footer strip: status line inside the side nav (`Server online`, locale, appearance, collapse).
-  The footer is the canonical server-status location; the header carries a compact mirror.
+- Footer strip: locale, appearance, and the collapse control inside the side nav. Server status is
+  reported exactly once, by the header indicator — there is no duplicate status line in the rail.
 - Mockup proportions of 220 px navigation and 72 px header are directional only; the dimensions
   above are binding.
 

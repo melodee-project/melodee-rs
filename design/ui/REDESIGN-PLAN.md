@@ -107,7 +107,7 @@ conflict with UI-SPEC §3.
 | # | Decision | Recommendation | Blocking? |
 |---|---|---|---|
 | D1 | **Navigation IA.** The mockups show `MANAGEMENT { Policies, Identity }` and `SYSTEM { Workers, Search, Storage, Users, Settings }` — no `History`, no `Diagnostics`, no `Users & Access`. PRD-UI-004 (authority 3) specifies `POLICIES { Release Rules, Matching Rules }`, `CATALOG { …, Identity Review }`, `SYSTEM { …, Diagnostics }`. | Keep **PRD-UI-004 IA** verbatim (mockup text may not override product architecture, PRD-UI-REF-001). Restyle only: group labels, icon vocabulary, active treatment, spacing. Record the mockup deviation in UI-SPEC §3. | No — resolved by authority |
-| D2 | **Server status placement.** UI-SPEC §3 puts the status indicator in the header; mockups put "Server online" only in the nav footer. | Keep both (header chip + footer strip) and amend UI-SPEC §3 to say the footer is canonical and the header chip is a compact mirror. | No |
+| D2 | **Server status placement.** UI-SPEC §3 puts the status indicator in the header; mockups put "Server online" only in the nav footer. | Header only. The status is reported once by the header indicator; the footer keeps locale, appearance, and collapse. (Interim build showed both; the duplicate was removed on operator request.) | No |
 | D3 | **Shell dimensions** follow §3.2. | Adopt 24 px gutter, reference palette, keep 256/48. Amend UI-SPEC §3. | No |
 | D4 | **Missing data.** Priority, per-item progress %, per-item byte size, Release/Artist on queue rows, KPI deltas, a second activity series, worker "Avg time", storage-warning count. | Implement §7 additive fields; **omit** any element whose data cannot be produced and declare the omission in `design/ui/DESIGN-SYSTEM.md` + the screen's docs. Never render invented values. | **Yes** for the queue and overview screens |
 | D5 | **"Progress" semantics.** The ingestion state machine is discrete; the mockup shows 72 %/45 %. | Render **stage progress** derived from a single declared state→stage table (a documented deterministic mapping, same class as `ProcessingStateTag`), never a fabricated elapsed-time estimate. | No |
@@ -199,8 +199,8 @@ light, dark, and high-contrast; no component still consumes a raw hex; `prefers-
 3. **Nav.** Keep PRD-UI-004 IA. Restyle: 15 px labels, 2 px inset accent rail on the active row,
    `#102334` active fill, 11 px tracked group labels in `#6f8193`, tighter vertical rhythm.
    Replace the icon set with reference-matching Carbon glyphs (one glyph per item, see §8).
-4. **Footer strip.** `● Server online` left, locale + appearance right, collapse control; header
-   health chip stays as a compact mirror (D2).
+4. **Footer strip.** Locale + appearance, and the collapse control. Server status lives only in the
+   header (D2); no duplicate status line in the rail.
 5. **Mobile.** Keep the off-canvas rail; the reference has no mobile mockup, so UI-SPEC §8 governs.
 
 Acceptance: `smoke.spec.ts`, `localization.spec.ts`, `theme-packs.spec.ts` green; keyboard order
