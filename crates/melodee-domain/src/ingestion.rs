@@ -97,6 +97,25 @@ impl IngestionState {
         matches!(self, Self::Indexed | Self::Ignored | Self::Deleted)
     }
 
+    /// The operator-facing phase this state belongs to.
+    ///
+    /// Total over [`Self::ALL`] and a partition: every state maps to exactly one
+    /// phase, and [`IngestionPhase::states`] is its inverse. Used by the Admin
+    /// UI queue filters and labels so operators reason in phases, not states.
+    #[must_use]
+    pub const fn phase(self) -> IngestionPhase {
+        match self {
+            Self::Discovered | Self::Settling | Self::Ready => IngestionPhase::Inbound,
+            Self::Inspecting | Self::Normalizing | Self::Validating => IngestionPhase::Processing,
+            Self::Staged | Self::Publishing | Self::Published => IngestionPhase::Publishing,
+            Self::Cataloging | Self::Cataloged => IngestionPhase::Catalog,
+            Self::Indexing | Self::Indexed => IngestionPhase::Search,
+            Self::NeedsReview | Self::Quarantined => IngestionPhase::Review,
+            Self::Ignored | Self::Deleted => IngestionPhase::Disposition,
+            Self::Failed => IngestionPhase::Failed,
+        }
+    }
+
     /// States a worker may claim from the queue.
     #[must_use]
     pub const fn is_claimable(self) -> bool {
@@ -142,6 +161,97 @@ pub enum TransitionKind {
     Worker,
     /// An operator decision (review accept/quarantine/ignore/delete, reprocess).
     Operator,
+}
+
+/// Operator-facing phase: the coarse grouping of [`IngestionState`].
+///
+/// Fourteen lifecycle states is the right granularity for the durable work
+/// model — each one is a claim partition with its own fencing and evidence —
+/// but it is the wrong granularity for an operator, who thinks in terms of
+/// "is this importing, being checked, publishing, cataloged, searchable?".
+/// Phases are a pure projection of state (every state belongs to exactly one
+/// phase); they are never stored and never affect transitions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IngestionPhase {
+    /// Arrived, waiting for a stable snapshot, or queued for a worker.
+    Inbound,
+    /// Being read, converted, and checked by the pipeline.
+    Processing,
+    /// Canonical publication in progress or verified.
+    Publishing,
+    /// Catalog import in progress or complete.
+    Catalog,
+    /// Search projection in progress or complete.
+    Search,
+    /// Parked on an operator decision.
+    Review,
+    /// Final non-accepted disposition.
+    Disposition,
+    /// Processing failed; retry or operator action required.
+    Failed,
+}
+
+impl IngestionPhase {
+    /// Every phase, in lifecycle order.
+    pub const ALL: [Self; 8] = [
+        Self::Inbound,
+        Self::Processing,
+        Self::Publishing,
+        Self::Catalog,
+        Self::Search,
+        Self::Review,
+        Self::Disposition,
+        Self::Failed,
+    ];
+
+    /// Stable lowercase wire/storage form.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Inbound => "inbound",
+            Self::Processing => "processing",
+            Self::Publishing => "publishing",
+            Self::Catalog => "catalog",
+            Self::Search => "search",
+            Self::Review => "review",
+            Self::Disposition => "disposition",
+            Self::Failed => "failed",
+        }
+    }
+
+    /// Parses the wire form.
+    #[must_use]
+    pub fn parse(value: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|p| p.as_str() == value)
+    }
+
+    /// The states that belong to this phase, in canonical order.
+    #[must_use]
+    pub const fn states(self) -> &'static [IngestionState] {
+        match self {
+            Self::Inbound => &[
+                IngestionState::Discovered,
+                IngestionState::Settling,
+                IngestionState::Ready,
+            ],
+            Self::Processing => &[
+                IngestionState::Inspecting,
+                IngestionState::Normalizing,
+                IngestionState::Validating,
+            ],
+            Self::Publishing => &[
+                IngestionState::Staged,
+                IngestionState::Publishing,
+                IngestionState::Published,
+            ],
+            Self::Catalog => &[IngestionState::Cataloging, IngestionState::Cataloged],
+            Self::Search => &[IngestionState::Indexing, IngestionState::Indexed],
+            Self::Review => &[IngestionState::NeedsReview, IngestionState::Quarantined],
+            Self::Disposition => &[IngestionState::Ignored, IngestionState::Deleted],
+            Self::Failed => &[IngestionState::Failed],
+        }
+    }
 }
 
 impl IngestionState {
@@ -778,5 +888,75 @@ mod tests {
         item.lease_expires_at = Some(T0 + Duration::seconds(60));
         assert!(item.has_active_lease(T0));
         assert!(!item.has_active_lease(T0 + Duration::seconds(61)));
+    }
+}
+
+#[cfg(test)]
+mod phase_tests {
+    use super::{IngestionPhase, IngestionState};
+    use std::collections::BTreeSet;
+
+    #[test]
+    fn every_state_has_exactly_one_phase() {
+        let mut seen: BTreeSet<&'static str> = BTreeSet::new();
+        for state in IngestionState::ALL {
+            assert!(
+                seen.insert(state.as_str()),
+                "state {state:?} appeared twice while mapping phases"
+            );
+            // Totality is enforced by the exhaustive match in `phase()`, but the
+            // phase must also be a declared member of IngestionPhase::ALL.
+            assert!(IngestionPhase::ALL.contains(&state.phase()));
+        }
+        assert_eq!(seen.len(), IngestionState::ALL.len());
+    }
+
+    #[test]
+    fn phases_partition_the_state_set() {
+        let mut from_phases: BTreeSet<&'static str> = BTreeSet::new();
+        for phase in IngestionPhase::ALL {
+            for state in phase.states() {
+                assert!(
+                    from_phases.insert(state.as_str()),
+                    "state {state:?} is listed by more than one phase"
+                );
+                assert_eq!(
+                    state.phase(),
+                    phase,
+                    "IngestionPhase::states() and IngestionState::phase() disagree for {state:?}"
+                );
+            }
+        }
+        assert_eq!(
+            from_phases.len(),
+            IngestionState::ALL.len(),
+            "phases must cover every state exactly once"
+        );
+    }
+
+    #[test]
+    fn phase_wire_form_round_trips() {
+        for phase in IngestionPhase::ALL {
+            assert_eq!(IngestionPhase::parse(phase.as_str()), Some(phase));
+        }
+        assert_eq!(IngestionPhase::parse("nonsense"), None);
+        assert_eq!(IngestionPhase::parse(""), None);
+    }
+
+    #[test]
+    fn terminal_states_report_a_finished_phase() {
+        // A terminal state must never project onto an "in progress" phase.
+        for state in IngestionState::ALL {
+            if state.is_terminal() {
+                assert!(
+                    matches!(
+                        state.phase(),
+                        IngestionPhase::Search | IngestionPhase::Disposition
+                    ),
+                    "terminal state {state:?} maps to {:?}",
+                    state.phase()
+                );
+            }
+        }
     }
 }

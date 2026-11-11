@@ -80,8 +80,25 @@ async function mockAdminApi(page: Page) {
       return;
     }
     if (pathname === '/api/admin/v1/ingest/work-items') {
+      // Mirrors the admin API: `phase` is a state set (ADR-0185), `state` is one
+      // exact state, and supplying neither returns the whole queue.
       const state = url.searchParams.get('state');
-      const items = [ITEM_ONE, ITEM_TWO].filter((item) => !state || item.state === state);
+      const phase = url.searchParams.get('phase');
+      const PHASE_STATES: Record<string, string[]> = {
+        inbound: ['discovered', 'settling', 'ready'],
+        processing: ['inspecting', 'normalizing', 'validating'],
+        publishing: ['staged', 'publishing', 'published'],
+        catalog: ['cataloging', 'cataloged'],
+        search: ['indexing', 'indexed'],
+        review: ['needs_review', 'quarantined'],
+        disposition: ['ignored', 'deleted'],
+        failed: ['failed'],
+      };
+      const items = [ITEM_ONE, ITEM_TWO].filter((item) => {
+        if (state) return item.state === state;
+        if (phase) return (PHASE_STATES[phase] ?? []).includes(item.state);
+        return true;
+      });
       await json({ items, total: items.length, limit: 50, offset: 0 });
       return;
     }
@@ -120,10 +137,10 @@ test('loads the queue with state pills, counts, and server-paged rows', async ({
   // Relative to the /admin/ baseURL so the deep link hits the SPA fallback.
   await page.goto('processing');
 
-  // Filter pills are toggle buttons with live counts (ADR-0184), not tabs.
-  const chips = page.getByRole('group', { name: 'Filter by state' });
+  // Filter pills are phases (ADR-0185) with live counts, not tabs.
+  const chips = page.getByRole('group', { name: 'Filter by phase' });
   await expect(chips.getByRole('button', { name: /All/ })).toHaveText(/2/);
-  await expect(chips.getByRole('button', { name: /Ready/ })).toHaveText(/1/);
+  await expect(chips.getByRole('button', { name: /Inbound/ })).toHaveText(/1/);
   await expect(chips.getByRole('button', { name: /Failed/ })).toHaveText(/1/);
   await expect(chips.getByRole('button', { name: /All/ })).toHaveAttribute(
     'aria-pressed',
@@ -135,11 +152,11 @@ test('loads the queue with state pills, counts, and server-paged rows', async ({
   await expect(table.getByText('Business as Usual')).toBeVisible();
   await expect(table.getByText('Road to Freedom')).toBeVisible();
 
-  // Pill filtering hits the mocked API with the state param.
+  // Pill filtering hits the mocked API with the phase param.
   await chips.getByRole('button', { name: /Failed/ }).click();
   await expect(table.getByText('Road to Freedom')).toBeVisible();
   await expect(table.getByText('Business as Usual')).not.toBeVisible();
-  expect(page.url()).toContain('state=failed');
+  expect(page.url()).toContain('phase=failed');
 });
 
 test('keyboard: arrows move between rows and Enter opens the inspector', async ({ page }) => {

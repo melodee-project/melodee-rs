@@ -15,6 +15,7 @@ import { ProcessingStateTag } from '../../components/ProcessingStateTag';
 import { ProgressBar } from '../../components/ProgressBar';
 import { Surface } from '../../components/Surface';
 import { formatBytes, formatDateTime } from '../../i18n/format';
+import { phaseForState } from './phase';
 import { stageProgress, workItemDisplayName } from './workItem';
 
 /**
@@ -84,6 +85,10 @@ export function WorkItemInspector({
   const facts = data
     ? [
         { term: t('queue.fact.state'), value: <ProcessingStateTag state={data.item.state} /> },
+        {
+          term: t('phase.label'),
+          value: t(`phase.${data.item.phase ?? phaseForState(data.item.state)}`),
+        },
         {
           term: t('queue.column.progress'),
           value: (

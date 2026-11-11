@@ -122,6 +122,29 @@ or an equivalent supervisor to start MPV with the configured socket.
 | `MELODEE__INGEST__READY_MARKER_NAME` | `.melodee-ready` | Marker filename that can short-circuit settling. |
 | `MELODEE__INGEST__READY_MARKER_SHORTCUT_SECONDS` | `0` | Quiet-period override when marker is present. |
 
+### Throughput tuning
+
+The default worker concurrency (`2` per stage) is deliberately conservative so a small host is never
+overloaded. Throughput is bound by concurrency, not by the number of stages: for a 25-Release /
+1.8 GB batch on a 24-core host, the median wait before a Release was claimed was ~200 s while the
+work itself took seconds to tens of seconds per stage.
+
+Sizing rule:
+
+- `MELODEE__INSPECTION__CONCURRENCY` — mostly I/O (hashing, `ffprobe`); raise to the number of
+  spindles you can saturate (4–8 is safe on a modern host).
+- `MELODEE__NORMALIZATION__CONCURRENCY` — the CPU bound (transcoding). Keep it at or below half the
+  physical cores so the database and API keep responsive.
+- `MELODEE__VALIDATION__CONCURRENCY` and `MELODEE__PUBLICATION__CONCURRENCY` — I/O bound; match
+  inspection.
+- `MELODEE__CATALOG__CONCURRENCY` — PostgreSQL bound; 2–4.
+- `MELODEE__INGEST__SETTLING_QUIET_SECONDS` — the floor on per-Release latency (default `10`); the
+  ready marker (`MELODEE__INGEST__READY_MARKER_NAME`) skips the wait when the source can write it.
+
+Raising concurrency cannot corrupt state — every stage is lease-fenced — it only changes how much
+runs at once.
+
+
 ### Media inspection
 
 | Key | Default | Effect |

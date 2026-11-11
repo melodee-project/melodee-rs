@@ -6,7 +6,14 @@ import { useSearchParams } from 'react-router-dom';
 
 import { getWorkItemCounts, listWorkItems } from '../../api/admin';
 import { ApiError } from '../../api/client';
-import type { IngestionState, Page, SortParam, WorkItem, WorkItemStateCount } from '../../api/types';
+import type {
+  IngestionPhase,
+  IngestionState,
+  Page,
+  SortParam,
+  WorkItem,
+  WorkItemStateCount,
+} from '../../api/types';
 import { EntityTable, type EntityColumn, type EntityRow } from '../../components/EntityTable';
 import { FilterPills } from '../../components/FilterPills';
 import { PageHeader } from '../../components/PageHeader';
@@ -16,6 +23,7 @@ import { Surface } from '../../components/Surface';
 import { AbsentCell, StackedCell } from '../../components/cells';
 import { formatBytes, formatDateTime, formatNumber, formatRelativeTime } from '../../i18n/format';
 import { WorkItemInspector } from './WorkItemInspector';
+import { countByPhase, PHASE_ORDER, phaseForState } from './phase';
 import { stageProgress, workItemDisplayName } from './workItem';
 
 /**
@@ -56,6 +64,11 @@ const STATE_ORDER: IngestionState[] = [
 ];
 
 const STATE_SET = new Set<string>(STATE_ORDER);
+const PHASE_SET = new Set<string>(PHASE_ORDER);
+
+function parsePhase(raw: string | null): IngestionPhase | undefined {
+  return raw && PHASE_SET.has(raw) ? (raw as IngestionPhase) : undefined;
+}
 const COUNTS_REFRESH_MS = 30_000;
 const SEARCH_DEBOUNCE_MS = 300;
 
@@ -83,6 +96,7 @@ export function ProcessingQueueScreen() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const stateFilter = parseState(searchParams.get('state'));
+  const phaseFilter = parsePhase(searchParams.get('phase'));
   const sort = parseSort(searchParams.get('sort'));
   const page = parsePage(searchParams.get('page'));
   const pageSize = Math.max(1, Number.parseInt(searchParams.get('pageSize') ?? '50', 10) || 50);
@@ -143,7 +157,10 @@ export function ProcessingQueueScreen() {
   const fetchPage = useCallback(
     (signal: { cancelled: boolean }) => {
       return listWorkItems({
-        state: stateFilter,
+        // Phase is the coarse filter (a state set); `state` remains for exact
+        // deep links such as the dashboard attention rows.
+        phase: phaseFilter,
+        state: phaseFilter ? undefined : stateFilter,
         query: query || undefined,
         limit: pageSize,
         offset: (page - 1) * pageSize,
@@ -165,7 +182,7 @@ export function ProcessingQueueScreen() {
           }
         });
     },
-    [stateFilter, sort, page, pageSize, query],
+    [stateFilter, phaseFilter, sort, page, pageSize, query],
   );
 
   useEffect(() => {
@@ -180,7 +197,7 @@ export function ProcessingQueueScreen() {
   // longer be visible, so it resets (state adjusted during render, per the
   // React docs pattern). Single-selection (the inspector) is preserved in
   // the URL.
-  const queryKey = `${stateFilter ?? ''}|${sort ?? ''}|${page}|${pageSize}|${query}`;
+  const queryKey = `${phaseFilter ?? ''}|${stateFilter ?? ''}|${sort ?? ''}|${page}|${pageSize}|${query}`;
   const [prevQueryKey, setPrevQueryKey] = useState(queryKey);
   if (prevQueryKey !== queryKey) {
     setPrevQueryKey(queryKey);
@@ -238,7 +255,14 @@ export function ProcessingQueueScreen() {
               />
             ),
             artist: item.artistName ?? <AbsentCell label={t('queue.unbound')} />,
-            state: <ProcessingStateTag state={item.state} />,
+            state: (
+              <>
+                <ProcessingStateTag state={item.state} />
+                <span className="melodee-cell-stack__secondary">
+                  {t(`phase.${item.phase ?? phaseForState(item.state)}`)}
+                </span>
+              </>
+            ),
             progress: (
               <ProgressBar
                 value={stageProgress(item.state)}
@@ -258,20 +282,23 @@ export function ProcessingQueueScreen() {
     [pageData, t],
   );
 
-  // Pills: All plus every state the counts endpoint reports, in canonical
-  // order. The counts endpoint omits empty states by design.
+  // Pills are phases (ADR-0185): the counts endpoint reports per state, so the
+  // phases are aggregated client-side and empty phases are omitted.
   const pills = useMemo(() => {
     const total = (counts ?? []).reduce((sum, entry) => sum + entry.count, 0);
-    const byState = new Map((counts ?? []).map((entry) => [entry.state, entry.count]));
     return [
       { key: '', label: t('common.all'), count: formatNumber(total) },
-      ...STATE_ORDER.filter((state) => byState.has(state)).map((state) => ({
-        key: state,
-        label: t(`queue.state.${state}`),
-        count: formatNumber(byState.get(state) ?? 0),
+      ...countByPhase(counts ?? []).map((entry) => ({
+        key: entry.phase,
+        label: t(`phase.${entry.phase}`),
+        count: formatNumber(entry.count),
       })),
     ];
   }, [counts, t]);
+
+  // A phase pill is active for an explicit phase filter, and for a legacy
+  // `state=` deep link whose state belongs to that phase.
+  const activePill = phaseFilter ?? (stateFilter ? phaseForState(stateFilter) : '');
 
   const toolbar =
     bulkSelected.length > 0 ? (
@@ -343,9 +370,9 @@ export function ProcessingQueueScreen() {
         <div className="melodee-queue-chips">
           <FilterPills
             items={pills}
-            value={stateFilter ?? ''}
-            onChange={(key) => updateParams({ state: key, page: '1' })}
-            ariaLabel={t('queue.filterByState')}
+            value={activePill}
+            onChange={(key) => updateParams({ phase: key, state: null, page: '1' })}
+            ariaLabel={t('queue.filterByPhase')}
           />
         </div>
         {loading && pageData === null ? (

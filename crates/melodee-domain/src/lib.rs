@@ -50,8 +50,9 @@ pub use ids::{
     TrackPublicId,
 };
 pub use ingestion::{
-    Disposition, FailureClass, IngestionState, InvalidStateTransition, ReleaseWorkItem,
-    ReleaseWorkItemEvent, RetryPolicy, TransitionKind, WorkErrorCode, WorkEventType,
+    Disposition, FailureClass, IngestionPhase, IngestionState, InvalidStateTransition,
+    ReleaseWorkItem, ReleaseWorkItemEvent, RetryPolicy, TransitionKind, WorkErrorCode,
+    WorkEventType,
 };
 pub use manifest::{
     AudioTechnicalObservation, CANONICAL_LAYOUT_VERSION, CANONICAL_MP3_PROFILE_VERSION,

@@ -16,6 +16,7 @@ import { EntityTable, type EntityColumn, type EntityRow } from '../../components
 import { FilterPills } from '../../components/FilterPills';
 import { ProcessingStateTag } from '../../components/ProcessingStateTag';
 import { formatDateTime, formatNumber, formatRelativeTime } from '../../i18n/format';
+import { phaseForState } from './phase';
 import { WorkItemInspector } from './WorkItemInspector';
 import { workItemDisplayName } from './workItem';
 
@@ -157,7 +158,14 @@ export function WorkItemStateTable({
               <span className="melodee-work-item__id">{item.id}</span>
             </>
           ),
-          state: <ProcessingStateTag state={item.state} />,
+          state: (
+            <>
+              <ProcessingStateTag state={item.state} />
+              <span className="melodee-cell-stack__secondary">
+                {t(`phase.${item.phase ?? phaseForState(item.state)}`)}
+              </span>
+            </>
+          ),
           attemptCount: formatNumber(item.attemptCount),
           addedAt: <span title={formatDateTime(item.createdAt)}>{formatRelativeTime(item.createdAt)}</span>,
           updatedAt: (

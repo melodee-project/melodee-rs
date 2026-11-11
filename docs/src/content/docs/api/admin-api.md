@@ -81,6 +81,13 @@ The optional `query` parameter is a bounded case-insensitive substring filter ov
 Release title, its billed artist, and the work item's current path — an operator convenience over
 the active queue, not a catalog search.
 
+The optional `phase` parameter filters by operator-facing phase (ADR-0185): `inbound`,
+`processing`, `publishing`, `catalog`, `search`, `review`, `disposition`, `failed`. A phase is a
+state set (`inbound` = `discovered|settling|ready`, and so on); `state` remains available for one
+exact state. Supplying both returns `400 invalid_filter`; an unknown phase returns
+`400 unknown_phase`. Every work item carries the derived `phase` alongside its `state`, so clients
+never re-implement the mapping.
+
 Each item also carries display-only enrichment for the rows of an operator queue, present once the
 work item has a catalog import binding and absent before that (they are never part of the work
 item's identity, which is its id):
@@ -91,6 +98,7 @@ item's identity, which is its id):
 | `releaseTitle` | Display title of that Release |
 | `artistName` | Billed display artist of that Release |
 | `mediaBytes` | Media bytes recorded by the Release aggregates |
+| `phase` | Derived operator-facing phase for `state` (always present) |
 
 Clients must render a missing field as absent, never as a zero or an empty title.
 

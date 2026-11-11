@@ -225,6 +225,11 @@ export function requestSearchRebuild(): Promise<SearchRebuild> {
 export interface WorkItemListParams extends ListParams {
   state?: string;
   /**
+   * Operator-facing phase filter (ADR-0185). A phase is a state set; use `state`
+   * for one exact state. Supplying both is a 400 `invalid_filter`.
+   */
+  phase?: string;
+  /**
    * Case-insensitive substring over the bound Release title, its billed artist,
    * and the work item's current path (ADR-0184). Bounded operator convenience
    * over the active queue, not a catalog search.

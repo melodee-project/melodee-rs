@@ -115,6 +115,16 @@ by an accepted ADR and release gate.
 - `design/adr/ADR-0184-admin-ui-reference-alignment-and-surface-system.md`,
   `design/ui/REDESIGN-PLAN.md`, and amended `UI-SPEC.md` / `DESIGN-SYSTEM.md` / `MOCKUPS.md`.
 
+### Changed
+
+- Operator-facing phases over the ingestion state machine (ADR-0185). The fourteen lifecycle states
+  are unchanged (each is a claim partition with its own fencing and evidence), but the Admin UI now
+  filters and labels by eight phases — `inbound`, `processing`, `publishing`, `catalog`, `search`,
+  `review`, `disposition`, `failed` — with the precise state kept as the row detail. The work-item
+  listing accepts an additive `phase` filter and returns a derived `phase` on every item.
+- Documented that a Release is *playable* at policy `Accept` and *searchable* at `indexed`, and added
+  throughput-tuning guidance (concurrency is the throughput lever, not the number of stages).
+
 ### Fixed
 
 - Releases no longer park forever in `indexing`. `Indexing -> Indexed` is the terminal hop of the

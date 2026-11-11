@@ -848,3 +848,101 @@ async fn response_contains_no_secrets() {
     assert!(!serialized.contains("postgres://"));
     db.drop().await;
 }
+
+/// ADR-0185: operators filter and group by phase, a derived state set, while
+/// `state` stays available for one exact state. The response also carries the
+/// derived `phase` so clients never re-implement the mapping.
+#[tokio::test]
+async fn work_item_phase_filter_groups_states_and_reports_the_derived_phase() {
+    let db = common::TestDb::create("admin_diag_phase_filter").await;
+    let fixture = seed_users(&db).await;
+    let router = admin_router(db.pool.clone());
+    let store = WorkItemStore;
+
+    // One item per phase is unnecessary; cover an in-flight phase and a
+    // terminal one, plus a state that shares a phase with another.
+    let ready_id = seed_ready(&store, &db.pool, "phase/ready").await;
+    let mut tx = db.pool.begin().await.expect("begin");
+    sqlx::query("UPDATE release_work_items SET state = 'settling', updated_at = $2 WHERE id = $1")
+        .bind(ready_id)
+        .bind(T0)
+        .execute(&mut *tx)
+        .await
+        .expect("park in settling");
+    tx.commit().await.expect("commit");
+    let failed_id = seed_ready(&store, &db.pool, "phase/failed").await;
+    let mut tx = db.pool.begin().await.expect("begin");
+    sqlx::query("UPDATE release_work_items SET state = 'failed', updated_at = $2 WHERE id = $1")
+        .bind(failed_id)
+        .bind(T0)
+        .execute(&mut *tx)
+        .await
+        .expect("park in failed");
+    tx.commit().await.expect("commit");
+
+    // `inbound` covers discovered/settling/ready, so it matches the settling item.
+    let (status, body) = get_json(
+        router.clone(),
+        "/api/admin/v1/ingest/work-items?phase=inbound",
+        Some(&fixture.admin_token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["total"], 1);
+    assert_eq!(body["items"][0]["state"], "settling");
+    assert_eq!(body["items"][0]["phase"], "inbound");
+
+    // `failed` is its own phase.
+    let (status, body) = get_json(
+        router.clone(),
+        "/api/admin/v1/ingest/work-items?phase=failed",
+        Some(&fixture.admin_token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["total"], 1);
+    assert_eq!(body["items"][0]["phase"], "failed");
+
+    // An in-flight phase with no members returns an honest empty page.
+    let (status, body) = get_json(
+        router.clone(),
+        "/api/admin/v1/ingest/work-items?phase=publishing",
+        Some(&fixture.admin_token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["total"], 0);
+
+    // `state` still filters one exact state and reports the shared phase.
+    let (status, body) = get_json(
+        router.clone(),
+        "/api/admin/v1/ingest/work-items?state=settling",
+        Some(&fixture.admin_token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["total"], 1);
+    assert_eq!(body["items"][0]["phase"], "inbound");
+
+    // Unknown phase is a client error, not an empty result.
+    let (status, body) = get_json(
+        router.clone(),
+        "/api/admin/v1/ingest/work-items?phase=nonsense",
+        Some(&fixture.admin_token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["code"], "unknown_phase");
+
+    // Supplying both filters is ambiguous and rejected.
+    let (status, body) = get_json(
+        router.clone(),
+        "/api/admin/v1/ingest/work-items?phase=inbound&state=ready",
+        Some(&fixture.admin_token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["code"], "invalid_filter");
+
+    db.drop().await;
+}

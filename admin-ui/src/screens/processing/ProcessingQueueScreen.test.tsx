@@ -102,30 +102,43 @@ describe('ProcessingQueueScreen', () => {
     mockGetWorkItemEvents.mockResolvedValue([makeEvent()]);
   });
 
-  it('renders rows from the pagination envelope and live count pills', async () => {
+  it('renders rows and phase pills aggregated from the per-state counts', async () => {
     renderScreen();
     expect(await screen.findByText('Business as Usual')).toBeInTheDocument();
-    // Pills are driven by /counts: All total plus per-state counts, exposed as
-    // toggle buttons (ADR-0184) rather than Carbon ContentSwitcher tabs.
-    // The pill name is the localized label; the count is a sibling span.
+    // Pills are phases (ADR-0185), aggregated from /counts and exposed as toggle
+    // buttons (ADR-0184) rather than Carbon ContentSwitcher tabs.
     const pills = await screen.findAllByRole('button', { pressed: true });
     expect(pills[0]).toHaveTextContent('All');
-    const group = screen.getByRole('group', { name: 'Filter by state' });
+    const group = screen.getByRole('group', { name: 'Filter by phase' });
     expect(within(group).getByRole('button', { name: /All/ })).toHaveTextContent('4');
-    expect(within(group).getByRole('button', { name: /Ready/ })).toHaveTextContent('1');
+    expect(within(group).getByRole('button', { name: /Inbound/ })).toHaveTextContent('1');
     expect(within(group).getByRole('button', { name: /Failed/ })).toHaveTextContent('3');
   });
 
-  it('applies the pill state filter to the API call and the URL', async () => {
+  it('applies the phase pill filter to the API call and the URL', async () => {
     renderScreen();
-    const group = await screen.findByRole('group', { name: 'Filter by state' });
+    const group = await screen.findByRole('group', { name: 'Filter by phase' });
     fireEvent.click(within(group).getByRole('button', { name: /Failed/ }));
     await waitFor(() =>
       expect(mockListWorkItems).toHaveBeenLastCalledWith(
-        expect.objectContaining({ state: 'failed', offset: 0 }),
+        expect.objectContaining({ phase: 'failed', offset: 0 }),
       ),
     );
-    expect(screen.getByTestId('search-params')).toHaveTextContent('state=failed');
+    expect(screen.getByTestId('search-params')).toHaveTextContent('phase=failed');
+  });
+
+  it('keeps a legacy state deep link working and marks its phase pill active', async () => {
+    renderScreen('/processing?state=failed');
+    await waitFor(() =>
+      expect(mockListWorkItems).toHaveBeenLastCalledWith(
+        expect.objectContaining({ state: 'failed', phase: undefined }),
+      ),
+    );
+    const group = await screen.findByRole('group', { name: 'Filter by phase' });
+    expect(within(group).getByRole('button', { name: /Failed/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
   });
 
   it('emits only whitelisted sort params', async () => {

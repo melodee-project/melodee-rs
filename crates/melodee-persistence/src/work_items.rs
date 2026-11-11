@@ -2937,7 +2937,7 @@ impl WorkItemStore {
     pub async fn list_page_enriched(
         &self,
         pool: &PgPool,
-        state: Option<IngestionState>,
+        states: Option<&[IngestionState]>,
         limit: u32,
         offset: u32,
         sort: WorkItemSort,
@@ -2947,7 +2947,11 @@ impl WorkItemStore {
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(|value| format!("%{}%", escape_like(value)));
-        let filter = "($1::text IS NULL OR w.state = $1)
+        // A phase filter is a state *set*; `NULL`/empty means every state.
+        let state_names: Option<Vec<&str>> = states
+            .filter(|list| !list.is_empty())
+            .map(|list| list.iter().map(|state| state.as_str()).collect());
+        let filter = "($1::text[] IS NULL OR w.state = ANY($1))
                AND (
                    $2::text IS NULL
                    OR r.title ILIKE $2 ESCAPE '\\'
@@ -2965,7 +2969,7 @@ impl WorkItemStore {
              LEFT JOIN releases r ON r.id = ci.release_id
              WHERE {filter}"
         )))
-        .bind(state.map(IngestionState::as_str))
+        .bind(state_names.as_deref())
         .bind(pattern.as_deref())
         .fetch_one(pool)
         .await?;
@@ -2980,7 +2984,7 @@ impl WorkItemStore {
              LIMIT $3 OFFSET $4",
             qualified_order_by(sort)
         )))
-        .bind(state.map(IngestionState::as_str))
+        .bind(state_names.as_deref())
         .bind(pattern.as_deref())
         .bind(i64::from(limit))
         .bind(i64::from(offset))

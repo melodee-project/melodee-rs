@@ -37,6 +37,28 @@ Bulk actions are deliberately not offered, and the queue screen itself is read-o
 queue mutation in this build is a per-item, audited decision made from the
 [Release Review](../library-management/release-review/) workspace or the CLI.
 
+## Phases, states, and what "playable" means
+
+The queue filters by **phase**, not by raw state. A phase is a coarse grouping the operator can
+reason about; the state button in each row stays the precise value.
+
+| Phase | States | Meaning |
+|---|---|---|
+| Inbound | discovered, settling, ready | Arrived, being snapshotted, or waiting for a worker |
+| Processing | inspecting, normalizing, validating | Being read, converted, and checked |
+| Publishing | staged, publishing, published | Canonical publication in progress or verified |
+| Catalog | cataloging, cataloged | Catalog import in progress or complete |
+| Search | indexing, indexed | Search projection in progress or complete |
+| Review | needs_review, quarantined | Parked on an operator decision |
+| Failed | failed | Retrying or awaiting an operator |
+| Closed | ignored, deleted | Final non-accepted disposition |
+
+A Release becomes **playable** when the policy decision is `Accept` (its catalog rows and canonical
+files exist and its status is active). It becomes **searchable** one step later, at `indexed`, when
+the search projection that makes it appear in browse, search, and list results is durable. So if a
+Release is playable but missing from search results, it is between those two points — the queue row
+will still read `Search`.
+
 ## Quarantine and History
 
 - **Processing → Quarantine** (`/admin/processing/quarantine`) lists quarantined work items —

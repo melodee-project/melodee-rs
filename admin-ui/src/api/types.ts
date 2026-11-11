@@ -115,6 +115,21 @@ export type IngestionState =
   | 'ignored'
   | 'deleted';
 
+/**
+ * Operator-facing phase (melodee-domain IngestionPhase, ADR-0185): a derived
+ * grouping of `IngestionState`. Operators filter and label by phase; the state
+ * remains the precise detail.
+ */
+export type IngestionPhase =
+  | 'inbound'
+  | 'processing'
+  | 'publishing'
+  | 'catalog'
+  | 'search'
+  | 'review'
+  | 'disposition'
+  | 'failed';
+
 /** One {state, count} row from GET /ingest/work-items/counts. */
 export interface WorkItemStateCount {
   state: IngestionState;
@@ -167,6 +182,8 @@ export interface WorkItem {
   updatedAt: string;
   createdAt: string;
   completedAt: string | null;
+  /** Derived operator-facing phase (ADR-0185); always present from the API. */
+  phase?: IngestionPhase;
   /** Bound catalog Release (display only; absent before an import binds). */
   releaseId?: string | null;
   releaseTitle?: string;

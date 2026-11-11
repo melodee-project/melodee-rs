@@ -29,7 +29,9 @@ use axum::{
     response::{IntoResponse, Response},
     routing::get,
 };
-use melodee_domain::{IngestionState, ReleaseWorkItem, ReleaseWorkItemEvent, WorkEventType};
+use melodee_domain::{
+    IngestionPhase, IngestionState, ReleaseWorkItem, ReleaseWorkItemEvent, WorkEventType,
+};
 use melodee_persistence::{ActiveLease, StateCount, WorkItemListRow, WorkItemSort, WorkItemStore};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -90,6 +92,9 @@ pub struct WorkItemDto {
     pub artist_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub media_bytes: Option<i64>,
+    /// Operator-facing phase derived from `state` (ADR-0185). Always present;
+    /// clients group and label by phase and show `state` as the precise detail.
+    pub phase: String,
 }
 
 impl From<ReleaseWorkItem> for WorkItemDto {
@@ -124,11 +129,18 @@ impl From<ReleaseWorkItem> for WorkItemDto {
             release_title: None,
             artist_name: None,
             media_bytes: None,
+            phase: item.state.phase().as_str().to_string(),
         }
     }
 }
 
 impl WorkItemDto {
+    /// Applies the operator-facing phase projection (ADR-0185).
+    fn with_phase(mut self) -> Self {
+        self.phase = self.state.phase().as_str().to_string();
+        self
+    }
+
     /// Applies the queue's display-only enrichment from the import binding.
     fn with_binding(mut self, row: &WorkItemListRow) -> Self {
         self.release_id = row.release_id;
@@ -241,6 +253,11 @@ pub struct ListWorkItemsParams {
     /// its billed artist, and the work item's current path. Bounded operator
     /// convenience over the active queue (ADR-0184) — not a catalog search.
     pub query: Option<String>,
+    /// Optional operator-facing phase filter (`inbound`, `processing`,
+    /// `publishing`, `catalog`, `search`, `review`, `disposition`, `failed`).
+    /// A phase is a state set (ADR-0185); use `state` for one exact state.
+    /// Supplying both is a `400 invalid_filter`.
+    pub phase: Option<String>,
 }
 
 fn default_list_limit() -> u32 {
@@ -351,6 +368,27 @@ pub async fn list_work_items(
             )
         })?),
     };
+    let parsed_phase = match params.phase.as_deref() {
+        None => None,
+        Some(raw) => Some(IngestionPhase::parse(raw).ok_or_else(|| {
+            AdminApiError::new(
+                AdminApiErrorKind::BadRequest("unknown_phase"),
+                format!("unknown phase '{raw}'"),
+            )
+        })?),
+    };
+    if parsed_state.is_some() && parsed_phase.is_some() {
+        return Err(AdminApiError::new(
+            AdminApiErrorKind::BadRequest("invalid_filter"),
+            "supply either 'state' or 'phase', not both".to_string(),
+        ));
+    }
+    // A phase is a state set; `None` keeps the unfiltered queue.
+    let state_filter: Option<Vec<IngestionState>> = match (parsed_state, parsed_phase) {
+        (Some(state), None) => Some(vec![state]),
+        (None, Some(phase)) => Some(phase.states().to_vec()),
+        _ => None,
+    };
     let sort = match params.sort.as_deref() {
         None => WorkItemSort::default_order(),
         Some(raw) => WorkItemSort::parse(raw).ok_or_else(|| {
@@ -365,7 +403,7 @@ pub async fn list_work_items(
     let (items, total) = WorkItemStore
         .list_page_enriched(
             &state.pool,
-            parsed_state,
+            state_filter.as_deref(),
             limit,
             offset,
             sort,
@@ -376,7 +414,11 @@ pub async fn list_work_items(
     Ok(Json(WorkItemPageDto {
         items: items
             .iter()
-            .map(|row| WorkItemDto::from(row.item.clone()).with_binding(row))
+            .map(|row| {
+                WorkItemDto::from(row.item.clone())
+                    .with_binding(row)
+                    .with_phase()
+            })
             .collect(),
         total,
         limit,

@@ -129,6 +129,10 @@ const ITEM_TWO = {
   id: WORK_ITEM_ID_TWO,
   sourcePath: "/library/incoming/Road to Freedom",
   currentPath: "/library/incoming/Road to Freedom",
+  releaseId: null,
+  releaseTitle: "Road to Freedom",
+  artistName: "The Nomads",
+  mediaBytes: 48200000,
   state: "failed",
   attemptCount: 5,
   leaseOwner: null,
@@ -744,9 +748,22 @@ export async function mockAdminApi(
     }
     if (pathname === "/api/admin/v1/ingest/work-items") {
       const state = url.searchParams.get("state");
-      const items = [ITEM_ONE, ITEM_TWO].filter(
-        (item) => !state || item.state === state,
-      );
+      const phase = url.searchParams.get("phase");
+      const PHASE_STATES: Record<string, string[]> = {
+        inbound: ["discovered", "settling", "ready"],
+        processing: ["inspecting", "normalizing", "validating"],
+        publishing: ["staged", "publishing", "published"],
+        catalog: ["cataloging", "cataloged"],
+        search: ["indexing", "indexed"],
+        review: ["needs_review", "quarantined"],
+        disposition: ["ignored", "deleted"],
+        failed: ["failed"],
+      };
+      const items = [ITEM_ONE, ITEM_TWO].filter((item) => {
+        if (state) return item.state === state;
+        if (phase) return (PHASE_STATES[phase] ?? []).includes(item.state);
+        return true;
+      });
       await json({ items, total: items.length, limit: 50, offset: 0 });
       return;
     }
