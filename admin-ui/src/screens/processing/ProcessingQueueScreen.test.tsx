@@ -102,18 +102,24 @@ describe('ProcessingQueueScreen', () => {
     mockGetWorkItemEvents.mockResolvedValue([makeEvent()]);
   });
 
-  it('renders rows from the pagination envelope and live count chips', async () => {
+  it('renders rows from the pagination envelope and live count pills', async () => {
     renderScreen();
     expect(await screen.findByText('Business as Usual')).toBeInTheDocument();
-    // Chips are driven by /counts: All total plus per-state counts.
-    expect(await screen.findByRole('tab', { name: 'All 4' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Ready 1' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Failed 3' })).toBeInTheDocument();
+    // Pills are driven by /counts: All total plus per-state counts, exposed as
+    // toggle buttons (ADR-0184) rather than Carbon ContentSwitcher tabs.
+    // The pill name is the localized label; the count is a sibling span.
+    const pills = await screen.findAllByRole('button', { pressed: true });
+    expect(pills[0]).toHaveTextContent('All');
+    const group = screen.getByRole('group', { name: 'Filter by state' });
+    expect(within(group).getByRole('button', { name: /All/ })).toHaveTextContent('4');
+    expect(within(group).getByRole('button', { name: /Ready/ })).toHaveTextContent('1');
+    expect(within(group).getByRole('button', { name: /Failed/ })).toHaveTextContent('3');
   });
 
-  it('applies the chip state filter to the API call and the URL', async () => {
+  it('applies the pill state filter to the API call and the URL', async () => {
     renderScreen();
-    fireEvent.click(await screen.findByRole('tab', { name: 'Failed 3' }));
+    const group = await screen.findByRole('group', { name: 'Filter by state' });
+    fireEvent.click(within(group).getByRole('button', { name: /Failed/ }));
     await waitFor(() =>
       expect(mockListWorkItems).toHaveBeenLastCalledWith(
         expect.objectContaining({ state: 'failed', offset: 0 }),

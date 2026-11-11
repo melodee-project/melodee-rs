@@ -6,26 +6,25 @@ import {
   Subtract,
   WarningFilled,
 } from '@carbon/icons-react';
-import { Tag } from '@carbon/react';
+import type { ComponentType } from 'react';
 import { useTranslation } from 'react-i18next';
 
 /**
- * The six-way status semantic (UI-SPEC §5). Status is never color-only:
- * every render carries an icon, a localized label, and a description exposed
- * via the accessible name/tooltip.
+ * The six-way status semantic (UI-SPEC §5) rendered as a Melodee status chip
+ * (UI-SPEC §6.1, ADR-0184). Status is never color-only: every render carries an
+ * icon, a localized label, and a description exposed via the accessible name
+ * and tooltip.
+ *
+ * The chip is Melodee-owned rather than a Carbon `Tag` because the reference
+ * treatment is a flat tinted pill with a tinted ink (no ring, no border), which
+ * Carbon tags cannot express without forking their internals.
  */
 export type StatusKind = 'success' | 'info' | 'warning' | 'error' | 'provisional' | 'neutral';
 
-type CarbonTagType = 'green' | 'blue' | 'red' | 'gray';
-
-const CARBON_TAG_TYPES: Partial<Record<StatusKind, CarbonTagType>> = {
-  success: 'green',
-  info: 'blue',
-  error: 'red',
-  neutral: 'gray',
-};
-
-const ICONS: Record<StatusKind, typeof CheckmarkFilled> = {
+const ICONS: Record<
+  StatusKind,
+  ComponentType<{ size?: number; className?: string; 'aria-hidden'?: boolean }>
+> = {
   success: CheckmarkFilled,
   info: InProgress,
   warning: WarningFilled,
@@ -34,39 +33,36 @@ const ICONS: Record<StatusKind, typeof CheckmarkFilled> = {
   neutral: Subtract,
 };
 
-export interface StatusTagProps {
+export interface StatusChipProps {
   kind: StatusKind;
   /** Override the default localized label for this kind. */
   label?: string;
   /** Override the default localized description for this kind. */
   description?: string;
+  /** Hide the icon where a denser surface needs it (never hides the text). */
+  hideIcon?: boolean;
 }
 
-export function StatusTag({ kind, label, description }: StatusTagProps) {
+export function StatusChip({ kind, label, description, hideIcon = false }: StatusChipProps) {
   const { t } = useTranslation();
   const resolvedLabel = label ?? t(`status.${kind}`);
   const resolvedDescription = description ?? t(`status.${kind}Description`);
   const Icon = ICONS[kind];
-  const carbonType = CARBON_TAG_TYPES[kind];
-  const customClass =
-    kind === 'warning'
-      ? 'melodee-status-tag--warning'
-      : kind === 'provisional'
-        ? 'melodee-status-tag--provisional'
-        : undefined;
   return (
     // The wrapper carries the tooltip; the visually-hidden description keeps
     // the semantic meaning available to assistive tech without relying on
     // hover (UI-SPEC §9: no hover-only information).
-    <span className="melodee-status-tag" title={resolvedDescription}>
-      <Tag
-        type={carbonType ?? 'outline'}
-        className={customClass}
-        aria-label={`${resolvedLabel}. ${resolvedDescription}`}
-      >
-        <Icon aria-hidden size={12} /> {resolvedLabel}
-        <span className="cds--visually-hidden"> {resolvedDescription}</span>
-      </Tag>
+    <span
+      className={`melodee-chip melodee-chip--${kind}`}
+      title={resolvedDescription}
+      aria-label={`${resolvedLabel}. ${resolvedDescription}`}
+    >
+      {hideIcon ? null : <Icon className="melodee-chip__icon" size={12} aria-hidden />}
+      <span>{resolvedLabel}</span>
+      <span className="cds--visually-hidden"> {resolvedDescription}</span>
     </span>
   );
 }
+
+/** Historical name for `StatusChip`; both exports render the same chip. */
+export const StatusTag = StatusChip;

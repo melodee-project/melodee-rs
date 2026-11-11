@@ -80,8 +80,8 @@ const KEYBOARD_TARGETS: Record<string, (page: Page) => Promise<Locator> | Locato
   overview: (page) => page.getByRole('link', { name: 'Open the processing queue' }),
   'processing-queue': (page) =>
     page.getByRole('table', { name: 'Processing queue work items' }).locator('tbody tr').first(),
-  'release-review': (page) => page.getByRole('button', { name: 'Accept Release' }),
-  'identity-review': (page) => page.getByRole('button', { name: 'Create New Artist' }),
+  'release-review': (page) => page.getByRole('button', { name: /^Accept Release/ }),
+  'identity-review': (page) => page.getByRole('button', { name: /^Create New Artist/ }),
   // Carbon Tabs use roving tabindex: only the selected tab is Tab-reachable.
   'artist-detail': (page) => page.getByRole('tab', { name: 'Overview', selected: true }),
   'release-detail': (page) => page.getByRole('tab', { name: 'Overview', selected: true }),

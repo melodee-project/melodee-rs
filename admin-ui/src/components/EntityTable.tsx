@@ -175,7 +175,9 @@ export function EntityTable({
     : t('table.notSorted');
 
   return (
-    <TableContainer title={caption}>
+    // The visible card heading is the surrounding Surface's title, so the
+    // container carries the caption as its accessible name only.
+    <TableContainer className="melodee-table-card" aria-label={caption}>
       {toolbar ? (
         <TableToolbar aria-label={caption}>
           <TableToolbarContent>{toolbar}</TableToolbarContent>
@@ -185,7 +187,7 @@ export function EntityTable({
       <span role="status" className="cds--visually-hidden">
         {sortedAnnouncement}
       </span>
-      <Table size={compact ? 'sm' : 'md'} aria-label={caption}>
+      <Table size={compact ? 'sm' : 'md'} className="melodee-table-skin" aria-label={caption}>
         <TableHead>
           <TableRow>
             {selection ? (

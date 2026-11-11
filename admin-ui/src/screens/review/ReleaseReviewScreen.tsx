@@ -1,7 +1,6 @@
 import {
   ActionableNotification,
   Button,
-  Heading,
   InlineNotification,
   Link,
   Loading,
@@ -13,7 +12,6 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  Tag,
   TextArea,
 } from '@carbon/react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -34,11 +32,16 @@ import { DecisionPanel, type DecisionChoice } from '../../components/DecisionPan
 import { DestructiveActionDialog } from '../../components/DestructiveActionDialog';
 import { EntityAvatar } from '../../components/EntityAvatar';
 import { EmptyState } from '../../components/EmptyState';
-import { EvidenceItem, type Evidence } from '../../components/EvidenceItem';
+import type { Evidence } from '../../components/EvidenceItem';
 import { EvidenceSummary } from '../../components/EvidenceSummary';
+import { HeroCard } from '../../components/HeroCard';
+import { KeyValueList } from '../../components/KeyValueList';
 import { PageHeader } from '../../components/PageHeader';
 import { ProcessingStateTag } from '../../components/ProcessingStateTag';
-import { StatusTag } from '../../components/StatusTag';
+import { ProgressBar } from '../../components/ProgressBar';
+import { StatusChip } from '../../components/StatusTag';
+import { Surface } from '../../components/Surface';
+import { StackedCell } from '../../components/cells';
 import { formatDateTime, formatDuration, formatNumber } from '../../i18n/format';
 import {
   dispositionKind,
@@ -242,24 +245,6 @@ export function ReleaseReviewScreen() {
     [classification],
   );
 
-  const comparisonItems: Evidence[] = useMemo(() => {
-    if (!comparison) {
-      return [];
-    }
-    const total = comparison.totalTracks;
-    return [
-      { source: t('review.comparison.known'), observation: countWithPercent(comparison.known, total) },
-      { source: t('review.comparison.new'), observation: countWithPercent(comparison.new, total) },
-      {
-        source: t('review.comparison.alternate'),
-        observation: countWithPercent(comparison.alternate, total),
-      },
-      {
-        source: t('review.comparison.uncertain'),
-        observation: countWithPercent(comparison.uncertain, total),
-      },
-    ];
-  }, [comparison, t]);
 
   const recommended = useMemo(() => recommendedAction(detail), [detail]);
 
@@ -351,12 +336,25 @@ export function ReleaseReviewScreen() {
 
   return (
     <div>
-      <PageHeader title={t('review.workspace.title')} subtitle={t('review.workspace.subtitle')} />
-      <p>
-        <Link as={RouterLink} to="/processing/review">
-          {t('review.workspace.back')}
-        </Link>
-      </p>
+      <PageHeader
+        title={t('review.workspace.title')}
+        subtitle={t('review.workspace.subtitle')}
+        breadcrumb={
+          <>
+            <Link as={RouterLink} to="/processing/review">
+              {t('review.workspace.back')}
+            </Link>
+            {detail ? (
+              <>
+                <span aria-hidden className="melodee-page-header__crumb-separator">
+                  ›
+                </span>
+                <span>{title}</span>
+              </>
+            ) : null}
+          </>
+        }
+      />
       {loadError ? (
         <ActionableNotification
           inline
@@ -376,288 +374,274 @@ export function ReleaseReviewScreen() {
         <Loading description={t('common.loading')} withOverlay={false} />
       ) : null}
       {detail ? (
-        <div className="melodee-review-layout">
-          <div className="melodee-review-main">
-            <div className="melodee-review-card">
-              <div className="melodee-review-header">
-                <EntityAvatar name={title} size={96} decorative />
-                <div className="melodee-review-header__title">
-                  <Heading style={{ fontSize: '1.25rem' }}>{title}</Heading>
-                  <div className="melodee-review-header__facts">
-                    {headerFacts.map((fact) => (
-                      <div key={fact.label}>
-                        <div className="melodee-review-fact__label">{fact.label}</div>
-                        <div>{fact.value}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <ProcessingStateTag state={detail.workItem.state} />
-              </div>
-            </div>
+        <>
+          <HeroCard
+            media={<EntityAvatar name={title} size={112} decorative />}
+            title={title}
+            subtitle={manifest?.releaseArtists?.length ? manifest.releaseArtists.join(', ') : undefined}
+            chips={state ? <ProcessingStateTag state={state} /> : undefined}
+            facts={headerFacts}
+          />
+          <div className="melodee-review-layout melodee-review-layout--spaced">
+            <div className="melodee-review-main">
+              <Surface
+                title={t('review.classification.title')}
+                subtitle={classification ? t('review.classification.subtitle') : undefined}
+              >
+                {classification ? (
+                  <>
+                    <KeyValueList
+                      ariaLabel={t('review.classification.title')}
+                      items={[
+                        {
+                          term: t('review.classification.confidence'),
+                          value: `${formatNumber(Math.round(classification.confidence / 100))}%`,
+                        },
+                        {
+                          term: t('review.classification.classifiedAt'),
+                          value: formatDateTime(classification.classifiedAt),
+                        },
+                        {
+                          term: t('review.classification.version'),
+                          value: classification.classifierVersion,
+                        },
+                        {
+                          term: t('review.classification.traits'),
+                          value:
+                            classification.traits.length > 0 ? (
+                              <span className="melodee-chip-row">
+                                {classification.traits.map((trait) => (
+                                  <StatusChip key={trait} kind="info" label={trait} hideIcon />
+                                ))}
+                              </span>
+                            ) : (
+                              t('common.none')
+                            ),
+                        },
+                      ]}
+                    />
+                    <div style={{ marginBlockStart: 'var(--melodee-space-4)' }}>
+                      <EvidenceSummary items={evidenceItems} />
+                    </div>
+                  </>
+                ) : (
+                  <EmptyState title={t('review.classification.empty')} compact />
+                )}
+              </Surface>
 
-            <div className="melodee-review-card">
-              <Heading style={{ fontSize: '1rem', marginBlockEnd: '0.5rem' }}>
-                {t('review.classification.title')}
-              </Heading>
-              {classification ? (
-                <>
-                  <div className="melodee-review-header__facts">
-                    <div>
-                      <div className="melodee-review-fact__label">
-                        {t('review.classification.confidence')}
-                      </div>
-                      <div>{formatNumber(Math.round(classification.confidence / 100))}%</div>
-                    </div>
-                    <div>
-                      <div className="melodee-review-fact__label">
-                        {t('review.classification.classifiedAt')}
-                      </div>
-                      <div>{formatDateTime(classification.classifiedAt)}</div>
-                    </div>
-                    <div>
-                      <div className="melodee-review-fact__label">
-                        {t('review.classification.version')}
-                      </div>
-                      <div>{classification.classifierVersion}</div>
-                    </div>
-                  </div>
-                  {classification.traits.length > 0 ? (
-                    <p>
-                      {classification.traits.map((trait) => (
-                        <Tag key={trait} type="outline" style={{ marginInlineEnd: '0.25rem' }}>
-                          {trait}
-                        </Tag>
+              <Surface title={t('review.comparison.title')}>
+                {comparison ? (
+                  <>
+                    <ul className="melodee-attention-list">
+                      {[
+                        { key: 'known', count: comparison.known, tone: 'success' as const },
+                        { key: 'new', count: comparison.new, tone: 'info' as const },
+                        { key: 'alternate', count: comparison.alternate, tone: 'warning' as const },
+                        { key: 'uncertain', count: comparison.uncertain, tone: 'neutral' as const },
+                      ].map((row) => (
+                        <li key={row.key} className="melodee-comparison-row">
+                          <span className="melodee-comparison-row__label">
+                            {t(`review.comparison.${row.key}`)}
+                          </span>
+                          <ProgressBar
+                            value={
+                              comparison.totalTracks > 0
+                                ? (row.count / comparison.totalTracks) * 100
+                                : 0
+                            }
+                            label={t(`review.comparison.${row.key}`)}
+                          />
+                          <span className="melodee-comparison-row__count">
+                            {countWithPercent(row.count, comparison.totalTracks)}
+                          </span>
+                        </li>
                       ))}
-                    </p>
-                  ) : null}
-                  {evidenceItems.map((item, index) => (
-                    <EvidenceItem key={`${item.source}-${index}`} evidence={item} />
-                  ))}
-                </>
-              ) : (
-                <EmptyState title={t('review.classification.empty')} compact />
-              )}
-            </div>
-
-            <div className="melodee-review-card">
-              {comparison ? (
-                <>
-                  <EvidenceSummary title={t('review.comparison.title')} items={comparisonItems} />
-                  <div className="melodee-review-header__facts">
-                    <div>
-                      <div className="melodee-review-fact__label">
-                        {t('review.comparison.evaluatedAt')}
-                      </div>
-                      <div>{formatDateTime(comparison.evaluatedAt)}</div>
-                    </div>
-                    <div>
-                      <div className="melodee-review-fact__label">
-                        {t('review.comparison.version')}
-                      </div>
-                      <div>{comparison.evaluatorVersion}</div>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <Heading style={{ fontSize: '1rem', marginBlockEnd: '0.5rem' }}>
-                    {t('review.comparison.title')}
-                  </Heading>
+                    </ul>
+                    <KeyValueList
+                      items={[
+                        {
+                          term: t('review.comparison.evaluatedAt'),
+                          value: formatDateTime(comparison.evaluatedAt),
+                        },
+                        {
+                          term: t('review.comparison.version'),
+                          value: comparison.evaluatorVersion,
+                        },
+                      ]}
+                    />
+                  </>
+                ) : (
                   <EmptyState title={t('review.comparison.empty')} compact />
-                </>
-              )}
-            </div>
+                )}
+              </Surface>
 
-            <div className="melodee-review-card">
-              <Heading style={{ fontSize: '1rem', marginBlockEnd: '0.5rem' }}>
-                {t('review.tracks.title')}
-              </Heading>
-              {manifest && manifest.tracks.length > 0 ? (
-                <div className="melodee-review-table-scroll">
-                  <TableContainer title={t('review.tracks.caption')}>
-                  <Table size="sm" aria-label={t('review.tracks.caption')}>
-                    <TableHead>
-                      <TableRow>
-                        <TableHeader>{t('review.tracks.column.number')}</TableHeader>
-                        <TableHeader>{t('review.tracks.column.title')}</TableHeader>
-                        <TableHeader>{t('review.tracks.column.duration')}</TableHeader>
-                        <TableHeader>{t('review.tracks.column.format')}</TableHeader>
-                        {novelty.size > 0 ? (
-                          <TableHeader>{t('review.tracks.column.result')}</TableHeader>
-                        ) : null}
-                        <TableHeader>{t('review.tracks.column.preview')}</TableHeader>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {manifest.tracks.map((track) => {
-                        const trackTitle = track.title ?? t('review.tracks.untitled');
-                        const result = novelty.get(track.index);
-                        return (
-                          <TableRow key={track.index}>
-                            <TableCell>{formatNumber(track.index + 1)}</TableCell>
-                            <TableCell>
-                              {trackTitle}
-                              <span className="melodee-review-track__file">{track.filePath}</span>
-                            </TableCell>
-                            <TableCell>
-                              {track.durationMs != null
-                                ? formatDuration(track.durationMs)
-                                : t('common.none')}
-                            </TableCell>
-                            <TableCell>
-                              {[track.container, track.codec].filter(Boolean).join(' / ') ||
-                                t('common.none')}
-                            </TableCell>
+              <Surface title={t('review.tracks.title')} variant="flush">
+                {manifest && manifest.tracks.length > 0 ? (
+                  <div className="melodee-review-table-scroll">
+                    <TableContainer aria-label={t('review.tracks.caption')}>
+                      <Table size="sm" className="melodee-table-skin" aria-label={t('review.tracks.caption')}>
+                        <TableHead>
+                          <TableRow>
+                            <TableHeader>{t('review.tracks.column.number')}</TableHeader>
+                            <TableHeader>{t('review.tracks.column.title')}</TableHeader>
+                            <TableHeader>{t('review.tracks.column.duration')}</TableHeader>
+                            <TableHeader>{t('review.tracks.column.format')}</TableHeader>
                             {novelty.size > 0 ? (
-                              <TableCell>
-                                {result ? (
-                                  <span title={result.detail}>
-                                    <StatusTag
-                                      kind={noveltyKind(result.category)}
-                                      label={t(noveltyLabelKey(result.category))}
-                                    />
-                                  </span>
-                                ) : null}
-                              </TableCell>
+                              <TableHeader>{t('review.tracks.column.result')}</TableHeader>
                             ) : null}
-                            <TableCell>
-                              <TrackPreview
-                                workItemId={workItemId}
-                                track={track}
-                                title={trackTitle}
-                              />
-                            </TableCell>
+                            <TableHeader>{t('review.tracks.column.preview')}</TableHeader>
                           </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                  </TableContainer>
-                </div>
-              ) : (
-                <EmptyState title={t('review.tracks.empty')} compact />
-              )}
+                        </TableHead>
+                        <TableBody>
+                          {manifest.tracks.map((track) => {
+                            const trackTitle = track.title ?? t('review.tracks.untitled');
+                            const result = novelty.get(track.index);
+                            return (
+                              <TableRow key={track.index}>
+                                <TableCell>{formatNumber(track.index + 1)}</TableCell>
+                                <TableCell>
+                                  <StackedCell primary={trackTitle} secondary={track.filePath} />
+                                </TableCell>
+                                <TableCell>
+                                  {track.durationMs != null
+                                    ? formatDuration(track.durationMs)
+                                    : t('common.none')}
+                                </TableCell>
+                                <TableCell>
+                                  {[track.container, track.codec].filter(Boolean).join(' / ') ||
+                                    t('common.none')}
+                                </TableCell>
+                                {novelty.size > 0 ? (
+                                  <TableCell>
+                                    {result ? (
+                                      <span title={result.detail}>
+                                        <StatusChip
+                                          kind={noveltyKind(result.category)}
+                                          label={t(noveltyLabelKey(result.category))}
+                                        />
+                                      </span>
+                                    ) : null}
+                                  </TableCell>
+                                ) : null}
+                                <TableCell>
+                                  <TrackPreview
+                                    workItemId={workItemId}
+                                    track={track}
+                                    title={trackTitle}
+                                  />
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </div>
+                ) : (
+                  <EmptyState title={t('review.tracks.empty')} compact />
+                )}
+              </Surface>
+            </div>
+
+            <div className="melodee-review-rail">
+              <Surface title={t('review.decision.title')}>
+                {notice ? (
+                  <InlineNotification
+                    kind={notice.kind}
+                    lowContrast
+                    hideCloseButton
+                    title={notice.text}
+                    style={{ marginBlockEnd: 'var(--melodee-space-2)' }}
+                  />
+                ) : null}
+                {state === 'needs_review' ? (
+                  <DecisionPanel choices={choices} onSelect={onSelectAction} />
+                ) : (
+                  <>
+                    {reprocessable ? (
+                      <Button
+                        kind="tertiary"
+                        disabled={busy}
+                        onClick={() => {
+                          setNotice(null);
+                          setReprocessOpen(true);
+                        }}
+                      >
+                        {t('review.reprocess.action')}
+                      </Button>
+                    ) : null}
+                    <p className="melodee-surface__subtitle">
+                      {reprocessable
+                        ? t('review.reprocess.description')
+                        : t('review.decision.unavailable')}
+                    </p>
+                  </>
+                )}
+              </Surface>
+
+              <Surface title={t('review.policy.title')}>
+                {decision ? (
+                  <KeyValueList
+                    ariaLabel={t('review.policy.title')}
+                    items={[
+                      {
+                        term: t('review.policy.matchedRule'),
+                        value:
+                          decision.matchedRuleIds.length > 0 ? (
+                            <StatusChip
+                              kind="provisional"
+                              label={decision.matchedRuleIds.join(', ')}
+                              hideIcon
+                            />
+                          ) : (
+                            t('common.none')
+                          ),
+                      },
+                      {
+                        term: t('review.policy.recommendation'),
+                        value: (
+                          <StatusChip
+                            kind={dispositionKind(decision.disposition)}
+                            label={t(`review.disposition.${decision.disposition}`, {
+                              defaultValue: decision.disposition,
+                            })}
+                          />
+                        ),
+                      },
+                      {
+                        term: t('review.policy.completionState'),
+                        value: decision.completionState,
+                      },
+                      {
+                        term: t('review.policy.decidedAt'),
+                        value: formatDateTime(decision.decidedAt),
+                      },
+                      {
+                        term: t('review.policy.ruleSetVersion'),
+                        value: formatNumber(decision.ruleSetVersion),
+                      },
+                      { term: t('review.policy.reason'), value: decision.evidenceSummary },
+                      ...(decision.overrideReason
+                        ? [
+                            {
+                              term: t('review.policy.overrideReason'),
+                              value: decision.overrideReason,
+                            },
+                          ]
+                        : []),
+                    ]}
+                  />
+                ) : (
+                  <EmptyState title={t('review.policy.empty')} compact />
+                )}
+              </Surface>
+
+              <Surface title={t('review.timeline.title')}>
+                <AuditTimeline events={detail.timeline.map(toAuditEvent)} relative />
+              </Surface>
             </div>
           </div>
-
-          <div className="melodee-review-rail">
-            <div className="melodee-review-card">
-              <Heading style={{ fontSize: '1rem', marginBlockEnd: '0.5rem' }}>
-                {t('review.decision.title')}
-              </Heading>
-              {notice ? (
-                <InlineNotification
-                  kind={notice.kind}
-                  lowContrast
-                  hideCloseButton
-                  title={notice.text}
-                  style={{ marginBlockEnd: '0.5rem' }}
-                />
-              ) : null}
-              {state === 'needs_review' ? (
-                <DecisionPanel choices={choices} onSelect={onSelectAction} />
-              ) : (
-                <>
-                  {reprocessable ? (
-                    <Button
-                      kind="tertiary"
-                      disabled={busy}
-                      onClick={() => {
-                        setNotice(null);
-                        setReprocessOpen(true);
-                      }}
-                    >
-                      {t('review.reprocess.action')}
-                    </Button>
-                  ) : null}
-                  <p style={{ color: 'var(--cds-text-secondary)', marginBlockStart: '0.5rem' }}>
-                    {reprocessable
-                      ? t('review.reprocess.description')
-                      : t('review.decision.unavailable')}
-                  </p>
-                </>
-              )}
-            </div>
-
-            <div className="melodee-review-card">
-              <Heading style={{ fontSize: '1rem', marginBlockEnd: '0.5rem' }}>
-                {t('review.policy.title')}
-              </Heading>
-              {/* HTML permits one level of <div> grouping inside <dl>; axe's
-                  definition-list/dlitem rules reject deeper nesting, so the
-                  grid div IS the <dl> and each fact wraps dt+dd. */}
-              {decision ? (
-                <dl className="melodee-review-header__facts">
-                  <div>
-                    <dt className="melodee-review-fact__label">
-                      {t('review.policy.matchedRule')}
-                    </dt>
-                    <dd style={{ marginInlineStart: 0 }}>
-                      {decision.matchedRuleIds.length > 0
-                        ? decision.matchedRuleIds.join(', ')
-                        : t('common.none')}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="melodee-review-fact__label">
-                      {t('review.policy.recommendation')}
-                    </dt>
-                    <dd style={{ marginInlineStart: 0 }}>
-                      <StatusTag
-                        kind={dispositionKind(decision.disposition)}
-                        label={t(`review.disposition.${decision.disposition}`, {
-                          defaultValue: decision.disposition,
-                        })}
-                      />
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="melodee-review-fact__label">
-                      {t('review.policy.completionState')}
-                    </dt>
-                    <dd style={{ marginInlineStart: 0 }}>{decision.completionState}</dd>
-                  </div>
-                  <div>
-                    <dt className="melodee-review-fact__label">{t('review.policy.decidedAt')}</dt>
-                    <dd style={{ marginInlineStart: 0 }}>
-                      {formatDateTime(decision.decidedAt)}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="melodee-review-fact__label">
-                      {t('review.policy.ruleSetVersion')}
-                    </dt>
-                    <dd style={{ marginInlineStart: 0 }}>
-                      {formatNumber(decision.ruleSetVersion)}
-                    </dd>
-                  </div>
-                  <div className="melodee-review-fact--full">
-                    <dt className="melodee-review-fact__label">{t('review.policy.reason')}</dt>
-                    <dd style={{ marginInlineStart: 0 }}>{decision.evidenceSummary}</dd>
-                  </div>
-                  {decision.overrideReason ? (
-                    <div className="melodee-review-fact--full">
-                      <dt className="melodee-review-fact__label">
-                        {t('review.policy.overrideReason')}
-                      </dt>
-                      <dd style={{ marginInlineStart: 0 }}>{decision.overrideReason}</dd>
-                    </div>
-                  ) : null}
-                </dl>
-              ) : (
-                <EmptyState title={t('review.policy.empty')} compact />
-              )}
-            </div>
-
-            <div className="melodee-review-card">
-              <Heading style={{ fontSize: '1rem', marginBlockEnd: '0.5rem' }}>
-                {t('review.timeline.title')}
-              </Heading>
-              <AuditTimeline events={detail.timeline.map(toAuditEvent)} />
-            </div>
-          </div>
-        </div>
+        </>
       ) : null}
 
       <DecisionConfirmDialog
@@ -710,7 +694,9 @@ export function ReleaseReviewScreen() {
             setReprocessReason('');
           }}
         >
-          <p style={{ marginBlockEnd: '0.5rem' }}>{t('review.reprocess.description')}</p>
+          <p style={{ marginBlockEnd: 'var(--melodee-space-2)' }}>
+            {t('review.reprocess.description')}
+          </p>
           <TextArea
             id="review-reprocess-reason"
             labelText={t('review.decision.reasonLabel')}

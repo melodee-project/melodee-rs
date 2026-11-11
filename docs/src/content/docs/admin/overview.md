@@ -32,13 +32,18 @@ automatically.
 
 The landing screen answers "what needs attention?" first, then summarizes the catalog:
 
-- **KPI cards** — inbound, processing, needs-review, and failed (24 h) work items, plus catalog
-  Artist, Release, and Track counts.
+- **KPI cards** — inbound, processing, needs-review work items (each with its recent-change line,
+  such as how many arrived today), plus catalog Artist, Release, and Track counts.
 - **Needs attention** — direct links to unresolved artist identities, pending Release policy
-  decisions, failed processing, and quarantined items.
-- **Processing activity** — completed work items per hour over the last 24 hours.
-- **System health** — PostgreSQL, the search index, storage, FFmpeg, and the four API surfaces.
-- **Current processing queue** — live per-state counts with a link into the queue.
+  decisions, failed processing, quarantined items, and a degraded storage check, each with its
+  current count.
+- **Processing activity** — two series over the last 24 hours: Releases processed per hour and
+  Tracks indexed per hour.
+- **System health** — PostgreSQL, the search index, storage, FFmpeg, podcast storage, disk space,
+  background workers, and the four API surfaces, each with its verdict and measured detail.
+- **Current processing queue** — the most recently updated work items with their Release, billed
+  Artist, lifecycle stage, stage progress, and when they were added, plus a link into the full
+  queue.
 
 The dashboard refreshes every 60 seconds and keeps showing the last good data if a refresh fails;
 a retryable error banner appears instead of a blank screen.

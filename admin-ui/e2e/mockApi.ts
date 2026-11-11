@@ -69,12 +69,25 @@ const DASHBOARD = {
     failedProcessing: 1,
     quarantined: 8,
   },
+  deltas: {
+    inboundToday: 12,
+    newForReview24h: 5,
+  },
   health: HEALTH,
   activity: {
     completedPerHour: [
+      { hour: "2026-08-14T08:00:00Z", count: 4 },
+      { hour: "2026-08-14T09:00:00Z", count: 6 },
       { hour: "2026-08-14T10:00:00Z", count: 5 },
       { hour: "2026-08-14T11:00:00Z", count: 9 },
       { hour: "2026-08-14T12:00:00Z", count: 7 },
+    ],
+    indexedPerHour: [
+      { hour: "2026-08-14T08:00:00Z", count: 3 },
+      { hour: "2026-08-14T09:00:00Z", count: 5 },
+      { hour: "2026-08-14T10:00:00Z", count: 4 },
+      { hour: "2026-08-14T11:00:00Z", count: 8 },
+      { hour: "2026-08-14T12:00:00Z", count: 6 },
     ],
   },
 };
@@ -105,6 +118,10 @@ const ITEM_ONE = {
   updatedAt: "2026-08-14T10:05:00Z",
   createdAt: "2026-08-14T10:00:00Z",
   completedAt: null,
+  releaseId: RELEASE_ID,
+  releaseTitle: "Business as Usual",
+  artistName: "Men at Work",
+  mediaBytes: 33600000,
 };
 
 const ITEM_TWO = {
@@ -680,6 +697,15 @@ export async function mockAdminApi(
       await json(DASHBOARD);
       return;
     }
+    if (pathname === "/api/admin/v1/diagnostics/bundle") {
+      await json({
+        generatedAt: "2026-08-14T12:00:00Z",
+        uptimeSeconds: 1_054_800,
+        selftest: { ok: true, checks: [] },
+        server: { name: "melodee", version: "test", buildProfile: "test", pid: 1 },
+      });
+      return;
+    }
     if (pathname === "/api/admin/v1/system/health") {
       await json(HEALTH);
       return;
@@ -1037,7 +1063,7 @@ export const CANONICAL_SCREENS: CanonicalScreen[] = [
       await expect(
         page.getByRole("table", { name: "Processing queue work items" }),
       ).toBeVisible();
-      await expect(page.getByText("Business as Usual")).toBeVisible();
+      await expect(page.getByText("Business as Usual").first()).toBeVisible();
     },
   },
   {
@@ -1166,6 +1192,31 @@ export const CANONICAL_SCREENS: CanonicalScreen[] = [
   },
 ];
 
+/** Native culture names rendered by the shell language controls (ADR-0184).
+ *  Mirrors CULTURES in src/i18n/index.ts. */
+const NATIVE_CULTURE_NAMES: Record<string, string> = {
+  "en-US": "English (US)",
+  "de-DE": "Deutsch",
+  "es-ES": "Español",
+  "fr-FR": "Français",
+  "it-IT": "Italiano",
+  "ja-JP": "日本語",
+  "pt-BR": "Português (Brasil)",
+  "ru-RU": "Русский",
+  "zh-CN": "简体中文",
+  "ar-SA": "العربية",
+  "nl-NL": "Nederlands",
+  "pl-PL": "Polski",
+  "tr-TR": "Türkçe",
+  "id-ID": "Bahasa Indonesia",
+  "ko-KR": "한국어",
+  "vi-VN": "Tiếng Việt",
+  "fa-IR": "فارسی",
+  "uk-UA": "Українська",
+  "cs-CZ": "Čeština",
+  "sv-SE": "Svenska",
+};
+
 /** Navigates to a canonical screen with mocks + locale seeded and waits for it. */
 export async function gotoScreen(
   page: Page,
@@ -1193,9 +1244,12 @@ export async function gotoScreen(
     await expect(headerHealth).not.toContainText("Checking server status");
   }
   // The nav footer carries the active culture only when the nav is expanded
-  // (lg+; the md rail and sm overlay render the toggle button alone).
+  // (lg+; the md rail and sm overlay render the toggle button alone). The
+  // footer shows the culture's native name (ADR-0184) rather than its code.
   if ((page.viewportSize()?.width ?? 0) >= 1056) {
-    await expect(page.locator(".melodee-shell__footer")).toContainText(locale);
+    await expect(page.locator(".melodee-shell__footer")).toContainText(
+      NATIVE_CULTURE_NAMES[locale] ?? locale,
+    );
   }
   // Carbon loads IBM Plex with @font-face declarations. A visible layout can
   // still be using fallback metrics while those faces are in flight, which

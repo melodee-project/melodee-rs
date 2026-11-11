@@ -573,7 +573,7 @@ test('release detail shows tracks, an honest empty classification, and provenanc
 
   await page.getByRole('tab', { name: 'Tracks' }).click();
   await expect(page.getByRole('link', { name: 'Down Under' })).toBeVisible();
-  await expect(page.getByText('flac / flac')).toBeVisible();
+  await expect(page.getByText('flac / flac').first()).toBeVisible();
   await expect(page.getByLabel('Audio preview: Down Under')).toBeVisible();
 
   await page.getByRole('tab', { name: 'Classification' }).click();
@@ -662,7 +662,7 @@ test('rtl smoke: ar-SA renders the artist detail with dir=rtl', async ({ page })
   await page.goto(`catalog/artists/${ARTIST_ID}`);
   await expect(page.getByRole('heading', { name: 'The Nomads' })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Language', exact: true }).click();
+  await page.getByRole('button', { name: /^Language:/ }).click();
   await page.getByText(/العربية/).click();
 
   await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
@@ -677,6 +677,11 @@ test('metadata transformations preview, apply, reload history, and revert', asyn
   await page.goto(`catalog/releases/${RELEASE_ID}`);
   await expect(page.getByRole('heading', { name: 'Into the Night' })).toBeVisible();
 
+  // The transforms card sits at the end of the Overview tab body, which is
+  // longer than a phone viewport: bring it into view before interacting.
+  await page
+    .getByRole('heading', { name: 'Safe metadata transformations' })
+    .scrollIntoViewIfNeeded();
   await page.getByRole('button', { name: 'Preview changes' }).click();
   await expect(page.getByText('1 file(s) will be changed.')).toBeVisible();
   await expect(page.getByText(/track\.mp3: title/)).toBeVisible();
@@ -702,6 +707,11 @@ test('metadata transformations preview, apply, reload history, and revert', asyn
 test('metadata transformation failure is visible and does not create history', async ({ page }) => {
   await mockAdminApi(page, { metadataApplyFails: true });
   await page.goto(`catalog/releases/${RELEASE_ID}`);
+  // The transforms card sits at the end of the Overview tab body, which is
+  // longer than a phone viewport: bring it into view before interacting.
+  await page
+    .getByRole('heading', { name: 'Safe metadata transformations' })
+    .scrollIntoViewIfNeeded();
   await page.getByRole('button', { name: 'Preview changes' }).click();
   await expect(page.getByText('1 file(s) will be changed.')).toBeVisible();
   await page.getByRole('button', { name: 'Apply changes', exact: true }).first().click();

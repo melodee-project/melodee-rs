@@ -1,15 +1,15 @@
 import {
+  Activity,
+  Archive,
   Asleep,
-  BrightnessContrast,
+  Catalog,
   Dashboard,
   DataBase,
-  DocumentTasks,
-  Folder,
+  Globe,
   History,
   Identification,
-  Language,
-  List,
   Logout,
+  Music,
   Notification,
   Renew,
   Rule,
@@ -19,7 +19,8 @@ import {
   SidePanelOpen,
   Sun,
   TaskView,
-  UserAdmin,
+  User,
+  UserMultiple,
   UserAvatar,
 } from '@carbon/icons-react';
 import {
@@ -48,15 +49,17 @@ import { useAuth } from '../auth/AuthContext';
 import { CULTURES, dirFor } from '../i18n';
 import i18n from '../i18n';
 import { useThemeState, type Appearance } from '../theme/ThemeProvider';
-import { HealthIndicator, type HealthState } from '../components/HealthIndicator';
+import { HealthDot, HealthIndicator, type HealthState } from '../components/HealthIndicator';
 import { RouteErrorBoundary } from '../components/RouteErrorBoundary';
 import { useScrollRegionFocus } from '../components/scrollRegions';
 
 /**
- * The fixed app shell (PRD-UI-001/004, UI-SPEC §3): 48px header with global
- * search (⌘K), server status, language, appearance, and user controls; a
- * persistent collapsible 256px/48px left navigation with the canonical IA;
- * a 24px status footer inside the nav.
+ * The fixed app shell (PRD-UI-001/004, UI-SPEC §3, ADR-0184): a dark brand rail
+ * with a monogram tile, wordmark, and `ADMIN` micro-label; a 48px header with
+ * one inset global search entry (⌘K), server status, notifications, language,
+ * appearance, and user controls; a persistent collapsible 256px/48px left
+ * navigation with the canonical PRD-UI-004 IA and icon vocabulary; and a
+ * status strip at the foot of the rail.
  */
 
 interface NavLeaf {
@@ -79,7 +82,7 @@ const NAV_TREE: (NavLeaf | NavGroup)[] = [
     items: [
       { key: 'processing', path: '/processing', icon: Renew },
       { key: 'reviewQueue', path: '/processing/review', icon: TaskView },
-      { key: 'quarantine', path: '/processing/quarantine', icon: DocumentTasks },
+      { key: 'quarantine', path: '/processing/quarantine', icon: Archive },
       { key: 'history', path: '/processing/history', icon: History },
     ],
   },
@@ -87,9 +90,9 @@ const NAV_TREE: (NavLeaf | NavGroup)[] = [
     key: 'catalog',
     labelKey: 'nav.group.catalog',
     items: [
-      { key: 'artists', path: '/catalog/artists', icon: UserAdmin },
-      { key: 'releases', path: '/catalog/releases', icon: List },
-      { key: 'tracks', path: '/catalog/tracks', icon: Folder },
+      { key: 'artists', path: '/catalog/artists', icon: User },
+      { key: 'releases', path: '/catalog/releases', icon: Catalog },
+      { key: 'tracks', path: '/catalog/tracks', icon: Music },
       { key: 'identityReview', path: '/catalog/identity', icon: Identification },
     ],
   },
@@ -99,7 +102,7 @@ const NAV_TREE: (NavLeaf | NavGroup)[] = [
     // The PRD-UI-004 "Matching Rules" entry is deliberately absent: the
     // policy engine has exactly one rule model (Release policy rules) and
     // identity matching is evidence-based, so no matching-rule surface
-    // exists to route to (decision log).
+    // exists to route to (ADR-0184 decision log).
     items: [{ key: 'releaseRules', path: '/policies/releases', icon: Rule }],
   },
   {
@@ -109,9 +112,9 @@ const NAV_TREE: (NavLeaf | NavGroup)[] = [
       { key: 'storage', path: '/system/storage', icon: DataBase },
       { key: 'workers', path: '/system/workers', icon: Renew },
       { key: 'search', path: '/system/search', icon: SearchIcon },
-      { key: 'usersAccess', path: '/system/users', icon: UserAdmin },
+      { key: 'usersAccess', path: '/system/users', icon: UserMultiple },
       { key: 'settings', path: '/system/settings', icon: Settings },
-      { key: 'diagnostics', path: '/system/diagnostics', icon: BrightnessContrast },
+      { key: 'diagnostics', path: '/system/diagnostics', icon: Activity },
     ],
   },
 ];
@@ -161,6 +164,7 @@ export function AppShell() {
   useScrollRegionFocus();
 
   const username = session.kind === 'admin' ? session.username : null;
+  const currentCulture = CULTURES.find((culture) => culture.code === i18n.language);
 
   // Server-status polling; the 401 session-expiry path is owned by the auth
   // provider, so polling suppresses its own auth event.
@@ -260,20 +264,21 @@ export function AppShell() {
         <button
           type="button"
           className="melodee-shell__brand-link"
-          aria-label="Melodee Admin"
           tabIndex={-1}
           onClick={() => navigate('/')}
         >
           <img
-            className="melodee-shell__brand-logo"
-            src="/admin/brand/melodee-logo-horizontal-for-dark.svg"
-            alt="Melodee"
-          />
-          <img
             className="melodee-shell__brand-mark"
-            src="/admin/brand/melodee-mark-spectrum-carbon.svg"
+            src="/admin/brand/melodee-mark-tile.svg"
             alt=""
           />
+          <span className="melodee-shell__brand-wordmark">
+            <span className="melodee-shell__brand-name">melodee</span>
+            <span className="melodee-shell__brand-subtitle">Admin</span>
+          </span>
+          {/* The wordmark is hidden in the collapsed rail, so the accessible
+              name must not depend on it. */}
+          <span className="cds--visually-hidden">{t('shell.brandName')}</span>
         </button>
       </div>
       <Header className={`melodee-shell__header ${shellStateClass}`} aria-label="Melodee Admin">
@@ -315,13 +320,24 @@ export function AppShell() {
           >
             <Notification size={20} />
           </HeaderGlobalAction>
+          {/* Reference composition: locale name, not a bare icon, so the active
+              language is readable without opening the panel. Stays a
+              HeaderGlobalAction so Carbon's 48px hit area and popover wrapper
+              are preserved. */}
           <HeaderGlobalAction
-            aria-label={t('shell.language')}
+            aria-label={`${t('shell.language')}: ${
+              currentCulture?.nativeName ?? i18n.language
+            }`}
             tooltipAlignment="end"
             isActive={openPanel === 'language'}
             onClick={() => togglePanel('language')}
           >
-            <Language size={20} />
+            <span className="melodee-shell__action-with-label">
+              <Globe size={20} aria-hidden />
+              <span className="melodee-shell__locale-name">
+                {currentCulture?.nativeName ?? i18n.language}
+              </span>
+            </span>
           </HeaderGlobalAction>
           <HeaderGlobalAction
             aria-label={`${t('shell.appearance')}: ${appearanceLabel}`}
@@ -332,12 +348,23 @@ export function AppShell() {
             {appearance === 'dark' ? <Asleep size={20} /> : <Sun size={20} />}
           </HeaderGlobalAction>
           <HeaderGlobalAction
-            aria-label={t('shell.userMenu')}
+            aria-label={
+              username ? `${t('shell.userMenu')}: ${username}` : t('shell.userMenu')
+            }
             tooltipAlignment="end"
             isActive={openPanel === 'user'}
             onClick={() => togglePanel('user')}
           >
-            <UserAvatar size={20} />
+            <span className="melodee-shell__action-with-label">
+              {username ? (
+                <span className="melodee-shell__avatar" aria-hidden>
+                  {username.slice(0, 1).toUpperCase()}
+                </span>
+              ) : (
+                <UserAvatar size={20} aria-hidden />
+              )}
+              {username ? <span className="melodee-shell__user-name">{username}</span> : null}
+            </span>
           </HeaderGlobalAction>
         </HeaderGlobalBar>
         <HeaderPanel
@@ -428,20 +455,36 @@ export function AppShell() {
           )}
         </SideNavItems>
         <div className="melodee-shell__footer">
+          {/* Status strip (reference): the canonical server-status location. */}
           <span className="melodee-shell__footer-health">
-            <HealthIndicator state={health} />
+            <HealthDot
+              state={health}
+              label={t(
+                health === 'online'
+                  ? 'health.online'
+                  : health === 'offline'
+                    ? 'health.offline'
+                    : health === 'checking'
+                      ? 'health.checking'
+                      : 'health.unknown',
+              )}
+              className="melodee-health-row__dot-label"
+            />
           </span>
-          <HeaderGlobalAction
-            aria-label={expanded ? t('shell.collapseNav') : t('shell.expandNav')}
-            onClick={() => setNavExpanded((current) => !current)}
-          >
-            {expanded ? <SidePanelClose size={16} /> : <SidePanelOpen size={16} />}
-          </HeaderGlobalAction>
-          {expanded ? (
-            <span>
-              {i18n.language} · {appearanceLabel}
-            </span>
-          ) : null}
+          <span className="melodee-shell__footer-controls">
+            {expanded ? (
+              <span className="melodee-shell__footer-meta">
+                <span>{currentCulture?.nativeName ?? i18n.language}</span>
+                <span>{appearanceLabel}</span>
+              </span>
+            ) : null}
+            <HeaderGlobalAction
+              aria-label={expanded ? t('shell.collapseNav') : t('shell.expandNav')}
+              onClick={() => setNavExpanded((current) => !current)}
+            >
+              {expanded ? <SidePanelClose size={16} /> : <SidePanelOpen size={16} />}
+            </HeaderGlobalAction>
+          </span>
         </div>
       </SideNav>
       <Content id="main-content" className={`melodee-shell__content ${shellStateClass}`}>
@@ -455,44 +498,50 @@ export function AppShell() {
           </Suspense>
         </RouteErrorBoundary>
       </Content>
-      <Modal
-        open={searchOpen}
-        modalHeading={t('shell.commandPaletteTitle')}
-        passiveModal
-        onRequestClose={() => {
-          setSearchOpen(false);
-          setSearchText('');
-        }}
-      >
-        <Search
-          ref={searchInputRef}
-          labelText={t('shell.search')}
-          placeholder={t('shell.searchPlaceholder')}
-          value={searchText}
-          onChange={(event) => setSearchText(event.target.value)}
-          autoFocus
-        />
-        {filteredLeaves.length === 0 ? (
-          <p>{t('shell.commandPaletteEmpty')}</p>
-        ) : (
-          <ul style={{ listStyle: 'none', paddingInlineStart: 0 }}>
-            {filteredLeaves.map((leaf) => (
-              <li key={leaf.key}>
-                <SwitcherItem
-                  aria-label={t(`nav.${leaf.key}`)}
-                  onClick={() => {
-                    setSearchOpen(false);
-                    setSearchText('');
-                    navigate(leaf.path);
-                  }}
-                >
-                  {t(`nav.${leaf.key}`)}
-                </SwitcherItem>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Modal>
+      {/* Modals mount only while open: Carbon keeps a closed Modal in the DOM,
+          where its fixed container still contributes to layout width (it
+          widened the mobile layout viewport past the screen), and its labelled
+          content would duplicate dialog roles for assistive tech. */}
+      {searchOpen ? (
+        <Modal
+          open
+          modalHeading={t('shell.commandPaletteTitle')}
+          passiveModal
+          onRequestClose={() => {
+            setSearchOpen(false);
+            setSearchText('');
+          }}
+        >
+          <Search
+            ref={searchInputRef}
+            labelText={t('shell.search')}
+            placeholder={t('shell.searchPlaceholder')}
+            value={searchText}
+            onChange={(event) => setSearchText(event.target.value)}
+            autoFocus
+          />
+          {filteredLeaves.length === 0 ? (
+            <p>{t('shell.commandPaletteEmpty')}</p>
+          ) : (
+            <ul className="melodee-shell__panel-list">
+              {filteredLeaves.map((leaf) => (
+                <li key={leaf.key}>
+                  <SwitcherItem
+                    aria-label={t(`nav.${leaf.key}`)}
+                    onClick={() => {
+                      setSearchOpen(false);
+                      setSearchText('');
+                      navigate(leaf.path);
+                    }}
+                  >
+                    {t(`nav.${leaf.key}`)}
+                  </SwitcherItem>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Modal>
+      ) : null}
     </>
   );
 }

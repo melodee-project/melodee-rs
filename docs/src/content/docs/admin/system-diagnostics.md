@@ -46,8 +46,10 @@ token; none mutates state. See
 
 ## System → Workers screen
 
-Open **System → Workers** (`/admin/system/workers`). The screen aggregates the operational
-surfaces:
+Open **System → Workers** (`/admin/system/workers`). The screen opens with five KPIs — worker
+pools, queued items, completed and failed work in the last 24 hours, and the server's measured
+**uptime** (read from the diagnostics bundle; it shows an em dash when the bundle is
+unavailable rather than guessing) — and then aggregates the operational surfaces:
 
 - **Worker pools** — every registered pool with its durable pause state and audit fields
   (`pausedBy`, timestamps), plus running, queued, throughput, completed-last-hour, and
@@ -79,7 +81,7 @@ cleanup, and job-history cleanup. Job pause/resume routes use the durable worker
 so a pause prevents new claims while an already leased item finishes or is released. Job-history
 cleanup retains completed records for 90 days by default and writes a cleanup audit row.
 
-![The System Workers screen with pool pause/resume and search rebuild](./images/system-workers-light.png)
+![The System Workers screen with uptime, worker pools, health, and recent failures](./images/system-workers-light.png)
 
 Structured logs and historical performance profiles are not exposed over HTTP; use the command-
 line diagnostics below for those. The routes behind this screen are documented under

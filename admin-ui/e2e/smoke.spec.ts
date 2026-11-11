@@ -91,7 +91,7 @@ test('renders the shell navigation groups in English', async ({ page }) => {
 test('switching to ar-SA sets dir=rtl on the document root', async ({ page }) => {
   await page.goto('/');
 
-  await page.getByRole('button', { name: 'Language', exact: true }).click();
+  await page.getByRole('button', { name: /^Language:/ }).click();
   // SwitcherItem entries are anchors without href (roleless); click by text.
   await page.getByText(/العربية/).click();
 

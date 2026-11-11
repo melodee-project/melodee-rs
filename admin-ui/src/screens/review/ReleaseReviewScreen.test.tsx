@@ -200,8 +200,11 @@ describe('ReleaseReviewScreen', () => {
 
   it('renders the header, evidence, comparison, decision panel, policy, and timeline', async () => {
     renderScreen();
-    // Header card: display title from the manifest plus the state tag.
-    expect(await screen.findByText('Example Artist — Greatest Hits')).toBeInTheDocument();
+    // Hero card: display title from the manifest plus the state chip. The
+    // breadcrumb repeats the title, so assert on the level-1 heading.
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Example Artist — Greatest Hits' }),
+    ).toBeInTheDocument();
     expect(screen.getByText('needs_review')).toBeInTheDocument();
     // Classification & Evidence with confidence.
     expect(screen.getByText('Classification & Evidence')).toBeInTheDocument();
@@ -221,10 +224,10 @@ describe('ReleaseReviewScreen', () => {
     const previews = screen.getAllByLabelText(/Preview track/);
     expect(previews).toHaveLength(2);
     // Decision panel: ordered actions, destructive last and distinct.
-    const accept = screen.getByRole('button', { name: 'Accept Release' });
-    const quarantine = screen.getByRole('button', { name: 'Quarantine' });
-    const ignore = screen.getByRole('button', { name: 'Ignore' });
-    const deleteButton = screen.getByRole('button', { name: 'Delete' });
+    const accept = screen.getByRole('button', { name: /^Accept Release/ });
+    const quarantine = screen.getByRole('button', { name: /^Quarantine/ });
+    const ignore = screen.getByRole('button', { name: /^Ignore/ });
+    const deleteButton = screen.getByRole('button', { name: /^Delete/ });
     expect(accept).toBeInTheDocument();
     expect(deleteButton).toBeInTheDocument();
     const order = [accept, quarantine, ignore, deleteButton];
@@ -243,7 +246,7 @@ describe('ReleaseReviewScreen', () => {
 
   it('posts accept with the audited reason and no override', async () => {
     renderScreen();
-    fireEvent.click(await screen.findByRole('button', { name: 'Accept Release' }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Accept Release/ }));
     const dialog = await screen.findByRole('dialog');
     fireEvent.change(screen.getByLabelText('Reason'), {
       target: { value: 'Verified against the catalog.' },
@@ -261,7 +264,7 @@ describe('ReleaseReviewScreen', () => {
 
   it('requires a reason before a decision can be applied', async () => {
     renderScreen();
-    fireEvent.click(await screen.findByRole('button', { name: 'Quarantine' }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Quarantine/ }));
     await screen.findByRole('dialog');
     expect(screen.getByRole('button', { name: 'Apply decision' })).toBeDisabled();
     expect(mockPostReviewDecision).not.toHaveBeenCalled();
@@ -269,7 +272,7 @@ describe('ReleaseReviewScreen', () => {
 
   it('delete shows impact and requires the typed confirmation before posting override', async () => {
     renderScreen();
-    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Delete/ }));
     const dialog = await screen.findByRole('dialog');
     // Impact from the manifest: 1 Release, 2 Tracks, 3 files (tracks + artwork).
     expect(within(dialog).getByText('Affected Releases')).toBeInTheDocument();
@@ -305,7 +308,7 @@ describe('ReleaseReviewScreen', () => {
       new ApiError(409, 'invalid_state', "work item is 'cataloged' and not awaiting review", 'corr-1'),
     );
     renderScreen();
-    fireEvent.click(await screen.findByRole('button', { name: 'Ignore' }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Ignore/ }));
     fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'No action.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Apply decision' }));
     expect(
@@ -318,7 +321,7 @@ describe('ReleaseReviewScreen', () => {
       new ApiError(400, 'override_required', 'delete requires explicit override', 'corr-2'),
     );
     renderScreen();
-    fireEvent.click(await screen.findByRole('button', { name: 'Accept Release' }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Accept Release/ }));
     fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'Trying.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Apply decision' }));
     expect(
@@ -360,6 +363,8 @@ describe('ReleaseReviewScreen', () => {
     ).toBeInTheDocument();
     mockGetReviewDetail.mockResolvedValue(makeDetail());
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
-    expect(await screen.findByText('Example Artist — Greatest Hits')).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Example Artist — Greatest Hits' }),
+    ).toBeInTheDocument();
   });
 });

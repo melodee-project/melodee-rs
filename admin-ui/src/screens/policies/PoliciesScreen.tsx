@@ -22,8 +22,10 @@ import type {
   PolicyTestRun,
 } from '../../api/types';
 import { EntityTable, type EntityColumn, type EntityRow } from '../../components/EntityTable';
+import { EmptyState } from '../../components/EmptyState';
 import { PageHeader } from '../../components/PageHeader';
 import { StatusTag } from '../../components/StatusTag';
+import { Surface } from '../../components/Surface';
 import { formatNumber } from '../../i18n/format';
 import { dispositionKind } from '../review/review';
 import { PolicyEditor } from './PolicyEditor';
@@ -284,33 +286,37 @@ export function PoliciesScreen() {
           onActionButtonClick={() => void fetchRules({ cancelled: false })}
         />
       ) : null}
-      <div className="melodee-system-columns">
+      <div className="melodee-policies-layout">
         <div className="melodee-system-main">
           {loading && pageData === null ? (
             <Loading description={t('common.loading')} withOverlay={false} />
           ) : (
-            <EntityTable
-              caption={t('policies.table.caption')}
-              columns={columns}
-              rows={rows}
-              totalRows={pageData?.total ?? 0}
-              toolbar={toolbar}
-              compact
-              emptyTitle={t('policies.table.emptyTitle')}
-              emptyDescription={t('policies.table.emptyDescription')}
-              activeRowId={selectedRule?.id ?? null}
-              onRowActivate={(id) => selectRule(id)}
-            />
+            <Surface
+              title={t('policies.table.caption')}
+              subtitle={t('policies.table.subtitle')}
+              variant="flush"
+              className="melodee-table-card"
+            >
+              <EntityTable
+                caption={t('policies.table.caption')}
+                columns={columns}
+                rows={rows}
+                totalRows={pageData?.total ?? 0}
+                toolbar={toolbar}
+                compact
+                emptyTitle={t('policies.table.emptyTitle')}
+                emptyDescription={t('policies.table.emptyDescription')}
+                activeRowId={selectedRule?.id ?? null}
+                onRowActivate={(id) => selectRule(id)}
+              />
+            </Surface>
           )}
         </div>
         <div className="melodee-system-rail">
           {editorMode === null ? (
-            <section className="melodee-panel" aria-labelledby="policy-editor-hint">
-              <h2 id="policy-editor-hint" className="melodee-panel__title">
-                {t('policies.editor.titleEdit')}
-              </h2>
-              <p className="melodee-panel__subtitle">{t('policies.editor.selectHint')}</p>
-            </section>
+            <Surface title={t('policies.editor.titleEdit')} subtitle={t('policies.editor.selectHint')}>
+              <EmptyState title={t('policies.editor.selectHint')} compact />
+            </Surface>
           ) : (
             <PolicyEditor
               // Remount on selection or version change so form state never

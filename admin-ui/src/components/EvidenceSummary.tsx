@@ -1,17 +1,35 @@
-import { Heading } from '@carbon/react';
 import { useTranslation } from 'react-i18next';
 
 import { EvidenceItem, type Evidence } from './EvidenceItem';
+import { EvidenceTileGrid, type EvidenceTile } from './EvidenceTileGrid';
 import { EmptyState } from './EmptyState';
 
-/** Grouped evidence block for review workspaces (evidence first, UI-SPEC §7). */
-export function EvidenceSummary({ items, title }: { items: Evidence[]; title?: string }) {
+/**
+ * Grouped evidence block for review workspaces (evidence first, UI-SPEC §7).
+ * When `tiles` is supplied, the reference's compact evidence counters render
+ * above the itemized list so the operator reads the shape of the evidence
+ * before its details.
+ */
+export function EvidenceSummary({
+  items,
+  title,
+  tiles,
+}: {
+  items: Evidence[];
+  title?: string;
+  tiles?: EvidenceTile[];
+}) {
   const { t } = useTranslation();
   return (
     <section aria-labelledby="evidence-summary-heading">
-      <Heading id="evidence-summary-heading" style={{ fontSize: '1rem', marginBlockEnd: '0.5rem' }}>
+      <h2 id="evidence-summary-heading" className="melodee-surface__title">
         {title ?? t('evidence.summaryTitle')}
-      </Heading>
+      </h2>
+      {tiles && tiles.length > 0 ? (
+        <div style={{ marginBlock: 'var(--melodee-space-3)' }}>
+          <EvidenceTileGrid tiles={tiles} />
+        </div>
+      ) : null}
       {items.length === 0 ? (
         <EmptyState title={t('empty.noData')} compact />
       ) : (

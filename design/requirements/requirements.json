@@ -2847,9 +2847,12 @@
     "line": 1816,
     "status": "implemented",
     "implementation": [
-      "design/ui/MOCKUPS.md + UI-SPEC.md (mockups are intent only; implemented screens follow written specs)"
+      "design/ui/MOCKUPS.md + design/ui/UI-SPEC.md + design/adr/ADR-0184-admin-ui-reference-alignment-and-surface-system.md",
+      "design/ui/DESIGN-SYSTEM.md (surface system plus the intentionally absent mockup affordances)"
     ],
-    "tests": []
+    "tests": [
+      "admin-ui/e2e/visual.spec.ts (reference-aligned baselines for the eight canonical screens)"
+    ]
   },
   {
     "id": "PRD-UI-REF-002",
@@ -2858,10 +2861,11 @@
     "line": 1820,
     "status": "tested",
     "implementation": [
-      "admin-ui/e2e/visual.spec.ts + snapshots (real React screenshots supersede mockups; light/dark/RTL baselines)"
+      "admin-ui/e2e/visual.spec.ts + admin-ui/e2e/visual.spec.ts-snapshots (real React screenshots supersede the mockups; light/dark/RTL baselines)",
+      "docs/src/content/docs/admin/images (the same captures feed the public admin docs, ADR-0184)"
     ],
     "tests": [
-      "admin-ui/e2e/visual.spec.ts (27+ committed baselines, 1% tolerance)"
+      "admin-ui/e2e/visual.spec.ts (27 committed baselines, 1% tolerance; regenerated with the reference-aligned surface system)"
     ]
   },
   {
@@ -2871,10 +2875,11 @@
     "line": 1824,
     "status": "tested",
     "implementation": [
-      "design/ui/UI-SPEC.md (tokens, Carbon overrides, shell dimensions, density, status semantics, shared components, interaction patterns, responsive breakpoints, accessibility, agent rules)"
+      "design/ui/UI-SPEC.md (tokens, Carbon overrides, shell dimensions, density, status semantics, shared components including the §6.1 Melodee surface and primitive layer, interaction patterns, responsive breakpoints, accessibility, agent rules)"
     ],
     "tests": [
-      "python3 scripts/validate_repository.py (doc gate)"
+      "python3 scripts/validate_repository.py (doc gate)",
+      "admin-ui/e2e/accessibility.spec.ts (axe-core WCAG 2.2 A/AA on every canonical screen and viewport)"
     ]
   },
   {

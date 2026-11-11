@@ -70,6 +70,49 @@ async function mockAdminApi(page: Page) {
       await json(DASHBOARD);
       return;
     }
+    if (pathname === '/api/admin/v1/ingest/work-items') {
+      // One bound queue row: the preview shows the Release, its artist, and
+      // the stage progress (ADR-0184).
+      await json({
+        items: [
+          {
+            id: '11111111-1111-4111-8111-111111111111',
+            apiKey: '33333333-3333-4333-8333-333333333333',
+            sourceLibraryId: null,
+            targetLibraryId: null,
+            sourcePath: '/library/incoming/Business as Usual',
+            currentPath: '/library/incoming/Business as Usual',
+            targetPath: null,
+            sourceFingerprint: null,
+            manifestHash: null,
+            state: 'publishing',
+            stateReason: null,
+            attemptCount: 1,
+            nextAttemptAt: null,
+            leaseOwner: null,
+            leaseAcquiredAt: null,
+            leaseExpiresAt: null,
+            lastErrorCode: null,
+            lastErrorMessage: null,
+            correlationId: '44444444-4444-4444-8444-444444444444',
+            discoveredAt: '2026-08-14T10:00:00Z',
+            firstStartedAt: null,
+            lastAttemptAt: null,
+            updatedAt: '2026-08-14T10:05:00Z',
+            createdAt: '2026-08-14T10:00:00Z',
+            completedAt: null,
+            releaseId: '55555555-5555-4555-8555-555555555555',
+            releaseTitle: 'Business as Usual',
+            artistName: 'Men at Work',
+            mediaBytes: 33600000,
+          },
+        ],
+        total: 1,
+        limit: 5,
+        offset: 0,
+      });
+      return;
+    }
     await route.fulfill({
       status: 404,
       contentType: 'application/json',
@@ -113,11 +156,16 @@ test('loads the dashboard with KPIs, attention, health, activity, and queue summ
 
   // Accessible activity chart.
   await expect(
-    page.getByRole('img', { name: 'Bar chart of completed work items per hour' }),
+    page.getByRole('img', { name: 'Line chart of Releases processed and Tracks indexed per hour' }),
   ).toBeVisible();
 
-  // Mini queue table with a link into the processing queue.
-  await expect(page.getByRole('table', { name: 'Work items by state' })).toBeVisible();
+  // Release-level queue preview with a link into the processing queue.
+  const queue = page.getByRole('table', { name: 'Current processing queue' });
+  await expect(queue).toBeVisible();
+  await expect(queue.getByText('Men at Work')).toBeVisible();
+  await expect(
+    queue.getByRole('progressbar', { name: /processing stage/ }).first(),
+  ).toBeVisible();
   await expect(page.getByRole('link', { name: 'Open the processing queue' })).toBeVisible();
 });
 
@@ -132,7 +180,7 @@ test('rtl smoke: ar-SA renders the dashboard with dir=rtl', async ({ page }) => 
   await page.goto('/');
   await expect(page.getByText('35,214')).toBeVisible();
 
-  await page.getByRole('button', { name: 'Language', exact: true }).click();
+  await page.getByRole('button', { name: /^Language:/ }).click();
   await page.getByText(/العربية/).click();
 
   await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
@@ -140,6 +188,6 @@ test('rtl smoke: ar-SA renders the dashboard with dir=rtl', async ({ page }) => 
   // Untranslated admin vocabulary falls back to English; the chrome mirrors.
   await expect(page.getByText('35,214')).toBeVisible();
   await expect(
-    page.getByRole('img', { name: 'Bar chart of completed work items per hour' }),
+    page.getByRole('img', { name: 'Line chart of Releases processed and Tracks indexed per hour' }),
   ).toBeVisible();
 });

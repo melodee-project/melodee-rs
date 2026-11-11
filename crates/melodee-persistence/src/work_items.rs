@@ -34,6 +34,26 @@ pub struct WorkItemWindowCounts {
     pub completed: i64,
 }
 
+/// One work-item list row with its catalog binding for operator queues.
+///
+/// The added columns are display values only: the work-item id is the
+/// identity, and a bound Release never becomes the work item's identity. Every
+/// added field is `Option` because a work item legitimately has no import
+/// binding until it has been imported.
+#[derive(Debug, Clone)]
+pub struct WorkItemListRow {
+    /// The durable work item (all operator-visible state and lease evidence).
+    pub item: ReleaseWorkItem,
+    /// Catalog Release this work item was imported into, when bound.
+    pub release_id: Option<Uuid>,
+    /// Display title of that Release, when bound.
+    pub release_title: Option<String>,
+    /// Billed display artist of that Release, when bound.
+    pub display_artist: Option<String>,
+    /// Total media bytes recorded by the release aggregates, when bound.
+    pub media_bytes: Option<i64>,
+}
+
 /// One hourly bucket of completed work items for the dashboard activity
 /// series.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -103,6 +123,48 @@ impl WorkItemSort {
             Self::AttemptCountAsc => "attempt_count ASC, id",
             Self::AttemptCountDesc => "attempt_count DESC, id",
         }
+    }
+}
+
+/// Table-qualified ordering fragment for queries that join other tables owning
+/// `created_at`/`updated_at` (see [`WorkItemStore::list_page_enriched`]).
+///
+/// Injection audit: built from the [`WorkItemSort`] whitelist only, never from
+/// client text.
+const fn qualified_order_by(sort: WorkItemSort) -> &'static str {
+    match sort {
+        WorkItemSort::AddedAtAsc => "w.created_at ASC, w.id",
+        WorkItemSort::AddedAtDesc => "w.created_at DESC, w.id",
+        WorkItemSort::UpdatedAtAsc => "w.updated_at ASC, w.id",
+        WorkItemSort::UpdatedAtDesc => "w.updated_at DESC, w.id",
+        WorkItemSort::StateAsc => "w.state ASC, w.created_at DESC, w.id",
+        WorkItemSort::StateDesc => "w.state DESC, w.created_at DESC, w.id",
+        WorkItemSort::AttemptCountAsc => "w.attempt_count ASC, w.id",
+        WorkItemSort::AttemptCountDesc => "w.attempt_count DESC, w.id",
+    }
+}
+
+/// Escapes LIKE wildcards in an operator-supplied substring so `%` and `_` are
+/// matched literally (`ESCAPE '\\'` is applied by the query).
+fn escape_like(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_")
+}
+
+impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for WorkItemListRow {
+    fn from_row(row: &sqlx::postgres::PgRow) -> Result<Self, sqlx::Error> {
+        use sqlx::Row as _;
+        let base = WorkItemRow::from_row(row)?;
+        Ok(Self {
+            item: ReleaseWorkItem::try_from(base)
+                .map_err(|error| sqlx::Error::Decode(Box::new(error)))?,
+            release_id: row.try_get("release_id")?,
+            release_title: row.try_get("title")?,
+            display_artist: row.try_get("display_artist")?,
+            media_bytes: row.try_get("media_bytes")?,
+        })
     }
 }
 
@@ -2746,6 +2808,76 @@ impl WorkItemStore {
         Ok((items, total))
     }
 
+    /// Lists one page of work items with their catalog binding, plus the total
+    /// row count for the filter (ignoring the page).
+    ///
+    /// The queue surface shows the Release a work item belongs to, so this
+    /// query joins the import binding (`catalog_imports`, unique on
+    /// `work_item_id`) and the release aggregates that already carry
+    /// `media_bytes`. All added columns are display values only: the work-item
+    /// id remains the identity, and a work item never inherits identity from a
+    /// path or a title (SPEC).
+    ///
+    /// `query` is an optional case-insensitive substring filter over the
+    /// Release title, billed artist, and current path. It is a bounded
+    /// operator convenience over the active queue, not a catalog search: the
+    /// scan is capped by the page limit and never becomes the catalog browse
+    /// path (PRD-UI-010).
+    pub async fn list_page_enriched(
+        &self,
+        pool: &PgPool,
+        state: Option<IngestionState>,
+        limit: u32,
+        offset: u32,
+        sort: WorkItemSort,
+        query: Option<&str>,
+    ) -> Result<(Vec<WorkItemListRow>, i64), WorkStoreError> {
+        let pattern = query
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|value| format!("%{}%", escape_like(value)));
+        let filter = "($1::text IS NULL OR w.state = $1)
+               AND (
+                   $2::text IS NULL
+                   OR r.title ILIKE $2 ESCAPE '\\'
+                   OR r.display_artist ILIKE $2 ESCAPE '\\'
+                   OR w.current_path ILIKE $2 ESCAPE '\\'
+               )";
+        // Injection audit: `order_by` and `filter` are constants; only bind
+        // parameters carry client-influenced values. The ordering fragment is
+        // table-qualified because the query joins other tables that also own
+        // `created_at`/`updated_at` columns.
+        let total = sqlx::query_scalar::<_, i64>(sqlx::AssertSqlSafe(format!(
+            "SELECT COUNT(*)::bigint
+             FROM release_work_items w
+             LEFT JOIN catalog_imports ci ON ci.work_item_id = w.id
+             LEFT JOIN releases r ON r.id = ci.release_id
+             WHERE {filter}"
+        )))
+        .bind(state.map(IngestionState::as_str))
+        .bind(pattern.as_deref())
+        .fetch_one(pool)
+        .await?;
+        let rows = sqlx::query_as::<_, WorkItemListRow>(sqlx::AssertSqlSafe(format!(
+            "SELECT w.*, ci.release_id, r.title, r.display_artist, rca.media_bytes
+             FROM release_work_items w
+             LEFT JOIN catalog_imports ci ON ci.work_item_id = w.id
+             LEFT JOIN releases r ON r.id = ci.release_id
+             LEFT JOIN release_catalog_aggregates rca ON rca.release_id = r.id
+             WHERE {filter}
+             ORDER BY {}
+             LIMIT $3 OFFSET $4",
+            qualified_order_by(sort)
+        )))
+        .bind(state.map(IngestionState::as_str))
+        .bind(pattern.as_deref())
+        .bind(i64::from(limit))
+        .bind(i64::from(offset))
+        .fetch_all(pool)
+        .await?;
+        Ok((rows, total))
+    }
+
     /// Lists one page of work items whose state is in `states`, ordered by a
     /// whitelisted sort, bounded — plus the total row count for the filter
     /// (ignoring the page). Read-side companion to [`Self::list_page`] for
@@ -2867,6 +2999,71 @@ impl WorkItemStore {
             .into_iter()
             .map(|(hour, count)| HourlyCompletionCount { hour, count })
             .collect())
+    }
+
+    /// Per-hour counts of work items that transitioned into `to_state` since
+    /// `since`, oldest first.
+    ///
+    /// Postgres, not the process: it reads the append-only
+    /// `release_work_item_events` log, whose `created_at` index backs the
+    /// window range, and groups to one row per hour (bounded by the window,
+    /// never by row cardinality).
+    pub async fn transitions_hourly(
+        &self,
+        pool: &PgPool,
+        since: OffsetDateTime,
+        to_state: &str,
+    ) -> Result<Vec<HourlyCompletionCount>, WorkStoreError> {
+        let rows: Vec<(OffsetDateTime, i64)> = sqlx::query_as(
+            "SELECT date_trunc('hour', created_at) AS hour, COUNT(*)::bigint AS count
+             FROM release_work_item_events
+             WHERE to_state = $1 AND created_at >= $2
+             GROUP BY 1 ORDER BY 1",
+        )
+        .bind(to_state)
+        .bind(since)
+        .fetch_all(pool)
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(|(hour, count)| HourlyCompletionCount { hour, count })
+            .collect())
+    }
+
+    /// Number of work items that transitioned into `to_state` since `since`.
+    /// Same evidence source and bounded range as [`Self::transitions_hourly`].
+    pub async fn count_transitions_since(
+        &self,
+        pool: &PgPool,
+        since: OffsetDateTime,
+        to_state: &str,
+    ) -> Result<i64, WorkStoreError> {
+        let count = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*)::bigint FROM release_work_item_events
+             WHERE to_state = $1 AND created_at >= $2",
+        )
+        .bind(to_state)
+        .bind(since)
+        .fetch_one(pool)
+        .await?;
+        Ok(count)
+    }
+
+    /// Number of work items that entered the pipeline (`created` events) since
+    /// `since`.
+    pub async fn count_created_since(
+        &self,
+        pool: &PgPool,
+        since: OffsetDateTime,
+    ) -> Result<i64, WorkStoreError> {
+        let count = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*)::bigint FROM release_work_item_events
+             WHERE event_type = 'created' AND created_at >= $1",
+        )
+        .bind(since)
+        .fetch_one(pool)
+        .await?;
+        Ok(count)
     }
 
     /// Active (unexpired) leases proven by PostgreSQL evidence, bounded by

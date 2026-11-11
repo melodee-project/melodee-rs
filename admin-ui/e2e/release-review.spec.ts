@@ -220,16 +220,19 @@ test('review queue loads from the envelope and row activation opens the workspac
   await page.goto('processing/review');
 
   const chips = page.getByRole('group', { name: 'Filter by review state' });
-  await expect(chips.getByRole('tab', { name: 'All 3' })).toBeVisible();
-  await expect(chips.getByRole('tab', { name: 'Needs review 1' })).toBeVisible();
-  await expect(chips.getByRole('tab', { name: 'Failed 2' })).toBeVisible();
+  // Filter pills are toggle buttons with live counts (ADR-0184).
+  await expect(chips.getByRole('button', { name: /All/ })).toHaveText(/3/);
+  await expect(chips.getByRole('button', { name: /Needs review/ })).toHaveText(/1/);
+  await expect(chips.getByRole('button', { name: /Failed/ })).toHaveText(/2/);
 
   const table = page.getByRole('table', { name: 'Review queue work items' });
   await expect(table.getByText('Greatest Hits')).toBeVisible();
   await table.getByText('Greatest Hits').click();
 
   await expect(page).toHaveURL(new RegExp(`/processing/review/${WORK_ITEM_ID}`));
-  await expect(page.getByText('Example Artist — Greatest Hits')).toBeVisible();
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Example Artist — Greatest Hits' }),
+  ).toBeVisible();
 });
 
 test('workspace renders evidence, comparison, decision actions, policy, and timeline', async ({
@@ -238,13 +241,15 @@ test('workspace renders evidence, comparison, decision actions, policy, and time
   await mockAdminApi(page);
   await page.goto(`processing/review/${WORK_ITEM_ID}`);
 
-  await expect(page.getByText('Example Artist — Greatest Hits')).toBeVisible();
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Example Artist — Greatest Hits' }),
+  ).toBeVisible();
   await expect(page.getByText('Classification & Evidence')).toBeVisible();
   await expect(page.getByText('Title contains "Greatest Hits"')).toBeVisible();
   await expect(page.getByText('Catalog Comparison')).toBeVisible();
   await expect(page.getByText('Known Tracks')).toBeVisible();
   await expect(page.getByText('Track Breakdown').first()).toBeVisible();
-  await expect(page.getByText('Down Under')).toBeVisible();
+  await expect(page.getByText('Down Under', { exact: true })).toBeVisible();
 
   // Inline previews: labeled transports, preload=none (no autoplay). The
   // 404 preview_unavailable path degrades to a localized note when playback
@@ -254,10 +259,10 @@ test('workspace renders evidence, comparison, decision actions, policy, and time
   await expect(previews.first()).toHaveAttribute('aria-label', /Preview track 1/);
 
   // Ordered decision actions: destructive last.
-  await expect(page.getByRole('button', { name: 'Accept Release' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Accept Release/ })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Quarantine' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Ignore' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Delete', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Delete/ })).toBeVisible();
 
   await expect(page.getByText('Policy Match')).toBeVisible();
   await expect(page.getByText('greatest_hits_novelty')).toBeVisible();
@@ -269,9 +274,9 @@ test('keyboard: Enter on a decision action opens its confirmation, Escape closes
 }) => {
   await mockAdminApi(page);
   await page.goto(`processing/review/${WORK_ITEM_ID}`);
-  await expect(page.getByRole('button', { name: 'Accept Release' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Accept Release/ })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Accept Release' }).press('Enter');
+  await page.getByRole('button', { name: /^Accept Release/ }).press('Enter');
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   await expect(dialog.getByText('Confirm decision: Accept Release')).toBeVisible();
@@ -283,7 +288,7 @@ test('keyboard: Enter on a decision action opens its confirmation, Escape closes
 test('decision happy path posts the audited reason', async ({ page }) => {
   const api = await mockAdminApi(page);
   await page.goto(`processing/review/${WORK_ITEM_ID}`);
-  await page.getByRole('button', { name: 'Accept Release' }).click();
+  await page.getByRole('button', { name: /^Accept Release/ }).click();
 
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Reason').fill('Verified against the catalog.');
@@ -299,13 +304,17 @@ test('decision happy path posts the audited reason', async ({ page }) => {
 test('rtl smoke: ar-SA renders the workspace with dir=rtl', async ({ page }) => {
   await mockAdminApi(page);
   await page.goto(`processing/review/${WORK_ITEM_ID}`);
-  await expect(page.getByText('Example Artist — Greatest Hits')).toBeVisible();
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Example Artist — Greatest Hits' }),
+  ).toBeVisible();
 
-  await page.getByRole('button', { name: 'Language', exact: true }).click();
+  await page.getByRole('button', { name: /^Language:/ }).click();
   await page.getByText(/العربية/).click();
 
   await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
   await expect(page.locator('html')).toHaveAttribute('lang', 'ar-SA');
   // Data stays visible; the chrome mirrors.
-  await expect(page.getByText('Example Artist — Greatest Hits')).toBeVisible();
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Example Artist — Greatest Hits' }),
+  ).toBeVisible();
 });

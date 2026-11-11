@@ -606,12 +606,29 @@ pub struct DashboardActivityBucketDto {
     pub count: i64,
 }
 
+/// Recent-change counters behind the KPI cards (ADR-0184). Every number comes
+/// from durable evidence in a bounded window; there is no historical catalog
+/// counter, so catalog week-deltas are deliberately absent rather than
+/// approximated.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DashboardDeltasDto {
+    /// Work items that entered the pipeline since UTC midnight (`created`
+    /// events).
+    pub inbound_today: i64,
+    /// Work items that transitioned into `needs_review` in the last 24h.
+    pub new_for_review_24h: i64,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DashboardActivityDto {
     /// Completed work items per hour over the trailing 24h (durable
     /// `completed_at` evidence; hours without completions are omitted).
     pub completed_per_hour: Vec<DashboardActivityBucketDto>,
+    /// Work items that reached `indexed` per hour over the trailing 24h, from
+    /// the append-only transition log (ADR-0184 second series).
+    pub indexed_per_hour: Vec<DashboardActivityBucketDto>,
 }
 
 #[derive(Debug, Serialize)]
@@ -621,6 +638,7 @@ pub struct DashboardDto {
     pub catalog: DashboardCatalogDto,
     pub work_items: DashboardWorkItemsDto,
     pub attention: DashboardAttentionDto,
+    pub deltas: DashboardDeltasDto,
     pub health: HealthDto,
     pub activity: DashboardActivityDto,
 }
@@ -840,6 +858,30 @@ async fn dashboard(State(state): State<AdminSystemState>, _admin: AdminPrincipal
         Ok(hourly) => hourly,
         Err(error) => return store_failure("activity series failed", &error),
     };
+    // ADR-0184: the reference activity chart plots two series, and its KPI
+    // cards carry "today"/"new" counters. Both read the append-only transition
+    // log inside the same bounded window, so nothing here scans a growing
+    // table without a range predicate.
+    let indexed_hourly = match WorkItemStore
+        .transitions_hourly(pool, since, IngestionState::Indexed.as_str())
+        .await
+    {
+        Ok(hourly) => hourly,
+        Err(error) => return store_failure("indexed activity series failed", &error),
+    };
+    // UTC midnight: the "today" boundary the Inbound KPI advertises.
+    let day_start = now.date().midnight().assume_utc();
+    let inbound_today = match WorkItemStore.count_created_since(pool, day_start).await {
+        Ok(count) => count,
+        Err(error) => return store_failure("inbound delta failed", &error),
+    };
+    let new_for_review_24h = match WorkItemStore
+        .count_transitions_since(pool, since, IngestionState::NeedsReview.as_str())
+        .await
+    {
+        Ok(count) => count,
+        Err(error) => return store_failure("review delta failed", &error),
+    };
     let failed_processing = counts_by_state
         .iter()
         .find(|count| count.state == IngestionState::Failed)
@@ -872,9 +914,20 @@ async fn dashboard(State(state): State<AdminSystemState>, _admin: AdminPrincipal
             failed_processing,
             quarantined,
         },
+        deltas: DashboardDeltasDto {
+            inbound_today,
+            new_for_review_24h,
+        },
         health,
         activity: DashboardActivityDto {
             completed_per_hour: hourly
+                .into_iter()
+                .map(|bucket| DashboardActivityBucketDto {
+                    hour: bucket.hour,
+                    count: bucket.count,
+                })
+                .collect(),
+            indexed_per_hour: indexed_hourly
                 .into_iter()
                 .map(|bucket| DashboardActivityBucketDto {
                     hour: bucket.hour,

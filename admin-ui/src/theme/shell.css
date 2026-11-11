@@ -1,0 +1,422 @@
+/*
+ * Shell chrome: brand block, header, persistent left navigation, status strip
+ * (UI-SPEC §3, ADR-0184). Structural rules only; every color, radius, spacing
+ * step and font size comes from tokens.css. Logical properties keep the shell
+ * fully mirrored under dir="rtl".
+ *
+ * The reference shell is a dark rail with a monogram tile and an `ADMIN`
+ * micro-label, a light header carrying one inset search entry, and a status
+ * strip at the foot of the rail. Dimensions stay UI-SPEC §3 (256/48 px), not
+ * the mockup's directional 220/72 px proportions.
+ */
+
+.melodee-shell__brand {
+  position: fixed;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  gap: var(--melodee-space-2);
+  inline-size: 16rem;
+  block-size: 3rem;
+  padding-inline: var(--melodee-space-4);
+  background: var(--melodee-shell-background);
+}
+
+.melodee-shell__brand-link {
+  display: flex;
+  align-items: center;
+  gap: var(--melodee-space-3);
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.melodee-shell__brand-link:focus-visible {
+  outline: 2px solid var(--cds-focus);
+  outline-offset: 3px;
+}
+
+.melodee-shell__brand-mark {
+  display: block;
+  inline-size: 2rem;
+  block-size: 2rem;
+  flex-shrink: 0;
+}
+
+.melodee-shell__brand-wordmark {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  line-height: 1.05;
+}
+
+.melodee-shell__brand-name {
+  color: var(--melodee-shell-text);
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.melodee-shell__brand-subtitle {
+  color: var(--melodee-shell-muted);
+  font-size: var(--melodee-font-micro);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* The horizontal logo is retained for the collapsed rail's accessible name
+   surface but never rendered at desktop sizes. */
+.melodee-shell__brand-logo {
+  display: none;
+}
+
+.melodee-shell__brand.melodee-shell--rail {
+  justify-content: center;
+  inline-size: 3rem;
+  padding-inline: 0;
+}
+
+.melodee-shell__brand.melodee-shell--rail .melodee-shell__brand-wordmark {
+  display: none;
+}
+
+.melodee-shell__header.cds--header {
+  inset-inline-start: 16rem;
+  inline-size: calc(100% - 16rem);
+  background: var(--melodee-surface);
+  border-block-end: 1px solid var(--melodee-surface-border);
+}
+
+.melodee-shell__header.cds--header.melodee-shell--rail {
+  inset-inline-start: 3rem;
+  inline-size: calc(100% - 3rem);
+}
+
+.melodee-shell__header-menu,
+.melodee-shell__header-name {
+  display: none !important;
+}
+
+/* One inset search entry (reference), replacing a bordered command button. */
+.melodee-shell__command-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--melodee-space-2);
+  inline-size: min(29rem, 40vw);
+  min-inline-size: 12rem;
+  block-size: 2.25rem;
+  margin-inline-start: var(--melodee-space-6);
+  padding-inline: var(--melodee-space-3);
+  border: 1px solid var(--melodee-surface-border);
+  border-radius: var(--melodee-radius-control);
+  background: var(--melodee-surface-inset);
+  color: var(--melodee-text-secondary);
+  font: inherit;
+  font-size: var(--melodee-font-body);
+  text-align: start;
+  cursor: pointer;
+  transition: background var(--melodee-motion-duration) ease;
+}
+
+.melodee-shell__command-entry:hover {
+  background: var(--melodee-surface-hover);
+  color: var(--melodee-text-primary);
+}
+
+.melodee-shell__command-entry:focus-visible {
+  outline: 2px solid var(--cds-focus);
+  outline-offset: 2px;
+}
+
+.melodee-shell__command-entry > span {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.melodee-shell__command-entry kbd {
+  color: var(--melodee-text-secondary);
+  font: inherit;
+  font-size: var(--melodee-font-micro);
+}
+
+/* Header action cluster: text label + avatar for the user control, locale name
+   for the language control (reference), icons for the rest. */
+.melodee-shell__header .cds--header__global {
+  margin-inline-start: auto;
+}
+
+/* Carbon header actions are 48px squares; the reference shows the locale name
+   and the username beside the icon, so those two grow to fit their text. */
+.melodee-shell__header .cds--header__action:has(.melodee-shell__action-with-label) {
+  inline-size: auto;
+  min-inline-size: 3rem;
+  padding-inline: var(--melodee-space-2);
+}
+
+.melodee-shell__action-with-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--melodee-space-2);
+  white-space: nowrap;
+}
+
+.melodee-shell__avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  border-radius: var(--melodee-radius-pill);
+  background: var(--melodee-status-neutral);
+  color: #ffffff;
+  font-size: var(--melodee-font-label);
+  font-weight: 600;
+}
+
+.melodee-shell__user-name {
+  max-inline-size: 10rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.melodee-shell__health {
+  display: inline-flex;
+  align-items: center;
+  padding-inline: var(--melodee-space-2);
+}
+
+/* Rail */
+.melodee-shell__nav.cds--side-nav {
+  inset-block-start: 0;
+  inline-size: 16rem;
+  block-size: 100dvh;
+  padding-block-start: 3.75rem;
+  background: var(--melodee-shell-background);
+  border: 0;
+  color: var(--melodee-shell-text);
+}
+
+.melodee-shell__nav.cds--side-nav.melodee-shell--rail {
+  inline-size: 3rem;
+  padding-inline: 0;
+}
+
+.melodee-shell__nav .cds--side-nav__items {
+  padding-inline: var(--melodee-space-3);
+}
+
+.melodee-shell__nav-link.cds--side-nav__link {
+  min-block-size: 2.375rem;
+  margin-block: 0.125rem;
+  border-radius: var(--melodee-radius-control);
+  color: var(--melodee-shell-text);
+  font-size: var(--melodee-font-body);
+}
+
+.melodee-shell__nav-link.cds--side-nav__link:hover {
+  background: color-mix(in srgb, var(--melodee-shell-active) 70%, transparent);
+  color: var(--melodee-shell-text);
+}
+
+.melodee-shell__nav-link.cds--side-nav__link > .cds--side-nav__link-text {
+  color: var(--melodee-shell-text);
+}
+
+.melodee-shell__nav-link.cds--side-nav__link.cds--side-nav__link--current,
+.melodee-shell__nav-link.cds--side-nav__link[aria-current='page'] {
+  background: var(--melodee-shell-active);
+  color: var(--melodee-shell-text);
+  box-shadow: inset 3px 0 0 var(--melodee-brand-accent);
+}
+
+.melodee-shell__nav-link.cds--side-nav__link.cds--side-nav__link--current
+  > .cds--side-nav__link-text,
+.melodee-shell__nav-link.cds--side-nav__link[aria-current='page']
+  > .cds--side-nav__link-text {
+  color: var(--melodee-shell-text);
+}
+
+[dir='rtl'] .melodee-shell__nav-link.cds--side-nav__link.cds--side-nav__link--current,
+[dir='rtl'] .melodee-shell__nav-link.cds--side-nav__link[aria-current='page'] {
+  box-shadow: inset -3px 0 0 var(--melodee-brand-accent);
+}
+
+.melodee-shell__nav-link .cds--side-nav__icon {
+  fill: currentcolor;
+}
+
+.melodee-shell__nav-group {
+  margin-block-start: var(--melodee-space-4);
+}
+
+.melodee-shell__nav-group-label {
+  display: block;
+  padding-inline: var(--melodee-space-2);
+  padding-block-end: var(--melodee-space-1);
+  color: var(--melodee-shell-muted);
+  font-size: var(--melodee-font-micro);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.melodee-shell__nav.melodee-shell--rail .melodee-shell__nav-group {
+  margin-block-start: var(--melodee-space-2);
+}
+
+.melodee-shell__nav.melodee-shell--rail .melodee-shell__nav-group-label {
+  display: none;
+}
+
+.melodee-shell__content {
+  min-block-size: 100dvh;
+  margin-inline-start: 3rem;
+  padding: var(--melodee-space-6);
+  background: var(--cds-background);
+}
+
+.melodee-shell__content.melodee-shell--expanded {
+  margin-inline-start: 16rem;
+}
+
+/* Status strip at the foot of the rail (canonical server-status location). */
+.melodee-shell__footer {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--melodee-space-2);
+  padding-inline: var(--melodee-space-3);
+  padding-block: var(--melodee-space-3);
+  border-block-start: 1px solid color-mix(in srgb, var(--melodee-shell-muted) 25%, transparent);
+  color: var(--melodee-shell-muted);
+  font-size: var(--melodee-font-micro);
+}
+
+.melodee-shell__footer-health {
+  display: inline-flex;
+  align-items: center;
+  color: var(--melodee-shell-text);
+}
+
+/* The status strip renders its dot on the dark rail: brighten the neutral
+   state so it stays visible, and keep the label readable at 11px. */
+.melodee-shell__footer-health .melodee-health-row__dot-label {
+  gap: var(--melodee-space-2);
+  font-size: var(--melodee-font-label);
+}
+
+.melodee-shell__footer-controls {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--melodee-space-2);
+}
+
+.melodee-shell__footer-meta {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.35;
+  text-transform: none;
+}
+
+.melodee-shell__footer .cds--header__action {
+  margin-inline-start: auto;
+  color: var(--melodee-shell-text);
+}
+
+.melodee-shell__footer .cds--header__action:hover {
+  background: color-mix(in srgb, var(--melodee-shell-active) 70%, transparent);
+}
+
+/* The status strip renders chips on the dark rail: keep their ink legible. */
+.melodee-shell__footer .melodee-chip {
+  background: transparent;
+  color: var(--melodee-shell-text);
+}
+
+@media (max-width: 1311px) {
+  .melodee-shell__content {
+    padding: var(--melodee-space-5);
+  }
+}
+
+/* UI-SPEC §8 sm: single column; the header health chip yields its space to the
+   action buttons — the server status remains visible in the nav footer. */
+@media (max-width: 671px) {
+  /* UI-SPEC §8 sm: the collapsed rail becomes an off-canvas navigation.
+     The header menu expands the existing SideNav over the page; it must not
+     consume a permanent 48px strip of the already narrow content area. */
+  .melodee-shell__brand.melodee-shell--rail {
+    display: none;
+  }
+
+  .melodee-shell__brand {
+    display: none;
+  }
+
+  .melodee-shell__header.cds--header,
+  .melodee-shell__header.cds--header.melodee-shell--rail {
+    inset-inline-start: 0;
+    inline-size: 100%;
+  }
+
+  .melodee-shell__nav.cds--side-nav.melodee-shell--rail {
+    inline-size: 0;
+    padding: 0;
+  }
+
+  .melodee-shell__content,
+  .melodee-shell__content.melodee-shell--expanded {
+    margin-inline-start: 0;
+    padding: var(--melodee-space-4);
+  }
+
+  .melodee-shell__header-menu {
+    display: inline-flex !important;
+  }
+
+  /* The header name is redundant at sm (the page title sits directly below)
+     and 200px of it is what pushed the action cluster past the viewport. */
+  .melodee-shell__header-name {
+    display: none !important;
+  }
+
+  .melodee-shell__command-entry {
+    display: none;
+  }
+
+  .melodee-shell__health {
+    display: none;
+  }
+
+  .melodee-shell__user-name,
+  .melodee-shell__locale-name {
+    display: none;
+  }
+
+  /* Carbon keeps the overlay node mounted while the off-canvas nav is
+   * collapsed. An inactive overlay must not win hit testing over a scrolled
+   * tab-panel control. */
+  .cds--side-nav__overlay:not(.cds--side-nav__overlay-active) {
+    pointer-events: none !important;
+  }
+}
+
+/* Header panel switcher lists: SwitcherItem renders <li>, so panels wrap
+   them in this plain list (WCAG 1.3.1 list semantics, axe listitem rule). */
+.melodee-shell__panel-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}

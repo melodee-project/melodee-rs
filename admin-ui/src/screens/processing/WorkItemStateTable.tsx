@@ -2,10 +2,8 @@ import { Renew } from '@carbon/icons-react';
 import {
   ActionableNotification,
   Button,
-  ContentSwitcher,
   Link,
   Loading,
-  Switch,
 } from '@carbon/react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -15,6 +13,7 @@ import { listWorkItems } from '../../api/admin';
 import { ApiError } from '../../api/client';
 import type { IngestionState, Page, SortParam, WorkItem } from '../../api/types';
 import { EntityTable, type EntityColumn, type EntityRow } from '../../components/EntityTable';
+import { FilterPills } from '../../components/FilterPills';
 import { ProcessingStateTag } from '../../components/ProcessingStateTag';
 import { formatDateTime, formatNumber, formatRelativeTime } from '../../i18n/format';
 import { WorkItemInspector } from './WorkItemInspector';
@@ -214,22 +213,16 @@ export function WorkItemStateTable({
           />
         ) : null}
         {states.length > 1 ? (
-          <div className="melodee-queue-chips" role="group" aria-label={t('queue.filterByState')}>
-            <ContentSwitcher
-              size="sm"
-              selectedIndex={Math.max(
-                0,
-                states.findIndex((state) => state === stateFilter),
-              )}
-              onChange={(data) => {
-                const name = typeof data.name === 'string' ? data.name : '';
-                updateParams({ state: name || null, page: '1' });
-              }}
-            >
-              {states.map((state) => (
-                <Switch key={state} name={state} text={t(`queue.state.${state}`)} />
-              ))}
-            </ContentSwitcher>
+          <div className="melodee-queue-chips">
+            <FilterPills
+              ariaLabel={t('queue.filterByState')}
+              value={stateFilter ?? ''}
+              onChange={(key) => updateParams({ state: key, page: '1' })}
+              items={states.map((state) => ({
+                key: state,
+                label: t(`queue.state.${state}`),
+              }))}
+            />
           </div>
         ) : null}
         {loading && pageData === null ? (

@@ -1,9 +1,7 @@
 import {
   ActionableNotification,
-  Heading,
   Link,
   Loading,
-  Tab,
   Table,
   TableBody,
   TableCell,
@@ -11,12 +9,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  TabList,
-  TabPanel,
-  TabPanels,
-  Tabs,
-  Tag,
 } from '@carbon/react';
+import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { Link as RouterLink, useParams } from 'react-router-dom';
 import { useState } from 'react';
@@ -25,10 +19,14 @@ import { getCatalogArtist, updateArtistMetadata } from '../../api/admin';
 import type { ArtistContribution, ArtistDetail } from '../../api/types';
 import { AuditTimeline } from '../../components/AuditTimeline';
 import { EmptyState } from '../../components/EmptyState';
+import { EntityAvatar } from '../../components/EntityAvatar';
 import { ArtistLink, ReleaseLink, TrackLink } from '../../components/EntityLink';
-import { MetricCard } from '../../components/MetricCard';
+import { HeroCard } from '../../components/HeroCard';
 import { PageHeader } from '../../components/PageHeader';
-import { StatusTag } from '../../components/StatusTag';
+import { StatStrip } from '../../components/StatStrip';
+import { StatusChip, StatusTag } from '../../components/StatusTag';
+import { Surface } from '../../components/Surface';
+import { TabNav } from '../../components/TabNav';
 import { formatDate, formatDateTime, formatNumber } from '../../i18n/format';
 import { catalogStatusKind, toCatalogAuditEvent, useCatalogDetail } from './catalog';
 import { ArtworkManager } from './ArtworkManager';
@@ -128,9 +126,12 @@ function ContributionTable({
   );
 }
 
-function ArtistHeaderFacts({ detail }: { detail: ArtistDetail }) {
-  const { t } = useTranslation();
-  const facts: { label: string; value: string }[] = [
+/** Hero fact strip (UI-SPEC §6.1): identity facts the reference shows at the
+ *  top of the Artist page. Genres and a biography are intentionally absent —
+ *  the catalog payload has no genre or biography field, so rendering them would
+ *  be invention. */
+function artistHeroFacts(detail: ArtistDetail, t: TFunction) {
+  return [
     {
       label: t('catalog.artist.fact.type'),
       value: t(`catalog.artistType.${detail.artistType}`, { defaultValue: detail.artistType }),
@@ -141,23 +142,15 @@ function ArtistHeaderFacts({ detail }: { detail: ArtistDetail }) {
     ...(detail.endDate
       ? [{ label: t('catalog.artist.fact.endDate'), value: formatDate(detail.endDate) }]
       : []),
+    { label: t('catalog.artist.fact.sortName'), value: detail.sortName },
   ];
-  return (
-    <div className="melodee-review-header__facts">
-      {facts.map((fact) => (
-        <div key={fact.label}>
-          <div className="melodee-review-fact__label">{fact.label}</div>
-          <div>{fact.value}</div>
-        </div>
-      ))}
-    </div>
-  );
 }
 
 export function ArtistDetailScreen() {
   const { t } = useTranslation();
   const { id = '' } = useParams();
   const [editing, setEditing] = useState(false);
+  const [tab, setTab] = useState('overview');
   const { detail, error, loading, retry } = useCatalogDetail(getCatalogArtist, id);
 
   if (loading && detail === null) {
@@ -213,110 +206,146 @@ export function ArtistDetailScreen() {
               refresh={retry}
             />
           ) : null}
-          <div className="melodee-review-card">
-            <div className="melodee-review-header">
-              <CatalogArtwork imageId={detail.imageId} name={detail.name} size={96} decorative />
-              <div className="melodee-review-header__title">
-                <Heading style={{ fontSize: '1.25rem' }}>{detail.name}</Heading>
-                {detail.disambiguation ? (
-                  <p className="melodee-page-header__subtitle">{detail.disambiguation}</p>
-                ) : null}
-                <ArtistHeaderFacts detail={detail} />
-                {detail.externalIds.items.length > 0 ? (
-                  <p style={{ marginBlockStart: '0.5rem' }}>
-                    {detail.externalIds.items.map((externalId) => (
-                      <Tag
-                        key={`${externalId.provider}-${externalId.externalId}`}
-                        type="outline"
-                        title={externalId.externalId}
-                        style={{ marginInlineEnd: '0.25rem' }}
-                      >
-                        {externalId.provider}
-                      </Tag>
-                    ))}
-                  </p>
-                ) : null}
-              </div>
-              <StatusTag
-                kind={catalogStatusKind(detail.status)}
-                label={t(`catalog.status.${detail.status}`, { defaultValue: detail.status })}
-              />
-            </div>
-          </div>
+          <HeroCard
+            media={<CatalogArtwork imageId={detail.imageId} name={detail.name} size={112} decorative />}
+            title={detail.name}
+            subtitle={detail.disambiguation ?? undefined}
+            chips={
+              <>
+                <StatusChip
+                  kind={catalogStatusKind(detail.status)}
+                  label={t(`catalog.status.${detail.status}`, { defaultValue: detail.status })}
+                />
+                {detail.externalIds.items.map((externalId) => (
+                  <StatusChip
+                    key={`${externalId.provider}-${externalId.externalId}`}
+                    kind="neutral"
+                    label={externalId.provider}
+                    description={externalId.externalId}
+                    hideIcon
+                  />
+                ))}
+              </>
+            }
+            facts={artistHeroFacts(detail, t)}
+          />
 
-          <div className="melodee-metric-grid">
-            <MetricCard
-              label={t('catalog.artist.stats.releases')}
-              value={formatNumber(detail.stats.releaseCount)}
-            />
-            <MetricCard
-              label={t('catalog.artist.stats.billedTracks')}
-              value={formatNumber(detail.stats.billedTrackCount)}
-            />
-            <MetricCard
-              label={t('catalog.artist.stats.performanceTracks')}
-              value={formatNumber(detail.stats.performanceTrackCount)}
-            />
-            <MetricCard
-              label={t('catalog.artist.stats.aliases')}
-              value={formatNumber(detail.aliases.total)}
-            />
-          </div>
+          <StatStrip
+            ariaLabel={t('catalog.artist.stats.label')}
+            items={[
+              {
+                label: t('catalog.artist.stats.releases'),
+                value: formatNumber(detail.stats.releaseCount),
+              },
+              {
+                label: t('catalog.artist.stats.billedTracks'),
+                value: formatNumber(detail.stats.billedTrackCount),
+              },
+              {
+                label: t('catalog.artist.stats.members'),
+                value: formatNumber(detail.memberships.total),
+              },
+              {
+                label: t('catalog.artist.stats.appearances'),
+                value: formatNumber(detail.stats.performanceTrackCount),
+              },
+              {
+                label: t('catalog.artist.stats.aliases'),
+                value: formatNumber(detail.aliases.total),
+              },
+            ]}
+          />
 
-          <Tabs>
-            <TabList aria-label={t('catalog.artist.tabsLabel')}>
-              <Tab>{t('catalog.artist.tabs.overview')}</Tab>
-              <Tab>{t('catalog.artist.tabs.releases')}</Tab>
-              <Tab>{t('catalog.artist.tabs.appearances')}</Tab>
-              <Tab>{t('catalog.artist.tabs.contributions')}</Tab>
-              <Tab>{t('catalog.artist.tabs.relationships')}</Tab>
-              <Tab>{t('catalog.artist.tabs.identity')}</Tab>
-              <Tab>{t('catalog.artist.tabs.images')}</Tab>
-              <Tab>{t('catalog.artist.tabs.history')}</Tab>
-            </TabList>
-            <TabPanels>
-              <TabPanel>
-                <Heading className="melodee-panel__title">
-                  {t('catalog.artist.aliases.title')}
-                </Heading>
-                {detail.aliases.items.length === 0 ? (
-                  <EmptyState title={t('catalog.artist.aliases.empty')} compact />
-                ) : (
-                  <div className="melodee-review-table-scroll">
-                    <TableContainer title={t('catalog.artist.aliases.caption')}>
-                      <Table size="sm" aria-label={t('catalog.artist.aliases.caption')}>
-                        <TableHead>
-                          <TableRow>
-                            <TableHeader>{t('catalog.artist.aliases.column.alias')}</TableHeader>
-                            <TableHeader>{t('catalog.column.type')}</TableHeader>
-                            <TableHeader>{t('catalog.artist.aliases.column.locale')}</TableHeader>
-                            <TableHeader>{t('catalog.column.evidence')}</TableHeader>
-                            <TableHeader>{t('catalog.column.confidence')}</TableHeader>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {detail.aliases.items.map((alias) => (
-                            <TableRow key={`${alias.alias}-${alias.createdAt}`}>
-                              <TableCell>{alias.alias}</TableCell>
-                              <TableCell>
-                                {t(`catalog.aliasType.${alias.aliasType}`, {
-                                  defaultValue: alias.aliasType,
-                                })}
-                              </TableCell>
-                              <TableCell>{alias.locale ?? t('common.none')}</TableCell>
-                              <TableCell>{alias.evidenceSource}</TableCell>
-                              <TableCell>{confidencePercent(alias.confidence)}</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </TableContainer>
-                  </div>
-                )}
-                <BoundedNote shown={detail.aliases.items.length} total={detail.aliases.total} />
-              </TabPanel>
-
-              <TabPanel>
+          <TabNav
+            ariaLabel={t('catalog.artist.tabsLabel')}
+            value={tab}
+            onChange={setTab}
+            tabs={[
+              { key: 'overview', label: t('catalog.artist.tabs.overview') },
+              { key: 'releases', label: t('catalog.artist.tabs.releases') },
+              { key: 'appearances', label: t('catalog.artist.tabs.appearances') },
+              { key: 'contributions', label: t('catalog.artist.tabs.contributions') },
+              { key: 'relationships', label: t('catalog.artist.tabs.relationships') },
+              { key: 'identity', label: t('catalog.artist.tabs.identity') },
+              { key: 'images', label: t('catalog.artist.tabs.images') },
+              { key: 'history', label: t('catalog.artist.tabs.history') },
+            ]}
+          />
+          {tab === 'overview' ? (
+                <div className="melodee-overview-columns melodee-overview-columns--tertiary">
+                  <Surface title={t('catalog.artist.aliases.title')}>
+                    {detail.aliases.items.length === 0 ? (
+                      <EmptyState title={t('catalog.artist.aliases.empty')} compact />
+                    ) : (
+                      <ul className="melodee-alias-list">
+                        {detail.aliases.items.map((alias) => (
+                          <li className="melodee-alias-list__row" key={`${alias.alias}-${alias.createdAt}`}>
+                            <StatusChip kind="info" label={alias.alias} hideIcon />
+                            <span className="melodee-alias-list__type">
+                              {t(`catalog.aliasType.${alias.aliasType}`, {
+                                defaultValue: alias.aliasType,
+                              })}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <BoundedNote shown={detail.aliases.items.length} total={detail.aliases.total} />
+                  </Surface>
+                  <Surface title={t('catalog.artist.overview.topReleases')}>
+                    {detail.releases.items.length === 0 ? (
+                      <EmptyState title={t('catalog.artist.releases.empty')} compact />
+                    ) : (
+                      <ul className="melodee-link-list">
+                        {detail.releases.items.slice(0, 6).map((release) => (
+                          <li className="melodee-link-list__row" key={`${release.releaseId}-${release.role}`}>
+                            <ReleaseLink id={release.releaseId} name={release.title} />
+                            <span className="melodee-link-list__meta">
+                              {release.releaseDate ? formatDate(release.releaseDate) : t('common.none')}
+                              {' · '}
+                              {t('catalog.artist.overview.trackCount', {
+                                count: formatNumber(release.trackCount),
+                              })}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </Surface>
+                  <Surface title={t('catalog.artist.overview.relationships')}>
+                    {detail.memberships.items.length === 0 ? (
+                      <EmptyState title={t('catalog.artist.memberships.empty')} compact />
+                    ) : (
+                      <ul className="melodee-link-list">
+                        {detail.memberships.items.slice(0, 6).map((membership) => {
+                          const isGroup = membership.groupArtistId === detail.id;
+                          const other = isGroup
+                            ? { id: membership.memberArtistId, name: membership.memberName }
+                            : { id: membership.groupArtistId, name: membership.groupName };
+                          return (
+                            <li
+                              className="melodee-link-list__row melodee-link-list__row--with-avatar"
+                              key={`${membership.memberArtistId}-${membership.groupArtistId}`}
+                            >
+                              <EntityAvatar name={other.name} size={32} decorative />
+                              <span>
+                                <ArtistLink id={other.id} name={other.name} />
+                                <span className="melodee-link-list__meta">
+                                  {[membership.role, dateRangeLabel(membership.startDate, membership.endDate)]
+                                    .filter(Boolean)
+                                    .join(' · ')}
+                                </span>
+                              </span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </Surface>
+                </div>
+          ) : null}
+          {tab === 'releases' ? (
+                <Surface title={t('catalog.artist.releases.title')} variant="flush">
                 {detail.releases.items.length === 0 ? (
                   <EmptyState title={t('catalog.artist.releases.empty')} compact />
                 ) : (
@@ -352,9 +381,10 @@ export function ArtistDetailScreen() {
                   </div>
                 )}
                 <BoundedNote shown={detail.releases.items.length} total={detail.releases.total} />
-              </TabPanel>
-
-              <TabPanel>
+                </Surface>
+          ) : null}
+          {tab === 'appearances' ? (
+                <Surface title={t('catalog.artist.appearances.title')} variant="flush">
                 <ContributionTable
                   caption={t('catalog.artist.appearances.caption')}
                   items={detail.contributions.items.filter((item) => item.isPerformance)}
@@ -364,9 +394,10 @@ export function ArtistDetailScreen() {
                   shown={detail.contributions.items.length}
                   total={detail.contributions.total}
                 />
-              </TabPanel>
-
-              <TabPanel>
+                </Surface>
+          ) : null}
+          {tab === 'contributions' ? (
+                <Surface title={t('catalog.artist.contributions.title')} variant="flush">
                 <ContributionTable
                   caption={t('catalog.artist.contributions.caption')}
                   items={detail.contributions.items.filter((item) => !item.isPerformance)}
@@ -376,12 +407,10 @@ export function ArtistDetailScreen() {
                   shown={detail.contributions.items.length}
                   total={detail.contributions.total}
                 />
-              </TabPanel>
-
-              <TabPanel>
-                <Heading className="melodee-panel__title">
-                  {t('catalog.artist.relationships.title')}
-                </Heading>
+                </Surface>
+          ) : null}
+          {tab === 'relationships' ? (
+                <Surface title={t('catalog.artist.relationships.title')} variant="flush">
                 {detail.relationships.items.length === 0 ? (
                   <EmptyState title={t('catalog.artist.relationships.empty')} compact />
                 ) : (
@@ -433,9 +462,6 @@ export function ArtistDetailScreen() {
                   shown={detail.relationships.items.length}
                   total={detail.relationships.total}
                 />
-                <Heading className="melodee-panel__title" style={{ marginBlockStart: '1rem' }}>
-                  {t('catalog.artist.memberships.title')}
-                </Heading>
                 {detail.memberships.items.length === 0 ? (
                   <EmptyState title={t('catalog.artist.memberships.empty')} compact />
                 ) : (
@@ -482,9 +508,10 @@ export function ArtistDetailScreen() {
                   shown={detail.memberships.items.length}
                   total={detail.memberships.total}
                 />
-              </TabPanel>
-
-              <TabPanel>
+                </Surface>
+          ) : null}
+          {tab === 'identity' ? (
+                <Surface title={t('catalog.artist.identity.title')} variant="flush">
                 <dl className="melodee-fact-list">
                   <div className="melodee-fact">
                     <dt>{t('catalog.artist.fact.sortName')}</dt>
@@ -539,9 +566,7 @@ export function ArtistDetailScreen() {
                     />
                   </p>
                 ) : null}
-                <Heading className="melodee-panel__title" style={{ marginBlockStart: '1rem' }}>
-                  {t('catalog.artist.externalIds.title')}
-                </Heading>
+                <p className="melodee-surface__subtitle">{t('catalog.artist.externalIds.title')}</p>
                 {detail.externalIds.items.length === 0 ? (
                   <EmptyState title={t('catalog.artist.externalIds.empty')} compact />
                 ) : (
@@ -580,9 +605,10 @@ export function ArtistDetailScreen() {
                   shown={detail.externalIds.items.length}
                   total={detail.externalIds.total}
                 />
-              </TabPanel>
-
-              <TabPanel>
+                </Surface>
+          ) : null}
+          {tab === 'images' ? (
+                <Surface title={t('catalog.artist.images.title')} variant="flush">
                 <p className="melodee-panel__subtitle">{t('catalog.artist.images.description')}</p>
                 <ArtworkManager
                   entity="artists"
@@ -591,14 +617,14 @@ export function ArtistDetailScreen() {
                   name={detail.name}
                   onChanged={retry}
                 />
-              </TabPanel>
-
-              <TabPanel>
+                </Surface>
+          ) : null}
+          {tab === 'history' ? (
+                <Surface title={t('catalog.artist.history.title')} variant="flush">
                 <AuditTimeline events={detail.history.items.map(toCatalogAuditEvent)} />
                 <BoundedNote shown={detail.history.items.length} total={detail.history.total} />
-              </TabPanel>
-            </TabPanels>
-          </Tabs>
+                </Surface>
+          ) : null}
         </>
       ) : null}
     </div>

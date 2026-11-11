@@ -1,36 +1,119 @@
 /*
- * Melodee token layer (UI-SPEC §1, PRD-THEME-001..003).
+ * Melodee token layer (UI-SPEC §1, ADR-0184, PRD-THEME-001..003).
  *
- * A small set of CSS custom properties layered on Carbon themes (g10 light,
- * g100 dark). Components must consume these tokens — never raw hex values.
- * Logical CSS properties only, so RTL mirrors automatically (UI-SPEC §10).
- * High-contrast and reduced-motion media queries are respected and never
- * overridden by component styles.
+ * The single source of truth for every color, radius, spacing step, and type
+ * size the Admin UI renders. Nothing outside this file may declare a raw
+ * value: primitives consume these custom properties, screens consume
+ * primitives.
+ *
+ * Layered on Carbon themes (g10 light, g100 dark) because Carbon components
+ * keep their own tokens; Melodee values win only where the reference design
+ * differs from Carbon's defaults. Logical CSS properties only, so RTL mirrors
+ * automatically (UI-SPEC §10). High-contrast and reduced-motion media queries
+ * are respected and never overridden.
  */
 
-/* Default theme pack — light values match Carbon's g10 theme. */
-:root,
-.cds--g10 {
+/* -------------------------------------------------------------------------
+ * Semantic layer that is identical in both appearances (references Carbon
+ * tokens where Carbon already expresses the intent).
+ * ------------------------------------------------------------------------- */
+:root {
+  /* Status semantics (UI-SPEC §5). */
   --melodee-status-success: #24a148;
   --melodee-status-info: #0f62fe;
   --melodee-status-warning: #f1c21b;
   --melodee-status-error: #da1e28;
   --melodee-status-provisional: #8a3ffc;
   --melodee-status-neutral: #6f6f6f;
-  --melodee-artwork-surface: #e0e0e0;
+
+  /* Brand accent (links, primary navigation active state). */
   --melodee-brand-accent: #0f62fe;
   --melodee-link-contrast: #0043ce;
-  --melodee-shell-background: #091117;
-  --melodee-shell-active: #173044;
-  --melodee-shell-text: #f4f4f4;
-  --melodee-shell-muted: #a8b7c5;
-  --melodee-surface-radius: 0.5rem;
+
+  /* Reference geometry (measured from design/ui/reference/, ADR-0184). */
+  --melodee-radius-card: 0.5rem;
+  --melodee-radius-control: 0.25rem;
+  --melodee-radius-pill: 999px;
+
+  /* Spacing scale. */
+  --melodee-space-1: 0.25rem;
+  --melodee-space-2: 0.5rem;
+  --melodee-space-3: 0.75rem;
+  --melodee-space-4: 1rem;
+  --melodee-space-5: 1.25rem;
+  --melodee-space-6: 1.5rem;
+  --melodee-space-7: 1.75rem;
+  --melodee-space-8: 2rem;
+  --melodee-grid-gap: 1.25rem;
+
+  /* Typography scale (reference: 32px page title, 32px metric numeral,
+     13px label, 11px tracked micro-label). */
+  --melodee-font-page-title: 2rem;
+  --melodee-font-card-title: 1.125rem;
+  --melodee-font-metric: 1.875rem;
+  --melodee-font-label: 0.8125rem;
+  --melodee-font-micro: 0.6875rem;
+  --melodee-font-body: 0.875rem;
+  --melodee-line-tight: 1.2;
+
+  /* Density (UI-SPEC §4). */
   --melodee-density-compact: 2rem;
   --melodee-density-default: 2.5rem;
+  --melodee-row-height: 3rem;
+
+  /* Motion. */
   --melodee-motion-duration: 150ms;
+
+  /* Navigation chrome is appearance-independent: the rail is always dark,
+     like the reference. */
+  --melodee-shell-background: #07131f;
+  --melodee-shell-active: #102334;
+  --melodee-shell-text: #f4f4f4;
+  --melodee-shell-muted: #6f8193;
 }
 
-/* Default theme pack — dark values match Carbon's g100 theme. */
+/* -------------------------------------------------------------------------
+ * Light appearance (Carbon g10).
+ * ------------------------------------------------------------------------- */
+:root,
+.cds--g10 {
+  --melodee-surface: #ffffff;
+  --melodee-surface-border: #eaeaea;
+  --melodee-surface-border-strong: #d9d9d9;
+  --melodee-surface-muted: #f4f4f4;
+  --melodee-surface-inset: #f8f8f8;
+  --melodee-surface-hover: #f4f4f4;
+  --melodee-artwork-surface: #e0e0e0;
+  --melodee-progress-track: #d9d9d9;
+  --melodee-progress-fill: #0f62fe;
+  --melodee-text-primary: #161616;
+  --melodee-text-secondary: #525252;
+  --melodee-text-accent: #0f62fe;
+
+  /* Chip tints: fill + ink pairs sampled from the reference. */
+  --melodee-chip-success-surface: #defbe6;
+  --melodee-chip-success-ink: #0e6027;
+  --melodee-chip-info-surface: #edf5ff;
+  --melodee-chip-info-ink: #0043ce;
+  --melodee-chip-warning-surface: #fff2e8;
+  --melodee-chip-warning-ink: #b34700;
+  --melodee-chip-error-surface: #fff1f1;
+  --melodee-chip-error-ink: #a2191f;
+  --melodee-chip-provisional-surface: #f6f2ff;
+  --melodee-chip-provisional-ink: #6929c4;
+  --melodee-chip-neutral-surface: #f4f4f4;
+  --melodee-chip-neutral-ink: #525252;
+
+  --melodee-attention-surface: #fff8f2;
+  /* Decorative icon tint (non-text, so the reference orange is kept) and the
+     WCAG-AA text tint for the count numeral (4.6:1 on the surface above). */
+  --melodee-attention-icon: #ff832b;
+  --melodee-attention-ink: #b34700;
+}
+
+/* -------------------------------------------------------------------------
+ * Dark appearance (Carbon g100).
+ * ------------------------------------------------------------------------- */
 .cds--g100 {
   --melodee-status-success: #42be65;
   --melodee-status-info: #78a9ff;
@@ -38,13 +121,38 @@
   --melodee-status-error: #fa4d56;
   --melodee-status-provisional: #be95ff;
   --melodee-status-neutral: #a8a8a8;
-  --melodee-artwork-surface: #393939;
   --melodee-brand-accent: #78a9ff;
   --melodee-link-contrast: #78a9ff;
-  --melodee-shell-background: #091117;
-  --melodee-shell-active: #173044;
-  --melodee-shell-text: #f4f4f4;
-  --melodee-shell-muted: #a8b7c5;
+
+  --melodee-surface: #262626;
+  --melodee-surface-border: #393939;
+  --melodee-surface-border-strong: #525252;
+  --melodee-surface-muted: #1c1c1c;
+  --melodee-surface-inset: #333333;
+  --melodee-surface-hover: #333333;
+  --melodee-artwork-surface: #393939;
+  --melodee-progress-track: #525252;
+  --melodee-progress-fill: #78a9ff;
+  --melodee-text-primary: #f4f4f4;
+  --melodee-text-secondary: #c6c6c6;
+  --melodee-text-accent: #78a9ff;
+
+  --melodee-chip-success-surface: #0d2f1d;
+  --melodee-chip-success-ink: #6fdc8c;
+  --melodee-chip-info-surface: #13233f;
+  --melodee-chip-info-ink: #a6c8ff;
+  --melodee-chip-warning-surface: #3a2510;
+  --melodee-chip-warning-ink: #ffb784;
+  --melodee-chip-error-surface: #3a1417;
+  --melodee-chip-error-ink: #ffb3b8;
+  --melodee-chip-provisional-surface: #241a3d;
+  --melodee-chip-provisional-ink: #d4bbff;
+  --melodee-chip-neutral-surface: #333333;
+  --melodee-chip-neutral-ink: #e0e0e0;
+
+  --melodee-attention-surface: #3a2510;
+  --melodee-attention-icon: #ff832b;
+  --melodee-attention-ink: #ffb784;
 }
 
 /* Reduced motion: collapse every Melodee-driven animation/transition. The
@@ -58,1074 +166,18 @@
   }
 }
 
-/* High contrast: strengthen the artwork surface contrast without touching
-   Carbon's own forced-colors handling. */
+/* High contrast: strengthen surface separation without touching Carbon's own
+   forced-colors handling. */
 @media (prefers-contrast: more) {
   :root,
   .cds--g10 {
     --melodee-artwork-surface: #c6c6c6;
+    --melodee-surface-border: #8d8d8d;
+    --melodee-surface-border-strong: #6f6f6f;
   }
   .cds--g100 {
     --melodee-artwork-surface: #525252;
+    --melodee-surface-border: #8d8d8d;
+    --melodee-surface-border-strong: #a8a8a8;
   }
-}
-
-/*
- * Shell structural styles. The reference UI uses a strong, persistent brand
- * rail without replacing Carbon controls. Logical properties keep the shell
- * fully mirrored under dir="rtl".
- */
-.melodee-shell__brand {
-  position: fixed;
-  inset-block-start: 0;
-  inset-inline-start: 0;
-  z-index: 10000;
-  display: flex;
-  align-items: center;
-  inline-size: 16rem;
-  block-size: 3rem;
-  padding-inline: 1rem;
-  background: var(--melodee-shell-background);
-}
-
-.melodee-shell__brand-link {
-  display: flex;
-  align-items: center;
-  min-inline-size: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-}
-
-.melodee-shell__brand-link:focus-visible {
-  outline: 2px solid var(--cds-focus);
-  outline-offset: 3px;
-}
-
-/* Carbon's primary link blue falls below 4.5:1 on the detail-page layer in
- * the light theme. Keep the edit control a Carbon Link while using the
- * theme-pack contrast token required for WCAG AA. */
-.melodee-detail-edit-link.cds--link {
-  color: var(--melodee-link-contrast);
-}
-
-.melodee-shell__brand-logo {
-  display: block;
-  inline-size: 8.75rem;
-  block-size: auto;
-}
-
-.melodee-shell__brand-mark {
-  display: none;
-  inline-size: 1.75rem;
-  block-size: 1.75rem;
-}
-
-.melodee-shell__brand.melodee-shell--rail {
-  justify-content: center;
-  inline-size: 3rem;
-  padding-inline: 0.625rem;
-}
-
-.melodee-shell__brand.melodee-shell--rail .melodee-shell__brand-logo {
-  display: none;
-}
-
-.melodee-shell__brand.melodee-shell--rail .melodee-shell__brand-mark {
-  display: block;
-}
-
-.melodee-shell__header.cds--header {
-  inset-inline-start: 16rem;
-  inline-size: calc(100% - 16rem);
-  background: var(--cds-layer-01);
-  border-block-end: 1px solid var(--cds-border-subtle);
-}
-
-.melodee-shell__header.cds--header.melodee-shell--rail {
-  inset-inline-start: 3rem;
-  inline-size: calc(100% - 3rem);
-}
-
-.melodee-shell__header-menu,
-.melodee-shell__header-name {
-  display: none !important;
-}
-
-.melodee-shell__command-entry {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.625rem;
-  inline-size: min(29rem, 40vw);
-  min-inline-size: 12rem;
-  block-size: 2.25rem;
-  margin-inline-start: 1.5rem;
-  padding-inline: 0.875rem;
-  border: 1px solid var(--cds-border-subtle);
-  border-radius: var(--melodee-surface-radius);
-  background: var(--cds-field-01);
-  color: var(--cds-text-secondary);
-  font: inherit;
-  font-size: 0.875rem;
-  text-align: start;
-  cursor: pointer;
-}
-
-.melodee-shell__command-entry:hover {
-  background: var(--cds-layer-hover-01);
-  color: var(--cds-text-primary);
-}
-
-.melodee-shell__command-entry:focus-visible {
-  outline: 2px solid var(--cds-focus);
-  outline-offset: 2px;
-}
-
-.melodee-shell__command-entry > span {
-  flex: 1;
-  min-inline-size: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.melodee-shell__command-entry kbd {
-  color: var(--cds-text-helper);
-  font: inherit;
-  font-size: 0.75rem;
-}
-
-.melodee-shell__nav.cds--side-nav {
-  inset-block-start: 0;
-  inline-size: 16rem;
-  block-size: 100dvh;
-  padding-block-start: 3.75rem;
-  background: var(--melodee-shell-background);
-  border: 0;
-  color: var(--melodee-shell-text);
-}
-
-.melodee-shell__nav.cds--side-nav.melodee-shell--rail {
-  inline-size: 3rem;
-  padding-inline: 0;
-}
-
-.melodee-shell__nav .cds--side-nav__items {
-  padding-inline: 0.75rem;
-}
-
-.melodee-shell__nav-link.cds--side-nav__link {
-  min-block-size: 2.375rem;
-  margin-block: 0.125rem;
-  border-radius: 0.25rem;
-  color: var(--melodee-shell-text);
-}
-
-.melodee-shell__nav-link.cds--side-nav__link:hover {
-  background: color-mix(in srgb, var(--melodee-shell-active) 70%, transparent);
-  color: var(--melodee-shell-text);
-}
-
-.melodee-shell__nav-link.cds--side-nav__link > .cds--side-nav__link-text {
-  color: var(--melodee-shell-text);
-}
-
-.melodee-shell__nav-link.cds--side-nav__link.cds--side-nav__link--current,
-.melodee-shell__nav-link.cds--side-nav__link[aria-current='page'] {
-  background: var(--melodee-shell-active);
-  color: var(--melodee-shell-text);
-  box-shadow: inset 3px 0 0 var(--melodee-brand-accent);
-}
-
-.melodee-shell__nav-link.cds--side-nav__link.cds--side-nav__link--current
-  > .cds--side-nav__link-text,
-.melodee-shell__nav-link.cds--side-nav__link[aria-current='page']
-  > .cds--side-nav__link-text {
-  color: var(--melodee-shell-text);
-}
-
-[dir='rtl'] .melodee-shell__nav-link.cds--side-nav__link.cds--side-nav__link--current,
-[dir='rtl'] .melodee-shell__nav-link.cds--side-nav__link[aria-current='page'] {
-  box-shadow: inset -3px 0 0 var(--melodee-brand-accent);
-}
-
-.melodee-shell__nav-link .cds--side-nav__icon {
-  fill: currentcolor;
-}
-
-.melodee-shell__nav-group {
-  margin-block-start: 0.875rem;
-}
-
-.melodee-shell__nav-group-label {
-  display: block;
-  padding-inline: 0.5rem;
-  padding-block-end: 0.25rem;
-  color: var(--melodee-shell-muted);
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.melodee-shell__nav.melodee-shell--rail .melodee-shell__nav-group {
-  margin-block-start: 0.5rem;
-}
-
-.melodee-shell__nav.melodee-shell--rail .melodee-shell__nav-group-label {
-  display: none;
-}
-
-.melodee-shell__content {
-  min-block-size: 100dvh;
-  margin-inline-start: 3rem;
-  padding: 1.5rem;
-  background: var(--cds-background);
-}
-
-.melodee-shell__content.melodee-shell--expanded {
-  margin-inline-start: 16rem;
-}
-
-.melodee-shell__footer {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-block-size: 4.5rem;
-  padding-inline: 1rem;
-  border-block-start: 1px solid color-mix(in srgb, var(--melodee-shell-muted) 20%, transparent);
-  color: var(--melodee-shell-muted);
-  font-size: 0.6875rem;
-}
-
-.melodee-shell__footer-health {
-  display: inline-flex;
-  align-items: center;
-}
-
-.melodee-shell__footer .cds--header__action {
-  margin-inline-start: auto;
-  color: var(--melodee-shell-text);
-}
-
-.melodee-shell__footer .cds--tag {
-  background: transparent;
-  color: var(--melodee-shell-text);
-}
-
-/* UI-SPEC §8 sm: single column; the header health tag yields its space to the
-   action buttons — the server status remains visible in the nav footer. */
-@media (max-width: 671px) {
-  /* UI-SPEC §8 sm: the collapsed rail becomes an off-canvas navigation.
-     The header menu expands the existing SideNav over the page; it must not
-     consume a permanent 48px strip of the already narrow content area. */
-  .melodee-shell__brand.melodee-shell--rail {
-    display: none;
-  }
-
-  .melodee-shell__header.cds--header.melodee-shell--rail {
-    inset-inline-start: 0;
-    inline-size: 100%;
-  }
-
-  .melodee-shell__nav.cds--side-nav.melodee-shell--rail {
-    inline-size: 0;
-    padding: 0;
-  }
-
-  .melodee-shell__content,
-  .melodee-shell__content.melodee-shell--expanded {
-    margin-inline-start: 0;
-    padding: 1rem;
-  }
-
-  .melodee-shell__header-menu {
-    display: inline-flex !important;
-  }
-
-  .melodee-shell__header-name {
-    display: inline-flex !important;
-  }
-
-  .melodee-shell__command-entry {
-    display: none;
-  }
-
-  .melodee-shell__health {
-    display: none;
-  }
-
-  /* Carbon keeps the overlay node mounted while the off-canvas nav is
-   * collapsed. An inactive overlay must not win hit testing over a scrolled
-   * tab-panel control. */
-  .cds--side-nav__overlay:not(.cds--side-nav__overlay-active) {
-    pointer-events: none !important;
-  }
-}
-
-/* Header panel switcher lists: SwitcherItem renders <li>, so panels wrap
-   them in this plain list (WCAG 1.3.1 list semantics, axe listitem rule). */
-.melodee-shell__panel-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.melodee-page-header {
-  margin-block-end: 1.5rem;
-}
-
-.melodee-page-header__content {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.melodee-page-header__title {
-  font-size: 2rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-}
-
-.melodee-page-header__subtitle {
-  color: var(--cds-text-secondary);
-  margin-block-start: 0.25rem;
-}
-
-.melodee-metric-card__label {
-  color: var(--cds-text-secondary);
-  font-size: 0.75rem;
-}
-
-.melodee-metric-card__value {
-  font-size: 1.75rem;
-  line-height: 1.2;
-}
-
-.melodee-entity-avatar {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--melodee-artwork-surface);
-  color: var(--cds-text-secondary);
-  overflow: hidden;
-  pointer-events: none;
-}
-
-.melodee-entity-avatar img {
-  inline-size: 100%;
-  block-size: 100%;
-  object-fit: cover;
-}
-
-/* Keep the compact mobile upload row above the fixed-size artwork fallback
- * while the browser scrolls a tab panel into view. */
-.melodee-artwork-controls {
-  position: relative;
-  z-index: 1;
-}
-
-@media (max-width: 480px) {
-  .melodee-artwork-controls {
-    flex-direction: column;
-    align-items: flex-start !important;
-  }
-}
-
-.melodee-inspector {
-  inline-size: 400px;
-  max-inline-size: 100%;
-  border-inline-start: 1px solid var(--cds-border-subtle);
-  padding-inline-start: 1rem;
-  padding-inline-end: 1rem;
-  padding-block-start: 1rem;
-}
-
-@media (max-width: 1055px) {
-  .melodee-inspector {
-    inline-size: 100%;
-    border-inline-start: none;
-  }
-}
-
-.melodee-evidence-item__label {
-  color: var(--cds-text-secondary);
-  font-size: 0.75rem;
-}
-
-/*
- * Status tags for meanings Carbon has no native tag color for (amber warning,
- * purple provisional). These classes are part of the token layer: they only
- * re-point Carbon tag tokens at Melodee status tokens, never raw hex.
- */
-.melodee-status-tag--warning {
-  background-color: color-mix(in srgb, var(--melodee-status-warning) 25%, var(--cds-layer));
-  color: var(--cds-text-primary);
-}
-
-.melodee-status-tag--provisional {
-  background-color: color-mix(in srgb, var(--melodee-status-provisional) 25%, var(--cds-layer));
-  color: var(--cds-text-primary);
-}
-
-.melodee-status-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.melodee-decision-panel__choice {
-  padding-block-start: 0.5rem;
-  padding-block-end: 0.5rem;
-  border-block-end: 1px solid var(--cds-border-subtle);
-}
-
-.melodee-decision-panel__choice:last-child {
-  border-block-end: none;
-}
-
-.melodee-decision-panel__badge {
-  margin-inline-start: 0.5rem;
-}
-
-/* Queue + inspector layout (UI-SPEC §7): the table region reflows when the
-   400px inspector docks; below lg the inspector stacks full-width. */
-.melodee-queue-layout {
-  display: flex;
-  align-items: flex-start;
-  gap: 1rem;
-}
-
-.melodee-queue-main {
-  flex: 1;
-  min-inline-size: 0;
-  /* The page never overflows (UI-SPEC §8): wide datasets scroll inside their
-     own table containers. Without this clip, intrinsic table sizing can
-     propagate past the viewport on narrow breakpoints and break mobile
-     hit-testing. */
-  overflow-inline: clip;
-}
-
-.melodee-queue-chips {
-  margin-block-end: 1rem;
-  overflow-inline: auto;
-}
-
-.melodee-queue-bulk-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  inline-size: 100%;
-}
-
-.melodee-queue-bulk-bar__count {
-  font-size: 0.875rem;
-  color: var(--cds-text-primary);
-}
-
-/* Activatable table rows (queue + inspector selection). The active row uses
-   Carbon's selected-layer token; the accent strip is inset so it does not
-   shift layout. */
-.melodee-table__row--activatable {
-  cursor: pointer;
-}
-
-.melodee-table__row--activatable:focus-visible {
-  outline: 2px solid var(--cds-focus);
-  outline-offset: -2px;
-}
-
-.melodee-table__row--active {
-  background-color: var(--cds-layer-selected);
-  box-shadow: inset 2px 0 0 0 var(--melodee-brand-accent);
-}
-
-[dir='rtl'] .melodee-table__row--active {
-  box-shadow: inset -2px 0 0 0 var(--melodee-brand-accent);
-}
-
-.melodee-work-item__title {
-  display: block;
-}
-
-.melodee-work-item__id {
-  display: block;
-  font-size: 0.75rem;
-  color: var(--cds-text-secondary);
-}
-
-/*
- * Review workspace layout: main evidence column plus a 400px
- * decision/policy/timeline rail; below lg the rail stacks full-width. Same
- * structural pattern as the queue + inspector layout above.
- */
-.melodee-review-layout {
-  display: flex;
-  align-items: flex-start;
-  gap: 1rem;
-}
-
-.melodee-review-main {
-  flex: 1;
-  min-inline-size: 0;
-}
-
-.melodee-review-rail {
-  inline-size: 400px;
-  max-inline-size: 100%;
-  flex-shrink: 0;
-}
-
-@media (max-width: 1055px) {
-  .melodee-review-layout {
-    flex-direction: column;
-    /* Cross-axis becomes horizontal in column mode: stretch so children
-       track the container width instead of growing to content width. */
-    align-items: stretch;
-  }
-
-  .melodee-review-rail {
-    inline-size: 100%;
-  }
-}
-
-.melodee-review-card {
-  background: var(--cds-layer);
-  padding-inline-start: 1rem;
-  padding-inline-end: 1rem;
-  padding-block-start: 1rem;
-  padding-block-end: 1rem;
-  margin-block-end: 1rem;
-}
-
-.melodee-review-header {
-  display: flex;
-  align-items: flex-start;
-  gap: 1rem;
-}
-
-.melodee-review-header__title {
-  flex: 1;
-  min-inline-size: 0;
-}
-
-.melodee-review-header__facts {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
-  gap: 0.5rem 1.5rem;
-  margin-block-start: 0.75rem;
-}
-
-.melodee-review-fact__label {
-  font-size: 0.75rem;
-  color: var(--cds-text-secondary);
-}
-
-/* Full-width fact inside a facts-grid <dl> (e.g. long policy reasons). */
-.melodee-review-fact--full {
-  grid-column: 1 / -1;
-  margin-block-start: 0.5rem;
-}
-
-.melodee-review-track__file {
-  display: block;
-  font-size: 0.75rem;
-  color: var(--cds-text-secondary);
-}
-
-/* UI-SPEC §8 sm: datasets wider than the viewport scroll horizontally
-   inside their container — the page itself never overflows. */
-.melodee-review-table-scroll {
-  overflow-inline: auto;
-}
-
-/* Generic variant of the review table scroll container for screens outside
-   the review flow (users/groups). */
-.melodee-table-scroll {
-  overflow-inline: auto;
-}
-
-/* UI-SPEC §8 sm: Carbon's structured list has a 500px min-width; the
-   onboarding checks table scrolls inside its own container. */
-.melodee-onboarding-checks-scroll {
-  overflow-inline: auto;
-}
-
-/* UI-SPEC §8 sm: the horizontal stepper sizes each step at ~112px, so six
-   preflight checks exceed the viewport; it scrolls inside its own container
-   instead of expanding the page (a wider page breaks hit-testing on mobile). */
-.melodee-onboarding-steps-scroll {
-  overflow-inline: auto;
-  margin-block-end: 1rem;
-}
-
-.melodee-review-preview-note {
-  font-size: 0.75rem;
-  color: var(--cds-text-secondary);
-}
-
-/*
- * Identity review workspace: three-pane review pattern (UI-SPEC §7)
- * — unresolved-observations queue, evidence/candidate column, decision
- * rail. Below lg the panes stack full-width in DOM order (queue → evidence
- * → actions), which is also the keyboard focus order.
- */
-.melodee-identity-layout {
-  display: flex;
-  align-items: flex-start;
-  gap: 1rem;
-}
-
-.melodee-identity-queue {
-  inline-size: 320px;
-  flex-shrink: 0;
-}
-
-.melodee-identity-main {
-  flex: 1;
-  min-inline-size: 0;
-}
-
-.melodee-identity-rail {
-  inline-size: 360px;
-  max-inline-size: 100%;
-  flex-shrink: 0;
-}
-
-@media (max-width: 1055px) {
-  .melodee-identity-layout {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .melodee-identity-queue,
-  .melodee-identity-rail {
-    inline-size: 100%;
-  }
-}
-
-.melodee-identity-observation__header {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-/* Selectable candidate cards: real buttons with radio semantics. The
-   selected state uses the §5 provisional accent (identity work), never
-   color alone — the radio role/aria-checked carries the semantics. */
-.melodee-identity-candidate {
-  display: block;
-  inline-size: 100%;
-  text-align: start;
-  background: var(--cds-layer);
-  border: 1px solid var(--cds-border-subtle);
-  padding-inline-start: 1rem;
-  padding-inline-end: 1rem;
-  padding-block-start: 1rem;
-  padding-block-end: 1rem;
-  margin-block-end: 0.5rem;
-  cursor: pointer;
-  font: inherit;
-  color: inherit;
-}
-
-.melodee-identity-candidate:focus-visible {
-  outline: 2px solid var(--cds-focus);
-  outline-offset: -2px;
-}
-
-.melodee-identity-candidate--selected {
-  box-shadow: inset 0 0 0 2px var(--melodee-status-provisional);
-}
-
-.melodee-identity-candidate__header {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-}
-
-.melodee-identity-candidate__title {
-  flex: 1;
-  min-inline-size: 0;
-}
-
-.melodee-identity-candidate__meta {
-  display: flex;
-  gap: 0.25rem;
-  margin-block-start: 0.25rem;
-  flex-wrap: wrap;
-}
-
-.melodee-identity-candidate__confidence {
-  text-align: end;
-}
-
-.melodee-identity-candidate__confidence-value {
-  display: block;
-  font-size: 1.5rem;
-  line-height: 1.2;
-}
-
-.melodee-identity-candidate__facts,
-.melodee-identity-candidate__reason {
-  display: block;
-  font-size: 0.75rem;
-  color: var(--cds-text-secondary);
-  margin-block-start: 0.25rem;
-}
-
-.melodee-identity-candidate__evidence {
-  display: block;
-  margin-block-start: 0.5rem;
-}
-
-.melodee-identity-assignment {
-  display: flex;
-  align-items: flex-end;
-  gap: 0.5rem;
-  margin-block-end: 0.5rem;
-}
-
-/*
- * Overview dashboard and System/Workers layout. All spacing
- * uses logical properties; grids collapse to a single column below lg
- * (UI-SPEC §8).
- */
-.melodee-metric-grid {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 0.75rem;
-  margin-block-end: 1.5rem;
-}
-
-.melodee-metric-card {
-  min-block-size: 7.875rem;
-  padding: 1.125rem;
-  border: 1px solid var(--cds-border-subtle);
-  border-radius: var(--melodee-surface-radius);
-  background: var(--cds-layer);
-}
-
-.melodee-metric-card__label {
-  margin-block-end: 0.5rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-}
-
-.melodee-metric-card__value {
-  font-size: 2rem;
-  font-weight: 600;
-  letter-spacing: -0.015em;
-}
-
-.melodee-overview-columns,
-.melodee-system-columns {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-  align-items: start;
-}
-
-.melodee-system-columns {
-  grid-template-columns: minmax(0, 1fr) 26rem;
-}
-
-.melodee-overview-columns--secondary {
-  grid-template-columns: minmax(17rem, 0.7fr) minmax(0, 1.3fr);
-}
-
-.melodee-system-main {
-  min-inline-size: 0;
-}
-
-.melodee-system-rail {
-  min-inline-size: 0;
-}
-
-@media (max-width: 1311px) {
-  .melodee-metric-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 1055px) {
-  .melodee-overview-columns,
-  .melodee-system-columns {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 671px) {
-  .melodee-metric-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .melodee-page-header__content {
-    flex-direction: column;
-  }
-
-  .melodee-overview-actions {
-    inline-size: 100%;
-    justify-content: space-between;
-  }
-}
-
-.melodee-panel {
-  background: var(--cds-layer);
-  padding: 1.25rem;
-  border: 1px solid var(--cds-border-subtle);
-  border-radius: var(--melodee-surface-radius);
-  margin-block-end: 1.25rem;
-}
-
-.melodee-panel__title {
-  font-size: 1.125rem;
-  font-weight: 600;
-  margin-block-end: 0.375rem;
-}
-
-.melodee-panel__subtitle {
-  color: var(--cds-text-secondary);
-  font-size: 0.875rem;
-  margin-block-end: 0.75rem;
-  pointer-events: none;
-}
-
-.melodee-panel__footer {
-  margin-block-start: 0.75rem;
-}
-
-.melodee-overview-actions {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.melodee-overview-generated {
-  font-size: 0.75rem;
-  color: var(--cds-text-secondary);
-}
-
-/* Attention rows: label link on the inline-start, count on the inline-end.
-   The count carries text weight, never color-only meaning (UI-SPEC §5). */
-.melodee-attention-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.melodee-attention-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding-block-start: 0.625rem;
-  padding-block-end: 0.625rem;
-  border-block-end: 1px solid var(--cds-border-subtle);
-}
-
-.melodee-attention-row:last-child {
-  border-block-end: none;
-}
-
-.melodee-attention-row__link {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.melodee-attention-row__count {
-  min-inline-size: 2.25rem;
-  padding-inline: 0.625rem;
-  padding-block: 0.25rem;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--melodee-status-error) 10%, var(--cds-layer));
-  color: var(--cds-text-primary);
-  font-size: 1.25rem;
-  font-weight: 600;
-  text-align: center;
-}
-
-/* Token-styled activity chart; bars use the info status token. */
-.melodee-activity-chart {
-  inline-size: 100%;
-  block-size: auto;
-}
-
-.melodee-activity-chart__bar {
-  fill: var(--melodee-status-info);
-}
-
-.melodee-activity-chart__baseline {
-  stroke: var(--cds-border-subtle);
-  stroke-width: 1;
-}
-
-/* Health rows: subsystem name, status tag, and server-provided detail. */
-.melodee-health-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.melodee-health-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  padding-block-start: 0.5rem;
-  padding-block-end: 0.5rem;
-  border-block-end: 1px solid var(--cds-border-subtle);
-}
-
-.melodee-health-row:last-child {
-  border-block-end: none;
-}
-
-.melodee-health-row__name {
-  font-weight: 600;
-}
-
-.melodee-health-row__status {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.melodee-health-row__detail {
-  font-size: 0.75rem;
-  color: var(--cds-text-secondary);
-}
-
-/* Compact key/value facts (search index status). */
-.melodee-fact-list {
-  margin: 0;
-}
-
-.melodee-fact {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 1rem;
-  padding-block-start: 0.25rem;
-  padding-block-end: 0.25rem;
-}
-
-.melodee-fact dt {
-  color: var(--cds-text-secondary);
-  font-size: 0.75rem;
-}
-
-.melodee-fact dd {
-  margin: 0;
-}
-
-.melodee-fact__detail {
-  display: block;
-  font-size: 0.75rem;
-  color: var(--cds-text-secondary);
-}
-
-/* Honest absence for pools without a durable queue table. */
-.melodee-metric-absent {
-  color: var(--cds-text-secondary);
-  font-size: 0.75rem;
-}
-
-.melodee-pool-paused-by {
-  display: block;
-  font-size: 0.75rem;
-  color: var(--cds-text-secondary);
-}
-
-.melodee-mini-table {
-  inline-size: 100%;
-}
-
-/*
- * Policies / rule editor. Logical properties only (RTL); no colors
- * or radii outside the token layer (UI-SPEC §1–§2).
- */
-.melodee-policy-editor__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-block-end: 0.75rem;
-}
-
-.melodee-policy-editor__footer {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.melodee-policy-condition {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.5rem;
-  margin-block-end: 0.5rem;
-}
-
-.melodee-policy-condition__operator {
-  font-size: 0.75rem;
-  color: var(--cds-text-secondary);
-  white-space: nowrap;
-}
-
-.melodee-policy-disposition-counts {
-  display: flex;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.melodee-policy-test-results {
-  margin-block-start: 1rem;
-}
-
-@media (max-width: 671px) {
-  .melodee-policy-condition {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-}
-
-/*
- * Theme-pack section (PRD-THEME-004): pack metadata inside radio labels and
- * the per-pack admin action rows. Token colors only; logical properties.
- */
-.melodee-theme-pack__meta {
-  display: block;
-  font-size: 0.75rem;
-  color: var(--cds-text-secondary);
-  margin-block-start: 0.125rem;
-}
-
-.melodee-theme-pack__actions-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.melodee-theme-pack__actions-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding-block-start: 0.25rem;
-  padding-block-end: 0.25rem;
-  border-block-end: 1px solid var(--cds-border-subtle);
-}
-
-.melodee-theme-pack__actions-row:last-child {
-  border-block-end: none;
 }

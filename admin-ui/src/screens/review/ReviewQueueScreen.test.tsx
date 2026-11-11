@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, within, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -90,16 +90,18 @@ describe('ReviewQueueScreen', () => {
     renderScreen();
     expect(await screen.findByText('Greatest Hits')).toBeInTheDocument();
     // Chips are driven by the envelope's countsByState.
-    expect(await screen.findByRole('tab', { name: 'All 3' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Needs review 2' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Failed 1' })).toBeInTheDocument();
+    // Filter pills (ADR-0184): toggle buttons with live counts.
+    const group = await screen.findByRole('group', { name: 'Filter by review state' });
+    expect(within(group).getByRole('button', { name: /All/ })).toHaveTextContent('3');
+    expect(within(group).getByRole('button', { name: /Needs review/ })).toHaveTextContent('2');
+    expect(within(group).getByRole('button', { name: /Failed/ })).toHaveTextContent('1');
     // Quarantined has no count in the envelope, so no chip is rendered.
     expect(screen.queryByRole('tab', { name: /Quarantined/ })).not.toBeInTheDocument();
   });
 
   it('applies the chip state filter to the API call and the URL', async () => {
     renderScreen();
-    fireEvent.click(await screen.findByRole('tab', { name: 'Failed 1' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Failed/ }));
     await waitFor(() =>
       expect(mockListReviewQueue).toHaveBeenLastCalledWith(
         expect.objectContaining({ state: 'failed', offset: 0 }),

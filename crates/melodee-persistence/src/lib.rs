@@ -182,7 +182,8 @@ pub use user_profile::{
 pub use work_items::{
     ActiveLease, HourlyCompletionCount, PublicationJournalEntry, SettlingSnapshot,
     SettlingSnapshotFile, StagingHandoff, StagingHandoffMethod, StagingHandoffStatus, StateCount,
-    StoredManifest, StoredPublication, WorkItemSort, WorkItemStore, WorkItemWindowCounts,
+    StoredManifest, StoredPublication, WorkItemListRow, WorkItemSort, WorkItemStore,
+    WorkItemWindowCounts,
 };
 pub use worker::WorkerId;
 pub use worker_pool::{

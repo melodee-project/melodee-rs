@@ -1,5 +1,5 @@
 import { Renew } from '@carbon/icons-react';
-import { ActionableNotification, Button, ContentSwitcher, Loading, Switch } from '@carbon/react';
+import { ActionableNotification, Button, Loading } from '@carbon/react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -8,6 +8,7 @@ import { listReviewQueue } from '../../api/admin';
 import { ApiError } from '../../api/client';
 import type { IngestionState, ReviewQueuePage, SortParam } from '../../api/types';
 import { EntityTable, type EntityColumn, type EntityRow } from '../../components/EntityTable';
+import { FilterPills } from '../../components/FilterPills';
 import { PageHeader } from '../../components/PageHeader';
 import { ProcessingStateTag } from '../../components/ProcessingStateTag';
 import { formatDateTime, formatNumber, formatRelativeTime } from '../../i18n/format';
@@ -163,10 +164,6 @@ export function ReviewQueueScreen() {
     };
   }, [pageData]);
 
-  const selectedChipIndex = stateFilter
-    ? chips.entries.findIndex((entry) => entry.state === stateFilter) + 1
-    : 0;
-
   const toolbar = (
     <Button
       kind="ghost"
@@ -197,26 +194,20 @@ export function ReviewQueueScreen() {
           onActionButtonClick={() => void fetchPage({ cancelled: false })}
         />
       ) : null}
-      <div className="melodee-queue-chips" role="group" aria-label={t('review.queue.filterByState')}>
-        <ContentSwitcher
-          size="sm"
-          selectedIndex={selectedChipIndex === -1 ? 0 : selectedChipIndex}
-          onChange={(data) => {
-            const name = typeof data.name === 'string' ? data.name : '';
-            updateParams({ state: name || null, page: '1' });
-          }}
-        >
-          {[
-            <Switch key="__all__" name="" text={`${t('common.all')} ${formatNumber(chips.total)}`} />,
-            ...chips.entries.map((entry) => (
-              <Switch
-                key={entry.state}
-                name={entry.state}
-                text={`${t(`queue.state.${entry.state}`)} ${formatNumber(entry.count)}`}
-              />
-            )),
+      <div className="melodee-queue-chips">
+        <FilterPills
+          ariaLabel={t('review.queue.filterByState')}
+          value={stateFilter ?? ''}
+          onChange={(key) => updateParams({ state: key, page: '1' })}
+          items={[
+            { key: '', label: t('common.all'), count: formatNumber(chips.total) },
+            ...chips.entries.map((entry) => ({
+              key: entry.state,
+              label: t(`queue.state.${entry.state}`),
+              count: formatNumber(entry.count),
+            })),
           ]}
-        </ContentSwitcher>
+        />
       </div>
       {loading && pageData === null ? (
         <Loading description={t('common.loading')} withOverlay={false} />

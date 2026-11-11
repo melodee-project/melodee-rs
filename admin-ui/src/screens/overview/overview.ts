@@ -78,3 +78,69 @@ export function layoutBars(
     };
   });
 }
+
+/** One point in a two-series activity line chart. */
+export interface LinePoint {
+  x: number;
+  y: number;
+}
+
+export interface LineSeries {
+  /** SVG path data (`M … L …`), empty when the series has no points. */
+  path: string;
+  points: LinePoint[];
+  /** Highest value in this series (the legend/table report it). */
+  peak: number;
+}
+
+export interface ActivityLineLayout {
+  hours: string[];
+  /** Shared y-axis maximum, so both series are comparable on one scale. */
+  max: number;
+  releases: LineSeries;
+  tracks: LineSeries;
+}
+
+function toPath(points: LinePoint[]): string {
+  if (points.length === 0) {
+    return '';
+  }
+  return points
+    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
+    .join(' ');
+}
+
+/**
+ * Two-series line geometry for the activity card (ADR-0184). The reference
+ * plots Releases processed and Tracks indexed on one shared scale; the hour
+ * axis is the union of both series so a missing bucket is an honest gap rather
+ * than a shifted point.
+ */
+export function layoutActivitySeries(
+  releases: readonly DashboardActivityBucket[],
+  tracks: readonly DashboardActivityBucket[],
+  width: number,
+  height: number,
+): ActivityLineLayout {
+  const hours = [...new Set([...releases, ...tracks].map((bucket) => bucket.hour))].sort(
+    (a, b) => Date.parse(a) - Date.parse(b),
+  );
+  const max = Math.max(1, ...releases.map((bucket) => bucket.count), ...tracks.map((bucket) => bucket.count));
+  const indexOf = new Map(hours.map((hour, index) => [hour, index]));
+
+  const build = (series: readonly DashboardActivityBucket[]): LineSeries => {
+    const counts = new Map(series.map((bucket) => [bucket.hour, bucket.count]));
+    const peak = series.reduce((most, bucket) => Math.max(most, bucket.count), 0);
+    const points = hours
+      .filter((hour) => counts.has(hour))
+      .map((hour) => {
+        const index = indexOf.get(hour) ?? 0;
+        const x = hours.length <= 1 ? width / 2 : (index / (hours.length - 1)) * width;
+        const value = counts.get(hour) ?? 0;
+        return { x, y: height - (value / max) * height };
+      });
+    return { path: toPath(points), points, peak };
+  };
+
+  return { hours, max, releases: build(releases), tracks: build(tracks) };
+}

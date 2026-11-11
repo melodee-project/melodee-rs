@@ -30,7 +30,7 @@ remove media; complete destructive deletion through the Admin UI workflow below.
 
 Open **Processing → Review Queue** (`/admin/processing/review`) in the admin UI. The queue lists
 the review-able slice of the pipeline — `needs_review`, `failed`, and quarantined work items —
-as a server-paged table with state filter chips fed by the listing's own counts. There is no
+as a server-paged table with state filter pills fed by the listing's own counts. There is no
 bulk mutation over review items; every decision is per-Release and audited.
 
 Selecting a row opens the **Release Review workspace** (`/admin/processing/review/{id}`), which

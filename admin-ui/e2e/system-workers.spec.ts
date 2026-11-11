@@ -293,7 +293,7 @@ test('rtl smoke: ar-SA renders the system screen with dir=rtl', async ({ page })
   await page.goto('system/workers');
   await expect(page.getByRole('table', { name: 'Worker pools and queue metrics' })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Language', exact: true }).click();
+  await page.getByRole('button', { name: /^Language:/ }).click();
   await page.getByText(/العربية/).click();
 
   await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');

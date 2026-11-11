@@ -8,9 +8,9 @@ describe('ProcessingStateTag', () => {
     const { container: failed } = render(<ProcessingStateTag state="failed" />);
     const { container: quarantined } = render(<ProcessingStateTag state="quarantined" />);
     const { container: ignored } = render(<ProcessingStateTag state="ignored" />);
-    expect(failed.querySelector('.cds--tag--red')).not.toBeNull();
-    expect(quarantined.querySelector('.cds--tag--red')).toBeNull();
-    expect(ignored.querySelector('.cds--tag--red')).toBeNull();
+    expect(failed.querySelector('.melodee-chip--error')).not.toBeNull();
+    expect(quarantined.querySelector('.melodee-chip--error')).toBeNull();
+    expect(ignored.querySelector('.melodee-chip--error')).toBeNull();
     // The raw server state remains the visible label in all three.
     expect(screen.getByText('quarantined')).toBeInTheDocument();
   });

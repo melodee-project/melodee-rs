@@ -152,7 +152,8 @@ test('lists rules with the rule-set summary and opens the editor from a row', as
   await expect(table).toBeVisible();
   await expect(table.getByText('POL-GH-REDUNDANT')).toBeVisible();
   await expect(page.getByText(/phase5-default-rules · version 3/)).toBeVisible();
-  await expect(page.getByText(/evaluated in priority order/)).toBeVisible();
+  // The evaluation-order note now also appears as the list card subtitle.
+  await expect(page.getByText(/priority order/).first()).toBeVisible();
 
   await table.getByText('POL-LIVE-REVIEW').click();
   await expect(page.getByRole('heading', { name: 'Policy Editor' })).toBeVisible();
@@ -229,7 +230,7 @@ test('rtl smoke: ar-SA renders the policies screen with dir=rtl', async ({ page 
   await page.goto('policies/releases');
   await expect(page.getByRole('table', { name: 'Policy rules' })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Language', exact: true }).click();
+  await page.getByRole('button', { name: /^Language:/ }).click();
   await page.getByText(/العربية/).click();
 
   await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');

@@ -1,0 +1,340 @@
+/*
+ * Screen layout containers (UI-SPEC §6.1, ADR-0184).
+ *
+ * Layout only: no color, radius, shadow, border, or font declarations. Those
+ * belong to tokens.css (values) and surfaces.css (appearance of primitives).
+ * Logical properties only, so every layout mirrors under dir="rtl".
+ */
+
+/* -------------------------------------------------------------------------
+ * Overview / System dashboards
+ * ------------------------------------------------------------------------- */
+.melodee-overview-columns,
+.melodee-system-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--melodee-grid-gap);
+  align-items: start;
+  margin-block-end: var(--melodee-grid-gap);
+}
+
+.melodee-system-columns {
+  grid-template-columns: minmax(0, 1fr) 26rem;
+}
+
+.melodee-overview-columns--tertiary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.melodee-overview-columns--secondary {
+  grid-template-columns: minmax(17rem, 0.7fr) minmax(0, 1.3fr);
+}
+
+.melodee-system-main,
+.melodee-system-rail {
+  min-inline-size: 0;
+}
+
+.melodee-overview-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--melodee-space-4);
+}
+
+.melodee-overview-generated {
+  font-size: var(--melodee-font-label);
+}
+
+/* -------------------------------------------------------------------------
+ * Queue + inspector
+ * ------------------------------------------------------------------------- */
+.melodee-queue-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--melodee-grid-gap);
+}
+
+.melodee-queue-main {
+  flex: 1;
+  min-inline-size: 0;
+  /* The page never overflows (UI-SPEC §8): wide datasets scroll inside their
+     own table containers. Without this clip, intrinsic table sizing can
+     propagate past the viewport on narrow breakpoints and break mobile
+     hit-testing. */
+  overflow-inline: clip;
+}
+
+.melodee-queue-chips {
+  margin-block-end: var(--melodee-space-4);
+  overflow-inline: auto;
+}
+
+.melodee-queue-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--melodee-space-2);
+  flex-wrap: wrap;
+  inline-size: 100%;
+}
+
+.melodee-queue-toolbar__search {
+  flex: 1;
+  min-inline-size: 12rem;
+  max-inline-size: 22rem;
+}
+
+.melodee-queue-toolbar__spacer {
+  flex: 1;
+}
+
+.melodee-queue-bulk-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--melodee-space-4);
+  inline-size: 100%;
+}
+
+.melodee-queue-bulk-bar__count {
+  font-size: var(--melodee-font-body);
+}
+
+/* -------------------------------------------------------------------------
+ * Review workspace
+ * ------------------------------------------------------------------------- */
+.melodee-review-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--melodee-grid-gap);
+}
+
+.melodee-review-main {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.melodee-review-rail {
+  inline-size: 400px;
+  max-inline-size: 100%;
+  flex-shrink: 0;
+}
+
+.melodee-review-layout--spaced {
+  margin-block-start: var(--melodee-grid-gap);
+}
+
+.melodee-review-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--melodee-grid-gap);
+  align-items: start;
+}
+
+.melodee-review-split > *,
+.melodee-overview-columns > *,
+.melodee-system-columns > * {
+  min-inline-size: 0;
+}
+
+/* UI-SPEC §8 sm: datasets wider than the viewport scroll horizontally
+   inside their container — the page itself never overflows. */
+.melodee-review-table-scroll,
+.melodee-table-scroll,
+.melodee-onboarding-checks-scroll,
+.melodee-onboarding-steps-scroll {
+  overflow-inline: auto;
+}
+
+.melodee-onboarding-steps-scroll {
+  margin-block-end: var(--melodee-space-4);
+}
+
+/* -------------------------------------------------------------------------
+ * Identity review — three-pane workspace (queue → evidence → actions)
+ * ------------------------------------------------------------------------- */
+.melodee-identity-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--melodee-grid-gap);
+}
+
+.melodee-identity-queue {
+  /* Wide enough for the observation, pending-match chip, and timestamp
+     columns without horizontal scrolling at xl (reference: ~330px). */
+  inline-size: 22rem;
+  flex-shrink: 0;
+}
+
+.melodee-identity-main {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.melodee-identity-rail {
+  inline-size: 22.5rem;
+  max-inline-size: 100%;
+  flex-shrink: 0;
+}
+
+/* -------------------------------------------------------------------------
+ * Policies / rule editor
+ * ------------------------------------------------------------------------- */
+.melodee-policies-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 26rem);
+  gap: var(--melodee-grid-gap);
+  align-items: start;
+}
+
+.melodee-policy-editor__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--melodee-space-4);
+  margin-block-end: var(--melodee-space-3);
+}
+
+.melodee-policy-editor__footer {
+  display: flex;
+  gap: var(--melodee-space-2);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-block-start: var(--melodee-space-4);
+}
+
+.melodee-policy-condition {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 0.8fr) auto;
+  align-items: center;
+  gap: var(--melodee-space-2);
+  margin-block-end: var(--melodee-space-2);
+}
+
+.melodee-policy-condition__operator {
+  font-size: var(--melodee-font-label);
+  white-space: nowrap;
+}
+
+.melodee-policy-disposition-counts {
+  display: flex;
+  gap: var(--melodee-space-3);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.melodee-policy-test-results {
+  margin-block-start: var(--melodee-space-4);
+}
+
+/* -------------------------------------------------------------------------
+ * Responsive collapse (UI-SPEC §8)
+ * ------------------------------------------------------------------------- */
+@media (max-width: 1311px) {
+  .melodee-metric-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .melodee-policies-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 1055px) {
+  .melodee-overview-columns,
+  .melodee-system-columns,
+  .melodee-review-split,
+  .melodee-overview-columns--tertiary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .melodee-review-layout,
+  .melodee-identity-layout {
+    flex-direction: column;
+    /* Cross-axis becomes horizontal in column mode: stretch so children
+       track the container width instead of growing to content width. */
+    align-items: stretch;
+  }
+
+  .melodee-review-rail,
+  .melodee-identity-queue,
+  .melodee-identity-rail {
+    inline-size: 100%;
+  }
+}
+
+@media (max-width: 671px) {
+  .melodee-metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .melodee-page-header__content {
+    flex-direction: column;
+  }
+
+  .melodee-overview-actions {
+    inline-size: 100%;
+    justify-content: space-between;
+  }
+
+  .melodee-policy-condition {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .melodee-identity-candidate__header {
+    flex-wrap: wrap;
+  }
+}
+
+/* -------------------------------------------------------------------------
+ * Review comparison rows: label, share bar, count (reference "Catalog
+ * Comparison" card).
+ * ------------------------------------------------------------------------- */
+.melodee-comparison-row {
+  display: grid;
+  grid-template-columns: minmax(6rem, 10rem) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--melodee-space-3);
+  padding-block: var(--melodee-space-2);
+}
+
+.melodee-comparison-row__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.melodee-comparison-row__count {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@media (max-width: 671px) {
+  .melodee-comparison-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .melodee-comparison-row .melodee-progress {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Release Overview body: the fact/media cards followed by the in-flow
+   metadata-transform task card. */
+.melodee-release-overview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--melodee-grid-gap);
+}
+
+.melodee-transform-panel {
+  margin-block-start: 0;
+}
+
+/* Below lg the transform task moves above the reference/info cards: on a
+   phone the operator reaches the actionable card first instead of scrolling
+   past every fact row and media list. */
+@media (max-width: 1055px) {
+  .melodee-release-overview > .melodee-transform-panel {
+    order: -1;
+  }
+}

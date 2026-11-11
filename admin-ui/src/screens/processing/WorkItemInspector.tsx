@@ -1,32 +1,31 @@
-import {
-  Button,
-  Heading,
-  InlineNotification,
-  SkeletonText,
-  StructuredListBody,
-  StructuredListCell,
-  StructuredListRow,
-  StructuredListWrapper,
-} from '@carbon/react';
+import { ArrowRight } from '@carbon/icons-react';
+import { Button, InlineNotification, SkeletonText } from '@carbon/react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link as RouterLink } from 'react-router-dom';
 
 import { getWorkItem, getWorkItemEvents } from '../../api/admin';
 import { ApiError } from '../../api/client';
 import type { WorkItem, WorkItemEvent } from '../../api/types';
 import { AuditTimeline, type AuditEvent } from '../../components/AuditTimeline';
+import { EntityAvatar } from '../../components/EntityAvatar';
 import { InspectorPanel } from '../../components/InspectorPanel';
+import { KeyValueList } from '../../components/KeyValueList';
 import { ProcessingStateTag } from '../../components/ProcessingStateTag';
-import { formatDateTime } from '../../i18n/format';
-import { workItemDisplayName } from './workItem';
+import { ProgressBar } from '../../components/ProgressBar';
+import { Surface } from '../../components/Surface';
+import { formatBytes, formatDateTime } from '../../i18n/format';
+import { stageProgress, workItemDisplayName } from './workItem';
 
 /**
- * Right-rail work-item inspector (UI-SPEC §7): facts, a derived next-action
- * explanation, and the append-only event history. No mutation actions exist
- * over the admin API yet (decision/reprocess endpoints ship with the backend), so
- * the action renders disabled with an explanation rather than faking a call.
- * The parent remounts this component per work item (`key={workItemId}`) so
- * switching selection starts from a clean loading state.
+ * Right-rail work-item inspector (UI-SPEC §7, ADR-0184): the reference's
+ * "Release Inspector" card — summary block, state/progress facts, the derived
+ * next action, and the append-only event history.
+ *
+ * No mutation actions exist over the admin API yet (decision/reprocess
+ * endpoints ship with the review wave), so actions render disabled with an
+ * explanation rather than faking a call. The parent remounts this component per
+ * work item (`key={workItemId}`) so switching selection starts clean.
  */
 
 interface InspectorData {
@@ -75,41 +74,51 @@ export function WorkItemInspector({
     };
   }, [workItemId]);
 
-  const title = data ? workItemDisplayName(data.item) : t('queue.itemFallback');
+  const title = data
+    ? (data.item.releaseTitle ?? workItemDisplayName(data.item))
+    : t('queue.itemFallback');
+  const stageLabel = data
+    ? t(`queue.state.${data.item.state}`, { defaultValue: data.item.state })
+    : '';
 
-  const facts: { label: string; value: string }[] = data
+  const facts = data
     ? [
-        { label: t('queue.fact.reason'), value: data.item.stateReason },
-        { label: t('queue.fact.attempts'), value: String(data.item.attemptCount) },
-        { label: t('queue.fact.worker'), value: data.item.leaseOwner },
-        { label: t('queue.fact.source'), value: data.item.sourcePath },
-        { label: t('queue.fact.currentPath'), value: data.item.currentPath },
-        { label: t('queue.fact.targetPath'), value: data.item.targetPath },
-        { label: t('queue.fact.fingerprint'), value: data.item.sourceFingerprint },
+        { term: t('queue.fact.state'), value: <ProcessingStateTag state={data.item.state} /> },
         {
-          label: t('queue.fact.lastError'),
+          term: t('queue.column.progress'),
+          value: (
+            <ProgressBar
+              value={stageProgress(data.item.state)}
+              label={t('queue.progress.label', { title })}
+              stage={stageLabel}
+            />
+          ),
+        },
+        { term: t('overview.queue.column.artist'), value: data.item.artistName ?? t('queue.unbound') },
+        { term: t('queue.column.size'), value: data.item.mediaBytes ? formatBytes(data.item.mediaBytes) : '—' },
+        { term: t('queue.fact.attempts'), value: String(data.item.attemptCount) },
+        { term: t('queue.fact.state'), value: data.item.stateReason ?? '—' },
+        { term: t('queue.fact.worker'), value: data.item.leaseOwner ?? '—' },
+        { term: t('queue.fact.source'), value: data.item.sourcePath },
+        { term: t('queue.fact.currentPath'), value: data.item.currentPath },
+        { term: t('queue.fact.targetPath'), value: data.item.targetPath ?? '—' },
+        { term: t('queue.fact.fingerprint'), value: data.item.sourceFingerprint ?? '—' },
+        {
+          term: t('queue.fact.lastError'),
           value: data.item.lastErrorMessage
             ? data.item.lastErrorCode
               ? `${data.item.lastErrorCode}: ${data.item.lastErrorMessage}`
               : data.item.lastErrorMessage
-            : null,
+            : '—',
         },
-        { label: t('queue.fact.discovered'), value: formatDateTime(data.item.discoveredAt) },
-        { label: t('queue.fact.added'), value: formatDateTime(data.item.createdAt) },
-        { label: t('queue.fact.updated'), value: formatDateTime(data.item.updatedAt) },
+        { term: t('queue.fact.discovered'), value: formatDateTime(data.item.discoveredAt) },
+        { term: t('queue.fact.added'), value: formatDateTime(data.item.createdAt) },
+        { term: t('queue.fact.updated'), value: formatDateTime(data.item.updatedAt) },
         {
-          label: t('queue.fact.lastAttempt'),
-          value: data.item.lastAttemptAt ? formatDateTime(data.item.lastAttemptAt) : null,
+          term: t('queue.fact.completed'),
+          value: data.item.completedAt ? formatDateTime(data.item.completedAt) : '—',
         },
-        {
-          label: t('queue.fact.nextAttempt'),
-          value: data.item.nextAttemptAt ? formatDateTime(data.item.nextAttemptAt) : null,
-        },
-        {
-          label: t('queue.fact.completed'),
-          value: data.item.completedAt ? formatDateTime(data.item.completedAt) : null,
-        },
-      ].flatMap(({ label, value }) => (value ? [{ label, value }] : []))
+      ]
     : [];
 
   return (
@@ -126,38 +135,56 @@ export function WorkItemInspector({
       {!data && !error ? <SkeletonText paragraph lineCount={6} /> : null}
       {data ? (
         <>
-          <StructuredListWrapper aria-label={t('queue.inspector.facts')}>
-            <StructuredListBody>
-              <StructuredListRow>
-                <StructuredListCell>{t('queue.fact.state')}</StructuredListCell>
-                <StructuredListCell>
-                  <ProcessingStateTag state={data.item.state} />
-                </StructuredListCell>
-              </StructuredListRow>
-              {facts.map((fact) => (
-                <StructuredListRow key={fact.label}>
-                  <StructuredListCell>{fact.label}</StructuredListCell>
-                  <StructuredListCell>{fact.value}</StructuredListCell>
-                </StructuredListRow>
-              ))}
-            </StructuredListBody>
-          </StructuredListWrapper>
-
-          <section aria-labelledby="queue-next-action">
-            <Heading id="queue-next-action" style={{ fontSize: '1rem', marginBlockStart: '1rem' }}>
-              {t('queue.nextAction.title')}
-            </Heading>
-            <p style={{ color: 'var(--cds-text-secondary)' }}>
+          <div className="melodee-review-header">
+            <EntityAvatar name={data.item.releaseTitle ?? title} size={64} decorative />
+            <div className="melodee-review-header__title">
+              <p className="melodee-hero__title" style={{ fontSize: '1.25rem' }}>
+                {title}
+              </p>
+              <p className="melodee-hero__subtitle">
+                {data.item.artistName ?? t('queue.unbound')}
+              </p>
+              <div className="melodee-hero__chips">
+                <ProcessingStateTag state={data.item.state} />
+              </div>
+            </div>
+          </div>
+          <div style={{ marginBlockStart: 'var(--melodee-space-4)' }}>
+            <KeyValueList items={facts} ariaLabel={t('queue.inspector.summary')} />
+          </div>
+          <Surface
+            title={t('queue.nextAction.title')}
+            headingLevel={3}
+            variant="inset"
+            className="melodee-inspector__next-action"
+          >
+            <p className="melodee-surface__subtitle">
               {t(`queue.nextAction.${data.item.state}`, {
                 defaultValue: t('queue.nextAction.unknown'),
               })}
             </p>
-            <Button kind="tertiary" size="sm" disabled title={t('queue.actions.unavailable')}>
-              {t('queue.actions.reprocess')}
-            </Button>
-          </section>
-
-          <div style={{ marginBlockStart: '1rem' }}>
+            <div className="melodee-inspector__actions">
+              {data.item.state === 'needs_review' ? (
+                <Button kind="primary" size="sm" as={RouterLink} to={`/processing/review/${data.item.id}`}>
+                  {t('queue.openReview')}
+                </Button>
+              ) : (
+                <Button kind="tertiary" size="sm" disabled title={t('queue.actions.unavailable')}>
+                  {t('queue.actions.reprocess')}
+                </Button>
+              )}
+              <Button
+                kind="ghost"
+                size="sm"
+                as={RouterLink}
+                to="/processing/review?state=quarantined"
+                renderIcon={ArrowRight}
+              >
+                {t('queue.quarantineAction')}
+              </Button>
+            </div>
+          </Surface>
+          <div style={{ marginBlockStart: 'var(--melodee-space-4)' }}>
             <AuditTimeline events={data.events.map(toAuditEvent)} />
           </div>
         </>

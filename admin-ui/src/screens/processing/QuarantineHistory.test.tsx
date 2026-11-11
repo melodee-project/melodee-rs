@@ -145,7 +145,7 @@ describe('HistoryScreen', () => {
       ),
     );
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Ignored' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Ignored' }));
     await waitFor(() =>
       expect(mockListWorkItems).toHaveBeenLastCalledWith(
         expect.objectContaining({ state: 'ignored', offset: 0 }),

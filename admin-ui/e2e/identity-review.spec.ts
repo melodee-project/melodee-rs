@@ -250,7 +250,7 @@ test('rtl smoke: ar-SA renders the workspace with dir=rtl', async ({ page }) => 
   await page.goto(`catalog/identity?observation=${OBSERVATION_ID}`);
   await expect(page.getByText('Candidate Matches')).toBeVisible();
 
-  await page.getByRole('button', { name: 'Language', exact: true }).click();
+  await page.getByRole('button', { name: /^Language:/ }).click();
   await page.getByText(/العربية/).click();
 
   await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');

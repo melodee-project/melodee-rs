@@ -2,18 +2,61 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { Dashboard } from '../../api/types';
+import type { Dashboard, Page, WorkItem } from '../../api/types';
+import { stageProgress } from '../processing/workItem';
 import { OverviewScreen } from './OverviewScreen';
-import { countStates, INBOUND_STATES, layoutBars, sortedBuckets } from './overview';
+import { countStates, INBOUND_STATES, layoutActivitySeries, sortedBuckets } from './overview';
 
 vi.mock('../../api/admin', () => ({
   getDashboard: vi.fn(),
   getOnboardingStatus: vi.fn(),
+  listWorkItems: vi.fn(),
 }));
 
-const { getDashboard, getOnboardingStatus } = await import('../../api/admin');
+const { getDashboard, getOnboardingStatus, listWorkItems } = await import('../../api/admin');
 const mockGetDashboard = vi.mocked(getDashboard);
 const mockGetOnboardingStatus = vi.mocked(getOnboardingStatus);
+const mockListWorkItems = vi.mocked(listWorkItems);
+
+/** Two queue rows: one bound to a catalog Release, one not yet imported. */
+function makeQueueItem(overrides: Partial<WorkItem> = {}): WorkItem {
+  return {
+    id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    apiKey: '33333333-3333-4333-8333-333333333333',
+    sourceLibraryId: null,
+    targetLibraryId: null,
+    sourcePath: '/library/incoming/Business as Usual',
+    currentPath: '/library/incoming/Business as Usual',
+    targetPath: null,
+    sourceFingerprint: null,
+    manifestHash: null,
+    state: 'publishing',
+    stateReason: null,
+    attemptCount: 1,
+    nextAttemptAt: null,
+    leaseOwner: null,
+    leaseAcquiredAt: null,
+    leaseExpiresAt: null,
+    lastErrorCode: null,
+    lastErrorMessage: null,
+    correlationId: '44444444-4444-4444-8444-444444444444',
+    discoveredAt: '2026-08-14T10:00:00Z',
+    firstStartedAt: null,
+    lastAttemptAt: null,
+    updatedAt: '2026-08-14T10:05:00Z',
+    createdAt: '2026-08-14T10:00:00Z',
+    completedAt: null,
+    releaseId: '55555555-5555-4555-8555-555555555555',
+    releaseTitle: 'Business as Usual',
+    artistName: 'Men at Work',
+    mediaBytes: 33600000,
+    ...overrides,
+  };
+}
+
+function makeQueuePage(items: WorkItem[]): Page<WorkItem> {
+  return { items, total: items.length, limit: 5, offset: 0 };
+}
 
 /** Default: onboarding already completed — no banner. */
 const ONBOARDING_COMPLETE = {
@@ -74,10 +117,15 @@ function makeDashboard(overrides: Partial<Dashboard> = {}): Dashboard {
       ],
       resourceBounds: [],
     },
+    deltas: { inboundToday: 12, newForReview24h: 5 },
     activity: {
       completedPerHour: [
         { hour: '2026-08-14T11:00:00Z', count: 9 },
         { hour: '2026-08-14T10:00:00Z', count: 5 },
+      ],
+      indexedPerHour: [
+        { hour: '2026-08-14T11:00:00Z', count: 8 },
+        { hour: '2026-08-14T10:00:00Z', count: 4 },
       ],
     },
     ...overrides,
@@ -111,19 +159,40 @@ describe('overview helpers', () => {
     expect(sorted[0]?.hour).toBe('2026-08-14T10:00:00Z');
   });
 
-  it('lays out bars scaled to the maximum bucket', () => {
-    const bars = layoutBars(
+  it('lays out two series on one shared scale over the union of hours', () => {
+    const layout = layoutActivitySeries(
       [
         { hour: '2026-08-14T10:00:00Z', count: 5 },
         { hour: '2026-08-14T11:00:00Z', count: 10 },
       ],
+      [{ hour: '2026-08-14T11:00:00Z', count: 4 }],
       720,
-      160,
+      100,
     );
-    expect(bars).toHaveLength(2);
-    expect(bars[1]?.height).toBe(160);
-    expect(bars[0]?.height).toBeLessThan(160);
-    expect(layoutBars([], 720, 160)).toEqual([]);
+    expect(layout.hours).toEqual(['2026-08-14T10:00:00Z', '2026-08-14T11:00:00Z']);
+    expect(layout.max).toBe(10);
+    // Releases series: two points, the peak sitting on the baseline-to-top scale.
+    expect(layout.releases.points).toHaveLength(2);
+    expect(layout.releases.path.startsWith('M ')).toBe(true);
+    expect(layout.releases.peak).toBe(10);
+    expect(layout.releases.points[1]?.y).toBe(0);
+    expect(layout.releases.points[0]?.y).toBeGreaterThan(0);
+    // Tracks series shares the axis: 4 of 10 renders below the releases peak.
+    expect(layout.tracks.points).toHaveLength(1);
+    expect(layout.tracks.points[0]?.y).toBe(60);
+
+    const empty = layoutActivitySeries([], [], 720, 100);
+    expect(empty.hours).toEqual([]);
+    expect(empty.releases.path).toBe('');
+  });
+
+  it('derives stage progress from the documented lifecycle mapping', () => {
+    // Monotonic through the happy path, terminal at both ends.
+    expect(stageProgress('discovered')).toBeLessThan(stageProgress('normalizing'));
+    expect(stageProgress('normalizing')).toBeLessThan(stageProgress('publishing'));
+    expect(stageProgress('indexed')).toBe(100);
+    expect(stageProgress('failed')).toBe(100);
+    expect(stageProgress('ignored')).toBe(0);
   });
 });
 
@@ -132,6 +201,7 @@ describe('OverviewScreen', () => {
     vi.clearAllMocks();
     mockGetDashboard.mockResolvedValue(makeDashboard());
     mockGetOnboardingStatus.mockResolvedValue(ONBOARDING_COMPLETE);
+    mockListWorkItems.mockResolvedValue(makeQueuePage([makeQueueItem()]));
   });
 
   it('renders KPI cards, attention rows, and subsystem health from the DTO', async () => {
@@ -163,33 +233,92 @@ describe('OverviewScreen', () => {
   it('renders the activity chart with a screen-reader table alternative', async () => {
     renderScreen();
     expect(
-      await screen.findByRole('img', { name: 'Bar chart of completed work items per hour' }),
+      await screen.findByRole('img', {
+        name: 'Line chart of Releases processed and Tracks indexed per hour',
+      }),
     ).toBeInTheDocument();
-    // The same series is available as a data table for assistive tech.
-    expect(screen.getByText('Completed work items per hour')).toBeInTheDocument();
+    // Both series are named in the visible legend, and the same two series
+    // drive the screen-reader data table (column headers + every hour row).
+    const seriesNames = screen.getAllByText('Releases processed');
+    expect(seriesNames.length).toBe(2);
+    expect(seriesNames.some((element) => element.tagName === 'TH')).toBe(true);
+    // The indexed column header is deliberately not the legend's wording:
+    // the legend names the series, the column names the measure.
+    expect(screen.getByText('Tracks indexed')).toBeInTheDocument();
+    const dataTable = screen.getByRole('table', { name: 'Processing activity per hour' });
+    expect(within(dataTable).getByText('Releases processed')).toBeInTheDocument();
+    expect(within(dataTable).getByText('Indexed')).toBeInTheDocument();
+    expect(within(dataTable).getAllByRole('row')).toHaveLength(3);
+    // … and available as a data table for assistive tech.
+    expect(screen.getByText('Processing activity per hour')).toBeInTheDocument();
   });
 
   it('renders the activity empty state when no completions are reported', async () => {
     mockGetDashboard.mockResolvedValue(
-      makeDashboard({ activity: { completedPerHour: [] } }),
+      makeDashboard({ activity: { completedPerHour: [], indexedPerHour: [] } }),
     );
     renderScreen();
     expect(
       await screen.findByText('No processing completions in the last 24 hours.'),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole('img', { name: 'Bar chart of completed work items per hour' }),
+      screen.queryByRole('img', {
+        name: 'Line chart of Releases processed and Tracks indexed per hour',
+      }),
     ).not.toBeInTheDocument();
   });
 
-  it('renders the mini queue table with links into the processing queue', async () => {
+  it('renders the KPI secondary lines from the dashboard deltas', async () => {
     renderScreen();
-    const table = await screen.findByRole('table', { name: 'Work items by state' });
-    expect(within(table).getByText('needs_review')).toBeInTheDocument();
-    expect(within(table).getByText('2')).toBeInTheDocument();
+    expect(await screen.findByText('12 today')).toBeInTheDocument();
+    expect(screen.getByText('5 new in 24h')).toBeInTheDocument();
+    // Active-now is derived from the state counts (3 discovered + 5 ready…).
+    expect(screen.getByText(/active now/)).toBeInTheDocument();
+  });
+
+  it('renders the Release-level queue preview with bound and unbound rows', async () => {
+    mockListWorkItems.mockResolvedValue(
+      makeQueuePage([
+        makeQueueItem(),
+        makeQueueItem({
+          id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          releaseId: null,
+          releaseTitle: undefined,
+          artistName: undefined,
+          mediaBytes: undefined,
+          currentPath: '/library/incoming/Road to Freedom',
+          state: 'ready',
+        }),
+      ]),
+    );
+    renderScreen();
+    const table = await screen.findByRole('table', { name: 'Current processing queue' });
+    // Bound row links into the catalog and shows its artist.
+    expect(within(table).getByRole('link', { name: 'Business as Usual' })).toHaveAttribute(
+      'href',
+      '/catalog/releases/55555555-5555-4555-8555-555555555555',
+    );
+    expect(within(table).getByText('Men at Work')).toBeInTheDocument();
+    // Unbound row falls back to the path-derived display name and says so.
+    expect(within(table).getByText('Road to Freedom')).toBeInTheDocument();
+    expect(within(table).getAllByText('Not yet imported')).toHaveLength(1);
+    // … and the artist cell is an honest em dash for the unbound row.
+    expect(within(table).getByLabelText('Not yet imported', { selector: 'span' })).toBeInTheDocument();
+    // Progress is a labeled stage, never a bare bar.
     expect(
-      screen.getByRole('link', { name: 'Open the processing queue' }),
-    ).toHaveAttribute('href', '/processing');
+      within(table).getByRole('progressbar', { name: 'Business as Usual processing stage' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open the processing queue' })).toHaveAttribute(
+      'href',
+      '/processing',
+    );
+  });
+
+  it('keeps the queue card usable when the preview request fails', async () => {
+    mockListWorkItems.mockRejectedValue(new Error('queue unavailable'));
+    renderScreen();
+    expect(await screen.findByText('35,214')).toBeInTheDocument();
+    expect(screen.getByText('No work items are in the queue.')).toBeInTheDocument();
   });
 
   it('shows the attention empty state when every count is zero', async () => {

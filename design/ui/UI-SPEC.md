@@ -1,21 +1,32 @@
 # Melodee UI Specification
 
-Status: **Accepted for Admin UI implementation (2026-08-14).** Satisfies PRD-UI-REF-003.
-Authoritative for implemented behavior alongside `DESIGN-SYSTEM.md`; mockups remain visual intent
-only (PRD-UI-REF-001). Governing ADRs: ADR-0109 (React + TypeScript + Carbon), ADR-0137
-(localization/RTL), ADR-0138 (tooling/serving), ADR-0139 (session/gating).
+Status: **Accepted for Admin UI implementation (2026-08-14). Amended 2026-08-15** by ADR-0184
+(reference alignment and Melodee surface system): §1 token inventory, §2 override scope, §3 shell
+dimensions and status placement, §6 component contracts, and the new §6.1 primitive layer.
+Satisfies PRD-UI-REF-003. Authoritative for implemented behavior alongside `DESIGN-SYSTEM.md`;
+mockups remain visual intent only (PRD-UI-REF-001). Governing ADRs: ADR-0109 (React + TypeScript +
+Carbon), ADR-0137 (localization/RTL), ADR-0138 (tooling/serving), ADR-0139 (session/gating),
+ADR-0184 (surface system).
 
 ## 1. Design tokens
 
-Carbon tokens (`@carbon/react` themes) are the default. The **Melodee token layer** is a small set
-of CSS custom properties layered on Carbon themes, never raw hex values in components:
+Carbon tokens (`@carbon/react` themes) are the default. The **Melodee token layer** is the set of CSS
+custom properties layered on Carbon themes (`src/theme/tokens.css`), never raw hex values in
+components:
 
-| Token | Purpose |
+| Token family | Purpose |
 |---|---|
 | `--melodee-status-success/-info/-warning/-error/-provisional/-neutral` | Status semantics (§5) |
 | `--melodee-artwork-surface` | Contrasting surface behind artwork |
 | `--melodee-density-compact/-default` | Row density overrides for data-heavy tables |
-| `--melodee-brand-accent` | Brand accent (links, primary nav active state) |
+| `--melodee-brand-accent`, `--melodee-link-contrast` | Brand accent (links, primary nav active state) |
+| `--melodee-surface`, `--melodee-surface-border`, `--melodee-surface-border-strong`, `--melodee-surface-muted` | Card and table surfaces (ADR-0184) |
+| `--melodee-radius-card/-control/-pill` | Corner radii |
+| `--melodee-space-1..8`, `--melodee-grid-gap` | Spacing scale |
+| `--melodee-font-page-title/-card-title/-label/-metric/-micro` | Typography scale |
+| `--melodee-chip-{success,info,warning,error,provisional,neutral}-{surface,ink}` | Status chip tints (§5) |
+| `--melodee-progress-fill`, `--melodee-progress-track` | Progress bars |
+| `--melodee-shell-background/-active/-text/-muted` | Navigation chrome |
 
 A theme pack defines values for both light and dark Carbon themes (g10/g100); appearance mode and
 theme pack are independent axes (PRD-THEME-002). High-contrast and reduced-motion media queries are
@@ -23,18 +34,31 @@ respected and never overridden.
 
 ## 2. Carbon token overrides
 
-Overrides are limited to the token layer above plus: border radius (`--cds-border-radius` stays
-Carbon default), and density via Carbon's compact grid rows where listed in §4. No component CSS
-overrides outside tokens; no one-off page styles (extend the shared system per MOCKUPS.md).
+Overrides are limited to the token layer above. Border radius comes from
+`--melodee-radius-*` rather than Carbon's default 0; density uses Carbon's compact rows where
+listed in §4.
+
+**Component CSS is permitted only through the §6.1 primitive layer.** A screen may not carry its
+own color, radius, shadow, spacing, or typography declarations; it composes primitives and layout
+containers, and every value those emit originates from a custom property in §1 (ADR-0184). Carbon
+component internals are never forked — where a reference treatment has no Carbon equivalent (filter
+pills, status chips, progress bars), Melodee owns a primitive built on Carbon tokens.
 
 ## 3. App shell dimensions
 
 - Left navigation: 256 px expanded, 48 px collapsed (Carbon UI shell side nav), persistent.
-- Header: 48 px (Carbon UI shell header) containing global search entry (`⌘K`/`Ctrl+K`), server
-  status indicator, notifications, language selector, appearance toggle, user menu.
-- Content region: max width none (data-heavy), padding per Carbon grid (16 px at ≥ lg).
-- Inspector panel: 400 px right rail (dismissible; content reflows).
-- Footer strip: 24 px status line (server online, locale, theme, collapse) inside the side nav.
+- Header: 48 px (Carbon UI shell header) containing one inset global search entry (`⌘K`/`Ctrl+K`),
+  a compact server status indicator, notifications, language selector, appearance toggle, and user
+  menu. The language control shows the current locale name at ≥ lg; the user control shows avatar
+  and username at ≥ lg (ADR-0184).
+- Brand block: monogram tile + `melodee` wordmark + `ADMIN` micro-label; the collapsed rail shows
+  the monogram only.
+- Content region: max width none (data-heavy), **24 px padding at ≥ lg** (was 16 px), 16 px below.
+- Inspector panel: 400 px right rail rendered as a `Surface` card (dismissible; content reflows).
+- Footer strip: status line inside the side nav (`Server online`, locale, appearance, collapse).
+  The footer is the canonical server-status location; the header carries a compact mirror.
+- Mockup proportions of 220 px navigation and 72 px header are directional only; the dimensions
+  above are binding.
 
 ## 4. Density
 
@@ -78,6 +102,32 @@ AuditTimeline, AudioPreview, DestructiveActionDialog`. Contracts:
 - `AudioPreview`: labeled transport controls, no autoplay, keyboard operable.
 - `DecisionPanel`: ordered choices with the recommended action visually primary; destructive
   choices are never visually equal to safe ones.
+
+### 6.1 Melodee surface and primitive layer (ADR-0184)
+
+Screens compose these primitives; they do not hand-author surfaces. Each has a Vitest contract
+test and is exported from `components/index.ts`.
+
+| Primitive | Contract |
+|---|---|
+| `Surface` | The one card treatment: `title`, `subtitle`, `actions`, `footer`, `density`, `tone`. Provides the heading level and the plain/inset variants. |
+| `PageHeader` | Page title, subtitle, inline-end action region, optional breadcrumb line. |
+| `HeroCard` | Entity hero: media slot, title, subtitle, `chips`, `facts`, `actions`. One hero per screen. |
+| `MetricCard` | KPI: `label`, `value`, `delta` (text + tone), `status`, `hint`. |
+| `StatStrip` | Row of numeral+caption cells (detail screens). |
+| `StatusChip` | Reference chip tint; icon + label + visually-hidden description (§5). |
+| `ProgressBar` | `value` 0–100 with textual value, `stage` label, `<progress>` semantics. |
+| `FilterPills` | Real buttons with `aria-pressed`, arrow-key navigation, count badges. |
+| `KeyValueList` | Term/value/derived-detail pairs; replaces per-screen fact grids. |
+| `EvidenceTileGrid` | Compact evidence counts with tone. |
+| `TimelineList` | Ordered audit/decision events with tone markers. |
+| `DecisionActionList` | Ordered actions, exactly one primary, destructive tinted, each with a reason line. |
+| `TabNav` | Underlined tab bar, `role="tablist"`, arrow-key navigation, RTL-safe. |
+| `EntityTable` | As above, plus column presets (`progress`, `chip`, `stacked`, `amount`). |
+
+Rules: exactly one primary action per screen region; no color-only meaning; no raw hex,
+radius, shadow, or font-size declaration outside the token layer; layout-only rules live in
+`screens.css` and may not set color or type.
 
 ## 7. Interaction patterns
 
@@ -129,3 +179,5 @@ Every canonical screen is verified at 375×812 (mobile), 768×1024 (tablet), and
 9. All visible text goes through the i18n layer (ADR-0137); no string concatenation of translated
    fragments; logical CSS properties only (RTL).
 10. Do not redesign canonical workflows without approval; mockup text is not data (PRD-UI-REF-001).
+11. New screens compose §6.1 primitives; a screen that declares color, radius, shadow, or font
+    size directly is a review failure (ADR-0184).

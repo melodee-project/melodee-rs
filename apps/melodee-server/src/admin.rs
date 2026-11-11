@@ -30,7 +30,7 @@ use axum::{
     routing::get,
 };
 use melodee_domain::{IngestionState, ReleaseWorkItem, ReleaseWorkItemEvent, WorkEventType};
-use melodee_persistence::{ActiveLease, StateCount, WorkItemSort, WorkItemStore};
+use melodee_persistence::{ActiveLease, StateCount, WorkItemListRow, WorkItemSort, WorkItemStore};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -47,6 +47,12 @@ const MAX_LIST_LIMIT: u32 = 500;
 /// only operator-safe fields: paths (read-only source paths, never credentials),
 /// state, attempts, lease evidence, last error code/message, timestamps, and
 /// the correlation id. Never includes secrets — the store never receives them.
+///
+/// The four `release*`/`artist*`/`mediaBytes` fields are **display-only**
+/// enrichment for the operator queue (ADR-0184): they exist once a work item
+/// has a `catalog_imports` binding, and they are `null` before that. They never
+/// participate in identity — the work-item id is the identity — so a caller
+/// must not treat a missing title as a missing item.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkItemDto {
@@ -75,6 +81,15 @@ pub struct WorkItemDto {
     pub updated_at: OffsetDateTime,
     pub created_at: OffsetDateTime,
     pub completed_at: Option<OffsetDateTime>,
+    /// Bound catalog Release (display only; see the struct docs).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub release_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub release_title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub artist_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub media_bytes: Option<i64>,
 }
 
 impl From<ReleaseWorkItem> for WorkItemDto {
@@ -105,7 +120,22 @@ impl From<ReleaseWorkItem> for WorkItemDto {
             updated_at: item.updated_at,
             created_at: item.created_at,
             completed_at: item.completed_at,
+            release_id: None,
+            release_title: None,
+            artist_name: None,
+            media_bytes: None,
         }
+    }
+}
+
+impl WorkItemDto {
+    /// Applies the queue's display-only enrichment from the import binding.
+    fn with_binding(mut self, row: &WorkItemListRow) -> Self {
+        self.release_id = row.release_id;
+        self.release_title = row.release_title.clone();
+        self.artist_name = row.display_artist.clone();
+        self.media_bytes = row.media_bytes;
+        self
     }
 }
 
@@ -207,6 +237,10 @@ pub struct ListWorkItemsParams {
     /// `updatedAt`, `state`, or `attemptCount`. Omitted keeps the historical
     /// newest-first ordering. Unknown keys or directions produce a 400.
     pub sort: Option<String>,
+    /// Optional case-insensitive substring filter over the bound Release title,
+    /// its billed artist, and the work item's current path. Bounded operator
+    /// convenience over the active queue (ADR-0184) — not a catalog search.
+    pub query: Option<String>,
 }
 
 fn default_list_limit() -> u32 {
@@ -329,11 +363,21 @@ pub async fn list_work_items(
     let limit = params.limit.clamp(1, MAX_LIST_LIMIT);
     let offset = params.offset;
     let (items, total) = WorkItemStore
-        .list_page(&state.pool, parsed_state, limit, offset, sort)
+        .list_page_enriched(
+            &state.pool,
+            parsed_state,
+            limit,
+            offset,
+            sort,
+            params.query.as_deref(),
+        )
         .await
         .map_err(AdminApiError::from_store)?;
     Ok(Json(WorkItemPageDto {
-        items: items.into_iter().map(WorkItemDto::from).collect(),
+        items: items
+            .iter()
+            .map(|row| WorkItemDto::from(row.item.clone()).with_binding(row))
+            .collect(),
         total,
         limit,
         offset,

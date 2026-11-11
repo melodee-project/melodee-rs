@@ -11,11 +11,19 @@ history, and a read-only inspector. A stalled or failed Release never blocks the
 ## Processing Queue screen
 
 Open **Processing → Processing Queue** (`/admin/processing`). The screen is a dense table backed
-by the server-side work-item listing: state filter chips show live counts per durable state
+by the server-side work-item listing: state filter pills show live counts per durable state
 (`discovered`, `settling`, `ready`, `inspecting`, `normalizing`, `needs_review`, `failed`, and so
 on), sorting is restricted to the backend whitelist (`addedAt`, `updatedAt`, `state`,
-`attemptCount`), and paging is envelope-driven with honest totals. Filter, sort, page, and
+`attemptCount`), and paging is envelope-driven with honest totals. Filter, search, sort, page, and
 selection state live in the URL, so a filtered view can be shared as a link.
+
+Each row shows the Release the work item belongs to (its title and billed Artist once the import
+is bound, and the work item's own path before that), its durable state, its **stage progress** in
+the Release lifecycle, when it was added, and the media size once known. Stage progress is a
+position in the documented lifecycle — `Discovered → Processing → Review → Cataloged` — not an
+elapsed-time estimate, and `Attempts` stands in the place a priority column would occupy because
+Melodee has no priority concept. The **Search Releases** box filters the queue server-side by
+Release title, billed Artist, or work-item path.
 
 Selecting a row opens the **inspector**, which shows the work item's full durable state —
 attempts, lease evidence, last error, timestamps — together with its append-only **event
@@ -23,7 +31,7 @@ timeline**: the answer to "what happened to this Release and why". Both come fro
 [Admin API](../api/admin-api/#work-item-detail) diagnostics endpoints and show only durable
 PostgreSQL state; nothing is inferred from a running process.
 
-![The Processing Queue with the state filter chips and inspector](./images/processing-queue-light.png)
+![The Processing Queue with the state filter pills, Release-level rows, and stage progress](./images/processing-queue-light.png)
 
 Bulk actions are deliberately not offered, and the queue screen itself is read-only: every
 queue mutation in this build is a per-item, audited decision made from the

@@ -1,9 +1,7 @@
 import {
   ActionableNotification,
-  Heading,
   Link,
   Loading,
-  Tab,
   Table,
   TableBody,
   TableCell,
@@ -11,10 +9,6 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  TabList,
-  TabPanel,
-  TabPanels,
-  Tabs,
   Tag,
 } from '@carbon/react';
 import { useTranslation } from 'react-i18next';
@@ -28,8 +22,11 @@ import { AudioPreview } from '../../components/AudioPreview';
 import { AuditTimeline } from '../../components/AuditTimeline';
 import { EmptyState } from '../../components/EmptyState';
 import { ArtistLink, TrackLink } from '../../components/EntityLink';
+import { HeroCard } from '../../components/HeroCard';
 import { PageHeader } from '../../components/PageHeader';
-import { StatusTag } from '../../components/StatusTag';
+import { StatusChip, StatusTag } from '../../components/StatusTag';
+import { Surface } from '../../components/Surface';
+import { TabNav } from '../../components/TabNav';
 import {
   formatBytes,
   formatDate,
@@ -77,6 +74,17 @@ function BoundedNote({ shown, total }: { shown: number; total: number }) {
   );
 }
 
+/** Uniform track format across the Release ("FLAC / flac"), or empty when the
+ *  Tracks disagree — a Release itself has no format field. */
+function releaseFormatLabel(detail: ReleaseDetail): string {
+  const formats = new Set(
+    detail.tracks.items
+      .map((track) => formatLabel(track.container, track.codec, ''))
+      .filter((value) => value !== ''),
+  );
+  return formats.size === 1 ? ([...formats][0] ?? '') : '';
+}
+
 /** Container/codec pair, or an honest absence. */
 function formatLabel(container: string | null, codec: string | null, none: string): string {
   return [container, codec].filter(Boolean).join(' / ') || none;
@@ -115,6 +123,7 @@ export function ReleaseDetailScreen() {
   const { t } = useTranslation();
   const { id = '' } = useParams();
   const [editing, setEditing] = useState(false);
+  const [tab, setTab] = useState('overview');
   const { detail, error, loading, retry } = useCatalogDetail(getCatalogRelease, id);
 
   if (loading && detail === null) {
@@ -191,75 +200,101 @@ export function ReleaseDetailScreen() {
               refresh={retry}
             />
           ) : null}
-          <MetadataTransformPanel releaseId={id} refresh={retry} />
-          <div className="melodee-review-card">
-            <div className="melodee-review-header">
-              <CatalogArtwork imageId={detail.imageId} name={detail.title} size={96} decorative />
-              <div className="melodee-review-header__title">
-                <Heading style={{ fontSize: '1.25rem' }}>{detail.title}</Heading>
-                {detail.displayArtist ? (
-                  <p className="melodee-page-header__subtitle">{detail.displayArtist}</p>
-                ) : null}
-                <div className="melodee-review-header__facts">
-                  <div>
-                    <div className="melodee-review-fact__label">{t('catalog.column.tracks')}</div>
-                    <div>{formatNumber(detail.trackCount)}</div>
-                  </div>
-                  <div>
-                    <div className="melodee-review-fact__label">{t('catalog.column.duration')}</div>
-                    <div>{formatDuration(detail.durationMs)}</div>
-                  </div>
-                  <div>
-                    <div className="melodee-review-fact__label">
-                      {t('catalog.release.fact.mediaSize')}
-                    </div>
-                    <div>{formatBytes(detail.mediaBytes)}</div>
-                  </div>
-                  {detail.releaseDate || detail.releaseDateText ? (
-                    <div>
-                      <div className="melodee-review-fact__label">
-                        {t('catalog.column.releaseDate')}
-                      </div>
-                      <div>
-                        {detail.releaseDate
-                          ? formatDate(detail.releaseDate)
-                          : detail.releaseDateText}
-                      </div>
-                    </div>
-                  ) : null}
+          <HeroCard
+            media={
+              <CatalogArtwork imageId={detail.imageId} name={detail.title} size={176} decorative />
+            }
+            title={detail.title}
+            subtitle={[
+              detail.displayArtist,
+              detail.releaseDate ? formatDate(detail.releaseDate) : detail.releaseDateText,
+              releaseFormatLabel(detail),
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+            chips={(() => {
+              const status = releaseStatusPresentation(detail);
+              return (
+                <StatusChip
+                  kind={status.kind}
+                  label={t(status.labelKey, { defaultValue: detail.status })}
+                  description={status.description}
+                />
+              );
+            })()}
+            facts={[
+              { label: t('catalog.column.tracks'), value: formatNumber(detail.trackCount) },
+              { label: t('catalog.column.duration'), value: formatDuration(detail.durationMs) },
+              { label: t('catalog.release.fact.mediaSize'), value: formatBytes(detail.mediaBytes) },
+              {
+                label: t('catalog.column.releaseDate'),
+                value: detail.releaseDate
+                  ? formatDate(detail.releaseDate)
+                  : (detail.releaseDateText ?? t('common.none')),
+              },
+            ]}
+          />
+
+          <TabNav
+            ariaLabel={t('catalog.release.tabsLabel')}
+            value={tab}
+            onChange={setTab}
+            tabs={[
+              { key: 'overview', label: t('catalog.release.tabs.overview') },
+              { key: 'tracks', label: t('catalog.release.tabs.tracks') },
+              { key: 'artists', label: t('catalog.release.tabs.artists') },
+              { key: 'contributors', label: t('catalog.release.tabs.contributors') },
+              { key: 'files', label: t('catalog.release.tabs.files') },
+              { key: 'classification', label: t('catalog.release.tabs.classification') },
+              { key: 'provenance', label: t('catalog.release.tabs.provenance') },
+              { key: 'images', label: t('catalog.release.tabs.images') },
+              { key: 'history', label: t('catalog.release.tabs.history') },
+            ]}
+          />
+          {tab === 'overview' ? (
+            <div className="melodee-release-overview">
+                <div className="melodee-review-split">
+                  <Surface title={t('catalog.release.overview.information')}>
+                    <ReleaseFacts detail={detail} />
+                  </Surface>
+                  <Surface title={t('catalog.release.overview.mediaFiles')}>
+                    {detail.mediaAssets.items.length === 0 ? (
+                      <EmptyState title={t('catalog.release.files.empty')} compact />
+                    ) : (
+                      <ul className="melodee-link-list">
+                        {detail.mediaAssets.items.map((asset) => (
+                          <li className="melodee-link-list__row" key={asset.id}>
+                            <span className="melodee-cell-stack__primary">
+                              {asset.canonicalRelativePath.split('/').pop() ??
+                                asset.canonicalRelativePath}
+                            </span>
+                            <span className="melodee-link-list__meta">
+                              {formatBytes(asset.byteSize)}
+                              {' · '}
+                              <StatusChip
+                                kind="neutral"
+                                hideIcon
+                                label={(asset.container ?? asset.mimeType)
+                                  .split('/')
+                                  .pop()
+                                  ?.toUpperCase() ?? asset.mimeType}
+                              />
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <BoundedNote
+                      shown={detail.mediaAssets.items.length}
+                      total={detail.mediaAssets.total}
+                    />
+                  </Surface>
                 </div>
-              </div>
-              {(() => {
-                const status = releaseStatusPresentation(detail);
-                return (
-                  <StatusTag
-                    kind={status.kind}
-                    label={t(status.labelKey, { defaultValue: detail.status })}
-                    description={status.description}
-                  />
-                );
-              })()}
+                <MetadataTransformPanel releaseId={id} refresh={retry} />
             </div>
-          </div>
-
-          <Tabs>
-            <TabList aria-label={t('catalog.release.tabsLabel')}>
-              <Tab>{t('catalog.release.tabs.overview')}</Tab>
-              <Tab>{t('catalog.release.tabs.tracks')}</Tab>
-              <Tab>{t('catalog.release.tabs.artists')}</Tab>
-              <Tab>{t('catalog.release.tabs.contributors')}</Tab>
-              <Tab>{t('catalog.release.tabs.files')}</Tab>
-              <Tab>{t('catalog.release.tabs.classification')}</Tab>
-              <Tab>{t('catalog.release.tabs.provenance')}</Tab>
-              <Tab>{t('catalog.release.tabs.images')}</Tab>
-              <Tab>{t('catalog.release.tabs.history')}</Tab>
-            </TabList>
-            <TabPanels>
-              <TabPanel>
-                <ReleaseFacts detail={detail} />
-              </TabPanel>
-
-              <TabPanel>
+          ) : null}
+          {tab === 'tracks' ? (
+                <Surface title={t('catalog.release.tracks.title')} variant="flush">
                 {detail.tracks.items.length === 0 ? (
                   <EmptyState title={t('catalog.release.tracks.empty')} compact />
                 ) : (
@@ -323,9 +358,10 @@ export function ReleaseDetailScreen() {
                   </div>
                 )}
                 <BoundedNote shown={detail.tracks.items.length} total={detail.tracks.total} />
-              </TabPanel>
-
-              <TabPanel>
+                </Surface>
+          ) : null}
+          {tab === 'artists' ? (
+                <Surface title={t('catalog.release.artists.title')} variant="flush">
                 {detail.artists.length === 0 ? (
                   <EmptyState title={t('catalog.release.artists.empty')} compact />
                 ) : (
@@ -365,9 +401,10 @@ export function ReleaseDetailScreen() {
                     </TableContainer>
                   </div>
                 )}
-              </TabPanel>
-
-              <TabPanel>
+                </Surface>
+          ) : null}
+          {tab === 'contributors' ? (
+                <Surface title={t('catalog.release.contributors.title')} variant="flush">
                 {detail.contributors.items.length === 0 ? (
                   <EmptyState title={t('catalog.release.contributors.empty')} compact />
                 ) : (
@@ -415,9 +452,10 @@ export function ReleaseDetailScreen() {
                   shown={detail.contributors.items.length}
                   total={detail.contributors.total}
                 />
-              </TabPanel>
-
-              <TabPanel>
+                </Surface>
+          ) : null}
+          {tab === 'files' ? (
+                <Surface title={t('catalog.release.files.title')} variant="flush">
                 {detail.mediaAssets.items.length === 0 ? (
                   <EmptyState title={t('catalog.release.files.empty')} compact />
                 ) : (
@@ -452,9 +490,10 @@ export function ReleaseDetailScreen() {
                   shown={detail.mediaAssets.items.length}
                   total={detail.mediaAssets.total}
                 />
-              </TabPanel>
-
-              <TabPanel>
+                </Surface>
+          ) : null}
+          {tab === 'classification' ? (
+                <Surface title={t('catalog.release.classification.title')} variant="flush">
                 {detail.classification ? (
                   <>
                     {detail.classification.traits.length > 0 ? (
@@ -488,9 +527,10 @@ export function ReleaseDetailScreen() {
                     compact
                   />
                 )}
-              </TabPanel>
-
-              <TabPanel>
+                </Surface>
+          ) : null}
+          {tab === 'provenance' ? (
+                <Surface title={t('catalog.release.provenance.title')} variant="flush">
                 {detail.provenance ? (
                   <dl className="melodee-fact-list">
                     <div className="melodee-fact">
@@ -539,9 +579,10 @@ export function ReleaseDetailScreen() {
                     compact
                   />
                 )}
-              </TabPanel>
-
-              <TabPanel>
+                </Surface>
+          ) : null}
+          {tab === 'images' ? (
+                <Surface title={t('catalog.release.images.title')} variant="flush">
                 <p className="melodee-panel__subtitle">
                   {t('catalog.release.images.description')}
                 </p>
@@ -552,14 +593,14 @@ export function ReleaseDetailScreen() {
                   name={detail.title}
                   onChanged={retry}
                 />
-              </TabPanel>
-
-              <TabPanel>
+                </Surface>
+          ) : null}
+          {tab === 'history' ? (
+                <Surface title={t('catalog.release.history.title')} variant="flush">
                 <AuditTimeline events={detail.history.items.map(toCatalogAuditEvent)} />
                 <BoundedNote shown={detail.history.items.length} total={detail.history.total} />
-              </TabPanel>
-            </TabPanels>
-          </Tabs>
+                </Surface>
+          ) : null}
         </>
       ) : null}
     </div>

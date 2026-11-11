@@ -122,9 +122,24 @@ export interface WorkItemStateCount {
 }
 
 /**
+ * Diagnostics support bundle (BundleReport,
+ * apps/melodee-server/src/admin_diagnostics.rs). Only the fields the Admin UI
+ * renders are typed.
+ */
+export interface DiagnosticsBundle {
+  generatedAt: string;
+  uptimeSeconds: number;
+  server: { name: string; version: string; buildProfile: string; pid: number };
+}
+
+/**
  * WorkItemDto (apps/melodee-server/src/admin.rs). Diagnostics-only: paths,
  * state, attempts, lease evidence, last error, timestamps, correlation id.
- * There are intentionally no release-title/artist/progress/size fields.
+ *
+ * The optional `releaseId`/`releaseTitle`/`artistName`/`mediaBytes` fields are
+ * display-only enrichment present once the item has a catalog import binding
+ * (ADR-0184). They never identify the item and are absent otherwise — render
+ * them as absent, never as zero or an empty title.
  */
 export interface WorkItem {
   id: string;
@@ -152,6 +167,11 @@ export interface WorkItem {
   updatedAt: string;
   createdAt: string;
   completedAt: string | null;
+  /** Bound catalog Release (display only; absent before an import binds). */
+  releaseId?: string | null;
+  releaseTitle?: string;
+  artistName?: string;
+  mediaBytes?: number;
 }
 
 /** Append-only transition/audit event (WorkItemEventDto). */
@@ -821,14 +841,31 @@ export interface DashboardActivityBucket {
   count: number;
 }
 
+/**
+ * Recent-change counters behind the KPI cards (DashboardDeltasDto, ADR-0184).
+ * There is no historical catalog counter, so catalog week-deltas are absent
+ * rather than approximated.
+ */
+export interface DashboardDeltas {
+  /** Work items that entered the pipeline since UTC midnight. */
+  inboundToday: number;
+  /** Work items that transitioned into `needs_review` in the last 24h. */
+  newForReview24h: number;
+}
+
 /** Aggregated overview dashboard payload (DashboardDto, PRD-UI-001). */
 export interface Dashboard {
   generatedAt: string;
   catalog: DashboardCatalog;
   workItems: DashboardWorkItems;
   attention: DashboardAttention;
+  deltas?: DashboardDeltas;
   health: SystemHealth;
-  activity: { completedPerHour: DashboardActivityBucket[] };
+  activity: {
+    completedPerHour: DashboardActivityBucket[];
+    /** Work items that reached `indexed` per hour (ADR-0184 second series). */
+    indexedPerHour?: DashboardActivityBucket[];
+  };
 }
 
 /**

@@ -116,22 +116,27 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('loads the queue with state chips, counts, and server-paged rows', async ({ page }) => {
+test('loads the queue with state pills, counts, and server-paged rows', async ({ page }) => {
   // Relative to the /admin/ baseURL so the deep link hits the SPA fallback.
   await page.goto('processing');
 
+  // Filter pills are toggle buttons with live counts (ADR-0184), not tabs.
   const chips = page.getByRole('group', { name: 'Filter by state' });
-  await expect(chips.getByRole('tab', { name: 'All 2' })).toBeVisible();
-  await expect(chips.getByRole('tab', { name: 'Ready 1' })).toBeVisible();
-  await expect(chips.getByRole('tab', { name: 'Failed 1' })).toBeVisible();
+  await expect(chips.getByRole('button', { name: /All/ })).toHaveText(/2/);
+  await expect(chips.getByRole('button', { name: /Ready/ })).toHaveText(/1/);
+  await expect(chips.getByRole('button', { name: /Failed/ })).toHaveText(/1/);
+  await expect(chips.getByRole('button', { name: /All/ })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
 
   const table = page.getByRole('table', { name: 'Processing queue work items' });
   await expect(table).toBeVisible();
   await expect(table.getByText('Business as Usual')).toBeVisible();
   await expect(table.getByText('Road to Freedom')).toBeVisible();
 
-  // Chip filtering hits the mocked API with the state param.
-  await chips.getByRole('tab', { name: 'Failed 1' }).click();
+  // Pill filtering hits the mocked API with the state param.
+  await chips.getByRole('button', { name: /Failed/ }).click();
   await expect(table.getByText('Road to Freedom')).toBeVisible();
   await expect(table.getByText('Business as Usual')).not.toBeVisible();
   expect(page.url()).toContain('state=failed');
@@ -165,7 +170,7 @@ test('rtl smoke: ar-SA renders the queue with dir=rtl', async ({ page }) => {
   await expect(page.getByText('Business as Usual')).toBeVisible();
 
   // Switch via the shell language selector (same path as smoke.spec).
-  await page.getByRole('button', { name: 'Language', exact: true }).click();
+  await page.getByRole('button', { name: /^Language:/ }).click();
   await page.getByText(/العربية/).click();
 
   await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');

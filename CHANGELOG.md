@@ -90,6 +90,37 @@ by an accepted ADR and release gate.
   retirement, library administration, and chart curation, with a 2026-11-09 reconciliation
   addendum.
 
+### Admin UI reference alignment (ADR-0184)
+
+- The Admin UI now implements the visual language of the eight canonical screens in
+  `design/ui/reference/`: a monogram-tile brand block, one inset header search entry, locale and
+  username labels in the header, a dark rail with the reference palette, flat carded surfaces,
+  tinted status chips, filter pills, stage progress bars, entity hero cards, stat strips,
+  underlined tabs, evidence tiles, and a timeline primitive.
+- A Melodee surface and primitive layer (`Surface`, `HeroCard`, `StatStrip`, `MetricCard`,
+  `StatusChip`, `ProgressBar`, `FilterPills`, `KeyValueList`, `EvidenceTileGrid`, `TimelineList`,
+  `DecisionActionList`, `TabNav`, `EntityTable` skin) replaces per-screen styling. UI-SPEC §2 now
+  permits component CSS only through that layer, and the theme is split into token, surface,
+  shell, and layout stylesheets.
+- Screen composition follows the references: Overview gains KPI delta lines, a two-series activity
+  chart, severity attention rows, and a Release-level queue preview; Processing gains filter pills,
+  server-side queue search, and Release/Artist/Progress/Size columns with a carded inspector;
+  Release Review, Identity Review, Artist Detail, Release Detail, Policies, and System → Workers
+  are recomposed with the reference card order, including measured server uptime.
+- Additive admin-API fields: `DashboardDto.deltas` and `activity.indexedPerHour`; work-item
+  `releaseTitle`, `artistName`, `releaseId`, and `mediaBytes` from the import binding; and a
+  `query` filter on the work-item listing. No existing field is removed or retyped and no
+  compatibility route changes. Mockup affordances with no data source (queue priority, worker
+  mean processing time, catalog week-deltas) are documented as intentionally absent.
+- `design/adr/ADR-0184-admin-ui-reference-alignment-and-surface-system.md`,
+  `design/ui/REDESIGN-PLAN.md`, and amended `UI-SPEC.md` / `DESIGN-SYSTEM.md` / `MOCKUPS.md`.
+
+### Security
+
+- `rustix` 1.1.6 (was 1.1.5) for RUSTSEC-2026-0486: the extended-attribute functions marked
+  unwritten bytes as initialized for a zero-length buffer. Melodee does not call the xattr
+  helpers, but the workspace pins exact versions and the advisory fails the dependency gate.
+
 ### Operational (R6: Hardening & Closure)
 
 - `melodee doctor --deep`: extended health probe with PostgreSQL connectivity + SELECT 1

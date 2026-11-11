@@ -1,7 +1,6 @@
 import { Add, TrashCan } from '@carbon/icons-react';
 import {
   Button,
-  Heading,
   IconButton,
   InlineNotification,
   Link,
@@ -235,9 +234,7 @@ export function PolicyEditor({
   return (
     <section className="melodee-panel" aria-labelledby="policy-editor-title">
       <div className="melodee-policy-editor__header">
-        <Heading id="policy-editor-title" className="melodee-panel__title">
-          {mode === 'create' ? t('policies.editor.titleCreate') : t('policies.editor.titleEdit')}
-        </Heading>
+        <h2 id="policy-editor-title" className="melodee-surface__title">{mode === 'create' ? t('policies.editor.titleCreate') : t('policies.editor.titleEdit')}</h2>
         {mode === 'edit' && rule ? (
           <StatusTag
             kind={rule.enabled ? 'success' : 'neutral'}
@@ -311,7 +308,7 @@ export function PolicyEditor({
         ))}
       </Select>
 
-      <Heading className="melodee-panel__title">{t('policies.editor.conditions.title')}</Heading>
+      <h2 className="melodee-surface__title">{t('policies.editor.conditions.title')}</h2>
       <p className="melodee-panel__subtitle">{t('policies.editor.conditions.description')}</p>
       {conditionsLocked ? (
         <InlineNotification
@@ -408,7 +405,7 @@ export function PolicyEditor({
         </>
       )}
 
-      <Heading className="melodee-panel__title">{t('policies.editor.actions.title')}</Heading>
+      <h2 className="melodee-surface__title">{t('policies.editor.actions.title')}</h2>
       <Select
         id="policy-rule-disposition"
         labelText={t('policies.editor.disposition')}
@@ -450,7 +447,7 @@ export function PolicyEditor({
         onChange={(event) => setConfidenceText(event.target.value)}
       />
 
-      <Heading className="melodee-panel__title">{t('policies.test.title')}</Heading>
+      <h2 className="melodee-surface__title">{t('policies.test.title')}</h2>
       <p className="melodee-panel__subtitle">{t('policies.test.description')}</p>
       <TextInput
         id="policy-test-limit"

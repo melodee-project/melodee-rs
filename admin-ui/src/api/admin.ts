@@ -13,6 +13,7 @@ import type {
   ConfigExport,
   ConfigImportResult,
   Dashboard,
+  DiagnosticsBundle,
   DeviceProfile,
   IdentityDecisionEntry,
   IdentityResolution,
@@ -74,6 +75,7 @@ export type {
   ConfigExport,
   ConfigImportResult,
   Dashboard,
+  DiagnosticsBundle,
   DeviceProfile,
   IdentityDecisionEntry,
   IdentityResolution,
@@ -222,6 +224,12 @@ export function requestSearchRebuild(): Promise<SearchRebuild> {
 
 export interface WorkItemListParams extends ListParams {
   state?: string;
+  /**
+   * Case-insensitive substring over the bound Release title, its billed artist,
+   * and the work item's current path (ADR-0184). Bounded operator convenience
+   * over the active queue, not a catalog search.
+   */
+  query?: string;
 }
 
 export function listWorkItems(params: WorkItemListParams = {}): Promise<Page<WorkItem>> {
@@ -229,6 +237,15 @@ export function listWorkItems(params: WorkItemListParams = {}): Promise<Page<Wor
 }
 
 /** Per-state counts; the endpoint returns only states that have items. */
+/**
+ * Redacted support bundle (GET /diagnostics/bundle). Only the uptime field is
+ * consumed by the Admin UI today: the Workers screen shows real server uptime
+ * instead of inventing one (ADR-0184).
+ */
+export function getDiagnosticsBundle(): Promise<DiagnosticsBundle> {
+  return apiFetch<DiagnosticsBundle>(`${ADMIN}/diagnostics/bundle`);
+}
+
 export function getWorkItemCounts(): Promise<WorkItemStateCount[]> {
   return apiFetch<WorkItemStateCount[]>(`${ADMIN}/ingest/work-items/counts`);
 }

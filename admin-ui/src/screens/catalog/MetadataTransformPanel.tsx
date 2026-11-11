@@ -5,7 +5,6 @@ import {
   ListItem,
   Modal,
   TextInput,
-  Tile,
   UnorderedList,
 } from '@carbon/react';
 import { useEffect, useMemo, useState } from 'react';
@@ -17,6 +16,7 @@ import {
   previewReleaseMetadataTransform,
   revertReleaseMetadataTransform,
 } from '../../api/admin';
+import { Surface } from '../../components/Surface';
 import { ApiError } from '../../api/client';
 import type {
   MetadataTransformAudit,
@@ -122,9 +122,12 @@ export function MetadataTransformPanel({
   };
 
   return (
-    <Tile style={{ marginBlock: '1rem' }}>
-      <h3>{t('catalog.transform.title')}</h3>
-      <p>{t('catalog.transform.description')}</p>
+    <Surface
+      title={t('catalog.transform.title')}
+      subtitle={t('catalog.transform.description')}
+      headingLevel={3}
+      className="melodee-transform-panel"
+    >
       {notice ? (
         <InlineNotification
           kind={notice.kind}
@@ -215,6 +218,6 @@ export function MetadataTransformPanel({
       >
         <p>{t('catalog.transform.revertBody')}</p>
       </Modal>
-    </Tile>
+    </Surface>
   );
 }

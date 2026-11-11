@@ -23,16 +23,17 @@ describe('DecisionPanel', () => {
 
   it('never renders destructive choices visually equal to safe ones', () => {
     render(<DecisionPanel choices={CHOICES} onSelect={() => undefined} />);
-    const destructive = screen.getByRole('button', { name: 'Delete files' });
-    const recommended = screen.getByRole('button', { name: 'Accept match' });
-    expect(destructive.className).toContain('danger');
-    expect(recommended.className).not.toContain('danger');
+    const destructive = screen.getByRole('button', { name: /^Delete files/ });
+    const recommended = screen.getByRole('button', { name: /^Accept match/ });
+    expect(destructive.className).toContain('melodee-action--danger');
+    expect(recommended.className).not.toContain('melodee-action--danger');
+    expect(recommended.className).toContain('melodee-action--primary');
   });
 
   it('reports selection through onSelect', () => {
     const onSelect = vi.fn();
     render(<DecisionPanel choices={CHOICES} onSelect={onSelect} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Quarantine' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Quarantine/ }));
     expect(onSelect).toHaveBeenCalledWith('quarantine');
   });
 });

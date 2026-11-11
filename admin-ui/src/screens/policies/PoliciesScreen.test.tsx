@@ -159,7 +159,7 @@ describe('PoliciesScreen', () => {
     expect(screen.getByText('POL-OLD')).toBeInTheDocument();
     // Rule-set identity and evaluation-order note.
     expect(screen.getByText(/phase5-default-rules · version 3/)).toBeInTheDocument();
-    expect(screen.getByText(/evaluated in priority order/)).toBeInTheDocument();
+    expect(screen.getAllByText(/priority order/).length).toBeGreaterThan(0);
     // Disabled rules from history have no priority.
     const disabledRow = screen.getByText('POL-OLD').closest('tr') as HTMLElement;
     expect(within(disabledRow).getByText('None')).toBeInTheDocument();

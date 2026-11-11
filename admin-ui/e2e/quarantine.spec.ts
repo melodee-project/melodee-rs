@@ -126,7 +126,7 @@ test('history switches terminal states server-side', async ({ page }) => {
   await expect(table.getByText('Business as Usual')).toBeVisible();
   expect(states).toContain('cataloged');
 
-  await page.getByRole('tab', { name: 'Ignored' }).click();
+  await page.getByRole('button', { name: 'Ignored' }).click();
   await expect.poll(() => states).toContain('ignored');
   await expect(page).toHaveURL(/state=ignored/);
 });

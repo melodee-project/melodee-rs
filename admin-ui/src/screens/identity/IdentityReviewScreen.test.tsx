@@ -274,7 +274,7 @@ describe('IdentityReviewScreen', () => {
     fireEvent.click(
       await screen.findByRole('radio', { name: /^The NomadsAustralian rock bandActive/ }),
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm Match' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Confirm Match/ }));
     const dialog = await screen.findByRole('dialog');
     fireEvent.change(within(dialog).getByLabelText('Reason'), {
       target: { value: 'Alias and release evidence line up.' },
@@ -300,7 +300,7 @@ describe('IdentityReviewScreen', () => {
       changed: true,
     });
     renderScreen(`/catalog/identity?observation=${OBSERVATION_ID}`);
-    fireEvent.click(await screen.findByRole('button', { name: 'Create New Artist' }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Create New Artist/ }));
     const dialog = await screen.findByRole('dialog');
     fireEvent.change(within(dialog).getByLabelText('Reason'), {
       target: { value: 'No existing Artist is correct.' },
@@ -317,7 +317,7 @@ describe('IdentityReviewScreen', () => {
 
   it('confirm requires a selected candidate', async () => {
     renderScreen(`/catalog/identity?observation=${OBSERVATION_ID}`);
-    fireEvent.click(await screen.findByRole('button', { name: 'Confirm Match' }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Confirm Match/ }));
     expect(
       await screen.findByText('Select a candidate Artist before confirming or rejecting a match.'),
     ).toBeInTheDocument();
@@ -327,10 +327,10 @@ describe('IdentityReviewScreen', () => {
   it('never-match is destructive-styled and requires a reason', async () => {
     renderScreen(`/catalog/identity?observation=${OBSERVATION_ID}`);
     fireEvent.click(await screen.findByRole('radio', { name: /^The Nomads \(US\)Provisional/ }));
-    const neverMatch = screen.getByRole('button', { name: 'Never Match Candidate' });
+    const neverMatch = screen.getByRole('button', { name: /^Never Match Candidate/ });
     fireEvent.click(neverMatch);
     const dialog = await screen.findByRole('dialog');
-    const submit = within(dialog).getByRole('button', { name: 'Never Match Candidate' });
+    const submit = within(dialog).getByRole('button', { name: /^Never Match Candidate/ });
     expect(submit).toBeDisabled();
     expect(mockNeverMatch).not.toHaveBeenCalled();
     fireEvent.change(within(dialog).getByLabelText('Reason'), {
@@ -363,7 +363,7 @@ describe('IdentityReviewScreen', () => {
     fireEvent.click(
       await screen.findByRole('radio', { name: /^The NomadsAustralian rock bandActive/ }),
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm Match' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Confirm Match/ }));
     const dialog = await screen.findByRole('dialog');
     fireEvent.change(within(dialog).getByLabelText('Reason'), { target: { value: 'Trying.' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Apply decision' }));

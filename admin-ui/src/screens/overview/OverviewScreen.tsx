@@ -1,31 +1,37 @@
-import { ArrowRight, Renew } from '@carbon/icons-react';
-import { ActionableNotification, Button, Heading, Link, Loading } from '@carbon/react';
+import { ArrowRight, Renew, WarningFilled } from '@carbon/icons-react';
+import { ActionableNotification, Button, Loading } from '@carbon/react';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 
-import { getDashboard, getOnboardingStatus } from '../../api/admin';
+import { getDashboard, getOnboardingStatus, listWorkItems } from '../../api/admin';
 import { ApiError } from '../../api/client';
-import type { Dashboard } from '../../api/types';
-import { EmptyState } from '../../components/EmptyState';
+import type { Dashboard, WorkItem } from '../../api/types';
 import { MetricCard } from '../../components/MetricCard';
 import { PageHeader } from '../../components/PageHeader';
 import { ProcessingStateTag } from '../../components/ProcessingStateTag';
+import { ProgressBar } from '../../components/ProgressBar';
+import { StackedCell } from '../../components/cells';
+import { Surface } from '../../components/Surface';
 import { SystemHealthPanel } from '../../components/SystemHealthPanel';
-import { formatDateTime, formatNumber, formatRelativeTime } from '../../i18n/format';
+import { formatNumber, formatRelativeTime } from '../../i18n/format';
+import { stageProgress, workItemDisplayName } from '../processing/workItem';
 import { ActivityChart } from './ActivityChart';
 import { ACTIVE_STATES, countStates, INBOUND_STATES, sortedBuckets } from './overview';
 
 /**
- * Overview dashboard (PRD-UI-001, SPEC §22): answers "what needs
- * attention?" first, then KPI counts, processing activity, system health,
- * and the current queue summary. Everything renders from the aggregated
- * GET /api/admin/v1/dashboard payload; the panel refreshes every 60s with
- * cancellation cleanup, and failures surface a retryable error without
- * discarding the last good data.
+ * Overview dashboard (PRD-UI-001, SPEC §22, ADR-0184): answers "what needs
+ * attention?" first, then KPI counts with their recent-change lines, processing
+ * activity, system health, and the Release-level current queue.
+ *
+ * Everything renders from the aggregated `GET /api/admin/v1/dashboard` payload
+ * plus the first page of the work-item queue (enriched with the bound Release);
+ * the panel refreshes every 60s with cancellation cleanup, and failures surface
+ * a retryable error without discarding the last good data.
  */
 
 const REFRESH_MS = 60_000;
+const QUEUE_PREVIEW_LIMIT = 5;
 
 function toApiError(cause: unknown): ApiError {
   return cause instanceof ApiError ? cause : new ApiError(0, 'unknown', String(cause), null);
@@ -35,6 +41,7 @@ export function OverviewScreen() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
+  const [queue, setQueue] = useState<WorkItem[]>([]);
   const [error, setError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState(true);
   // First-run setup pointer: shown only when the status endpoint answers
@@ -44,10 +51,16 @@ export function OverviewScreen() {
   const [onboardingPending, setOnboardingPending] = useState(false);
 
   const fetchDashboard = useCallback((signal: { cancelled: boolean }) => {
-    return getDashboard()
-      .then((result) => {
+    return Promise.all([
+      getDashboard(),
+      // The preview is decoration-grade: a failure must never fail the screen,
+      // so it falls back to the state summary below.
+      listWorkItems({ limit: QUEUE_PREVIEW_LIMIT, sort: 'updatedAt:desc' }).catch(() => null),
+    ])
+      .then(([result, page]) => {
         if (!signal.cancelled) {
           setDashboard(result);
+          setQueue(page?.items ?? []);
           setError(null);
           setLoading(false);
         }
@@ -100,7 +113,9 @@ export function OverviewScreen() {
   }
 
   const countsByState = dashboard?.workItems.countsByState ?? [];
-  const buckets = sortedBuckets(dashboard?.activity.completedPerHour ?? []);
+  const completedBuckets = sortedBuckets(dashboard?.activity.completedPerHour ?? []);
+  const indexedBuckets = sortedBuckets(dashboard?.activity.indexedPerHour ?? []);
+  const hasActivity = completedBuckets.length > 0 || indexedBuckets.length > 0;
 
   const attention = dashboard?.attention;
   const attentionRows = attention
@@ -130,6 +145,9 @@ export function OverviewScreen() {
   const storageDegraded = dashboard?.health.storage.status === 'degraded';
   const attentionEmpty = attentionRows.every((row) => row.count === 0) && !storageDegraded;
 
+  const activeCount = countStates(countsByState, ACTIVE_STATES);
+  const pendingCount = countsByState.reduce((sum, entry) => sum + entry.count, 0);
+
   return (
     <>
       <PageHeader
@@ -138,11 +156,10 @@ export function OverviewScreen() {
         actions={
           <div className="melodee-overview-actions">
             {dashboard ? (
-              <span
-                className="melodee-overview-generated"
-                title={formatDateTime(dashboard.generatedAt)}
-              >
-                {t('overview.generatedAt', { time: formatRelativeTime(dashboard.generatedAt) })}
+              <span className="melodee-overview-generated">
+                {t('overview.generatedAt', {
+                  time: formatRelativeTime(dashboard.generatedAt),
+                })}
               </span>
             ) : null}
             <Button
@@ -189,44 +206,79 @@ export function OverviewScreen() {
       {dashboard ? (
         <>
           <div className="melodee-metric-grid">
-            <MetricCard label={t('overview.kpi.inbound')} value={formatNumber(countStates(countsByState, INBOUND_STATES))} />
-            <MetricCard label={t('overview.kpi.processing')} value={formatNumber(countStates(countsByState, ACTIVE_STATES))} />
+            <MetricCard
+              label={t('overview.kpi.inbound')}
+              value={formatNumber(countStates(countsByState, INBOUND_STATES))}
+              delta={
+                dashboard.deltas
+                  ? {
+                      text: t('overview.kpi.inboundDelta', {
+                        count: formatNumber(dashboard.deltas.inboundToday),
+                      }),
+                    }
+                  : undefined
+              }
+            />
+            <MetricCard
+              label={t('overview.kpi.processing')}
+              value={formatNumber(activeCount)}
+              delta={{
+                text: t('overview.kpi.processingDelta', { count: formatNumber(activeCount) }),
+              }}
+            />
             <MetricCard
               label={t('overview.kpi.review')}
               value={formatNumber(countStates(countsByState, ['needs_review']))}
+              delta={
+                dashboard.deltas
+                  ? {
+                      text: t('overview.kpi.reviewDelta', {
+                        count: formatNumber(dashboard.deltas.newForReview24h),
+                      }),
+                      tone: 'warning',
+                    }
+                  : undefined
+              }
             />
-            <MetricCard label={t('overview.kpi.artists')} value={formatNumber(dashboard.catalog.artists)} />
-            <MetricCard label={t('overview.kpi.releases')} value={formatNumber(dashboard.catalog.releases)} />
-            <MetricCard label={t('overview.kpi.tracks')} value={formatNumber(dashboard.catalog.tracks)} />
+            <MetricCard
+              label={t('overview.kpi.artists')}
+              value={formatNumber(dashboard.catalog.artists)}
+              hint={t('overview.kpi.artistsHint')}
+            />
+            <MetricCard
+              label={t('overview.kpi.releases')}
+              value={formatNumber(dashboard.catalog.releases)}
+              hint={t('overview.kpi.releasesHint')}
+            />
+            <MetricCard
+              label={t('overview.kpi.tracks')}
+              value={formatNumber(dashboard.catalog.tracks)}
+              hint={t('overview.kpi.tracksHint')}
+            />
           </div>
           <div className="melodee-overview-columns">
-            <section className="melodee-panel" aria-labelledby="overview-activity-title">
-              <Heading id="overview-activity-title" className="melodee-panel__title">
-                {t('overview.activity.title')}
-              </Heading>
-              <p className="melodee-panel__subtitle">{t('overview.activity.subtitle')}</p>
-              {buckets.length === 0 ? (
-                <EmptyState compact title={t('overview.activity.empty')} />
+            <Surface title={t('overview.activity.title')} subtitle={t('overview.activity.subtitle')}>
+              {hasActivity ? (
+                <ActivityChart releases={completedBuckets} tracks={indexedBuckets} />
               ) : (
-                <ActivityChart buckets={buckets} />
+                <p className="melodee-empty__description">{t('overview.activity.empty')}</p>
               )}
-            </section>
-            <section className="melodee-panel" aria-labelledby="overview-attention-title">
-              <Heading id="overview-attention-title" className="melodee-panel__title">
-                {t('overview.attention.title')}
-              </Heading>
+            </Surface>
+            <Surface title={t('overview.attention.title')}>
               {attentionEmpty ? (
-                <EmptyState compact tone="success" title={t('overview.attention.empty')} />
+                <p className="melodee-empty__description">{t('overview.attention.empty')}</p>
               ) : (
                 <ul className="melodee-attention-list">
                   {attentionRows
                     .filter((row) => row.count > 0)
                     .map((row) => (
                       <li key={row.key} className="melodee-attention-row">
-                        <Link as={RouterLink} to={row.to} className="melodee-attention-row__link">
+                        <span className="melodee-attention-row__icon" aria-hidden>
+                          <WarningFilled size={12} />
+                        </span>
+                        <RouterLink className="melodee-attention-row__link" to={row.to}>
                           {t(`overview.attention.${row.key}`)}
-                          <ArrowRight aria-hidden />
-                        </Link>
+                        </RouterLink>
                         <span className="melodee-attention-row__count">
                           {formatNumber(row.count)}
                         </span>
@@ -234,19 +286,17 @@ export function OverviewScreen() {
                     ))}
                   {storageDegraded ? (
                     <li className="melodee-attention-row">
-                      <Link
-                        as={RouterLink}
-                        to="/system/workers"
-                        className="melodee-attention-row__link"
-                      >
+                      <span className="melodee-attention-row__icon" aria-hidden>
+                        <WarningFilled size={12} />
+                      </span>
+                      <RouterLink className="melodee-attention-row__link" to="/system/workers">
                         {t('overview.attention.storageDegraded')}
-                        <ArrowRight aria-hidden />
-                      </Link>
+                      </RouterLink>
                     </li>
                   ) : null}
                 </ul>
               )}
-            </section>
+            </Surface>
           </div>
           <div className="melodee-overview-columns melodee-overview-columns--secondary">
             <SystemHealthPanel
@@ -254,49 +304,86 @@ export function OverviewScreen() {
               title={t('overview.health.title')}
               headingId="overview-health-title"
             />
-            <section className="melodee-panel" aria-labelledby="overview-queue-title">
-              <Heading id="overview-queue-title" className="melodee-panel__title">
-                {t('overview.queue.title')}
-              </Heading>
-              {countsByState.length === 0 ? (
-                <EmptyState compact title={t('overview.queue.empty')} />
+            <Surface
+              title={t('overview.queue.title')}
+              subtitle={t('overview.queue.summary', {
+                active: formatNumber(activeCount),
+                pending: formatNumber(pendingCount),
+              })}
+              footer={
+                <Button kind="ghost" size="sm" as={RouterLink} to="/processing" renderIcon={ArrowRight}>
+                  {t('overview.queue.open')}
+                </Button>
+              }
+            >
+              {queue.length === 0 ? (
+                <p className="melodee-empty__description">{t('overview.queue.empty')}</p>
               ) : (
+                <div className="melodee-table-scroll">
                 <table
                   className="cds--data-table cds--data-table--sm melodee-mini-table"
                   aria-label={t('overview.queue.caption')}
                 >
                   <thead>
                     <tr>
+                      <th scope="col">{t('overview.queue.column.release')}</th>
+                      <th scope="col">{t('overview.queue.column.artist')}</th>
                       <th scope="col">{t('overview.queue.column.state')}</th>
-                      <th scope="col">{t('overview.queue.column.count')}</th>
+                      <th scope="col">{t('overview.queue.column.progress')}</th>
+                      <th scope="col">{t('overview.queue.column.added')}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {countsByState.map((entry) => (
-                      <tr key={entry.state}>
-                        <td>
-                          <Link as={RouterLink} to={`/processing?state=${entry.state}`}>
-                            <ProcessingStateTag state={entry.state} />
-                          </Link>
-                        </td>
-                        <td>{formatNumber(entry.count)}</td>
-                      </tr>
-                    ))}
+                    {queue.map((item) => {
+                      const title = item.releaseTitle ?? workItemDisplayName(item);
+                      return (
+                        <tr key={item.id}>
+                          <td>
+                            <StackedCell
+                              primary={
+                                item.releaseId ? (
+                                  <RouterLink to={`/catalog/releases/${item.releaseId}`}>
+                                    {title}
+                                  </RouterLink>
+                                ) : (
+                                  title
+                                )
+                              }
+                              secondary={
+                                item.releaseTitle ? undefined : t('queue.unbound')
+                              }
+                            />
+                          </td>
+                          <td>
+                            {item.artistName ?? (
+                              <span className="melodee-absent" aria-label={t('queue.unbound')}>
+                                —
+                              </span>
+                            )}
+                          </td>
+                          <td>
+                            <ProcessingStateTag state={item.state} />
+                          </td>
+                          <td>
+                            <ProgressBar
+                              value={stageProgress(item.state)}
+                              label={t('queue.progress.label', { title })}
+                              stage={t(`queue.state.${item.state}`, { defaultValue: item.state })}
+                            />
+                          </td>
+                          <td>
+                            <span title={item.updatedAt}>
+                              {formatRelativeTime(item.createdAt)}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
+                </div>
               )}
-              <div className="melodee-panel__footer">
-                <Button
-                  kind="ghost"
-                  size="sm"
-                  as={RouterLink}
-                  to="/processing"
-                  renderIcon={ArrowRight}
-                >
-                  {t('overview.queue.open')}
-                </Button>
-              </div>
-            </section>
+            </Surface>
           </div>
         </>
       ) : null}

@@ -4,7 +4,6 @@ import {
   AccordionItem,
   ActionableNotification,
   Button,
-  Heading,
   InlineNotification,
   Loading,
   Modal,
@@ -879,7 +878,7 @@ export function IdentityReviewScreen() {
       <div className="melodee-identity-layout">
         <div className="melodee-identity-queue">
           <div className="melodee-review-card">
-            <Heading style={{ fontSize: '1rem' }}>{t('identity.queue.title')}</Heading>
+            <h2 className="melodee-surface__title">{t('identity.queue.title')}</h2>
             <p className="melodee-page-header__subtitle">
               {t('identity.queue.remaining', { count: pageData?.total ?? 0 })}
             </p>
@@ -939,7 +938,7 @@ export function IdentityReviewScreen() {
                   {t('identity.observation.incoming')}
                 </span>
                 <div className="melodee-identity-observation__header">
-                  <Heading style={{ fontSize: '1.25rem' }}>{observation.displayValue}</Heading>
+                  <h2 className="melodee-hero__title">{observation.displayValue}</h2>
                   <StatusTag kind="provisional" label={t('identity.observation.reviewTag')} />
                 </div>
                 <div className="melodee-review-header__facts">
@@ -1012,10 +1011,8 @@ export function IdentityReviewScreen() {
           </div>
 
           {detail ? (
-            <div className="melodee-review-card">
-              <Heading style={{ fontSize: '1rem', marginBlockEnd: '0.5rem' }}>
-                {t('identity.candidates.title')}
-              </Heading>
+            <div className="melodee-review-card melodee-table-card">
+              <h2 className="melodee-surface__title">{t('identity.candidates.title')}</h2>
               {detail.candidates.length === 0 ? (
                 <EmptyState title={t('identity.candidates.empty')} compact />
               ) : (
@@ -1039,6 +1036,28 @@ export function IdentityReviewScreen() {
               <EvidenceSummary
                 title={t('identity.evidence.summaryTitle')}
                 items={evidenceItems}
+                tiles={
+                  detail
+                    ? [
+                        {
+                          label: t('identity.evidence.tiles.alias'),
+                          value: formatNumber(detail.candidates.length),
+                        },
+                        {
+                          label: t('identity.evidence.tiles.negative'),
+                          value: formatNumber(detail.negativeAssertions.length),
+                          tone: detail.negativeAssertions.length > 0 ? 'error' : 'default',
+                        },
+                        {
+                          label: t('identity.evidence.tiles.confidence'),
+                          value: candidate
+                            ? `${formatNumber(Math.round(candidate.latestConfidence / 100))}%`
+                            : '—',
+                          tone: 'info',
+                        },
+                      ]
+                    : undefined
+                }
               />
             </div>
           ) : null}
@@ -1059,9 +1078,7 @@ export function IdentityReviewScreen() {
               <DecisionPanel choices={choices} onSelect={onSelectAction} />
             ) : (
               <>
-                <Heading style={{ fontSize: '1rem', marginBlockEnd: '0.5rem' }}>
-                  {t('identity.decision.title')}
-                </Heading>
+                <h2 className="melodee-surface__title">{t('identity.decision.title')}</h2>
                 <p style={{ color: 'var(--cds-text-secondary)' }}>
                   {t('identity.decision.unavailable')}
                 </p>
@@ -1072,9 +1089,7 @@ export function IdentityReviewScreen() {
       </div>
 
       <div className="melodee-review-card">
-        <Heading style={{ fontSize: '1rem', marginBlockEnd: '0.5rem' }}>
-          {t('identity.feed.title')}
-        </Heading>
+        <h2 className="melodee-surface__title">{t('identity.feed.title')}</h2>
         {feedError ? (
           <InlineNotification
             kind="error"

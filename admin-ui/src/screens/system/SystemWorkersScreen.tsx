@@ -2,7 +2,6 @@ import { Renew } from '@carbon/icons-react';
 import {
   ActionableNotification,
   Button,
-  Heading,
   InlineNotification,
   Link,
   Loading,
@@ -14,6 +13,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import {
   getDashboard,
+  getDiagnosticsBundle,
   getSystemHealth,
   listJobHistory,
   listWorkerFailures,
@@ -31,9 +31,9 @@ import type {
   WorkItem,
   WorkerPool,
 } from '../../api/types';
-import { EmptyState } from '../../components/EmptyState';
 import { EntityTable, type EntityColumn, type EntityRow } from '../../components/EntityTable';
 import { MetricCard } from '../../components/MetricCard';
+import { Surface } from '../../components/Surface';
 import { PageHeader } from '../../components/PageHeader';
 import { StatusTag } from '../../components/StatusTag';
 import { SystemHealthPanel } from '../../components/SystemHealthPanel';
@@ -97,6 +97,22 @@ function PoolMetric({ value }: { value: number | null }) {
   return <>{formatNumber(value)}</>;
 }
 
+/** Coarse uptime label ("12d 4h", "4h 12m", "42m"). Numbers are formatted by
+ *  the caller's locale through Intl in `formatNumber`. */
+function formatUptime(totalSeconds: number): string {
+  const seconds = Math.max(0, Math.floor(totalSeconds));
+  const days = Math.floor(seconds / 86_400);
+  const hours = Math.floor((seconds % 86_400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (days > 0) {
+    return `${formatNumber(days)}d ${formatNumber(hours)}h`;
+  }
+  if (hours > 0) {
+    return `${formatNumber(hours)}h ${formatNumber(minutes)}m`;
+  }
+  return `${formatNumber(minutes)}m`;
+}
+
 export function SystemWorkersScreen() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -122,10 +138,29 @@ export function SystemWorkersScreen() {
   const [cleanupTarget, setCleanupTarget] = useState<string | null>(null);
   const [pauseTarget, setPauseTarget] = useState<WorkerPool | null>(null);
   const [poolBusy, setPoolBusy] = useState<string | null>(null);
+  const [uptimeSeconds, setUptimeSeconds] = useState<number | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   // Bumped by the refresh action so the shared SearchPanel/LeasesPanel
   // re-run their fetches without this screen owning them.
   const [panelRefreshKey, setPanelRefreshKey] = useState(0);
+
+  // Server uptime comes from the existing diagnostics bundle (ADR-0184): the
+  // KPI shows a measured value or an honest em dash, never a guess.
+  useEffect(() => {
+    let cancelled = false;
+    getDiagnosticsBundle()
+      .then((bundle) => {
+        if (!cancelled) {
+          setUptimeSeconds(bundle.uptimeSeconds);
+        }
+      })
+      .catch(() => {
+        // Uptime is decoration-grade: a failure leaves the em dash.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const fetchPools = useCallback((signal: { cancelled: boolean }) => {
     return Promise.all([listWorkerPools(), getDashboard()])
@@ -471,6 +506,10 @@ export function SystemWorkersScreen() {
           value={totals ? formatNumber(totals.failed24h) : '—'}
           status={totals && totals.failed24h > 0 ? 'error' : undefined}
         />
+        <MetricCard
+          label={t('system.kpi.uptime')}
+          value={uptimeSeconds != null ? formatUptime(uptimeSeconds) : '—'}
+        />
       </div>
       <div className="melodee-system-columns">
         <div className="melodee-system-main">
@@ -490,28 +529,42 @@ export function SystemWorkersScreen() {
             <Loading description={t('common.loading')} withOverlay={false} />
           ) : (
             <>
-              <EntityTable
-              caption={t('system.pools.caption')}
-              columns={poolColumns}
-              rows={poolRows}
-              totalRows={pools?.total ?? 0}
-              compact
-              emptyTitle={t('system.pools.emptyTitle')}
-              emptyDescription={t('system.pools.emptyDescription')}
-              />
+              <Surface
+                title={t('system.pools.title')}
+                subtitle={t('system.pools.subtitle')}
+                variant="flush"
+                className="melodee-table-card"
+              >
+                <EntityTable
+                  caption={t('system.pools.caption')}
+                  columns={poolColumns}
+                  rows={poolRows}
+                  totalRows={pools?.total ?? 0}
+                  compact
+                  emptyTitle={t('system.pools.emptyTitle')}
+                  emptyDescription={t('system.pools.emptyDescription')}
+                />
+              </Surface>
 
           {jobsError ? (
             <ActionableNotification inline kind="error" lowContrast title={t('system.jobs.loadError')} subtitle={jobsError.message} hideCloseButton actionButtonLabel={t('actions.retry')} onActionButtonClick={() => void fetchJobs({ cancelled: false })} />
           ) : null}
-          <EntityTable
-            caption={t('system.jobs.caption')}
-            columns={jobColumns}
-            rows={jobRows}
-            totalRows={jobs?.total ?? 0}
-            compact
-            emptyTitle={t('system.jobs.emptyTitle')}
-            emptyDescription={t('system.jobs.emptyDescription')}
-          />
+              <Surface
+                title={t('system.jobs.title')}
+                subtitle={t('system.jobs.subtitle')}
+                variant="flush"
+                className="melodee-table-card"
+              >
+                <EntityTable
+                  caption={t('system.jobs.caption')}
+                  columns={jobColumns}
+                  rows={jobRows}
+                  totalRows={jobs?.total ?? 0}
+                  compact
+                  emptyTitle={t('system.jobs.emptyTitle')}
+                  emptyDescription={t('system.jobs.emptyDescription')}
+                />
+              </Surface>
             </>
           )}
 
@@ -527,18 +580,25 @@ export function SystemWorkersScreen() {
               onActionButtonClick={() => void fetchFailures({ cancelled: false })}
             />
           ) : null}
-          <EntityTable
-            caption={t('system.failures.caption')}
-            columns={failureColumns}
-            rows={failureRows}
-            totalRows={failures?.total ?? 0}
-            compact
-            emptyTitle={t('system.failures.emptyTitle')}
-            emptyDescription={t('system.failures.emptyDescription')}
-            onRowActivate={(id) =>
-              void navigate(`/processing?state=failed&item=${encodeURIComponent(id)}`)
-            }
-          />
+          <Surface
+            title={t('system.failures.title')}
+            subtitle={t('system.failures.subtitle')}
+            variant="flush"
+            className="melodee-table-card"
+          >
+            <EntityTable
+              caption={t('system.failures.caption')}
+              columns={failureColumns}
+              rows={failureRows}
+              totalRows={failures?.total ?? 0}
+              compact
+              emptyTitle={t('system.failures.emptyTitle')}
+              emptyDescription={t('system.failures.emptyDescription')}
+              onRowActivate={(id) =>
+                void navigate(`/processing?state=failed&item=${encodeURIComponent(id)}`)
+              }
+            />
+          </Surface>
 
           <LeasesPanel refreshKey={panelRefreshKey} />
         </div>
@@ -566,20 +626,21 @@ export function SystemWorkersScreen() {
 
           <SearchPanel refreshKey={panelRefreshKey} />
 
-          <section className="melodee-panel" aria-labelledby="system-diagnostics-title">
-            <Heading id="system-diagnostics-title" className="melodee-panel__title">
-              {t('system.diagnostics.title')}
-            </Heading>
-            <p className="melodee-panel__subtitle">
-              <Link href="#system-health-title">{t('system.diagnostics.runCheck')}</Link>
-            </p>
-            <p className="melodee-panel__subtitle">{t('system.diagnostics.runCheckDescription')}</p>
-            <EmptyState
-              compact
-              title={t('system.diagnostics.cliNoteTitle')}
-              description={t('system.diagnostics.cliNote')}
-            />
-          </section>
+          <Surface title={t('system.diagnostics.title')} headingId="system-diagnostics-title">
+            <ul className="melodee-link-list">
+              <li className="melodee-link-list__row">
+                <Link href="#system-health-title">{t('system.diagnostics.runCheck')}</Link>
+                <span className="melodee-link-list__meta">
+                  {t('system.diagnostics.runCheckDescription')}
+                </span>
+              </li>
+            </ul>
+            {/* Structured logs and performance metrics remain CLI surfaces
+                (documented operator behavior), so this card states that rather
+                than linking to a page that does not exist. */}
+            <p className="melodee-surface__subtitle">{t('system.diagnostics.cliNoteTitle')}</p>
+            <p className="melodee-surface__subtitle">{t('system.diagnostics.cliNote')}</p>
+          </Surface>
         </div>
       </div>
 

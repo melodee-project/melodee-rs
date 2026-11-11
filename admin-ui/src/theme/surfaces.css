@@ -1,0 +1,1495 @@
+/*
+ * Melodee surface and primitive layer (UI-SPEC §6.1, ADR-0184).
+ *
+ * This is the only place component CSS is allowed. Screens compose these
+ * primitives; every value comes from tokens.css. Carbon component internals are
+ * never forked — where the reference has no Carbon equivalent (status chips,
+ * filter pills, progress bars, hero cards), Melodee owns the primitive.
+ */
+
+/* =========================================================================
+ * Page header
+ * ========================================================================= */
+.melodee-page-header {
+  margin-block-end: var(--melodee-space-5);
+}
+
+.melodee-page-header__content {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--melodee-space-4);
+}
+
+.melodee-page-header__crumb {
+  display: flex;
+  align-items: center;
+  gap: var(--melodee-space-1);
+  margin-block-end: var(--melodee-space-2);
+  font-size: var(--melodee-font-label);
+}
+
+.melodee-page-header__crumb-separator {
+  color: var(--melodee-text-secondary);
+}
+
+.melodee-page-header__title {
+  color: var(--melodee-text-primary);
+  font-size: var(--melodee-font-page-title);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: var(--melodee-line-tight);
+}
+
+.melodee-page-header__subtitle {
+  margin-block-start: var(--melodee-space-2);
+  color: var(--melodee-text-secondary);
+  font-size: var(--melodee-font-body);
+}
+
+.melodee-page-header__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--melodee-space-3);
+  flex-shrink: 0;
+}
+
+/* =========================================================================
+ * Surface — the one card treatment
+ * ========================================================================= */
+.melodee-surface,
+.melodee-panel {
+  /* Grid/flex children must be allowed to shrink: without this, a wide child
+     (long path, unbreakable name) makes the card overflow horizontally and
+     the sibling cards' headers can overlap the body at narrow widths. */
+  min-inline-size: 0;
+  background: var(--melodee-surface);
+  border: 1px solid var(--melodee-surface-border);
+  border-radius: var(--melodee-radius-card);
+  padding: var(--melodee-space-5);
+}
+
+.melodee-surface--flush {
+  padding: 0;
+  overflow: hidden;
+}
+
+.melodee-surface--inset {
+  background: var(--melodee-surface-muted);
+  border-color: transparent;
+}
+
+.melodee-surface--quiet {
+  border-color: transparent;
+  background: transparent;
+  padding-inline: 0;
+}
+
+.melodee-surface__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--melodee-space-4);
+  margin-block-end: var(--melodee-space-3);
+}
+
+.melodee-surface__heading {
+  min-inline-size: 0;
+}
+
+.melodee-surface__title,
+.melodee-panel__title {
+  color: var(--melodee-text-primary);
+  font-size: var(--melodee-font-card-title);
+  font-weight: 600;
+  line-height: var(--melodee-line-tight);
+}
+
+.melodee-surface__subtitle,
+.melodee-panel__subtitle {
+  margin-block-start: var(--melodee-space-1);
+  color: var(--melodee-text-secondary);
+  font-size: var(--melodee-font-label);
+  pointer-events: none;
+}
+
+.melodee-surface__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--melodee-space-2);
+  flex-shrink: 0;
+}
+
+.melodee-surface__body {
+  min-inline-size: 0;
+}
+
+.melodee-surface__footer,
+.melodee-panel__footer {
+  margin-block-start: var(--melodee-space-3);
+}
+
+.melodee-surface + .melodee-surface,
+.melodee-surface + .melodee-panel,
+.melodee-panel + .melodee-panel,
+.melodee-panel + .melodee-surface {
+  margin-block-start: var(--melodee-grid-gap);
+}
+
+/* =========================================================================
+ * Hero card — one per screen (detail, review, identity)
+ * ========================================================================= */
+.melodee-hero {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--melodee-space-6);
+  background: var(--melodee-surface);
+  border: 1px solid var(--melodee-surface-border);
+  border-radius: var(--melodee-radius-card);
+  padding: var(--melodee-space-5);
+}
+
+.melodee-hero__media {
+  flex-shrink: 0;
+  overflow: hidden;
+  border-radius: var(--melodee-radius-control);
+  background: var(--melodee-artwork-surface);
+}
+
+.melodee-hero__main {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.melodee-hero__title {
+  color: var(--melodee-text-primary);
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: var(--melodee-line-tight);
+}
+
+.melodee-hero__subtitle {
+  margin-block-start: var(--melodee-space-1);
+  color: var(--melodee-text-secondary);
+  font-size: var(--melodee-font-body);
+}
+
+.melodee-hero__chips {
+  display: flex;
+  align-items: center;
+  gap: var(--melodee-space-2);
+  flex-wrap: wrap;
+  margin-block-start: var(--melodee-space-3);
+}
+
+.melodee-hero__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--melodee-space-3) var(--melodee-space-6);
+  margin-block-start: var(--melodee-space-4);
+}
+
+.melodee-hero__fact {
+  min-inline-size: 0;
+}
+
+.melodee-hero__fact-label {
+  display: block;
+  color: var(--melodee-text-secondary);
+  font-size: var(--melodee-font-label);
+}
+
+.melodee-hero__fact-value {
+  display: block;
+  margin-block-start: var(--melodee-space-1);
+  color: var(--melodee-text-primary);
+  font-size: var(--melodee-font-body);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.melodee-hero__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--melodee-space-2);
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+@media (max-width: 671px) {
+  .melodee-hero {
+    flex-direction: column;
+    gap: var(--melodee-space-4);
+  }
+
+  .melodee-hero__actions {
+    inline-size: 100%;
+  }
+}
+
+/* =========================================================================
+ * Metric card (KPI)
+ * ========================================================================= */
+.melodee-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--melodee-grid-gap);
+  margin-block-end: var(--melodee-space-5);
+}
+
+.melodee-metric-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--melodee-space-2);
+  min-block-size: 7.75rem;
+  padding: var(--melodee-space-5);
+  border: 1px solid var(--melodee-surface-border);
+  border-radius: var(--melodee-radius-card);
+  background: var(--melodee-surface);
+}
+
+.melodee-metric-card__label {
+  color: var(--melodee-text-secondary);
+  font-size: var(--melodee-font-label);
+  font-weight: 600;
+}
+
+.melodee-metric-card__value {
+  color: var(--melodee-text-primary);
+  font-size: var(--melodee-font-metric);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: var(--melodee-line-tight);
+}
+
+.melodee-metric-card__delta {
+  color: var(--melodee-text-accent);
+  font-size: var(--melodee-font-label);
+  font-weight: 600;
+}
+
+.melodee-metric-card__delta--warning {
+  color: var(--melodee-chip-warning-ink);
+}
+
+.melodee-metric-card__delta--error {
+  color: var(--melodee-chip-error-ink);
+}
+
+.melodee-metric-card__delta--muted {
+  color: var(--melodee-text-secondary);
+  font-weight: 400;
+}
+
+.melodee-metric-card__hint {
+  color: var(--melodee-text-secondary);
+  font-size: var(--melodee-font-label);
+}
+
+/* =========================================================================
+ * Stat strip (detail screens)
+ * ========================================================================= */
+.melodee-stat-strip {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: var(--melodee-grid-gap);
+  margin-block-end: var(--melodee-space-5);
+}
+
+.melodee-stat {
+  padding: var(--melodee-space-5);
+  border: 1px solid var(--melodee-surface-border);
+  border-radius: var(--melodee-radius-card);
+  background: var(--melodee-surface);
+}
+
+.melodee-stat__value {
+  color: var(--melodee-text-accent);
+  font-size: var(--melodee-font-metric);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: var(--melodee-line-tight);
+}
+
+.melodee-stat__label {
+  margin-block-start: var(--melodee-space-2);
+  color: var(--melodee-text-primary);
+  font-size: var(--melodee-font-label);
+  font-weight: 600;
+}
+
+@media (max-width: 1055px) {
+  .melodee-stat-strip {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 671px) {
+  .melodee-stat-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* =========================================================================
+ * Status chip (UI-SPEC §5) — icon + label + tint, never color-only.
+ * ========================================================================= */
+.melodee-chip,
+.melodee-status-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--melodee-space-1);
+  max-inline-size: 100%;
+  padding-inline: var(--melodee-space-2);
+  padding-block: 0.125rem;
+  border-radius: var(--melodee-radius-pill);
+  background: var(--melodee-chip-neutral-surface);
+  color: var(--melodee-chip-neutral-ink);
+  font-size: var(--melodee-font-micro);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.melodee-chip-row {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--melodee-space-1);
+  justify-content: flex-end;
+}
+
+.melodee-chip__icon {
+  flex-shrink: 0;
+  fill: currentcolor;
+}
+
+.melodee-chip--success {
+  background: var(--melodee-chip-success-surface);
+  color: var(--melodee-chip-success-ink);
+}
+
+.melodee-chip--info {
+  background: var(--melodee-chip-info-surface);
+  color: var(--melodee-chip-info-ink);
+}
+
+.melodee-chip--warning {
+  background: var(--melodee-chip-warning-surface);
+  color: var(--melodee-chip-warning-ink);
+}
+
+.melodee-chip--error {
+  background: var(--melodee-chip-error-surface);
+  color: var(--melodee-chip-error-ink);
+}
+
+.melodee-chip--provisional {
+  background: var(--melodee-chip-provisional-surface);
+  color: var(--melodee-chip-provisional-ink);
+}
+
+.melodee-chip--neutral {
+  background: var(--melodee-chip-neutral-surface);
+  color: var(--melodee-chip-neutral-ink);
+}
+
+/*
+ * Legacy tag classes retained for the Carbon `Tag` path still used by a few
+ * screens; they only re-point Carbon tag tokens at Melodee chip tokens.
+ */
+.melodee-status-tag--warning {
+  background: var(--melodee-chip-warning-surface);
+  color: var(--melodee-chip-warning-ink);
+}
+
+.melodee-status-tag--provisional {
+  background: var(--melodee-chip-provisional-surface);
+  color: var(--melodee-chip-provisional-ink);
+}
+
+/* =========================================================================
+ * Progress bar
+ * ========================================================================= */
+.melodee-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--melodee-space-2);
+  min-inline-size: 0;
+}
+
+.melodee-progress__track {
+  position: relative;
+  flex: 1;
+  min-inline-size: 3rem;
+  block-size: 0.375rem;
+  overflow: hidden;
+  border-radius: var(--melodee-radius-pill);
+  background: var(--melodee-progress-track);
+}
+
+.melodee-progress__bar {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  border-radius: var(--melodee-radius-pill);
+  background: var(--melodee-progress-fill);
+}
+
+.melodee-progress__value {
+  min-inline-size: 2.5rem;
+  color: var(--melodee-text-secondary);
+  font-size: var(--melodee-font-label);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+/* =========================================================================
+ * Filter pills (queue state filters)
+ * ========================================================================= */
+.melodee-pills {
+  display: flex;
+  align-items: center;
+  gap: var(--melodee-space-2);
+  flex-wrap: wrap;
+}
+
+.melodee-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--melodee-space-2);
+  block-size: 2.25rem;
+  padding-inline: var(--melodee-space-3);
+  border: 1px solid var(--melodee-surface-border);
+  border-radius: var(--melodee-radius-control);
+  background: var(--melodee-surface);
+  color: var(--melodee-text-primary);
+  font: inherit;
+  font-size: var(--melodee-font-body);
+  cursor: pointer;
+  transition: background var(--melodee-motion-duration) ease;
+}
+
+.melodee-pill:hover {
+  background: var(--melodee-surface-hover);
+}
+
+.melodee-pill:focus-visible {
+  outline: 2px solid var(--cds-focus);
+  outline-offset: 2px;
+}
+
+.melodee-pill--active {
+  border-color: transparent;
+  background: var(--melodee-chip-info-surface);
+  color: var(--melodee-chip-info-ink);
+  font-weight: 600;
+}
+
+.melodee-pill__count {
+  color: var(--melodee-text-secondary);
+  font-size: var(--melodee-font-label);
+  font-variant-numeric: tabular-nums;
+}
+
+.melodee-pill--active .melodee-pill__count {
+  color: inherit;
+}
+
+/* =========================================================================
+ * Key/value list
+ * ========================================================================= */
+.melodee-kv,
+.melodee-fact-list {
+  margin: 0;
+}
+
+.melodee-kv__row,
+.melodee-fact {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--melodee-space-4);
+  padding-block: var(--melodee-space-2);
+  border-block-end: 1px solid var(--melodee-surface-border);
+}
+
+.melodee-kv__row:last-child,
+.melodee-fact:last-child {
+  border-block-end: none;
+}
+
+.melodee-kv__term,
+.melodee-fact dt {
+  margin: 0;
+  color: var(--melodee-text-secondary);
+  font-size: var(--melodee-font-label);
+}
+
+.melodee-kv__value,
+.melodee-fact dd {
+  margin: 0;
+  color: var(--melodee-text-primary);
+  font-size: var(--melodee-font-body);
+  font-weight: 600;
+  text-align: end;
+  overflow-wrap: anywhere;
+}
+
+.melodee-kv__detail,
+.melodee-fact__detail {
+  display: block;
+  color: var(--melodee-text-secondary);
+  font-size: var(--melodee-font-label);
+  font-weight: 400;
+}
+
+/* =========================================================================
+ * Evidence tiles
+ * ========================================================================= */
+.melodee-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr));
+  gap: var(--melodee-space-2);
+}
+
+.melodee-tile {
+  padding: var(--melodee-space-3);
+  border: 1px solid var(--melodee-surface-border);
+  border-radius: var(--melodee-radius-control);
+  background: var(--melodee-surface);
+}
+
+.melodee-tile__label {
+  color: var(--melodee-text-secondary);
+  font-size: var(--melodee-font-label);
+}
+
+.melodee-tile__value {
+  margin-block-start: var(--melodee-space-1);
+  color: var(--melodee-text-primary);
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: var(--melodee-line-tight);
+}
+
+.melodee-tile--success .melodee-tile__value {
+  color: var(--melodee-chip-success-ink);
+}
+
+.melodee-tile--warning .melodee-tile__value {
+  color: var(--melodee-chip-warning-ink);
+}
+
+.melodee-tile--error .melodee-tile__value {
+  color: var(--melodee-chip-error-ink);
+}
+
+.melodee-tile--info .melodee-tile__value {
+  color: var(--melodee-chip-info-ink);
+}
+
+/* =========================================================================
+ * Timeline list
+ * ========================================================================= */
+.melodee-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.melodee-timeline__item {
+  position: relative;
+  display: flex;
+  gap: var(--melodee-space-3);
+  padding-block-end: var(--melodee-space-3);
+}
+
+.melodee-timeline__item:last-child {
+  padding-block-end: 0;
+}
+
+.melodee-timeline__marker {
+  flex-shrink: 0;
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  margin-block-start: 0.375rem;
+  border-radius: var(--melodee-radius-pill);
+  background: var(--melodee-status-neutral);
+}
+
+.melodee-timeline__marker--success {
+  background: var(--melodee-status-success);
+}
+
+.melodee-timeline__marker--info {
+  background: var(--melodee-status-info);
+}
+
+.melodee-timeline__marker--warning {
+  background: var(--melodee-status-warning);
+}
+
+.melodee-timeline__marker--error {
+  background: var(--melodee-status-error);
+}
+
+.melodee-timeline__content {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--melodee-space-3);
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.melodee-timeline__title {
+  color: var(--melodee-text-primary);
+  font-size: var(--melodee-font-body);
+  font-weight: 600;
+}
+
+.melodee-timeline__detail {
+  display: block;
+  color: var(--melodee-text-secondary);
+  font-size: var(--melodee-font-label);
+  font-weight: 400;
+}
+
+.melodee-timeline__time {
+  color: var(--melodee-text-secondary);
+  font-size: var(--melodee-font-label);
+  white-space: nowrap;
+}
+
+/* =========================================================================
+ * Decision actions (ordered, exactly one primary, destructive tinted)
+ * ========================================================================= */
+.melodee-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--melodee-space-2);
+}
+
+.melodee-action {
+  display: block;
+  inline-size: 100%;
+  padding: var(--melodee-space-3);
+  border: 1px solid var(--melodee-surface-border);
+  border-radius: var(--melodee-radius-control);
+  background: var(--melodee-surface);
+  color: var(--melodee-text-primary);
+  font: inherit;
+  font-size: var(--melodee-font-body);
+  font-weight: 600;
+  text-align: start;
+  cursor: pointer;
+}
+
+.melodee-action:hover {
+  background: var(--melodee-surface-hover);
+}
+
+.melodee-action:focus-visible {
+  outline: 2px solid var(--cds-focus);
+  outline-offset: 2px;
+}
+
+.melodee-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.melodee-action--primary {
+  border-color: transparent;
+  background: var(--cds-button-primary);
+  color: var(--cds-text-on-color);
+}
+
+.melodee-action--primary:hover:not(:disabled) {
+  background: var(--cds-button-primary-hover);
+}
+
+.melodee-action--danger {
+  border-color: var(--melodee-chip-error-ink);
+  background: var(--melodee-chip-error-surface);
+  color: var(--melodee-chip-error-ink);
+}
+
+.melodee-action--danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--melodee-chip-error-surface) 70%, var(--melodee-status-error));
+}
+
+.melodee-action__reason {
+  display: block;
+  margin-block-start: var(--melodee-space-1);
+  font-size: var(--melodee-font-label);
+  font-weight: 400;
+}
+
+/* Full-strength on-color text: the 85% tint measured 3.9:1 on the primary
+   blue and failed WCAG AA for 13px reason lines. */
+.melodee-action--primary .melodee-action__reason {
+  color: var(--cds-text-on-color);
+}
+
+.melodee-action--danger .melodee-action__reason {
+  color: inherit;
+}
+
+.melodee-action__badge {
+  margin-inline-start: var(--melodee-space-2);
+}
+
+.melodee-decision-panel__choice {
+  padding-block: var(--melodee-space-2);
+  border-block-end: 1px solid var(--melodee-surface-border);
+}
+
+.melodee-decision-panel__choice:last-child {
+  border-block-end: none;
+}
+
+.melodee-decision-panel__badge {
+  margin-inline-start: var(--melodee-space-2);
+}
+
+/* =========================================================================
+ * Tab bar
+ * ========================================================================= */
+.melodee-tabnav {
+  display: flex;
+  align-items: stretch;
+  gap: var(--melodee-space-5);
+  overflow-inline: auto;
+  border-block-end: 1px solid var(--melodee-surface-border);
+  margin-block-end: var(--melodee-space-5);
+}
+
+.melodee-tab {
+  flex-shrink: 0;
+  margin-block-end: -1px;
+  padding-block: var(--melodee-space-3);
+  border: 0;
+  border-block-end: 2px solid transparent;
+  background: transparent;
+  color: var(--melodee-text-secondary);
+  font: inherit;
+  font-size: var(--melodee-font-body);
+  cursor: pointer;
+}
+
+.melodee-tab:hover {
+  color: var(--melodee-text-primary);
+}
+
+.melodee-tab:focus-visible {
+  outline: 2px solid var(--cds-focus);
+  outline-offset: -2px;
+}
+
+.melodee-tab--active {
+  border-block-end-color: var(--melodee-text-accent);
+  color: var(--melodee-text-accent);
+  font-weight: 600;
+}
+
+/* =========================================================================
+ * Attention rows (Overview)
+ * ========================================================================= */
+.melodee-attention-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.melodee-attention-row {
+  display: flex;
+  align-items: center;
+  gap: var(--melodee-space-3);
+  padding-block: var(--melodee-space-3);
+  border-block-end: 1px solid var(--melodee-surface-border);
+}
+
+.melodee-attention-row:last-child {
+  border-block-end: none;
+}
+
+.melodee-attention-row__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
+  border-radius: var(--melodee-radius-pill);
+  background: var(--melodee-attention-surface);
+  color: var(--melodee-attention-icon);
+  fill: currentcolor;
+}
+
+.melodee-attention-row__link {
+  flex: 1;
+  min-inline-size: 0;
+  color: var(--melodee-text-primary);
+  font-size: var(--melodee-font-body);
+  text-decoration: none;
+}
+
+.melodee-attention-row__link:hover {
+  text-decoration: underline;
+}
+
+.melodee-attention-row__count {
+  flex-shrink: 0;
+  min-inline-size: 2.25rem;
+  padding-inline: var(--melodee-space-2);
+  padding-block: 0.125rem;
+  border-radius: var(--melodee-radius-pill);
+  background: var(--melodee-attention-surface);
+  color: var(--melodee-attention-ink);
+  font-size: var(--melodee-font-body);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+/* =========================================================================
+ * Activity chart
+ * ========================================================================= */
+.melodee-activity-chart {
+  inline-size: 100%;
+  block-size: auto;
+}
+
+.melodee-activity-chart__bar {
+  fill: var(--melodee-status-info);
+}
+
+.melodee-activity-chart__line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.melodee-activity-chart__line--releases {
+  stroke: var(--melodee-status-info);
+}
+
+.melodee-activity-chart__line--tracks {
+  stroke: var(--melodee-status-success);
+}
+
+.melodee-activity-chart__grid {
+  stroke: var(--melodee-surface-border);
+  stroke-width: 1;
+}
+
+.melodee-activity-chart__baseline {
+  stroke: var(--melodee-surface-border-strong);
+  stroke-width: 1;
+}
+
+.melodee-activity-chart__legend {
+  display: flex;
+  gap: var(--melodee-space-4);
+  flex-wrap: wrap;
+  margin-block-start: var(--melodee-space-3);
+  font-size: var(--melodee-font-label);
+}
+
+.melodee-activity-chart__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--melodee-space-2);
+  color: var(--melodee-text-primary);
+}
+
+.melodee-activity-chart__swatch {
+  display: inline-block;
+  inline-size: 1.5rem;
+  block-size: 0.1875rem;
+  border-radius: var(--melodee-radius-pill);
+}
+
+.melodee-activity-chart__swatch--releases {
+  background: var(--melodee-status-info);
+}
+
+.melodee-activity-chart__swatch--tracks {
+  background: var(--melodee-status-success);
+}
+
+/* =========================================================================
+ * Health rows
+ * ========================================================================= */
+.melodee-health-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.melodee-health-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--melodee-space-3);
+  padding-block: var(--melodee-space-3);
+  border-block-end: 1px solid var(--melodee-surface-border);
+}
+
+.melodee-health-row__main {
+  min-inline-size: 0;
+}
+
+.melodee-health-row__dot-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--melodee-space-2);
+}
+
+.melodee-health-row:last-child {
+  border-block-end: none;
+}
+
+.melodee-health-row__name {
+  display: flex;
+  align-items: center;
+  gap: var(--melodee-space-2);
+  color: var(--melodee-text-primary);
+  font-size: var(--melodee-font-body);
+  font-weight: 600;
+}
+
+.melodee-health-row__dot {
+  display: inline-block;
+  flex-shrink: 0;
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  border-radius: var(--melodee-radius-pill);
+  background: var(--melodee-status-neutral);
+}
+
+.melodee-health-row__dot--success {
+  background: var(--melodee-status-success);
+}
+
+.melodee-health-row__dot--warning {
+  background: var(--melodee-status-warning);
+}
+
+.melodee-health-row__dot--error {
+  background: var(--melodee-status-error);
+}
+
+.melodee-health-row__dot--info {
+  background: var(--melodee-status-info);
+}
+
+.melodee-health-row__status {
+  display: flex;
+  align-items: center;
+  gap: var(--melodee-space-1);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-inline-size: 60%;
+}
+
+/* Rows whose value is a set of surface chips stack instead of squeezing the
+   label: the chips wrap across the full row width. */
+.melodee-health-row--stacked {
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--melodee-space-2);
+}
+
+.melodee-health-row--stacked .melodee-health-row__status {
+  justify-content: flex-start;
+  max-inline-size: 100%;
+}
+
+.melodee-health-row__verdict {
+  color: var(--melodee-health-verdict-ink, var(--melodee-chip-success-ink));
+  font-size: var(--melodee-font-body);
+  font-weight: 600;
+}
+
+.melodee-health-row__verdict--warning {
+  color: var(--melodee-chip-warning-ink);
+}
+
+.melodee-health-row__verdict--error {
+  color: var(--melodee-chip-error-ink);
+}
+
+.melodee-health-row__verdict--neutral {
+  color: var(--melodee-text-secondary);
+}
+
+.melodee-health-row__detail {
+  display: block;
+  margin-block-start: var(--melodee-space-1);
+  color: var(--melodee-text-secondary);
+  font-size: var(--melodee-font-label);
+  overflow-wrap: anywhere;
+}
+
+/* =========================================================================
+ * Entity avatar / artwork
+ * ========================================================================= */
+.melodee-entity-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--melodee-artwork-surface);
+  color: var(--melodee-text-secondary);
+  overflow: hidden;
+  border-radius: var(--melodee-radius-control);
+  pointer-events: none;
+}
+
+.melodee-entity-avatar img {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+}
+
+/* Keep the compact mobile upload row above the fixed-size artwork fallback
+ * while the browser scrolls a tab panel into view. */
+.melodee-artwork-controls {
+  position: relative;
+  z-index: 1;
+}
+
+@media (max-width: 480px) {
+  .melodee-artwork-controls {
+    flex-direction: column;
+    align-items: flex-start !important;
+  }
+}
+
+/* =========================================================================
+ * Inspector rail
+ * ========================================================================= */
+.melodee-inspector {
+  inline-size: 400px;
+  max-inline-size: 100%;
+  background: var(--melodee-surface);
+  border: 1px solid var(--melodee-surface-border);
+  border-radius: var(--melodee-radius-card);
+  padding: var(--melodee-space-5);
+}
+
+.melodee-inspector__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--melodee-space-2);
+  margin-block-end: var(--melodee-space-3);
+}
+
+.melodee-inspector__title {
+  color: var(--melodee-text-primary);
+  font-size: var(--melodee-font-card-title);
+  font-weight: 600;
+}
+
+@media (max-width: 1055px) {
+  .melodee-inspector {
+    inline-size: 100%;
+  }
+}
+
+/* =========================================================================
+ * Review workspace cards
+ * ========================================================================= */
+.melodee-review-card {
+  background: var(--melodee-surface);
+  border: 1px solid var(--melodee-surface-border);
+  border-radius: var(--melodee-radius-card);
+  padding: var(--melodee-space-5);
+  margin-block-end: var(--melodee-grid-gap);
+}
+
+.melodee-review-header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--melodee-space-4);
+}
+
+.melodee-review-header__title {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.melodee-review-header__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--melodee-space-3) var(--melodee-space-6);
+  margin-block-start: var(--melodee-space-3);
+}
+
+.melodee-review-fact__label,
+.melodee-evidence-item__label {
+  color: var(--melodee-text-secondary);
+  font-size: var(--melodee-font-label);
+}
+
+/* Full-width fact inside a facts-grid <dl> (e.g. long policy reasons). */
+.melodee-review-fact--full {
+  grid-column: 1 / -1;
+  margin-block-start: var(--melodee-space-2);
+}
+
+.melodee-review-track__file {
+  display: block;
+  color: var(--melodee-text-secondary);
+  font-size: var(--melodee-font-label);
+}
+
+.melodee-review-preview-note {
+  color: var(--melodee-text-secondary);
+  font-size: var(--melodee-font-label);
+}
+
+/* =========================================================================
+ * Identity candidate cards
+ * ========================================================================= */
+.melodee-identity-observation__header {
+  display: flex;
+  align-items: center;
+  gap: var(--melodee-space-3);
+}
+
+/* Selectable candidate cards: real buttons with radio semantics. The selected
+   state uses the §5 provisional accent (identity work), never color alone —
+   the radio role/aria-checked carries the semantics. */
+.melodee-identity-candidate {
+  display: block;
+  inline-size: 100%;
+  text-align: start;
+  background: var(--melodee-surface);
+  border: 1px solid var(--melodee-surface-border);
+  border-radius: var(--melodee-radius-card);
+  padding: var(--melodee-space-4);
+  margin-block-end: var(--melodee-space-2);
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.melodee-identity-candidate:hover {
+  background: var(--melodee-surface-hover);
+}
+
+.melodee-identity-candidate:focus-visible {
+  outline: 2px solid var(--cds-focus);
+  outline-offset: -2px;
+}
+
+.melodee-identity-candidate--selected {
+  border-color: transparent;
+  background: var(--melodee-chip-success-surface);
+  box-shadow: inset 0 0 0 2px var(--melodee-status-success);
+}
+
+.melodee-identity-candidate__header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--melodee-space-3);
+}
+
+.melodee-identity-candidate__title {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.melodee-identity-candidate__meta {
+  display: flex;
+  gap: var(--melodee-space-1);
+  margin-block-start: var(--melodee-space-1);
+  flex-wrap: wrap;
+}
+
+.melodee-identity-candidate__confidence {
+  text-align: end;
+}
+
+.melodee-identity-candidate__confidence-value {
+  display: block;
+  color: var(--melodee-chip-error-ink);
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: var(--melodee-line-tight);
+  font-variant-numeric: tabular-nums;
+}
+
+.melodee-identity-candidate--selected .melodee-identity-candidate__confidence-value {
+  color: var(--melodee-chip-success-ink);
+}
+
+.melodee-identity-candidate__facts,
+.melodee-identity-candidate__reason {
+  display: block;
+  color: var(--melodee-text-secondary);
+  font-size: var(--melodee-font-label);
+  margin-block-start: var(--melodee-space-1);
+}
+
+.melodee-identity-candidate__evidence {
+  display: block;
+  margin-block-start: var(--melodee-space-2);
+}
+
+.melodee-identity-assignment {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--melodee-space-2);
+  margin-block-end: var(--melodee-space-2);
+}
+
+/* =========================================================================
+ * Tables — Carbon DataTable skin (reference: muted header, hairline dividers)
+ * ========================================================================= */
+.melodee-table-skin.cds--data-table,
+.melodee-mini-table.cds--data-table {
+  border: 1px solid var(--melodee-surface-border);
+  border-radius: var(--melodee-radius-control);
+  background: var(--melodee-surface);
+}
+
+.melodee-table-skin.cds--data-table th,
+.melodee-mini-table.cds--data-table th {
+  background: var(--melodee-surface-muted);
+  color: var(--melodee-text-secondary);
+  font-size: var(--melodee-font-label);
+  font-weight: 600;
+}
+
+.melodee-table-skin.cds--data-table td,
+.melodee-mini-table.cds--data-table td {
+  border-block-start: 1px solid var(--melodee-surface-border);
+  color: var(--melodee-text-primary);
+}
+
+.melodee-table-skin.cds--data-table tbody tr:hover td {
+  background: var(--melodee-surface-hover);
+}
+
+.melodee-mini-table {
+  inline-size: 100%;
+}
+
+/* Queue + catalog table containers sit on a card, and the table scrolls
+   inside the card rather than widening it (UI-SPEC §8: the page never
+   overflows; wide datasets scroll in their own container). */
+.melodee-table-card {
+  overflow: hidden;
+}
+
+.melodee-table-card .cds--data-table-container {
+  overflow-x: auto;
+}
+
+.melodee-table-card .cds--data-table-container {
+  padding-block-start: 0;
+}
+
+.melodee-table-card .cds--table-toolbar {
+  background: transparent;
+  border-block-end: 1px solid var(--melodee-surface-border);
+}
+
+.melodee-table-card .cds--pagination {
+  border-block-start: 1px solid var(--melodee-surface-border);
+  background: transparent;
+}
+
+/* Activatable rows (queue + inspector selection). */
+.melodee-table__row--activatable {
+  cursor: pointer;
+}
+
+.melodee-table__row--activatable:focus-visible {
+  outline: 2px solid var(--cds-focus);
+  outline-offset: -2px;
+}
+
+.melodee-table__row--active {
+  background-color: var(--melodee-chip-info-surface);
+  box-shadow: inset 2px 0 0 0 var(--melodee-brand-accent);
+}
+
+[dir='rtl'] .melodee-table__row--active {
+  box-shadow: inset -2px 0 0 0 var(--melodee-brand-accent);
+}
+
+/* Stacked primary/secondary cell content (reference's title + subtitle rows). */
+.melodee-cell-stack__primary {
+  display: block;
+  color: var(--melodee-text-primary);
+  font-weight: 600;
+}
+
+.melodee-cell-stack__secondary {
+  display: block;
+  color: var(--melodee-text-secondary);
+  font-size: var(--melodee-font-label);
+}
+
+/* =========================================================================
+ * Small shared bits
+ * ========================================================================= */
+.melodee-detail-edit-link.cds--link {
+  color: var(--melodee-link-contrast);
+}
+
+.melodee-absent,
+.melodee-metric-absent {
+  color: var(--melodee-text-secondary);
+  font-size: var(--melodee-font-label);
+}
+
+.melodee-pool-paused-by {
+  display: block;
+  color: var(--melodee-text-secondary);
+  font-size: var(--melodee-font-label);
+}
+
+.melodee-work-item__title {
+  display: block;
+}
+
+.melodee-work-item__id {
+  display: block;
+  color: var(--melodee-text-secondary);
+  font-size: var(--melodee-font-label);
+}
+
+.melodee-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--melodee-space-2);
+  padding-block: var(--melodee-space-6);
+  text-align: center;
+}
+
+.melodee-empty__title {
+  color: var(--melodee-text-primary);
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.melodee-empty__description {
+  max-inline-size: 32rem;
+  color: var(--melodee-text-secondary);
+}
+
+/* In-card absence is a quiet statement, not a headline. */
+.melodee-empty--compact .melodee-empty__title {
+  color: var(--melodee-text-secondary);
+  font-size: var(--melodee-font-body);
+  font-weight: 400;
+}
+
+/* =========================================================================
+ * Theme pack section (PRD-THEME-004)
+ * ========================================================================= */
+.melodee-theme-pack__meta {
+  display: block;
+  color: var(--melodee-text-secondary);
+  font-size: var(--melodee-font-label);
+  margin-block-start: 0.125rem;
+}
+
+.melodee-theme-pack__actions-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.melodee-theme-pack__actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--melodee-space-4);
+  padding-block: var(--melodee-space-1);
+  border-block-end: 1px solid var(--melodee-surface-border);
+}
+
+.melodee-theme-pack__actions-row:last-child {
+  border-block-end: none;
+}
+
+/* Unstyled container classes retained from earlier screens; they only need
+   spacing/box behavior now that the surface system owns appearance. */
+.melodee-definition-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: var(--melodee-space-3) var(--melodee-space-6);
+  margin: 0;
+}
+
+.melodee-edit-panel {
+  min-inline-size: 0;
+}
+
+.melodee-evidence-item {
+  margin: 0;
+}
+
+/* Compact alias chips (Artist overview) with their type caption. */
+.melodee-alias-list,
+.melodee-link-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.melodee-alias-list__row {
+  display: flex;
+  align-items: center;
+  gap: var(--melodee-space-2);
+  padding-block: var(--melodee-space-2);
+  border-block-end: 1px solid var(--melodee-surface-border);
+}
+
+.melodee-alias-list__row:last-child {
+  border-block-end: none;
+}
+
+.melodee-alias-list__type,
+.melodee-link-list__meta {
+  color: var(--melodee-text-secondary);
+  font-size: var(--melodee-font-label);
+}
+
+.melodee-link-list__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--melodee-space-3);
+  flex-wrap: wrap;
+  padding-block: var(--melodee-space-2);
+  border-block-end: 1px solid var(--melodee-surface-border);
+}
+
+.melodee-link-list__row:last-child {
+  border-block-end: none;
+}
+
+.melodee-link-list__row--with-avatar {
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.melodee-link-list__row--with-avatar .melodee-link-list__meta {
+  display: block;
+}
+
+.melodee-link-list__meta {
+  overflow-wrap: anywhere;
+}

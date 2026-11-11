@@ -15,6 +15,7 @@ import { SystemWorkersScreen } from './SystemWorkersScreen';
 
 vi.mock('../../api/admin', () => ({
   getDashboard: vi.fn(),
+  getDiagnosticsBundle: vi.fn(),
   getSystemHealth: vi.fn(),
   listJobHistory: vi.fn(),
   listLeases: vi.fn(),
@@ -28,6 +29,7 @@ vi.mock('../../api/admin', () => ({
 
 const admin = await import('../../api/admin');
 const mockGetDashboard = vi.mocked(admin.getDashboard);
+const mockGetDiagnosticsBundle = vi.mocked(admin.getDiagnosticsBundle);
 const mockGetSystemHealth = vi.mocked(admin.getSystemHealth);
 const mockListJobHistory = vi.mocked(admin.listJobHistory);
 const mockListLeases = vi.mocked(admin.listLeases);
@@ -197,6 +199,11 @@ function panelButton(name: string): HTMLElement {
 describe('SystemWorkersScreen', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetDiagnosticsBundle.mockResolvedValue({
+      generatedAt: '2026-08-14T12:00:00Z',
+      uptimeSeconds: 1_054_800,
+      server: { name: 'melodee', version: 'test', buildProfile: 'test', pid: 1 },
+    });
     mockListWorkerPools.mockResolvedValue({
       items: [
         makePool(),
