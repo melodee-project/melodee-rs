@@ -109,11 +109,23 @@ impl IngestionState {
             Self::Inspecting | Self::Normalizing | Self::Validating => IngestionPhase::Processing,
             Self::Staged | Self::Publishing | Self::Published => IngestionPhase::Publishing,
             Self::Cataloging | Self::Cataloged => IngestionPhase::Catalog,
-            Self::Indexing | Self::Indexed => IngestionPhase::Search,
+            Self::Indexing | Self::Indexed => IngestionPhase::Active,
             Self::NeedsReview | Self::Quarantined => IngestionPhase::Review,
             Self::Ignored | Self::Deleted => IngestionPhase::Disposition,
             Self::Failed => IngestionPhase::Failed,
         }
+    }
+
+    /// True when client surfaces can already see and stream the Release.
+    ///
+    /// Entering `indexing` is the policy `accept` commit, which sets
+    /// `releases.status = 'active'` in the same transaction; every client route
+    /// (native, OpenSubsonic, Jellyfin) filters on that status and a playable
+    /// media asset. `indexed` adds only the search projection, which no client
+    /// browse or playback path depends on.
+    #[must_use]
+    pub const fn is_client_visible(self) -> bool {
+        matches!(self, Self::Indexing | Self::Indexed)
     }
 
     /// States a worker may claim from the queue.
@@ -182,8 +194,11 @@ pub enum IngestionPhase {
     Publishing,
     /// Catalog import in progress or complete.
     Catalog,
-    /// Search projection in progress or complete.
-    Search,
+    /// Live to clients: the Release is `active` and playable. The search
+    /// projection may still be finishing inside this phase, because client
+    /// browse/search/playback read PostgreSQL — the projection only feeds smart
+    /// playlists and therefore never gates availability.
+    Active,
     /// Parked on an operator decision.
     Review,
     /// Final non-accepted disposition.
@@ -199,7 +214,7 @@ impl IngestionPhase {
         Self::Processing,
         Self::Publishing,
         Self::Catalog,
-        Self::Search,
+        Self::Active,
         Self::Review,
         Self::Disposition,
         Self::Failed,
@@ -213,7 +228,7 @@ impl IngestionPhase {
             Self::Processing => "processing",
             Self::Publishing => "publishing",
             Self::Catalog => "catalog",
-            Self::Search => "search",
+            Self::Active => "active",
             Self::Review => "review",
             Self::Disposition => "disposition",
             Self::Failed => "failed",
@@ -246,7 +261,7 @@ impl IngestionPhase {
                 IngestionState::Published,
             ],
             Self::Catalog => &[IngestionState::Cataloging, IngestionState::Cataloged],
-            Self::Search => &[IngestionState::Indexing, IngestionState::Indexed],
+            Self::Active => &[IngestionState::Indexing, IngestionState::Indexed],
             Self::Review => &[IngestionState::NeedsReview, IngestionState::Quarantined],
             Self::Disposition => &[IngestionState::Ignored, IngestionState::Deleted],
             Self::Failed => &[IngestionState::Failed],
@@ -935,6 +950,21 @@ mod phase_tests {
     }
 
     #[test]
+    fn only_the_active_phase_is_client_visible() {
+        for state in IngestionState::ALL {
+            assert_eq!(
+                state.is_client_visible(),
+                state.phase() == IngestionPhase::Active,
+                "{state:?} disagrees between is_client_visible and its phase"
+            );
+        }
+        // The last state a client cannot see is cataloged; the first it can is
+        // indexing (the policy accept commit).
+        assert!(!IngestionState::Cataloged.is_client_visible());
+        assert!(IngestionState::Indexing.is_client_visible());
+    }
+
+    #[test]
     fn phase_wire_form_round_trips() {
         for phase in IngestionPhase::ALL {
             assert_eq!(IngestionPhase::parse(phase.as_str()), Some(phase));
@@ -951,7 +981,7 @@ mod phase_tests {
                 assert!(
                     matches!(
                         state.phase(),
-                        IngestionPhase::Search | IngestionPhase::Disposition
+                        IngestionPhase::Active | IngestionPhase::Disposition
                     ),
                     "terminal state {state:?} maps to {:?}",
                     state.phase()

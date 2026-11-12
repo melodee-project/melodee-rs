@@ -125,7 +125,7 @@ export type IngestionPhase =
   | 'processing'
   | 'publishing'
   | 'catalog'
-  | 'search'
+  | 'active'
   | 'review'
   | 'disposition'
   | 'failed';
@@ -184,6 +184,14 @@ export interface WorkItem {
   completedAt: string | null;
   /** Derived operator-facing phase (ADR-0185); always present from the API. */
   phase?: IngestionPhase;
+  /**
+   * True once client surfaces can see and stream the Release (policy accept has
+   * set the Release status to `active`). This — not the search projection — is
+   * the "ready to listen" signal an operator looks for.
+   */
+  clientVisible?: boolean;
+  /** Authoritative client-facing Release status once the import is bound. */
+  releaseStatus?: string | null;
   /** Bound catalog Release (display only; absent before an import binds). */
   releaseId?: string | null;
   releaseTitle?: string;

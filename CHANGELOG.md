@@ -119,9 +119,12 @@ by an accepted ADR and release gate.
 
 - Operator-facing phases over the ingestion state machine (ADR-0185). The fourteen lifecycle states
   are unchanged (each is a claim partition with its own fencing and evidence), but the Admin UI now
-  filters and labels by eight phases — `inbound`, `processing`, `publishing`, `catalog`, `search`,
-  `review`, `disposition`, `failed` — with the precise state kept as the row detail. The work-item
-  listing accepts an additive `phase` filter and returns a derived `phase` on every item.
+  filters and labels by eight phases — `inbound`, `processing`, `publishing`, `catalog`, **`active`**,
+  `review`, `disposition`, `failed` — with the precise state kept as the row detail. `active` is the
+  operator-facing completion signal: it is set by the policy `accept` commit, which is exactly when
+  client surfaces can see and play the Release; the search projection runs inside that phase and
+  never gates playback. The work-item listing accepts an additive `phase` filter and returns a
+  derived `phase`, `clientVisible`, and `releaseStatus` on every item.
 - Documented that a Release is *playable* at policy `Accept` and *searchable* at `indexed`, and added
   throughput-tuning guidance (concurrency is the throughput lever, not the number of stages).
 

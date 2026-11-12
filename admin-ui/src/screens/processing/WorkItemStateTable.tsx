@@ -14,9 +14,9 @@ import { ApiError } from '../../api/client';
 import type { IngestionState, Page, SortParam, WorkItem } from '../../api/types';
 import { EntityTable, type EntityColumn, type EntityRow } from '../../components/EntityTable';
 import { FilterPills } from '../../components/FilterPills';
-import { ProcessingStateTag } from '../../components/ProcessingStateTag';
+import { StatusChip } from '../../components/StatusTag';
 import { formatDateTime, formatNumber, formatRelativeTime } from '../../i18n/format';
-import { phaseForState } from './phase';
+import { phaseForState, phaseStatusKind } from './phase';
 import { WorkItemInspector } from './WorkItemInspector';
 import { workItemDisplayName } from './workItem';
 
@@ -160,10 +160,11 @@ export function WorkItemStateTable({
           ),
           state: (
             <>
-              <ProcessingStateTag state={item.state} />
-              <span className="melodee-cell-stack__secondary">
-                {t(`phase.${item.phase ?? phaseForState(item.state)}`)}
-              </span>
+              <StatusChip
+                kind={phaseStatusKind(item.phase ?? phaseForState(item.state))}
+                label={t(`phase.${item.phase ?? phaseForState(item.state)}`)}
+              />
+              <span className="melodee-cell-stack__secondary">{item.state}</span>
             </>
           ),
           attemptCount: formatNumber(item.attemptCount),

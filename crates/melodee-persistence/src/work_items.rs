@@ -52,6 +52,9 @@ pub struct WorkItemListRow {
     pub display_artist: Option<String>,
     /// Total media bytes recorded by the release aggregates, when bound.
     pub media_bytes: Option<i64>,
+    /// Client-facing Release status (`active` when clients can see and play it),
+    /// when the work item is bound to a catalog Release.
+    pub release_status: Option<String>,
 }
 
 /// One hourly bucket of completed work items for the dashboard activity
@@ -164,6 +167,7 @@ impl sqlx::FromRow<'_, sqlx::postgres::PgRow> for WorkItemListRow {
             release_title: row.try_get("title")?,
             display_artist: row.try_get("display_artist")?,
             media_bytes: row.try_get("media_bytes")?,
+            release_status: row.try_get("status")?,
         })
     }
 }
@@ -2974,7 +2978,7 @@ impl WorkItemStore {
         .fetch_one(pool)
         .await?;
         let rows = sqlx::query_as::<_, WorkItemListRow>(sqlx::AssertSqlSafe(format!(
-            "SELECT w.*, ci.release_id, r.title, r.display_artist, rca.media_bytes
+            "SELECT w.*, ci.release_id, r.title, r.display_artist, rca.media_bytes, r.status
              FROM release_work_items w
              LEFT JOIN catalog_imports ci ON ci.work_item_id = w.id
              LEFT JOIN releases r ON r.id = ci.release_id

@@ -17,13 +17,13 @@ import type {
 import { EntityTable, type EntityColumn, type EntityRow } from '../../components/EntityTable';
 import { FilterPills } from '../../components/FilterPills';
 import { PageHeader } from '../../components/PageHeader';
-import { ProcessingStateTag } from '../../components/ProcessingStateTag';
 import { ProgressBar } from '../../components/ProgressBar';
+import { StatusChip } from '../../components/StatusTag';
 import { Surface } from '../../components/Surface';
 import { AbsentCell, StackedCell } from '../../components/cells';
 import { formatBytes, formatDateTime, formatNumber, formatRelativeTime } from '../../i18n/format';
 import { WorkItemInspector } from './WorkItemInspector';
-import { countByPhase, PHASE_ORDER, phaseForState } from './phase';
+import { countByPhase, PHASE_ORDER, phaseForState, phaseStatusKind } from './phase';
 import { stageProgress, workItemDisplayName } from './workItem';
 
 /**
@@ -257,10 +257,13 @@ export function ProcessingQueueScreen() {
             artist: item.artistName ?? <AbsentCell label={t('queue.unbound')} />,
             state: (
               <>
-                <ProcessingStateTag state={item.state} />
-                <span className="melodee-cell-stack__secondary">
-                  {t(`phase.${item.phase ?? phaseForState(item.state)}`)}
-                </span>
+                {/* The semantic label an operator triages on. "Active" means a
+                    client can already see and play it. */}
+                <StatusChip
+                  kind={phaseStatusKind(item.phase ?? phaseForState(item.state))}
+                  label={t(`phase.${item.phase ?? phaseForState(item.state)}`)}
+                />
+                <span className="melodee-cell-stack__secondary">{item.state}</span>
               </>
             ),
             progress: (

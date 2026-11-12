@@ -42,7 +42,7 @@ The problem is therefore not the state machine — it is that the operator was a
 ## Decision
 
 1. **Phases are a derived presentation projection.** `IngestionPhase` (eight values: `inbound`,
-   `processing`, `publishing`, `catalog`, `search`, `review`, `disposition`, `failed`) groups the
+   `processing`, `publishing`, `catalog`, **`active`**, `review`, `disposition`, `failed`) groups the
    states; `IngestionState::phase()` is total and `IngestionPhase::states()` is its inverse, enforced
    by tests. Phases are never stored, never transitioned, and never affect policy.
 
@@ -60,8 +60,14 @@ The problem is therefore not the state machine — it is that the operator was a
    claim partitions backed by distinct durable evidence, and merging them would trade two states for
    more complex claim predicates and a weaker crash boundary.
 
-5. **Documentation states playable versus findable explicitly**, so "waiting for search" is never
-   mistaken for "not yet usable".
+5. **The completion phase is called `active`, not `search`, and the UI shows it as the primary
+   label.** `IngestionState::is_client_visible()` names the client-availability predicate in the
+   domain, the API exposes it as `clientVisible` (with the authoritative `releaseStatus` from the
+   join), and the queue row shows the phase chip with the machinery state as its caption. Naming it
+   after the search projection was anti-semantic: clients read PostgreSQL filtered on
+   `releases.status = 'active'`, and the Tantivy projection only feeds smart playlists. "Ready" was
+   rejected as the label because `Ready` already means *queued for a worker* in the same state
+   machine — the exact confusion this ADR removes.
 
 6. **Validation re-hashing is retained, and the optimization is deferred with a trigger.** Structural
    validation deliberately treats the work directory as untrusted and re-reads every planned file

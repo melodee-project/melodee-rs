@@ -15,7 +15,7 @@ import { ProcessingStateTag } from '../../components/ProcessingStateTag';
 import { ProgressBar } from '../../components/ProgressBar';
 import { Surface } from '../../components/Surface';
 import { formatBytes, formatDateTime } from '../../i18n/format';
-import { phaseForState } from './phase';
+import { isClientReady, phaseForState } from './phase';
 import { stageProgress, workItemDisplayName } from './workItem';
 
 /**
@@ -88,6 +88,24 @@ export function WorkItemInspector({
         {
           term: t('phase.label'),
           value: t(`phase.${data.item.phase ?? phaseForState(data.item.state)}`),
+        },
+        {
+          // The operator's real question: can a client play this yet?
+          term: t('phase.clientAvailability'),
+          value: isClientReady(data.item)
+            ? t('phase.clientAvailabilityYes')
+            : t('phase.clientAvailabilityNo'),
+        },
+        {
+          // Whether the background search projection has finished. This never
+          // gates playback; it only feeds smart playlists.
+          term: t('phase.searchIndex'),
+          value:
+            data.item.state === 'indexed'
+              ? t('phase.searchIndexComplete')
+              : data.item.state === 'indexing'
+                ? t('phase.searchIndexPending')
+                : t('phase.searchIndexNotApplicable'),
         },
         {
           term: t('queue.column.progress'),

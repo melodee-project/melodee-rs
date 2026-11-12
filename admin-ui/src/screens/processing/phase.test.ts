@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import type { IngestionPhase, IngestionState, WorkItemStateCount } from '../../api/types';
-import { countByPhase, PHASE_ORDER, PHASE_STATES, phaseForState } from './phase';
+import {
+  countByPhase,
+  isClientReady,
+  PHASE_ORDER,
+  PHASE_STATES,
+  phaseForState,
+  phaseStatusKind,
+} from './phase';
 
 const ALL_STATES: IngestionState[] = [
   'discovered',
@@ -49,7 +56,7 @@ describe('phase projection', () => {
       'processing',
       'publishing',
       'catalog',
-      'search',
+      'active',
       'review',
       'failed',
       'disposition',
@@ -74,5 +81,27 @@ describe('phase projection', () => {
 
   it('falls back to a phase for an unknown state rather than dropping the row', () => {
     expect(phaseForState('some_future_state')).toBe('processing');
+  });
+
+  it('marks the last unavailable and first available states explicitly', () => {
+    // cataloged = imported but not yet accepted by policy; indexing = the accept
+    // commit, which is when clients can play it.
+    expect(phaseForState('cataloged')).toBe('catalog');
+    expect(phaseForState('indexing')).toBe('active');
+    expect(phaseForState('indexed')).toBe('active');
+    expect(phaseStatusKind('active')).toBe('success');
+    expect(phaseStatusKind('failed')).toBe('error');
+    expect(phaseStatusKind('inbound')).toBe('neutral');
+  });
+
+  it('answers "can a client play this?" from the API flag, not the search phase', () => {
+    // Authoritative flag wins.
+    expect(isClientReady({ clientVisible: true, state: 'cataloged' })).toBe(true);
+    expect(isClientReady({ clientVisible: false, state: 'indexing' })).toBe(false);
+    // Fallback projection for payloads without the flag.
+    expect(isClientReady({ state: 'indexing' })).toBe(true);
+    expect(isClientReady({ state: 'indexed' })).toBe(true);
+    expect(isClientReady({ state: 'cataloged' })).toBe(false);
+    expect(isClientReady({ state: 'cataloging' })).toBe(false);
   });
 });

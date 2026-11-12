@@ -122,6 +122,9 @@ const ITEM_ONE = {
   releaseTitle: "Business as Usual",
   artistName: "Men at Work",
   mediaBytes: 33600000,
+  phase: "inbound",
+  clientVisible: false,
+  releaseStatus: "active",
 };
 
 const ITEM_TWO = {
@@ -133,6 +136,9 @@ const ITEM_TWO = {
   releaseTitle: "Road to Freedom",
   artistName: "The Nomads",
   mediaBytes: 48200000,
+  phase: "failed",
+  clientVisible: false,
+  releaseStatus: "deprecated",
   state: "failed",
   attemptCount: 5,
   leaseOwner: null,
@@ -754,7 +760,7 @@ export async function mockAdminApi(
         processing: ["inspecting", "normalizing", "validating"],
         publishing: ["staged", "publishing", "published"],
         catalog: ["cataloging", "cataloged"],
-        search: ["indexing", "indexed"],
+        active: ["indexing", "indexed"],
         review: ["needs_review", "quarantined"],
         disposition: ["ignored", "deleted"],
         failed: ["failed"],

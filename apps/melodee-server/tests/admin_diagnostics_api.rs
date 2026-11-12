@@ -880,6 +880,16 @@ async fn work_item_phase_filter_groups_states_and_reports_the_derived_phase() {
         .expect("park in failed");
     tx.commit().await.expect("commit");
 
+    // A queue item that is not yet accepted by policy is not client-visible.
+    let (status, body) = get_json(
+        router.clone(),
+        "/api/admin/v1/ingest/work-items?phase=inbound",
+        Some(&fixture.admin_token),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["items"][0]["clientVisible"], false);
+
     // `inbound` covers discovered/settling/ready, so it matches the settling item.
     let (status, body) = get_json(
         router.clone(),
@@ -906,7 +916,7 @@ async fn work_item_phase_filter_groups_states_and_reports_the_derived_phase() {
     // An in-flight phase with no members returns an honest empty page.
     let (status, body) = get_json(
         router.clone(),
-        "/api/admin/v1/ingest/work-items?phase=publishing",
+        "/api/admin/v1/ingest/work-items?phase=active",
         Some(&fixture.admin_token),
     )
     .await;

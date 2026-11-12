@@ -48,16 +48,26 @@ reason about; the state button in each row stays the precise value.
 | Processing | inspecting, normalizing, validating | Being read, converted, and checked |
 | Publishing | staged, publishing, published | Canonical publication in progress or verified |
 | Catalog | cataloging, cataloged | Catalog import in progress or complete |
-| Search | indexing, indexed | Search projection in progress or complete |
+| **Active** | indexing, indexed | **Live to clients: visible and playable.** The search projection may still be finishing |
 | Review | needs_review, quarantined | Parked on an operator decision |
 | Failed | failed | Retrying or awaiting an operator |
 | Closed | ignored, deleted | Final non-accepted disposition |
 
-A Release becomes **playable** when the policy decision is `Accept` (its catalog rows and canonical
-files exist and its status is active). It becomes **searchable** one step later, at `indexed`, when
-the search projection that makes it appear in browse, search, and list results is durable. So if a
-Release is playable but missing from search results, it is between those two points — the queue row
-will still read `Search`.
+**`Active` is the state you are looking for.** It means the policy decision was `Accept`, which sets
+the Release status to `active` in the same transaction, and from that moment every client surface —
+native Melodee API v1, OpenSubsonic, Jellyfin — lists and streams it. The admin and editor vocabulary
+is intentionally "Active" rather than "Ready": `ready` already means *queued for a worker* earlier in
+the same pipeline, which is not the same thing at all.
+
+The search projection is **not** a gate. It runs inside the `Active` phase and only feeds native
+smart-playlist evaluation; client browse, search, and playback read PostgreSQL directly. So:
+
+- last state where clients **cannot** see the Release: `cataloged` (imported, not yet accepted);
+- first state where they **can**: `indexing`;
+- `indexed` means the background projection also finished — nothing is left running.
+
+The work-item inspector states both facts explicitly (`Client availability`, `Search index`), so you
+never have to infer them from lifecycle vocabulary.
 
 ## Quarantine and History
 

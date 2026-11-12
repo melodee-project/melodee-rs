@@ -95,6 +95,15 @@ pub struct WorkItemDto {
     /// Operator-facing phase derived from `state` (ADR-0185). Always present;
     /// clients group and label by phase and show `state` as the precise detail.
     pub phase: String,
+    /// True once client surfaces can see and stream the Release (policy
+    /// `accept` has set the Release status to `active`). Derived from `state`,
+    /// which is set in the same transaction as that status change.
+    pub client_visible: bool,
+    /// Authoritative client-facing Release status when the work item is bound to
+    /// a catalog Release (`active`, `deprecated`, `deleted`); absent before an
+    /// import binds. `clientVisible` is the state-derived projection of it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub release_status: Option<String>,
 }
 
 impl From<ReleaseWorkItem> for WorkItemDto {
@@ -130,6 +139,8 @@ impl From<ReleaseWorkItem> for WorkItemDto {
             artist_name: None,
             media_bytes: None,
             phase: item.state.phase().as_str().to_string(),
+            client_visible: item.state.is_client_visible(),
+            release_status: None,
         }
     }
 }
@@ -147,6 +158,12 @@ impl WorkItemDto {
         self.release_title = row.release_title.clone();
         self.artist_name = row.display_artist.clone();
         self.media_bytes = row.media_bytes;
+        self.release_status = row.release_status.clone();
+        // The joined status is authoritative, so it also wins over the
+        // state-derived projection when the two are present.
+        if let Some(status) = row.release_status.as_deref() {
+            self.client_visible = status == "active";
+        }
         self
     }
 }
