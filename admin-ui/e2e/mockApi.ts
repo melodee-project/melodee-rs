@@ -409,6 +409,23 @@ const ARTIST_DETAIL = {
     total: 1,
   },
   contributions: { items: [], total: 0 },
+  trackCredits: {
+    items: [
+      {
+        trackId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        trackTitle: "Down Under",
+        releaseId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        releaseTitle: "Into the Night",
+        role: "primary",
+        isPerformance: true,
+        associationType: "primary_artist",
+        displayValue: "The Nomads",
+        joinPhrase: "",
+        presentationOrder: 1,
+      },
+    ],
+    total: 1,
+  },
   relationships: { items: [], total: 0 },
   memberships: { items: [], total: 0 },
   history: {

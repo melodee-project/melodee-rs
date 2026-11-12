@@ -235,6 +235,7 @@ async fn artist_metadata_round_trip_partial_and_rejects() {
                 canonical_name: Some("New Artist".to_string()),
                 sort_name: Some("artist, new".to_string()),
                 artist_type: Some("orchestra".to_string()),
+                status: None,
             },
             "test-admin",
         )
@@ -412,6 +413,95 @@ async fn track_metadata_round_trip_partial_and_rejects() {
         )
         .await;
     assert!(matches!(result, Err(CatalogStoreError::InvalidRequest)));
+
+    db.drop().await;
+}
+
+/// Import always creates provisional Artists and nothing promoted them, so the
+/// operator status edit is the only auditable path to `verified`. System states
+/// stay system-managed.
+#[tokio::test]
+async fn artist_status_is_operator_settable_but_system_states_are_not() {
+    let db = TestDb::create("metadata_artist_status").await;
+    let store = CatalogStore;
+    let fixture = phase5_common::seed_cataloged_release(
+        &db,
+        7,
+        presentation("Status Release", "Provisional Artist", "Status Track"),
+    )
+    .await;
+    let (_release_id, artist_id, _track_id) =
+        internal_ids(&db.pool, fixture.release_id().into_uuid()).await;
+    let status: String = sqlx::query_scalar("SELECT status FROM artists WHERE id = $1")
+        .bind(artist_id)
+        .fetch_one(&db.pool)
+        .await
+        .expect("imported artist status");
+    assert_eq!(status, "provisional", "import never promotes an Artist");
+    let audit_before = audit_count(&db.pool, "artist", artist_id).await;
+
+    store
+        .update_artist_metadata(
+            &db.pool,
+            artist_id,
+            &ArtistMetadataPatch {
+                status: Some("verified".to_string()),
+                ..Default::default()
+            },
+            "test-admin",
+        )
+        .await
+        .expect("promote to verified");
+    let status: String = sqlx::query_scalar("SELECT status FROM artists WHERE id = $1")
+        .bind(artist_id)
+        .fetch_one(&db.pool)
+        .await
+        .expect("artist status");
+    assert_eq!(status, "verified");
+    assert_eq!(
+        audit_count(&db.pool, "artist", artist_id).await,
+        audit_before + 1,
+        "the promotion is audited"
+    );
+
+    // Back to provisional is allowed (an operator can withdraw the assertion).
+    store
+        .update_artist_metadata(
+            &db.pool,
+            artist_id,
+            &ArtistMetadataPatch {
+                status: Some("provisional".to_string()),
+                ..Default::default()
+            },
+            "test-admin",
+        )
+        .await
+        .expect("return to provisional");
+
+    // Merge and delete flows own their states; a metadata edit cannot set them.
+    for rejected in ["merged", "deprecated", "VERIFIED"] {
+        let result = store
+            .update_artist_metadata(
+                &db.pool,
+                artist_id,
+                &ArtistMetadataPatch {
+                    status: Some(rejected.to_string()),
+                    ..Default::default()
+                },
+                "test-admin",
+            )
+            .await;
+        assert!(
+            matches!(result, Err(CatalogStoreError::InvalidRequest)),
+            "{rejected} must be rejected"
+        );
+    }
+    let status: String = sqlx::query_scalar("SELECT status FROM artists WHERE id = $1")
+        .bind(artist_id)
+        .fetch_one(&db.pool)
+        .await
+        .expect("artist status");
+    assert_eq!(status, "provisional", "rejected edits change nothing");
 
     db.drop().await;
 }

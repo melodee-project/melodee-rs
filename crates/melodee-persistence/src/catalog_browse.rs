@@ -354,9 +354,34 @@ pub struct ArtistCatalogDetail {
     pub external_ids: BoundedSection<ArtistExternalIdRow>,
     pub releases: BoundedSection<ArtistReleaseRow>,
     pub contributions: BoundedSection<ArtistContributionRow>,
+    /// Track credits backing the Artist statistics, newest Release first.
+    pub track_credits: BoundedSection<ArtistTrackCreditRow>,
     pub relationships: BoundedSection<ArtistRelationshipRow>,
     pub memberships: BoundedSection<ArtistMembershipRow>,
     pub history: BoundedSection<CatalogAuditEventRow>,
+}
+
+/// One Track credit for an Artist, sourced from the same
+/// `artist_track_associations` rows the Artist statistics aggregate over.
+///
+/// The statistics ("track credits", "appearances") are counts over these
+/// associations, so this section is what makes those counts drillable: an
+/// operator can see which Track, on which Release, in which role.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArtistTrackCreditRow {
+    pub track_public_api_id: Uuid,
+    pub track_title: String,
+    pub release_public_api_id: Uuid,
+    pub release_title: String,
+    /// Billing role from `track_artists` (`primary`, `featured`, …) when the
+    /// credit came from tag billing syntax.
+    pub role: Option<String>,
+    /// True when the credit is a performance credit (the "appearances" count).
+    pub is_performance: bool,
+    pub association_type: String,
+    pub display_value: Option<String>,
+    pub join_phrase: Option<String>,
+    pub presentation_order: Option<i32>,
 }
 
 /// One Track row inside the Release detail, with playable media format facts.
@@ -926,6 +951,49 @@ impl CatalogStore {
                 }
             },
         );
+        // Drill-down for the statistics: the counts come from
+        // `artist_track_associations`, so the rows do too.
+        let track_credits = section_rows(
+            sqlx::query(
+                "SELECT track.public_api_id AS track_public_api_id,
+                        track.title AS track_title,
+                        release.public_api_id AS release_public_api_id,
+                        release.title AS release_title,
+                        billing.role, billing.display_value, billing.join_phrase,
+                        billing.presentation_order,
+                        association.is_performance, association.association_type,
+                        COUNT(*) OVER () AS total_count
+                   FROM artist_track_associations association
+                   JOIN tracks track ON track.id = association.track_id
+                   JOIN releases release ON release.id = track.release_id
+                   LEFT JOIN track_artists billing
+                     ON billing.track_id = association.track_id
+                    AND billing.artist_id = association.artist_id
+                  WHERE association.artist_id = $1
+                  ORDER BY release.title, track.disc_number ASC NULLS FIRST,
+                           track.track_number ASC NULLS FIRST, track.ordinal, track.id
+                  LIMIT $2",
+            )
+            .bind(id)
+            .bind(limit)
+            .fetch_all(pool)
+            .await?,
+            |row| {
+                use sqlx::Row as _;
+                ArtistTrackCreditRow {
+                    track_public_api_id: row.get("track_public_api_id"),
+                    track_title: row.get("track_title"),
+                    release_public_api_id: row.get("release_public_api_id"),
+                    release_title: row.get("release_title"),
+                    role: row.try_get("role").ok(),
+                    is_performance: row.get("is_performance"),
+                    association_type: row.get("association_type"),
+                    display_value: row.try_get("display_value").ok(),
+                    join_phrase: row.try_get("join_phrase").ok(),
+                    presentation_order: row.try_get("presentation_order").ok(),
+                }
+            },
+        );
         let history = audit_history(pool, "artist", id, limit).await?;
 
         Ok(Some(ArtistCatalogDetail {
@@ -949,6 +1017,7 @@ impl CatalogStore {
             external_ids,
             releases,
             contributions,
+            track_credits,
             relationships,
             memberships,
             history,

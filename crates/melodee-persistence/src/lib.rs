@@ -58,11 +58,11 @@ pub use catalog::{
 };
 pub use catalog_browse::{
     ArtistAliasRow, ArtistCatalogDetail, ArtistContributionRow, ArtistExternalIdRow,
-    ArtistMembershipRow, ArtistRelationshipRow, ArtistReleaseRow, BilledArtistRow, BoundedSection,
-    CatalogArtistListRow, CatalogArtistSort, CatalogAuditEventRow, CatalogBrowseError,
-    CatalogReleaseListRow, CatalogReleaseSort, CatalogTrackListRow, CatalogTrackSort,
-    ContributionRow, MAX_CATALOG_BROWSE_QUERY_CHARS, MAX_CATALOG_DETAIL_ITEMS, MediaAssetRow,
-    ReleaseCatalogDetail, ReleaseProvenanceRow, ReleaseTrackRow, TrackCatalogDetail,
+    ArtistMembershipRow, ArtistRelationshipRow, ArtistReleaseRow, ArtistTrackCreditRow,
+    BilledArtistRow, BoundedSection, CatalogArtistListRow, CatalogArtistSort, CatalogAuditEventRow,
+    CatalogBrowseError, CatalogReleaseListRow, CatalogReleaseSort, CatalogTrackListRow,
+    CatalogTrackSort, ContributionRow, MAX_CATALOG_BROWSE_QUERY_CHARS, MAX_CATALOG_DETAIL_ITEMS,
+    MediaAssetRow, ReleaseCatalogDetail, ReleaseProvenanceRow, ReleaseTrackRow, TrackCatalogDetail,
     contains_pattern,
 };
 pub use catalog_identity::{

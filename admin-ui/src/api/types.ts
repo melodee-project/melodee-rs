@@ -28,6 +28,11 @@ export interface ArtistMetadataPatch {
   canonicalName?: string | null;
   sortName?: string | null;
   artistType?: string | null;
+  /**
+   * Operator identity assertion. Import always creates `provisional` and nothing
+   * promoted it, so this is the audited path to `verified`.
+   */
+  status?: 'provisional' | 'verified' | null;
 }
 
 export interface TrackMetadataPatch {
@@ -1085,6 +1090,23 @@ export interface ArtistRelease {
   trackCount: number;
 }
 
+/**
+ * One Track credit on an Artist (ArtistTrackCreditDto). This is the drill-down
+ * behind the Artist statistics: which Track, on which Release, in which role.
+ */
+export interface ArtistTrackCredit {
+  trackId: string;
+  trackTitle: string;
+  releaseId: string;
+  releaseTitle: string;
+  role: string | null;
+  isPerformance: boolean;
+  associationType: string;
+  displayValue: string | null;
+  joinPhrase: string | null;
+  presentationOrder: number | null;
+}
+
 /** One credit row (ArtistContributionDto): release-level when trackId is null. */
 export interface ArtistContribution {
   role: string;
@@ -1165,6 +1187,8 @@ export interface ArtistDetail {
   externalIds: Section<ArtistExternalId>;
   releases: Section<ArtistRelease>;
   contributions: Section<ArtistContribution>;
+  /** Track credits backing `stats` (the drill-down for the Artist numbers). */
+  trackCredits: Section<ArtistTrackCredit>;
   relationships: Section<ArtistRelationship>;
   memberships: Section<ArtistMembership>;
   history: Section<CatalogAuditEvent>;

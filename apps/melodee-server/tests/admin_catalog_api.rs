@@ -879,6 +879,43 @@ async fn metadata_update_routes_auth_success_and_errors() {
         "artist audit event"
     );
 
+    // ---- Artist: operator identity status (provisional → verified). -------
+    let (status, _) = call(
+        app.clone(),
+        "PUT",
+        &format!("/api/admin/v1/catalog/artists/{artist_public}/metadata"),
+        Some(json!({ "status": "verified" })),
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::NO_CONTENT,
+        "operator verifies the identity"
+    );
+    let (status, body) = call(
+        app.clone(),
+        "GET",
+        &format!("/api/admin/v1/catalog/artists/{artist_public}"),
+        None,
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["status"], "verified");
+
+    // System-managed states are not operator metadata.
+    let (status, body) = call(
+        app.clone(),
+        "PUT",
+        &format!("/api/admin/v1/catalog/artists/{artist_public}/metadata"),
+        Some(json!({ "status": "merged" })),
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(body["code"], "invalid_request");
+
     // ---- Artist: blank canonical name rejected (400). ---------------------
     let (status, body) = call(
         app.clone(),

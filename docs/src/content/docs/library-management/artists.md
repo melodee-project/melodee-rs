@@ -67,7 +67,9 @@ featured Track Artists without globally splitting literal names such as `$NOT/Je
 Every component still passes through identity resolution—parsing text never merges Artists by name.
 
 Already imported compound identities are not rewritten automatically because a separator may be
-part of a real name and the identity may have administrator or provider evidence. For disposable
+part of a real name and the identity may have administrator or provider evidence. The Identity tab
+of such an Artist says so explicitly — a name containing `&`, `,`, `;`, `feat.`, `ft.`, or ` x `
+shows a note that it is one provisional identity and links straight to Identity Review. For disposable
 source-development catalogs, run the
 [guided fresh development setup](../installation/build-from-source/#guided-fresh-development-setup)
 and re-import the media. Retained catalogs should use Identity Review rather than deleting or
@@ -75,6 +77,24 @@ editing identity rows directly.
 
 See [Identity Review](../admin/identity-review/) for the administrative workflow that resolves
 uncertain artist matches.
+
+## Provisional versus Verified identity
+
+Every Artist created by import is **Provisional**. That is deliberate: a tag value is an observation,
+not an identity, so the importer records the name and refuses to claim authority it does not have.
+`Verified` means a human (or an authoritative provider) has asserted that this is a real, confirmed
+identity.
+
+Until this change nothing could promote an Artist — import only ever writes `provisional` — so every
+Artist in a freshly imported catalog read Provisional with no way out. Now an administrator can
+assert it explicitly: **Catalog → Artists → (open an Artist) → Edit → Identity status**, choosing
+`Provisional` or `Verified`. The change bumps the row revision, records an `artist_metadata_updated`
+audit event carrying the field delta, and refreshes the search projection. `merged` and `deprecated`
+are system states owned by the merge and delete flows; a metadata edit rejects them.
+
+Provider-confirmed verification (promoting on a verified MusicBrainz/Spotify identity) is not
+implemented yet, so verification is an operator decision. Unconfigured providers surface as
+`provider enrichment attempt failed` warnings and never change status.
 
 ## Merging duplicate Artists
 
@@ -105,8 +125,15 @@ explicitly selected assignments to a new Artist.
 Open **Catalog → Artists** (`/admin/catalog/artists`) in the admin UI. The list is searched,
 sorted, and paged server-side — the search box binds to the backend query filter, sorting is
 restricted to the backend whitelist, and the view state lives in the URL so it can be shared.
-Selecting an Artist opens the **detail view** with tabs for overview, Releases, appearances,
-contributions, relationships, identity, images, and history (the audit timeline). The detail
+Selecting an Artist opens the **detail view** with tabs for overview, **Tracks**, Releases,
+appearances, contributions, relationships, identity, images, and history (the audit timeline).
+
+The summary numbers are **links into the rows they count**, so a statistic is never a dead end: the
+**Track credits** card (every Track the Artist is credited on, whatever the role) and
+**Appearances** (the performance subset) both open the **Tracks** tab, which lists the Track, the
+Release, the billing role, and whether the credit is a performance credit or a written/production
+credit. Those rows come from the same association records the counts aggregate over, so the number
+and the list can never disagree. The detail
 view also offers an **Edit** panel with the editable metadata fields: name, sort name, and
 artist type. Saves are partial updates validated server-side (blank names and unknown artist
 types are rejected with `400`), recorded as an audit event in the entity's history, and applied

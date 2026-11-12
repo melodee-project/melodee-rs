@@ -3,6 +3,8 @@ import {
   Form,
   InlineNotification,
   NumberInput,
+  Select,
+  SelectItem,
   TextInput,
 } from '@carbon/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -23,7 +25,9 @@ interface FormFieldConfig<P extends MetadataPatch> {
   fields: Array<{
     name: string;
     label: string;
-    type: 'string' | 'number';
+    type: 'string' | 'number' | 'select';
+    /** Options for a `select` field: value plus its localized label. */
+    options?: Array<{ value: string; label: string }>;
     value: unknown;
   }>;
   /** Build the patch object from current form state. */
@@ -136,7 +140,23 @@ export function EditPanel<P extends MetadataPatch>({
 
       <Form style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
         {fields.map((field) =>
-          field.type === 'number' ? (
+          field.type === 'select' ? (
+            <Select
+              key={field.name}
+              id={`edit-${field.name}`}
+              labelText={field.label}
+              value={(formState[field.name] as string | null | undefined) ?? ''}
+              onChange={(event) => setField(field.name, event.target.value)}
+            >
+              {(field.options ?? []).map((option) => (
+                <SelectItem
+                  key={option.value}
+                  value={option.value}
+                  text={option.label}
+                />
+              ))}
+            </Select>
+          ) : field.type === 'number' ? (
             <NumberInput
               key={field.name}
               id={`edit-${field.name}`}

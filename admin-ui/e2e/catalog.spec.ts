@@ -554,8 +554,12 @@ test('artist detail tabs are keyboard accessible', async ({ page }) => {
   await expect(overview).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByText('Nomads', { exact: true })).toBeVisible();
 
-  // Carbon tab lists are arrow-key navigable with roving selection.
+  // Carbon tab lists are arrow-key navigable with roving selection. The tab
+  // order is Overview → Tracks → Releases (Tracks is the credit drill-down).
   await overview.focus();
+  await page.keyboard.press('ArrowRight');
+  const tracks = page.getByRole('tab', { name: 'Tracks' });
+  await expect(tracks).toBeFocused();
   await page.keyboard.press('ArrowRight');
   const releases = page.getByRole('tab', { name: 'Releases' });
   await expect(releases).toBeFocused();

@@ -46,6 +46,13 @@ pub struct ArtistMetadataPatch {
     pub canonical_name: Option<String>,
     pub sort_name: Option<String>,
     pub artist_type: Option<String>,
+    /// Operator assertion of identity authority: `provisional` or `verified`.
+    ///
+    /// Import always creates `provisional` (a name observation is not an
+    /// identity) and nothing promoted it, so this is the auditable path an
+    /// administrator uses to state that the identity is confirmed.
+    /// System-managed states (`merged`, `deprecated`) are rejected.
+    pub status: Option<String>,
 }
 
 /// Operator-supplied editable Track metadata patch.
@@ -1099,6 +1106,14 @@ impl CatalogStore {
 
         let mut tx = pool.begin().await?;
 
+        // Only the two operator-settable statuses are accepted; `merged` and
+        // `deprecated` belong to merge/delete flows, never to a metadata edit.
+        if let Some(status) = patch.status.as_deref()
+            && !matches!(status, "provisional" | "verified")
+        {
+            return Err(CatalogStoreError::InvalidRequest);
+        }
+
         // Verify the artist exists first (unknown ids surface as InvalidRequest → 400).
         sqlx::query("SELECT id FROM artists WHERE id = $1")
             .bind(artist_id)
@@ -1135,6 +1150,11 @@ impl CatalogStore {
             builder.push_bind(artist_type);
         }
 
+        if let Some(status) = patch.status.as_deref() {
+            builder.push(" ,status = ");
+            builder.push_bind(status);
+        }
+
         builder.push(" WHERE id = ");
         builder.push_bind(artist_id);
         builder.push(" RETURNING revision");
@@ -1169,6 +1189,7 @@ impl CatalogStore {
                 "canonical_name": patch.canonical_name,
                 "sort_name": patch.sort_name,
                 "artist_type": patch.artist_type,
+                "status": patch.status,
             }),
             now,
         )

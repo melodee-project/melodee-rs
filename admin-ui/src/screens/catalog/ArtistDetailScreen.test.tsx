@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -10,11 +10,13 @@ vi.mock('../../api/admin', async (importOriginal) => {
   return {
     ...original,
     getCatalogArtist: vi.fn(),
+    updateArtistMetadata: vi.fn(),
   };
 });
 
-const { getCatalogArtist } = await import('../../api/admin');
+const { getCatalogArtist, updateArtistMetadata } = await import('../../api/admin');
 const mockGetArtist = vi.mocked(getCatalogArtist);
+const mockUpdateArtistMetadata = vi.mocked(updateArtistMetadata);
 
 const ARTIST_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const TARGET_ID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
@@ -75,6 +77,23 @@ function makeDetail(overrides: Partial<ArtistDetail> = {}): ArtistDetail {
           displayValue: 'The Nomads',
           releaseDate: '1986-05-12',
           trackCount: 10,
+        },
+      ],
+      total: 1,
+    },
+    trackCredits: {
+      items: [
+        {
+          trackId: TRACK_ID,
+          trackTitle: 'Down Under',
+          releaseId: RELEASE_ID,
+          releaseTitle: 'Into the Night',
+          role: 'featured',
+          isPerformance: true,
+          associationType: 'featured_artist',
+          displayValue: 'The Nomads',
+          joinPhrase: '&',
+          presentationOrder: 2,
         },
       ],
       total: 1,
@@ -221,6 +240,78 @@ describe('ArtistDetailScreen', () => {
     // History tab: audit timeline.
     fireEvent.click(screen.getByRole('tab', { name: 'History' }));
     expect(screen.getByText('artist.created')).toBeInTheDocument();
+  });
+
+  it('drills the track-credit statistics down to the actual Tracks', async () => {
+    renderScreen(makeDetail());
+    await screen.findByRole('heading', { name: 'The Nomads' });
+    // The stat card is a link into the credits tab, so a count is never a dead end.
+    const credits = screen.getByRole('link', { name: /Track credits/ });
+    expect(credits).toHaveAttribute('href', `/catalog/artists/${ARTIST_ID}?tab=tracks`);
+    fireEvent.click(screen.getByRole('tab', { name: 'Tracks' }));
+    expect(screen.getByRole('link', { name: 'Down Under' })).toHaveAttribute(
+      'href',
+      `/catalog/tracks/${TRACK_ID}`,
+    );
+    expect(screen.getByRole('link', { name: 'Into the Night' })).toHaveAttribute(
+      'href',
+      `/catalog/releases/${RELEASE_ID}`,
+    );
+    expect(screen.getByText('featured')).toBeInTheDocument();
+    expect(screen.getByText('Performance')).toBeInTheDocument();
+  });
+
+  it('lets an administrator assert identity status (the audited path to Verified)', async () => {
+    mockUpdateArtistMetadata.mockResolvedValue(undefined);
+    renderScreen(makeDetail({ status: 'provisional' }));
+    await screen.findByRole('heading', { name: 'The Nomads' });
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    const select = await screen.findByLabelText('Identity status');
+    expect(select).toHaveValue('provisional');
+    fireEvent.change(select, { target: { value: 'verified' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(mockUpdateArtistMetadata).toHaveBeenCalledWith(
+        ARTIST_ID,
+        expect.objectContaining({ status: 'verified' }),
+      ),
+    );
+  });
+
+  it('flags a collaboration-credit name and points at Identity Review', async () => {
+    renderScreen(makeDetail({ name: 'Bun B & Big K.R.I.T.' }));
+    await screen.findByRole('heading', { name: 'Bun B & Big K.R.I.T.' });
+    fireEvent.click(screen.getByRole('tab', { name: 'Identity' }));
+    expect(
+      screen.getByText('This name looks like a collaboration credit'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open Identity Review' })).toHaveAttribute(
+      'href',
+      '/catalog/identity',
+    );
+  });
+
+  it('does not flag an ordinary name', async () => {
+    renderScreen(makeDetail());
+    await screen.findByRole('heading', { name: 'The Nomads' });
+    fireEvent.click(screen.getByRole('tab', { name: 'Identity' }));
+    expect(
+      screen.queryByText('This name looks like a collaboration credit'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('opens the credits tab from a ?tab=tracks deep link', async () => {
+    render(
+      <MemoryRouter initialEntries={[`/catalog/artists/${ARTIST_ID}?tab=tracks`]}>
+        <Routes>
+          <Route path="/catalog/artists/:id" element={<ArtistDetailScreen />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('tab', { name: 'Tracks' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
   });
 
   it('falls back to EntityAvatar initials when the artwork image fails to load', async () => {

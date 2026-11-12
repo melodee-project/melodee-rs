@@ -115,6 +115,27 @@ by an accepted ADR and release gate.
 - `design/adr/ADR-0184-admin-ui-reference-alignment-and-surface-system.md`,
   `design/ui/REDESIGN-PLAN.md`, and amended `UI-SPEC.md` / `DESIGN-SYSTEM.md` / `MOCKUPS.md`.
 
+### Added
+
+- Artists can be marked **Verified** by an administrator (`PUT …/catalog/artists/{id}/metadata` with
+  `status`, exposed as *Edit → Identity status*). Import always creates `provisional` and no code
+  promoted it, so in practice every Artist stayed Provisional forever; the chip in the UI promised a
+  state nothing could reach. The edit is revision-bumped and audited, `merged`/`deprecated` remain
+  system-managed and are rejected, and provider-confirmed promotion remains future work.
+
+### Fixed
+
+- Artist statistics are now drillable. The summary numbers (track credits, appearances) are counts
+  over `artist_track_associations`, while the detail tabs read `contributions` — so an Artist could
+  show "1 Appearances" with an empty tab. Artist detail now exposes a `trackCredits` section from the
+  same association rows the counts aggregate over, the Admin UI adds a **Tracks** tab listing Track,
+  Release, billing role and credit kind, and both stat cards link into it. The "Billed Tracks" label
+  became "Track credits", because the underlying count includes every role, not only billing.
+- The Artist Identity tab now flags a name that contains a collaboration separator (`&`, `,`, `;`,
+  `feat.`, `ft.`, ` x `) and links to Identity Review. Melodee still does not auto-split those
+  separators — they occur inside real band names — so the combined credit stays one provisional
+  identity until an operator resolves it.
+
 ### Changed
 
 - Operator-facing phases over the ingestion state machine (ADR-0185). The fourteen lifecycle states

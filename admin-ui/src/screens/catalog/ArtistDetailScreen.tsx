@@ -1,5 +1,6 @@
 import {
   ActionableNotification,
+  Button,
   Link,
   Loading,
   Table,
@@ -12,7 +13,7 @@ import {
 } from '@carbon/react';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
-import { Link as RouterLink, useParams } from 'react-router-dom';
+import { Link as RouterLink, useParams, useSearchParams } from 'react-router-dom';
 import { useState } from 'react';
 
 import { getCatalogArtist, updateArtistMetadata } from '../../api/admin';
@@ -146,11 +147,40 @@ function artistHeroFacts(detail: ArtistDetail, t: TFunction) {
   ];
 }
 
+/**
+ * True when a name contains a collaboration separator Melodee deliberately does
+ * not auto-split. `&`, `,`, `;` and `x` are part of real band names
+ * ("Simon & Garfunkel", "Earth, Wind & Fire"), so a combined credit string is
+ * kept as one provisional identity until an operator resolves it — this hint
+ * points at that workflow instead of guessing.
+ */
+function looksLikeCollaboration(name: string): boolean {
+  return /(&|,|;|\bfeat\.?\b|\bft\.?\b|\bfeaturing\b|\sx\s)/i.test(name);
+}
+
+const ARTIST_TABS = [
+  'overview',
+  'tracks',
+  'releases',
+  'appearances',
+  'contributions',
+  'relationships',
+  'identity',
+  'images',
+  'history',
+];
+
 export function ArtistDetailScreen() {
   const { t } = useTranslation();
   const { id = '' } = useParams();
   const [editing, setEditing] = useState(false);
-  const [tab, setTab] = useState('overview');
+  // Deep links (e.g. the stat cards) select a tab via ?tab=; the tab bar then
+  // owns the state locally.
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState(() => {
+    const requested = searchParams.get('tab');
+    return requested && ARTIST_TABS.includes(requested) ? requested : 'overview';
+  });
   const { detail, error, loading, retry } = useCatalogDetail(getCatalogArtist, id);
 
   if (loading && detail === null) {
@@ -196,11 +226,27 @@ export function ArtistDetailScreen() {
                 { name: 'canonicalName', label: t('catalog.artist.edit.name'), type: 'string', value: detail.name },
                 { name: 'sortName', label: t('catalog.artist.edit.sortName'), type: 'string', value: detail.sortName },
                 { name: 'artistType', label: t('catalog.artist.edit.type'), type: 'string', value: detail.artistType },
+                {
+                  // Only `provisional` and `verified` are operator-settable;
+                  // merge/delete states belong to their own flows.
+                  name: 'status',
+                  label: t('catalog.artist.edit.status'),
+                  type: 'select',
+                  options: [
+                    { value: 'provisional', label: t('catalog.status.provisional') },
+                    { value: 'verified', label: t('catalog.status.verified') },
+                  ],
+                  value: detail.status,
+                },
               ]}
               buildPatch={(state) => ({
                 canonicalName: state['canonicalName'] !== undefined && String(state['canonicalName']).trim() !== '' ? String(state['canonicalName']) : null,
                 sortName: state['sortName'] !== undefined && String(state['sortName']).trim() !== '' ? String(state['sortName']) : null,
                 artistType: state['artistType'] !== undefined && String(state['artistType']).trim() !== '' ? String(state['artistType']) : null,
+                status:
+                  state['status'] === 'provisional' || state['status'] === 'verified'
+                    ? state['status']
+                    : null,
               })}
               onSave={(patch) => updateArtistMetadata(id, patch)}
               refresh={retry}
@@ -238,8 +284,12 @@ export function ArtistDetailScreen() {
                 value: formatNumber(detail.stats.releaseCount),
               },
               {
-                label: t('catalog.artist.stats.billedTracks'),
+                // `billed_track_count` counts every Track credit for this
+                // Artist (any role), so it is labelled as such rather than
+                // "billed", and it links to the rows it summarises.
+                label: t('catalog.artist.stats.trackCredits'),
                 value: formatNumber(detail.stats.billedTrackCount),
+                to: `/catalog/artists/${detail.id}?tab=tracks`,
               },
               {
                 label: t('catalog.artist.stats.members'),
@@ -248,6 +298,7 @@ export function ArtistDetailScreen() {
               {
                 label: t('catalog.artist.stats.appearances'),
                 value: formatNumber(detail.stats.performanceTrackCount),
+                to: `/catalog/artists/${detail.id}?tab=tracks`,
               },
               {
                 label: t('catalog.artist.stats.aliases'),
@@ -262,6 +313,7 @@ export function ArtistDetailScreen() {
             onChange={setTab}
             tabs={[
               { key: 'overview', label: t('catalog.artist.tabs.overview') },
+              { key: 'tracks', label: t('catalog.artist.tabs.tracks') },
               { key: 'releases', label: t('catalog.artist.tabs.releases') },
               { key: 'appearances', label: t('catalog.artist.tabs.appearances') },
               { key: 'contributions', label: t('catalog.artist.tabs.contributions') },
@@ -343,6 +395,52 @@ export function ArtistDetailScreen() {
                     )}
                   </Surface>
                 </div>
+          ) : null}
+          {tab === 'tracks' ? (
+            <Surface title={t('catalog.artist.tracks.title')} variant="flush">
+              {detail.trackCredits.items.length === 0 ? (
+                <EmptyState title={t('catalog.artist.tracks.empty')} compact />
+              ) : (
+                <div className="melodee-review-table-scroll">
+                  <TableContainer aria-label={t('catalog.artist.tracks.caption')}>
+                    <Table size="sm" className="melodee-table-skin" aria-label={t('catalog.artist.tracks.caption')}>
+                      <TableHead>
+                        <TableRow>
+                          <TableHeader>{t('catalog.column.track')}</TableHeader>
+                          <TableHeader>{t('catalog.column.release')}</TableHeader>
+                          <TableHeader>{t('catalog.column.role')}</TableHeader>
+                          <TableHeader>{t('catalog.artist.tracks.column.credit')}</TableHeader>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {detail.trackCredits.items.map((credit) => (
+                          <TableRow key={`${credit.trackId}-${credit.releaseId}`}>
+                            <TableCell>
+                              <TrackLink id={credit.trackId} name={credit.trackTitle} />
+                            </TableCell>
+                            <TableCell>
+                              <ReleaseLink id={credit.releaseId} name={credit.releaseTitle} />
+                            </TableCell>
+                            <TableCell>
+                              {credit.role ?? t('common.none')}
+                            </TableCell>
+                            <TableCell>
+                              {credit.isPerformance
+                                ? t('catalog.artist.tracks.performanceCredit')
+                                : t('catalog.artist.tracks.writtenCredit')}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </div>
+              )}
+              <BoundedNote
+                shown={detail.trackCredits.items.length}
+                total={detail.trackCredits.total}
+              />
+            </Surface>
           ) : null}
           {tab === 'releases' ? (
                 <Surface title={t('catalog.artist.releases.title')} variant="flush">
@@ -565,6 +663,23 @@ export function ArtistDetailScreen() {
                       name={detail.mergedIntoArtistId}
                     />
                   </p>
+                ) : null}
+                {looksLikeCollaboration(detail.name) ? (
+                  <Surface
+                    title={t('catalog.artist.collaboration.title')}
+                    variant="inset"
+                    headingLevel={3}
+                    className="melodee-surface--stacked"
+                  >
+                    <p className="melodee-surface__subtitle">
+                      {t('catalog.artist.collaboration.body')}
+                    </p>
+                    <div className="melodee-inspector__actions">
+                      <Button kind="tertiary" size="sm" as={RouterLink} to="/catalog/identity">
+                        {t('catalog.artist.collaboration.action')}
+                      </Button>
+                    </div>
+                  </Surface>
                 ) : null}
                 <p className="melodee-surface__subtitle">{t('catalog.artist.externalIds.title')}</p>
                 {detail.externalIds.items.length === 0 ? (

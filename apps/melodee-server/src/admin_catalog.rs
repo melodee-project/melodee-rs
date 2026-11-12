@@ -303,6 +303,10 @@ pub struct ArtistMetadataUpdate {
     pub canonical_name: Option<String>,
     pub sort_name: Option<String>,
     pub artist_type: Option<String>,
+    /// Operator identity assertion (`provisional` or `verified`). This is the
+    /// only path that promotes an imported provisional Artist, because import
+    /// never promotes and no provider-confirmation path exists yet.
+    pub status: Option<String>,
 }
 
 /// Request body for updating editable Track metadata fields.
@@ -430,6 +434,21 @@ pub struct ArtistReleaseDto {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ArtistTrackCreditDto {
+    pub track_id: Uuid,
+    pub track_title: String,
+    pub release_id: Uuid,
+    pub release_title: String,
+    pub role: Option<String>,
+    pub is_performance: bool,
+    pub association_type: String,
+    pub display_value: Option<String>,
+    pub join_phrase: Option<String>,
+    pub presentation_order: Option<i32>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ArtistContributionDto {
     pub role: String,
     pub role_detail: Option<String>,
@@ -527,6 +546,9 @@ pub struct ArtistDetailDto {
     pub external_ids: SectionDto<ArtistExternalIdDto>,
     pub releases: SectionDto<ArtistReleaseDto>,
     pub contributions: SectionDto<ArtistContributionDto>,
+    /// Track credits backing `stats`: which Track, on which Release, in which
+    /// role. Additive drill-down for the Artist statistics.
+    pub track_credits: SectionDto<ArtistTrackCreditDto>,
     pub relationships: SectionDto<ArtistRelationshipDto>,
     pub memberships: SectionDto<ArtistMembershipDto>,
     pub history: SectionDto<CatalogAuditEventDto>,
@@ -1056,6 +1078,18 @@ fn artist_detail_dto(detail: ArtistCatalogDetail) -> ArtistDetailDto {
             release_title: row.release_title,
             track_id: row.track_public_api_id,
             track_title: row.track_title,
+        }),
+        track_credits: section(detail.track_credits, |row| ArtistTrackCreditDto {
+            track_id: row.track_public_api_id,
+            track_title: row.track_title,
+            release_id: row.release_public_api_id,
+            release_title: row.release_title,
+            role: row.role,
+            is_performance: row.is_performance,
+            association_type: row.association_type,
+            display_value: row.display_value,
+            join_phrase: row.join_phrase,
+            presentation_order: row.presentation_order,
         }),
         relationships: section(detail.relationships, |row| ArtistRelationshipDto {
             source_artist_id: row.source_public_api_id,
@@ -1632,6 +1666,7 @@ async fn update_artist_metadata(
         canonical_name: payload.canonical_name,
         sort_name: payload.sort_name,
         artist_type: payload.artist_type,
+        status: payload.status,
     };
     match CatalogStore
         .update_artist_metadata(&state.admin.pool, internal_id, &patch, &actor)

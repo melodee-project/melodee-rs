@@ -602,6 +602,23 @@ aliases, external provider identities, the Releases the Artist is billed on, con
 history. Every sub-list is bounded (at most 100 items) and carries its full `total` as
 `{items, total}` so truncation is visible.
 
+### Artist identity status
+
+`PUT /api/admin/v1/catalog/artists/{id}/metadata` accepts the optional `status` field alongside the
+name fields. Only `provisional` and `verified` are accepted — `merged` and `deprecated` belong to the
+merge and delete flows, and any other value returns `400 invalid_request`. Import always writes
+`provisional`, so this is the audited operator path to `verified`: the edit bumps the revision,
+records an `artist_metadata_updated` audit event with the field delta, and refreshes the search
+projection.
+
+### Artist detail drill-down
+
+`GET /api/admin/v1/catalog/artists/{id}` returns a `trackCredits` section beside `stats`. The
+statistics (`billedTrackCount`, `performanceTrackCount`, `allCreditTrackCount`) are counts over
+`artist_track_associations`, and `trackCredits` lists those same rows — Track, Release, billing
+role, and whether the credit is a performance credit — so a client can always show the evidence
+behind a count. `billedTrackCount` counts every Track credit regardless of role.
+
 ### Release detail
 
 ```http
