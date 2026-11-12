@@ -25,6 +25,20 @@ by an accepted ADR and release gate.
   Release. Precedence is now override → published plan → provider → placeholder. ADR-0143 carries a
   dated clarification; both behaviours are asserted by the known-answer corpus.
 
+- Artwork reads no longer fail under a normal catalogue browse. The image pipeline refused
+  (`503`) every request beyond four in flight instead of queueing, so a release list requesting one
+  cover per row rendered mostly initials (measured: 20 of 24 concurrent reads refused). Reads now
+  wait for a bounded moment for a decode permit, `original`/`source` requests need no decode permit
+  at all, and uploads keep the immediate refusal they can retry.
+- Acoustic fingerprints are no longer computed and thrown away. Normalization has always run `fpcalc`
+  and retained the Chromaprint observation in the sealed manifest, but nothing promoted it to durable
+  identity evidence, so every Track's novelty stayed `uncertain` and a copy whose bytes differed only
+  by tags could not be recognised. Imports now record one `acoustic_fingerprint` evidence row per
+  Track (BLAKE3 digest as the comparison key, raw fingerprint untouched in the manifest), and novelty
+  reports a Track whose digest already exists in another Release as a known recording. Identity
+  confirmation semantics are unchanged: a locally computed fingerprint is evidence, not a verdict
+  (ADR-0186, migration 0043).
+
 ### Added
 
 - Known-answer corpus and the four-phase audit that goes with it

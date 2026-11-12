@@ -10,6 +10,7 @@
 use std::{
     io::Cursor,
     sync::{Arc, OnceLock},
+    time::Duration,
 };
 
 use axum::{
@@ -48,6 +49,12 @@ const MAX_IMAGE_OUTPUT_BYTES: usize = 16 * 1024 * 1024;
 const MAX_IMAGE_PIXELS: u64 = 16 * 1024 * 1024;
 const MAX_IMAGE_DIMENSION: u32 = 4096;
 const IMAGE_PROCESSING_CONCURRENCY: usize = 4;
+/// How long an artwork read waits for a processing permit before the endpoint
+/// reports `503`. A catalogue page requests one cover per row at once, so an
+/// instant rejection turned an ordinary browse into a wall of fallback initials
+/// (measured: 20 of 24 concurrent reads refused). The wait is bounded so a
+/// stalled client can never pin the pipeline indefinitely.
+const IMAGE_ADMISSION_WAIT: Duration = Duration::from_secs(10);
 
 static IMAGE_PROCESSOR: OnceLock<ImageProcessor> = OnceLock::new();
 
@@ -124,6 +131,37 @@ impl ImageProcessor {
                     gauge.reject();
                 }
                 let _ = error;
+                Err(ImageProcessingError)
+            }
+        }
+    }
+
+    /// Waits up to `wait` for a processing permit instead of refusing at once.
+    ///
+    /// Mutations (uploads) keep the non-blocking [`Self::try_admit`] contract:
+    /// refusing an upload under load is a clear answer the caller can retry.
+    /// A read has no such option — the browser simply gives up and shows an
+    /// initial — so reads queue for a bounded moment.
+    async fn admit_bounded(&self, wait: Duration) -> Result<ImageAdmission, ImageProcessingError> {
+        if let Ok(permit) = self.permits.clone().try_acquire_owned() {
+            return Ok(ImageAdmission {
+                _semaphore: permit,
+                _gauge: self.gauge.as_ref().map(|gauge| gauge.admit_immediate()),
+            });
+        }
+        if let Some(gauge) = &self.gauge {
+            gauge.begin_wait();
+        }
+        let awaited = tokio::time::timeout(wait, self.permits.clone().acquire_owned()).await;
+        match awaited {
+            Ok(Ok(permit)) => Ok(ImageAdmission {
+                _semaphore: permit,
+                _gauge: self.gauge.as_ref().map(|gauge| gauge.admit()),
+            }),
+            Ok(Err(_)) | Err(_) => {
+                if let Some(gauge) = &self.gauge {
+                    gauge.wait_failed();
+                }
                 Err(ImageProcessingError)
             }
         }
@@ -399,10 +437,16 @@ async fn get_image(
     };
     let processor =
         IMAGE_PROCESSOR.get_or_init(|| ImageProcessor::new(IMAGE_PROCESSING_CONCURRENCY));
-    let Ok(permit) = processor.try_admit() else {
-        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    // `original` serves stored bytes without decoding, so it neither needs nor
+    // should consume a decode permit; sized reads queue for one (bounded).
+    let admission = match size {
+        RequestedSize::Original => None,
+        RequestedSize::Pixels(_) => match processor.admit_bounded(IMAGE_ADMISSION_WAIT).await {
+            Ok(admission) => Some(admission),
+            Err(_) => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+        },
     };
-    match load_image(&state, kind, public_id, size, &headers, permit).await {
+    match load_image(&state, kind, public_id, size, &headers, admission).await {
         Ok(Some(response)) => response,
         Ok(None) => empty_ok(),
         Err(error) => {
@@ -418,7 +462,7 @@ async fn load_image(
     public_id: Uuid,
     size: RequestedSize,
     headers: &HeaderMap,
-    admission: ImageAdmission,
+    admission: Option<ImageAdmission>,
 ) -> Result<Option<Response<Body>>, sqlx::Error> {
     match kind {
         ImageKind::Playlist => {
@@ -436,7 +480,7 @@ async fn load_image(
                     kind.fallback().to_vec(),
                     kind.content_type(),
                     headers,
-                    Some(admission),
+                    admission,
                 ))),
                 None => Ok(None),
             }
@@ -461,7 +505,7 @@ async fn load_image(
                     kind.fallback().to_vec(),
                     kind.content_type(),
                     headers,
-                    Some(admission),
+                    admission,
                 ))),
                 None => Ok(None),
             }
@@ -522,7 +566,7 @@ async fn load_image(
                 kind.fallback().to_vec(),
                 kind.content_type(),
                 headers,
-                Some(admission),
+                admission,
             )))
         }
     }
@@ -709,7 +753,7 @@ async fn processed_response(
     bytes: Vec<u8>,
     size: RequestedSize,
     headers: &HeaderMap,
-    admission: ImageAdmission,
+    admission: Option<ImageAdmission>,
 ) -> Result<Response<Body>, sqlx::Error> {
     // ADR-0143 §2: `original` is the untransformed publication asset. Serving
     // it must not pass through the decoder, because a source the pipeline
@@ -724,10 +768,16 @@ async fn processed_response(
             ));
         }
         let content_type = kind.content_type();
-        return Ok(byte_response(bytes, content_type, headers, Some(admission)));
+        return Ok(byte_response(bytes, content_type, headers, admission));
     }
     let RequestedSize::Pixels(size) = size else {
         unreachable!("original handled above")
+    };
+    // Decoding requires the bounded permit; `original` above does not.
+    let Some(admission) = admission else {
+        return Err(sqlx::Error::Protocol(
+            "cannot decode an image without an admission permit".to_string(),
+        ));
     };
     let processor =
         IMAGE_PROCESSOR.get_or_init(|| ImageProcessor::new(IMAGE_PROCESSING_CONCURRENCY));
@@ -843,7 +893,8 @@ mod tests {
     }
 
     /// The Admin UI addresses artwork as `/images/album_<id>/original`; that
-    /// token used to fall through to the empty-200 path.
+    /// token used to fall through to the empty-200 path. It must also work with
+    /// no admission permit at all, since it never decodes.
     #[tokio::test]
     async fn original_size_serves_source_bytes_without_reencoding() {
         let source = DEFAULT_ALBUM.to_vec();
@@ -852,13 +903,7 @@ mod tests {
             source.clone(),
             RequestedSize::Original,
             &HeaderMap::new(),
-            Arc::new(Semaphore::new(1))
-                .try_acquire_owned()
-                .map(|permit| ImageAdmission {
-                    _semaphore: permit,
-                    _gauge: None,
-                })
-                .expect("admission"),
+            None,
         )
         .await
         .expect("original response");
@@ -871,6 +916,41 @@ mod tests {
             .await
             .expect("body");
         assert_eq!(body.as_ref(), source.as_slice());
+    }
+
+    /// A catalogue page asks for every cover at once. Reads must queue for a
+    /// decode permit instead of being refused on sight — a browse of 24 covers
+    /// produced 20 `503`s before this — while the process-wide bound still
+    /// holds and the wait itself stays bounded.
+    #[tokio::test]
+    async fn artwork_reads_queue_for_a_permit_without_exceeding_the_bound() {
+        let processor = ImageProcessor::new(4);
+        let mut held = Vec::new();
+        for _ in 0..4 {
+            held.push(
+                processor
+                    .admit_bounded(Duration::from_millis(50))
+                    .await
+                    .expect("admit"),
+            );
+        }
+
+        // No permit free: the wait expires instead of accepting unbounded work.
+        let timed_out = processor.admit_bounded(Duration::from_millis(50)).await;
+        assert!(
+            timed_out.is_err(),
+            "a saturated pipeline must not admit past its bound"
+        );
+
+        // Freeing one permit lets a queued read proceed within the same bound.
+        held.pop();
+        let queued = processor.admit_bounded(Duration::from_secs(1)).await;
+        assert!(
+            queued.is_ok(),
+            "a read must be served once capacity returns"
+        );
+        drop(queued);
+        drop(held);
     }
 
     #[test]

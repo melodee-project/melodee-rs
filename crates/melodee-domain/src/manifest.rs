@@ -216,6 +216,24 @@ impl NormalizedOutput {
     }
 }
 
+/// Durable comparison key for a Chromaprint fingerprint.
+///
+/// The raw fingerprint is a long (kilobyte-scale) string that is retained in the
+/// immutable manifest. Catalogue-wide acoustic duplicate detection compares this
+/// fixed-width digest instead, so the observation stays in the manifest while the
+/// *conclusion* is cheap to index and query (PRD-FP-002/PRD-FP-003).
+///
+/// Only byte-identical fingerprints produce the same digest: this is an exact
+/// match criterion, not a similarity search. It already covers the common case of
+/// the same recording re-encoded or retagged, because Chromaprint derives its
+/// hashes from the decoded signal rather than the container.
+#[must_use]
+pub fn acoustic_fingerprint_digest(fingerprint: &str) -> String {
+    blake3::hash(fingerprint.trim().as_bytes())
+        .to_hex()
+        .to_string()
+}
+
 /// Acoustic fingerprint observation for one audio file (PRD-FP-003).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FingerprintObservation {

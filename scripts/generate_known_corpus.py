@@ -61,6 +61,20 @@ DEFAULT_OUTPUT = Path("/tmp/melodee-known-corpus")
 # if anyone listens, and stable so regeneration is byte-stable.
 BASE_FREQUENCY_HZ = 220.0
 
+# Each fixture also gets its own frequency offset. Two fixtures that happen to
+# share a duration would otherwise generate identical audio, which makes their
+# Chromaprint fingerprints identical: with acoustic duplicate detection in place
+# a fixture would be classified as a copy of another fixture, and the fixture's
+# declared outcome (a policy review, say) would never be exercised. Deriving the
+# offset from the slug keeps the corpus byte-stable and the fixtures independent.
+FIXTURE_FREQUENCY_STEP_HZ = 6.0
+FIXTURE_FREQUENCY_SLOTS = 61
+
+
+def fixture_frequency_offset(slug: str) -> float:
+    """Deterministic, fixture-specific tone offset in ``[0, 61) * 6 Hz``."""
+    return FIXTURE_FREQUENCY_STEP_HZ * (sum(slug.encode()) % FIXTURE_FREQUENCY_SLOTS)
+
 
 class CorpusError(RuntimeError):
     """The corpus cannot be generated (missing tool, bad spec, ffmpeg failure)."""
@@ -175,6 +189,16 @@ def write_track(
     ffmpeg: str,
     artwork: Path | None,
 ) -> None:
+    # A plain sine is spectrally constant, and Chromaprint describes spectral
+    # *change*: two fixtures with different pitch but identical duration can
+    # produce the same fingerprint, which would make the acoustic matcher treat
+    # one fixture as a copy of another. Sweeping the pitch at a per-fixture rate
+    # makes each fixture acoustically distinct while staying a boring tone.
+    sweep_hz = round(frequency * 0.09, 3)
+    tone = (
+        f"aevalsrc=0.25*sin(2*PI*({frequency}+{sweep_hz}*t)*t):"
+        f"d={seconds}:s={audio['sampleRate']}"
+    )
     command = [
         ffmpeg,
         "-hide_banner",
@@ -184,7 +208,7 @@ def write_track(
         "-f",
         "lavfi",
         "-i",
-        f"sine=frequency={frequency}:duration={seconds}:sample_rate={audio['sampleRate']}",
+        tone,
     ]
     if artwork is not None:
         command += ["-i", str(artwork), "-map", "0:a", "-map", "1:v", "-c:v", "mjpeg"]
@@ -359,7 +383,9 @@ def build_release(
         write_track(
             path,
             seconds=int(track["seconds"]),
-            frequency=BASE_FREQUENCY_HZ + index * 37.0,
+            frequency=BASE_FREQUENCY_HZ
+            + fixture_frequency_offset(str(release.get("slug", release.get("album", ""))))
+            + index * 37.0,
             tags=tags,
             audio=audio,
             ffmpeg=ffmpeg,

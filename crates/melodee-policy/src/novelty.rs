@@ -87,6 +87,9 @@ pub struct NoveltyTrackFact {
     pub audio_identity_id: AudioIdentityId,
     pub media_asset_id: Option<MediaAssetId>,
     pub byte_hash: Option<String>,
+    /// Durable comparison key for this Track's Chromaprint fingerprint, when the
+    /// manifest retained one (see `melodee_domain::acoustic_fingerprint_digest`).
+    pub audio_fingerprint_digest: Option<String>,
     /// True only when the AudioIdentity has durable fingerprint/match evidence;
     /// provisional identity allocation alone is not confirmation.
     pub audio_identity_confirmed: bool,
@@ -104,6 +107,10 @@ pub struct NoveltyInput {
     /// Distinct identities confirmed as alternate performances/versions in the
     /// same catalog context.
     pub catalog_alternate_audio_identities: BTreeSet<AudioIdentityId>,
+    /// Acoustic fingerprint digests already present in another Release. A match
+    /// means the same decoded audio is catalogued elsewhere (typically the same
+    /// recording re-encoded or retagged), so the Track is known, not new.
+    pub catalog_acoustic_fingerprints: BTreeSet<String>,
     pub policy_rule_set_id: PolicyRuleSetId,
     pub evaluator_version: String,
     pub now: OffsetDateTime,
@@ -293,6 +300,13 @@ fn validate_input(input: &NoveltyInput) -> Result<(), NoveltyEngineError> {
         {
             return Err(NoveltyEngineError::InvalidByteHash);
         }
+        if fact
+            .audio_fingerprint_digest
+            .as_deref()
+            .is_some_and(|digest| !is_blake3(digest))
+        {
+            return Err(NoveltyEngineError::InvalidByteHash);
+        }
     }
     Ok(())
 }
@@ -317,6 +331,16 @@ fn derive_track_novelty(
             NoveltyEvidenceKind::ByteHashMatch,
             Confidence::new(10_000)?,
             "Canonical byte hash exists in another Release".to_string(),
+        ));
+    }
+    if let Some(digest) = &fact.audio_fingerprint_digest
+        && input.catalog_acoustic_fingerprints.contains(digest)
+    {
+        return Ok((
+            TrackNoveltyCategory::KnownAudioIdentity,
+            NoveltyEvidenceKind::AudioIdentityMatch,
+            Confidence::new(9_000)?,
+            "Canonical acoustic fingerprint exists in another Release".to_string(),
         ));
     }
     if input
@@ -354,7 +378,9 @@ fn derive_track_novelty(
         TrackNoveltyCategory::Uncertain,
         NoveltyEvidenceKind::InsufficientEvidence,
         Confidence::zero(),
-        "AudioIdentity lacks durable fingerprint or match confirmation".to_string(),
+        // A durable fingerprint is recorded at import, so the missing fact is a
+        // catalogue comparison conclusion, not the fingerprint itself.
+        "No catalog comparison conclusion for this AudioIdentity".to_string(),
     ))
 }
 

@@ -64,6 +64,7 @@ pub use manifest::{
     ObservedMetadata, ObservedTrack, PUBLICATION_MANIFEST_VERSION, ParsedSidecar,
     PublicationAuthorization, PublicationInvariantError, PublicationJournalStep, PublicationPlan,
     ReleaseManifest, SourceDisposition, StructuralValidation, ValidationOutcome,
+    acoustic_fingerprint_digest,
 };
 pub use novelty::{NoveltyEvaluation, NoveltyEvidenceKind, TrackNovelty, TrackNoveltyCategory};
 pub use overlay::{

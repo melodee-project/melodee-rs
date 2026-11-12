@@ -160,6 +160,7 @@ fn greatest_hits_compatibility_corpus_executes_the_real_policy_pipeline() {
                     audio_identity_id,
                     media_asset_id: Some(MediaAssetId::new()),
                     byte_hash: Some(byte_hash),
+                    audio_fingerprint_digest: None,
                     audio_identity_confirmed: confirmed,
                 }
             })
@@ -170,6 +171,7 @@ fn greatest_hits_compatibility_corpus_executes_the_real_policy_pipeline() {
             catalog_exact_byte_hashes: exact_hashes,
             catalog_known_audio_identities: known_identities,
             catalog_alternate_audio_identities: alternate_identities,
+            catalog_acoustic_fingerprints: BTreeSet::new(),
             policy_rule_set_id: engine.rule_set_id(),
             evaluator_version: DEFAULT_NOVELTY_EVALUATOR_VERSION.to_string(),
             now: NOW,

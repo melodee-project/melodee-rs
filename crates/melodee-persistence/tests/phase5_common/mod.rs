@@ -244,7 +244,7 @@ pub fn unknown_review_commit(
             category: TrackNoveltyCategory::Uncertain,
             confidence: Confidence::zero(),
             evidence_kind: NoveltyEvidenceKind::InsufficientEvidence,
-            detail: "AudioIdentity lacks durable fingerprint or match confirmation".to_string(),
+            detail: "No catalog comparison conclusion for this AudioIdentity".to_string(),
             evaluated_at: now,
         })
         .expect("valid new Track novelty"),

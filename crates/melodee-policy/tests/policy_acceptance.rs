@@ -108,6 +108,7 @@ fn fact(
         audio_identity_id,
         media_asset_id: Some(MediaAssetId::new()),
         byte_hash,
+        audio_fingerprint_digest: None,
         audio_identity_confirmed: confirmed,
     }
 }
@@ -123,6 +124,7 @@ fn novelty_input(
         catalog_exact_byte_hashes: BTreeSet::new(),
         catalog_known_audio_identities: BTreeSet::new(),
         catalog_alternate_audio_identities: BTreeSet::new(),
+        catalog_acoustic_fingerprints: BTreeSet::new(),
         policy_rule_set_id: engine.rule_set_id(),
         evaluator_version: "acceptance-v1".to_string(),
         now: NOW,
@@ -518,6 +520,53 @@ fn all_new_tracks_reach_brand_new_release() {
     assert_eq!(assessment.evaluation().new_track_count, 1);
 }
 
+/// PRD-FP-002: the same audio re-encoded under a different byte hash must be
+/// recognised acoustically — an identical Chromaprint fingerprint in another
+/// Release is a known recording, not an unknown one.
+#[test]
+fn acoustic_fingerprint_match_is_a_known_recording_even_when_bytes_differ() {
+    let engine = PolicyEngine::new(config()).expect("engine");
+    let release_id = ReleaseId::new();
+    let digest = hash('e');
+    let mut track = fact(
+        release_id,
+        melodee_domain::AudioIdentityId::new(),
+        Some(hash('f')),
+        false,
+    );
+    track.audio_fingerprint_digest = Some(digest.clone());
+    let mut input = novelty_input(&engine, release_id, vec![track]);
+    input.catalog_acoustic_fingerprints.insert(digest);
+
+    let assessment = NoveltyEngine.assess(&input).expect("assessment");
+    assert_eq!(assessment.evaluation().known_audio_identity_count, 1);
+    assert_eq!(assessment.evaluation().uncertain_count, 0);
+    let detail = &assessment.track_novelty()[0];
+    assert_eq!(
+        detail.evidence_kind,
+        melodee_domain::NoveltyEvidenceKind::AudioIdentityMatch
+    );
+    assert_eq!(
+        detail.detail,
+        "Canonical acoustic fingerprint exists in another Release"
+    );
+    // Without the catalogue-side match the same Track stays honestly uncertain:
+    // a locally computed fingerprint is evidence, not a conclusion.
+    let mut unknown = novelty_input(
+        &engine,
+        release_id,
+        vec![fact(
+            release_id,
+            melodee_domain::AudioIdentityId::new(),
+            Some(hash('f')),
+            false,
+        )],
+    );
+    unknown.tracks[0].audio_fingerprint_digest = Some(hash('e'));
+    let uncertain = NoveltyEngine.assess(&unknown).expect("assessment");
+    assert_eq!(uncertain.evaluation().uncertain_count, 1);
+}
+
 #[test]
 fn greatest_hits_delete_cannot_borrow_confidence_from_studio_evidence() {
     let mut configured = config();
@@ -758,6 +807,7 @@ fn fact_orchestration_returns_the_exact_novelty_rows_used_by_policy() {
         catalog_exact_byte_hashes: BTreeSet::new(),
         catalog_known_audio_identities: BTreeSet::new(),
         catalog_alternate_audio_identities: BTreeSet::new(),
+        catalog_acoustic_fingerprints: BTreeSet::new(),
         policy_rule_set_id: engine.rule_set_id(),
         evaluator_version: DEFAULT_NOVELTY_EVALUATOR_VERSION.to_string(),
         now: NOW,

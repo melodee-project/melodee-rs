@@ -14,7 +14,8 @@ use melodee_domain::{
     OverlayAudioIdentityLink, OverlayDisplayArtist, OverlayReferences, ParsedArtistCandidate,
     ParticipationKind, PresentationRole, PublicationPlan, ReleaseArtistId, ReleaseId,
     ReleaseManifest, ReleaseWorkItem, RetryPolicy, TrackArtistId, TrackId, WorkErrorCode,
-    WorkEventType, parse_explicit_artist_billing, parse_slash_artist_billing,
+    WorkEventType, acoustic_fingerprint_digest, parse_explicit_artist_billing,
+    parse_slash_artist_billing,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Postgres, QueryBuilder, Transaction};
@@ -2040,6 +2041,11 @@ struct PreparedTrack {
     source_path: String,
     media_asset_id: Uuid,
     musicbrainz_ids: Vec<(String, String)>,
+    /// Chromaprint fingerprint of this Track's own audio, when the normalized
+    /// output is a whole file. CUE-governed segments share one source
+    /// fingerprint, so they carry none (the fingerprint would describe another
+    /// Track's audio and poison acoustic duplicate detection).
+    acoustic_fingerprint: Option<String>,
 }
 
 #[derive(Clone)]
@@ -2240,6 +2246,17 @@ impl PreparedImport {
             }
         }
 
+        // Acoustic fingerprints are observed per *source file* during
+        // normalization and retained in the sealed manifest; index them by source
+        // path so each Track can carry its own audio's fingerprint into durable
+        // identity evidence (PRD-FP-001/PRD-FP-003) without re-reading audio.
+        let fingerprints_by_source = normalization
+            .fingerprints
+            .iter()
+            .filter(|fingerprint| !fingerprint.fingerprint.trim().is_empty())
+            .map(|fingerprint| (fingerprint.source_file.as_str(), fingerprint))
+            .collect::<BTreeMap<_, _>>();
+
         let mut tracks = Vec::with_capacity(manifest.tracks.len());
         for (index, track) in manifest.tracks.iter().enumerate() {
             let output = outputs.get(track.file_path.as_str()).ok_or_else(|| {
@@ -2291,6 +2308,15 @@ impl PreparedImport {
                     .as_ref()
                     .map(extract_musicbrainz_ids)
                     .unwrap_or_default(),
+                acoustic_fingerprint: output
+                    .segment
+                    .is_none()
+                    .then(|| {
+                        fingerprints_by_source
+                            .get(output.source_file.as_str())
+                            .map(|fingerprint| fingerprint.fingerprint.trim().to_owned())
+                    })
+                    .flatten(),
             });
         }
         if tracks.is_empty() {
@@ -2844,6 +2870,7 @@ async fn persist_prepared_import(
     link_query.build().execute(&mut **tx).await?;
 
     persist_embedded_audio_identity_evidence(tx, prepared, now).await?;
+    persist_acoustic_audio_identity_evidence(tx, prepared, now).await?;
 
     let artist_identities = prepared.resolutions.iter().fold(
         BTreeMap::<Uuid, &PreparedResolution>::new(),
@@ -3384,6 +3411,49 @@ where
 /// Retains embedded MusicBrainz observations on the AudioIdentity that owns a
 /// Track. Matching recording IDs are only proposals: a tag is evidence, not a
 /// license to silently collapse two catalog occurrences.
+/// Records the durable acoustic identity evidence an import already paid for.
+///
+/// Normalization runs `fpcalc` on every source file and the fingerprint is
+/// retained in the sealed manifest, but nothing promoted it into
+/// `audio_identity_evidence`, so `audio_identity_confirmed` could never be true
+/// from acoustic data and every Track's novelty stayed `uncertain` ("lacks
+/// durable fingerprint"). The digest is the catalogue-wide comparison key
+/// (PRD-FP-002/PRD-FP-003); the raw fingerprint stays in the manifest.
+async fn persist_acoustic_audio_identity_evidence(
+    tx: &mut Transaction<'_, Postgres>,
+    prepared: &PreparedImport,
+    now: OffsetDateTime,
+) -> Result<(), CatalogStoreError> {
+    for track in &prepared.tracks {
+        let Some(fingerprint) = track.acoustic_fingerprint.as_deref() else {
+            continue;
+        };
+        if fingerprint.trim().is_empty() {
+            continue;
+        }
+        sqlx::query(
+            "INSERT INTO audio_identity_evidence (
+                id, source_audio_identity_id, candidate_audio_identity_id,
+                track_id, evidence_kind, polarity, confidence, source,
+                payload, created_at
+             ) VALUES ($1,$2,NULL,$3,'acoustic_fingerprint','supports',9000,
+                       'manifest-v3:chromaprint',$4,$5)",
+        )
+        .bind(Uuid::now_v7())
+        .bind(track.audio_identity_id)
+        .bind(track.id)
+        .bind(serde_json::json!({
+            "fingerprint_digest": acoustic_fingerprint_digest(fingerprint),
+            "fingerprint_length": fingerprint.trim().len(),
+            "media_asset_id": track.media_asset_id,
+        }))
+        .bind(now)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
+}
+
 async fn persist_embedded_audio_identity_evidence(
     tx: &mut Transaction<'_, Postgres>,
     prepared: &PreparedImport,

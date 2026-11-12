@@ -1496,9 +1496,12 @@ async fn catalog_import_persists_all_embedded_musicbrainz_families_and_enrichmen
         .expect("read Release external evidence"),
         2
     );
+    // Embedded-identifier evidence only: the import also records durable
+    // acoustic-fingerprint evidence (PRD-FP-001), which carries no `family`.
     let audio_evidence: Vec<(String, i32)> = sqlx::query_as(
         "SELECT payload->>'family', confidence FROM audio_identity_evidence
          WHERE track_id=(SELECT id FROM tracks WHERE release_id=$1)
+           AND evidence_kind='external_identifier'
          ORDER BY payload->>'family'",
     )
     .bind(fixture.release_id.into_uuid())
@@ -1506,6 +1509,25 @@ async fn catalog_import_persists_all_embedded_musicbrainz_families_and_enrichmen
     .await
     .expect("read AudioIdentity evidence");
     assert_eq!(audio_evidence.len(), 6);
+
+    // PRD-FP-001: the Chromaprint observation normalization already computed is
+    // promoted to durable identity evidence (digest only; the raw fingerprint
+    // stays in the sealed manifest).
+    let acoustic: (i32, Option<String>) = sqlx::query_as(
+        "SELECT confidence, payload->>'fingerprint_digest' FROM audio_identity_evidence
+         WHERE track_id=(SELECT id FROM tracks WHERE release_id=$1)
+           AND evidence_kind='acoustic_fingerprint'",
+    )
+    .bind(fixture.release_id.into_uuid())
+    .fetch_one(&db.pool)
+    .await
+    .expect("read acoustic identity evidence");
+    assert_eq!(acoustic.0, 9000);
+    assert_eq!(
+        acoustic.1.as_deref().map(str::len),
+        Some(64),
+        "the durable comparison key is a BLAKE3 digest"
+    );
     assert!(
         audio_evidence
             .iter()

@@ -48,10 +48,23 @@ fn request_for_category(
         }
         TrackNoveltyCategory::KnownAudioIdentity => {
             request.novelty_evaluation.known_audio_identity_count = 1;
+            // The engine reports which signal found the known recording, and
+            // commit revalidation re-derives the same conclusion: a Release that
+            // shares audio carries a matching acoustic fingerprint digest even
+            // when its AudioIdentity row is new.
+            let acoustic = context
+                .tracks
+                .first()
+                .and_then(|track| track.audio_fingerprint_digest.as_ref())
+                .is_some_and(|digest| context.catalog_acoustic_fingerprints.contains(digest));
             (
                 NoveltyEvidenceKind::AudioIdentityMatch,
                 Confidence::new(9_000).expect("valid confidence"),
-                "AudioIdentity is durably referenced by another Release",
+                if acoustic {
+                    "Canonical acoustic fingerprint exists in another Release"
+                } else {
+                    "AudioIdentity is durably referenced by another Release"
+                },
             )
         }
         TrackNoveltyCategory::AlternateRecording => {
@@ -75,7 +88,7 @@ fn request_for_category(
             (
                 NoveltyEvidenceKind::InsufficientEvidence,
                 Confidence::zero(),
-                "AudioIdentity lacks durable fingerprint or match confirmation",
+                "No catalog comparison conclusion for this AudioIdentity",
             )
         }
     };
@@ -357,11 +370,24 @@ async fn exact_known_alternate_new_and_uncertain_catalog_truth_commit_without_me
                     .catalog_exact_byte_hashes
                     .contains(&exact.published.normalized_byte_hash)
             ),
-            TrackNoveltyCategory::KnownAudioIdentity => assert!(
-                context
-                    .catalog_known_audio_identities
-                    .contains(&baseline_audio)
-            ),
+            TrackNoveltyCategory::KnownAudioIdentity => {
+                assert!(
+                    context
+                        .catalog_known_audio_identities
+                        .contains(&baseline_audio)
+                );
+                // A merged AudioIdentity shares an identity row, not audio: the
+                // conclusion must come from the identity reference, never from a
+                // fabricated acoustic match.
+                let digest = context.tracks[0]
+                    .audio_fingerprint_digest
+                    .as_deref()
+                    .expect("fixture fingerprint");
+                assert!(
+                    !context.catalog_acoustic_fingerprints.contains(digest),
+                    "distinct fixtures must not share an acoustic fingerprint"
+                );
+            }
             TrackNoveltyCategory::AlternateRecording => {
                 let release_audio =
                     melodee_domain::AudioIdentityId::from_uuid(context.tracks[0].audio_identity_id);
@@ -386,7 +412,9 @@ async fn exact_known_alternate_new_and_uncertain_catalog_truth_commit_without_me
                 &request_for_category(&context, rule_set.id, category, now),
             )
             .await
-            .expect("commit revalidated novelty category");
+            .unwrap_or_else(|error| {
+                panic!("commit revalidated novelty category {category:?}: {error:?}")
+            });
         assert_eq!(committed.item.state, IngestionState::NeedsReview);
     }
     let baseline_claim = claims

@@ -150,6 +150,7 @@ declared output*. That is what the known-answer corpus adds.
 | `07-compilation-trait` | `Greatest Hits` + various-artists → trait detected, policy routes to **review** |
 | `08-duplicate-reimport` | Byte-identical re-import → second Release, Tracks flagged `exact_duplicate` |
 | `09-fault-truncated` | A truncated MP3 is still decodable and catalogues (documented negative case) |
+| — | Fixtures are acoustically distinct (per-fixture pitch + sweep) except where a fixture deliberately reuses another's audio; otherwise the acoustic matcher treats one fixture as a copy of another and the declared policy outcome never happens |
 | `10-blackbeard-sidecar` | `.blackbeard.provenance.json` supplies release-level date text (fallback-only) |
 | `11-fault-missing-album-tag` | An unnameable Release is routed to `needs_review`, never guessed |
 

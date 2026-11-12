@@ -39,7 +39,13 @@ presents evidence first and choices last:
 - **Classification and evidence** — overall confidence, the classifier version, and each
   finding (for example `Title contains "Greatest Hits" → greatest_hits`).
 - **Catalog comparison** — known, new, alternate-version, and uncertain Track counts with
-  percentages, evaluated timestamp, and evaluator version.
+  percentages, evaluated timestamp, and evaluator version. Comparison uses durable evidence
+  recorded at import: an identical canonical byte hash makes a Track an **exact duplicate**, and an
+  identical acoustic fingerprint (the Chromaprint observation every import already computes) makes
+  it a **known** recording even when the file itself differs, for example a copy that was only
+  retagged. A Track stays **uncertain** until a catalogue comparison actually concludes something —
+  a locally computed fingerprint is evidence, not a verdict — and re-encodes at a different bitrate
+  keep that honest verdict until a similarity matcher exists.
 - **Track breakdown** — per-Track duration, format, and novelty result, with an **inline audio
   preview** transport (never autoplaying; a missing preview degrades gracefully).
 - **Policy match** — the matched rule ids, the recommended disposition, the decision state, the

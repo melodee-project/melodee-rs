@@ -44,12 +44,14 @@ pub fn evaluate_catalog_context(
                     .media_asset_id
                     .map(melodee_domain::MediaAssetId::from_uuid),
                 byte_hash: fact.byte_hash.clone(),
+                audio_fingerprint_digest: fact.audio_fingerprint_digest.clone(),
                 audio_identity_confirmed: fact.has_confirmed_audio_identity,
             })
             .collect(),
         catalog_exact_byte_hashes: context.catalog_exact_byte_hashes.clone(),
         catalog_known_audio_identities: context.catalog_known_audio_identities.clone(),
         catalog_alternate_audio_identities: context.catalog_alternate_audio_identities.clone(),
+        catalog_acoustic_fingerprints: context.catalog_acoustic_fingerprints.clone(),
         policy_rule_set_id: engine.rule_set_id(),
         evaluator_version: DEFAULT_NOVELTY_EVALUATOR_VERSION.to_owned(),
         now,
@@ -124,6 +126,7 @@ mod tests {
                 media_asset_id: Some(MediaAssetId::new().into_uuid()),
                 byte_hash: Some(byte_hash),
                 audio_fingerprint: Some("fingerprint-observation".to_owned()),
+                audio_fingerprint_digest: None,
                 has_confirmed_audio_identity: false,
             }],
             current_classification: None,
@@ -136,6 +139,7 @@ mod tests {
             catalog_exact_byte_hashes: BTreeSet::new(),
             catalog_known_audio_identities: BTreeSet::new(),
             catalog_alternate_audio_identities: BTreeSet::new(),
+            catalog_acoustic_fingerprints: BTreeSet::new(),
         }
     }
 

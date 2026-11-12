@@ -84,6 +84,9 @@ pub struct CatalogTrackFact {
     pub byte_hash: Option<String>,
     /// Nonblank Chromaprint observation from the immutable v3 manifest.
     pub audio_fingerprint: Option<String>,
+    /// Durable comparison key for `audio_fingerprint` (see
+    /// [`melodee_domain::acoustic_fingerprint_digest`]).
+    pub audio_fingerprint_digest: Option<String>,
     pub has_confirmed_audio_identity: bool,
 }
 
@@ -117,6 +120,9 @@ pub struct PolicyCatalogContext {
     /// Audio identities with a durable confirmed distinct-recording decision.
     pub catalog_alternate_audio_identities:
         std::collections::BTreeSet<melodee_domain::AudioIdentityId>,
+    /// Acoustic fingerprint digests already present in *another* Release, so a
+    /// re-encoded or retagged copy is recognised instead of being called new.
+    pub catalog_acoustic_fingerprints: std::collections::BTreeSet<String>,
 }
 
 /// Atomic, lease-fenced policy evaluation write.
@@ -1308,8 +1314,10 @@ impl PolicyStore {
                 limit: MAX_POLICY_TRACKS_PER_RELEASE,
             });
         }
-        let rows: Vec<(Uuid, Uuid, Uuid, bool, bool, bool, bool)> = sqlx::query_as(
-            r#"SELECT t.id, t.audio_identity_id, t.playable_media_asset_id,
+        let rows: Vec<NoveltyRevalidationRow> = sqlx::query_as(
+            r#"SELECT t.id AS track_id,
+                      t.audio_identity_id,
+                      t.playable_media_asset_id AS media_asset_id,
                       EXISTS (
                           SELECT 1 FROM tracks other
                           JOIN media_assets other_media
@@ -1319,6 +1327,19 @@ impl PolicyStore {
                           WHERE other.release_id <> t.release_id
                             AND other_media.byte_hash = own_media.byte_hash
                       ) AS exact_duplicate,
+                      EXISTS (
+                          SELECT 1
+                            FROM audio_identity_evidence own_evidence
+                            JOIN audio_identity_evidence other_evidence
+                              ON other_evidence.evidence_kind = 'acoustic_fingerprint'
+                             AND (other_evidence.payload->>'fingerprint_digest')
+                                 = (own_evidence.payload->>'fingerprint_digest')
+                            JOIN tracks other_track
+                              ON other_track.id = other_evidence.track_id
+                             AND other_track.release_id <> t.release_id
+                           WHERE own_evidence.track_id = t.id
+                             AND own_evidence.evidence_kind = 'acoustic_fingerprint'
+                      ) AS acoustic_match,
                       EXISTS (
                           SELECT 1 FROM tracks other
                            WHERE other.release_id <> t.release_id
@@ -1397,13 +1418,29 @@ impl PolicyStore {
         > = rows
             .into_iter()
             .map(
-                |(track, audio, media, exact, known, alternate, confirmed)| {
+                |NoveltyRevalidationRow {
+                     track_id: track,
+                     audio_identity_id: audio,
+                     media_asset_id: media,
+                     exact_duplicate: exact,
+                     acoustic_match: acoustic,
+                     known_identity: known,
+                     alternate_recording: alternate,
+                     identity_confirmed: confirmed,
+                 }| {
                     let (category, evidence_kind, confidence, detail) = if exact {
                         (
                             melodee_domain::TrackNoveltyCategory::ExactDuplicate,
                             melodee_domain::NoveltyEvidenceKind::ByteHashMatch,
                             10_000,
                             "Canonical byte hash exists in another Release",
+                        )
+                    } else if acoustic {
+                        (
+                            melodee_domain::TrackNoveltyCategory::KnownAudioIdentity,
+                            melodee_domain::NoveltyEvidenceKind::AudioIdentityMatch,
+                            9_000,
+                            "Canonical acoustic fingerprint exists in another Release",
                         )
                     } else if known {
                         (
@@ -1431,7 +1468,7 @@ impl PolicyStore {
                             melodee_domain::TrackNoveltyCategory::Uncertain,
                             melodee_domain::NoveltyEvidenceKind::InsufficientEvidence,
                             0,
-                            "AudioIdentity lacks durable fingerprint or match confirmation",
+                            "No catalog comparison conclusion for this AudioIdentity",
                         )
                     };
                     (
@@ -2031,6 +2068,10 @@ impl PolicyStore {
                 audio_identity_id: row.audio_identity_id,
                 media_asset_id: row.media_asset_id,
                 byte_hash: row.byte_hash,
+                audio_fingerprint_digest: row
+                    .audio_fingerprint
+                    .as_deref()
+                    .map(melodee_domain::acoustic_fingerprint_digest),
                 audio_fingerprint: row.audio_fingerprint,
                 has_confirmed_audio_identity: row.has_confirmed_audio_identity,
             })
@@ -2139,6 +2180,17 @@ impl PolicyStore {
         .bind(release_id)
         .fetch_all(pool)
         .await?;
+        let acoustic_rows: Vec<(String,)> = sqlx::query_as(
+            r#"SELECT DISTINCT evidence.payload->>'fingerprint_digest'
+                 FROM audio_identity_evidence evidence
+                 JOIN tracks owner ON owner.id = evidence.track_id
+                WHERE evidence.evidence_kind = 'acoustic_fingerprint'
+                  AND evidence.payload ? 'fingerprint_digest'
+                  AND owner.release_id <> $1"#,
+        )
+        .bind(release_id)
+        .fetch_all(pool)
+        .await?;
         let catalog_trait_rows: Vec<(String,)> = sqlx::query_as(
             r#"SELECT trait FROM release_catalog_trait_assertions
                 WHERE release_id = $1 ORDER BY trait LIMIT $2"#,
@@ -2195,6 +2247,7 @@ impl PolicyStore {
                 .into_iter()
                 .map(|row| melodee_domain::AudioIdentityId::from_uuid(row.0))
                 .collect(),
+            catalog_acoustic_fingerprints: acoustic_rows.into_iter().map(|row| row.0).collect(),
         })
     }
 
@@ -2416,7 +2469,16 @@ impl PolicyStore {
                                        alternate.alternate_audio_identity_id
                                    )
                               )
-                      ), ARRAY[]::uuid[]) AS alternate_audio_ids
+                      ), ARRAY[]::uuid[]) AS alternate_audio_ids,
+                      COALESCE((
+                          SELECT array_agg(DISTINCT evidence.payload->>'fingerprint_digest')
+                            FROM audio_identity_evidence evidence
+                            JOIN tracks owner
+                              ON owner.id = evidence.track_id
+                           WHERE evidence.evidence_kind = 'acoustic_fingerprint'
+                             AND evidence.payload ? 'fingerprint_digest'
+                             AND owner.release_id <> ci.release_id
+                      ), ARRAY[]::text[]) AS acoustic_fingerprints
                  FROM catalog_imports ci
                  JOIN release_work_items w ON w.id = ci.work_item_id
                  JOIN releases r ON r.id = ci.release_id
@@ -3487,6 +3549,22 @@ async fn route_operator_item_tx(
     Ok(row)
 }
 
+/// Derived novelty signals for one Track, recomputed at commit time so a caller
+/// cannot submit a conclusion the catalogue facts do not support.
+#[derive(Debug, sqlx::FromRow)]
+struct NoveltyRevalidationRow {
+    track_id: Uuid,
+    audio_identity_id: Uuid,
+    /// The Track's playable asset; a Track that reached novelty evaluation always
+    /// has one (the decoder rejects NULL exactly as before).
+    media_asset_id: Uuid,
+    exact_duplicate: bool,
+    acoustic_match: bool,
+    known_identity: bool,
+    alternate_recording: bool,
+    identity_confirmed: bool,
+}
+
 #[derive(Debug, Clone, sqlx::FromRow)]
 struct CatalogTrackFactRow {
     release_id: Uuid,
@@ -3527,6 +3605,7 @@ struct DryRunContextRow {
     exact_hashes: Vec<String>,
     known_audio_ids: Vec<Uuid>,
     alternate_audio_ids: Vec<Uuid>,
+    acoustic_fingerprints: Vec<String>,
 }
 
 impl TryFrom<DryRunContextRow> for PolicyCatalogContext {
@@ -3574,6 +3653,7 @@ impl TryFrom<DryRunContextRow> for PolicyCatalogContext {
             existing_disposition,
             has_corrupt_media: row.has_corrupt_media,
             catalog_exact_byte_hashes: row.exact_hashes.into_iter().collect(),
+            catalog_acoustic_fingerprints: row.acoustic_fingerprints.into_iter().collect(),
             catalog_known_audio_identities: row
                 .known_audio_ids
                 .into_iter()
