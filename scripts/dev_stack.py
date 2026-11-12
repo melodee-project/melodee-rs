@@ -233,7 +233,8 @@ def supervise(environment: dict[str, str], command: list[str] | None = None) -> 
                 / profile
                 / ("melodee-server.exe" if os.name == "nt" else "melodee-server")
             )
-            if not executable.is_file():
+            # An explicit command (tests, tooling) bypasses the binary contract.
+            if command is None and not executable.is_file():
                 raise StackError(
                     f"{executable} is missing; build it first with "
                     f"`cargo build --profile {profile} -p melodee-server`"
