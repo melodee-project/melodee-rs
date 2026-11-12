@@ -30,9 +30,17 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   projects: [
+    // Authenticate once (the API rate-limits sign-in), then reuse the session.
+    { name: 'live-setup', testMatch: /auth\.setup\.ts/ },
     {
       name: 'live-desktop',
-      use: { ...devices['Desktop Chrome'], viewport: { width: 1600, height: 1200 } },
+      dependencies: ['live-setup'],
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1600, height: 1200 },
+        storageState:
+          process.env.MELODEE_LIVE_STATE ?? '/tmp/melodee-live-auth-state.json',
+      },
     },
   ],
 });

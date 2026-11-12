@@ -1,6 +1,6 @@
 PYTHON ?= python3
 
-.PHONY: up down bootstrap prechecks check check-fast fmt lint test test-unit test-integration test-coverage docs docs-site-check deny postgres-up postgres-down postgres-reset capture-baseline admin-ui-check admin-ui-e2e audit audit-live
+.PHONY: up down bootstrap prechecks check check-fast fmt lint test test-unit test-integration test-coverage docs docs-site-check deny postgres-up postgres-down postgres-reset capture-baseline admin-ui-check admin-ui-e2e audit audit-live corpus corpus-verify
 
 bootstrap:
 	$(PYTHON) scripts/bootstrap.py
@@ -62,6 +62,13 @@ postgres-down:
 
 audit:
 	$(PYTHON) scripts/audit_runtime_invariants.py
+
+corpus:
+	$(PYTHON) scripts/generate_known_corpus.py --tier all
+
+corpus-verify:
+	$(PYTHON) scripts/verify_known_corpus.py --require-tier all \
+		--emit-ui-expectations admin-ui/e2e/live/known-corpus.generated.ts
 
 audit-live:
 	$(PYTHON) scripts/check.py audit-live

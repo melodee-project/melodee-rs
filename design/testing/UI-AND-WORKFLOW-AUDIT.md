@@ -117,3 +117,73 @@ Add a check to `CHECKS` in `scripts/audit_runtime_invariants.py` whenever a new 
 status, or lifecycle state is introduced: the rule is that every rendered count has a query that
 proves it can be drilled down, and every status the UI can display must be produced by the code
 path that the audit names.
+
+---
+
+## Known-answer corpus (Phases 1–6)
+
+The layers above prove internal consistency. They cannot prove that *a declared input produces a
+declared output*. That is what the known-answer corpus adds.
+
+### Artifacts
+
+| Path | Role |
+|---|---|
+| `tests/fixtures/media-test-metadata.json` | The durable, declarative corpus: fixtures, tags, durations, artwork, sidecars, and per-fixture expectations |
+| `scripts/generate_known_corpus.py` | Materialises media + `expected.json` (the oracle) from that JSON with ffmpeg. No media is committed. |
+| `scripts/verify_known_corpus.py` | Ingests the corpus, waits for terminal states, and asserts the oracle across PostgreSQL, the filesystem, the search projection, the runtime invariants, and the OpenSubsonic client surface |
+| `admin-ui/e2e/live/known-corpus.generated.ts` | Oracle → typed TS module (emitted by the verifier) so the UI suite asserts the same decided values |
+| `admin-ui/e2e/live/known-corpus-views.spec.ts` | Phase 3: every view populated from the oracle (hero, tabs, artefacts, History/Active, Overview KPIs) |
+| `admin-ui/e2e/live/edit-matrix.spec.ts` | Phase 4: every edit control persists and its side effect is observable |
+| `design/evidence/known-corpus/` | Run evidence, including findings raised |
+
+### Fixture matrix
+
+| Fixture | Proves |
+|---|---|
+| `01-single-artist-album` | Happy path: complete tags, embedded art, sequential numbering |
+| `02-featured-track` | `feat.` billing → one primary + one featured Track Artist, not a compound name |
+| `03-multidisc` | Disc-scoped ordinals and ordering |
+| `04-no-album-artist` | Missing Album Artist still yields a provisional Release Artist |
+| `05-unicode-and-punctuation` | Diacritics fold for search; `AC/DC` and `Sigur Rós` are **not** split |
+| `06-no-artwork` | No cover → initials, and no invented image row |
+| `07-compilation-trait` | `Greatest Hits` + various-artists → trait detected, policy routes to **review** |
+| `08-duplicate-reimport` | Byte-identical re-import → second Release, Tracks flagged `exact_duplicate` |
+| `09-fault-truncated` | A truncated MP3 is still decodable and catalogues (documented negative case) |
+| `10-blackbeard-sidecar` | `.blackbeard.provenance.json` supplies release-level date text (fallback-only) |
+| `11-fault-missing-album-tag` | An unnameable Release is routed to `needs_review`, never guessed |
+
+### Running it
+
+```bash
+make corpus                       # generate media + oracle (tier: all)
+MELODEE_LIVE_USERNAME=… MELODEE_LIVE_PASSWORD=… make corpus-verify
+MELODEE_LIVE_USERNAME=… MELODEE_LIVE_PASSWORD=… \
+  MELODEE_CLIENT_URL=http://<host-lan-ip>:8080 make audit-live
+```
+
+`corpus-verify` needs a **non-loopback** client URL for the OpenSubsonic checks: loopback requests hit
+the captured OpenSubsonic auth bypass, which synthesizes no principal, and media routes answer 404 to
+it. The server must therefore also be bound beyond `127.0.0.1`
+(`MELODEE__SERVER__BIND=0.0.0.0:8080 make up`).
+
+Live suites authenticate **once**: the Admin API rate-limits sign-in, so a per-test login pattern
+exhausts the budget and returns `429` part-way through a run (observed, and a good sign that the
+limit works). `e2e/live/auth.setup.ts` signs in a single time and persists `storageState`
+(`/tmp/melodee-live-auth-state.json`, mode 0600); `playwright.live.config.ts` declares it as a
+dependency of the `live-desktop` project, and `signIn()` in `e2e/live/session.ts` reads that state
+instead of logging in again.
+
+### Known gaps are not passes
+
+A **gap** is behaviour the product does not yet have. The verifier records gaps separately from
+failures, and the Playwright suites annotate them (`known-gap`) instead of failing the run. They stay
+visible in every report and flip to hard failures the moment the intended behaviour lands — which is
+how F1 and F2 below stay on the record rather than being silently normalised.
+
+### Findings raised so far
+
+See `design/evidence/known-corpus/RUN-m1.md`. In summary: a tagged release date never reaches the
+Release; imported/provider cover art is served as a zero-byte body; History defaulted to an empty
+filter (fixed in that run); truncation alone is not a fault; an unnameable Release is correctly
+refused.

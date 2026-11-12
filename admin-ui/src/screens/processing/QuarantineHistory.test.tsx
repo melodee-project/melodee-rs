@@ -136,12 +136,12 @@ describe('HistoryScreen', () => {
     mockGetWorkItemEvents.mockResolvedValue([makeEvent({ toState: 'cataloged' })]);
   });
 
-  it('defaults to the cataloged terminal state and switches server-side', async () => {
+  it('defaults to the indexed terminal state and switches server-side', async () => {
     renderScreen(<HistoryScreen />, '/processing/history');
     expect(await screen.findByText('Business as Usual')).toBeInTheDocument();
     await waitFor(() =>
       expect(mockListWorkItems).toHaveBeenLastCalledWith(
-        expect.objectContaining({ state: 'cataloged' }),
+        expect.objectContaining({ state: 'indexed' }),
       ),
     );
 
@@ -164,7 +164,7 @@ describe('HistoryScreen', () => {
     renderScreen(<HistoryScreen />, '/processing/history?state=ready');
     await waitFor(() =>
       expect(mockListWorkItems).toHaveBeenLastCalledWith(
-        expect.objectContaining({ state: 'cataloged' }),
+        expect.objectContaining({ state: 'indexed' }),
       ),
     );
   });

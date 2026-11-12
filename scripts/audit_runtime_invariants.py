@@ -70,16 +70,20 @@ class Check:
 CHECKS: tuple[Check, ...] = (
     Check(
         "workflow.no_stuck_non_terminal",
-        "A work item never sits in a non-terminal state: every accepted Release reaches "
-        "`indexed`, and failures/parks are explicit states.",
+        "No work item sits in a state a worker is supposed to advance. Operator-park "
+        "states (needs_review, quarantined, failed) are excluded here and reported "
+        "separately by `workflow.awaiting_operator`, because waiting for a human is not "
+        "a stuck pipeline.",
         """
         SELECT count(*)::bigint FROM release_work_items
-         WHERE state NOT IN ('indexed', 'ignored', 'deleted')
+         WHERE state NOT IN ('indexed', 'ignored', 'deleted',
+                             'needs_review', 'quarantined', 'failed')
            AND updated_at < now() - make_interval(mins => $1)
         """,
         """
         SELECT state, count(*)::bigint FROM release_work_items
-         WHERE state NOT IN ('indexed', 'ignored', 'deleted')
+         WHERE state NOT IN ('indexed', 'ignored', 'deleted',
+                             'needs_review', 'quarantined', 'failed')
            AND updated_at < now() - make_interval(mins => $1)
          GROUP BY state ORDER BY 2 DESC
         """,
@@ -129,6 +133,20 @@ CHECKS: tuple[Check, ...] = (
         SELECT count(*)::bigint FROM pending
         """,
         None,
+    ),
+    Check(
+        "workflow.awaiting_operator",
+        "Items parked on an operator decision are listed, never failed: this is "
+        "informational and always passes, so the queue depth is visible in the audit "
+        "report without pretending a human decision is a defect.",
+        """
+        SELECT 0::bigint
+        """,
+        """
+        SELECT state, count(*)::bigint FROM release_work_items
+         WHERE state IN ('needs_review', 'quarantined', 'failed')
+         GROUP BY state ORDER BY 2 DESC
+        """,
     ),
     Check(
         "catalog.playable_asset_resolves",

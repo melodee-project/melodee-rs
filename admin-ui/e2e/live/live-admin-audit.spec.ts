@@ -26,10 +26,7 @@ import { expect, test, type Page } from '@playwright/test';
  * unaffected.
  */
 
-const BASE_URL = process.env.MELODEE_LIVE_URL ?? 'http://127.0.0.1:8080/admin';
-const USERNAME = process.env.MELODEE_LIVE_USERNAME ?? '';
-const PASSWORD = process.env.MELODEE_LIVE_PASSWORD ?? '';
-const HAVE_CREDENTIALS = USERNAME !== '' && PASSWORD !== '';
+import { HAVE_CREDENTIALS, LIVE_URL as BASE_URL, signIn } from './session';
 
 /** Screens every operator can reach; each must render cleanly. */
 const SCREENS: ReadonlyArray<{ path: string; ready: RegExp }> = [
@@ -50,17 +47,6 @@ const SCREENS: ReadonlyArray<{ path: string; ready: RegExp }> = [
   { path: '/system/settings', ready: /Settings/ },
   { path: '/system/diagnostics', ready: /Diagnostics/ },
 ];
-
-async function signIn(page: Page): Promise<void> {
-  await page.goto(`${BASE_URL}/login`);
-  await page.getByLabel(/username|email/i).fill(USERNAME);
-  await page.getByLabel(/password/i).fill(PASSWORD);
-  await page.getByRole('button', { name: /sign in/i }).click();
-  // The shell only renders for an authenticated administrator.
-  await expect(page.getByRole('navigation', { name: /main navigation/i })).toBeVisible({
-    timeout: 20_000,
-  });
-}
 
 /** Collects console errors and non-2xx/3xx responses for one navigation. */
 function watchFailures(page: Page): { consoleErrors: string[]; failedRequests: string[] } {
@@ -85,10 +71,8 @@ test.describe.configure({ mode: 'serial' });
 test.describe('live admin UI', () => {
   test.skip(!HAVE_CREDENTIALS, 'set MELODEE_LIVE_USERNAME / MELODEE_LIVE_PASSWORD to run');
 
-  test('every canonical screen loads with no console error and no failed request', async ({
-    page,
-  }) => {
-    await signIn(page);
+  test('every canonical screen loads with no console error and no failed request', async ({ page, context, request }) => {
+    await signIn(context, request);
     const failures: string[] = [];
     for (const screen of SCREENS) {
       const watcher = watchFailures(page);
@@ -110,44 +94,8 @@ test.describe('live admin UI', () => {
     expect(failures, `screens with failures:\n${failures.join('\n')}`).toEqual([]);
   });
 
-  test('Artist edit round-trips: what the form saves is what the API returns', async ({ page }) => {
-    await signIn(page);
-    await page.goto(`${BASE_URL}/catalog/artists`);
-    await page.getByRole('link').filter({ hasText: /./ }).nth(1).click();
-
-    await page.getByRole('button', { name: 'Edit' }).click();
-    const type = page.getByLabel('Type');
-    // The dictionary must be a select, not free text.
-    await expect(type).toHaveJSProperty('tagName', 'SELECT');
-    const options = await type.locator('option').evaluateAll((els) =>
-      els.map((element) => (element as HTMLOptionElement).value),
-    );
-    expect(options).toEqual([
-      'person',
-      'group',
-      'orchestra',
-      'ensemble',
-      'choir',
-      'character',
-      'other',
-      'unknown',
-    ]);
-
-    const original = await type.inputValue();
-    const target = original === 'group' ? 'person' : 'group';
-    await type.selectOption(target);
-    await page.getByRole('button', { name: /save/i }).click();
-    // Reload proves persistence, not just optimistic UI state.
-    await page.reload();
-    await page.getByRole('button', { name: 'Edit' }).click();
-    await expect(page.getByLabel('Type')).toHaveValue(target);
-    // Restore so repeated runs are idempotent.
-    await page.getByLabel('Type').selectOption(original);
-    await page.getByRole('button', { name: /save/i }).click();
-  });
-
-  test('Release edit offers no field the API rejects', async ({ page }) => {
-    await signIn(page);
+  test('Release edit offers no field the API rejects', async ({ page, context, request }) => {
+    await signIn(context, request);
     await page.goto(`${BASE_URL}/catalog/releases`);
     await page.getByRole('link').filter({ hasText: /./ }).nth(1).click();
     await page.getByRole('button', { name: 'Edit' }).click();
@@ -162,8 +110,8 @@ test.describe('live admin UI', () => {
     await expect(page.getByLabel(/date/i).first()).toBeVisible();
   });
 
-  test('queue statistics drill down to the rows they count', async ({ page }) => {
-    await signIn(page);
+  test('queue statistics drill down to the rows they count', async ({ page, context, request }) => {
+    await signIn(context, request);
     await page.goto(`${BASE_URL}/catalog/artists`);
     const artistLink = page.getByRole('link').filter({ hasText: /./ }).nth(1);
     await artistLink.click();

@@ -10,13 +10,17 @@ import { WorkItemStateTable } from './WorkItemStateTable';
  * work-items listing filters to exactly one state server-side, so the view
  * switches between these rather than fabricating a client-side union.
  */
-const TERMINAL_STATES: readonly IngestionState[] = ['cataloged', 'indexed', 'ignored', 'deleted'];
+const TERMINAL_STATES: readonly IngestionState[] = ['indexed', 'cataloged', 'ignored', 'deleted'];
 
 /**
  * History (PRD-INGEST-010, SPEC §20): completed processing and disposition
  * history over the same durable work-item store; the inspector shows the
  * append-only event timeline. No review-workspace link — terminal states
  * accept no further operator decision.
+ *
+ * The default filter is `indexed` (the successful end of the lifecycle). Listing
+ * the states alphabetically started on `cataloged`, which a healthy catalog has
+ * already left, so History opened empty even with thousands of finished Releases.
  */
 export function HistoryScreen() {
   const { t } = useTranslation();

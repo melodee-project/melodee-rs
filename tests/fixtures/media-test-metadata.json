@@ -1,0 +1,461 @@
+{
+  "$comment": [
+    "Known-answer media corpus specification (design/testing/KNOWN-ANSWER-E2E.md).",
+    "This file is the durable artifact: `python3 scripts/generate_known_corpus.py` recreates",
+    "every audio file, artwork file, and the expected-outcome oracle from it, so the whole",
+    "end-to-end exercise can be re-run at any time without committing binaries.",
+    "Everything here is synthesised with ffmpeg from sine tones. No copyrighted audio.",
+    "Durations are seconds; the generator records the exact duration ffprobe reports back into",
+    "the oracle so assertions compare against the real artefact, not an assumption."
+  ],
+  "schemaVersion": 1,
+  "audio": {
+    "codec": "mp3",
+    "bitrate": "128k",
+    "sampleRate": 44100,
+    "channels": 1,
+    "id3Version": 3
+  },
+  "releases": [
+    {
+      "slug": "01-single-artist-album",
+      "folder": "Fixture One - Static Bloom (2019)",
+      "purpose": "Happy path: complete tags, embedded artwork, sequential track numbers.",
+      "albumArtist": "Fixture One",
+      "releaseArtist": "Fixture One",
+      "album": "Static Bloom",
+      "year": 2019,
+      "genre": "Synthwave",
+      "releaseDate": "2019-04-12",
+      "artwork": {
+        "kind": "embedded",
+        "width": 500,
+        "height": 500,
+        "colors": [
+          "#12294a",
+          "#3d6fb5"
+        ]
+      },
+      "tracks": [
+        {
+          "title": "Static Bloom",
+          "trackNumber": 1,
+          "seconds": 8
+        },
+        {
+          "title": "Amber Circuit",
+          "trackNumber": 2,
+          "seconds": 7
+        },
+        {
+          "title": "Harbour Lights",
+          "trackNumber": 3,
+          "seconds": 9
+        },
+        {
+          "title": "Cold Start",
+          "trackNumber": 4,
+          "seconds": 6
+        }
+      ],
+      "expect": {
+        "terminalStates": [
+          "indexed"
+        ],
+        "releaseDateSource": "tags"
+      }
+    },
+    {
+      "slug": "02-featured-track",
+      "folder": "Fixture Two - Paper Lanterns (2020)",
+      "purpose": "Billing parse: a `feat.` track must yield a featured Track Artist, not a compound artist name.",
+      "albumArtist": "Fixture Two",
+      "releaseArtist": "Fixture Two",
+      "album": "Paper Lanterns",
+      "year": 2020,
+      "genre": "Indie Pop",
+      "releaseDate": "2020-09-01",
+      "artwork": {
+        "kind": "embedded",
+        "width": 400,
+        "height": 400,
+        "colors": [
+          "#3b1d47",
+          "#a265c4"
+        ]
+      },
+      "tracks": [
+        {
+          "title": "Paper Lanterns",
+          "trackNumber": 1,
+          "seconds": 8
+        },
+        {
+          "title": "Slow Motion",
+          "trackNumber": 2,
+          "seconds": 7,
+          "artist": "Fixture Two feat. Guest Vocalist"
+        }
+      ],
+      "expect": {
+        "featuredTrackArtist": "Guest Vocalist",
+        "primaryTrackArtist": "Fixture Two",
+        "terminalStates": [
+          "indexed"
+        ],
+        "releaseDateSource": "tags"
+      }
+    },
+    {
+      "slug": "03-multidisc",
+      "folder": "Fixture Three - Two Rooms (2021)",
+      "purpose": "Disc numbering: ordinals and disc-scoped track numbers must survive.",
+      "albumArtist": "Fixture Three",
+      "releaseArtist": "Fixture Three",
+      "album": "Two Rooms",
+      "year": 2021,
+      "genre": "Ambient",
+      "releaseDate": "2021-02-20",
+      "artwork": {
+        "kind": "embedded",
+        "width": 400,
+        "height": 400,
+        "colors": [
+          "#1f3b2c",
+          "#5f9c72"
+        ]
+      },
+      "tracks": [
+        {
+          "title": "Room One",
+          "trackNumber": 1,
+          "discNumber": 1,
+          "seconds": 6
+        },
+        {
+          "title": "Room Two",
+          "trackNumber": 2,
+          "discNumber": 1,
+          "seconds": 7
+        },
+        {
+          "title": "Room Three",
+          "trackNumber": 1,
+          "discNumber": 2,
+          "seconds": 8
+        }
+      ],
+      "expect": {
+        "terminalStates": [
+          "indexed"
+        ],
+        "releaseDateSource": "tags"
+      }
+    },
+    {
+      "slug": "04-no-album-artist",
+      "folder": "Fixture Four - Loose Ends (2018)",
+      "purpose": "Missing Album Artist: the Track Artist observation must still produce a provisional release artist.",
+      "albumArtist": null,
+      "releaseArtist": "Fixture Four",
+      "album": "Loose Ends",
+      "year": 2018,
+      "genre": "Folk",
+      "releaseDate": "2018-11-30",
+      "artwork": {
+        "kind": "sidecar",
+        "width": 300,
+        "height": 300,
+        "colors": [
+          "#4a2f1a",
+          "#b98a52"
+        ],
+        "fileName": "cover.jpg"
+      },
+      "tracks": [
+        {
+          "title": "Loose Ends",
+          "trackNumber": 1,
+          "seconds": 7
+        },
+        {
+          "title": "Tin Roof",
+          "trackNumber": 2,
+          "seconds": 6
+        }
+      ],
+      "expect": {
+        "terminalStates": [
+          "indexed"
+        ],
+        "releaseDateSource": "tags"
+      }
+    },
+    {
+      "slug": "05-unicode-and-punctuation",
+      "folder": "Fixture Five - Hopp\u00edpolla EP (2022)",
+      "purpose": "Diacritics fold for search but the display value is preserved; `&` and `/` inside a real name must NOT be split into separate artists.",
+      "albumArtist": "Sigur R\u00f3s",
+      "releaseArtist": "Sigur R\u00f3s",
+      "album": "Hopp\u00edpolla EP",
+      "year": 2022,
+      "genre": "Post-Rock",
+      "releaseDate": "2022-06-17",
+      "artwork": {
+        "kind": "embedded",
+        "width": 400,
+        "height": 400,
+        "colors": [
+          "#123c3c",
+          "#4fb3b3"
+        ]
+      },
+      "tracks": [
+        {
+          "title": "Hopp\u00edpolla",
+          "trackNumber": 1,
+          "seconds": 8
+        },
+        {
+          "title": "Me\u00f0 Bl\u00f3\u00f0nasir",
+          "trackNumber": 2,
+          "seconds": 6
+        },
+        {
+          "title": "Back In Black",
+          "trackNumber": 3,
+          "seconds": 7,
+          "artist": "AC/DC"
+        }
+      ],
+      "expect": {
+        "mustNotSplitArtists": [
+          "AC/DC",
+          "Sigur R\u00f3s"
+        ],
+        "mustNotContainArtist": [
+          "AC",
+          "DC"
+        ],
+        "terminalStates": [
+          "indexed"
+        ],
+        "releaseDateFromTags": true,
+        "releaseDateSource": "tags"
+      }
+    },
+    {
+      "slug": "06-no-artwork",
+      "folder": "Fixture Six - Unpictured (2023)",
+      "purpose": "No embedded art and no sidecar: the UI must fall back to initials and no image row may be invented.",
+      "albumArtist": "Fixture Six",
+      "releaseArtist": "Fixture Six",
+      "album": "Unpictured",
+      "year": 2023,
+      "genre": "Drone",
+      "releaseDate": "2023-01-05",
+      "artwork": null,
+      "tracks": [
+        {
+          "title": "Blank Wall",
+          "trackNumber": 1,
+          "seconds": 6
+        },
+        {
+          "title": "Grey Room",
+          "trackNumber": 2,
+          "seconds": 7
+        }
+      ],
+      "expect": {
+        "noArtwork": true,
+        "terminalStates": [
+          "indexed"
+        ],
+        "releaseDateSource": "tags"
+      }
+    },
+    {
+      "slug": "07-compilation-trait",
+      "folder": "Fixture Seven - Greatest Hits (2017)",
+      "purpose": "Trait detection and review routing: a `Greatest Hits` billing with various-artists credits classifies as a compilation trait and the policy routes it to operator review rather than auto-accepting it.",
+      "albumArtist": "Various Artists",
+      "releaseArtist": "Various Artists",
+      "album": "Greatest Hits",
+      "year": 2017,
+      "genre": "Various",
+      "releaseDate": "2017-08-08",
+      "artwork": {
+        "kind": "embedded",
+        "width": 400,
+        "height": 400,
+        "colors": [
+          "#4a1212",
+          "#c25b5b"
+        ]
+      },
+      "tracks": [
+        {
+          "title": "Hit One",
+          "trackNumber": 1,
+          "seconds": 6,
+          "artist": "Fixture Seven A"
+        },
+        {
+          "title": "Hit Two",
+          "trackNumber": 2,
+          "seconds": 6,
+          "artist": "Fixture Seven B"
+        }
+      ],
+      "expect": {
+        "trait": "greatest_hits",
+        "terminalStates": [
+          "needs_review"
+        ],
+        "policyDisposition": "review",
+        "releaseDateSource": "tags"
+      }
+    },
+    {
+      "slug": "08-duplicate-reimport",
+      "folder": "Fixture Eight - Static Bloom Copy (2019)",
+      "purpose": "Byte-identical re-import: verified as a second Release whose Tracks are flagged `exact_duplicate`. There is no release-level dedupe in this build; whether the C# product merges instead is a parity question.",
+      "albumArtist": "Fixture One",
+      "releaseArtist": "Fixture One",
+      "album": "Static Bloom",
+      "year": 2019,
+      "genre": "Synthwave",
+      "releaseDate": "2019-04-12",
+      "artwork": {
+        "kind": "embedded",
+        "width": 500,
+        "height": 500,
+        "colors": [
+          "#12294a",
+          "#3d6fb5"
+        ]
+      },
+      "duplicateOf": "01-single-artist-album",
+      "expect": {
+        "reusesAudioIdentityOf": "01-single-artist-album",
+        "terminalStates": [
+          "indexed"
+        ],
+        "duplicateBehaviour": "second_release_with_exact_duplicate_tracks",
+        "noveltyCategory": "exact_duplicate",
+        "releaseDateSource": "tags"
+      }
+    },
+    {
+      "slug": "09-fault-truncated",
+      "folder": "Fixture Nine - Broken Transmission (2024)",
+      "purpose": "Fault tier, negative case: an MP3 truncated to 35 % is still decodable, so the pipeline catalogues it. This documents that truncation alone is not treated as a fault; the positive fault case is fixture 11 (a Release that cannot be named).",
+      "albumArtist": "Fixture Nine",
+      "releaseArtist": "Fixture Nine",
+      "album": "Broken Transmission",
+      "year": 2024,
+      "genre": "Industrial",
+      "releaseDate": "2024-03-03",
+      "artwork": null,
+      "tier": "faults",
+      "tracks": [
+        {
+          "title": "Intact",
+          "trackNumber": 1,
+          "seconds": 6
+        },
+        {
+          "title": "Truncated",
+          "trackNumber": 2,
+          "seconds": 8,
+          "truncateToPercent": 35
+        }
+      ],
+      "expect": {
+        "terminalStates": [
+          "indexed"
+        ],
+        "releaseDateSource": "tags"
+      }
+    },
+    {
+      "slug": "10-blackbeard-sidecar",
+      "folder": "Fixture Ten - Sidecar Source (2025)",
+      "purpose": "Release-level date from a `.blackbeard.provenance.json` sidecar. The sidecar is a fallback, not an override: with album/artist tags present it supplies only the release date text, which is the only release-level field tags never populate (the manifest's release date is hard-coded empty in the media observer).",
+      "albumArtist": "Sidecar Ensemble",
+      "releaseArtist": "Sidecar Ensemble",
+      "album": "Sidecar Source",
+      "year": 2025,
+      "genre": "Chamber",
+      "releaseDate": null,
+      "artwork": {
+        "kind": "embedded",
+        "width": 400,
+        "height": 400,
+        "colors": [
+          "#2b2b3a",
+          "#7a7a9c"
+        ]
+      },
+      "sidecar": {
+        "fileName": ".blackbeard.provenance.json",
+        "release": {
+          "album_title": "Sidecar Source",
+          "album_artist": "Sidecar Ensemble",
+          "release_year": 2025
+        }
+      },
+      "tracks": [
+        {
+          "title": "Sidecar One",
+          "trackNumber": 1,
+          "seconds": 6
+        },
+        {
+          "title": "Sidecar Two",
+          "trackNumber": 2,
+          "seconds": 7
+        }
+      ],
+      "expect": {
+        "terminalStates": [
+          "indexed"
+        ],
+        "releaseDateSource": "sidecar",
+        "releaseDateText": "2025"
+      }
+    },
+    {
+      "slug": "11-fault-missing-album-tag",
+      "folder": "Fixture Eleven - Nameless (2026)",
+      "purpose": "Fault tier: tracks with no album tag and no sidecar cannot name a Release. Structural validation must route the work item to operator review instead of inventing a title.",
+      "albumArtist": null,
+      "releaseArtist": "Fixture Eleven",
+      "album": "Nameless",
+      "year": 2026,
+      "genre": "Noise",
+      "releaseDate": "2026-02-02",
+      "artwork": null,
+      "tier": "faults",
+      "tagOverrides": {
+        "omit": [
+          "album",
+          "albumArtist"
+        ]
+      },
+      "tracks": [
+        {
+          "title": "Untitled One",
+          "trackNumber": 1,
+          "seconds": 6
+        }
+      ],
+      "expect": {
+        "terminalStates": [
+          "needs_review"
+        ]
+      }
+    }
+  ]
+}

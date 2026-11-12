@@ -13,6 +13,9 @@ declare const process: { env: Record<string, string | undefined> };
  */
 export default defineConfig({
   testDir: './e2e',
+  // The live suites under e2e/live drive a real server and are run separately
+  // (`make audit-live`, playwright.live.config.ts); this mocked gate excludes them.
+  testIgnore: /live\//,
   timeout: 30_000,
   // The default worker count is half the host CPUs (12 here), which can
   // exhaust a GitHub runner and kill the single Vite preview process halfway

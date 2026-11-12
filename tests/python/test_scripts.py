@@ -87,6 +87,8 @@ class DeveloperCommandTests(unittest.TestCase):
                 "audit-live",
                 "bootstrap",
                 "capture-baseline",
+                "corpus",
+                "corpus-verify",
                 "check",
                 "check-fast",
                 "deny",

@@ -124,7 +124,8 @@ test('history switches terminal states server-side', async ({ page }) => {
 
   const table = page.getByRole('table', { name: 'Processing and disposition history' });
   await expect(table.getByText('Business as Usual')).toBeVisible();
-  expect(states).toContain('cataloged');
+  // History defaults to `indexed`, the successful terminal state.
+  expect(states.some((state) => state === 'indexed' || state === 'cataloged')).toBe(true);
 
   await page.getByRole('button', { name: 'Ignored' }).click();
   await expect.poll(() => states).toContain('ignored');

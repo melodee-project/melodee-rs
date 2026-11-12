@@ -9,6 +9,17 @@ by an accepted ADR and release gate.
 
 ### Added
 
+- Known-answer corpus and the four-phase audit that goes with it
+  (`design/testing/UI-AND-WORKFLOW-AUDIT.md`, `design/evidence/known-corpus/`):
+  `tests/fixtures/media-test-metadata.json` declares eleven fabricated Releases (tags, durations,
+  artwork, sidecars, fault cases), `scripts/generate_known_corpus.py` materialises the media plus an
+  expected-outcome oracle with ffmpeg, `scripts/verify_known_corpus.py` ingests them and asserts the
+  oracle across PostgreSQL, the filesystem, the search projection and OpenSubsonic, and two live
+  Playwright suites assert every view and every edit control against the same oracle. `make corpus`,
+  `make corpus-verify`.
+- `History` now defaults to `indexed` (the successful terminal state) instead of alphabetically
+  landing on `cataloged`, which made a full history look empty.
+
 - Runtime audit tooling that closes the seam the mocked e2e suite could not see
   (`design/testing/UI-AND-WORKFLOW-AUDIT.md`): `make audit` runs read-only invariants against a live
   database (workflow completion, `indexed` requiring a durable projection, client visibility,
