@@ -1,6 +1,9 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { expect, test } from '@playwright/test';
 
-import { KNOWN_RELEASES, RUN_ID, type KnownRelease } from './known-corpus.generated';
 import { HAVE_CREDENTIALS, LIVE_URL as BASE_URL, signIn } from './session';
 
 /**
@@ -8,19 +11,60 @@ import { HAVE_CREDENTIALS, LIVE_URL as BASE_URL, signIn } from './session';
  *
  * Runs against a real instance and asserts every view is populated from the
  * *decided* values, not from whatever happens to be on screen. The expectations
- * come from `known-corpus.generated.ts`, which `scripts/verify_known_corpus.py`
+ * come from `known-corpus.generated.json`, which `scripts/verify_known_corpus.py`
  * writes from the corpus oracle plus resolved catalogue ids:
  *
  *   1. generate + ingest + verify the database, emitting UI expectations:
  *      python3 scripts/verify_known_corpus.py --ingest \
- *        --emit-ui-expectations admin-ui/e2e/live/known-corpus.generated.ts
+ *        --emit-ui-expectations admin-ui/e2e/live/known-corpus.generated.json
  *   2. drive the UI:
  *      MELODEE_LIVE_USERNAME=... MELODEE_LIVE_PASSWORD=... make audit-live
  *
- * Without generated expectations (or credentials) the suite skips rather than
- * failing, so the default gate is unaffected.
+ * The expectations are read at runtime rather than imported: the artifact is
+ * generated per run and untracked, so a static import would make `tsc` — and the
+ * Admin UI gate — depend on a file CI never has. Without it (or without
+ * credentials) the suite skips instead of failing.
  */
 
+interface KnownTrack {
+  title: string;
+  artist: string;
+}
+
+interface KnownRelease {
+  slug: string;
+  purpose: string;
+  releaseId: string;
+  album: string;
+  folder: string;
+  displayArtist: string;
+  trackCount: number;
+  hasArtwork: boolean;
+  tracks: KnownTrack[];
+  expect: Record<string, unknown>;
+}
+
+interface KnownCorpus {
+  runId: string | null;
+  releases: KnownRelease[];
+}
+
+function loadKnownCorpus(): KnownCorpus {
+  const path = join(dirname(fileURLToPath(import.meta.url)), 'known-corpus.generated.json');
+  try {
+    const parsed = JSON.parse(readFileSync(path, 'utf8')) as Partial<KnownCorpus>;
+    return {
+      runId: typeof parsed.runId === 'string' ? parsed.runId : null,
+      releases: Array.isArray(parsed.releases) ? (parsed.releases as KnownRelease[]) : [],
+    };
+  } catch {
+    return { runId: null, releases: [] };
+  }
+}
+
+const KNOWN_CORPUS = loadKnownCorpus();
+const KNOWN_RELEASES = KNOWN_CORPUS.releases;
+const RUN_ID = KNOWN_CORPUS.runId ?? 'not generated';
 const HAS_FIXTURES = KNOWN_RELEASES.length > 0;
 const CAN_RUN = HAVE_CREDENTIALS && HAS_FIXTURES;
 
@@ -33,7 +77,7 @@ test.describe.configure({ mode: 'serial' });
 test.describe(`known-answer views (run ${RUN_ID})`, () => {
   test.skip(
     !CAN_RUN,
-    'needs MELODEE_LIVE_USERNAME/PASSWORD plus e2e/live/known-corpus.generated.ts',
+    'needs MELODEE_LIVE_USERNAME/PASSWORD plus e2e/live/known-corpus.generated.json',
   );
 
   test('release detail renders every decided value in every tab', async ({ page, context, request }) => {

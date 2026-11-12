@@ -132,7 +132,7 @@ declared output*. That is what the known-answer corpus adds.
 | `tests/fixtures/media-test-metadata.json` | The durable, declarative corpus: fixtures, tags, durations, artwork, sidecars, and per-fixture expectations |
 | `scripts/generate_known_corpus.py` | Materialises media + `expected.json` (the oracle) from that JSON with ffmpeg. No media is committed. |
 | `scripts/verify_known_corpus.py` | Ingests the corpus, waits for terminal states, and asserts the oracle across PostgreSQL, the filesystem, the search projection, the runtime invariants, and the OpenSubsonic client surface |
-| `admin-ui/e2e/live/known-corpus.generated.ts` | Oracle → typed TS module (emitted by the verifier) so the UI suite asserts the same decided values |
+| `admin-ui/e2e/live/known-corpus.generated.json` | Oracle → JSON the UI suite reads at runtime (emitted by the verifier, untracked) so the UI asserts the same decided values without making `tsc` depend on a generated file |
 | `admin-ui/e2e/live/known-corpus-views.spec.ts` | Phase 3: every view populated from the oracle (hero, tabs, artefacts, History/Active, Overview KPIs) |
 | `admin-ui/e2e/live/edit-matrix.spec.ts` | Phase 4: every edit control persists and its side effect is observable |
 | `design/evidence/known-corpus/` | Run evidence, including findings raised |

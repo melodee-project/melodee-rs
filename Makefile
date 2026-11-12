@@ -68,7 +68,7 @@ corpus:
 
 corpus-verify:
 	$(PYTHON) scripts/verify_known_corpus.py --require-tier all \
-		--emit-ui-expectations admin-ui/e2e/live/known-corpus.generated.ts
+		--emit-ui-expectations admin-ui/e2e/live/known-corpus.generated.json
 
 audit-live:
 	$(PYTHON) scripts/check.py audit-live

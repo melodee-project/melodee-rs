@@ -10,7 +10,7 @@ MELODEE__SERVER__BIND=0.0.0.0:8080 MELODEE__NATIVE__PUBLIC_ORIGIN=http://<host-l
 MELODEE_LIVE_USERNAME=… MELODEE_LIVE_PASSWORD=… \
   python3 scripts/verify_known_corpus.py --corpus /tmp/melodee-known-corpus-m2 --ingest \
     --client-base-url http://<host-lan-ip>:8080 \
-    --emit-ui-expectations admin-ui/e2e/live/known-corpus.generated.ts
+    --emit-ui-expectations admin-ui/e2e/live/known-corpus.generated.json
 MELODEE_LIVE_USERNAME=… MELODEE_LIVE_PASSWORD=… make audit-live
 ```
 

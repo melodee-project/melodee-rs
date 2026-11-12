@@ -53,6 +53,23 @@ immutable publication hash (repeat views and ETag revalidations no longer decode
 and `MELODEE_DEV_PROFILE=release` support in the dev stack so client testing runs the
 binary the product actually ships.
 
+## CI failures fixed in this pass
+
+Two failing GitHub workflows were reproduced locally and fixed:
+
+- **Admin UI / validate** — `tsc` failed on `e2e/live/known-corpus.generated.ts`,
+  the corpus oracle artefact the live suite imported statically. That file is
+  generated per run and untracked, so CI never had it and the gate could not pass.
+  The verifier now emits JSON (`--emit-ui-expectations …known-corpus.generated.json`)
+  and the spec reads it at runtime, skipping when it is absent; a missing artefact
+  can no longer break the type check. `tests/python/test_known_corpus_ui_artifacts.py`
+  pins both properties.
+- **Full validation** — `admin_runtime_diagnostics_api::diagnostics_routes_require_administrator`
+  asserted `200` on `/api/admin/v1/diagnostics/events`, which answers `503` until the
+  process-wide event buffer is installed. The test depended on another test in the
+  same binary installing it first, so it failed whenever it ran first. It now
+  installs the buffer itself, mirroring the live server's logging setup.
+
 ## Verification runs
 
 - Nav sweep, admin account: **20/21 views clean**; the only remaining failure is

@@ -447,7 +447,7 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "_supervise":
-            supervise(load_environment())
+            supervise(dict(os.environ))
         else:
             with command_lock():
                 (up if args.command == "up" else down)()

@@ -55,4 +55,4 @@ playwright-report/
 .hamstik.toml
 
 # Emitted by scripts/verify_known_corpus.py --emit-ui-expectations
-admin-ui/e2e/live/known-corpus.generated.ts
+admin-ui/e2e/live/known-corpus.generated.json

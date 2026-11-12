@@ -161,6 +161,11 @@ async fn diagnostics_routes_require_administrator() {
     let db = common::TestDb::create("runtime_diag_gate").await;
     let fixture = seed_users(&db).await;
     let router = diagnostics_router(db.pool.clone());
+    // The live server installs the process-wide recent-event buffer during
+    // logging setup, so `/diagnostics/events` answers 503 only in a process that
+    // never installed one. Install it here so this gate does not depend on which
+    // other test in the binary happened to run first.
+    melodee_server::diagnostics::install(melodee_server::diagnostics::EVENT_CAPACITY);
 
     for path in ROUTES {
         let (status, body) = get_json(router.clone(), path, None).await;
