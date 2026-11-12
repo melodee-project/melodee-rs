@@ -86,9 +86,35 @@ def run_admin_ui_e2e() -> None:
     run([pnpm, "test:e2e"], cwd=ADMIN_UI)
 
 
+def run_live_ui_audit() -> None:
+    """Live Admin UI audit against a running instance (no API mocks).
+
+    Separate from `admin-ui-e2e` on purpose: that suite mocks the Admin API, which
+    is precisely the seam that let contract drift through. This mode needs a live
+    server plus administrator credentials in the environment; the spec skips
+    itself (never silently passes) when they are absent.
+    """
+    pnpm = shutil.which("pnpm")
+    if pnpm is None:
+        raise CheckError("pnpm not installed; cannot run the live admin-ui audit")
+    run([pnpm, "install", "--frozen-lockfile"], cwd=ADMIN_UI)
+    run([pnpm, "test:live"], cwd=ADMIN_UI)
+
+
 def run_checks(mode: str) -> None:
-    if mode not in {"admin-ui", "admin-ui-e2e", "coverage", "docs", "fast", "full"}:
+    if mode not in {
+        "admin-ui",
+        "admin-ui-e2e",
+        "audit-live",
+        "coverage",
+        "docs",
+        "fast",
+        "full",
+    }:
         raise ValueError(f"unsupported check mode: {mode}")
+    if mode == "audit-live":
+        run_live_ui_audit()
+        return
     if mode == "admin-ui":
         run_admin_ui_checks(required=True)
         return
@@ -194,7 +220,8 @@ def run_coverage_mode() -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "mode", choices=("admin-ui", "admin-ui-e2e", "coverage", "docs", "fast", "full")
+        "mode",
+        choices=("admin-ui", "admin-ui-e2e", "audit-live", "coverage", "docs", "fast", "full"),
     )
     return parser.parse_args()
 

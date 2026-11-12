@@ -29,6 +29,13 @@ template.
   (CI: `.github/workflows/admin-ui.yml`).
 - **Run `cargo fmt --all` before `make check`.** `fmt --check` is a hard gate and fails on
   non-canonical formatting.
+- **Runtime audit:** `make audit` runs read-only consistency invariants against the development
+  database (`scripts/audit_runtime_invariants.py`) — workflow completion, statistic drill-down,
+  closed dictionaries, projection freshness. `make audit-live` drives a real instance and a real
+  administrator session with no API mocks (`admin-ui/e2e/live/`) and is the only check that proves
+  the Admin UI and the API agree. See `design/testing/UI-AND-WORKFLOW-AUDIT.md`; the mocked e2e
+  suite cannot see contract drift, so a UI change that touches requests or forms needs
+  `make audit-live`.
 - **Focused runs:** `cargo test -p melodee-domain` for one crate; `make test-unit` (database-free
   Rust library and binary unit tests), `make test-integration` (PostgreSQL-backed integration
   tests), `make lint`, `make test`, `make docs` (doc validation only), `make deny`.

@@ -9,6 +9,14 @@ by an accepted ADR and release gate.
 
 ### Added
 
+- Runtime audit tooling that closes the seam the mocked e2e suite could not see
+  (`design/testing/UI-AND-WORKFLOW-AUDIT.md`): `make audit` runs read-only invariants against a live
+  database (workflow completion, `indexed` requiring a durable projection, client visibility,
+  statistic drill-down, closed dictionaries, projection freshness), and `make audit-live` drives a
+  real instance and administrator session with no API mocks to prove every canonical screen loads
+  cleanly and every edit form round-trips. Both encode the defect classes found in this cycle —
+  unreachable terminal states, dead form fields, and counts without rows.
+
 - Provider identity candidates are visible in the Admin UI. The enrichment worker has always written
   provider matches (`provider_identity_candidates`) and provider artwork, but nothing read them from
   an operator surface, so MusicBrainz/Deezer/iTunes IDs were invisible. Artist detail now returns a

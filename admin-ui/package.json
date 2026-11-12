@@ -15,7 +15,8 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "i18n:harvest": "python3 ../scripts/harvest_legacy_i18n.py",
-    "i18n:check": "node scripts/check-locales.mjs"
+    "i18n:check": "node scripts/check-locales.mjs",
+    "test:live": "playwright test --config playwright.live.config.ts"
   },
   "dependencies": {
     "@carbon/icons-react": "11.90.0",

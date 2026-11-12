@@ -83,6 +83,8 @@ class DeveloperCommandTests(unittest.TestCase):
             {
                 "admin-ui-check",
                 "admin-ui-e2e",
+                "audit",
+                "audit-live",
                 "bootstrap",
                 "capture-baseline",
                 "check",

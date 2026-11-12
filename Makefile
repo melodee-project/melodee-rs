@@ -1,6 +1,6 @@
 PYTHON ?= python3
 
-.PHONY: up down bootstrap prechecks check check-fast fmt lint test test-unit test-integration test-coverage docs docs-site-check deny postgres-up postgres-down postgres-reset capture-baseline admin-ui-check admin-ui-e2e
+.PHONY: up down bootstrap prechecks check check-fast fmt lint test test-unit test-integration test-coverage docs docs-site-check deny postgres-up postgres-down postgres-reset capture-baseline admin-ui-check admin-ui-e2e audit audit-live
 
 bootstrap:
 	$(PYTHON) scripts/bootstrap.py
@@ -59,6 +59,12 @@ postgres-up:
 
 postgres-down:
 	docker compose -f compose.dev.yaml down
+
+audit:
+	$(PYTHON) scripts/audit_runtime_invariants.py
+
+audit-live:
+	$(PYTHON) scripts/check.py audit-live
 
 postgres-reset:
 	$(PYTHON) scripts/reset_dev_database.py
