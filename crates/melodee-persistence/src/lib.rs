@@ -135,7 +135,7 @@ pub use provider_enrichment::{
     ClaimedEnrichmentTask, DEFAULT_ENRICHMENT_LEASE_SECONDS, EnrichmentEntityType,
     EnrichmentOutcome, EnrichmentPurpose, MAX_ENRICHMENT_ATTEMPTS, MAX_ENRICHMENT_BATCH,
     MAX_PROVIDER_IMAGE_BYTES, ProviderArtworkStore, ProviderEnrichmentStore,
-    ProviderEnrichmentStoreError, ProviderIdentityCandidateObservation,
+    ProviderEnrichmentStoreError, ProviderIdentityCandidate, ProviderIdentityCandidateObservation,
     ProviderIdentityCandidateStore, StoredProviderImage, schedule_in_transaction,
 };
 pub use providers::{

@@ -26,9 +26,9 @@ use melodee_persistence::{
     ArtistCatalogDetail, ArtistMetadataPatch, BilledArtistRow, BoundedSection, CatalogArtistSort,
     CatalogAuditEventRow, CatalogBrowseError, CatalogImageAudit, CatalogImageEntity,
     CatalogImageError, CatalogImageStore, CatalogReleaseSort, CatalogStore, CatalogStoreError,
-    CatalogTrackSort, ContributionRow, MediaAssetRow, PolicyStore, ReleaseCatalogDetail,
-    ReleaseMetadataPatch, StoredReleaseClassification, TrackCatalogDetail, TrackMetadataPatch,
-    contains_pattern,
+    CatalogTrackSort, ContributionRow, MediaAssetRow, PolicyStore, ProviderIdentityCandidateStore,
+    ReleaseCatalogDetail, ReleaseMetadataPatch, StoredReleaseClassification, TrackCatalogDetail,
+    TrackMetadataPatch, contains_pattern,
 };
 use serde::{Deserialize, Serialize};
 use time::{Date, OffsetDateTime, format_description::well_known::Rfc3339};
@@ -432,6 +432,22 @@ pub struct ArtistReleaseDto {
     pub track_count: i64,
 }
 
+/// One provider-found identity candidate for an Artist (enrichment evidence).
+///
+/// Recorded by the enrichment worker and never displayed before; it is evidence
+/// an operator uses when deciding whether a provisional identity is correct.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtistProviderCandidateDto {
+    pub provider: String,
+    pub external_id: String,
+    pub query: String,
+    pub candidate_rank: i32,
+    /// Basis points (0–10000).
+    pub confidence: i32,
+    pub observed_at: OffsetDateTime,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ArtistTrackCreditDto {
@@ -549,6 +565,8 @@ pub struct ArtistDetailDto {
     /// Track credits backing `stats`: which Track, on which Release, in which
     /// role. Additive drill-down for the Artist statistics.
     pub track_credits: SectionDto<ArtistTrackCreditDto>,
+    /// Provider identity candidates recorded for this Artist (best first).
+    pub provider_candidates: SectionDto<ArtistProviderCandidateDto>,
     pub relationships: SectionDto<ArtistRelationshipDto>,
     pub memberships: SectionDto<ArtistMembershipDto>,
     pub history: SectionDto<CatalogAuditEventDto>,
@@ -1019,10 +1037,29 @@ async fn artist_detail(
         Ok(None) => return not_found("artist", id),
         Err(error) => return store_failure("artist detail read failed", &error),
     };
-    Json(artist_detail_dto(detail)).into_response()
+    // Provider identity candidates are enrichment evidence: recorded by the
+    // enrichment worker, previously invisible to operators. A failure here must
+    // not hide the Artist, so it degrades to an empty section.
+    let provider_candidates = match ProviderIdentityCandidateStore
+        .list_artist_candidates(&state.admin.pool, id, PROVIDER_CANDIDATE_LIMIT)
+        .await
+    {
+        Ok(candidates) => candidates,
+        Err(error) => {
+            tracing::warn!(error = ?error, %id, "provider identity candidates unavailable");
+            Vec::new()
+        }
+    };
+    Json(artist_detail_dto(detail, provider_candidates)).into_response()
 }
 
-fn artist_detail_dto(detail: ArtistCatalogDetail) -> ArtistDetailDto {
+/// Bounded provider-candidate section size for one Artist detail read.
+const PROVIDER_CANDIDATE_LIMIT: u32 = 25;
+
+fn artist_detail_dto(
+    detail: ArtistCatalogDetail,
+    provider_candidates: Vec<melodee_persistence::ProviderIdentityCandidate>,
+) -> ArtistDetailDto {
     ArtistDetailDto {
         id: detail.public_api_id,
         image_id: image_id("artist", detail.public_api_id),
@@ -1079,6 +1116,20 @@ fn artist_detail_dto(detail: ArtistCatalogDetail) -> ArtistDetailDto {
             track_id: row.track_public_api_id,
             track_title: row.track_title,
         }),
+        provider_candidates: SectionDto {
+            total: i64::try_from(provider_candidates.len()).unwrap_or(i64::MAX),
+            items: provider_candidates
+                .into_iter()
+                .map(|candidate| ArtistProviderCandidateDto {
+                    provider: candidate.provider,
+                    external_id: candidate.external_id,
+                    query: candidate.query,
+                    candidate_rank: candidate.candidate_rank,
+                    confidence: candidate.confidence,
+                    observed_at: candidate.observed_at,
+                })
+                .collect(),
+        },
         track_credits: section(detail.track_credits, |row| ArtistTrackCreditDto {
             track_id: row.track_public_api_id,
             track_title: row.track_title,

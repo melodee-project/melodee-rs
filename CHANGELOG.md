@@ -9,6 +9,13 @@ by an accepted ADR and release gate.
 
 ### Added
 
+- Provider identity candidates are visible in the Admin UI. The enrichment worker has always written
+  provider matches (`provider_identity_candidates`) and provider artwork, but nothing read them from
+  an operator surface, so MusicBrainz/Deezer/iTunes IDs were invisible. Artist detail now returns a
+  bounded `providerCandidates` section and the Identity tab lists provider, external ID, the query it
+  matched, confidence, and observation time — clearly labelled as evidence that does not create
+  external identities or authorize a merge.
+
 - Initial repository scaffold.
 - Product requirements, technical specification, implementation plan, ADR program, and agent guide.
 - Minimal Rust server, CLI, and domain workspace.

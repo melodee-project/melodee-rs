@@ -705,6 +705,57 @@ export function ArtistDetailScreen() {
                   </Surface>
                 ) : null}
                 <p className="melodee-surface__subtitle">{t('catalog.artist.externalIds.title')}</p>
+                <Surface
+                  title={t('catalog.artist.providers.title')}
+                  subtitle={t('catalog.artist.providers.subtitle')}
+                  headingLevel={3}
+                  className="melodee-surface--stacked"
+                >
+                  {detail.providerCandidates.items.length === 0 ? (
+                    <EmptyState title={t('catalog.artist.providers.empty')} compact />
+                  ) : (
+                    <div className="melodee-review-table-scroll">
+                      <TableContainer aria-label={t('catalog.artist.providers.caption')}>
+                        <Table size="sm" className="melodee-table-skin" aria-label={t('catalog.artist.providers.caption')}>
+                          <TableHead>
+                            <TableRow>
+                              <TableHeader>{t('catalog.artist.providers.column.provider')}</TableHeader>
+                              <TableHeader>{t('catalog.artist.providers.column.externalId')}</TableHeader>
+                              <TableHeader>{t('catalog.artist.providers.column.confidence')}</TableHeader>
+                              <TableHeader>{t('catalog.artist.providers.column.observed')}</TableHeader>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {detail.providerCandidates.items.map((candidate) => (
+                              <TableRow
+                                key={`${candidate.provider}-${candidate.externalId}-${candidate.query}`}
+                              >
+                                <TableCell>{candidate.provider}</TableCell>
+                                <TableCell>
+                                  <span className="melodee-cell-stack__primary">
+                                    {candidate.externalId}
+                                  </span>
+                                  <span className="melodee-cell-stack__secondary">
+                                    {t('catalog.artist.providers.matchedOn', {
+                                      query: candidate.query,
+                                    })}
+                                  </span>
+                                </TableCell>
+                                <TableCell>
+                                  {`${formatNumber(Math.round(candidate.confidence / 100))}%`}
+                                </TableCell>
+                                <TableCell>{formatDateTime(candidate.observedAt)}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    </div>
+                  )}
+                  <p className="melodee-surface__subtitle">
+                    {t('catalog.artist.providers.note')}
+                  </p>
+                </Surface>
                 {detail.externalIds.items.length === 0 ? (
                   <EmptyState title={t('catalog.artist.externalIds.empty')} compact />
                 ) : (

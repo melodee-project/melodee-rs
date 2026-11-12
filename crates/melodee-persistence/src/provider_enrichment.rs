@@ -124,6 +124,45 @@ pub struct StoredProviderImage {
     pub observed_at: OffsetDateTime,
 }
 
+/// One provider identity candidate as read back for an operator.
+///
+/// Still evidence, not authority: it never authorizes a merge or an external
+/// identity on its own (only an operator decision or the tag-derived importer
+/// path writes `artist_external_identities`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProviderIdentityCandidate {
+    pub provider: String,
+    pub external_id: String,
+    pub query: String,
+    pub candidate_rank: i32,
+    /// Basis points (0–10000).
+    pub confidence: i32,
+    pub observed_at: OffsetDateTime,
+}
+
+#[derive(sqlx::FromRow)]
+struct ProviderIdentityCandidateRow {
+    provider: String,
+    external_id: String,
+    query: String,
+    candidate_rank: i32,
+    confidence: i32,
+    observed_at: OffsetDateTime,
+}
+
+impl From<ProviderIdentityCandidateRow> for ProviderIdentityCandidate {
+    fn from(row: ProviderIdentityCandidateRow) -> Self {
+        Self {
+            provider: row.provider,
+            external_id: row.external_id,
+            query: row.query,
+            candidate_rank: row.candidate_rank,
+            confidence: row.confidence,
+            observed_at: row.observed_at,
+        }
+    }
+}
+
 /// One provider search result retained as candidate evidence. It is not an
 /// `artist_external_identities` row and therefore cannot authorize a merge.
 #[derive(Debug, Clone, PartialEq)]
@@ -138,6 +177,31 @@ pub struct ProviderIdentityCandidateObservation {
 pub struct ProviderIdentityCandidateStore;
 
 impl ProviderIdentityCandidateStore {
+    /// Provider identity candidates recorded for one Artist, best match first.
+    ///
+    /// Enrichment has always written these rows; until now nothing read them, so
+    /// provider-found external IDs were invisible to operators. Best-first order
+    /// is confidence descending, then provider rank ascending.
+    pub async fn list_artist_candidates(
+        &self,
+        pool: &PgPool,
+        artist_id: Uuid,
+        limit: u32,
+    ) -> Result<Vec<ProviderIdentityCandidate>, ProviderEnrichmentStoreError> {
+        let rows = sqlx::query_as::<_, ProviderIdentityCandidateRow>(
+            "SELECT provider, external_id, query, candidate_rank, confidence, observed_at
+               FROM provider_identity_candidates
+              WHERE artist_id = $1
+              ORDER BY confidence DESC, candidate_rank ASC, provider
+              LIMIT $2",
+        )
+        .bind(artist_id)
+        .bind(i64::from(limit.clamp(1, 100)))
+        .fetch_all(pool)
+        .await?;
+        Ok(rows.into_iter().map(Into::into).collect())
+    }
+
     pub async fn upsert_artist_candidates(
         &self,
         pool: &PgPool,

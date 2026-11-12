@@ -96,6 +96,28 @@ Provider-confirmed verification (promoting on a verified MusicBrainz/Spotify ide
 implemented yet, so verification is an operator decision. Unconfigured providers surface as
 `provider enrichment attempt failed` warnings and never change status.
 
+## Provider matching (MusicBrainz, Deezer, iTunes, Discogs, Last.fm, Spotify)
+
+The enrichment worker searches the configured metadata providers for each Artist and Release. Two
+kinds of result are stored:
+
+- **Identity candidates** — provider, external ID, the query that produced it, its rank and a
+  confidence score. These are *evidence*: they never create an external identity and never authorize
+  a merge on their own.
+- **Provider artwork** — cover/portrait images, used by client apps as artwork fallback when no
+  operator image exists.
+
+The **Identity** tab of an Artist lists its provider candidates with confidence and observation time,
+so an operator can judge whether a provisional identity is the artist the providers agree on, then
+assert **Identity status** or resolve the observation in Identity Review. Provider credentials are
+per-provider settings (`searchEngine.<provider>.enabled`, `…baseUrl`, and a token where one is
+required — Discogs `userToken`, Spotify `accessToken`); MusicBrainz, Deezer, and iTunes need none.
+A provider that is unreachable logs `provider enrichment attempt failed` and retries on a durable
+schedule; the Artist keeps its provisional identity meanwhile.
+
+External IDs under the same tab come from the source tags (for example an embedded MusicBrainz ID),
+not from provider searches, which is why a catalog imported without MBIDs shows none.
+
 ## Merging duplicate Artists
 
 From **Catalog → Artists**, select between two and 101 Artists on the current page and choose

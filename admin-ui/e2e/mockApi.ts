@@ -409,6 +409,19 @@ const ARTIST_DETAIL = {
     total: 1,
   },
   contributions: { items: [], total: 0 },
+  providerCandidates: {
+    items: [
+      {
+        provider: "musicbrainz",
+        externalId: "8f6bd1e4-fbe1-4f50-aa9b-94c450ec0f11",
+        query: "The Nomads",
+        candidateRank: 1,
+        confidence: 7500,
+        observedAt: "2026-08-14T10:00:00Z",
+      },
+    ],
+    total: 1,
+  },
   trackCredits: {
     items: [
       {

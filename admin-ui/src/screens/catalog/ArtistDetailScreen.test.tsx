@@ -81,6 +81,19 @@ function makeDetail(overrides: Partial<ArtistDetail> = {}): ArtistDetail {
       ],
       total: 1,
     },
+    providerCandidates: {
+      items: [
+        {
+          provider: 'musicbrainz',
+          externalId: '3f451fd3-c27a-4e76-acc6-ed42991f13df',
+          query: 'The Nomads',
+          candidateRank: 1,
+          confidence: 7500,
+          observedAt: '2026-08-14T10:00:00Z',
+        },
+      ],
+      total: 1,
+    },
     trackCredits: {
       items: [
         {
@@ -259,6 +272,21 @@ describe('ArtistDetailScreen', () => {
     );
     expect(screen.getByText('featured')).toBeInTheDocument();
     expect(screen.getByText('Performance')).toBeInTheDocument();
+  });
+
+  it('shows provider-found external IDs as evidence on the Identity tab', async () => {
+    renderScreen(makeDetail());
+    await screen.findByRole('heading', { name: 'The Nomads' });
+    fireEvent.click(screen.getByRole('tab', { name: 'Identity' }));
+    expect(screen.getByText('Provider matches')).toBeInTheDocument();
+    expect(screen.getByText('3f451fd3-c27a-4e76-acc6-ed42991f13df')).toBeInTheDocument();
+    // `musicbrainz` also appears in the header external-id chips.
+    expect(screen.getAllByText('musicbrainz').length).toBeGreaterThan(0);
+    expect(screen.getByText('75%')).toBeInTheDocument();
+    // The note keeps the evidence/authority distinction explicit.
+    expect(
+      screen.getByText(/Candidates are evidence, not authority/),
+    ).toBeInTheDocument();
   });
 
   it('edits the Artist type from the closed dictionary, not free text', async () => {

@@ -1088,6 +1088,17 @@ export interface ArtistRelease {
   trackCount: number;
 }
 
+/** One provider-found identity candidate for an Artist (enrichment evidence). */
+export interface ArtistProviderCandidate {
+  provider: string;
+  externalId: string;
+  query: string;
+  candidateRank: number;
+  /** Basis points (0–10000). */
+  confidence: number;
+  observedAt: string;
+}
+
 /**
  * One Track credit on an Artist (ArtistTrackCreditDto). This is the drill-down
  * behind the Artist statistics: which Track, on which Release, in which role.
@@ -1187,6 +1198,11 @@ export interface ArtistDetail {
   contributions: Section<ArtistContribution>;
   /** Track credits backing `stats` (the drill-down for the Artist numbers). */
   trackCredits: Section<ArtistTrackCredit>;
+  /**
+   * Provider identity candidates recorded by enrichment. Evidence only — these
+   * are not external identities and never authorize a merge on their own.
+   */
+  providerCandidates: Section<ArtistProviderCandidate>;
   relationships: Section<ArtistRelationship>;
   memberships: Section<ArtistMembership>;
   history: Section<CatalogAuditEvent>;

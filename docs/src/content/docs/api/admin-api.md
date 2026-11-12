@@ -602,6 +602,14 @@ aliases, external provider identities, the Releases the Artist is billed on, con
 history. Every sub-list is bounded (at most 100 items) and carries its full `total` as
 `{items, total}` so truncation is visible.
 
+### Artist provider candidates
+
+`GET /api/admin/v1/catalog/artists/{id}` returns a bounded `providerCandidates` section (best match
+first, at most 25): `provider`, `externalId`, `query`, `candidateRank`, `confidence` (basis points),
+and `observedAt`. These rows are enrichment evidence recorded per Artist — they are not
+`externalIds`, which only ever come from source tags, and they never authorize a merge. A failure to
+read them degrades to an empty section rather than failing the Artist read.
+
 ### Artist identity status
 
 `PUT /api/admin/v1/catalog/artists/{id}/metadata` accepts the optional `status` field alongside the
