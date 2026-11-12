@@ -237,6 +237,8 @@ agrees with the server":
    preset through the public API, and is idempotent so it can run before every
    parity pass.
 
-The parity harness itself lives outside the repository (it drives Electron through
-Playwright); the findings and the fixes they produced are recorded in
+The parity driver is committed as `admin-ui/e2e/meloamp-parity.cjs` (Node because the
+Playwright Electron API is Node-only): it walks every navigation target of the client
+and reports console errors, failed requests and broken artwork, taking the client
+location and credentials from the environment. Findings and fixes are recorded in
 `design/evidence/meloamp-parity/MELOAMP-VERIFY.md`.

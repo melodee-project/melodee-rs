@@ -5,10 +5,13 @@ a full pass: real catalogue (50 imported Releases, 385 Tracks), seeded client da
 every navigation target driven through the running Electron application, and the
 defects the pass produced.
 
-Harness: Electron launched through Playwright (`_electron`), credentials injected into
-`localStorage`, one sign-in, then per-route navigation with console-error and
-`>= 400` response capture, image decode checks (`naturalWidth`) and audio-element
-state checks. Nothing in MeloAmp was modified.
+Harness: `admin-ui/e2e/meloamp-parity.cjs` — Electron launched through Playwright
+(`_electron`), one sign-in, then per-route navigation with console-error and
+`>= 400` response capture and image decode checks (`naturalWidth`). It takes the
+client location and credentials from the environment (`MELOAMP_DIR`,
+`MELODEE_LIVE_USERNAME`/`MELODEE_LIVE_PASSWORD`), records the two frozen-behaviour
+failures described below as expectations rather than defects, and exits non-zero
+when any other view reports a problem. Nothing in MeloAmp was modified.
 
 ## Defects found and fixed in melodee-rs
 
@@ -72,8 +75,10 @@ Two failing GitHub workflows were reproduced locally and fixed:
 
 ## Verification runs
 
-- Nav sweep, admin account: **20/21 views clean**; the only remaining failure is
-  `/playback-tools` (Jukebox disabled, frozen parity).
+- `node admin-ui/e2e/meloamp-parity.cjs` (admin account): **21/21 views clean**,
+  exit 0. Two views only pass because the frozen behaviour they expose is declared:
+  `/playback-tools` (Jukebox disabled → `400`) and `/charts` (the frozen chart DTO
+  advertises an image route neither server implements).
 - Nav sweep, listener account (`meloamp`): no unexpected failures; Dashboard reports
   the capability error exactly as the frozen server does.
 - Data-consumption checks after seeding (`scripts/seed_meloamp_parity_data.py`):
