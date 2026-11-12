@@ -353,19 +353,36 @@ fn parse_image_id(value: &str) -> Option<(ImageKind, Uuid)> {
     Uuid::parse_str(value).ok().map(|id| (kind, id))
 }
 
-fn image_size(value: &str) -> Option<u32> {
+/// A resolved image request size.
+///
+/// `Original` exists because the Admin UI (and native clients) address
+/// `/images/album_<id>/original` for the untransformed source. Before this
+/// existed the literal token failed `u32` parsing, so the handler answered
+/// `200` with an empty body and no content type — the request never reached
+/// artwork resolution at all.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RequestedSize {
+    /// Longest-edge target; decoded, resized, and re-encoded.
+    Pixels(u32),
+    /// Source bytes served untouched (no decode, no re-encode).
+    Original,
+}
+
+fn image_size(value: &str) -> Option<RequestedSize> {
     if value.len() > 16 || value.is_empty() {
         return None;
     }
     match value.to_ascii_lowercase().as_str() {
-        "thumbnail" => Some(80),
-        "small" => Some(160),
-        "medium" => Some(640),
-        "large" => Some(1024),
+        "thumbnail" => Some(RequestedSize::Pixels(80)),
+        "small" => Some(RequestedSize::Pixels(160)),
+        "medium" => Some(RequestedSize::Pixels(640)),
+        "large" => Some(RequestedSize::Pixels(1024)),
+        "original" | "source" => Some(RequestedSize::Original),
         _ => value
             .parse::<u32>()
             .ok()
-            .filter(|size| (1..=MAX_IMAGE_DIMENSION).contains(size)),
+            .filter(|size| (1..=MAX_IMAGE_DIMENSION).contains(size))
+            .map(RequestedSize::Pixels),
     }
 }
 
@@ -399,7 +416,7 @@ async fn load_image(
     state: &NativeState,
     kind: ImageKind,
     public_id: Uuid,
-    size: u32,
+    size: RequestedSize,
     headers: &HeaderMap,
     admission: ImageAdmission,
 ) -> Result<Option<Response<Body>>, sqlx::Error> {
@@ -455,19 +472,52 @@ async fn load_image(
             // override preserves the captured behavior exactly below (plan
             // artwork, then placeholder).
             if let Some(bytes) = artwork_override_bytes(&state.pool, kind, public_id).await? {
+                tracing::debug!(
+                    ?kind,
+                    %public_id,
+                    bytes = bytes.len(),
+                    "artwork resolved from the operator override"
+                );
                 return Ok(Some(
                     processed_response(kind, bytes, size, headers, admission).await?,
                 ));
             }
             let release = resolve_release(&state.pool, kind, public_id).await?;
             let Some(release_id) = release else {
+                tracing::debug!(?kind, %public_id, "artwork lookup found no active entity");
                 return Ok(None);
             };
             if let Some(bytes) = canonical_artwork_bytes(state, release_id).await? {
+                tracing::debug!(
+                    ?kind,
+                    %public_id,
+                    %release_id,
+                    bytes = bytes.len(),
+                    "artwork resolved from the published plan"
+                );
                 return Ok(Some(
                     processed_response(kind, bytes, size, headers, admission).await?,
                 ));
             }
+            if let Some(bytes) = provider_artwork_bytes(&state.pool, kind, public_id).await? {
+                tracing::debug!(
+                    ?kind,
+                    %public_id,
+                    %release_id,
+                    bytes = bytes.len(),
+                    "artwork resolved from a provider candidate"
+                );
+                return Ok(Some(
+                    processed_response(kind, bytes, size, headers, admission).await?,
+                ));
+            }
+            tracing::debug!(
+                ?kind,
+                %public_id,
+                %release_id,
+                bytes = kind.fallback().len(),
+                "artwork resolved to the captured placeholder"
+            );
             Ok(Some(byte_response(
                 kind.fallback().to_vec(),
                 kind.content_type(),
@@ -548,13 +598,23 @@ async fn artwork_override_bytes(
         }
         ImageKind::Playlist | ImageKind::User => return Ok(None),
     };
-    let override_bytes = sqlx::query_scalar(query)
+    sqlx::query_scalar(query)
         .bind(public_id)
         .fetch_optional(pool)
-        .await?;
-    if override_bytes.is_some() {
-        return Ok(override_bytes);
-    }
+        .await
+}
+
+/// Provider-sourced artwork (`catalog_provider_images`) for the addressed
+/// entity. ADR-0143 §2 lists the override, the publication plan, and the
+/// placeholder; provider bytes rank *between* plan artwork and the
+/// placeholder, so a cover the operator actually imported is never silently
+/// replaced by a provider guess, while a Release with no artwork still shows
+/// the best available cover.
+async fn provider_artwork_bytes(
+    pool: &sqlx::PgPool,
+    kind: ImageKind,
+    public_id: Uuid,
+) -> Result<Option<Vec<u8>>, sqlx::Error> {
     let provider_query = match kind {
         ImageKind::Album => {
             "SELECT image.image_bytes FROM catalog_provider_images image
@@ -618,6 +678,14 @@ async fn canonical_artwork_bytes(
         .read_asset_bounded(&asset, MAX_IMAGE_INPUT_BYTES, None)
         .await
     else {
+        // Silence here is undiagnosable in production: a plan asset that cannot
+        // be read is served as the placeholder, so record why.
+        tracing::debug!(
+            %release_id,
+            path = %asset.canonical_relative_path,
+            byte_size = asset.byte_size,
+            "canonical artwork asset could not be read"
+        );
         return Ok(None);
     };
     // Integrity fence: the recorded publication hash must match the bytes on
@@ -639,10 +707,28 @@ async fn canonical_artwork_bytes(
 async fn processed_response(
     kind: ImageKind,
     bytes: Vec<u8>,
-    size: u32,
+    size: RequestedSize,
     headers: &HeaderMap,
     admission: ImageAdmission,
 ) -> Result<Response<Body>, sqlx::Error> {
+    // ADR-0143 §2: `original` is the untransformed publication asset. Serving
+    // it must not pass through the decoder, because a source the pipeline
+    // accepted may still exceed the decoder's own bounds; it is bounded by the
+    // input cap that produced it instead.
+    if size == RequestedSize::Original {
+        if bytes.is_empty()
+            || u64::try_from(bytes.len()).unwrap_or(u64::MAX) > MAX_IMAGE_INPUT_BYTES
+        {
+            return Err(sqlx::Error::Protocol(
+                "original image exceeds compatibility bounds".to_string(),
+            ));
+        }
+        let content_type = kind.content_type();
+        return Ok(byte_response(bytes, content_type, headers, Some(admission)));
+    }
+    let RequestedSize::Pixels(size) = size else {
+        unreachable!("original handled above")
+    };
     let processor =
         IMAGE_PROCESSOR.get_or_init(|| ImageProcessor::new(IMAGE_PROCESSING_CONCURRENCY));
     processor
@@ -747,10 +833,44 @@ mod tests {
         let id = Uuid::nil();
         assert!(parse_image_id(&format!("album_{id}")).is_some());
         assert!(parse_image_id(&format!("../../album_{id}")).is_none());
-        assert_eq!(image_size("80"), Some(80));
-        assert_eq!(image_size("large"), Some(1024));
+        assert_eq!(image_size("80"), Some(RequestedSize::Pixels(80)));
+        assert_eq!(image_size("large"), Some(RequestedSize::Pixels(1024)));
+        assert_eq!(image_size("original"), Some(RequestedSize::Original));
+        assert_eq!(image_size("ORIGINAL"), Some(RequestedSize::Original));
         assert_eq!(image_size("0"), None);
         assert_eq!(image_size("99999999999999999"), None);
+        assert_eq!(image_size("bogus"), None);
+    }
+
+    /// The Admin UI addresses artwork as `/images/album_<id>/original`; that
+    /// token used to fall through to the empty-200 path.
+    #[tokio::test]
+    async fn original_size_serves_source_bytes_without_reencoding() {
+        let source = DEFAULT_ALBUM.to_vec();
+        let response = processed_response(
+            ImageKind::Album,
+            source.clone(),
+            RequestedSize::Original,
+            &HeaderMap::new(),
+            Arc::new(Semaphore::new(1))
+                .try_acquire_owned()
+                .map(|permit| ImageAdmission {
+                    _semaphore: permit,
+                    _gauge: None,
+                })
+                .expect("admission"),
+        )
+        .await
+        .expect("original response");
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.headers().get(header::CONTENT_TYPE),
+            Some(&HeaderValue::from_static("image/jpeg"))
+        );
+        let body = axum::body::to_bytes(response.into_body(), MAX_IMAGE_OUTPUT_BYTES)
+            .await
+            .expect("body");
+        assert_eq!(body.as_ref(), source.as_slice());
     }
 
     #[test]

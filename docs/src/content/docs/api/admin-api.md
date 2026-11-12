@@ -671,8 +671,9 @@ restores the Release to active.
 Operators can upload or remove custom artwork for one Artist or Release (ADR-0143). An
 override is served with precedence by the shared `/images/{imageId}/{size}` endpoint for the
 `album_`, `artist_`, and `song_` id prefixes (a Song serves its Release's override); entities
-without an override keep the publication-plan/placeholder behavior unchanged. Overrides are
-curation data only: upload and removal never touch canonical media files or publication plans.
+without an override fall back to the published Release artwork, then a provider cover, then the
+captured default image. Overrides are curation data only: upload and removal never touch canonical
+media files or publication plans.
 
 ```http
 PUT /api/admin/v1/catalog/artists/{id}/image

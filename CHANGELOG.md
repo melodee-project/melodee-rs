@@ -7,6 +7,24 @@ by an accepted ADR and release gate.
 
 ## Unreleased
 
+### Fixed
+
+- A tagged release date now reaches the Release. The media observer hard-coded the release
+  observation's date to `None`, so `date`/`year` tags were recorded on every Track and then dropped:
+  imported Releases had neither `release_date` nor `release_date_text` and only a sidecar could set
+  the text. The observer now picks the date tag carried by the most Tracks (ties break deterministically,
+  so identical media seals identical manifests) and the importer stores the typed date plus the source
+  text. Found by the known-answer corpus, which had been recording it as a known gap.
+- Cover art that was published is now actually served. `/images/{id}/original` — the untransformed
+  artwork URL an operator or client naturally asks for — was not a recognized size, so the endpoint
+  answered `200` with an empty body and never performed a lookup. `original` (and `source`) now serve
+  the stored bytes, and the resolver logs which source produced a response.
+- Provider artwork no longer outranks the published cover. The image endpoint consulted
+  `catalog_provider_images` before the Release's publication plan (contrary to ADR-0143 §2) and logged
+  it as an operator override, so an enrichment guess could replace a cover that was imported with the
+  Release. Precedence is now override → published plan → provider → placeholder. ADR-0143 carries a
+  dated clarification; both behaviours are asserted by the known-answer corpus.
+
 ### Added
 
 - Known-answer corpus and the four-phase audit that goes with it

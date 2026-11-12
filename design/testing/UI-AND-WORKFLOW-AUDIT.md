@@ -176,14 +176,43 @@ instead of logging in again.
 
 ### Known gaps are not passes
 
-A **gap** is behaviour the product does not yet have. The verifier records gaps separately from
-failures, and the Playwright suites annotate them (`known-gap`) instead of failing the run. They stay
-visible in every report and flip to hard failures the moment the intended behaviour lands — which is
-how F1 and F2 below stay on the record rather than being silently normalised.
+A **gap** is behaviour the product does not yet have. The verifier can record one separately from a
+failure (`Verifier.gap`), and a live spec can annotate one (`known-gap`) instead of failing. A gap is
+never counted as a pass: it is printed in every report and flips to a hard failure the moment the
+intended behaviour partially lands.
+
+**Current state: zero gaps.** The two gaps this exercise opened (`RUN-m1.md`) were fixed rather than
+accepted, so the corpus now carries only hard assertions — including the ones that used to be gaps,
+which is why a regression fails loudly instead of returning to a gap. Keep it that way: a new gap is
+a temporary label for a defect that is being fixed in the same cycle, not a way to ship one.
+
+### Browser suites run over loopback
+
+The admin session cookie is `Secure`. Chromium accepts it on `http://127.0.0.1` (a potentially
+trustworthy origin) but drops it for a private plain-HTTP address, which renders every screen
+signed out while `curl` and the API helpers keep working — a confusing failure that looks like an
+auth bug. Drive Playwright over loopback (`MELODEE_LIVE_URL=http://127.0.0.1:8080/admin`) and use a
+LAN address only for the non-browser client leg. Persisted `storageState` is domain-scoped, so
+`signIn()` ignores cookies minted for a different host instead of silently reusing them.
 
 ### Findings raised so far
 
-See `design/evidence/known-corpus/RUN-m1.md`. In summary: a tagged release date never reaches the
-Release; imported/provider cover art is served as a zero-byte body; History defaulted to an empty
-filter (fixed in that run); truncation alone is not a fault; an unnameable Release is correctly
-refused.
+`design/evidence/known-corpus/RUN-m1.md` (first run) and `RUN-m2.md` (post-fix verification). In
+summary: a tagged release date never reached the Release (fixed); cover art was published but not
+served, because the `original` size token was unknown and silently answered an empty `200` (fixed);
+provider artwork outranked the published plan, contradicting ADR-0143 §2 (fixed); History defaulted
+to an empty filter (fixed in the first run); truncation alone is not a fault; an unnameable Release
+is correctly refused.
+
+### Assertion tiers worth keeping
+
+The corpus asserts at the resolution an operator actually sees, which is what makes partial fixes
+visible:
+
+| Tier | Example | Fails when |
+|---|---|---|
+| Typed value | `releases.release_date` equals the tagged date | a date lands as text only, or is lost on re-import |
+| Served bytes | image endpoint body SHA-256 equals the published plan asset | artwork is published but not served, or is served from the wrong source |
+| Precedence | operator override → published plan → provider → placeholder | a provider guess silently replaces imported art |
+| Visibility boundary | a review-routed Release keeps its artwork hidden | a withheld Release leaks through a client surface |
+| Control round trip | edit form → save → reload → API | a field is accepted but discarded |

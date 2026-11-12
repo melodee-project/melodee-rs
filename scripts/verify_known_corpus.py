@@ -2,7 +2,7 @@
 """Verify the known-answer corpus after it has been processed by a live instance.
 
 This is the known-answer half of the audit (see
-`design/testing/KNOWN-ANSWER-E2E.md`): the corpus generator declares exactly what
+`design/testing/UI-AND-WORKFLOW-AUDIT.md`): the corpus generator declares exactly what
 should exist, and this script compares the running system against that
 declaration across four independent read paths, so a lie in one layer cannot hide
 behind another:
@@ -167,6 +167,24 @@ class Http:
             except json.JSONDecodeError:
                 parsed = payload.decode(errors="replace")
             return error.code, parsed
+
+    def bytes_get(self, path: str) -> tuple[int, str, bytes]:
+        """Fetches a non-JSON body (artwork/audio) and its content type."""
+        headers = {"Accept": "*/*"}
+        if self.cookies:
+            headers["Cookie"] = "; ".join(f"{k}={v}" for k, v in self.cookies.items())
+        request = urllib.request.Request(f"{self.base_url}{path}", headers=headers)
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                self._store_cookies(response.headers)
+                return (
+                    response.status,
+                    response.headers.get("Content-Type", ""),
+                    response.read(),
+                )
+        except urllib.error.HTTPError as error:
+            self._store_cookies(error.headers)
+            return error.code, error.headers.get("Content-Type", ""), error.read()
 
     def _store_cookies(self, headers: Any) -> None:
         for header in headers.get_all("Set-Cookie", []) or []:
@@ -363,7 +381,7 @@ def release_row(url: str, album: str, album_artist: str) -> dict[str, str] | Non
     rows = psql_rows(
         url,
         "SELECT r.id, r.public_api_id, r.title, r.sort_title, r.normalized_title, "
-        "       r.display_artist, r.release_date::text, r.status, "
+        "       r.display_artist, r.release_date::text, COALESCE(r.release_date_text, ''), r.status, "
         "       a.track_count, a.duration_ms, a.media_bytes "
         "  FROM releases r "
         "  LEFT JOIN release_catalog_aggregates a ON a.release_id = r.id "
@@ -381,6 +399,7 @@ def release_row(url: str, album: str, album_artist: str) -> dict[str, str] | Non
         "normalized_title",
         "display_artist",
         "release_date",
+        "release_date_text",
         "status",
         "track_count",
         "duration_ms",
@@ -455,20 +474,18 @@ def verify_release(verifier: Verifier, url: str, release: dict[str, Any], env: d
                 release.get("expect", {}).get("releaseDateText", ""),
             )
         else:
-            # Documented gap: a `date`/`year` tag is observed on every Track but
-            # never lifted to the Release (`ManifestReleaseObservation.date` is
-            # hard-coded `None` in the media observer), so only a sidecar can set
-            # it. Recorded as a gap so it stays visible and flips to a real failure
-            # if the intended behaviour ever partially lands (e.g. text only).
-            verifier.gap(
-                f"{slug}: release date from tags (KNOWN GAP: tag date is not lifted to the Release)",
-                row["release_date"] == release["releaseDate"],
-                f"expected {release['releaseDate']}, got {row['release_date']!r}",
+            # A `date` tag is an audio observation and must reach the Release
+            # through the sealed manifest: typed date plus verbatim text.
+            verifier.equals(
+                f"{slug}: release date from tags",
+                row["release_date"],
+                release["releaseDate"],
             )
-            verifier.gap(
-                f"{slug}: release date text from tags (KNOWN GAP)",
-                bool(row.get("release_date_text")),
-                f"release_date_text={row.get('release_date_text')!r}",
+            verifier.equals(
+                f"{slug}: release date text from tags",
+                row["release_date_text"],
+                release.get("expect", {}).get("releaseDateText")
+                or release["releaseDate"],
             )
     if release.get("tagOverrides") and row["title"] == release["album"]:
         verifier.check(
@@ -596,6 +613,63 @@ def verify_release(verifier: Verifier, url: str, release: dict[str, Any], env: d
             bundle_artwork >= 1,
             f"artwork files={bundle_artwork}",
         )
+
+    # ADR-0143 §2: published artwork must actually be *served*. The image
+    # endpoint is the only surface the Admin UI and clients use, so a cover that
+    # is on disk but answered with a zero-byte 200 is a user-visible failure.
+    artwork_file: Path | None = None
+    if storage_root.is_dir():
+        for relative, _hash, _size in published:
+            bundle = (storage_root / relative).parent.parent / "artwork"
+            if bundle.is_dir():
+                candidates = sorted(bundle.glob("*.jpg")) + sorted(bundle.glob("*.png"))
+                artwork_file = candidates[0] if candidates else None
+                break
+    status, content_type, body = verifier.api.bytes_get(
+        f"/images/album_{row['public_api_id']}/original"
+    )
+    if row["status"] != "active":
+        # A non-Accept disposition deprecates the Release so client surfaces
+        # hide it (`set_release_client_status_tx`); the frozen image endpoint
+        # answers those ids with the empty 200 rather than leaking artwork.
+        verifier.check(
+            f"{slug}: deprecated release serves no artwork",
+            status == 200 and not body,
+            f"status={status} bytes={len(body)}",
+        )
+        artwork_visible = False
+    else:
+        artwork_visible = True
+    if artwork_visible:
+        verifier.equals(f"{slug}: artwork endpoint status (original)", status, 200)
+        verifier.check(
+            f"{slug}: artwork endpoint content type",
+            content_type.startswith("image/"),
+            content_type or "missing",
+        )
+        if artwork_file is not None:
+            verifier.equals(
+                f"{slug}: artwork endpoint serves the published bytes",
+                hashlib.sha256(body).hexdigest(),
+                hashlib.sha256(artwork_file.read_bytes()).hexdigest(),
+            )
+        else:
+            verifier.check(
+                f"{slug}: artwork endpoint answers the placeholder, not an empty body",
+                bool(body),
+                f"{len(body)} bytes",
+            )
+        if artwork_file is not None:
+            status, content_type, resized = verifier.api.bytes_get(
+                f"/images/album_{row['public_api_id']}/medium"
+            )
+            verifier.check(
+                f"{slug}: artwork resizing serves decoded bytes",
+                status == 200
+                and bool(resized)
+                and content_type.startswith("image/"),
+                f"status={status} bytes={len(resized)} type={content_type!r}",
+            )
 
     # Billing parse expectations.
     expect = release.get("expect", {})

@@ -30,13 +30,22 @@ export async function signIn(
   request: APIRequestContext,
 ): Promise<string> {
   const statePath = process.env.MELODEE_LIVE_STATE ?? '/tmp/melodee-live-auth-state.json';
+  // A state file written for a different origin (127.0.0.1 vs a LAN address, a
+  // different port) is worse than no state: the API helpers would send the
+  // cookie by hand while the browser silently omitted it, so every screen would
+  // render signed-out. Only reuse a session minted for this exact host.
+  const expectedHost = new URL(LIVE_URL).hostname;
   try {
     const { readFileSync } = await import('node:fs');
     const state = JSON.parse(readFileSync(statePath, 'utf8')) as {
-      cookies: { name: string; value: string }[];
+      cookies: { name: string; value: string; domain?: string }[];
     };
-    if (state.cookies.length > 0) {
-      return state.cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join('; ');
+    const forThisHost = state.cookies.filter((cookie) => {
+      const domain = (cookie.domain ?? '').replace(/^\./, '');
+      return domain === '' || domain === expectedHost;
+    });
+    if (forThisHost.length > 0) {
+      return forThisHost.map((cookie) => `${cookie.name}=${cookie.value}`).join('; ');
     }
   } catch {
     // No persisted state: fall through to a direct sign-in.

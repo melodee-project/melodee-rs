@@ -6,6 +6,8 @@
 #![forbid(unsafe_code)]
 
 use std::{
+    cmp::Reverse,
+    collections::BTreeMap,
     fs::{self, DirEntry},
     io::{self, Read},
     path::{Path, PathBuf},
@@ -520,6 +522,11 @@ pub fn inspect_release(
     } else {
         "album_artist"
     };
+    // The album-level date is an audio observation like the album title: it is
+    // read from the track tags here so the importer receives it through the
+    // sealed manifest. Sidecars only fill it when the audio carries nothing
+    // (normalize.rs), keeping tagged audio authoritative over provenance text.
+    let release_date = select_release_date(&tracks);
 
     let audio_count = files
         .iter()
@@ -576,7 +583,7 @@ pub fn inspect_release(
         ManifestReleaseObservation {
             title: release_titles.first().cloned(),
             artists: release_artists,
-            date: None,
+            date: release_date,
             source_labels: serde_json::json!({
                 "observed_titles": release_titles,
                 "observed_album_artists": release_album_artists,
@@ -1490,6 +1497,35 @@ fn jpeg_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
     None
 }
 
+/// Selects the album-level date from the observed track tags.
+///
+/// The value carried by the most audio tracks wins, because one mistagged
+/// track must not override the rest of the release. `BTreeMap` iteration is
+/// lexicographic and ties are broken towards the smallest observed value, so
+/// the choice is a pure function of the files' contents rather than of
+/// directory enumeration order; identical corpora therefore always seal the
+/// same manifest. Values are passed through verbatim: validating or
+/// normalizing them is the importer's concern (`parse_observed_date`).
+fn select_release_date(tracks: &[ObservedTrack]) -> Option<String> {
+    let mut observed: BTreeMap<&str, usize> = BTreeMap::new();
+    for track in tracks {
+        let Some(date) = track
+            .observed_metadata
+            .as_ref()
+            .and_then(|metadata| metadata.date.as_deref())
+            .map(str::trim)
+            .filter(|date| !date.is_empty())
+        else {
+            continue;
+        };
+        *observed.entry(date).or_default() += 1;
+    }
+    observed
+        .into_iter()
+        .max_by_key(|(date, count)| (*count, Reverse(*date)))
+        .map(|(date, _)| date.to_owned())
+}
+
 fn push_unique(values: &mut Vec<String>, value: Option<String>) {
     if let Some(value) = value.filter(|value| !value.is_empty())
         && !values.iter().any(|existing| existing == &value)
@@ -1696,6 +1732,64 @@ mod tests {
             reference.update(&zero_chunk);
         }
         assert_eq!(hash, reference.finalize().to_hex().to_string());
+    }
+
+    /// PRD-FP-001/ADR-0145: the album date is an audio observation. It must be
+    /// lifted from the track tags, prefer the value most tracks agree on, and
+    /// ignore untagged or blank tracks entirely.
+    #[test]
+    fn release_date_is_the_majority_track_tag_and_is_stable() {
+        fn track(path: &str, date: Option<&str>) -> ObservedTrack {
+            ObservedTrack {
+                file_path: path.to_owned(),
+                track_number: None,
+                track_title: None,
+                media_number: None,
+                sort_order: None,
+                byte_hash: None,
+                duration_ms: None,
+                observed_metadata: date.map(|date| ObservedMetadata {
+                    album: None,
+                    album_artist: None,
+                    track_title: None,
+                    artist: None,
+                    track_number: None,
+                    track_total: None,
+                    disc_number: None,
+                    disc_total: None,
+                    year: None,
+                    date: Some(date.to_owned()),
+                    genre: None,
+                    raw: serde_json::json!({}),
+                }),
+            }
+        }
+
+        // The majority wins over a stray mistagged track.
+        let majority = vec![
+            track("01.mp3", Some("2019-04-12")),
+            track("02.mp3", Some("2001-01-01")),
+            track("03.mp3", Some("2019-04-12")),
+        ];
+        assert_eq!(
+            select_release_date(&majority).as_deref(),
+            Some("2019-04-12")
+        );
+
+        // Ties and enumeration order must not change the sealed value.
+        let tied = vec![
+            track("01.mp3", Some("2020-09-01")),
+            track("02.mp3", Some("2019-04-12")),
+        ];
+        let mut reversed = tied.clone();
+        reversed.reverse();
+        assert_eq!(select_release_date(&tied).as_deref(), Some("2019-04-12"));
+        assert_eq!(select_release_date(&tied), select_release_date(&reversed));
+
+        // Blank and absent dates are not observations.
+        let none = vec![track("01.mp3", Some("   ")), track("02.mp3", None)];
+        assert_eq!(select_release_date(&none), None);
+        assert_eq!(select_release_date(&[]), None);
     }
 
     #[test]

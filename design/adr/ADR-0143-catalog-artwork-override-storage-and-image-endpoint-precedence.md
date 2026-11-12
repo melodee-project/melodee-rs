@@ -176,6 +176,30 @@ review completed the corresponding adapter reads without changing any no-artwork
   `images_fall_back_to_published_canonical_artwork` covers the immutable-plan branch through
   the no-follow canonical root.
 
+
+### Clarification after the known-answer audit (2026-11-12)
+
+Two implementation details were underspecified in decision 2 and are recorded here without changing
+the decision.
+
+1. **Provider artwork sits below the plan.** `catalog_provider_images` (enrichment output) is a
+   fourth source that decision 2 did not name. The endpoint had been consulting it *before* the
+   publication plan, which let a provider guess silently replace a cover an operator had actually
+   imported, and logged it as an "operator override". The implemented order is now the one decision 2
+   states, with provider bytes filling the gap the plan leaves:
+   **operator override → published plan artwork → provider artwork → captured placeholder.**
+   A Release without imported art still shows the best available cover; a Release with imported art
+   never has it replaced. Each branch logs which source produced the response
+   (`native::images`, debug level) so the resolution is diagnosable rather than silent.
+2. **`original`/`source` are valid sizes.** The size parser accepted only `thumbnail`, `small`,
+   `medium`, `large`, and numeric pixel sizes, so `/images/{id}/original` — the URL an operator or
+   client naturally uses for untransformed art — fell through to the frozen empty `200` fallback
+   *without* performing a lookup at all. `original` and `source` now serve the stored bytes
+   untransformed (bounded by `MAX_IMAGE_INPUT_BYTES`, still with the ETag and content-type headers).
+   Unknown tokens keep the captured empty-`200` behavior.
+
+Evidence: `design/evidence/known-corpus/RUN-m2.md`.
+
 ## Validation
 
 - Upload → `GET /images/{kind}_{id}/{size}` serves the uploaded bytes (resized pipeline

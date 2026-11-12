@@ -1,10 +1,10 @@
-import { expect, test, type TestInfo } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
 import { KNOWN_RELEASES, RUN_ID, type KnownRelease } from './known-corpus.generated';
 import { HAVE_CREDENTIALS, LIVE_URL as BASE_URL, signIn } from './session';
 
 /**
- * Known-answer view validation (Phase 3 of design/testing/KNOWN-ANSWER-E2E.md).
+ * Known-answer view validation (Phase 3 of design/testing/UI-AND-WORKFLOW-AUDIT.md).
  *
  * Runs against a real instance and asserts every view is populated from the
  * *decided* values, not from whatever happens to be on screen. The expectations
@@ -21,24 +21,6 @@ import { HAVE_CREDENTIALS, LIVE_URL as BASE_URL, signIn } from './session';
  * failing, so the default gate is unaffected.
  */
 
-/**
- * Record a documented product gap without failing the run.
- *
- * A gap is behaviour that is known to be missing and is tracked as a finding
- * (see design/testing/KNOWN-ANSWER-E2E.md). It is annotated on the test and
- * printed, so it can never be mistaken for a pass, and it turns back into a real
- * assertion as soon as the behaviour lands.
- */
-function knownGap(testInfo: TestInfo, name: string, ok: boolean, detail = ''): void {
-  if (ok) {
-    return;
-  }
-  const annotation = { type: 'known-gap', description: `${name}${detail ? `: ${detail}` : ''}` };
-  testInfo.annotations.push(annotation);
-  // eslint-disable-next-line no-console
-  console.log(`KNOWN GAP: ${annotation.description}`);
-}
-
 const HAS_FIXTURES = KNOWN_RELEASES.length > 0;
 const CAN_RUN = HAVE_CREDENTIALS && HAS_FIXTURES;
 
@@ -54,7 +36,7 @@ test.describe(`known-answer views (run ${RUN_ID})`, () => {
     'needs MELODEE_LIVE_USERNAME/PASSWORD plus e2e/live/known-corpus.generated.ts',
   );
 
-  test('release detail renders every decided value in every tab', async ({ page, context, request }, testInfo) => {
+  test('release detail renders every decided value in every tab', async ({ page, context, request }) => {
     await signIn(context, request);
     const failures: string[] = [];
     for (const release of KNOWN_RELEASES) {
@@ -67,16 +49,34 @@ test.describe(`known-answer views (run ${RUN_ID})`, () => {
       await expect(hero).toContainText(release.displayArtist);
       await expect(hero).toContainText(String(release.trackCount));
 
-      // Artwork: an <img> when the fixture declares cover art, initials when not.
-      // KNOWN GAP: `/images/{id}/{size}` answers 200 with a zero-byte body for
-      // every Release today, so imported and provider covers never render.
+      // Artwork: an <img> when the fixture declares cover art. The image must
+      // actually decode — a 200 with an undecodable body renders a broken
+      // image, which is the failure mode this caught (the endpoint answered
+      // `/original` with an empty body before the size token was accepted).
       if (release.hasArtwork) {
-        knownGap(
-          testInfo,
-          `${release.slug}: cover art rendered`,
-          (await hero.locator('img').count()) === 1,
-          'image endpoint returns 200 with an empty body',
+        const cover = hero.locator('img').first();
+        await expect(cover).toHaveCount(1);
+        // Decoding is asynchronous, so wait for the load to settle before
+        // reading: a loaded 160px `small` derivative is the observable proof
+        // that the image endpoint served real artwork instead of an empty body.
+        await page
+          .waitForFunction(
+            () => {
+              const image = document.querySelector<HTMLImageElement>('.melodee-hero img');
+              return image !== null && image.complete;
+            },
+            undefined,
+            { timeout: 10_000 },
+          )
+          .catch(() => undefined);
+        const decoded = await cover.evaluate(
+          (element) => (element as HTMLImageElement).naturalWidth,
         );
+        if (decoded < 100) {
+          failures.push(
+            `${release.slug}: cover art did not decode (naturalWidth=${decoded})`,
+          );
+        }
       }
 
       // Tracks tab: every decided track title, in the decided order.

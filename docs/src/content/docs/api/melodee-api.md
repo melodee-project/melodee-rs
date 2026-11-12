@@ -57,6 +57,14 @@ symlink/traversal protection. Numeric and named sizes are decoded/resized under 
 dimension, pixel, and concurrency limits; unsupported or oversized images fail closed. Responses
 include an ETag and public cache headers.
 
+Artwork is chosen in a fixed order: an operator-uploaded override first, then the cover published
+with the Release, then a provider (enrichment) cover, then the captured default image. Provider art
+therefore never replaces a cover that was imported with the Release; it only fills the gap a Release
+without imported art leaves. Sizes are `thumbnail` (80 px), `small` (160 px), `medium` (640 px),
+`large` (1024 px), any numeric size up to 4096 px, and `original` (or `source`), which returns the
+stored bytes untransformed. A Release withheld by policy (see
+[Releases](../library-management/releases/)) serves no artwork through any client surface.
+
 Theme discovery and theme assets are public. Setting a personal theme and administering custom
 theme packs preserve the legacy browser-cookie authentication boundary; a bearer token alone does
 not authorize those routes. Admin ZIP imports are bounded, validated entirely in memory, reject

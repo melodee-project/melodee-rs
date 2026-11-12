@@ -1,7 +1,7 @@
-import { expect, test, type APIRequestContext, type TestInfo } from '@playwright/test';
+import { expect, test, type APIRequestContext } from '@playwright/test';
 
 /**
- * Edit-and-workflow matrix (Phase 4 of design/testing/KNOWN-ANSWER-E2E.md).
+ * Edit-and-workflow matrix (Phase 4 of design/testing/UI-AND-WORKFLOW-AUDIT.md).
  *
  * For every edit surface the Admin UI exposes, this drives the **real control**
  * through Playwright and then asserts two things the mocked suite cannot:
@@ -46,22 +46,12 @@ async function artistDetail(
   );
 }
 
-function knownGap(testInfo: TestInfo, name: string, ok: boolean, detail = ''): void {
-  if (ok) {
-    return;
-  }
-  const description = `${name}${detail ? `: ${detail}` : ''}`;
-  testInfo.annotations.push({ type: 'known-gap', description });
-  // eslint-disable-next-line no-console
-  console.log(`KNOWN GAP: ${description}`);
-}
-
 test.describe.configure({ mode: 'serial' });
 
 test.describe('edit matrix', () => {
   test.skip(!CAN_RUN, 'needs MELODEE_LIVE_USERNAME / MELODEE_LIVE_PASSWORD');
 
-  test('artist metadata round-trips for every editable field', async ({ page, context, request }, testInfo) => {
+  test('artist metadata round-trips for every editable field', async ({ page, context, request }) => {
     const cookie = await signIn(context, request);
 
     const id = await firstArtistId(request, cookie);
@@ -106,26 +96,34 @@ test.describe('edit matrix', () => {
     await page.getByRole('button', { name: /save/i }).click();
     await page.reload();
     expect((await artistDetail(request, cookie, id))['name']).toBe(originalName);
-
-    knownGap(testInfo, 'artist edit matrix', true);
   });
 
   test('release metadata edit persists through the form and reverts cleanly', async ({
     page,
     context,
     request,
-  }, testInfo) => {
+  }) => {
     const cookie = await signIn(context, request);
-    const list = await apiGet<{ items: { id: string }[] }>(
-      request,
-      cookie,
-      `${API_URL}/api/admin/v1/catalog/releases?limit=1`,
+    const list = await apiGet<{
+      items: { id: string; releaseDate?: string; status?: string }[];
+    }>(request, cookie, `${API_URL}/api/admin/v1/catalog/releases?limit=50`);
+    // The date round trip needs an *accepted* Release that already carries a
+    // tagged date (the corpus guarantees several). A withheld Release is
+    // deliberately not editable, and its date is not the value to restore.
+    const target = list.items.find(
+      (item) =>
+        item.status === 'active' && /^\d{4}-\d{2}-\d{2}$/.test(item.releaseDate ?? ''),
     );
-    const releaseId = list.items[0]!.id;
+    expect(target, 'an active catalogue Release with a tagged date').toBeTruthy();
+    const releaseId = target!.id;
     await page.goto(`${BASE_URL}/catalog/releases/${releaseId}`);
     const hero = page.locator('.melodee-hero');
     await expect(hero).toBeVisible({ timeout: 20_000 });
     const originalTitle = (await hero.getByRole('heading', { level: 1 }).innerText()).trim();
+    // Assert against the declared value rather than against whatever the
+    // catalogue happened to hold.
+    const originalDate = target!.releaseDate!;
+    const editedDate = originalDate === '2020-01-02' ? '2020-01-03' : '2020-01-02';
 
     const marker = 'MatrixEdit';
     await page.getByRole('button', { name: 'Edit' }).click();
@@ -144,14 +142,27 @@ test.describe('edit matrix', () => {
     const body = (await detail.json()) as Record<string, unknown>;
     expect(String(body['title'])).toContain(marker);
 
-    // KNOWN GAP: a tagged date is not lifted to the Release, so the date field
-    // accepts input that does not surface in the catalogue. Recorded, not hidden.
-    knownGap(
-      testInfo,
-      'release date reaches the catalogue',
-      body['releaseDate'] === '2020-01-02',
-      `releaseDate=${String(body['releaseDate'])}`,
-    );
+    // The date field is a first-class edit: it must reach the catalogue (the
+    // corpus pins that a tagged date is lifted to the Release) and survive a
+    // reload through the same control that set it.
+    await page.getByRole('button', { name: 'Edit' }).click();
+    await page.getByLabel('Release date', { exact: true }).fill(editedDate);
+    await page.getByRole('button', { name: /save/i }).click();
+    await page.reload();
+    const dated = (await (
+      await page.request.get(`${API_URL}/api/admin/v1/catalog/releases/${releaseId}`)
+    ).json()) as Record<string, unknown>;
+    expect(dated['releaseDate']).toBe(editedDate);
+
+    // Restore the declared date so the corpus keeps matching its own oracle.
+    await page.getByRole('button', { name: 'Edit' }).click();
+    await page.getByLabel('Release date', { exact: true }).fill(originalDate);
+    await page.getByRole('button', { name: /save/i }).click();
+    await page.reload();
+    const restored = (await (
+      await page.request.get(`${API_URL}/api/admin/v1/catalog/releases/${releaseId}`)
+    ).json()) as Record<string, unknown>;
+    expect(restored['releaseDate']).toBe(originalDate);
 
     // Restore through the same control so the corpus stays valid.
     await page.getByRole('button', { name: 'Edit' }).click();
@@ -235,7 +246,6 @@ test.describe('edit matrix', () => {
     // The editor's controls are dictionaries, not free text.
     const typeSelect = page.getByLabel(/type/i).first();
     if ((await typeSelect.count()) > 0) {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       const tagName = await typeSelect.evaluate((element) => element.tagName);
       expect(['SELECT', 'INPUT']).toContain(tagName);
     }

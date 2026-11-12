@@ -491,6 +491,74 @@ async fn native_catalog_browse_detail_and_search_preserve_public_ids_and_user_st
     assert!(headers.get(header::CONTENT_TYPE).is_none());
     assert!(body.is_empty());
 
+    // ADR-0143 §2 precedence beyond the override: a stored operator override
+    // wins over provider artwork, and provider artwork fills the gap left by a
+    // Release whose publication plan carries none. `original` must serve those
+    // source bytes untouched (the Admin UI addresses artwork that way, and the
+    // token used to fall through to the empty-200 path).
+    let original_path = format!("/images/album_{release_public_id}/original");
+    let provider_bytes = include_bytes!(
+        "../../../compatibility/melodee-api-v1/golden/native-catalog/catalog-images-image-artist-thumb.bin"
+    )
+    .to_vec();
+    sqlx::query(
+        "INSERT INTO catalog_provider_images
+           (id, entity_type, entity_id, provider, source_url, image_mime_type, image_bytes,
+            confidence, observed_at)
+         VALUES ($1,'release',$2,'musicbrainz','https://example.invalid/cover.jpg','image/jpeg',$3,90,$4)",
+    )
+    .bind(Uuid::now_v7())
+    .bind(fixture.release_id().into_uuid())
+    .bind(&provider_bytes)
+    .bind(now)
+    .execute(&db.pool)
+    .await
+    .expect("provider artwork fixture");
+    let (status, headers, bytes) = response_bytes(state.clone(), &original_path, None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        headers
+            .get(header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok()),
+        Some("image/jpeg")
+    );
+    assert_eq!(
+        bytes, provider_bytes,
+        "provider artwork must be served byte-for-byte for `original`"
+    );
+
+    let override_bytes = include_bytes!(
+        "../../../compatibility/melodee-api-v1/golden/native-catalog/catalog-images-image-user-thumb.bin"
+    )
+    .to_vec();
+    sqlx::query(
+        "INSERT INTO catalog_entity_images
+           (entity_type, release_id, image_mime_type, image_bytes, uploaded_by, created_at, updated_at)
+         VALUES ('release',$1,'image/jpeg',$2,'test-admin',$3,$3)",
+    )
+    .bind(fixture.release_id().into_uuid())
+    .bind(&override_bytes)
+    .bind(now)
+    .execute(&db.pool)
+    .await
+    .expect("override artwork fixture");
+    let (status, _, bytes) = response_bytes(state.clone(), &original_path, None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        bytes, override_bytes,
+        "an operator override must outrank provider artwork"
+    );
+    sqlx::query("DELETE FROM catalog_entity_images WHERE release_id = $1")
+        .bind(fixture.release_id().into_uuid())
+        .execute(&db.pool)
+        .await
+        .expect("restore provider precedence fixture");
+    sqlx::query("DELETE FROM catalog_provider_images WHERE entity_id = $1")
+        .bind(fixture.release_id().into_uuid())
+        .execute(&db.pool)
+        .await
+        .expect("restore placeholder fallback fixture");
+
     let fallback_path = format!("/images/album_{release_public_id}/80");
     let mut admitted = Vec::new();
     for _ in 0..4 {

@@ -34,6 +34,12 @@ identifiers, or identity relationships. The remaining curation actions are the a
 decisions in [Release Review](./release-review/) (including reprocess) and the
 [Policies](../admin/policies/) rule set.
 
+The initial values come from the media, not from a guess: the release title and artists are the
+observed tags, and the release date is the date tag carried by most of the Release's Tracks, with
+the full date stored as the source text alongside the editable date. A Release whose audio carries
+no date can still receive date *text* from a `.blackbeard.provenance.json` sidecar (a year, for
+example), and any value can be corrected through the Edit panel.
+
 An administrator-confirmed deletion removes the Release from this listing and deletes its
 canonical and retained staged media. Immutable identifiers and audit evidence remain as a
 non-browsable tombstone; see [Release Review](./release-review/#deciding).
