@@ -664,7 +664,8 @@ The `imageId` values returned by these routes are consumed by the existing
 `artist_`, `song_`) are that endpoint's frozen contract. Artwork bytes are never served by the
 admin API itself. Track streaming and Release/Track artwork obey the accepted-Release visibility
 boundary: a non-active policy result is intentionally unavailable until an audited Accept decision
-restores the Release to active.
+restores the Release to active. Artwork reads for a withheld Release answer with the captured default
+image, so a client slot renders instead of breaking, but never with that Release's own cover.
 
 ### Catalog artwork overrides
 

@@ -46,6 +46,11 @@ pub struct UpsertPresetRequest {
 pub struct EqualizerPresetsResponse {
     pub presets: Vec<EqualizerPreset>,
     pub meta: PaginationMetadata,
+    /// Compatibility alias (ADR-0187). The frozen response names the collection
+    /// `presets`, while clients built on the generic paged envelope read `data`;
+    /// this field carries the same rows so both readers work. The frozen keys are
+    /// unchanged and remain authoritative.
+    pub data: Vec<EqualizerPreset>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -230,7 +235,11 @@ async fn list_equalizer_presets(
         u16::try_from(limit).map_err(|_| NativeApiError::BadRequest)?,
     )
     .map_err(|_| NativeApiError::BadRequest)?;
-    Ok(Json(EqualizerPresetsResponse { presets, meta }))
+    Ok(Json(EqualizerPresetsResponse {
+        data: presets.clone(),
+        presets,
+        meta,
+    }))
 }
 
 async fn upsert_equalizer_preset(

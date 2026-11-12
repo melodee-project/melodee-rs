@@ -588,14 +588,73 @@ async fn native_catalog_browse_detail_and_search_preserve_public_ids_and_user_st
         format!("/images/album_{release_public_id}/80"),
         format!("/images/song_{track_public_id}/80"),
     ] {
+        // A withheld Release still names a real entity, so the frozen endpoint
+        // answers with the captured default image rather than an empty body —
+        // never with the Release's own artwork.
         let (status, headers, bytes) = response_bytes(state.clone(), &path, None).await;
         assert_eq!(status, StatusCode::OK);
-        assert!(headers.get(header::CONTENT_TYPE).is_none());
-        assert!(
-            bytes.is_empty(),
-            "inactive Release image must not leak: {path}"
+        assert_eq!(
+            headers
+                .get(header::CONTENT_TYPE)
+                .and_then(|value| value.to_str().ok()),
+            Some("image/jpeg")
+        );
+        assert_eq!(
+            bytes.as_slice(),
+            include_bytes!(
+                "../../../compatibility/melodee-api-v1/golden/native-catalog/catalog-images-image-album-large.bin"
+            )
+            .as_slice(),
+            "a withheld Release must serve the captured default, not its artwork: {path}"
         );
     }
+
+    // A known Artist with no artwork is not an unknown id: the frozen endpoint
+    // serves the captured default image, which is what keeps client artwork
+    // slots rendering instead of showing a broken image.
+    let bare_artist_public_id = Uuid::now_v7();
+    sqlx::query(
+        "INSERT INTO artists
+           (id, public_api_id, canonical_name, sort_name, normalized_name, artist_type, status,
+            created_at, updated_at)
+         VALUES ($1,$2,'Bare Artist','Bare Artist','bare artist','person','provisional',$3,$3)",
+    )
+    .bind(Uuid::now_v7())
+    .bind(bare_artist_public_id)
+    .bind(now)
+    .execute(&db.pool)
+    .await
+    .expect("bare Artist fixture");
+    let (status, headers, bytes) = response_bytes(
+        state.clone(),
+        &format!("/images/artist_{bare_artist_public_id}/80"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        headers
+            .get(header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok()),
+        Some("image/jpeg")
+    );
+    assert_eq!(
+        bytes.as_slice(),
+        include_bytes!(
+            "../../../compatibility/melodee-api-v1/golden/native-catalog/catalog-images-image-artist-thumb.bin"
+        )
+        .as_slice(),
+        "a known Artist without artwork must serve the captured default image"
+    );
+    let (status, headers, bytes) = response_bytes(
+        state.clone(),
+        &format!("/images/artist_{}/80", Uuid::now_v7()),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(headers.get(header::CONTENT_TYPE).is_none());
+    assert!(bytes.is_empty(), "unknown ids keep the captured empty 200");
     sqlx::query("UPDATE releases SET status='active' WHERE id=$1")
         .bind(fixture.release_id().into_uuid())
         .execute(&db.pool)
@@ -923,6 +982,23 @@ async fn native_catalog_browse_detail_and_search_preserve_public_ids_and_user_st
         response_json(state.clone(), principal, "/api/v1/user/stats?days=30").await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(stats["totalPlays"], 1);
+
+    // The last-played route is a history feed: the play it counted is the play it
+    // returns, with the Song DTO the client needs to play it again (ADR-0188).
+    let (status, last_played) = response_json(
+        state.clone(),
+        principal,
+        "/api/v1/user/last-played?page=1&pageSize=5",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(last_played["meta"]["totalCount"], 1);
+    let item = &last_played["data"][0];
+    assert_eq!(item["song"]["id"], track_public_id.to_string());
+    assert_eq!(item["song"]["title"], "Compatibility Track");
+    assert!(item["song"]["streamUrl"].is_string());
+    assert!(item["playedAt"].is_string());
+    assert_eq!(item["duration"], 30);
 
     let (status, lastfm_auth) = response_json(
         state.clone(),

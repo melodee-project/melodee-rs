@@ -629,13 +629,17 @@ def verify_release(verifier: Verifier, url: str, release: dict[str, Any], env: d
         f"/images/album_{row['public_api_id']}/original"
     )
     if row["status"] != "active":
-        # A non-Accept disposition deprecates the Release so client surfaces
-        # hide it (`set_release_client_status_tx`); the frozen image endpoint
-        # answers those ids with the empty 200 rather than leaking artwork.
+        # A non-Accept disposition deprecates the Release so client surfaces hide
+        # it (`set_release_client_status_tx`). The frozen image endpoint still
+        # answers for a Release that exists — with the captured default image, not
+        # its own artwork, and never with an empty body.
+        leaked = artwork_file is not None and hashlib.sha256(body).hexdigest() == hashlib.sha256(
+            artwork_file.read_bytes()
+        ).hexdigest()
         verifier.check(
-            f"{slug}: deprecated release serves no artwork",
-            status == 200 and not body,
-            f"status={status} bytes={len(body)}",
+            f"{slug}: deprecated release serves the default image, not its artwork",
+            status == 200 and bool(body) and not leaked,
+            f"status={status} bytes={len(body)} leaked={leaked}",
         )
         artwork_visible = False
     else:

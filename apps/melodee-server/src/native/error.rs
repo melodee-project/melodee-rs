@@ -131,11 +131,17 @@ impl IntoResponse for NativeApiError {
             );
             return response;
         }
-        if matches!(
-            self,
-            Self::Database(_) | Self::Search(_) | Self::Unavailable | Self::CapturedInternal(_)
-        ) {
-            tracing::error!(error = ?self, "native API request failed");
+        // Every 5xx must leave a diagnosable trace: the client only ever sees an
+        // opaque `INTERNAL_ERROR`, and a silent mapping made an intermittent
+        // scrobble failure impossible to explain from the logs.
+        let (status, _, _) = self.response_facts();
+        if status.is_server_error() {
+            tracing::error!(
+                status = status.as_u16(),
+                error = %self,
+                detail = ?self,
+                "native API request failed"
+            );
         }
         let (status, code, message) = self.response_facts();
         (

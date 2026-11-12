@@ -360,9 +360,17 @@ async fn top_content(
 ) -> Result<Json<TopContentResponse>, NativeApiError> {
     let days = period_days(&period)?;
     let limit = query.limit.unwrap_or(10);
-    let content_type = query.r#type.to_ascii_lowercase();
-    if !(1..=100).contains(&limit) || !matches!(content_type.as_str(), "song" | "album" | "artist")
-    {
+    // The frozen validation accepts the singular content types. Plural forms
+    // (`songs`, `albums`, `artists`) are accepted as a tolerated alias so
+    // clients that pluralise still get their data; anything else is rejected
+    // exactly as before.
+    let content_type = match query.r#type.to_ascii_lowercase().as_str() {
+        "song" | "songs" => "song".to_owned(),
+        "album" | "albums" => "album".to_owned(),
+        "artist" | "artists" => "artist".to_owned(),
+        _ => return Err(NativeApiError::BadRequest),
+    };
+    if !(1..=100).contains(&limit) {
         return Err(NativeApiError::BadRequest);
     }
     let rows = match content_type.as_str() {
@@ -752,7 +760,25 @@ struct ChartList {
     is_generated_playlist_enabled: bool,
     playlist_id: Option<String>,
     image_url: Option<String>,
+    /// Compatibility aliases (ADR-0188): clients that model a chart as a named
+    /// list read `name`/`trackCount`, while the frozen contract names the same
+    /// values `title`/`itemCount`. Both are always present and always equal, so
+    /// they are derived from the frozen columns rather than selected.
+    #[sqlx(default)]
+    name: Option<String>,
+    #[sqlx(default)]
+    track_count: Option<i32>,
 }
+impl ChartList {
+    /// Mirrors the frozen `title`/`itemCount` into the `name`/`trackCount` keys a
+    /// chart-list client reads (ADR-0188). The frozen keys remain authoritative.
+    fn with_aliases(mut self) -> Self {
+        self.name = Some(self.title.clone());
+        self.track_count = Some(self.item_count);
+        self
+    }
+}
+
 #[derive(Debug, Serialize)]
 struct ChartPage {
     meta: PaginationMetadata,
@@ -769,7 +795,10 @@ async fn charts(
     let year = q.year;
     let source = q.source;
     let rows=sqlx::query_as::<_,ChartList>("SELECT chart.legacy_numeric_id AS id,chart.public_api_id AS api_key,chart.slug,chart.title,chart.source_name,chart.source_url,chart.chart_year AS year,chart.description,NULLIF(chart.tags,'{}') AS tags,(SELECT count(*)::integer FROM native_chart_items item WHERE item.chart_id=chart.id) AS item_count,chart.is_generated_playlist_enabled,CASE WHEN chart.is_generated_playlist_enabled THEN 'chart:'||chart.legacy_numeric_id::text END AS playlist_id,$1||'/api/v1/charts/'||chart.public_api_id::text||'/image' AS image_url FROM native_charts chart WHERE chart.is_visible AND ($2::integer IS NULL OR chart.chart_year=$2) AND ($3::text IS NULL OR chart.source_name=$3) AND ($4::text[]='{}' OR chart.tags @> $4) ORDER BY chart.created_at DESC,chart.public_api_id LIMIT $5 OFFSET $6")
-        .bind(&state.public_origin).bind(year).bind(&source).bind(&tags).bind(i64::from(size)).bind(offset).fetch_all(&state.pool).await?;
+        .bind(&state.public_origin).bind(year).bind(&source).bind(&tags).bind(i64::from(size)).bind(offset).fetch_all(&state.pool).await?
+        .into_iter()
+        .map(ChartList::with_aliases)
+        .collect::<Vec<_>>();
     let total = sqlx::query_scalar::<_, i64>(
         "SELECT count(*) FROM native_charts chart WHERE chart.is_visible \
          AND ($1::integer IS NULL OR chart.chart_year=$1) \
@@ -802,6 +831,7 @@ async fn chart_record(
         .bind(id)
         .fetch_optional(pool)
         .await?
+        .map(ChartList::with_aliases)
         .ok_or(NativeApiError::CapturedNotFound("Chart not found"))
 }
 
@@ -1431,7 +1461,9 @@ async fn system_stats(
     Authenticated(principal, _): Authenticated,
 ) -> Result<Json<Vec<Statistic>>, NativeApiError> {
     if !principal.is_admin {
-        return Err(NativeApiError::NotFound);
+        // Frozen filter behaviour: `[RequireCapability(Admin)]` fails with `403`
+        // and `ApiError.Codes.Forbidden`, not a not-found shaped body.
+        return Err(NativeApiError::Forbidden);
     }
     let(artists,releases,playlists,tracks)=sqlx::query_as::<_,(i64,i64,i64,i64)>("SELECT (SELECT count(*) FROM artists WHERE status IS DISTINCT FROM 'merged'),(SELECT count(*) FROM releases WHERE status='active'),(SELECT count(*) FROM native_playlists),(SELECT count(*) FROM tracks)").fetch_one(&state.pool).await?;
     Ok(Json(vec![

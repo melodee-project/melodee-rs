@@ -2896,31 +2896,73 @@ song_user_handler!(user_songs_rated, UserListMode::Rated);
 song_user_handler!(user_songs_top_rated, UserListMode::TopRated);
 song_user_handler!(user_songs_recent, UserListMode::Recent);
 
-/// Reproduce the legacy last-played envelope. The legacy service selected
-/// UserSong rows without eager-loading their Song navigation, so the captured
-/// endpoint reports the bounded row count while serializing an empty `data`
-/// array. The richer recently-played endpoint above is a separate contract.
+/// One last-played entry: the play event plus the Song it played (ADR-0188).
+///
+/// Distinct from the analytics `HistoryItemDto` in `dto`, which is a compact
+/// `{songId, name, playedAt}` projection for the listening-history endpoint.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LastPlayedItemDto {
+    /// Play-event identity, so a Track played twice appears twice.
+    pub id: Uuid,
+    pub song: SongDto,
+    pub played_at: String,
+    pub duration: i32,
+}
+
+/// Last-played history feed.
+///
+/// The frozen envelope reported a bounded row count with an empty `data` array
+/// because the legacy query did not eager-load the Song navigation for the rows it
+/// counted. Serving that literally makes a real history look empty, and the
+/// reference client renders a history feed (event id, Song, played-at, duration)
+/// from this route, so the route now answers with the plays it counted.
 pub async fn user_last_played(
     State(state): State<NativeState>,
-    Authenticated(principal, _binding): Authenticated,
+    Authenticated(principal, binding): Authenticated,
     Query(params): Query<UserListParams>,
-) -> Result<Json<PagedResponse<SongDto>>, NativeApiError> {
+) -> Result<Json<PagedResponse<LastPlayedItemDto>>, NativeApiError> {
     let page = Page::parse(params.page, params.page_size.or(Some(3)))?;
-    let total = sqlx::query_scalar::<_, i64>(
-        "SELECT count(*) FROM (
-           SELECT 1 FROM native_track_user_states
-           WHERE user_id = $1
-           ORDER BY last_played_at DESC NULLS LAST
-           LIMIT $2
-         ) bounded",
+    let rows = sqlx::query_as::<_, (Uuid, Uuid, OffsetDateTime, Option<i32>, i64)>(
+        "SELECT play.id, track.public_api_id, play.played_at, play.duration_seconds,
+                count(*) OVER()
+           FROM native_track_plays play
+           JOIN tracks track ON track.id = play.track_id
+           JOIN releases release ON release.id = track.release_id
+          WHERE play.user_id = $1 AND release.status = 'active'
+            AND native_user_can_access_release($1, release.id)
+          ORDER BY play.played_at DESC, play.id DESC
+          LIMIT $2 OFFSET $3",
     )
     .bind(principal.user_id)
     .bind(i64::from(page.size))
-    .fetch_one(&state.pool)
+    .bind(page.offset)
+    .fetch_all(&state.pool)
     .await?;
+    let total = rows.first().map_or(0, |row| row.4);
+    let public_ids = rows.iter().map(|row| row.1).collect::<Vec<_>>();
+    let songs = song_dtos_by_public_ids(&state, principal, &binding.0, &public_ids).await?;
+    let mut by_id = songs
+        .into_iter()
+        .map(|song| (song.id, song))
+        .collect::<HashMap<_, _>>();
+    let mut data = Vec::with_capacity(rows.len());
+    for (play_id, public_id, played_at, duration, _) in rows {
+        let Some(song) = by_id.remove(&public_id) else {
+            continue;
+        };
+        data.push(LastPlayedItemDto {
+            id: play_id,
+            song,
+            played_at: played_at
+                .format(&time::format_description::well_known::Rfc3339)
+                .unwrap_or_default(),
+            duration: duration.unwrap_or(0),
+        });
+    }
     Ok(Json(PagedResponse {
         meta: page.metadata(total)?,
-        data: Vec::new(),
+        data,
     }))
 }
 

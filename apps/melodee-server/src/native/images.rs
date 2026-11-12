@@ -55,6 +55,73 @@ const IMAGE_PROCESSING_CONCURRENCY: usize = 4;
 /// (measured: 20 of 24 concurrent reads refused). The wait is bounded so a
 /// stalled client can never pin the pipeline indefinitely.
 const IMAGE_ADMISSION_WAIT: Duration = Duration::from_secs(10);
+/// Bounded cache of derived artwork bytes.
+///
+/// The frozen endpoint revalidates with an ETag computed from the *processed*
+/// bytes, so without a cache every navigation decodes and re-encodes the same
+/// cover again (measured: ~115 ms per 1024px cover in a release build, seconds in
+/// a debug build). Caching the derivative keyed by the immutable publication hash
+/// makes a repeat view a memcpy. The cache is bounded by bytes and entries so a
+/// large catalogue cannot grow it without limit, and a full cache is simply
+/// thrashed rather than treated as an error.
+const IMAGE_DERIVATIVE_CACHE_BYTES: usize = 64 * 1024 * 1024;
+const IMAGE_DERIVATIVE_CACHE_ENTRIES: usize = 4_096;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct DerivativeKey {
+    source_hash: String,
+    size: u32,
+    format: u8,
+}
+
+#[derive(Debug, Default)]
+struct DerivativeCache {
+    entries: std::collections::HashMap<DerivativeKey, Arc<Vec<u8>>>,
+    order: std::collections::VecDeque<DerivativeKey>,
+    bytes: usize,
+}
+
+impl DerivativeCache {
+    fn get(&self, key: &DerivativeKey) -> Option<Arc<Vec<u8>>> {
+        self.entries.get(key).map(Arc::clone)
+    }
+
+    fn insert(&mut self, key: DerivativeKey, bytes: Vec<u8>) {
+        let len = bytes.len();
+        if len > IMAGE_DERIVATIVE_CACHE_BYTES / 4 {
+            // A single derivative that large would crowd out everything else.
+            return;
+        }
+        if self.entries.contains_key(&key) {
+            return;
+        }
+        while (self.bytes + len > IMAGE_DERIVATIVE_CACHE_BYTES
+            || self.entries.len() >= IMAGE_DERIVATIVE_CACHE_ENTRIES)
+            && let Some(evicted) = self.order.pop_front()
+            && let Some(removed) = self.entries.remove(&evicted)
+        {
+            self.bytes = self.bytes.saturating_sub(removed.len());
+        }
+        self.bytes += len;
+        self.order.push_back(key.clone());
+        self.entries.insert(key, Arc::new(bytes));
+    }
+}
+
+static IMAGE_DERIVATIVE_CACHE: OnceLock<std::sync::Mutex<DerivativeCache>> = OnceLock::new();
+
+fn derivative_cache() -> &'static std::sync::Mutex<DerivativeCache> {
+    IMAGE_DERIVATIVE_CACHE.get_or_init(|| std::sync::Mutex::new(DerivativeCache::default()))
+}
+
+fn format_code(format: ImageFormat) -> u8 {
+    match format {
+        ImageFormat::Jpeg => 0,
+        ImageFormat::Png => 1,
+        ImageFormat::Gif => 2,
+        _ => 3,
+    }
+}
 
 static IMAGE_PROCESSOR: OnceLock<ImageProcessor> = OnceLock::new();
 
@@ -528,10 +595,29 @@ async fn load_image(
             }
             let release = resolve_release(&state.pool, kind, public_id).await?;
             let Some(release_id) = release else {
-                tracing::debug!(?kind, %public_id, "artwork lookup found no active entity");
+                // The frozen endpoint distinguishes "id names nothing" from "the
+                // entity exists but has no artwork": the former is an empty `200`,
+                // the latter is the captured default image. Reporting a known
+                // Artist (or a Release withheld by policy) as absent left clients
+                // rendering broken images.
+                if image_entity_exists(&state.pool, kind, public_id).await? {
+                    tracing::debug!(
+                        ?kind,
+                        %public_id,
+                        bytes = kind.fallback().len(),
+                        "no artwork for a known entity; serving the captured default"
+                    );
+                    return Ok(Some(byte_response(
+                        kind.fallback().to_vec(),
+                        kind.content_type(),
+                        headers,
+                        admission,
+                    )));
+                }
+                tracing::debug!(?kind, %public_id, "artwork lookup found no entity");
                 return Ok(None);
             };
-            if let Some(bytes) = canonical_artwork_bytes(state, release_id).await? {
+            if let Some((source_hash, bytes)) = canonical_artwork_bytes(state, release_id).await? {
                 tracing::debug!(
                     ?kind,
                     %public_id,
@@ -540,7 +626,15 @@ async fn load_image(
                     "artwork resolved from the published plan"
                 );
                 return Ok(Some(
-                    processed_response(kind, bytes, size, headers, admission).await?,
+                    processed_response_cached(
+                        kind,
+                        bytes,
+                        size,
+                        headers,
+                        admission,
+                        Some(&source_hash),
+                    )
+                    .await?,
                 ));
             }
             if let Some(bytes) = provider_artwork_bytes(&state.pool, kind, public_id).await? {
@@ -570,6 +664,57 @@ async fn load_image(
             )))
         }
     }
+}
+
+/// Whether the addressed id names an entity at all, regardless of whether its
+/// artwork resolved or its Release is currently client-visible. The image
+/// endpoint needs this to tell "unknown id" (empty `200`) from "known entity
+/// without artwork" (captured default image).
+async fn image_entity_exists(
+    pool: &sqlx::PgPool,
+    kind: ImageKind,
+    public_id: Uuid,
+) -> Result<bool, sqlx::Error> {
+    let exists: bool = match kind {
+        ImageKind::Album => {
+            sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM releases WHERE public_api_id = $1)")
+                .bind(public_id)
+                .fetch_one(pool)
+                .await?
+        }
+        ImageKind::Song => {
+            sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM tracks WHERE public_api_id = $1)")
+                .bind(public_id)
+                .fetch_one(pool)
+                .await?
+        }
+        ImageKind::Artist => {
+            sqlx::query_scalar(
+                "SELECT EXISTS (SELECT 1 FROM artists WHERE public_api_id = $1
+                                 AND status <> 'merged')",
+            )
+            .bind(public_id)
+            .fetch_one(pool)
+            .await?
+        }
+        ImageKind::Playlist => {
+            sqlx::query_scalar(
+                "SELECT EXISTS (SELECT 1 FROM native_playlists WHERE public_api_id = $1)",
+            )
+            .bind(public_id)
+            .fetch_one(pool)
+            .await?
+        }
+        ImageKind::User => {
+            sqlx::query_scalar(
+                "SELECT EXISTS (SELECT 1 FROM native_users WHERE public_api_id = $1)",
+            )
+            .bind(public_id)
+            .fetch_one(pool)
+            .await?
+        }
+    };
+    Ok(exists)
 }
 
 async fn resolve_release(
@@ -693,7 +838,7 @@ async fn provider_artwork_bytes(
 async fn canonical_artwork_bytes(
     state: &NativeState,
     release_id: Uuid,
-) -> Result<Option<Vec<u8>>, sqlx::Error> {
+) -> Result<Option<(String, Vec<u8>)>, sqlx::Error> {
     let row = sqlx::query(
         "SELECT plan.target_relative_path || '/' || (asset.value->>'canonical_path'),
                 (asset.value->>'size_bytes')::bigint, asset.value->>'byte_hash'
@@ -745,7 +890,67 @@ async fn canonical_artwork_bytes(
         );
         return Ok(None);
     }
-    Ok(Some(bytes))
+    Ok(Some((source_hash, bytes)))
+}
+
+/// `processed_response` with a bounded derivative cache.
+///
+/// `source_hash` identifies the immutable publication bytes; when present the
+/// processed derivative is cached so repeat views (and every ETag revalidation)
+/// skip decode/encode entirely. `original` and the captured defaults are never
+/// cached: the former is already raw bytes, the latter is a static constant.
+async fn processed_response_cached(
+    kind: ImageKind,
+    bytes: Vec<u8>,
+    size: RequestedSize,
+    headers: &HeaderMap,
+    admission: Option<ImageAdmission>,
+    source_hash: Option<&str>,
+) -> Result<Response<Body>, sqlx::Error> {
+    let RequestedSize::Pixels(pixels) = size else {
+        return processed_response(kind, bytes, size, headers, admission).await;
+    };
+    let Some(source_hash) = source_hash else {
+        return processed_response(kind, bytes, size, headers, admission).await;
+    };
+    let key = DerivativeKey {
+        source_hash: source_hash.to_owned(),
+        size: pixels,
+        format: format_code(kind.output_format()),
+    };
+    let cached = derivative_cache()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .get(&key);
+    if let Some(cached) = cached {
+        return Ok(byte_response(
+            cached.as_ref().clone(),
+            kind.content_type(),
+            headers,
+            admission,
+        ));
+    }
+    let response = processed_response(kind, bytes, size, headers, admission).await?;
+    // Only cache what was actually produced, and only when the caller did not ask
+    // for a conditional response (a 304 carries no body to store).
+    if response.status() == StatusCode::OK {
+        let body = response.into_body();
+        let Ok(collected) = axum::body::to_bytes(body, MAX_IMAGE_OUTPUT_BYTES).await else {
+            return Ok(byte_response(
+                Vec::new(),
+                kind.content_type(),
+                headers,
+                None,
+            ));
+        };
+        let produced = collected.to_vec();
+        derivative_cache()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .insert(key, produced.clone());
+        return Ok(byte_response(produced, kind.content_type(), headers, None));
+    }
+    Ok(response)
 }
 
 async fn processed_response(
@@ -916,6 +1121,43 @@ mod tests {
             .await
             .expect("body");
         assert_eq!(body.as_ref(), source.as_slice());
+    }
+
+    /// The derivative cache is what keeps a warmed catalogue responsive: repeat
+    /// views and ETag revalidations must not decode the cover again.
+    #[test]
+    fn derivative_cache_hits_and_stays_within_bounds() {
+        let mut cache = DerivativeCache::default();
+        let key = DerivativeKey {
+            source_hash: "a".repeat(64),
+            size: 1024,
+            format: format_code(ImageFormat::Jpeg),
+        };
+        assert!(cache.get(&key).is_none());
+        cache.insert(key.clone(), vec![7_u8; 1024]);
+        assert_eq!(cache.get(&key).map(|bytes| bytes.len()), Some(1024));
+        // Re-inserting the same key is a no-op rather than a duplicate charge.
+        let before = cache.bytes;
+        cache.insert(key.clone(), vec![8_u8; 1024]);
+        assert_eq!(cache.bytes, before);
+
+        // Eviction keeps the byte budget: inserting past the cap drops old entries.
+        for index in 0..64_u32 {
+            cache.insert(
+                DerivativeKey {
+                    source_hash: format!("{index:064}"),
+                    size: 1024,
+                    format: 0,
+                },
+                vec![0_u8; 2 * 1024 * 1024],
+            );
+        }
+        assert!(
+            cache.bytes <= IMAGE_DERIVATIVE_CACHE_BYTES,
+            "cache exceeded its byte budget: {}",
+            cache.bytes
+        );
+        assert_eq!(cache.entries.len(), cache.order.len());
     }
 
     /// A catalogue page asks for every cover at once. Reads must queue for a

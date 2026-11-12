@@ -214,12 +214,30 @@ def supervise(environment: dict[str, str], command: list[str] | None = None) -> 
             listener.bind(("127.0.0.1", 0))
             listener.listen(5)
             listener.settimeout(0.2)
+            # Debug is the default (fast incremental builds), but image
+            # processing and audio analysis are dramatically slower unoptimised:
+            # a 1024px cover takes ~3.4s in debug and ~0.11s in release, which
+            # reads as an application defect during client parity testing. Set
+            # MELODEE_DEV_PROFILE=release (after `cargo build --release
+            # -p melodee-server`) to run the real thing.
+            profile = (
+                environment.get("MELODEE_DEV_PROFILE") or "debug"
+            ).strip().lower()
+            if profile not in ("debug", "release"):
+                raise StackError(
+                    f"MELODEE_DEV_PROFILE must be 'debug' or 'release', got {profile!r}"
+                )
             executable = (
                 ROOT
                 / "target"
-                / "debug"
+                / profile
                 / ("melodee-server.exe" if os.name == "nt" else "melodee-server")
             )
+            if not executable.is_file():
+                raise StackError(
+                    f"{executable} is missing; build it first with "
+                    f"`cargo build --profile {profile} -p melodee-server`"
+                )
             process = subprocess.Popen(
                 command or [str(executable)],
                 cwd=ROOT,
@@ -429,7 +447,7 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "_supervise":
-            supervise(dict(os.environ))
+            supervise(load_environment())
         else:
             with command_lock():
                 (up if args.command == "up" else down)()

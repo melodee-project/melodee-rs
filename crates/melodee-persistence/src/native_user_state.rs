@@ -1067,6 +1067,11 @@ impl NativeUserStateStore {
         now: OffsetDateTime,
     ) -> Result<(), NativeUserStateStoreError> {
         validate_client_event_id(client_event_id)?;
+        // A client clock ahead of the server must not fail the write: the frozen
+        // server ignores the client timestamp entirely, and the ordering check
+        // (`started_at <= updated_at`) is about server-observed state. Clamp
+        // instead of surfacing a 500 for a skewed `nowplaying` event.
+        let started_at = started_at.min(now);
         let affected = sqlx::query(
             r#"
             INSERT INTO native_now_playing (
@@ -1132,11 +1137,16 @@ impl NativeUserStateStore {
         duration_seconds: Option<i32>,
     ) -> Result<NativeScrobbleResult, NativeUserStateStoreError> {
         validate_client_event_id(client_event_id)?;
-        if duration_seconds.is_some_and(|duration| duration < 0) || played_at > submitted_at {
+        if duration_seconds.is_some_and(|duration| duration < 0) {
             return Err(NativeUserStateStoreError::InvalidRequest(
                 "invalid scrobble time or duration",
             ));
         }
+        // Client clocks drift. The frozen server records server time, so a
+        // timestamp in the future is clamped rather than rejected or written as
+        // an impossible future play (which previously failed a database check and
+        // surfaced as `500`).
+        let played_at = played_at.min(submitted_at);
         let mut tx = pool.begin().await?;
         let track = sqlx::query_as::<_, (Uuid, Uuid)>(
             "SELECT id, release_id FROM tracks WHERE public_api_id = $1",

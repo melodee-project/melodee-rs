@@ -217,3 +217,26 @@ visible:
 | Precedence | operator override → published plan → provider → placeholder | a provider guess silently replaces imported art |
 | Visibility boundary | a review-routed Release keeps its artwork hidden | a withheld Release leaks through a client surface |
 | Control round trip | edit form → save → reload → API | a field is accepted but discarded |
+
+## Client parity testing (MeloAmp)
+
+Real-client parity is checked against MeloAmp, the native-API desktop client. Two
+practical rules make the difference between "the server is broken" and "the client
+agrees with the server":
+
+1. **Run the server from a release build when judging client performance.** Image
+   processing is decode-and-resize work; an unoptimised build turns a 110 ms cover
+   into 3.4 s. The dev stack honours `MELODEE_DEV_PROFILE=release` (build with
+   `cargo build --release -p melodee-server` first). Measured on a 50-release
+   catalogue: 1024 px cover 130 ms cold / 10 ms warm in release, 3.46 s / 3.4 s in
+   debug before the derivative cache existed.
+2. **Seed the data the screens need before blaming a screen.** An empty catalogue
+   cannot distinguish a broken view from an empty one.
+   `python3 scripts/seed_meloamp_parity_data.py` fills favourites, play history,
+   playlists and a smart playlist, a chart, a request, a share and an equalizer
+   preset through the public API, and is idempotent so it can run before every
+   parity pass.
+
+The parity harness itself lives outside the repository (it drives Electron through
+Playwright); the findings and the fixes they produced are recorded in
+`design/evidence/meloamp-parity/MELOAMP-VERIFY.md`.

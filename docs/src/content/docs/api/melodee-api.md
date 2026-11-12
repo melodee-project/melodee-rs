@@ -51,11 +51,24 @@ playlist `description`; existing migrated descriptions remain readable.
 Image URLs returned by native DTOs use the anonymous `/images/{id}/{size}` compatibility route so
 clients can render art before adding authentication headers. Typed Artist, Album, Song, Playlist,
 and User IDs are resolved through PostgreSQL facts. Missing stored art uses the captured default
-image for an existing entity; unknown or malformed IDs preserve the legacy empty `200` response.
+image for an entity that exists — including an Artist with no artwork yet, and a Release withheld by
+policy, which gets the default rather than its own cover — while unknown or malformed IDs preserve
+the legacy empty `200` response.
 Canonical Release artwork is opened only beneath the configured canonical storage root with
 symlink/traversal protection. Numeric and named sizes are decoded/resized under fixed input-byte,
 dimension, pixel, and concurrency limits; unsupported or oversized images fail closed. Responses
-include an ETag and public cache headers.
+include an ETag and public cache headers. Derived sizes are cached in-process,
+keyed by the immutable publication hash, so repeat views and ETag revalidations do
+not decode the source image again; `original` is served from storage directly.
+
+`GET /user/last-played` is the play-history feed: each item is
+`{id, song, playedAt, duration}`, where `id` identifies the play event (a Track
+played twice appears twice), `song` is the same Song DTO the other catalog routes
+return — including a signed `streamUrl`, so an entry can be replayed directly — and
+`duration` is the recorded play length in seconds. `meta.totalCount` counts the
+same plays the feed returns. Chart lists and details additionally expose
+`name`/`trackCount` alongside the canonical `title`/`itemCount`; the two are always
+equal.
 
 Artwork is chosen in a fixed order: an operator-uploaded override first, then the cover published
 with the Release, then a provider (enrichment) cover, then the captured default image. Provider art

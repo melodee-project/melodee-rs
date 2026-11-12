@@ -183,6 +183,11 @@ async fn native_discovery_routes_use_durable_bounded_facts_and_preserve_wire_sha
         is_admin: true,
         is_editor: true,
     };
+    let non_admin_principal = NativePrincipal {
+        is_admin: false,
+        is_editor: false,
+        ..principal
+    };
     let track_id: Uuid = sqlx::query_scalar("SELECT id FROM tracks WHERE release_id=$1")
         .bind(fixture.release_id().into_uuid())
         .fetch_one(&db.pool)
@@ -392,6 +397,25 @@ async fn native_discovery_routes_use_durable_bounded_facts_and_preserve_wire_sha
     );
     assert_eq!(lookup["candidates"][0]["itunesId"], "1825315582");
 
+    // Capability failure parity: the frozen filter answers `403` with an ApiError
+    // (not a not-found body) when the caller is not an administrator.
+    let (status, bytes) = request(
+        state.clone(),
+        Some(non_admin_principal),
+        "GET",
+        "/api/v1/system/stats",
+        Body::empty(),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::FORBIDDEN,
+        "{}",
+        String::from_utf8_lossy(&bytes)
+    );
+    let error: serde_json::Value = serde_json::from_slice(&bytes).expect("ApiError JSON");
+    assert_eq!(error["code"], "FORBIDDEN");
+
     let (status, bytes) = request(
         state.clone(),
         Some(principal),
@@ -409,7 +433,10 @@ async fn native_discovery_routes_use_durable_bounded_facts_and_preserve_wire_sha
     assert_eq!(stats[3]["title"], "Songs");
     assert_eq!(stats[3]["sortOrder"], 9);
 
-    for content_type in ["album", "artist"] {
+    // The frozen contract uses singular content types; plural forms are a
+    // tolerated alias (a client that pluralises must still get its data), while
+    // unknown values keep the frozen rejection.
+    for content_type in ["album", "artist", "albums", "artists"] {
         let (status, bytes) = request(
             state.clone(),
             Some(principal),
@@ -418,11 +445,38 @@ async fn native_discovery_routes_use_durable_bounded_facts_and_preserve_wire_sha
             Body::empty(),
         )
         .await;
-        assert_eq!(status, StatusCode::OK);
+        assert_eq!(status, StatusCode::OK, "type={content_type}");
         let top: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(top["items"].as_array().unwrap().len(), 1);
         assert_eq!(top["items"][0]["playCount"], 1);
     }
+    for content_type in ["genre", "bogus"] {
+        let (status, _) = request(
+            state.clone(),
+            Some(principal),
+            "GET",
+            &format!("/api/v1/analytics/top/week?type={content_type}&limit=10"),
+            Body::empty(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "type={content_type}");
+    }
+
+    let (_, bytes) = request(
+        state.clone(),
+        Some(principal),
+        "GET",
+        "/api/v1/charts?page=1&pageSize=10",
+        Body::empty(),
+    )
+    .await;
+    let chart_list: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let chart_card = &chart_list["data"][0];
+    // ADR-0188: the frozen `title`/`itemCount` keys are mirrored into the
+    // `name`/`trackCount` keys a chart-list client reads.
+    assert_eq!(chart_card["title"], "Discovery Chart");
+    assert_eq!(chart_card["name"], chart_card["title"]);
+    assert_eq!(chart_card["itemCount"], chart_card["trackCount"]);
 
     let (_, bytes) = request(
         state.clone(),
@@ -437,6 +491,8 @@ async fn native_discovery_routes_use_durable_bounded_facts_and_preserve_wire_sha
         chart_detail["items"][0]["albumImageUrl"],
         format!("http://melodee.test/images/album_{release_public_id}/80")
     );
+    assert_eq!(chart_detail["name"], chart_detail["title"]);
+    assert_eq!(chart_detail["trackCount"], chart_detail["itemCount"]);
 
     let (_, bytes) = request(
         state.clone(),

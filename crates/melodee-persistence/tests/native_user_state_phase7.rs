@@ -526,5 +526,45 @@ async fn annotations_playlists_and_scrobbles_are_bounded_atomic_and_idempotent()
         NativeUserStateStore::playlist(&db.pool, user_id, playlist.public_api_id).await,
         Err(NativeUserStateStoreError::NotFound)
     ));
+    // A client clock ahead of the server must not fail the write. Previously the
+    // future timestamp violated `native_now_playing_time_check` and surfaced to
+    // the client as a `500`; the frozen server ignores client time entirely, so a
+    // skewed timestamp is clamped to server-observed time.
+    let future = now + time::Duration::seconds(600);
+    NativeUserStateStore::record_now_playing(
+        &db.pool,
+        user_id,
+        track_public_id,
+        "phase7-future-now-playing",
+        future,
+        now,
+    )
+    .await
+    .expect("a future now-playing timestamp is clamped, not rejected");
+    let started_at: time::OffsetDateTime =
+        sqlx::query_scalar("SELECT started_at FROM native_now_playing WHERE user_id = $1")
+            .bind(user_id)
+            .fetch_one(&db.pool)
+            .await
+            .expect("read clamped now-playing row");
+    assert!(
+        started_at <= now,
+        "clamped started_at must not be in the future"
+    );
+    assert_eq!(
+        NativeUserStateStore::record_scrobble(
+            &db.pool,
+            user_id,
+            track_public_id,
+            "phase7-future-played",
+            future,
+            now,
+            Some(30),
+        )
+        .await
+        .expect("a future played timestamp is clamped, not rejected"),
+        NativeScrobbleResult::Applied
+    );
+
     db.drop().await;
 }

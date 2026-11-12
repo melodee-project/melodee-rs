@@ -9,6 +9,16 @@ by an accepted ADR and release gate.
 
 ### Fixed
 
+- MeloAmp parity defects found by driving the client against a populated instance
+  (`design/evidence/meloamp-parity/MELOAMP-VERIFY.md`): a known Artist without
+  artwork served an empty `200` instead of the captured default image;
+  `/user/last-played` reported a play count with an empty `data` array, so a real
+  listening history looked empty; chart lists lacked the `name`/`trackCount` keys a
+  chart-list client reads; the equalizer list lacked the `data` alias envelope
+  readers expect; `analytics/top/{period}` rejected plural `type` values; a scrobble
+  with a future client timestamp failed a database check and surfaced as `500`; and
+  `/system/stats` answered `404` where the frozen capability filter answers `403`.
+  Every native `5xx` now logs its cause instead of only the status.
 - A tagged release date now reaches the Release. The media observer hard-coded the release
   observation's date to `None`, so `date`/`year` tags were recorded on every Track and then dropped:
   imported Releases had neither `release_date` nor `release_date_text` and only a sidecar could set
@@ -40,6 +50,15 @@ by an accepted ADR and release gate.
   (ADR-0186, migration 0043).
 
 ### Added
+
+- `scripts/seed_meloamp_parity_data.py` populates a local instance with the data a
+  client parity pass needs (favourites, play history, playlists and a smart playlist,
+  a chart, a request, a share, an equalizer preset) through the public API, idempotently.
+- Artwork derivatives are cached in-process, keyed by the immutable publication hash,
+  so repeat views and ETag revalidations no longer decode and resize the source image;
+  the cache is bounded by bytes and entries. The dev stack accepts
+  `MELODEE_DEV_PROFILE=release`, because an unoptimised build makes a 110 ms cover take
+  3.4 s and reads as an application defect during client testing.
 
 - Known-answer corpus and the four-phase audit that goes with it
   (`design/testing/UI-AND-WORKFLOW-AUDIT.md`, `design/evidence/known-corpus/`):

@@ -247,7 +247,20 @@ async fn native_community_routes_are_owner_fenced_bounded_and_replay_safe() {
         "../../../compatibility/melodee-api-v1/golden/native-community/community-lifecycle-equalizer-list-empty.json"
     ))
     .expect("legacy empty presets");
-    assert_eq!(empty_presets.unwrap(), legacy_empty_presets);
+    // ADR-0187: the frozen `presets`/`meta` keys are unchanged; `data` is a
+    // compatibility alias carrying the same collection for clients that read the
+    // generic paged envelope.
+    let mut actual_empty = empty_presets.unwrap();
+    let alias = actual_empty
+        .get("data")
+        .cloned()
+        .expect("compatibility alias present");
+    assert_eq!(alias, actual_empty["presets"]);
+    assert_eq!(alias.as_array().map(Vec::len), Some(0));
+    if let Some(object) = actual_empty.as_object_mut() {
+        object.remove("data");
+    }
+    assert_eq!(actual_empty, legacy_empty_presets);
 
     let (status, _) = call(
         state.clone(),
