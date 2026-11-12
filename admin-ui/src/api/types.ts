@@ -20,8 +20,6 @@ export interface ReleaseMetadataPatch {
   /** ISO date `YYYY-MM-DD`. */
   releaseDate?: string | null;
   releaseDateText?: string | null;
-  country?: string | null;
-  type?: string | null;
 }
 
 export interface ArtistMetadataPatch {
@@ -1289,8 +1287,6 @@ export interface ReleaseDetail {
   displayArtist: string | null;
   releaseDate: string | null;
   releaseDateText: string | null;
-  country?: string | null;
-  type?: string | null;
   status: CatalogReleaseStatus;
   workflowState: ReleaseWorkflowState | null;
   policyDisposition: PolicyDisposition | null;

@@ -125,6 +125,13 @@ by an accepted ADR and release gate.
 
 ### Fixed
 
+- Catalog edit forms no longer offer free text where a dictionary exists, and no longer offer fields
+  the API does not accept. Artist **Type** is now a select over the eight `ArtistType` values (the
+  store already rejected anything else with `400`, so typing produced a failed save). Release edit
+  dropped **Country** and **Type**, which the W0 contract removed when the corresponding columns were
+  never added — the form sent values the server silently discarded. **Release date** is validated as
+  `YYYY-MM-DD` inline, and Track edit gained the **Display artist** field the patch already supported.
+
 - Artist statistics are now drillable. The summary numbers (track credits, appearances) are counts
   over `artist_track_associations`, while the detail tabs read `contributions` — so an Artist could
   show "1 Appearances" with an empty tab. Artist detail now exposes a `trackCredits` section from the

@@ -182,10 +182,17 @@ export function ReleaseDetailScreen() {
                 { name: 'title', label: t('catalog.release.edit.title'), type: 'string', value: detail.title },
                 { name: 'sortTitle', label: t('catalog.release.edit.sortTitle'), type: 'string', value: detail.sortTitle },
                 { name: 'displayArtist', label: t('catalog.column.artist'), type: 'string', value: detail.displayArtist ?? '' },
-                { name: 'releaseDate', label: t('catalog.release.edit.date'), type: 'string', value: detail.releaseDate ?? '' },
+                {
+                  // ISO date, validated inline: the server parses `YYYY-MM-DD`
+                  // and rejects anything else with 400.
+                  name: 'releaseDate',
+                  label: t('catalog.release.edit.date'),
+                  type: 'date',
+                  placeholder: 'YYYY-MM-DD',
+                  invalidText: t('catalog.release.edit.dateInvalid'),
+                  value: detail.releaseDate ?? '',
+                },
                 { name: 'releaseDateText', label: t('catalog.release.edit.dateText'), type: 'string', value: detail.releaseDateText ?? '' },
-                { name: 'country', label: t('catalog.release.edit.country'), type: 'string', value: detail.country ?? null },
-                { name: 'type', label: t('catalog.release.edit.type'), type: 'string', value: detail.type ?? null },
               ]}
               buildPatch={(state) => ({
                 title: state['title'] !== undefined && String(state['title']).trim() !== '' ? String(state['title']) : null,
@@ -193,8 +200,9 @@ export function ReleaseDetailScreen() {
                 displayArtist: state['displayArtist'] !== undefined && String(state['displayArtist']).trim() !== '' ? String(state['displayArtist']) : null,
                 releaseDate: state['releaseDate'] !== undefined && String(state['releaseDate']).trim() !== '' ? String(state['releaseDate']) : null,
                 releaseDateText: state['releaseDateText'] !== undefined && String(state['releaseDateText']).trim() !== '' ? String(state['releaseDateText']) : null,
-                country: state['country'] !== undefined && String(state['country']).trim() !== '' ? String(state['country']) : null,
-                type: state['type'] !== undefined && String(state['type']).trim() !== '' ? String(state['type']) : null,
+                // `country` and `releaseType` are not part of the metadata
+                // contract (the columns do not exist), so the form no longer
+                // sends values the server would silently discard.
               })}
               onSave={(patch) => updateReleaseMetadata(id, patch)}
               refresh={retry}

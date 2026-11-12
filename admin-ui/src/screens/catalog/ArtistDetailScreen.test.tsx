@@ -261,6 +261,27 @@ describe('ArtistDetailScreen', () => {
     expect(screen.getByText('Performance')).toBeInTheDocument();
   });
 
+  it('edits the Artist type from the closed dictionary, not free text', async () => {
+    renderScreen(makeDetail());
+    await screen.findByRole('heading', { name: 'The Nomads' });
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    const select = await screen.findByLabelText('Type');
+    expect(select.tagName).toBe('SELECT');
+    const options = Array.from((select as HTMLSelectElement).options).map((o) => o.value);
+    // melodee-domain ArtistType, exactly.
+    expect(options).toEqual([
+      'person',
+      'group',
+      'orchestra',
+      'ensemble',
+      'choir',
+      'character',
+      'other',
+      'unknown',
+    ]);
+    expect(select).toHaveValue('group');
+  });
+
   it('lets an administrator assert identity status (the audited path to Verified)', async () => {
     mockUpdateArtistMetadata.mockResolvedValue(undefined);
     renderScreen(makeDetail({ status: 'provisional' }));

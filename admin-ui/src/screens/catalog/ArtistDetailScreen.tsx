@@ -158,6 +158,18 @@ function looksLikeCollaboration(name: string): boolean {
   return /(&|,|;|\bfeat\.?\b|\bft\.?\b|\bfeaturing\b|\sx\s)/i.test(name);
 }
 
+/// The Artist type dictionary (melodee-domain `ArtistType`, snake_case wire form).
+const ARTIST_TYPES = [
+  'person',
+  'group',
+  'orchestra',
+  'ensemble',
+  'choir',
+  'character',
+  'other',
+  'unknown',
+] as const;
+
 const ARTIST_TABS = [
   'overview',
   'tracks',
@@ -225,7 +237,18 @@ export function ArtistDetailScreen() {
               fields={[
                 { name: 'canonicalName', label: t('catalog.artist.edit.name'), type: 'string', value: detail.name },
                 { name: 'sortName', label: t('catalog.artist.edit.sortName'), type: 'string', value: detail.sortName },
-                { name: 'artistType', label: t('catalog.artist.edit.type'), type: 'string', value: detail.artistType },
+                {
+                  // Closed dictionary: melodee-domain ArtistType. The store
+                  // rejects anything else with 400, so this must be a select.
+                  name: 'artistType',
+                  label: t('catalog.artist.edit.type'),
+                  type: 'select',
+                  options: ARTIST_TYPES.map((value) => ({
+                    value,
+                    label: t(`catalog.artistType.${value}`),
+                  })),
+                  value: detail.artistType,
+                },
                 {
                   // Only `provisional` and `verified` are operator-settable;
                   // merge/delete states belong to their own flows.

@@ -134,9 +134,12 @@ The summary numbers are **links into the rows they count**, so a statistic is ne
 Release, the billing role, and whether the credit is a performance credit or a written/production
 credit. Those rows come from the same association records the counts aggregate over, so the number
 and the list can never disagree. The detail
-view also offers an **Edit** panel with the editable metadata fields: name, sort name, and
-artist type. Saves are partial updates validated server-side (blank names and unknown artist
-types are rejected with `400`), recorded as an audit event in the entity's history, and applied
+view also offers an **Edit** panel with the editable metadata fields: name, sort name, artist type,
+and identity status. **Artist type is a closed dictionary** (`person`, `group`, `orchestra`,
+`ensemble`, `choir`, `character`, `other`, `unknown`) rendered as a select: the store rejects any
+other value with `400`, so free text would only produce a failed save. Saves are partial updates
+validated server-side (blank names and unknown artist types are rejected with `400`), recorded as an
+audit event in the entity's history, and applied
 with last-write-wins semantics — each save bumps the row revision, and a concurrent edit by
 another administrator simply wins if it lands last; the other editor sees the current values on
 refresh. Edits change display metadata only: they never alter Artist identity. Multi-Artist merge

@@ -80,12 +80,23 @@ export function TrackDetailScreen() {
               fields={[
                 { name: 'title', label: t('catalog.track.edit.titleField'), type: 'string', value: detail.title },
                 { name: 'sortTitle', label: t('catalog.track.edit.sortTitle'), type: 'string', value: detail.sortTitle },
+                {
+                  // Display value only — never an Artist identity (AGENTS.md).
+                  name: 'displayArtist',
+                  label: t('catalog.track.edit.displayArtist'),
+                  type: 'string',
+                  value: detail.displayArtist ?? '',
+                },
                 { name: 'ordinal', label: t('catalog.track.edit.number'), type: 'number', value: detail.ordinal },
                 { name: 'durationMs', label: t('catalog.track.edit.duration'), type: 'number', value: detail.durationMs ?? undefined },
               ]}
               buildPatch={(state) => ({
                 title: state['title'] !== undefined && String(state['title']).trim() !== '' ? String(state['title']) : null,
                 sortTitle: state['sortTitle'] !== undefined && String(state['sortTitle']).trim() !== '' ? String(state['sortTitle']) : null,
+                displayArtist:
+                  state['displayArtist'] !== undefined && String(state['displayArtist']).trim() !== ''
+                    ? String(state['displayArtist'])
+                    : null,
                 ordinal: (state['ordinal'] as number | undefined) ?? undefined,
                 durationMs: (state['durationMs'] as number | undefined) ?? undefined,
               })}

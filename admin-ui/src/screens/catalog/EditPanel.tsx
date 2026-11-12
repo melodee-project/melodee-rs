@@ -25,9 +25,13 @@ interface FormFieldConfig<P extends MetadataPatch> {
   fields: Array<{
     name: string;
     label: string;
-    type: 'string' | 'number' | 'select';
+    type: 'string' | 'number' | 'select' | 'date';
     /** Options for a `select` field: value plus its localized label. */
     options?: Array<{ value: string; label: string }>;
+    /** Placeholder shown in an empty input (e.g. the expected date shape). */
+    placeholder?: string;
+    /** Localized message shown when a `date` field is not `YYYY-MM-DD`. */
+    invalidText?: string;
     value: unknown;
   }>;
   /** Build the patch object from current form state. */
@@ -156,6 +160,21 @@ export function EditPanel<P extends MetadataPatch>({
                 />
               ))}
             </Select>
+          ) : field.type === 'date' ? (
+            <TextInput
+              key={field.name}
+              id={`edit-${field.name}`}
+              labelText={field.label}
+              placeholder={field.placeholder}
+              value={(formState[field.name] as string | null | undefined) ?? ''}
+              invalid={
+                typeof formState[field.name] === 'string' &&
+                (formState[field.name] as string).length > 0 &&
+                !/^\d{4}-\d{2}-\d{2}$/.test(formState[field.name] as string)
+              }
+              invalidText={field.invalidText}
+              onChange={(event) => setField(field.name, event.target.value)}
+            />
           ) : field.type === 'number' ? (
             <NumberInput
               key={field.name}
