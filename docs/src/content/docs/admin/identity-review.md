@@ -61,3 +61,12 @@ Neither operation touches media files; they change catalog relationships only.
 
 All of these flows use the [Admin API identity routes](../api/admin-api/#artist-identity-review),
 which are the parallel surface for scripting and automation.
+
+## Artist status
+
+Artists created from imported credit text start as **Provisional**: the catalogue knows
+the name, not the identity. Confirming that an observation names an existing Artist (the
+`confirm` resolution) promotes that Artist to **Verified** in the same transaction, so the
+Artists list shows how much identity work has been done rather than treating every
+imported name as an open question. The `create-new` resolution records a distinct Artist
+and leaves it Provisional. You can also set the status directly in the Artist's Edit panel.

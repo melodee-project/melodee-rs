@@ -542,6 +542,18 @@ async fn resolve_confirm_creates_locked_authoritative_decision() {
     );
     assert_eq!(body["changed"], true);
 
+    // Confirming that an observation names an existing Artist is the evidence
+    // ADR-0117 requires to move an Artist out of the provisional default.
+    let promoted = CatalogStore
+        .artist_by_public_id(&db.pool, candidate_public)
+        .await
+        .expect("lookup confirmed artist")
+        .expect("confirmed artist exists");
+    assert_eq!(
+        promoted.status, "verified",
+        "a confirmed identity match promotes the Artist to verified"
+    );
+
     let (status, body) = call(
         app.clone(),
         "GET",

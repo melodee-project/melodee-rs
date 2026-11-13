@@ -33,13 +33,19 @@ async fn window_counts_and_completed_hourly_track_the_rolling_window() {
         .expect("window counts");
     assert_eq!(counts.failed, 0);
     assert_eq!(counts.completed, 0);
+    // The series is a zero-filled trailing window, so an idle hour is a data
+    // point (0) rather than an absent bucket: that is what lets the dashboard
+    // chart plot a real 24-hour axis.
+    let idle_hourly = store
+        .completed_hourly(&db.pool, now - time::Duration::hours(24))
+        .await
+        .expect("hourly");
     assert!(
-        store
-            .completed_hourly(&db.pool, now - time::Duration::hours(24))
-            .await
-            .expect("hourly")
-            .is_empty()
+        (24..=26).contains(&idle_hourly.len()),
+        "expected a ~24h hour spine, got {}",
+        idle_hourly.len()
     );
+    assert!(idle_hourly.iter().all(|bucket| bucket.count == 0));
 
     let failed_id = seed_ready_item(&store, &db.pool, "admin/window/failed").await;
     let completed_id = seed_ready_item(&store, &db.pool, "admin/window/completed").await;
@@ -82,11 +88,19 @@ async fn window_counts_and_completed_hourly_track_the_rolling_window() {
         .completed_hourly(&db.pool, now - time::Duration::hours(24))
         .await
         .expect("hourly");
-    assert_eq!(hourly.len(), 1);
-    assert_eq!(hourly[0].count, 1);
     let bucket = now - time::Duration::hours(2);
+    let populated = hourly
+        .iter()
+        .filter(|entry| entry.count != 0)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        populated.len(),
+        1,
+        "exactly one hour carries the completion"
+    );
+    assert_eq!(populated[0].count, 1);
     assert!(
-        hourly[0].hour <= bucket && hourly[0].hour > bucket - time::Duration::hours(1),
+        populated[0].hour <= bucket && populated[0].hour > bucket - time::Duration::hours(1),
         "bucket is the truncated hour of the completion"
     );
 

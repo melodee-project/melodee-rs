@@ -177,6 +177,7 @@
   "catalog.artists.merge.targetWinsTitle": "The surviving Artist's metadata wins",
   "catalog.artists.merge.title": "Merge Artists",
   "catalog.artists.merge.userStates": "User states coalesced",
+  "catalog.artists.provisionalHint": "Provisional artists are created from observed credit text. Confirming an identity match in Identity Review promotes the artist to Verified; you can also set it directly in Edit.",
   "catalog.artists.searchLabel": "Search artists",
   "catalog.artists.subtitle": "Every Melodee-owned Artist identity in the catalog.",
   "catalog.artists.tableCaption": "Catalog artists",

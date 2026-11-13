@@ -1679,3 +1679,9 @@
   fill: color-mix(in srgb, var(--melodee-status-info) 14%, transparent);
   stroke: none;
 }
+
+/* Muted inline text for a value that is the catalogue default (e.g. a
+   provisional Artist): readable, but not an alert. */
+.melodee-text-muted {
+  color: var(--melodee-text-secondary);
+}

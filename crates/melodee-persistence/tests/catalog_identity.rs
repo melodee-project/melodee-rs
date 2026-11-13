@@ -574,6 +574,18 @@ async fn aliases_manual_decisions_and_negative_assertions_are_durable_and_scoped
         )
         .await
         .expect("persist locked admin decision through CatalogStore");
+    // A confirmed match is the evidence that distinguishes a known Artist from
+    // the provisional default, so the resolved Artist stops being provisional.
+    let resolved_status: String = sqlx::query_scalar("SELECT status FROM artists WHERE id=$1")
+        .bind(resolved_artist_id)
+        .fetch_one(&db.pool)
+        .await
+        .expect("query promoted Artist status");
+    assert_eq!(
+        resolved_status, "verified",
+        "confirming an identity match promotes a provisional Artist"
+    );
+
     let revised_release: (i64, i64) = sqlx::query_as(
         "SELECT revision,
                 (SELECT count(*) FROM catalog_semantic_overlays WHERE release_id=releases.id)

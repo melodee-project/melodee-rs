@@ -9,6 +9,18 @@ by an accepted ADR and release gate.
 
 ### Fixed
 
+- Artist status means something again. Every imported Artist started `provisional`
+  (ADR-0117's rule for identities created from observed credit text) and **nothing
+  ever promoted one**, so a healthy catalogue showed 100 % provisional — a per-row
+  "pending" chip on every Artist, which reads as hundreds of problems and is why the
+  Artists list looked alarming. Confirming a match to an existing Artist in Identity
+  Review now promotes that Artist to `verified` in the same transaction (the
+  `create-new` resolution deliberately does not: it asserts a distinct Artist, not a
+  known identity). In the UI, `provisional` renders as muted text rather than a status
+  chip on the list, and the Artist detail explains the lifecycle.
+- `completed_hourly` tests now assert the zero-filled hour spine introduced with the
+  activity chart, instead of an empty series for an idle window.
+
 - The Admin UI visual gate is stable again. The density fix (compact rows now use
   Carbon's `xs` size) changed the rendered rows of the queue and worker pools, so the
   `system-workers` baselines were regenerated; and the narrow mobile baselines — which

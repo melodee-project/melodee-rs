@@ -284,6 +284,11 @@ export function ArtistDetailScreen() {
                 <StatusChip
                   kind={catalogStatusKind(detail.status)}
                   label={t(`catalog.status.${detail.status}`, { defaultValue: detail.status })}
+                  description={
+                    detail.status === 'provisional'
+                      ? t('catalog.artists.provisionalHint')
+                      : undefined
+                  }
                 />
                 {detail.externalIds.items.map((externalId) => (
                   <StatusChip

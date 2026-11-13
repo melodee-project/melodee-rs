@@ -623,7 +623,8 @@ async fn resolve_observation(
                 Ok(artist) => artist,
                 Err(response) => return *response,
             };
-            match record_confirmation(&state.pool, id, artist.id, &admin, &reason, now).await {
+            match record_confirmation(&state.pool, id, artist.id, &admin, &reason, now, true).await
+            {
                 Ok(()) => {
                     tracing::info!(
                         actor = %admin.public_api_id,
@@ -671,7 +672,9 @@ async fn resolve_observation(
             if let Err(error) = CatalogStore.create_artist(&state.pool, &artist).await {
                 return catalog_error(error);
             }
-            match record_confirmation(&state.pool, id, new_artist_id, &admin, &reason, now).await {
+            match record_confirmation(&state.pool, id, new_artist_id, &admin, &reason, now, false)
+                .await
+            {
                 Ok(()) => {
                     tracing::info!(
                         actor = %admin.public_api_id,
@@ -724,6 +727,30 @@ async fn resolve_observation(
 
 /// Records the administrator's confirmed match decision through the durable
 /// decision store (locked, so no automated resolver supersedes it).
+/// Promotes the confirmed Artist from `provisional` to `verified`.
+///
+/// ADR-0117 keeps `provisional` for Artists created from observed credit text and
+/// reserves `verified` for identities backed by credible or locked evidence. An
+/// operator confirming that an observation names an existing Artist is exactly that
+/// evidence, so the Artist stops being provisional. `create-new` deliberately does
+/// not promote: it records "this is a distinct Artist", not "this identity is known".
+async fn promote_confirmed_artist(
+    pool: &sqlx::PgPool,
+    artist_id: ArtistId,
+    now: OffsetDateTime,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE artists
+            SET status = 'verified', revision = revision + 1, updated_at = $2
+          WHERE id = $1 AND status = 'provisional'",
+    )
+    .bind(artist_id.into_uuid())
+    .bind(now)
+    .execute(pool)
+    .await
+    .map(|_| ())
+}
+
 async fn record_confirmation(
     pool: &sqlx::PgPool,
     observation_id: Uuid,
@@ -731,6 +758,7 @@ async fn record_confirmation(
     admin: &AdminPrincipal,
     reason: &str,
     now: OffsetDateTime,
+    promote: bool,
 ) -> Result<(), Box<Response>> {
     let decision = ArtistMatchDecision::new(
         NewArtistMatchDecision {
@@ -758,7 +786,20 @@ async fn record_confirmation(
             serde_json::json!({ "surface": "admin-api/v1/identity" }),
         )
         .await
-        .map_err(|error| Box::new(catalog_error(error)))
+        .map_err(|error| Box::new(catalog_error(error)))?;
+    if !promote {
+        return Ok(());
+    }
+    promote_confirmed_artist(pool, artist_id, now)
+        .await
+        .map_err(|error| {
+            tracing::error!(%error, %artist_id, "artist status promotion failed");
+            Box::new(identity_error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "promotion_failed",
+                "the match decision was recorded but the Artist status could not be updated",
+            ))
+        })
 }
 
 /// POST /api/admin/v1/identity/observations/{id}/never-match — durable
