@@ -237,6 +237,13 @@ agrees with the server":
    preset through the public API, and is idempotent so it can run before every
    parity pass.
 
+The Android / Android Auto client (`melodee-player`) is checked by
+`scripts/verify_melodee_player_api.py` (`make verify-android-client`): it issues exactly
+the requests its two Retrofit interfaces declare, asserts the non-null fields of its
+Kotlin models, and covers the token-refresh, paging, ordering, artist-filter, Range and
+scrobble behaviours the app implements. Evidence:
+`design/evidence/android-client-parity/ANDROID-AUTO-VERIFY.md`.
+
 The parity driver is committed as `admin-ui/e2e/meloamp-parity.cjs` (Node because the
 Playwright Electron API is Node-only): it walks every navigation target of the client
 and reports console errors, failed requests and broken artwork, taking the client

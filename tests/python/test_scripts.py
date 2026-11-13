@@ -101,6 +101,8 @@ class DeveloperCommandTests(unittest.TestCase):
                 "postgres-reset",
                 "postgres-up",
                 "prechecks",
+                "seed-client-data",
+                "verify-android-client",
                 "test",
                 "test-coverage",
                 "test-integration",

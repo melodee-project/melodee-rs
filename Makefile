@@ -1,6 +1,6 @@
 PYTHON ?= python3
 
-.PHONY: up down bootstrap prechecks check check-fast fmt lint test test-unit test-integration test-coverage docs docs-site-check deny postgres-up postgres-down postgres-reset capture-baseline admin-ui-check admin-ui-e2e audit audit-live corpus corpus-verify
+.PHONY: verify-android-client seed-client-data up down bootstrap prechecks check check-fast fmt lint test test-unit test-integration test-coverage docs docs-site-check deny postgres-up postgres-down postgres-reset capture-baseline admin-ui-check admin-ui-e2e audit audit-live corpus corpus-verify
 
 bootstrap:
 	$(PYTHON) scripts/bootstrap.py
@@ -72,6 +72,12 @@ corpus-verify:
 
 audit-live:
 	$(PYTHON) scripts/check.py audit-live
+
+verify-android-client:
+	$(PYTHON) scripts/verify_melodee_player_api.py
+
+seed-client-data:
+	$(PYTHON) scripts/seed_meloamp_parity_data.py
 
 postgres-reset:
 	$(PYTHON) scripts/reset_dev_database.py

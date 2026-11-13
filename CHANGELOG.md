@@ -51,6 +51,12 @@ by an accepted ADR and release gate.
 
 ### Added
 
+- `scripts/verify_melodee_player_api.py` (`make verify-android-client`) verifies the
+  native-v1 contract the Melodee Android / Android Auto client depends on: the 13
+  requests its Retrofit interfaces declare, the non-null fields of its Kotlin models,
+  the access-token refresh lifecycle, paging/ordering/artist filtering, `Range`
+  playback and the app's exact scrobble payload. 46 checks, run against both an
+  administrator and a listener-only account.
 - `scripts/seed_meloamp_parity_data.py` populates a local instance with the data a
   client parity pass needs (favourites, play history, playlists and a smart playlist,
   a chart, a request, a share, an equalizer preset) through the public API, idempotently.
