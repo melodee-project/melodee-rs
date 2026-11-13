@@ -9,6 +9,14 @@ by an accepted ADR and release gate.
 
 ### Fixed
 
+- The Admin UI visual gate is stable again. The density fix (compact rows now use
+  Carbon's `xs` size) changed the rendered rows of the queue and worker pools, so the
+  `system-workers` baselines were regenerated; and the narrow mobile baselines — which
+  are almost entirely text — now allow up to 3 % pixel drift for font rasterisation
+  differences between CI and a developer machine, which is what made
+  `processing-queue [mobile-light]` fail on CI while passing locally. Desktop baselines
+  keep the 1 % tolerance.
+
 - Admin API timestamps are RFC 3339 strings. `OffsetDateTime`'s default serialization is a
   nine-element array, so every `createdAt`/`updatedAt`/`hour` field the Admin UI rendered was an
   `Invalid Date` (blank cells) and the Overview activity chart sorted its axis by `NaN`. All 40
@@ -66,6 +74,14 @@ by an accepted ADR and release gate.
   (ADR-0186, migration 0043).
 
 ### Added
+
+- A **Stats** page (`/admin/system/stats`) with library, playback, and database statistics:
+  catalog totals, media bytes, library duration, lossless share, storage by format, releases by
+  decade, largest releases, play counts, total play time, the two-week plays-per-day chart, top
+  artists and tracks, database size and connections, the dominant tables, and freshness counters.
+  Backed by a new bounded `GET /api/admin/v1/stats` aggregate (fixed `GROUP BY`/`LIMIT` buckets, a
+  zero-filled day spine, sizes for a fixed relation list) and charts that follow the existing
+  library-free, screen-reader-accessible pattern.
 
 - `scripts/verify_melodee_player_api.py` (`make verify-android-client`) verifies the
   native-v1 contract the Melodee Android / Android Auto client depends on: the 13

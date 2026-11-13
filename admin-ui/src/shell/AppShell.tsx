@@ -1,4 +1,5 @@
 import {
+  ChartLine,
   Activity,
   Archive,
   Asleep,
@@ -109,6 +110,7 @@ const NAV_TREE: (NavLeaf | NavGroup)[] = [
     key: 'system',
     labelKey: 'nav.group.system',
     items: [
+      { key: 'stats', path: '/system/stats', icon: ChartLine },
       { key: 'storage', path: '/system/storage', icon: DataBase },
       { key: 'workers', path: '/system/workers', icon: Renew },
       { key: 'search', path: '/system/search', icon: SearchIcon },

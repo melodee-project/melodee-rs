@@ -64,6 +64,9 @@ const DiagnosticsScreen = lazy(() =>
 const SearchScreen = lazy(() =>
   import('./screens/system/SearchScreen').then((m) => ({ default: m.SearchScreen })),
 );
+const StatsScreen = lazy(() =>
+  import('./screens/stats/StatsScreen').then((m) => ({ default: m.StatsScreen })),
+);
 const StorageScreen = lazy(() =>
   import('./screens/system/StorageScreen').then((m) => ({ default: m.StorageScreen })),
 );
@@ -107,6 +110,7 @@ export default function App() {
           <Route path="catalog/tracks/:id" element={<TrackDetailScreen />} />
           <Route path="catalog/identity" element={<IdentityReviewScreen />} />
           <Route path="policies/releases" element={<PoliciesScreen />} />
+          <Route path="system/stats" element={<StatsScreen />} />
           <Route path="system/storage" element={<StorageScreen />} />
           <Route path="system/workers" element={<SystemWorkersScreen />} />
           <Route path="system/search" element={<SearchScreen />} />

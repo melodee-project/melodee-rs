@@ -17,6 +17,7 @@ pub mod admin_policies;
 pub mod admin_radio;
 pub mod admin_review;
 pub mod admin_scripts;
+pub mod admin_stats;
 pub mod admin_system;
 pub mod admin_time;
 pub mod admin_ui;

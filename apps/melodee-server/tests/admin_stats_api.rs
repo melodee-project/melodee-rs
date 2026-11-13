@@ -1,0 +1,245 @@
+//! Stats aggregation API integration tests: the administrator gate, the shape of
+//! the library/listening/database panels, RFC 3339 timestamps, and the bounded
+//! aggregate guarantees (fixed-size breakdowns, zero-filled day spine).
+
+#![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
+
+#[path = "../../../crates/melodee-persistence/tests/catalog_common/mod.rs"]
+mod catalog_common;
+#[path = "../../../crates/melodee-persistence/tests/common/mod.rs"]
+mod common;
+#[path = "../../../crates/melodee-persistence/tests/phase5_common/mod.rs"]
+mod phase5_common;
+
+use std::sync::Arc;
+
+use axum::{
+    body::Body,
+    http::{Request, StatusCode, header},
+};
+use catalog_common::CatalogFixturePresentation;
+use common::TestDb;
+use http_body_util::BodyExt;
+use melodee_auth::{NativeAccessClaims, PasswordHashAlgorithm, issue_access_token};
+use melodee_persistence::{AuthStore, NativeUserImport};
+use melodee_server::admin_access::AdminAccessState;
+use melodee_server::admin_system::AdminSystemState;
+use serde_json::Value;
+use time::OffsetDateTime;
+use tower::ServiceExt;
+use uuid::Uuid;
+
+const JWT_KEY: &str = "test-admin-stats-jwt-key-at-least-32-bytes";
+
+struct Fixture {
+    admin_public: Uuid,
+    plain_public: Uuid,
+}
+
+async fn seed_users(db: &TestDb) -> Fixture {
+    let now = OffsetDateTime::now_utc();
+    let admin_public = Uuid::now_v7();
+    let plain_public = Uuid::now_v7();
+    for (username, is_admin, public_id) in [
+        ("stats-admin", true, admin_public),
+        ("stats-plain", false, plain_public),
+    ] {
+        let email = format!("{username}@example.test");
+        AuthStore::new()
+            .import_user(
+                &db.pool,
+                &NativeUserImport {
+                    id: Uuid::now_v7(),
+                    public_api_id: public_id,
+                    username,
+                    normalized_username: &username.to_uppercase(),
+                    email: &email,
+                    normalized_email: &email.to_uppercase(),
+                    password_hash: &bcrypt::hash("Mel0deeR0cks!", 4).expect("fixture hash"),
+                    password_hash_algorithm: PasswordHashAlgorithm::Bcrypt,
+                    stream_signing_key: "test-stream-signing-key",
+                    is_admin,
+                    is_editor: false,
+                    enabled: true,
+                    locked: false,
+                    blacklisted: false,
+                    preferred_language: None,
+                    preferred_theme: None,
+                    auth_revision: 1,
+                    roles: &["HasStreamRole".to_string()],
+                    created_at: now,
+                    updated_at: now,
+                },
+            )
+            .await
+            .expect("import user");
+    }
+    Fixture {
+        admin_public,
+        plain_public,
+    }
+}
+
+fn token_for(public_api_id: Uuid, username: &str) -> String {
+    let now = OffsetDateTime::now_utc().unix_timestamp();
+    issue_access_token(
+        &melodee_auth::SecretString::new(JWT_KEY.to_string()),
+        &NativeAccessClaims {
+            aud: "MelodeeClient".to_string(),
+            email: format!("{username}@example.test"),
+            exp: now + 900,
+            sid: public_api_id,
+            iat: now,
+            iss: "MelodeeApi".to_string(),
+            nbf: now,
+            role: vec![],
+            unique_name: username.to_string(),
+            theme: String::new(),
+        },
+    )
+    .expect("issue token")
+}
+
+fn build_app(pool: sqlx::PgPool) -> axum::Router {
+    let admin = AdminAccessState {
+        notifications: Arc::new(melodee_server::notifications::NotificationService::noop(
+            pool.clone(),
+        )),
+        scripting: Arc::new(melodee_server::scripting::ScriptingService::new(
+            pool.clone(),
+        )),
+        pool,
+        auth: Arc::new(
+            melodee_server::native::auth::NativeAuthService::new(JWT_KEY.to_string(), 90)
+                .expect("auth config"),
+        ),
+    };
+    melodee_server::admin_stats::router().with_state(AdminSystemState::new(admin, None))
+}
+
+async fn call(app: axum::Router, path: &str, bearer: Option<&str>) -> (StatusCode, Value) {
+    let mut builder = Request::builder().method("GET").uri(path);
+    if let Some(token) = bearer {
+        builder = builder.header(header::AUTHORIZATION, format!("Bearer {token}"));
+    }
+    let response = app
+        .oneshot(builder.body(Body::empty()).expect("request"))
+        .await
+        .expect("response");
+    let status = response.status();
+    let bytes = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body")
+        .to_bytes();
+    let json = if bytes.is_empty() {
+        Value::Null
+    } else {
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null)
+    };
+    (status, json)
+}
+
+/// Seeds a published *and catalog-imported* Release, so the Stats aggregates see
+/// real catalog rows rather than a pending publication plan.
+async fn seed_release(db: &TestDb, ordinal: u32, title: &str) {
+    phase5_common::seed_cataloged_release(
+        db,
+        ordinal,
+        CatalogFixturePresentation {
+            release_title: title,
+            release_artist: "Stats Artist",
+            track_title: "Stats Track",
+            track_artist: "Stats Artist",
+            release_date: "1997-03-04",
+        },
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn stats_require_an_administrator() {
+    let db = TestDb::create("stats_admin_gate").await;
+    let fixture = seed_users(&db).await;
+    let app = build_app(db.pool.clone());
+
+    let (status, _) = call(app.clone(), "/api/admin/v1/stats", None).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+
+    let plain = token_for(fixture.plain_public, "stats-plain");
+    let (status, _) = call(app.clone(), "/api/admin/v1/stats", Some(&plain)).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn stats_report_library_listening_and_database_panels() {
+    let db = TestDb::create("stats_panels").await;
+    let fixture = seed_users(&db).await;
+    seed_release(&db, 41, "Stats Release One").await;
+    seed_release(&db, 42, "Stats Release Two").await;
+    let app = build_app(db.pool.clone());
+    let admin = token_for(fixture.admin_public, "stats-admin");
+
+    let (status, body) = call(app, "/api/admin/v1/stats", Some(&admin)).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+
+    // Timestamps are RFC 3339 strings: the UI parses them with `new Date(...)`.
+    let generated_at = body["generatedAt"].as_str().expect("generatedAt string");
+    assert!(
+        generated_at.ends_with('Z') && generated_at.contains('T'),
+        "{generated_at}"
+    );
+
+    // Library panel.
+    let library = &body["library"];
+    assert_eq!(library["releases"], 2);
+    assert_eq!(library["tracks"], 2);
+    assert!(library["totalBytes"].as_i64().unwrap_or_default() > 0);
+    assert!(library["totalDurationMs"].as_i64().unwrap_or_default() > 0);
+    let formats = library["formats"].as_array().expect("formats");
+    assert!(!formats.is_empty(), "the fixture publishes one media asset");
+    assert!(formats.len() <= 12, "the breakdown is bounded");
+    // Release years come from the observed date text, so the decade is present.
+    let decades = library["decades"].as_array().expect("decades");
+    assert!(
+        decades.iter().any(|entry| entry["decade"] == 1990),
+        "1997 must land in the 1990s bucket: {decades:?}"
+    );
+
+    // Listening panel: a zero-filled day spine over the trailing window.
+    let listening = &body["listening"];
+    let days = listening["playsPerDay"].as_array().expect("playsPerDay");
+    assert!(
+        days.len() >= 14,
+        "expected a two-week day spine, got {}",
+        days.len()
+    );
+    let day = days[0]["day"].as_str().expect("day string");
+    assert!(
+        day.len() == 10 && day.contains('-'),
+        "day must be a date: {day}"
+    );
+    assert_eq!(listening["totalPlays"], 0);
+
+    // Database panel: sizes for the fixed relation list, honest counters.
+    let database = &body["database"];
+    assert!(database["totalBytes"].as_i64().unwrap_or_default() > 0);
+    let tables = database["tables"].as_array().expect("tables");
+    assert!(
+        tables.iter().any(|table| table["name"] == "tracks"),
+        "the tracks relation is reported"
+    );
+    // The catalog import enqueues search-projection rows, and no search worker runs
+    // in this test, so the honest value is whatever the outbox holds — assert it is
+    // reported (not invented) rather than pinned to zero.
+    assert!(
+        database["pendingProjection"].as_i64().unwrap_or(-1) >= 0,
+        "pendingProjection must be a count, got {}",
+        database["pendingProjection"]
+    );
+
+    db.drop().await;
+}

@@ -1,6 +1,7 @@
 import { apiFetch, buildQuery } from './client';
 import type {
   AccessGroup,
+  Stats,
   AccessGroupDetail,
   AdminScript,
   ArtistMergePreview,
@@ -151,6 +152,11 @@ export function getSystemHealth(): Promise<SystemHealth> {
 /** Aggregated KPIs, attention counts, health, and per-hour activity. */
 export function getDashboard(): Promise<Dashboard> {
   return apiFetch<Dashboard>(`${ADMIN}/dashboard`);
+}
+
+/** Library, listening, and database statistics (Stats page). */
+export function getStats(): Promise<Stats> {
+  return apiFetch<Stats>(`${ADMIN}/stats`);
 }
 
 // ---- Worker pools and search administration ----

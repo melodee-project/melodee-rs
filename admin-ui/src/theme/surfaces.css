@@ -1533,3 +1533,149 @@
 .melodee-link-list__meta {
   overflow-wrap: anywhere;
 }
+
+/* =========================================================================
+ * Stats page (stats/*): KPI grid, bar lists, and library-free charts.
+ * ========================================================================= */
+.melodee-stats-panels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: var(--melodee-space-5);
+  margin-block-start: var(--melodee-space-5);
+}
+
+.melodee-stats-panel {
+  min-inline-size: 0;
+}
+
+.melodee-stats-panel__title {
+  margin: 0 0 var(--melodee-space-3);
+  font-size: var(--melodee-font-label);
+  font-weight: 600;
+  color: var(--melodee-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.melodee-stats-empty {
+  margin: 0;
+  color: var(--melodee-text-secondary);
+  font-size: var(--melodee-font-label);
+}
+
+.melodee-bar-list {
+  display: grid;
+  gap: var(--melodee-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.melodee-bar-list__head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--melodee-space-3);
+  font-size: var(--melodee-font-label);
+}
+
+.melodee-bar-list__label {
+  color: var(--melodee-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.melodee-bar-list__value {
+  color: var(--melodee-text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.melodee-bar-list__track {
+  margin-block-start: var(--melodee-space-1);
+  block-size: 6px;
+  border-radius: 999px;
+  background: var(--melodee-surface-muted);
+  overflow: hidden;
+}
+
+.melodee-bar-list__fill {
+  display: block;
+  block-size: 100%;
+  border-radius: 999px;
+  background: var(--melodee-status-info);
+}
+
+.melodee-bar-list__detail {
+  margin: var(--melodee-space-1) 0 0;
+  font-size: var(--melodee-font-label);
+  color: var(--melodee-text-secondary);
+}
+
+.melodee-decade-chart__plot,
+.melodee-plays-chart__plot {
+  display: grid;
+  grid-template-columns: minmax(2.5rem, auto) 1fr;
+  gap: 0 var(--melodee-space-2);
+  align-items: stretch;
+}
+
+.melodee-decade-chart__axis,
+.melodee-plays-chart__value-axis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--melodee-font-label);
+  color: var(--melodee-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.melodee-decade-chart__svg {
+  inline-size: 100%;
+  block-size: 150px;
+}
+
+.melodee-decade-chart__bar {
+  fill: var(--melodee-status-info);
+}
+
+.melodee-decade-chart__labels,
+.melodee-plays-chart__time-axis {
+  grid-column: 2;
+  display: flex;
+  justify-content: space-between;
+  gap: var(--melodee-space-2);
+  margin: var(--melodee-space-1) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--melodee-font-label);
+  color: var(--melodee-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.melodee-plays-chart {
+  margin-block-start: var(--melodee-space-5);
+}
+
+.melodee-plays-chart__svg {
+  inline-size: 100%;
+  block-size: 180px;
+}
+
+.melodee-plays-chart__line {
+  fill: none;
+  stroke: var(--melodee-status-info);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.melodee-plays-chart__area {
+  fill: color-mix(in srgb, var(--melodee-status-info) 14%, transparent);
+  stroke: none;
+}

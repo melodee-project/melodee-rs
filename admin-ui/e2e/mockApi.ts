@@ -737,6 +737,10 @@ export async function mockAdminApi(
       await json(DASHBOARD);
       return;
     }
+    if (pathname === "/api/admin/v1/stats") {
+      await json(STATS);
+      return;
+    }
     if (pathname === "/api/admin/v1/diagnostics/bundle") {
       await json({
         generatedAt: "2026-08-14T12:00:00Z",
@@ -1099,6 +1103,68 @@ export interface CanonicalScreen {
   ready: (page: Page) => Promise<void>;
 }
 
+/**
+ * Stats page fixture (StatsDto). Small, stable numbers so the accessibility and
+ * visual suites compare a fixed shape rather than live catalog data.
+ */
+export const STATS = {
+  generatedAt: "2026-08-14T12:00:00Z",
+  library: {
+    artists: 417,
+    releases: 128,
+    tracks: 1_632,
+    mediaAssets: 1_632,
+    totalBytes: 18_432_000_000,
+    totalDurationMs: 468_000_000,
+    averageTrackDurationMs: 286_765,
+    losslessTracks: 96,
+    formats: [
+      { container: "mp3", codec: "mp3", tracks: 1_536, bytes: 17_400_000_000, lossless: false },
+      { container: "flac", codec: "flac", tracks: 96, bytes: 1_032_000_000, lossless: true },
+    ],
+    decades: [
+      { decade: 2020, releases: 98 },
+      { decade: 2010, releases: 21 },
+      { decade: 1990, releases: 9 },
+    ],
+    largestReleases: [
+      { id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", title: "Greatest Hits", artist: "Men at Work", tracks: 14, bytes: 1_720_000_000 },
+      { id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd", title: "Business as Usual", artist: "Men at Work", tracks: 10, bytes: 1_310_000_000 },
+    ],
+  },
+  listening: {
+    totalPlays: 12_345,
+    totalPlaytimeSeconds: 2_592_000,
+    uniqueTracks: 1_204,
+    uniqueListeners: 6,
+    playsPerDay: [
+      { day: "2026-08-03", plays: 612, seconds: 128_520 },
+      { day: "2026-08-04", plays: 704, seconds: 147_840 },
+      { day: "2026-08-05", plays: 655, seconds: 137_550 },
+    ],
+    topArtists: [
+      { name: "Men at Work", plays: 1_204, seconds: 252_840 },
+      { name: "The Coral", plays: 980, seconds: 205_800 },
+    ],
+    topTracks: [
+      { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", title: "Down Under", artist: "Men at Work", plays: 312 },
+      { id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", title: "Who Can It Be Now?", artist: "Men at Work", plays: 288 },
+    ],
+  },
+  database: {
+    totalBytes: 214_748_364,
+    tables: [
+      { name: "release_work_item_manifests", bytes: 14_680_064 },
+      { name: "tracks", bytes: 3_145_728 },
+    ],
+    workItems: 321,
+    playEvents: 12_345,
+    pendingProjection: 0,
+    poolCapacity: 100,
+    poolInUse: 26,
+  },
+};
+
 export const CANONICAL_SCREENS: CanonicalScreen[] = [
   {
     key: "overview",
@@ -1191,6 +1257,15 @@ export const CANONICAL_SCREENS: CanonicalScreen[] = [
           .getByRole("button", { name: "Rebuild search index" }),
       ).toBeVisible();
       await expect(page.getByText("Indexed documents")).toBeVisible();
+    },
+  },
+  {
+    key: "stats",
+    path: "system/stats",
+    ready: async (page) => {
+      await expect(page.getByRole("heading", { name: "Media library" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Storage by format" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Plays per day" })).toBeVisible();
     },
   },
   {

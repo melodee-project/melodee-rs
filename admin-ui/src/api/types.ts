@@ -897,6 +897,46 @@ export interface Dashboard {
 }
 
 /**
+ * Library/listening/database statistics (StatsDto) for the Stats page. Every
+ * aggregate is computed server-side over a bounded window; the client renders it
+ * and never re-aggregates.
+ */
+export interface Stats {
+  generatedAt: string;
+  library: {
+    artists: number;
+    releases: number;
+    tracks: number;
+    mediaAssets: number;
+    totalBytes: number;
+    totalDurationMs: number;
+    averageTrackDurationMs: number;
+    losslessTracks: number;
+    formats: { container: string; codec: string; tracks: number; bytes: number; lossless: boolean }[];
+    decades: { decade: number; releases: number }[];
+    largestReleases: { id: string; title: string; artist: string | null; tracks: number; bytes: number }[];
+  };
+  listening: {
+    totalPlays: number;
+    totalPlaytimeSeconds: number;
+    uniqueTracks: number;
+    uniqueListeners: number;
+    playsPerDay: { day: string; plays: number; seconds: number }[];
+    topArtists: { name: string; plays: number; seconds: number }[];
+    topTracks: { id: string; title: string; artist: string | null; plays: number }[];
+  };
+  database: {
+    totalBytes: number;
+    tables: { name: string; bytes: number }[];
+    workItems: number;
+    playEvents: number;
+    pendingProjection: number;
+    poolCapacity: number;
+    poolInUse: number;
+  };
+}
+
+/**
  * One durable worker pool with queue metrics (WorkerPoolDto). When
  * `metricsAvailable` is false the pool's worker has no durable queue table
  * and every metric field is null — render honest absence, never zeros.

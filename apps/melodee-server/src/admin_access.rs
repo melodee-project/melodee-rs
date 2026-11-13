@@ -121,6 +121,19 @@ pub struct AdminAccessErrorBody {
     pub correlation_id: Uuid,
 }
 
+/// Service-unavailable shape shared by admin surfaces that aggregate state.
+pub fn admin_service_error(code: &'static str, message: &str) -> Response {
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(AdminAccessErrorBody {
+            code,
+            message: message.to_owned(),
+            correlation_id: crate::correlation::envelope_id(),
+        }),
+    )
+        .into_response()
+}
+
 fn admin_error(status: StatusCode, code: &'static str) -> Response {
     (
         status,

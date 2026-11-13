@@ -69,6 +69,7 @@ so it can also be identified by that text with assistive technology.
 | Catalog → Artists / Releases / Tracks | `/admin/catalog/…` | Server-side search, sort, and paging over the catalog |
 | Catalog → Identity Review | `/admin/catalog/identity` | Unresolved artist-name observations; see [Identity Review](./identity-review/) |
 | Policies → Release Rules | `/admin/policies/releases` | The immutable, versioned policy rule set; see [Policies](./policies/) |
+| System → Stats | `/admin/system/stats` | Media-library, playback, and database statistics with charts; see [Stats](./stats/) |
 | System → Storage | `/admin/system/storage` | Storage subsystem health and the storage-paths preflight; see [System and Diagnostics](./system-diagnostics/) |
 | System → Workers | `/admin/system/workers` | Worker pools, failures, search status, health, leases; see [System and Diagnostics](./system-diagnostics/) |
 | System → Search | `/admin/system/search` | Search index status and the rebuild trigger; see [System and Diagnostics](./system-diagnostics/) |

@@ -716,7 +716,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .merge(melodee_server::admin_catalog::router().with_state(admin_catalog_state))
         .merge(melodee_server::admin_charts::router().with_state(admin_access_state.clone()))
         .merge(melodee_server::admin_policies::router().with_state(admin_access_state.clone()))
-        .merge(melodee_server::admin_system::router().with_state(admin_system_state))
+        .merge(melodee_server::admin_system::router().with_state(admin_system_state.clone()))
+        .merge(melodee_server::admin_stats::router().with_state(admin_system_state))
         .merge(melodee_server::admin_diagnostics::router().with_state(admin_diagnostics_state))
         .merge(melodee_server::admin_onboarding::router().with_state(admin_access_state))
         // ADR-0161 permits this one anonymous browser security page; it is
