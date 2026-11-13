@@ -1,8 +1,12 @@
 import { useTranslation } from 'react-i18next';
 
 import type { DashboardActivityBucket } from '../../api/types';
-import { formatDateTime, formatNumber } from '../../i18n/format';
-import { layoutActivitySeries } from './overview';
+import { formatDateTime, formatNumber, formatTime } from '../../i18n/format';
+import {
+  activityTimeTickIndices,
+  activityValueTicks,
+  layoutActivitySeries,
+} from './overview';
 
 /**
  * Accessible two-series line chart (ADR-0184). No chart library is approved for
@@ -28,9 +32,26 @@ export function ActivityChart({
     return null;
   }
   const trackCounts = new Map(tracks.map((bucket) => [bucket.hour, bucket.count]));
+  // Axis labels are rendered as HTML beside the plot: the SVG stretches to the
+  // card width (`preserveAspectRatio="none"`), which would distort any text drawn
+  // inside it. Without them the chart showed two lines with no scale or time
+  // reference, which read as noise rather than activity.
+  const valueTicks = activityValueTicks(layout.max);
+  const timeTicks = activityTimeTickIndices(layout.hours.length);
   return (
     <>
-      <svg
+      <div className="melodee-activity-chart__plot">
+        <ul className="melodee-activity-chart__value-axis" aria-hidden>
+          {valueTicks
+            .slice()
+            .reverse()
+            .map((tick) => (
+              <li key={tick} className="melodee-activity-chart__value-tick">
+                {formatNumber(tick)}
+              </li>
+            ))}
+        </ul>
+        <svg
         className="melodee-activity-chart"
         viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
         preserveAspectRatio="none"
@@ -69,7 +90,15 @@ export function ActivityChart({
           y1={CHART_HEIGHT - 0.5}
           y2={CHART_HEIGHT - 0.5}
         />
-      </svg>
+        </svg>
+        <ul className="melodee-activity-chart__time-axis" aria-hidden>
+          {timeTicks.map((index) => (
+            <li key={layout.hours[index]} className="melodee-activity-chart__time-tick">
+              {formatTime(layout.hours[index])}
+            </li>
+          ))}
+        </ul>
+      </div>
       <div className="melodee-activity-chart__legend">
         <span className="melodee-activity-chart__legend-item">
           <span aria-hidden className="melodee-activity-chart__swatch melodee-activity-chart__swatch--releases" />

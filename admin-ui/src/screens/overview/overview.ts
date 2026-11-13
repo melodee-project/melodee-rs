@@ -116,6 +116,34 @@ function toPath(points: LinePoint[]): string {
  * axis is the union of both series so a missing bucket is an honest gap rather
  * than a shifted point.
  */
+/**
+ * Value-axis ticks for the activity chart: the peak, its midpoint, and zero.
+ * A single "max" label was the whole axis before, which made the plot
+ * unreadable (no scale, no time reference).
+ */
+export function activityValueTicks(max: number): number[] {
+  if (max <= 0) {
+    return [0];
+  }
+  return [0, Math.round(max / 2), max];
+}
+
+/** Indices of the hour buckets that get a time label, always including the ends. */
+export function activityTimeTickIndices(bucketCount: number, ticks = 5): number[] {
+  if (bucketCount <= 0) {
+    return [];
+  }
+  if (bucketCount === 1) {
+    return [0];
+  }
+  const step = (bucketCount - 1) / Math.max(1, ticks - 1);
+  const indices = new Set<number>();
+  for (let index = 0; index < ticks; index += 1) {
+    indices.add(Math.round(index * step));
+  }
+  return [...indices].sort((left, right) => left - right);
+}
+
 export function layoutActivitySeries(
   releases: readonly DashboardActivityBucket[],
   tracks: readonly DashboardActivityBucket[],

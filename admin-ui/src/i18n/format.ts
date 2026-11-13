@@ -22,6 +22,15 @@ export function formatDateTime(value: string | number | Date): string {
   }).format(date);
 }
 
+/** Formats an ISO timestamp's clock time (chart axis ticks). */
+export function formatTime(value: string | number | Date): string {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+  return new Intl.DateTimeFormat(activeLocale(), { timeStyle: 'short' }).format(date);
+}
+
 /** Formats a date without a time component. */
 export function formatDate(value: string | number | Date): string {
   const date = value instanceof Date ? value : new Date(value);

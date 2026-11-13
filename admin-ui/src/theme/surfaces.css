@@ -864,6 +864,46 @@
   block-size: auto;
 }
 
+/* Plot area with a value axis to its left and a time axis beneath. The axes are
+ * HTML (not SVG text) because the plot stretches to the card width. */
+.melodee-activity-chart__plot {
+  display: grid;
+  grid-template-columns: minmax(2.5rem, auto) 1fr;
+  grid-template-rows: auto auto;
+  align-items: stretch;
+  gap: 0 var(--melodee-space-2);
+}
+
+.melodee-activity-chart__value-axis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--melodee-font-label);
+  color: var(--melodee-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.melodee-activity-chart__time-axis {
+  grid-column: 2;
+  display: flex;
+  justify-content: space-between;
+  margin: var(--melodee-space-1) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--melodee-font-label);
+  color: var(--melodee-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.melodee-activity-chart__time-tick,
+.melodee-activity-chart__value-tick {
+  white-space: nowrap;
+}
+
 .melodee-activity-chart__bar {
   fill: var(--melodee-status-info);
 }

@@ -3105,11 +3105,27 @@ impl WorkItemStore {
         pool: &PgPool,
         since: OffsetDateTime,
     ) -> Result<Vec<HourlyCompletionCount>, WorkStoreError> {
+        // Zero-filled hour spine: the dashboard plots a trailing-24h axis, so an
+        // hour with no completions is a real data point (0), not a gap. A sparse
+        // series made the chart draw one long diagonal between two distant
+        // samples. generate_series is bounded by the same window.
         let rows: Vec<(OffsetDateTime, i64)> = sqlx::query_as(
-            "SELECT date_trunc('hour', completed_at) AS hour, COUNT(*)::bigint AS count
-             FROM release_work_items
-             WHERE completed_at IS NOT NULL AND completed_at >= $1
-             GROUP BY 1 ORDER BY 1",
+            "WITH spine AS (
+               SELECT generate_series(
+                        date_trunc('hour', $1::timestamptz),
+                        date_trunc('hour', now()),
+                        interval '1 hour'
+                      ) AS hour
+             ),
+             counted AS (
+               SELECT date_trunc('hour', completed_at) AS hour, COUNT(*)::bigint AS count
+                 FROM release_work_items
+                WHERE completed_at IS NOT NULL AND completed_at >= $1
+                GROUP BY 1
+             )
+             SELECT spine.hour, COALESCE(counted.count, 0)
+               FROM spine LEFT JOIN counted USING (hour)
+              ORDER BY 1",
         )
         .bind(since)
         .fetch_all(pool)

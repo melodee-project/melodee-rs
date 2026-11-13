@@ -259,11 +259,29 @@ async fn dashboard_aggregates_counts_attention_health_and_activity() {
             .iter()
             .any(|surface| surface["surface"] == "admin" && surface["status"] == "serving")
     );
+    // The series is a zero-filled trailing window, not a sparse list: an hour with
+    // no completions is a data point (see the chart's 24-hour axis).
+    let idle_activity = body["activity"]["completedPerHour"]
+        .as_array()
+        .expect("activity");
     assert!(
-        body["activity"]["completedPerHour"]
-            .as_array()
-            .expect("activity")
-            .is_empty()
+        idle_activity.len() >= 24 && idle_activity.len() <= 26,
+        "expected a ~24h hour spine, got {}",
+        idle_activity.len()
+    );
+    assert!(idle_activity.iter().all(|bucket| bucket["count"] == 0));
+    // Timestamps are RFC 3339 strings: the UI parses them with `new Date(...)`.
+    let hour = idle_activity[0]["hour"].as_str().expect("hour is a string");
+    assert!(
+        hour.ends_with('Z') && hour.contains('T'),
+        "hour must be RFC 3339, got {hour:?}"
+    );
+    assert!(
+        body["generatedAt"]
+            .as_str()
+            .is_some_and(|value| value.ends_with('Z')),
+        "generatedAt must be an RFC 3339 string, got {}",
+        body["generatedAt"]
     );
 
     // Seed: one cataloged Release with a pending Review decision plus one
@@ -340,8 +358,18 @@ async fn dashboard_aggregates_counts_attention_health_and_activity() {
     let activity = body["activity"]["completedPerHour"]
         .as_array()
         .expect("activity");
-    assert_eq!(activity.len(), 1);
-    assert_eq!(activity[0]["count"], 1);
+    // The current hour carries the completion; the rest of the window is zero.
+    let completed_now = activity
+        .iter()
+        .filter(|bucket| bucket["count"] == 1)
+        .count();
+    assert_eq!(completed_now, 1, "exactly one hour carries the completion");
+    assert!(
+        activity
+            .iter()
+            .filter(|bucket| bucket["count"] != 1)
+            .all(|bucket| bucket["count"] == 0)
+    );
 
     db.drop().await;
 }

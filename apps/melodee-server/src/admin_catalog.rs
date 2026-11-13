@@ -358,7 +358,9 @@ pub struct ArtistListItemDto {
     pub release_count: i64,
     pub track_count: i64,
     pub image_id: String,
+    #[serde(with = "crate::admin_time")]
     pub created_at: OffsetDateTime,
+    #[serde(with = "crate::admin_time")]
     pub updated_at: OffsetDateTime,
 }
 
@@ -377,7 +379,9 @@ pub struct ReleaseListItemDto {
     pub track_count: i64,
     pub duration_ms: i64,
     pub image_id: String,
+    #[serde(with = "crate::admin_time")]
     pub created_at: OffsetDateTime,
+    #[serde(with = "crate::admin_time")]
     pub updated_at: OffsetDateTime,
 }
 
@@ -394,6 +398,7 @@ pub struct TrackListItemDto {
     pub release_id: Uuid,
     pub release_title: String,
     pub image_id: String,
+    #[serde(with = "crate::admin_time")]
     pub created_at: OffsetDateTime,
 }
 
@@ -406,6 +411,7 @@ pub struct ArtistAliasDto {
     pub evidence_source: String,
     pub confidence: i32,
     pub locked: bool,
+    #[serde(with = "crate::admin_time")]
     pub created_at: OffsetDateTime,
 }
 
@@ -416,6 +422,7 @@ pub struct ArtistExternalIdDto {
     pub external_id: String,
     pub confidence: i32,
     pub evidence_source: String,
+    #[serde(with = "crate::admin_time::option")]
     pub verified_at: Option<OffsetDateTime>,
     pub locked: bool,
 }
@@ -445,6 +452,7 @@ pub struct ArtistProviderCandidateDto {
     pub candidate_rank: i32,
     /// Basis points (0–10000).
     pub confidence: i32,
+    #[serde(with = "crate::admin_time")]
     pub observed_at: OffsetDateTime,
 }
 
@@ -515,6 +523,7 @@ pub struct CatalogAuditEventDto {
     pub actor: String,
     pub reason: String,
     pub payload: serde_json::Value,
+    #[serde(with = "crate::admin_time")]
     pub created_at: OffsetDateTime,
 }
 
@@ -555,7 +564,9 @@ pub struct ArtistDetailDto {
     pub merged_into_artist_id: Option<Uuid>,
     pub revision: i64,
     pub image_id: String,
+    #[serde(with = "crate::admin_time")]
     pub created_at: OffsetDateTime,
+    #[serde(with = "crate::admin_time")]
     pub updated_at: OffsetDateTime,
     pub stats: ArtistStatsDto,
     pub aliases: SectionDto<ArtistAliasDto>,
@@ -695,6 +706,7 @@ pub struct ReleaseProvenanceDto {
     pub publication_plan_hash: String,
     pub sealed_manifest_hash: String,
     pub resolver_version: String,
+    #[serde(with = "crate::admin_time")]
     pub imported_at: OffsetDateTime,
 }
 
@@ -704,6 +716,7 @@ pub struct ReleaseProvenanceDto {
 pub struct ReleaseClassificationDto {
     pub traits: Vec<String>,
     pub confidence: u16,
+    #[serde(with = "crate::admin_time")]
     pub classified_at: OffsetDateTime,
     pub classifier_version: String,
 }
@@ -742,7 +755,9 @@ pub struct ReleaseDetailDto {
     pub duration_ms: i64,
     pub media_bytes: i64,
     pub image_id: String,
+    #[serde(with = "crate::admin_time")]
     pub created_at: OffsetDateTime,
+    #[serde(with = "crate::admin_time")]
     pub updated_at: OffsetDateTime,
     pub tracks: SectionDto<ReleaseTrackDto>,
     pub artists: Vec<BilledArtistDto>,
@@ -774,7 +789,9 @@ pub struct TrackDetailDto {
     /// `/song/stream/…` route; `null` when the Track has no playable asset
     /// or the signer fails closed for the acting administrator.
     pub stream_url: Option<String>,
+    #[serde(with = "crate::admin_time")]
     pub created_at: OffsetDateTime,
+    #[serde(with = "crate::admin_time")]
     pub updated_at: OffsetDateTime,
     pub release_id: Uuid,
     pub release_title: String,

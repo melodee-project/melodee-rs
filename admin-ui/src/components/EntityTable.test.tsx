@@ -30,6 +30,25 @@ function renderTable(initialEntry = '/processing') {
 }
 
 describe('EntityTable', () => {
+  it('switches between compact and default density (UI-SPEC §4)', () => {
+    // Carbon's `sm` and `md` sizes are identical for a plain table, so the
+    // compact control must use Carbon's dense (`xs`) size to change anything.
+    const { rerender } = renderTable();
+    expect(screen.getByRole('table', { name: 'Work items' })).toHaveClass('cds--data-table--md');
+    rerender(
+      <MemoryRouter initialEntries={['/processing']}>
+        <EntityTable
+          caption="Work items"
+          columns={COLUMNS}
+          rows={[{ id: '1', cells: { name: 'Release A', state: 'ready', notes: '—' } }]}
+          totalRows={137}
+          compact
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('table', { name: 'Work items' })).toHaveClass('cds--data-table--xs');
+  });
+
   it('renders rows with an accessible caption', () => {
     renderTable();
     expect(screen.getByRole('table', { name: 'Work items' })).toBeInTheDocument();

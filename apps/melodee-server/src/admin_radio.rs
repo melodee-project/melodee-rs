@@ -209,7 +209,9 @@ pub struct RadioStationDto {
     pub name: String,
     pub stream_url: String,
     pub home_page_url: Option<String>,
+    #[serde(with = "crate::admin_time")]
     pub created_at: OffsetDateTime,
+    #[serde(with = "crate::admin_time")]
     pub updated_at: OffsetDateTime,
 }
 

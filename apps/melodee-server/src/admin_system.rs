@@ -602,6 +602,7 @@ pub struct DashboardAttentionDto {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DashboardActivityBucketDto {
+    #[serde(with = "crate::admin_time")]
     pub hour: OffsetDateTime,
     pub count: i64,
 }
@@ -634,6 +635,7 @@ pub struct DashboardActivityDto {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DashboardDto {
+    #[serde(with = "crate::admin_time")]
     pub generated_at: OffsetDateTime,
     pub catalog: DashboardCatalogDto,
     pub work_items: DashboardWorkItemsDto,
@@ -653,8 +655,11 @@ pub struct WorkerPoolDto {
     pub name: String,
     pub paused: bool,
     pub paused_by: Option<String>,
+    #[serde(with = "crate::admin_time::option")]
     pub paused_at: Option<OffsetDateTime>,
+    #[serde(with = "crate::admin_time::option")]
     pub resume_requested_at: Option<OffsetDateTime>,
+    #[serde(with = "crate::admin_time")]
     pub updated_at: OffsetDateTime,
     /// False when the pool's worker has no durable queue table (discovery
     /// maintenance); all metric fields are then null.
@@ -768,6 +773,7 @@ pub struct SearchProjectionDto {
     pub pending: i64,
     pub failed: i64,
     pub leased: i64,
+    #[serde(with = "crate::admin_time::option")]
     pub oldest_available_at: Option<OffsetDateTime>,
     pub last_processed_outbox_id: i64,
     pub active_generation_id: Option<Uuid>,

@@ -53,7 +53,43 @@ cookie-gated `themes-*` routes answer `401` with no body, while `endpoints-*` an
 rejects. The app's `ErrorHandler` handles either; the probe now accepts the captured
 behaviour instead of demanding one shape.
 
-## Why the app was not driven on a device
+## On-device run (physical device)
+
+The app was then driven on a **Pixel 9 Pro XL running Android API 37 (arm64)** with
+the debug APK built from the client checkout, against a melodee-rs instance reached
+through `adb reverse tcp:8080 tcp:8080` (so the device's `http://127.0.0.1:8080`
+is the host server, and the stream URLs it issues resolve back through the same
+tunnel — no public origin juggling, no client-address mismatch).
+
+| Flow | Result |
+|---|---|
+| Sign-in against `http://127.0.0.1:8080` | `GET /system/info` 200, `POST /auth/authenticate` 200, home renders the account and its playlists |
+| Home | playlists with song counts and durations ("Parity Playlist · 9 songs · 0:33:37") |
+| Playlist detail | `GET /playlists/{id}/songs` 200; every cover loads (`/images/song_*/80` 200) |
+| Search | `GET /search/songs?q=love` 200 → "Displaying 1 to 3 of 3 results" |
+| Artist filter | `GET /artists?q=The` 200; selecting an artist re-filters via `search/songs?…&filterByArtistApiKey=…` 200 |
+| Artist albums / album songs | `GET /artists/{id}/albums` 200, `GET /albums/{id}/songs` 200 (18 songs) |
+| Playback | `GET /song/stream/…` **200 and 206** (ranged), position advances to 3:02 of a 3:27 track |
+| Scrobble | `POST /scrobble` nowPlaying 200, then **played 200**; the play row lands in the database with the real duration (104 s) |
+| Auto-advance | queue advanced to the next track and kept playing; the media session's custom action reflected the server's favourite state ("Add to Favorites" / "Remove from Favorites") |
+| Queue | "Queue (9 songs)" listing the playlist in order |
+| Transport clean-up | no unexpected non-2xx across the whole device session; the only failures were `HTTP FAILED: Canceled` image loads, which is OkHttp cancelling requests for recycled list rows |
+
+The media session is live and exported for the car surface: `dumpsys media_session`
+shows `com.melodee.autoplayer/Melodee` active, `state=PLAYING(3)`, full metadata
+(title, artist, album), a media-button receiver and 10 controllers — this is exactly
+what Android Auto binds to, and the manifest declares `<uses name="media"/>` with the
+`MediaBrowserService` intent filter.
+
+Not exercised: the Android Auto *car screen* itself. That needs a head unit or the
+Desktop Head Unit; the browse tree it renders comes from the same calls verified
+above and from the `MediaBrowserService` the session belongs to.
+
+The device was left as found: the app's server URL was restored to the operator's
+production instance and the app stopped (its session was logged out by the test, so
+one sign-in is needed next time it is opened).
+
+## Why the emulator could not be used
 
 The workspace has the Android SDK, an AVD (`Pixel_9_Pro_XL`, `android-37`
 Google-APIs Play-Store, 16 KB pages) and a working toolchain: `./gradlew

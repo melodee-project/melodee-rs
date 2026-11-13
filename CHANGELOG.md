@@ -9,6 +9,22 @@ by an accepted ADR and release gate.
 
 ### Fixed
 
+- Admin API timestamps are RFC 3339 strings. `OffsetDateTime`'s default serialization is a
+  nine-element array, so every `createdAt`/`updatedAt`/`hour` field the Admin UI rendered was an
+  `Invalid Date` (blank cells) and the Overview activity chart sorted its axis by `NaN`. All 40
+  admin response timestamps now serialize as `2026-11-13T03:23:10.304Z`.
+- The Overview "Processing activity" chart is readable. It plotted only the hours that had activity
+  (two distant samples joined by one long diagonal), had no scale and no time axis, and its x values
+  came from those array timestamps. The trailing window is now a zero-filled hourly spine (~24
+  points per series), and the chart draws a value axis (peak, midpoint, zero) and hour ticks.
+
+- The Processing Queue density control now changes the table. It switched Carbon's
+  `sm`/`md` sizes, which render identically for a plain table (both use the same
+  cell padding and row height), so `?density=compact` and `?density=default` looked
+  the same. Compact now uses Carbon's dense (`xs`) size, matching the 2rem
+  `--melodee-density-compact` token and UI-SPEC §4: rows drop from 50px to 41px with
+  2px cell padding.
+
 - MeloAmp parity defects found by driving the client against a populated instance
   (`design/evidence/meloamp-parity/MELOAMP-VERIFY.md`): a known Artist without
   artwork served an empty `200` instead of the captured default image;

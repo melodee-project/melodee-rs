@@ -37,8 +37,10 @@ The landing screen answers "what needs attention?" first, then summarizes the ca
 - **Needs attention** — direct links to unresolved artist identities, pending Release policy
   decisions, failed processing, quarantined items, and a degraded storage check, each with its
   current count.
-- **Processing activity** — two series over the last 24 hours: Releases processed per hour and
-  Tracks indexed per hour.
+- **Processing activity** — two series on a labelled 24-hour axis: Releases processed per hour and
+  Tracks indexed per hour. Every hour in the window is plotted, including quiet ones, so the shape
+  reads as activity over time rather than as isolated samples; the value axis shows the peak and
+  its midpoint.
 - **System health** — PostgreSQL, the search index, storage, FFmpeg, podcast storage, disk space,
   background workers, and the four API surfaces, each with its verdict and measured detail.
 - **Current processing queue** — the most recently updated work items with their Release, billed

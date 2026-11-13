@@ -237,6 +237,7 @@ pub struct ReviewSidecarDto {
 pub struct ManifestSummaryDto {
     pub manifest_hash: String,
     pub schema_version: i32,
+    #[serde(with = "crate::admin_time")]
     pub generated_at: OffsetDateTime,
     pub source_path: String,
     pub release_title: Option<String>,
@@ -264,6 +265,7 @@ pub struct ClassificationEvidenceDto {
 pub struct ClassificationDto {
     pub traits: Vec<String>,
     pub confidence: u16,
+    #[serde(with = "crate::admin_time")]
     pub classified_at: OffsetDateTime,
     pub classifier_version: String,
     pub evidence: Vec<ClassificationEvidenceDto>,
@@ -295,6 +297,7 @@ pub struct CatalogComparisonDto {
     pub new_tracks: u32,
     pub uncertain_tracks: u32,
     pub total_tracks: u32,
+    #[serde(with = "crate::admin_time")]
     pub evaluated_at: OffsetDateTime,
     pub evaluator_version: String,
     pub tracks: Vec<NoveltyTrackDto>,
@@ -315,7 +318,9 @@ pub struct DecisionDto {
     pub evidence_summary: String,
     pub override_reason: Option<String>,
     pub actor: serde_json::Value,
+    #[serde(with = "crate::admin_time")]
     pub decided_at: OffsetDateTime,
+    #[serde(with = "crate::admin_time::option")]
     pub completed_at: Option<OffsetDateTime>,
 }
 

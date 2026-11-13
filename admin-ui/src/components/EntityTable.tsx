@@ -187,7 +187,14 @@ export function EntityTable({
       <span role="status" className="cds--visually-hidden">
         {sortedAnnouncement}
       </span>
-      <Table size={compact ? 'sm' : 'md'} className="melodee-table-skin" aria-label={caption}>
+      {/*
+        UI-SPEC §4: queue/triage tables switch between "compact" and Carbon's
+        default density. Carbon's `sm` and `md` sizes render identically for a
+        plain table (both use 0.4375/0.375rem cell padding), so `sm` made the
+        density control a no-op; `xs` is Carbon's dense table and matches the
+        2rem `--melodee-density-compact` token.
+      */}
+      <Table size={compact ? 'xs' : 'md'} className="melodee-table-skin" aria-label={caption}>
         <TableHead>
           <TableRow>
             {selection ? (

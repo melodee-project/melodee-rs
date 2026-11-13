@@ -1363,15 +1363,29 @@ impl SearchProjectionStore {
         pool: &PgPool,
         since: OffsetDateTime,
     ) -> Result<Vec<HourlyCompletionCount>, SearchStoreError> {
+        // Zero-filled hour spine over the same window as the completion series so
+        // both chart series share one axis and empty hours plot as 0.
         let rows: Vec<(OffsetDateTime, i64)> = sqlx::query_as(
-            "SELECT date_trunc('hour', processed_at) AS hour,
-                    COUNT(DISTINCT entity_id)::bigint AS count
-               FROM catalog_projection_outbox
-              WHERE projection_name = $1
-                AND entity_type = 'track'
-                AND processed_at IS NOT NULL
-                AND processed_at >= $2
-              GROUP BY 1 ORDER BY 1",
+            "WITH spine AS (
+               SELECT generate_series(
+                        date_trunc('hour', $2::timestamptz),
+                        date_trunc('hour', now()),
+                        interval '1 hour'
+                      ) AS hour
+             ),
+             counted AS (
+               SELECT date_trunc('hour', processed_at) AS hour,
+                      COUNT(DISTINCT entity_id)::bigint AS count
+                 FROM catalog_projection_outbox
+                WHERE projection_name = $1
+                  AND entity_type = 'track'
+                  AND processed_at IS NOT NULL
+                  AND processed_at >= $2
+                GROUP BY 1
+             )
+             SELECT spine.hour, COALESCE(counted.count, 0)
+               FROM spine LEFT JOIN counted USING (hour)
+              ORDER BY 1",
         )
         .bind(SEARCH_PROJECTION_NAME)
         .bind(since)

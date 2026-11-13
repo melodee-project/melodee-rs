@@ -99,6 +99,7 @@ pub struct PolicyRuleSetDto {
     pub id: Uuid,
     pub name: String,
     pub version: u32,
+    #[serde(with = "crate::admin_time")]
     pub created_at: OffsetDateTime,
     pub created_by: serde_json::Value,
 }

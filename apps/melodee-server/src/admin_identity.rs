@@ -115,6 +115,7 @@ pub struct UnresolvedObservationDto {
     pub track_title: Option<String>,
     pub pending_match_count: i64,
     pub evidence_count: i64,
+    #[serde(with = "crate::admin_time")]
     pub created_at: OffsetDateTime,
 }
 
@@ -182,6 +183,7 @@ pub struct CurrentDecisionDto {
     pub confidence: i32,
     pub reason: String,
     pub locked: bool,
+    #[serde(with = "crate::admin_time")]
     pub decided_at: OffsetDateTime,
 }
 
@@ -193,6 +195,7 @@ pub struct MatchEvidenceDto {
     pub confidence: i32,
     pub source: String,
     pub payload: serde_json::Value,
+    #[serde(with = "crate::admin_time")]
     pub created_at: OffsetDateTime,
 }
 
@@ -207,6 +210,7 @@ pub struct CandidateDto {
     pub latest_confidence: i32,
     pub latest_reason: String,
     pub latest_locked: bool,
+    #[serde(with = "crate::admin_time")]
     pub latest_decided_at: OffsetDateTime,
     pub decision_count: i64,
     pub evidence: Vec<MatchEvidenceDto>,
@@ -224,6 +228,7 @@ pub struct NegativeAssertionDto {
     pub reason: String,
     pub locked: bool,
     pub active: bool,
+    #[serde(with = "crate::admin_time")]
     pub created_at: OffsetDateTime,
 }
 
@@ -280,6 +285,7 @@ pub struct IdentityDecisionEntryDto {
     pub actor: String,
     pub reason: String,
     pub payload: serde_json::Value,
+    #[serde(with = "crate::admin_time")]
     pub created_at: OffsetDateTime,
 }
 

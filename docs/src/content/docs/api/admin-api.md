@@ -116,7 +116,8 @@ GET /api/admin/v1/ingest/work-items/{id}
 ```
 
 Returns the full durable work item by internal id or operator-safe api key, including state,
-attempts, lease evidence, last error, and timestamps.
+attempts, lease evidence, last error, and timestamps. Every Admin API timestamp is an RFC 3339
+UTC string (for example `2026-11-13T03:23:10.304Z`), so clients can parse it directly.
 
 ### Work-item event history
 
