@@ -318,6 +318,7 @@ def build_release(
             "artwork": {"present": False, "kind": "duplicate", "sidecar": False},
             "tracks": tracks,
             "expect": release.get("expect", {}),
+            "extraTags": release.get("extraTags") or {},
             "duplicateOf": duplicate_of,
             "duplicateFileHashes": [track["sha256"] for track in tracks],
         }
@@ -374,6 +375,15 @@ def build_release(
         tagged_album_artist = overrides.get("albumArtist", release.get("albumArtist"))
         if tagged_album_artist:
             tags["album_artist"] = str(tagged_album_artist)
+        # Declarative extra native tags. The identity fixtures use this to write a
+        # MusicBrainz Artist id, because a provider id is the only tag-level fact
+        # that can distinguish two genuinely different artists with one name.
+        extra_tags = release.get("extraTags") or {}
+        for key, value in extra_tags.items():
+            if key in omit:
+                tags.pop(key, None)
+                continue
+            tags[str(key)] = str(value)
         if track.get("discNumber"):
             tags["disc"] = str(track["discNumber"])
         if "album" in omit:
@@ -436,6 +446,7 @@ def build_release(
             "sidecar": artwork_is_sidecar,
         },
         "tracks": tracks,
+        "extraTags": release.get("extraTags") or {},
         "expect": release.get("expect", {}),
     }
     return expected

@@ -510,6 +510,7 @@ pub fn start_normalization_loop(
         }
         let interval = TokioDuration::try_from(ingestion.reconciliation_interval)
             .unwrap_or_else(|_| TokioDuration::from_secs(30));
+        let claim_batch_size = work_config.claim_batch_size as u64;
         let mut ticker = time::interval(interval);
         let mut results = Vec::new();
         loop {
@@ -521,33 +522,52 @@ pub fn start_normalization_loop(
                 break;
             }
 
-            let shutdown = Arc::new(AtomicBool::new(false));
-            let batch = normalize_once_with_shutdown(
-                &ingestion,
-                &store,
-                &pool,
-                &work_config,
-                OffsetDateTime::now_utc(),
-                shutdown.clone(),
-            );
-            tokio::pin!(batch);
-            let (stopping, result) = tokio::select! {
-                result = &mut batch => (false, result),
-                _ = notifier.notified() => {
-                    shutdown.store(true, Ordering::SeqCst);
-                    (true, batch.await)
+            // Drain a full batch rather than sleeping out the tick.
+            let mut stopping = false;
+            loop {
+                let shutdown = Arc::new(AtomicBool::new(false));
+                let batch = normalize_once_with_shutdown(
+                    &ingestion,
+                    &store,
+                    &pool,
+                    &work_config,
+                    OffsetDateTime::now_utc(),
+                    shutdown.clone(),
+                );
+                tokio::pin!(batch);
+                let (interrupted, result) = tokio::select! {
+                    result = &mut batch => (false, result),
+                    _ = notifier.notified() => {
+                        shutdown.store(true, Ordering::SeqCst);
+                        (true, batch.await)
+                    }
+                };
+                let full_batch = match result {
+                    Ok(stats) => {
+                        let full_batch = stats.claimed >= claim_batch_size;
+                        results.push(ReconcileResult {
+                            source: "normalization".to_owned(),
+                            stats: ReconcileStats {
+                                duration_ms: stats.duration_ms,
+                                errors: stats.errors,
+                                ..ReconcileStats::default()
+                            },
+                        });
+                        full_batch
+                    }
+                    Err(error) => {
+                        error!(%error, "normalization loop failed");
+                        false
+                    }
+                };
+                if interrupted {
+                    stopping = true;
+                    break;
                 }
-            };
-            match result {
-                Ok(stats) => results.push(ReconcileResult {
-                    source: "normalization".to_owned(),
-                    stats: ReconcileStats {
-                        duration_ms: stats.duration_ms,
-                        errors: stats.errors,
-                        ..ReconcileStats::default()
-                    },
-                }),
-                Err(error) => error!(%error, "normalization loop failed"),
+                if !full_batch {
+                    break;
+                }
+                tokio::task::yield_now().await;
             }
             if stopping {
                 break;

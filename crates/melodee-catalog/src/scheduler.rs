@@ -54,6 +54,10 @@ pub fn start_catalog_loop(
         // Published work remains to trigger the post-import reconciliation.
         reconcile_artist_identities_once(&store, &pool).await;
 
+        // The poll interval is the idle cadence, not a throughput ceiling: a pass
+        // that claims a full batch means more `published` work is queued, so run
+        // again immediately instead of sleeping out the rest of the tick.
+        let claim_batch_size = work_config.claim_batch_size as usize;
         let interval = TokioDuration::try_from(config.poll_interval)
             .unwrap_or_else(|_| TokioDuration::from_secs(5));
         let mut ticker = time::interval(interval);
@@ -63,20 +67,33 @@ pub fn start_catalog_loop(
                 break;
             }
             tokio::select! {
-                _ = ticker.tick() => {
-                    match import_once_with_cancellation(
-                        &config,
-                        &store,
-                        &pool,
-                        &work_config,
-                        ::time::OffsetDateTime::now_utc(),
-                        &task_cancellation,
-                    ).await {
-                        Ok(stats) => latest = Some(stats),
-                        Err(error) => error!(%error, "catalog import pass failed before completion"),
+                _ = ticker.tick() => {}
+                () = task_cancellation.cancelled() => break,
+            }
+            loop {
+                match import_once_with_cancellation(
+                    &config,
+                    &store,
+                    &pool,
+                    &work_config,
+                    ::time::OffsetDateTime::now_utc(),
+                    &task_cancellation,
+                )
+                .await
+                {
+                    Ok(stats) => {
+                        let full_batch = stats.claimed >= claim_batch_size;
+                        latest = Some(stats);
+                        if !full_batch || task_cancellation.is_cancelled() {
+                            break;
+                        }
+                        tokio::task::yield_now().await;
+                    }
+                    Err(error) => {
+                        error!(%error, "catalog import pass failed before completion");
+                        break;
                     }
                 }
-                () = task_cancellation.cancelled() => break,
             }
         }
         latest

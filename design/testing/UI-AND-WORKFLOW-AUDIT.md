@@ -153,6 +153,8 @@ declared output*. That is what the known-answer corpus adds.
 | — | Fixtures are acoustically distinct (per-fixture pitch + sweep) except where a fixture deliberately reuses another's audio; otherwise the acoustic matcher treats one fixture as a copy of another and the declared policy outcome never happens |
 | `10-blackbeard-sidecar` | `.blackbeard.provenance.json` supplies release-level date text (fallback-only) |
 | `11-fault-missing-album-tag` | An unnameable Release is routed to `needs_review`, never guessed |
+| `12-artist-name-reuse-a` + `13-artist-name-reuse-b` | Two Releases by one artist name end on **one** Artist carrying credits from both, with no merge history (ADR-0189 import-time reuse) |
+| `14-homonym-provider-a` + `15-homonym-provider-b` | Same display name with **different** MusicBrainz Artist ids stays split: reuse refuses a provider conflict, and reconciliation refuses it too |
 
 ### Running it
 

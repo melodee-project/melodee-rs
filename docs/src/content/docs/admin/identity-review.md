@@ -62,6 +62,19 @@ Neither operation touches media files; they change catalog relationships only.
 All of these flows use the [Admin API identity routes](../api/admin-api/#artist-identity-review),
 which are the parallel surface for scripting and automation.
 
+## What import resolves on its own
+
+Import reuses an existing Artist when a credit's normalized name exactly equals exactly one
+existing Artist that carries no disambiguation hint and no conflicting trusted provider identifier
+(see [Artists](../library-management/artists/)). Duplicates that still exist in a catalogue written
+before that rule are converged by the bounded post-import reconciliation pass, for primary Release
+credits and Track credits alike, whenever the whole same-name group has no differentiating
+evidence. Each convergence is recorded as an audited, reversible merge.
+
+What remains in this queue is genuine ambiguity: same-name artists distinguished by provider
+identity, disambiguation, Artist type, active dates, memberships, relationships, aliases, locked
+decisions, or **Never Match** assertions, plus names no automated rule may resolve.
+
 ## Artist status
 
 Artists created from imported credit text start as **Provisional**: the catalogue knows

@@ -9,6 +9,13 @@ by an accepted ADR and release gate.
 
 ### Fixed
 
+- Ingestion stages no longer throttle a bulk import to their poll interval. Every stage loop
+  (inspection, normalization, validation, publication, catalog import, policy) now runs another pass
+  immediately when the previous pass claimed its full batch, so the poll interval is an idle cadence
+  rather than a throughput ceiling. Measured on a 643-Release policy backlog: **4 Releases/minute
+  before, entire backlog drained in under 30 seconds after** — the policy stage was claiming four
+  Releases per 60-second tick while doing ~80 ms of work per pass.
+
 - Artist status means something again. Every imported Artist started `provisional`
   (ADR-0117's rule for identities created from observed credit text) and **nothing
   ever promoted one**, so a healthy catalogue showed 100 % provisional — a per-row

@@ -456,6 +456,154 @@
           "needs_review"
         ]
       }
+    },
+    {
+      "slug": "12-artist-name-reuse-a",
+      "folder": "Corpus Reuse Artist - Late Signal (2022)",
+      "purpose": "Artist identity: an exact normalized name that already exists in the catalogue must be reused, so this Release and `13-artist-name-reuse-b` end up on one Artist.",
+      "albumArtist": "Corpus Reuse Artist",
+      "releaseArtist": "Corpus Reuse Artist",
+      "album": "Late Signal",
+      "year": 2022,
+      "genre": "Post Rock",
+      "releaseDate": "2022-03-04",
+      "artwork": {
+        "kind": "embedded",
+        "width": 400,
+        "height": 400,
+        "colors": [
+          "#1c2b3a",
+          "#4f7f9c"
+        ]
+      },
+      "tracks": [
+        {
+          "title": "Late Signal",
+          "trackNumber": 1,
+          "seconds": 7
+        }
+      ],
+      "expect": {
+        "terminalStates": [
+          "indexed"
+        ],
+        "releaseDateSource": "tags"
+      }
+    },
+    {
+      "slug": "13-artist-name-reuse-b",
+      "folder": "Corpus Reuse Artist - Static Field (2023)",
+      "purpose": "Artist identity: the second Release by the same artist name must reuse the Artist from `12-artist-name-reuse-a` instead of creating a duplicate row.",
+      "albumArtist": "Corpus Reuse Artist",
+      "releaseArtist": "Corpus Reuse Artist",
+      "album": "Static Field",
+      "year": 2023,
+      "genre": "Post Rock",
+      "releaseDate": "2023-05-19",
+      "artwork": {
+        "kind": "embedded",
+        "width": 400,
+        "height": 400,
+        "colors": [
+          "#2a1c2f",
+          "#8a5f9c"
+        ]
+      },
+      "tracks": [
+        {
+          "title": "Static Field",
+          "trackNumber": 1,
+          "seconds": 6
+        }
+      ],
+      "expect": {
+        "terminalStates": [
+          "indexed"
+        ],
+        "releaseDateSource": "tags",
+        "artistReleaseCount": {
+          "artist": "Corpus Reuse Artist",
+          "releases": 2,
+          "artists": 1
+        }
+      }
+    },
+    {
+      "slug": "14-homonym-provider-a",
+      "folder": "Corpus Homonym - Northern Rooms (1971)",
+      "purpose": "Artist identity, negative case: the same display name with a *different* trusted MusicBrainz Artist id is a genuinely different artist and must stay split.",
+      "albumArtist": "Corpus Homonym",
+      "releaseArtist": "Corpus Homonym",
+      "album": "Northern Rooms",
+      "year": 1971,
+      "genre": "Progressive Rock",
+      "releaseDate": "1971-09-10",
+      "extraTags": {
+        "MusicBrainz Artist Id": "3f7c1b4e-6a2d-4c58-9e11-8d2b5a7c4e01"
+      },
+      "artwork": {
+        "kind": "embedded",
+        "width": 400,
+        "height": 400,
+        "colors": [
+          "#33241a",
+          "#9c6b46"
+        ]
+      },
+      "tracks": [
+        {
+          "title": "Northern Rooms",
+          "trackNumber": 1,
+          "seconds": 7
+        }
+      ],
+      "expect": {
+        "terminalStates": [
+          "indexed"
+        ],
+        "releaseDateSource": "tags"
+      }
+    },
+    {
+      "slug": "15-homonym-provider-b",
+      "folder": "Corpus Homonym - Southern Halls (1998)",
+      "purpose": "Artist identity, negative case: a same-name artist carrying a different MusicBrainz Artist id must remain a second Artist, not be reused or merged.",
+      "albumArtist": "Corpus Homonym",
+      "releaseArtist": "Corpus Homonym",
+      "album": "Southern Halls",
+      "year": 1998,
+      "genre": "Progressive Rock",
+      "releaseDate": "1998-02-27",
+      "extraTags": {
+        "MusicBrainz Artist Id": "b91a7d63-0c48-42f5-8f60-2e5c7d9a1b02"
+      },
+      "artwork": {
+        "kind": "embedded",
+        "width": 400,
+        "height": 400,
+        "colors": [
+          "#1a2f33",
+          "#469c9c"
+        ]
+      },
+      "tracks": [
+        {
+          "title": "Southern Halls",
+          "trackNumber": 1,
+          "seconds": 6
+        }
+      ],
+      "expect": {
+        "terminalStates": [
+          "indexed"
+        ],
+        "releaseDateSource": "tags",
+        "artistReleaseCount": {
+          "artist": "Corpus Homonym",
+          "releases": 2,
+          "artists": 2
+        }
+      }
     }
   ]
 }

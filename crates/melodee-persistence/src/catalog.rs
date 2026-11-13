@@ -264,6 +264,11 @@ pub enum ArtistReconciliationEvidence {
     /// The same exact primary Artist credit recurred on different Releases,
     /// and the full active name group had no differentiating identity facts.
     RepeatedPrimaryReleaseCredit { normalized_name: String },
+    /// The same exact Artist credit (primary Release credit *or* Track credit)
+    /// recurred on different Releases, and the full active name group had no
+    /// differentiating identity facts. ADR-0189: C# reuses an Artist by
+    /// normalized name at import, so featured-only credits must converge too.
+    RepeatedCredit { normalized_name: String },
 }
 
 impl ArtistReconciliationEvidence {
@@ -276,9 +281,8 @@ impl ArtistReconciliationEvidence {
             Self::SameReleaseTrackCredit {
                 normalized_name, ..
             } => !normalized_name.trim().is_empty(),
-            Self::RepeatedPrimaryReleaseCredit { normalized_name } => {
-                !normalized_name.trim().is_empty()
-            }
+            Self::RepeatedPrimaryReleaseCredit { normalized_name }
+            | Self::RepeatedCredit { normalized_name } => !normalized_name.trim().is_empty(),
         };
         if valid {
             Ok(())
@@ -292,6 +296,7 @@ impl ArtistReconciliationEvidence {
             Self::EmbeddedExternalId { .. } => "embedded_external_id",
             Self::SameReleaseTrackCredit { .. } => "same_release_track_credit",
             Self::RepeatedPrimaryReleaseCredit { .. } => "repeated_primary_release_credit",
+            Self::RepeatedCredit { .. } => "repeated_credit",
         }
     }
 
@@ -318,6 +323,13 @@ impl ArtistReconciliationEvidence {
                 "normalized_name": normalized_name,
                 "scope": "different_releases",
                 "role": "primary",
+                "conflict_gated": true,
+            }),
+            Self::RepeatedCredit { normalized_name } => serde_json::json!({
+                "predicate": self.predicate(),
+                "normalized_name": normalized_name,
+                "scope": "different_releases",
+                "role": "any",
                 "conflict_gated": true,
             }),
         }
@@ -1401,6 +1413,198 @@ impl CatalogStore {
         .collect())
     }
 
+    /// Cross-Release exact-name merge candidates over **every** credit form:
+    /// primary Release credits and Track credits (featured/guest included).
+    ///
+    /// ADR-0189: C# reuses an Artist row by normalized name at import, so a
+    /// featured artist appearing on two different Releases is one Artist there.
+    /// The guards are unchanged from the primary-Release variant — the whole
+    /// active name group must be provisional, disambiguation-free, free of
+    /// external identifiers, relationships, group memberships and aliases, carry
+    /// only automated decisions, have every observation matching the name, no
+    /// same-Release ambiguity, and no negative assertion — so genuinely distinct
+    /// same-name artists are still preserved.
+    pub async fn repeated_artist_credit_merge_candidates(
+        &self,
+        pool: &PgPool,
+        limit: i64,
+    ) -> Result<Vec<RepeatedPrimaryReleaseArtistMergeCandidate>, CatalogStoreError> {
+        if !(1..=1_000).contains(&limit) {
+            return Err(CatalogStoreError::InvalidRequest);
+        }
+        Ok(sqlx::query_as::<_, (Uuid, Uuid, Uuid, Uuid, String)>(
+            "WITH active_artists AS (
+                 SELECT artist.id, artist.public_api_id, artist.normalized_name,
+                        artist.artist_type, artist.begin_date, artist.end_date
+                 FROM artists artist
+                 WHERE artist.status IN ('provisional','verified')
+                   AND btrim(artist.normalized_name) <> ''
+             ), eligible_artists AS (
+                 SELECT active.*
+                 FROM active_artists active
+                 JOIN artists artist ON artist.id=active.id
+                 WHERE artist.status='provisional'
+                   AND COALESCE(btrim(artist.disambiguation), '')=''
+                   AND NOT EXISTS (
+                       SELECT 1 FROM artist_external_identities external
+                       WHERE external.artist_id=artist.id
+                   )
+                   AND NOT EXISTS (
+                       SELECT 1 FROM group_memberships membership
+                       WHERE membership.member_artist_id=artist.id
+                          OR membership.group_artist_id=artist.id
+                   )
+                   AND NOT EXISTS (
+                       SELECT 1 FROM artist_relationships relationship
+                       WHERE relationship.source_artist_id=artist.id
+                          OR relationship.target_artist_id=artist.id
+                   )
+                   AND NOT EXISTS (
+                       SELECT 1 FROM artist_aliases alias
+                       WHERE alias.artist_id=artist.id
+                         AND alias.normalized_alias <> artist.normalized_name
+                   )
+                   AND NOT EXISTS (
+                       SELECT 1 FROM artist_match_decisions decision
+                       WHERE decision.artist_id=artist.id
+                         AND (decision.is_locked OR decision.authority <> 'automated')
+                   )
+                   AND EXISTS (
+                       SELECT 1
+                       FROM artist_match_current current
+                       JOIN artist_match_decisions decision
+                         ON decision.id=current.decision_id
+                       WHERE decision.artist_id=artist.id
+                         AND decision.authority='automated'
+                         AND NOT decision.is_locked
+                   )
+                   AND NOT EXISTS (
+                       SELECT 1
+                       FROM artist_match_current current
+                       JOIN artist_match_decisions decision
+                         ON decision.id=current.decision_id
+                       JOIN observed_artists observed
+                         ON observed.id=current.observed_artist_id
+                       WHERE decision.artist_id=artist.id
+                         AND observed.normalized_value <> artist.normalized_name
+                   )
+             ), credit_context AS (
+                 SELECT DISTINCT eligible.id, eligible.public_api_id,
+                        eligible.normalized_name, eligible.artist_type,
+                        eligible.begin_date, eligible.end_date,
+                        credit.release_id
+                 FROM eligible_artists eligible
+                 JOIN release_artists credit ON credit.artist_id=eligible.id
+                 JOIN releases release ON release.id=credit.release_id
+                 WHERE credit.role='primary' AND release.status <> 'deleted'
+                 UNION
+                 SELECT DISTINCT eligible.id, eligible.public_api_id,
+                        eligible.normalized_name, eligible.artist_type,
+                        eligible.begin_date, eligible.end_date,
+                        release.id AS release_id
+                 FROM eligible_artists eligible
+                 JOIN track_artists credit ON credit.artist_id=eligible.id
+                 JOIN tracks track ON track.id=credit.track_id
+                 JOIN releases release ON release.id=track.release_id
+                 WHERE release.status <> 'deleted'
+             ), candidate_names AS (
+                 SELECT normalized_name
+                 FROM credit_context
+                 GROUP BY normalized_name
+                 HAVING count(DISTINCT id)>1
+                    AND count(DISTINCT release_id)>1
+                    AND count(DISTINCT artist_type)=1
+                    AND count(DISTINCT COALESCE(begin_date, DATE '0001-01-01'))=1
+                    AND count(DISTINCT COALESCE(end_date, DATE '9999-12-31'))=1
+             ), blocked_names AS (
+                 SELECT DISTINCT active.normalized_name
+                 FROM active_artists active
+                 JOIN candidate_names candidate
+                   ON candidate.normalized_name=active.normalized_name
+                 LEFT JOIN eligible_artists eligible ON eligible.id=active.id
+                 WHERE eligible.id IS NULL
+             ), same_release_ambiguity AS (
+                 SELECT normalized_name
+                 FROM credit_context
+                 GROUP BY normalized_name, release_id
+                 HAVING count(DISTINCT id)>1
+             ), negative_names AS (
+                 SELECT DISTINCT owner.normalized_name
+                 FROM active_artists owner
+                 JOIN artist_match_decisions owner_decision
+                   ON owner_decision.artist_id=owner.id
+                 JOIN artist_match_current current
+                   ON current.decision_id=owner_decision.id
+                  AND current.observed_artist_id=owner_decision.observed_artist_id
+                 JOIN artist_negative_assertions negative
+                   ON negative.observed_artist_id=current.observed_artist_id
+                  AND negative.candidate_artist_id IS NOT NULL
+                 JOIN active_artists candidate
+                   ON candidate.id=negative.candidate_artist_id
+                  AND candidate.normalized_name=owner.normalized_name
+                 WHERE negative.assertion_kind='do_not_match'
+                   AND NOT EXISTS (
+                       SELECT 1 FROM artist_negative_assertions revoked
+                       WHERE revoked.predecessor_assertion_id=negative.id
+                         AND revoked.assertion_kind='revoke'
+                   )
+             ), distinct_candidates AS (
+                 SELECT DISTINCT context.id, context.public_api_id,
+                        context.normalized_name
+                 FROM credit_context context
+                 JOIN candidate_names candidate
+                   ON candidate.normalized_name=context.normalized_name
+                 WHERE NOT EXISTS (
+                     SELECT 1 FROM blocked_names blocked
+                     WHERE blocked.normalized_name=context.normalized_name
+                 )
+                   AND NOT EXISTS (
+                       SELECT 1 FROM same_release_ambiguity ambiguous
+                       WHERE ambiguous.normalized_name=context.normalized_name
+                   )
+                   AND NOT EXISTS (
+                       SELECT 1 FROM negative_names negative
+                       WHERE negative.normalized_name=context.normalized_name
+                   )
+             ), ranked AS (
+                 SELECT candidate.*,
+                        first_value(candidate.id) OVER (
+                            PARTITION BY candidate.normalized_name
+                            ORDER BY candidate.id
+                        ) AS target_artist_id
+                 FROM distinct_candidates candidate
+             )
+             SELECT source.id, source.public_api_id,
+                    target.id, target.public_api_id,
+                    source.normalized_name
+             FROM ranked source
+             JOIN distinct_candidates target ON target.id=source.target_artist_id
+             WHERE source.id <> target.id
+             ORDER BY source.normalized_name, source.id
+             LIMIT $1",
+        )
+        .bind(limit)
+        .fetch_all(pool)
+        .await?
+        .into_iter()
+        .map(
+            |(
+                source_artist_id,
+                source_public_api_id,
+                target_artist_id,
+                target_public_api_id,
+                normalized_name,
+            )| RepeatedPrimaryReleaseArtistMergeCandidate {
+                source_artist_id,
+                source_public_api_id,
+                target_artist_id,
+                target_public_api_id,
+                normalized_name,
+            },
+        )
+        .collect())
+    }
+
     /// Returns bounded exact-name candidates for non-authoritative review
     /// proposals. Name equality is discovery evidence, never an identity key.
     ///
@@ -2110,6 +2314,7 @@ struct PreparedArtistPresentation {
     join_phrase: String,
 }
 
+#[derive(Clone)]
 struct PreparedImport {
     work_item_id: Uuid,
     manifest_row_id: i64,
@@ -2759,6 +2964,90 @@ fn parse_observed_date(value: Option<&str>) -> (Option<Date>, Option<String>) {
     (date, Some(text))
 }
 
+/// Rewrites each resolution's Artist id to an existing Artist with the exact same
+/// normalized name when that is unambiguous (ADR-0189).
+///
+/// Returns a cloned import because every downstream insert (credits, external
+/// identifiers, observations, enrichment tasks) uses the resolution's Artist id;
+/// remapping once here keeps them consistent.
+async fn reuse_existing_artists(
+    tx: &mut Transaction<'_, Postgres>,
+    prepared: &PreparedImport,
+) -> Result<(PreparedImport, std::collections::BTreeSet<Uuid>), CatalogStoreError> {
+    let mut prepared = prepared.clone();
+    let names = prepared
+        .resolutions
+        .iter()
+        .map(|resolution| resolution.normalized_value.clone())
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    let mut reused = std::collections::BTreeSet::new();
+    if names.is_empty() {
+        return Ok((prepared, reused));
+    }
+    // A check-then-insert race would recreate the duplicate this decision exists to
+    // prevent: two imports of the same name running concurrently both find no
+    // candidate and both insert. Serialize them on the name itself, in ascending
+    // order so two imports sharing several names cannot deadlock. The lock is
+    // transaction-scoped and released by the import commit.
+    for name in &names {
+        sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+            .bind(name)
+            .execute(&mut **tx)
+            .await?;
+    }
+    let candidates: Vec<(Uuid, String, Option<String>)> = sqlx::query_as(
+        "SELECT artist.id, artist.normalized_name, external.external_id
+           FROM artists artist
+           LEFT JOIN artist_external_identities external
+             ON external.artist_id = artist.id AND external.provider = 'musicbrainz'
+          WHERE artist.normalized_name = ANY($1)
+            AND artist.status IN ('provisional','verified')
+            AND artist.merged_into_artist_id IS NULL
+            AND COALESCE(btrim(artist.disambiguation), '') = ''",
+    )
+    .bind(&names)
+    .fetch_all(&mut **tx)
+    .await?;
+    // Group by name; a name with more than one candidate (or conflicting embedded
+    // identifiers) is left alone so the identity review decides.
+    let mut by_name: std::collections::BTreeMap<String, Vec<(Uuid, Option<String>)>> =
+        std::collections::BTreeMap::new();
+    for (id, name, external_id) in candidates {
+        by_name.entry(name).or_default().push((id, external_id));
+    }
+    for resolution in &mut prepared.resolutions {
+        let Some(candidates) = by_name.get(&resolution.normalized_value) else {
+            continue;
+        };
+        let [candidate] = candidates.as_slice() else {
+            continue;
+        };
+        let embedded = resolution
+            .musicbrainz_ids
+            .iter()
+            .filter(|(family, _)| matches!(family.as_str(), "artist" | "release_artist"))
+            .map(|(_, external_id)| external_id)
+            .collect::<Vec<_>>();
+        if let Some(existing) = &candidate.1
+            && embedded.iter().any(|external_id| *external_id != existing)
+        {
+            continue;
+        }
+        if candidate.0 != resolution.artist_id {
+            tracing::debug!(
+                normalized_name = %resolution.normalized_value,
+                reused_artist_id = %candidate.0,
+                "reusing an existing Artist for an exact normalized name"
+            );
+            resolution.artist_id = candidate.0;
+            reused.insert(candidate.0);
+        }
+    }
+    Ok((prepared, reused))
+}
+
 const SET_BASED_MUTATION_STATEMENT_COUNT: u32 = 18;
 
 async fn persist_prepared_import(
@@ -2872,32 +3161,51 @@ async fn persist_prepared_import(
     persist_embedded_audio_identity_evidence(tx, prepared, now).await?;
     persist_acoustic_audio_identity_evidence(tx, prepared, now).await?;
 
+    // ADR-0189: reuse an existing Artist whose normalized name is exactly equal
+    // instead of creating a second row for the same name. C# resolves credits
+    // against a normalized-name lookup at import (`LibraryInsertJob`), so a
+    // featured artist appearing on several Releases is one Artist there; creating
+    // one provisional row per Release is what produced the duplicates. Reuse is
+    // deliberately narrow: exactly one candidate may carry the name, it must not
+    // be a tombstone, a disambiguation hint refuses reuse, and a conflicting
+    // embedded MusicBrainz Artist identifier blocks the reuse (two same-name
+    // artists with different external identity).
+    let (reused_import, reused_artist_ids) = reuse_existing_artists(tx, prepared).await?;
+    let prepared = &reused_import;
+
+    // Reused Artists already exist, so they must not be inserted again.
     let artist_identities = prepared.resolutions.iter().fold(
         BTreeMap::<Uuid, &PreparedResolution>::new(),
         |mut rows, resolution| {
-            rows.entry(resolution.artist_id).or_insert(resolution);
+            if !reused_artist_ids.contains(&resolution.artist_id) {
+                rows.entry(resolution.artist_id).or_insert(resolution);
+            }
             rows
         },
     );
-    let mut artist_query: QueryBuilder<Postgres> = QueryBuilder::new(
-        "INSERT INTO artists (
-            id, public_api_id, canonical_name, normalized_name, sort_name,
-            artist_type, status, revision, created_at, updated_at
-         ) ",
-    );
-    artist_query.push_values(artist_identities.values(), |mut row, resolution| {
-        row.push_bind(resolution.artist_id)
-            .push_bind(resolution.artist_id)
-            .push_bind(&resolution.raw_value)
-            .push_bind(&resolution.normalized_value)
-            .push_bind(&resolution.raw_value)
-            .push_bind("unknown")
-            .push_bind("provisional")
-            .push_bind(1_i64)
-            .push_bind(now)
-            .push_bind(now);
-    });
-    artist_query.build().execute(&mut **tx).await?;
+    // An import can reuse every Artist it observes (ADR-0189), in which case there
+    // is nothing to insert.
+    if !artist_identities.is_empty() {
+        let mut artist_query: QueryBuilder<Postgres> = QueryBuilder::new(
+            "INSERT INTO artists (
+                id, public_api_id, canonical_name, normalized_name, sort_name,
+                artist_type, status, revision, created_at, updated_at
+             ) ",
+        );
+        artist_query.push_values(artist_identities.values(), |mut row, resolution| {
+            row.push_bind(resolution.artist_id)
+                .push_bind(resolution.artist_id)
+                .push_bind(&resolution.raw_value)
+                .push_bind(&resolution.normalized_value)
+                .push_bind(&resolution.raw_value)
+                .push_bind("unknown")
+                .push_bind("provisional")
+                .push_bind(1_i64)
+                .push_bind(now)
+                .push_bind(now);
+        });
+        artist_query.build().execute(&mut **tx).await?;
+    }
 
     for resolution in &prepared.resolutions {
         for (family, external_id) in &resolution.musicbrainz_ids {
@@ -3226,32 +3534,34 @@ async fn persist_prepared_import(
                         WHERE it.release_id = $1
                     ) distinct_assets
                 ), 0), 1, $2
-         FROM tracks t WHERE t.release_id = $1",
+         FROM tracks t WHERE t.release_id = $1
+         ON CONFLICT (release_id) DO UPDATE SET
+            track_count=EXCLUDED.track_count,
+            duration_ms=EXCLUDED.duration_ms,
+            media_bytes=EXCLUDED.media_bytes,
+            revision=release_catalog_aggregates.revision+1,
+            updated_at=EXCLUDED.updated_at",
     )
     .bind(release_id)
     .bind(now)
     .execute(&mut **tx)
     .await?;
 
-    sqlx::query(
-        "INSERT INTO artist_catalog_aggregates (
-            artist_id, release_count, billed_track_count,
-            performance_track_count, all_credit_track_count, revision, updated_at
-         )
-         SELECT a.artist_id, count(DISTINCT t.release_id),
-                count(DISTINCT a.track_id),
-                count(DISTINCT a.track_id) FILTER (WHERE a.is_performance),
-                count(DISTINCT a.track_id), 1, $2
-         FROM artist_track_associations a
-         JOIN tracks t ON t.id = a.track_id
-         WHERE t.release_id = $1
-         GROUP BY a.artist_id",
-    )
-    .bind(release_id)
-    .bind(now)
-    .execute(&mut **tx)
-    .await?;
+    let imported_track_ids = prepared
+        .tracks
+        .iter()
+        .map(|track| track.id)
+        .collect::<Vec<_>>();
+    refresh_artist_catalog_aggregates(tx, &imported_track_ids, now).await?;
 
+    // Distinct Artists this import resolved, including reused ones; the outbox set
+    // below is the same set, so one value serves both.
+    let resolved_artist_count = prepared
+        .resolutions
+        .iter()
+        .map(|resolution| resolution.artist_id)
+        .collect::<std::collections::BTreeSet<_>>()
+        .len();
     let mut outbox_rows = vec![("release", release_id)];
     outbox_rows.extend(prepared.tracks.iter().map(|track| ("track", track.id)));
     outbox_rows.extend(
@@ -3332,7 +3642,7 @@ async fn persist_prepared_import(
             "catalog_import_id": prepared.import_id,
             "overlay_id": prepared.overlay.id(),
             "track_count": prepared.tracks.len(),
-            "artist_count": artist_identities.len(),
+            "artist_count": resolved_artist_count,
             "media_asset_count": prepared.assets.len(),
         })),
     )
@@ -3344,7 +3654,7 @@ async fn persist_prepared_import(
         overlay_id: prepared.overlay.id(),
         track_count: u32::try_from(prepared.tracks.len())
             .map_err(|_| CatalogStoreError::NumericOverflow)?,
-        artist_count: u32::try_from(artist_identities.len())
+        artist_count: u32::try_from(resolved_artist_count)
             .map_err(|_| CatalogStoreError::NumericOverflow)?,
         media_asset_count: u32::try_from(prepared.assets.len())
             .map_err(|_| CatalogStoreError::NumericOverflow)?,

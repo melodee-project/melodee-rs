@@ -1,14 +1,18 @@
 # ADR-0117: Use a PostgreSQL catalog, identity, and contribution schema with set-based manifest import
 
 - **Date:** 2026-08-10
-- **Status:** Accepted
+- **Status:** Superseded
 - **Decision owners:** User-directed Phase 4 authority work
 - **Supersedes:** None
-- **Superseded by:** None
+- **Superseded by:** [ADR-0189](ADR-0189-reuse-an-existing-artist-by-exact-normalized-name-at-import.md) — only the "creates provisional Artists when no credible or locked match exists rather than merging by name" import rule; every schema and identity invariant below stands
 - **Related requirements:** PRD-ARTIST-001 through PRD-ARTIST-012, PRD-RESOLVE-001 through
   PRD-RESOLVE-005, PRD-CREDIT-001 through PRD-CREDIT-008, PRD-CATALOG-001 through
   PRD-CATALOG-005, PRD-INGEST-007 through PRD-INGEST-010, PRD-API-M1-004, PRD-MIG-002,
   PRD-MIG-004
+
+> Only the import rule in decision item 4 below is superseded, by
+> [ADR-0189](ADR-0189-reuse-an-existing-artist-by-exact-normalized-name-at-import.md). Every schema,
+> identity, and audit invariant in this ADR remains binding.
 
 ## Context
 
@@ -115,7 +119,10 @@ For each bounded batch, the importer:
    reading canonical asset bytes;
 3. expands Release, Track, observed Artist, and asset rows through set-based SQL (for example,
    arrays, `jsonb_to_recordset`, staging relations, or equivalent), never a lookup/save loop;
-4. creates provisional Artists when no credible or locked match exists rather than merging by name;
+4. creates provisional Artists when no credible or locked match exists rather than merging by name
+   (**superseded by [ADR-0189](ADR-0189-reuse-an-existing-artist-by-exact-normalized-name-at-import.md)**:
+   import now reuses an existing Artist when the normalized name is exactly equal and the reuse is
+   unambiguous; names remain non-unique and non-authoritative);
 5. inserts catalog rows, associations, initial aggregates, catalog-import record, audit evidence, and
    future-search outbox records in the same transaction;
 6. transitions `Cataloging -> Cataloged` and clears the lease in that transaction.

@@ -213,6 +213,7 @@ pub async fn start_policy_loop(
     }
     let cancellation = PolicyCancellation::default();
     let task_cancellation = cancellation.clone();
+    let claim_batch_size = bounded_claim_config(&policy_config, &work_config)?.claim_batch_size;
     let join = tokio::spawn(async move {
         info!(
             rule_set_id = %engine.rule_set_id(),
@@ -221,6 +222,15 @@ pub async fn start_policy_loop(
             batch_size = policy_config.batch_size,
             "starting policy worker loop"
         );
+        // The poll interval is the *idle* cadence, not a throughput ceiling. One
+        // pass evaluates `batch_size.min(concurrency)` releases in ~100 ms, so a
+        // scheduler that only ran one pass per tick drained a backlog of several
+        // hundred releases at four releases a minute (measured) while the worker sat
+        // idle for the rest of every tick. Draining a full batch immediately keeps
+        // the stage work-bound: a batch that comes back full means more work is
+        // queued, so run again before sleeping. Job history stays per scheduled
+        // tick, which is what the diagnostics surface reports.
+        let claim_batch_size = claim_batch_size;
         let mut ticker = tokio::time::interval(worker_config.poll_interval);
         ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
         let mut latest = None;
@@ -229,43 +239,63 @@ pub async fn start_policy_loop(
                 break;
             }
             tokio::select! {
-                _ = ticker.tick() => {
-                    let started = OffsetDateTime::now_utc();
-                    let tick = melodee_persistence::scheduled_tick(started, worker_config.poll_interval);
-                    let history = melodee_persistence::JobRunHistoryStore;
-                    let run = match history.start_tick(&pool, "policy", tick).await {
-                        Ok(run) => run,
-                        Err(error) => {
-                            error!(%error, "policy tick history could not be recorded");
-                            None
-                        }
-                    };
-                    let Some(run) = run else {
-                        continue;
-                    };
-                    let outcome = run_policy_once_with_cancellation(
-                        &engine,
-                        &policy_config,
-                        &store,
-                        &pool,
-                        &work_config,
-                        OffsetDateTime::now_utc(),
-                        &task_cancellation,
-                    ).await;
-                    match outcome {
-                        Ok(stats) => {
-                            let _ = history.finish(&pool, run.id, OffsetDateTime::now_utc(), true, None).await;
-                            latest = Some(stats);
-                        }
-                        Err(worker_error) => {
-                            let message = worker_error.to_string();
-                            let _ = history.finish(&pool, run.id, OffsetDateTime::now_utc(), false, Some(&message)).await;
-                            error!(%worker_error, "policy pass failed before completion");
-                        }
-                    }
-                }
+                _ = ticker.tick() => {}
                 () = task_cancellation.cancelled() => break,
             }
+            let started = OffsetDateTime::now_utc();
+            let tick = melodee_persistence::scheduled_tick(started, worker_config.poll_interval);
+            let history = melodee_persistence::JobRunHistoryStore;
+            let run = match history.start_tick(&pool, "policy", tick).await {
+                Ok(run) => run,
+                Err(error) => {
+                    error!(%error, "policy tick history could not be recorded");
+                    None
+                }
+            };
+            let Some(run) = run else {
+                continue;
+            };
+            let finished;
+            loop {
+                match run_policy_once_with_cancellation(
+                    &engine,
+                    &policy_config,
+                    &store,
+                    &pool,
+                    &work_config,
+                    OffsetDateTime::now_utc(),
+                    &task_cancellation,
+                )
+                .await
+                {
+                    Ok(stats) => {
+                        let full_batch = stats.claimed >= claim_batch_size as usize;
+                        latest = Some(stats);
+                        if !full_batch || task_cancellation.is_cancelled() {
+                            finished = Some((true, None));
+                            break;
+                        }
+                        // Yield so timers, shutdown, and other workers keep running.
+                        tokio::task::yield_now().await;
+                    }
+                    Err(worker_error) => {
+                        let message = worker_error.to_string();
+                        error!(%worker_error, "policy pass failed before completion");
+                        finished = Some((false, Some(message)));
+                        break;
+                    }
+                }
+            }
+            let (succeeded, message) = finished.unwrap_or((true, None));
+            let _ = history
+                .finish(
+                    &pool,
+                    run.id,
+                    OffsetDateTime::now_utc(),
+                    succeeded,
+                    message.as_deref(),
+                )
+                .await;
         }
         latest
     });

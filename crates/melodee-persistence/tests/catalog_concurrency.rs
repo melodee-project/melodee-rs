@@ -814,3 +814,214 @@ async fn concurrent_direct_redirect_cycles_serialize_to_one_acyclic_terminal() {
 
     db.drop().await;
 }
+
+#[tokio::test]
+async fn same_name_imports_serialize_on_the_artist_name_lock() {
+    // The reuse decision is check-then-insert, so the deterministic proof is that a
+    // concurrent importer of the same name waits for the in-flight one instead of
+    // racing it, and then reuses the committed Artist.
+    let db = TestDb::create("catalog_artist_name_lock").await;
+    let now = OffsetDateTime::now_utc();
+    let worker = WorkerId::new();
+    let first = seed_published_release(
+        &db,
+        123,
+        CatalogFixturePresentation {
+            release_title: "Serialized One",
+            release_artist: "Serialized Reuse Artist",
+            track_title: "Serialized One",
+            track_artist: "Serialized Reuse Artist",
+            release_date: "2026-03-03",
+        },
+    )
+    .await;
+    let second = seed_published_release(
+        &db,
+        124,
+        CatalogFixturePresentation {
+            release_title: "Serialized Two",
+            release_artist: "Serialized Reuse Artist",
+            track_title: "Serialized Two",
+            track_artist: "Serialized Reuse Artist",
+            release_date: "2026-04-04",
+        },
+    )
+    .await;
+    assert_eq!(
+        CatalogStore
+            .claim_cataloging(&db.pool, &worker, &test_config(), now)
+            .await
+            .expect("claim both serialized fixtures")
+            .len(),
+        2
+    );
+
+    let mut holder = db.pool.begin().await.expect("open the lock holder");
+    let locked: bool =
+        sqlx::query_scalar("SELECT pg_try_advisory_xact_lock(hashtextextended($1, 0))")
+            .bind("serialized reuse artist")
+            .fetch_one(&mut *holder)
+            .await
+            .expect("take the Artist name lock");
+    assert!(locked, "the fixture must own the name lock");
+
+    let pool = db.pool.clone();
+    let import_worker = worker.clone();
+    let import = tokio::spawn(async move {
+        CatalogStore
+            .import_manifest_v3(
+                &pool,
+                first.work_item_id,
+                &import_worker,
+                &CatalogImportRequest::new("serialized-reuse-v1", "catalog-concurrency-test"),
+                now,
+            )
+            .await
+    });
+    tokio::time::timeout(StdDuration::from_secs(10), async {
+        loop {
+            let waiting: i64 = sqlx::query_scalar(
+                "SELECT count(*) FROM pg_stat_activity
+                 WHERE datname=current_database() AND pid<>pg_backend_pid()
+                   AND wait_event_type='Lock'
+                   AND query LIKE '%pg_advisory_xact_lock%'",
+            )
+            .fetch_one(&db.pool)
+            .await
+            .expect("query the blocked importer");
+            if waiting >= 1 {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("the importer waits on the Artist name lock");
+    assert!(!import.is_finished(), "the importer is still blocked");
+    holder.rollback().await.expect("release the name lock");
+    import
+        .await
+        .expect("serialized import task joins")
+        .expect("first import completes after the lock is released");
+    CatalogStore
+        .import_manifest_v3(
+            &db.pool,
+            second.work_item_id,
+            &worker,
+            &CatalogImportRequest::new("serialized-reuse-v1", "catalog-concurrency-test"),
+            now,
+        )
+        .await
+        .expect("second import reuses the committed Artist");
+
+    let artists: Vec<(Uuid, String)> = sqlx::query_as(
+        "SELECT id, status FROM artists WHERE normalized_name='serialized reuse artist'",
+    )
+    .fetch_all(&db.pool)
+    .await
+    .expect("read serialized reuse Artists");
+    assert_eq!(artists.len(), 1, "the name lock guarantees one Artist");
+    assert_eq!(artists[0].1, "provisional");
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(DISTINCT release_id) FROM release_artists WHERE artist_id=$1",
+        )
+        .bind(artists[0].0)
+        .fetch_one(&db.pool)
+        .await
+        .expect("count credits on the reused Artist"),
+        2
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn concurrent_imports_of_one_artist_name_reuse_one_artist() {
+    // ADR-0189: reuse is a read-then-insert decision, so two imports of the same
+    // name running at the same time must not both insert. They serialize on the
+    // name, and the loser reuses the winner's Artist instead of duplicating it.
+    let db = TestDb::create("catalog_concurrent_artist_name_reuse").await;
+    let now = OffsetDateTime::now_utc();
+    let worker = WorkerId::new();
+    let mut fixtures = Vec::new();
+    for (ordinal, release_title) in [(121, "Concurrent Reuse One"), (122, "Concurrent Reuse Two")] {
+        fixtures.push(
+            seed_published_release(
+                &db,
+                ordinal,
+                CatalogFixturePresentation {
+                    release_title,
+                    release_artist: "Concurrent Reuse Artist",
+                    track_title: release_title,
+                    track_artist: "Concurrent Reuse Artist",
+                    release_date: "2026-02-02",
+                },
+            )
+            .await,
+        );
+    }
+    assert_eq!(
+        CatalogStore
+            .claim_cataloging(&db.pool, &worker, &test_config(), now)
+            .await
+            .expect("claim both concurrent fixtures")
+            .len(),
+        2
+    );
+
+    let mut tasks = tokio::task::JoinSet::new();
+    for fixture in &fixtures {
+        let pool = db.pool.clone();
+        let worker = worker.clone();
+        let work_item_id = fixture.work_item_id;
+        tasks.spawn(async move {
+            CatalogStore
+                .import_manifest_v3(
+                    &pool,
+                    work_item_id,
+                    &worker,
+                    &CatalogImportRequest::new("concurrent-reuse-v1", "catalog-concurrency-test"),
+                    now,
+                )
+                .await
+        });
+    }
+    while let Some(joined) = tasks.join_next().await {
+        joined
+            .expect("concurrent import task joins")
+            .expect("concurrent import succeeds");
+    }
+
+    let artists: Vec<(Uuid, String)> = sqlx::query_as(
+        "SELECT id, status FROM artists WHERE normalized_name='concurrent reuse artist'
+         ORDER BY created_at",
+    )
+    .fetch_all(&db.pool)
+    .await
+    .expect("read concurrent reuse Artists");
+    assert_eq!(
+        artists.len(),
+        1,
+        "concurrent imports must not create a second Artist for one name"
+    );
+    assert_eq!(artists[0].1, "provisional");
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(DISTINCT release_id) FROM release_artists WHERE artist_id=$1",
+        )
+        .bind(artists[0].0)
+        .fetch_one(&db.pool)
+        .await
+        .expect("count credits on the reused Artist"),
+        2
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM artist_merge_events")
+            .fetch_one(&db.pool)
+            .await
+            .expect("count merge events"),
+        0,
+        "serialized reuse needs no merge history"
+    );
+    db.drop().await;
+}

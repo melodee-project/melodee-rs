@@ -745,6 +745,56 @@ def verify_release(verifier: Verifier, url: str, release: dict[str, Any], env: d
         names = [entry[0] for entry in traits]
         verifier.check(f"{slug}: trait {expect['trait']} detected", expect["trait"] in names, f"traits={names}")
 
+    # Artist identity across Releases (ADR-0189). The corpus declares the expected
+    # shape explicitly, because the defect class it guards was an undeclared
+    # divergence: import created one Artist per Release and no assertion said
+    # otherwise.
+    identity = expect.get("artistReleaseCount")
+    if identity:
+        name = sql_literal(identity["artist"])
+        artists = int(
+            scalar(
+                url,
+                "SELECT count(*)::bigint FROM artists "
+                f" WHERE normalized_name = lower({name}) AND status <> 'merged'",
+            )
+            or "0"
+        )
+        releases = int(
+            scalar(
+                url,
+                "SELECT count(DISTINCT ra.release_id)::bigint FROM release_artists ra "
+                "  JOIN artists a ON a.id = ra.artist_id "
+                f" WHERE a.normalized_name = lower({name})",
+            )
+            or "0"
+        )
+        verifier.equals(
+            f"{slug}: '{identity['artist']}' occupies {identity['artists']} Artist row(s)",
+            artists,
+            identity["artists"],
+        )
+        verifier.equals(
+            f"{slug}: '{identity['artist']}' credits {identity['releases']} Release(s)",
+            releases,
+            identity["releases"],
+        )
+        if identity["artists"] == 1:
+            merged = int(
+                scalar(
+                    url,
+                    "SELECT count(*)::bigint FROM artist_merge_events event "
+                    "  JOIN artists a ON a.id = event.target_artist_id "
+                    f" WHERE a.normalized_name = lower({name})",
+                )
+                or "0"
+            )
+            verifier.equals(
+                f"{slug}: reuse created no merge history for '{identity['artist']}'",
+                merged,
+                0,
+            )
+
     # Duplicate re-import. This build does not dedupe at Release level, so the
     # declared behaviour is a second Release whose Tracks the novelty classifier
     # flags `exact_duplicate`. If the product ever starts merging instead, this

@@ -16,7 +16,9 @@ use melodee_catalog::{CatalogConfig, import_once, start_catalog_loop};
 use melodee_persistence::{CatalogImportRequest, CatalogStore, WorkEngineConfig, WorkerId};
 
 #[tokio::test]
-async fn successful_import_auto_merges_only_shared_trusted_artist_ids() {
+async fn successful_import_reuses_one_artist_per_trusted_artist_id() {
+    // ADR-0189: the same trusted provider Artist id is the same Artist, so the
+    // second Release reuses the first Artist row instead of requiring a merge.
     let db = TestDb::create("catalog_scheduler_strong_artist_id").await;
     let shared_artist_id = "aa1b1c1d-0000-7000-8000-000000000071";
     for (ordinal, release_title) in [(108, "Trusted One"), (109, "Trusted Two")] {
@@ -52,6 +54,123 @@ async fn successful_import_auto_merges_only_shared_trusted_artist_ids() {
     .await
     .expect("run strong-ID catalog import pass");
     assert_eq!(stats.completed, 2);
+    assert_eq!(stats.failed, 0);
+
+    let statuses: (i64, i64, i64) = sqlx::query_as(
+        "SELECT count(*) FILTER (WHERE status='provisional'),
+                count(*) FILTER (WHERE status='merged'),
+                (SELECT count(DISTINCT artist_id) FROM release_artists credit
+                   JOIN artists artist ON artist.id=credit.artist_id
+                  WHERE artist.normalized_name='trusted artist')
+           FROM artists WHERE normalized_name='trusted artist'",
+    )
+    .fetch_one(&db.pool)
+    .await
+    .expect("read strong-ID import result");
+    assert_eq!(
+        statuses,
+        (1, 0, 1),
+        "one trusted provider id yields one Artist and no merge history"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM artist_merge_events WHERE actor='catalog-reconciler'",
+        )
+        .fetch_one(&db.pool)
+        .await
+        .expect("count reconciler merges"),
+        0
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn scheduler_repairs_legacy_duplicates_sharing_a_trusted_artist_id() {
+    // A catalogue written before ADR-0189 can still hold two rows for one
+    // trusted provider Artist id; the startup sweep must converge them.
+    let db = TestDb::create("catalog_scheduler_legacy_strong_artist_id").await;
+    let shared_artist_id = "aa1b1c1d-0000-7000-8000-000000000072";
+    for (ordinal, release_title) in [(108, "Trusted One"), (109, "Trusted Two")] {
+        seed_published_release_with_musicbrainz_ids(
+            &db,
+            ordinal,
+            CatalogFixturePresentation {
+                release_title,
+                release_artist: "Trusted Artist",
+                track_title: "Fixture Track",
+                track_artist: "Trusted Artist",
+                release_date: "2026-01-01",
+            },
+            serde_json::json!({
+                "artist": shared_artist_id,
+                "release_artist": shared_artist_id
+            }),
+        )
+        .await;
+    }
+    let catalog = CatalogStore;
+    let worker = WorkerId::new();
+    let now = time::OffsetDateTime::now_utc();
+    let claimed = catalog
+        .claim_cataloging(&db.pool, &worker, &test_config(), now)
+        .await
+        .expect("claim legacy strong-ID fixtures");
+    assert_eq!(claimed.len(), 2);
+    let mut claimed = claimed.into_iter();
+    let first_item = claimed.next().expect("first claimable work item").id;
+    let second_item = claimed.next().expect("second claimable work item").id;
+    catalog
+        .import_manifest_v3(
+            &db.pool,
+            first_item,
+            &worker,
+            &CatalogImportRequest::new("older-binary-v1", "catalog-test"),
+            now,
+        )
+        .await
+        .expect("import first legacy strong-ID fixture");
+    sqlx::query(
+        "UPDATE artists SET disambiguation='legacy duplicate'
+          WHERE normalized_name='trusted artist'",
+    )
+    .execute(&db.pool)
+    .await
+    .expect("force a legacy second row");
+    catalog
+        .import_manifest_v3(
+            &db.pool,
+            second_item,
+            &worker,
+            &CatalogImportRequest::new("older-binary-v1", "catalog-test"),
+            now,
+        )
+        .await
+        .expect("import second legacy strong-ID fixture");
+    sqlx::query("UPDATE artists SET disambiguation=NULL WHERE normalized_name='trusted artist'")
+        .execute(&db.pool)
+        .await
+        .expect("clear the temporary hint");
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM artists
+              WHERE normalized_name='trusted artist' AND status='provisional'",
+        )
+        .fetch_one(&db.pool)
+        .await
+        .expect("count legacy same-name rows"),
+        2
+    );
+
+    let handle = start_catalog_loop(
+        CatalogConfig {
+            poll_interval: time::Duration::hours(1),
+            ..CatalogConfig::default()
+        },
+        db.pool.clone(),
+        catalog,
+        WorkEngineConfig::default(),
+    );
+    let _ = handle.stop().await;
 
     let statuses: (i64, i64, i64) = sqlx::query_as(
         "SELECT count(*) FILTER (WHERE status='provisional'),
@@ -64,13 +183,15 @@ async fn successful_import_auto_merges_only_shared_trusted_artist_ids() {
     )
     .fetch_one(&db.pool)
     .await
-    .expect("read strong-ID reconciliation result");
+    .expect("read startup strong-ID reconciliation result");
     assert_eq!(statuses, (1, 1, 1));
     db.drop().await;
 }
 
 #[tokio::test]
-async fn successful_import_converges_repeated_primary_release_artist_credits() {
+async fn successful_import_reuses_one_artist_for_repeated_release_credits() {
+    // ADR-0189: C# reuses an Artist by normalized name at import, so two Releases
+    // by "4Trey" produce one Artist with credits from both and no merge history.
     let db = TestDb::create("catalog_scheduler_cross_release_artist").await;
     for (ordinal, release_title) in [(101, "The Aim"), (102, "Play Your Roll")] {
         seed_published_release(
@@ -103,19 +224,26 @@ async fn successful_import_converges_repeated_primary_release_artist_credits() {
     assert_eq!(stats.completed, 2);
     assert_eq!(stats.failed, 0);
 
-    let statuses: (i64, i64, i64, i64) = sqlx::query_as(
+    let statuses: (i64, i64, i64, i64, i64) = sqlx::query_as(
         "SELECT count(*) FILTER (WHERE status='provisional'),
                 count(*) FILTER (WHERE status='merged'),
                 (SELECT count(*) FROM artist_merge_events
                   WHERE actor='catalog-reconciler'),
                 (SELECT count(*) FROM artist_match_decisions
-                  WHERE outcome='proposed' AND authority='automated')
+                  WHERE outcome='proposed' AND authority='automated'),
+                (SELECT count(*) FROM release_artists credit
+                   JOIN artists artist ON artist.id=credit.artist_id
+                  WHERE artist.normalized_name='4trey')
            FROM artists WHERE normalized_name='4trey'",
     )
     .fetch_one(&db.pool)
     .await
-    .expect("read scheduler reconciliation result");
-    assert_eq!(statuses, (1, 1, 1, 0));
+    .expect("read scheduler reuse result");
+    assert_eq!(
+        statuses,
+        (1, 0, 0, 0, 2),
+        "one Artist carries both Release credits without merge or proposal history"
+    );
     assert_eq!(
         CatalogStore
             .count_unresolved_observations(&db.pool)
@@ -179,6 +307,8 @@ async fn scheduler_startup_repairs_older_repeated_primary_artist_identities() {
             .len(),
         14
     );
+    // Reproduce a pre-ADR-0189 catalogue: a disambiguation hint present while each
+    // Release imports suppresses name reuse, leaving one row per Release.
     for fixture in &fixtures {
         catalog
             .import_manifest_v3(
@@ -190,7 +320,18 @@ async fn scheduler_startup_repairs_older_repeated_primary_artist_identities() {
             )
             .await
             .expect("import without scheduler reconciliation");
+        sqlx::query(
+            "UPDATE artists SET disambiguation='legacy duplicate'
+              WHERE normalized_name='alice cooper'",
+        )
+        .execute(&db.pool)
+        .await
+        .expect("keep legacy duplicates apart");
     }
+    sqlx::query("UPDATE artists SET disambiguation=NULL WHERE normalized_name='alice cooper'")
+        .execute(&db.pool)
+        .await
+        .expect("clear the temporary hints");
     sqlx::query("UPDATE releases SET status='deprecated' WHERE id=ANY($1)")
         .bind(
             fixtures
@@ -228,7 +369,7 @@ async fn scheduler_startup_repairs_older_repeated_primary_artist_identities() {
                 count(*) FILTER (WHERE status='merged'),
                 (SELECT count(*) FROM artist_merge_events
                   WHERE moved_relationships #>> '{reconciliation,evidence,predicate}'
-                        = 'repeated_primary_release_credit')
+                        = 'repeated_credit')
            FROM artists WHERE normalized_name='alice cooper'",
     )
     .fetch_one(&db.pool)

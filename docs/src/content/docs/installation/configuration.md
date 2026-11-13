@@ -129,6 +129,14 @@ overloaded. Throughput is bound by concurrency, not by the number of stages: for
 1.8 GB batch on a 24-core host, the median wait before a Release was claimed was ~200 s while the
 work itself took seconds to tens of seconds per stage.
 
+Every stage drains while it has work: when a pass claims its full batch, the worker runs the next
+pass immediately instead of waiting for the next poll tick. Each stage's poll interval is therefore
+an **idle cadence**, not a throughput ceiling — a queue of several hundred Releases is limited by the
+concurrency you configure, not by how often the scheduler wakes up. (Before this, the policy stage
+polled once a minute and claimed four Releases per tick, so a 643-Release backlog advanced at exactly
+4/minute while the worker sat idle 99 % of the time; the same backlog now clears in well under a
+minute.)
+
 Sizing rule:
 
 - `MELODEE__INSPECTION__CONCURRENCY` — mostly I/O (hashing, `ffprobe`); raise to the number of

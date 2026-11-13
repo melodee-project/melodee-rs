@@ -20,6 +20,7 @@ use melodee_persistence::{
     ArtistReconciliationEvidence, CatalogImportRequest, CatalogStore, WorkItemStore, WorkerId,
 };
 use time::Duration;
+use uuid::Uuid;
 
 #[tokio::test]
 async fn slash_billing_keeps_release_artist_primary_and_creates_featured_track_artists() {
@@ -847,7 +848,10 @@ async fn negative_assertions_and_locked_decisions_block_same_release_track_recon
 }
 
 #[tokio::test]
-async fn repeated_primary_release_artist_credits_are_conflict_gated_and_audited() {
+async fn same_name_release_credits_reuse_one_artist_across_releases() {
+    // ADR-0189: C# resolves every credit against a normalized-name lookup at
+    // import, so two Releases by the same artist name produce one Artist row and
+    // there is nothing left for reconciliation to merge.
     let db = TestDb::create("catalog_repeated_primary_artist").await;
     let first = seed_published_release(
         &db,
@@ -876,11 +880,14 @@ async fn repeated_primary_release_artist_credits_are_conflict_gated_and_audited(
     let catalog = CatalogStore;
     let worker = WorkerId::new();
     let now = time::OffsetDateTime::now_utc();
-    let claimed = catalog
-        .claim_cataloging(&db.pool, &worker, &test_config(), now)
-        .await
-        .expect("claim cross-Release fixtures");
-    assert_eq!(claimed.len(), 2);
+    assert_eq!(
+        catalog
+            .claim_cataloging(&db.pool, &worker, &test_config(), now)
+            .await
+            .expect("claim cross-Release fixtures")
+            .len(),
+        2
+    );
     for fixture in [&first, &second] {
         catalog
             .import_manifest_v3(
@@ -893,19 +900,163 @@ async fn repeated_primary_release_artist_credits_are_conflict_gated_and_audited(
             .await
             .expect("import cross-Release fixture");
     }
-    sqlx::query("UPDATE releases SET status='deprecated' WHERE id=ANY($1)")
-        .bind([first.release_id.into_uuid(), second.release_id.into_uuid()])
+
+    let artists: Vec<(Uuid, i64, i64)> = sqlx::query_as(
+        "SELECT artist.id,
+                (SELECT count(*) FROM release_artists credit
+                  WHERE credit.artist_id=artist.id AND credit.role='primary'),
+                (SELECT count(*) FROM track_artists credit
+                  WHERE credit.artist_id=artist.id)
+           FROM artists artist
+          WHERE artist.normalized_name='alice cooper'",
+    )
+    .fetch_all(&db.pool)
+    .await
+    .expect("read same-name Artist reuse");
+    assert_eq!(artists.len(), 1, "one name yields exactly one Artist row");
+    assert_eq!(artists[0].1, 2, "both Releases bill the reused Artist");
+    assert_eq!(artists[0].2, 2, "both Track credits use the reused Artist");
+
+    let aggregate: (i64, i64) = sqlx::query_as(
+        "SELECT release_count, billed_track_count
+           FROM artist_catalog_aggregates WHERE artist_id=$1",
+    )
+    .bind(artists[0].0)
+    .fetch_one(&db.pool)
+    .await
+    .expect("read reused Artist aggregate");
+    assert_eq!(
+        aggregate,
+        (2, 2),
+        "the reused Artist aggregate covers every Release"
+    );
+
+    assert!(
+        catalog
+            .repeated_artist_credit_merge_candidates(&db.pool, 64)
+            .await
+            .expect("scan for leftover same-name candidates")
+            .is_empty(),
+        "reuse leaves nothing to reconcile"
+    );
+    assert!(
+        catalog
+            .name_only_artist_match_proposal_candidates(&db.pool, 64)
+            .await
+            .expect("scan for leftover name-only proposals")
+            .is_empty(),
+        "reuse leaves no duplicate to propose against"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM artist_merge_events")
+            .fetch_one(&db.pool)
+            .await
+            .expect("count merge events"),
+        0,
+        "reuse creates no merge history because nothing was merged"
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn legacy_same_name_artist_rows_are_reconciled_audited_and_reversible() {
+    // Reconciliation still has to clean catalogues written before ADR-0189. A
+    // temporary disambiguation hint suppresses reuse so the fixture reproduces
+    // the legacy duplicate rows, then the hint is cleared to leave exactly the
+    // identity facts the reconciler is allowed to converge.
+    let db = TestDb::create("catalog_legacy_duplicate_artist_name").await;
+    let first = seed_published_release(
+        &db,
+        96,
+        CatalogFixturePresentation {
+            release_title: "Alice Cooper Goes to Hell",
+            release_artist: "Alice Cooper",
+            track_title: "Go to Hell",
+            track_artist: "Alice Cooper",
+            release_date: "1976-06-25",
+        },
+    )
+    .await;
+    let second = seed_published_release(
+        &db,
+        97,
+        CatalogFixturePresentation {
+            release_title: "Brutal Planet",
+            release_artist: "Alice Cooper",
+            track_title: "Brutal Planet",
+            track_artist: "Alice Cooper",
+            release_date: "2000-06-06",
+        },
+    )
+    .await;
+    let catalog = CatalogStore;
+    let worker = WorkerId::new();
+    let now = time::OffsetDateTime::now_utc();
+    assert_eq!(
+        catalog
+            .claim_cataloging(&db.pool, &worker, &test_config(), now)
+            .await
+            .expect("claim legacy duplicate fixtures")
+            .len(),
+        2
+    );
+    catalog
+        .import_manifest_v3(
+            &db.pool,
+            first.work_item_id,
+            &worker,
+            &CatalogImportRequest::new("cross-release-name-v1", "catalog-test"),
+            now,
+        )
+        .await
+        .expect("import first legacy fixture");
+    sqlx::query(
+        "UPDATE artists SET disambiguation='legacy duplicate' WHERE normalized_name='alice cooper'",
+    )
+    .execute(&db.pool)
+    .await
+    .expect("force a legacy second row");
+    catalog
+        .import_manifest_v3(
+            &db.pool,
+            second.work_item_id,
+            &worker,
+            &CatalogImportRequest::new("cross-release-name-v1", "catalog-test"),
+            now,
+        )
+        .await
+        .expect("import second legacy fixture");
+    sqlx::query("UPDATE artists SET disambiguation=NULL WHERE normalized_name='alice cooper'")
         .execute(&db.pool)
         .await
-        .expect("model retained deprecated Releases from the live catalog");
+        .expect("clear the temporary hint");
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM artists
+              WHERE normalized_name='alice cooper' AND status='provisional'",
+        )
+        .fetch_one(&db.pool)
+        .await
+        .expect("count legacy duplicates"),
+        2
+    );
 
     let candidates = catalog
-        .repeated_primary_release_artist_merge_candidates(&db.pool, 64)
+        .repeated_artist_credit_merge_candidates(&db.pool, 64)
         .await
-        .expect("scan repeated primary Release credits");
+        .expect("scan repeated Artist credits");
     assert_eq!(candidates.len(), 1);
     let candidate = &candidates[0];
     assert_eq!(candidate.normalized_name, "alice cooper");
+    let target_release_credit: (Uuid, Uuid) = sqlx::query_as(
+        "SELECT credit.id, credit.artist_id
+           FROM release_artists credit
+          WHERE credit.release_id=$1",
+    )
+    .bind(second.release_id.into_uuid())
+    .fetch_one(&db.pool)
+    .await
+    .expect("read second Release credit");
     catalog
         .reconcile_artist(
             &db.pool,
@@ -915,16 +1066,16 @@ async fn repeated_primary_release_artist_credits_are_conflict_gated_and_audited(
                 source_public_api_id: ArtistPublicId::from_uuid(candidate.source_public_api_id),
                 target_artist_id: ArtistId::from_uuid(candidate.target_artist_id),
                 actor: "catalog-reconciler".to_owned(),
-                reason: "repeated exact primary Release Artist credit".to_owned(),
+                reason: "repeated exact Artist credit".to_owned(),
                 occurred_at: time::OffsetDateTime::now_utc(),
             },
-            "repeated-primary-release-v1",
-            &ArtistReconciliationEvidence::RepeatedPrimaryReleaseCredit {
+            "repeated-credit-v1",
+            &ArtistReconciliationEvidence::RepeatedCredit {
                 normalized_name: candidate.normalized_name.clone(),
             },
         )
         .await
-        .expect("reconcile repeated primary Release Artist");
+        .expect("reconcile repeated Artist credit");
 
     let statuses: (i64, i64) = sqlx::query_as(
         "SELECT count(*) FILTER (WHERE status='provisional'),
@@ -934,18 +1085,92 @@ async fn repeated_primary_release_artist_credits_are_conflict_gated_and_audited(
     .fetch_one(&db.pool)
     .await
     .expect("read same-name Artist statuses");
-    assert_eq!(statuses, (1, 1));
+    assert_eq!(statuses, (1, 1), "the duplicate is tombstoned, not deleted");
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
             "SELECT count(*) FROM artist_merge_events
               WHERE moved_relationships #>> '{reconciliation,evidence,predicate}'
-                    = 'repeated_primary_release_credit'",
+                    = 'repeated_credit'
+                AND moved_relationships #>> '{reconciliation,evidence,scope}'
+                    = 'different_releases'",
         )
         .fetch_one(&db.pool)
         .await
         .expect("count merge events"),
         1,
         "the contextual merge remains audited"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM artist_merge_events WHERE source_artist_id=$1",
+        )
+        .bind(candidate.source_artist_id)
+        .fetch_one(&db.pool)
+        .await
+        .expect("count merge events for the tombstoned Artist"),
+        1,
+        "the audit names the merged Artist"
+    );
+
+    // The merge is reversible through the existing split path.
+    let restored_artist_id = ArtistId::new();
+    let restored_public_id = ArtistPublicId::from_uuid(Uuid::now_v7());
+    let restored = melodee_domain::Artist::new(melodee_domain::NewArtist {
+        id: restored_artist_id,
+        public_api_id: restored_public_id,
+        canonical_name: "Alice Cooper".to_owned(),
+        normalized_name: "alice cooper".to_owned(),
+        sort_name: "Alice Cooper".to_owned(),
+        artist_type: melodee_domain::ArtistType::Unknown,
+        disambiguation: None,
+        active_dates: None,
+        status: melodee_domain::ArtistStatus::Provisional,
+        created_at: time::OffsetDateTime::now_utc(),
+    })
+    .expect("valid restored Artist");
+    let track_credit: Uuid = sqlx::query_scalar(
+        "SELECT credit.id FROM track_artists credit
+           JOIN tracks track ON track.id=credit.track_id
+          WHERE track.release_id=$1",
+    )
+    .bind(second.release_id.into_uuid())
+    .fetch_one(&db.pool)
+    .await
+    .expect("read second Release Track credit");
+    catalog
+        .split_artist(
+            &db.pool,
+            &melodee_domain::ArtistSplit {
+                id: melodee_domain::ArtistSplitId::new(),
+                source_artist_id: ArtistId::from_uuid(candidate.target_artist_id),
+                new_artist_id: restored_artist_id,
+                assignments: vec![
+                    melodee_domain::SplitAssignment::ReleaseArtist(
+                        melodee_domain::ReleaseArtistId::from_uuid(target_release_credit.0),
+                    ),
+                    melodee_domain::SplitAssignment::TrackArtist(
+                        melodee_domain::TrackArtistId::from_uuid(track_credit),
+                    ),
+                ],
+                actor: "catalog-admin".to_owned(),
+                reason: "restore the legacy duplicate".to_owned(),
+                occurred_at: time::OffsetDateTime::now_utc(),
+            },
+            &restored,
+            "manual-identity-correction-v2",
+        )
+        .await
+        .expect("split the reconciled credit back out");
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM artists
+              WHERE normalized_name='alice cooper' AND status<>'merged'",
+        )
+        .fetch_one(&db.pool)
+        .await
+        .expect("count active same-name Artists after the split"),
+        2,
+        "the split restores a second active Artist"
     );
     db.drop().await;
 }
@@ -1100,18 +1325,40 @@ async fn conflicting_active_dates_block_strong_provider_id_reconciliation() {
             .len(),
         2
     );
-    for fixture in &fixtures {
-        catalog
-            .import_manifest_v3(
-                &db.pool,
-                fixture.work_item_id,
-                &worker,
-                &CatalogImportRequest::new("strong-id-conflict-v1", "catalog-test"),
-                now,
-            )
-            .await
-            .expect("import active-date fixture");
-    }
+    // Both fixtures carry the same trusted provider id, so a pre-existing row is
+    // reused by identity (ADR-0189) unless a disambiguation hint keeps the pair
+    // apart; the fixture needs the two legacy rows to exercise date gating.
+    catalog
+        .import_manifest_v3(
+            &db.pool,
+            fixtures[0].work_item_id,
+            &worker,
+            &CatalogImportRequest::new("strong-id-conflict-v1", "catalog-test"),
+            now,
+        )
+        .await
+        .expect("import first active-date fixture");
+    sqlx::query(
+        "UPDATE artists SET disambiguation='legacy duplicate'
+          WHERE normalized_name='nirvana'",
+    )
+    .execute(&db.pool)
+    .await
+    .expect("force a legacy second row");
+    catalog
+        .import_manifest_v3(
+            &db.pool,
+            fixtures[1].work_item_id,
+            &worker,
+            &CatalogImportRequest::new("strong-id-conflict-v1", "catalog-test"),
+            now,
+        )
+        .await
+        .expect("import second active-date fixture");
+    sqlx::query("UPDATE artists SET disambiguation=NULL WHERE normalized_name='nirvana'")
+        .execute(&db.pool)
+        .await
+        .expect("clear the temporary hint");
     let artist_ids: Vec<uuid::Uuid> = sqlx::query_scalar(
         "SELECT DISTINCT artist_id FROM release_artists
           WHERE release_id=ANY($1) ORDER BY artist_id",
@@ -1204,18 +1451,47 @@ async fn disambiguated_same_name_primary_artists_remain_distinct() {
             .len(),
         2
     );
-    for fixture in &fixtures {
-        catalog
-            .import_manifest_v3(
-                &db.pool,
-                fixture.work_item_id,
-                &worker,
-                &CatalogImportRequest::new("homonym-v1", "catalog-test"),
-                now,
-            )
-            .await
-            .expect("import homonym fixture");
-    }
+    // A disambiguation hint present before the second import suppresses name
+    // reuse (ADR-0189), which is how two genuinely different same-name Artists
+    // stay separate.
+    catalog
+        .import_manifest_v3(
+            &db.pool,
+            fixtures[0].work_item_id,
+            &worker,
+            &CatalogImportRequest::new("homonym-v1", "catalog-test"),
+            now,
+        )
+        .await
+        .expect("import first homonym fixture");
+    sqlx::query(
+        "UPDATE artists SET disambiguation='UK psychedelic group'
+          WHERE normalized_name='nirvana'",
+    )
+    .execute(&db.pool)
+    .await
+    .expect("disambiguate the first homonym");
+    catalog
+        .import_manifest_v3(
+            &db.pool,
+            fixtures[1].work_item_id,
+            &worker,
+            &CatalogImportRequest::new("homonym-v1", "catalog-test"),
+            now,
+        )
+        .await
+        .expect("import second homonym fixture");
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM artists
+              WHERE normalized_name='nirvana' AND status='provisional'",
+        )
+        .fetch_one(&db.pool)
+        .await
+        .expect("count disambiguated Artists after import"),
+        2,
+        "a disambiguation hint refuses name reuse at import"
+    );
     let updated = sqlx::query(
         "UPDATE artists artist
             SET disambiguation=CASE release.title
@@ -1236,7 +1512,7 @@ async fn disambiguated_same_name_primary_artists_remain_distinct() {
 
     assert!(
         catalog
-            .repeated_primary_release_artist_merge_candidates(&db.pool, 64)
+            .repeated_artist_credit_merge_candidates(&db.pool, 64)
             .await
             .expect("scan disambiguated homonyms")
             .is_empty(),
@@ -1295,18 +1571,41 @@ async fn negative_assertions_and_locked_decisions_suppress_name_only_proposals()
             .len(),
         2
     );
-    for fixture in &fixtures {
-        catalog
-            .import_manifest_v3(
-                &db.pool,
-                fixture.work_item_id,
-                &worker,
-                &CatalogImportRequest::new("cross-release-name-v1", "catalog-test"),
-                now,
-            )
-            .await
-            .expect("import manual-conflict fixture");
-    }
+    // Two legacy same-name rows are the subject of this fixture, so a temporary
+    // disambiguation hint suppresses import-time reuse (ADR-0189) and is then
+    // cleared to leave the ambiguous provisional pair reconciliation sees in a
+    // pre-existing catalogue.
+    catalog
+        .import_manifest_v3(
+            &db.pool,
+            fixtures[0].work_item_id,
+            &worker,
+            &CatalogImportRequest::new("cross-release-name-v1", "catalog-test"),
+            now,
+        )
+        .await
+        .expect("import first manual-conflict fixture");
+    sqlx::query(
+        "UPDATE artists SET disambiguation='legacy duplicate'
+          WHERE normalized_name='shared billing'",
+    )
+    .execute(&db.pool)
+    .await
+    .expect("force a legacy second row");
+    catalog
+        .import_manifest_v3(
+            &db.pool,
+            fixtures[1].work_item_id,
+            &worker,
+            &CatalogImportRequest::new("cross-release-name-v1", "catalog-test"),
+            now,
+        )
+        .await
+        .expect("import second manual-conflict fixture");
+    sqlx::query("UPDATE artists SET disambiguation=NULL WHERE normalized_name='shared billing'")
+        .execute(&db.pool)
+        .await
+        .expect("clear the temporary hint");
     let candidate = catalog
         .name_only_artist_match_proposal_candidates(&db.pool, 64)
         .await
@@ -1316,7 +1615,7 @@ async fn negative_assertions_and_locked_decisions_suppress_name_only_proposals()
         .expect("same provisional billing is initially eligible");
     assert_eq!(
         catalog
-            .repeated_primary_release_artist_merge_candidates(&db.pool, 64)
+            .repeated_artist_credit_merge_candidates(&db.pool, 64)
             .await
             .expect("scan initial contextual candidate")
             .len(),
@@ -1352,7 +1651,7 @@ async fn negative_assertions_and_locked_decisions_suppress_name_only_proposals()
     );
     assert!(
         catalog
-            .repeated_primary_release_artist_merge_candidates(&db.pool, 64)
+            .repeated_artist_credit_merge_candidates(&db.pool, 64)
             .await
             .expect("scan contextual candidates after rejection")
             .is_empty()
@@ -1381,7 +1680,7 @@ async fn negative_assertions_and_locked_decisions_suppress_name_only_proposals()
     );
     assert_eq!(
         catalog
-            .repeated_primary_release_artist_merge_candidates(&db.pool, 64)
+            .repeated_artist_credit_merge_candidates(&db.pool, 64)
             .await
             .expect("scan contextual candidates after revocation")
             .len(),
@@ -1423,7 +1722,7 @@ async fn negative_assertions_and_locked_decisions_suppress_name_only_proposals()
     );
     assert!(
         catalog
-            .repeated_primary_release_artist_merge_candidates(&db.pool, 64)
+            .repeated_artist_credit_merge_candidates(&db.pool, 64)
             .await
             .expect("scan contextual candidates after manual lock")
             .is_empty()

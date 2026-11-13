@@ -830,6 +830,7 @@ fn start_stage_loop(
         if !ingestion.publication_enabled() {
             return Vec::new();
         }
+        let claim_batch_size = work_config.claim_batch_size as u64;
         let interval = TokioDuration::try_from(ingestion.reconciliation_interval)
             .unwrap_or_else(|_| TokioDuration::from_secs(30));
         let mut ticker = time::interval(interval);
@@ -842,50 +843,69 @@ fn start_stage_loop(
             if !should_run {
                 break;
             }
-            let shutdown = Arc::new(AtomicBool::new(false));
-            let batch = async {
-                if validation {
-                    validate_once_with_shutdown(
-                        &ingestion,
-                        &store,
-                        &pool,
-                        &work_config,
-                        OffsetDateTime::now_utc(),
-                        shutdown.clone(),
-                    )
-                    .await
-                    .map(|stats| (stats.duration_ms, stats.errors))
-                } else {
-                    publish_once_with_shutdown(
-                        &ingestion,
-                        &store,
-                        &pool,
-                        &work_config,
-                        OffsetDateTime::now_utc(),
-                        shutdown.clone(),
-                    )
-                    .await
-                    .map(|stats| (stats.duration_ms, stats.errors))
+            // Drain a full batch rather than sleeping out the tick: the interval is
+            // the idle cadence, not a throughput ceiling.
+            let mut stopping = false;
+            loop {
+                let shutdown = Arc::new(AtomicBool::new(false));
+                let batch = async {
+                    if validation {
+                        validate_once_with_shutdown(
+                            &ingestion,
+                            &store,
+                            &pool,
+                            &work_config,
+                            OffsetDateTime::now_utc(),
+                            shutdown.clone(),
+                        )
+                        .await
+                        .map(|stats| (stats.duration_ms, stats.errors, stats.claimed))
+                    } else {
+                        publish_once_with_shutdown(
+                            &ingestion,
+                            &store,
+                            &pool,
+                            &work_config,
+                            OffsetDateTime::now_utc(),
+                            shutdown.clone(),
+                        )
+                        .await
+                        .map(|stats| (stats.duration_ms, stats.errors, stats.claimed))
+                    }
+                };
+                tokio::pin!(batch);
+                let (interrupted, result) = tokio::select! {
+                    result = &mut batch => (false, result),
+                    _ = notifier.notified() => {
+                        shutdown.store(true, Ordering::SeqCst);
+                        (true, batch.await)
+                    }
+                };
+                let full_batch = match result {
+                    Ok((duration_ms, errors, claimed)) => {
+                        results.push(ReconcileResult {
+                            source: stage.to_owned(),
+                            stats: ReconcileStats {
+                                duration_ms,
+                                errors,
+                                ..ReconcileStats::default()
+                            },
+                        });
+                        claimed >= claim_batch_size
+                    }
+                    Err(error) => {
+                        error!(%error, stage, "ingestion stage loop failed");
+                        false
+                    }
+                };
+                if interrupted {
+                    stopping = true;
+                    break;
                 }
-            };
-            tokio::pin!(batch);
-            let (stopping, result) = tokio::select! {
-                result = &mut batch => (false, result),
-                _ = notifier.notified() => {
-                    shutdown.store(true, Ordering::SeqCst);
-                    (true, batch.await)
+                if !full_batch {
+                    break;
                 }
-            };
-            match result {
-                Ok((duration_ms, errors)) => results.push(ReconcileResult {
-                    source: stage.to_owned(),
-                    stats: ReconcileStats {
-                        duration_ms,
-                        errors,
-                        ..ReconcileStats::default()
-                    },
-                }),
-                Err(error) => error!(%error, stage, "ingestion stage loop failed"),
+                tokio::task::yield_now().await;
             }
             if stopping {
                 break;

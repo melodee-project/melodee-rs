@@ -46,9 +46,9 @@ async fn two_hundred_manifests_catalog_exactly_once_with_bounded_queries_and_no_
                 u32::try_from(ordinal).expect("fixture ordinal fits u32"),
                 CatalogFixturePresentation {
                     release_title: &format!("Catalog Release {ordinal:04}"),
-                    release_artist: "Same Name Across Releases",
+                    release_artist: &format!("Catalog Artist {ordinal:04}"),
                     track_title: &format!("Catalog Track {ordinal:04}"),
-                    track_artist: "Same Name Across Releases",
+                    track_artist: &format!("Catalog Artist {ordinal:04}"),
                     release_date: "2004-05-06",
                 },
             )

@@ -1891,6 +1891,11 @@ async fn insert_automated_reconciliation_evidence(
         ArtistReconciliationEvidence::RepeatedPrimaryReleaseCredit { .. } => {
             &[("name_similarity", 9_000), ("release_context", 9_000)]
         }
+        // A repeated credit is the same evidence either way; a Track credit is
+        // slightly weaker context than a primary Release credit.
+        ArtistReconciliationEvidence::RepeatedCredit { .. } => {
+            &[("name_similarity", 9_000), ("track_participation", 8_500)]
+        }
     };
     let mut ids = Vec::with_capacity(observation_ids.len().saturating_mul(facts.len()));
     let mut observations = Vec::with_capacity(ids.capacity());

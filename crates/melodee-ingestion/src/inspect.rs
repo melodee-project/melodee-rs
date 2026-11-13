@@ -470,24 +470,47 @@ pub fn start_inspection_loop(
         }
         let interval = TokioDuration::try_from(ingestion.reconciliation_interval)
             .unwrap_or_else(|_| TokioDuration::from_secs(30));
+        // Drain a full batch instead of sleeping out the tick: the interval is the
+        // idle cadence, not a throughput ceiling.
+        let claim_batch_size = work_config.claim_batch_size as u64;
         let mut ticker = time::interval(interval);
         let mut results = Vec::new();
         loop {
             tokio::select! {
-                _ = ticker.tick() => {
-                    match inspect_ready_once(&ingestion, &store, &pool, &work_config, OffsetDateTime::now_utc(), gate.as_deref()).await {
-                        Ok(stats) => results.push(crate::ReconcileResult {
-                            source: "inspection".to_owned(),
-                            stats: crate::ReconcileStats {
-                                duration_ms: stats.duration_ms,
-                                errors: stats.errors,
-                                ..crate::ReconcileStats::default()
-                            },
-                        }),
-                        Err(error) => error!(%error, "inspection loop failed"),
-                    }
-                }
+                _ = ticker.tick() => {}
                 _ = notifier.notified() => break,
+            }
+            loop {
+                let stopped = tokio::select! {
+                    result = inspect_ready_once(&ingestion, &store, &pool, &work_config, OffsetDateTime::now_utc(), gate.as_deref()) => {
+                        match result {
+                            Ok(stats) => {
+                                let full_batch = stats.claimed >= claim_batch_size;
+                                results.push(crate::ReconcileResult {
+                                    source: "inspection".to_owned(),
+                                    stats: crate::ReconcileStats {
+                                        duration_ms: stats.duration_ms,
+                                        errors: stats.errors,
+                                        ..crate::ReconcileStats::default()
+                                    },
+                                });
+                                if !full_batch {
+                                    break;
+                                }
+                                false
+                            }
+                            Err(error) => {
+                                error!(%error, "inspection loop failed");
+                                break;
+                            }
+                        }
+                    }
+                    _ = notifier.notified() => true,
+                };
+                if stopped {
+                    break;
+                }
+                tokio::task::yield_now().await;
             }
         }
         results

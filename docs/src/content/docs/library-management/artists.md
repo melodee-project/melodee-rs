@@ -17,13 +17,20 @@ that same Release has the same normalized value. Other differently named Artists
 Release do not make that exact match ambiguous. If no Release Artist or multiple Release Artist
 observations match, the Track keeps a separate provisional identity for review.
 
-Across Releases, exact name equality by itself never merges Artists automatically. When that exact
-name recurs specifically as the primary Artist credit on different non-deleted Releases, however,
-Melodee converges the provisional rows if the complete same-name group has no differentiating
-evidence. This repairs ordinary import duplicates such as one `Alice Cooper` row per Release,
-including rows left by older binaries; the bounded repair runs after imports and when the catalog
-scheduler starts. Every consolidation is audited and reversible, and the surviving Artist remains
-provisional.
+Across Releases, an exact normalized name is a **reuse hint**, not an identity key. When a credit
+names an Artist whose normalized value is exactly equal to exactly one existing Artist that has no
+disambiguation hint and no conflicting trusted provider identifier, the importer reuses that Artist
+instead of creating a second row — the same lookup the previous Melodee server performed, which is
+why one artist appearing on many Releases is one Artist. Reuse never matches fuzzily (`The Coral` is
+not `Coral`), never matches through aliases, and never overrides a provider conflict or a
+disambiguation hint, so genuinely different same-name artists still get their own rows.
+
+Catalogues written before that rule can still contain one row per Release. Melodee converges those
+duplicates for both primary Release credits and Track credits when the complete same-name group has
+no differentiating evidence. This repairs ordinary import duplicates such as one `Alice Cooper` row
+per Release, including rows left by older binaries; the bounded repair runs after imports and when
+the catalog scheduler starts. Every consolidation is audited and reversible, and the surviving
+Artist remains provisional.
 
 External IDs, disambiguation, Artist type, active dates, memberships, relationships, manual or
 locked decisions, **Never Match** assertions, differing aliases, and ambiguous same-Release billing
@@ -31,8 +38,9 @@ block that contextual rule for the complete name group. Blocked and name-only ca
 separate in Identity Review. Candidate cards include Artist disambiguation text, so legitimate
 same-name identities such as `Nirvana — UK psychedelic group` and `Nirvana — US grunge band` can be
 reviewed without changing their canonical names. When source tags provide neither disambiguation
-nor other identity evidence, two real homonyms are unknowable; an administrator can split an
-incorrect provisional consolidation without losing raw observations or public-ID redirects.
+nor other identity evidence, two real homonyms are unknowable — the import may reuse one row for
+them, exactly as the previous server did; an administrator can split an incorrect provisional
+consolidation without losing raw observations or public-ID redirects.
 
 The stronger cross-Release path converges Artists when both carry the same trusted, well-formed
 provider identifier. Known conflicts—different IDs from the same provider,
