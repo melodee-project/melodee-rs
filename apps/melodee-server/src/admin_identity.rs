@@ -19,14 +19,15 @@
 use axum::{
     Json, Router,
     extract::{Path, Query, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post},
 };
 use melodee_domain::{
-    Artist, ArtistId, ArtistMatchDecision, ArtistMatchOutcome, ArtistMerge,
-    ArtistNegativeAssertion, ArtistPublicId, ArtistSplit, ArtistStatus, ArtistType, Confidence,
-    DecisionAuthority, NewArtist, NewArtistMatchDecision, SplitAssignment,
+    Artist, ArtistId, ArtistMatchDecision, ArtistMatchEvidence, ArtistMatchEvidenceId,
+    ArtistMatchOutcome, ArtistMerge, ArtistNegativeAssertion, ArtistPublicId, ArtistSplit,
+    ArtistStatus, ArtistType, Confidence, DecisionAuthority, EvidenceKind, EvidencePolarity,
+    NewArtist, NewArtistMatchDecision, ObservedArtistId, SplitAssignment,
 };
 use melodee_persistence::{
     ArtistIdentityRef, ArtistMergeImpact, ArtistMergePreview, ArtistMergePreviewArtist,
@@ -38,9 +39,18 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::admin_access::{AdminAccessErrorBody, AdminAccessState, AdminPrincipal};
+use crate::admin_agent::agent_label;
 
 /// Maximum rows returned by identity listings.
 const MAX_LIST_LIMIT: u32 = 500;
+
+/// Maximum evidence facts an agent may attach to one proposal. Each fact is
+/// separately persisted and audited, so the bound protects the append-only
+/// evidence table from a single oversized request.
+const MAX_PROPOSAL_EVIDENCE: usize = 32;
+
+/// Maximum serialized size of one evidence payload.
+const MAX_PROPOSAL_PAYLOAD_BYTES: usize = 8 * 1024;
 
 /// Resolver-version label recorded for admin-API identity corrections.
 const ADMIN_RESOLVER_VERSION: &str = "admin-api-identity-v1";
@@ -257,6 +267,42 @@ pub struct ResolveResponseDto {
     pub observation_id: Uuid,
     pub resolution: String,
     pub artist_id: Option<Uuid>,
+    pub changed: bool,
+}
+
+/// One evidence fact supplied by an agent proposal. The server assigns the
+/// evidence id, stamps the source as the calling agent, and persists the
+/// payload immutably; this is evidence, not a match decision.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProposalEvidenceDto {
+    pub kind: String,
+    pub polarity: String,
+    pub confidence: u16,
+    #[serde(default)]
+    pub payload: serde_json::Value,
+}
+
+/// A non-authoritative proposal from an AI harness. It never advances the
+/// authoritative identity pointer or mutates Release/Track credits; an
+/// administrator still confirms or rejects it.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProposeRequest {
+    pub artist_id: Uuid,
+    pub confidence: u16,
+    pub reason: String,
+    pub evidence: Vec<ProposalEvidenceDto>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProposeResponseDto {
+    pub observation_id: Uuid,
+    pub artist_id: Uuid,
+    pub decision_id: Uuid,
+    pub outcome: String,
+    pub confidence: u16,
     pub changed: bool,
 }
 
@@ -497,6 +543,10 @@ pub fn router() -> Router<AdminAccessState> {
         .route(
             "/api/admin/v1/identity/observations/{id}/never-match",
             post(never_match),
+        )
+        .route(
+            "/api/admin/v1/identity/observations/{id}/propose",
+            post(propose_observation),
         )
         .route("/api/admin/v1/identity/decisions", get(identity_decisions))
         .route("/api/admin/v1/identity/artists/merge", post(merge_artists))
@@ -857,6 +907,221 @@ async fn never_match(
             .into_response()
         }
         Err(error) => catalog_error(error),
+    }
+}
+
+/// POST /api/admin/v1/identity/observations/{id}/propose — record a
+/// non-authoritative, evidence-backed proposal from an AI harness. The
+/// proposal is visible in observation detail and the decision feed, but it
+/// neither advances the authoritative identity pointer nor changes any
+/// Release/Track credit. An administrator still confirms, creates a new
+/// Artist, or rejects the candidate.
+async fn propose_observation(
+    State(state): State<AdminAccessState>,
+    admin: AdminPrincipal,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+    Json(request): Json<ProposeRequest>,
+) -> Response {
+    let reason = request.reason.trim().to_string();
+    if reason.is_empty() {
+        return identity_error(
+            StatusCode::BAD_REQUEST,
+            "invalid_reason",
+            "a non-blank reason is required",
+        );
+    }
+    let confidence = match Confidence::new(request.confidence) {
+        Ok(confidence) => confidence,
+        Err(_) => {
+            return identity_error(
+                StatusCode::BAD_REQUEST,
+                "invalid_confidence",
+                "confidence must be between 0 and 10000 basis points",
+            );
+        }
+    };
+    if request.evidence.is_empty() {
+        return identity_error(
+            StatusCode::BAD_REQUEST,
+            "missing_evidence",
+            "an agent proposal must carry at least one evidence fact",
+        );
+    }
+    if request.evidence.len() > MAX_PROPOSAL_EVIDENCE {
+        return identity_error(
+            StatusCode::BAD_REQUEST,
+            "too_many_evidence",
+            format!("at most {MAX_PROPOSAL_EVIDENCE} evidence facts are accepted per proposal"),
+        );
+    }
+    let mut parsed_evidence = Vec::with_capacity(request.evidence.len());
+    for item in &request.evidence {
+        let Some(kind) = proposal_evidence_kind(&item.kind) else {
+            return identity_error(
+                StatusCode::BAD_REQUEST,
+                "invalid_evidence_kind",
+                format!("unknown evidence kind '{}'", item.kind),
+            );
+        };
+        let Some(polarity) = proposal_evidence_polarity(&item.polarity) else {
+            return identity_error(
+                StatusCode::BAD_REQUEST,
+                "invalid_evidence_polarity",
+                "evidence polarity must be 'supports' or 'conflicts'",
+            );
+        };
+        let evidence_confidence = match Confidence::new(item.confidence) {
+            Ok(confidence) => confidence,
+            Err(_) => {
+                return identity_error(
+                    StatusCode::BAD_REQUEST,
+                    "invalid_evidence_confidence",
+                    "evidence confidence must be between 0 and 10000 basis points",
+                );
+            }
+        };
+        let payload_size = match serde_json::to_vec(&item.payload) {
+            Ok(payload) => payload.len(),
+            Err(_) => {
+                return identity_error(
+                    StatusCode::BAD_REQUEST,
+                    "invalid_evidence_payload",
+                    "evidence payload must be serializable JSON",
+                );
+            }
+        };
+        if payload_size > MAX_PROPOSAL_PAYLOAD_BYTES {
+            return identity_error(
+                StatusCode::BAD_REQUEST,
+                "evidence_payload_too_large",
+                format!("each evidence payload must be at most {MAX_PROPOSAL_PAYLOAD_BYTES} bytes"),
+            );
+        }
+        parsed_evidence.push((kind, polarity, evidence_confidence, item.payload.clone()));
+    }
+
+    let detail = match load_detail(&state.pool, id).await {
+        Ok(detail) => detail,
+        Err(response) => return *response,
+    };
+    if detail.current.is_some() {
+        return identity_error(
+            StatusCode::CONFLICT,
+            "already_resolved",
+            "the observation already has an authoritative match decision",
+        );
+    }
+    let artist = match resolvable_artist(&state.pool, request.artist_id).await {
+        Ok(artist) => artist,
+        Err(response) => return *response,
+    };
+
+    let label = agent_label(&headers).unwrap_or_else(|| "api".to_string());
+    let resolver_version = format!("agent:{label}");
+    let now = OffsetDateTime::now_utc();
+    let mut evidence_rows = Vec::with_capacity(parsed_evidence.len());
+    for (kind, polarity, evidence_confidence, payload) in parsed_evidence {
+        let evidence = ArtistMatchEvidence {
+            id: ArtistMatchEvidenceId::new(),
+            observed_artist_id: ObservedArtistId::from_uuid(id),
+            candidate_artist_id: artist.id,
+            kind,
+            polarity,
+            confidence: evidence_confidence,
+            source: resolver_version.clone(),
+        };
+        if let Err(error) = ArtistMatchEvidence::new(evidence.clone()) {
+            return store_failure("proposal evidence construction failed", &error);
+        }
+        if let Err(error) = CatalogStore
+            .record_artist_match_evidence(&state.pool, &evidence, payload, now)
+            .await
+        {
+            return catalog_error(error);
+        }
+        evidence_rows.push(evidence);
+    }
+
+    let decision = match ArtistMatchDecision::new(
+        NewArtistMatchDecision {
+            id: melodee_domain::ArtistMatchDecisionId::new(),
+            observed_artist_id: ObservedArtistId::from_uuid(id),
+            artist_id: artist.id,
+            outcome: ArtistMatchOutcome::Proposed,
+            authority: DecisionAuthority::Automated {
+                resolver_version: resolver_version.clone(),
+            },
+            locked: false,
+            reason: reason.clone(),
+            decided_at: now,
+        },
+        &evidence_rows,
+    ) {
+        Ok(decision) => decision,
+        Err(error) => return store_failure("proposal decision construction failed", &error),
+    };
+    let decision_id = decision.id().into_uuid();
+    match CatalogStore
+        .record_artist_match_decision(
+            &state.pool,
+            &decision,
+            confidence,
+            serde_json::json!({
+                "surface": "admin-api/v1/identity/propose",
+                "agent": &label,
+                "evidence_count": evidence_rows.len(),
+            }),
+        )
+        .await
+    {
+        Ok(()) => {
+            tracing::info!(
+                actor = %admin.public_api_id,
+                agent = %label,
+                observation = %id,
+                artist = %request.artist_id,
+                evidence = evidence_rows.len(),
+                "agent proposed observed Artist match"
+            );
+            Json(ProposeResponseDto {
+                observation_id: id,
+                artist_id: request.artist_id,
+                decision_id,
+                outcome: "proposed".to_string(),
+                confidence: confidence.basis_points(),
+                changed: true,
+            })
+            .into_response()
+        }
+        Err(error) => catalog_error(error),
+    }
+}
+
+/// Parses the persisted evidence-kind vocabulary used by the resolver and the
+/// Admin API. Unknown values are rejected instead of being stored as free text.
+fn proposal_evidence_kind(value: &str) -> Option<EvidenceKind> {
+    Some(match value {
+        "name_similarity" => EvidenceKind::NameSimilarity,
+        "alias" => EvidenceKind::Alias,
+        "embedded_external_id" => EvidenceKind::EmbeddedExternalId,
+        "release_context" => EvidenceKind::ReleaseContext,
+        "track_participation" => EvidenceKind::TrackParticipation,
+        "artist_type" => EvidenceKind::ArtistType,
+        "active_date" => EvidenceKind::ActiveDate,
+        "area" => EvidenceKind::Area,
+        "group_membership" => EvidenceKind::GroupMembership,
+        "external_provider_agreement" => EvidenceKind::ExternalProviderAgreement,
+        "manual" => EvidenceKind::Manual,
+        _ => return None,
+    })
+}
+
+fn proposal_evidence_polarity(value: &str) -> Option<EvidencePolarity> {
+    match value {
+        "supports" => Some(EvidencePolarity::Supports),
+        "conflicts" => Some(EvidencePolarity::Conflicts),
+        _ => None,
     }
 }
 

@@ -470,6 +470,9 @@ pub struct ReleaseCatalogDetail {
     /// evidence); never exposed on the wire.
     pub internal_id: Uuid,
     pub public_api_id: Uuid,
+    /// Public id of the surviving Release when this Release is a merge
+    /// tombstone; `None` for an active Release.
+    pub merged_into_public_id: Option<Uuid>,
     pub title: String,
     pub sort_title: String,
     pub display_artist: Option<String>,
@@ -490,7 +493,38 @@ pub struct ReleaseCatalogDetail {
     pub contributors: BoundedSection<ContributionRow>,
     pub media_assets: BoundedSection<MediaAssetRow>,
     pub provenance: Option<ReleaseProvenanceRow>,
+    /// Durable provider/tag evidence for the Release. Trusted rows are the
+    /// only ones that participate in automatic convergence; every row is
+    /// evidence, never a canonical identity.
+    pub external_identities: BoundedSection<ReleaseExternalIdentityRow>,
+    /// Audited, reversible merge events in which this Release participated,
+    /// newest first. A merged source Release's latest event is the input to
+    /// the split operation.
+    pub merge_events: BoundedSection<ReleaseMergeEventRow>,
     pub history: BoundedSection<CatalogAuditEventRow>,
+}
+
+/// One durable Release external-identity observation.
+#[derive(Debug, Clone)]
+pub struct ReleaseExternalIdentityRow {
+    pub provider: String,
+    pub external_id: String,
+    pub trusted: bool,
+    pub confidence: i32,
+    pub evidence_source: String,
+    pub is_locked: bool,
+    pub observed_at: OffsetDateTime,
+}
+
+/// One audited Release merge event, exposed so an operator can reverse it.
+#[derive(Debug, Clone)]
+pub struct ReleaseMergeEventRow {
+    pub id: Uuid,
+    pub source_release_public_id: Uuid,
+    pub target_release_public_id: Uuid,
+    pub actor: String,
+    pub reason: String,
+    pub created_at: OffsetDateTime,
 }
 
 /// Full operator detail image of one catalog Track.
@@ -1056,6 +1090,7 @@ impl CatalogStore {
             _,
             (
                 Uuid,
+                Option<Uuid>,
                 String,
                 String,
                 Option<String>,
@@ -1070,7 +1105,7 @@ impl CatalogStore {
                 OffsetDateTime,
             ),
         >(
-            "SELECT release.id, release.title, release.sort_title,
+            "SELECT release.id, merged.public_api_id, release.title, release.sort_title,
                     release.display_artist, release.release_date,
                     release.release_date_text, release.status,
                     workflow.state AS workflow_state,
@@ -1078,6 +1113,7 @@ impl CatalogStore {
                     decision.evidence_summary AS policy_evidence_summary,
                     release.revision, release.created_at, release.updated_at
                FROM releases release
+               LEFT JOIN releases merged ON merged.id = release.merged_into_release_id
                LEFT JOIN catalog_imports import ON import.release_id = release.id
                LEFT JOIN release_work_items workflow ON workflow.id = import.work_item_id
                LEFT JOIN policy_decisions decision ON decision.release_id = release.id
@@ -1088,6 +1124,7 @@ impl CatalogStore {
         .await?;
         let Some((
             id,
+            merged_into_public_id,
             title,
             sort_title,
             display_artist,
@@ -1259,10 +1296,47 @@ impl CatalogStore {
             },
         );
         let history = audit_history(pool, "release", id, limit).await?;
+        let external_identities = section_rows(
+            sqlx::query(
+                "SELECT provider, external_id, trusted, confidence,
+                        evidence_source, is_locked, observed_at,
+                        COUNT(*) OVER () AS total_count
+                   FROM release_external_identities
+                  WHERE release_id = $1
+                  ORDER BY trusted DESC, confidence DESC, provider, external_id
+                  LIMIT $2",
+            )
+            .bind(id)
+            .bind(limit)
+            .fetch_all(pool)
+            .await?,
+            release_external_identity_row,
+        );
+        let merge_events = section_rows(
+            sqlx::query(
+                "SELECT event.id,
+                        source.public_api_id AS source_release_public_id,
+                        target.public_api_id AS target_release_public_id,
+                        event.actor, event.reason, event.created_at,
+                        COUNT(*) OVER () AS total_count
+                   FROM release_merge_events event
+                   JOIN releases source ON source.id = event.source_release_id
+                   JOIN releases target ON target.id = event.target_release_id
+                  WHERE event.source_release_id = $1 OR event.target_release_id = $1
+                  ORDER BY event.created_at DESC, event.id DESC
+                  LIMIT $2",
+            )
+            .bind(id)
+            .bind(limit)
+            .fetch_all(pool)
+            .await?,
+            release_merge_event_row,
+        );
 
         Ok(Some(ReleaseCatalogDetail {
             internal_id: id,
             public_api_id,
+            merged_into_public_id,
             title,
             sort_title,
             display_artist,
@@ -1283,6 +1357,8 @@ impl CatalogStore {
             contributors,
             media_assets,
             provenance,
+            external_identities,
+            merge_events,
             history,
         }))
     }
@@ -1472,6 +1548,33 @@ fn media_asset_row(row: &sqlx::postgres::PgRow) -> MediaAssetRow {
         channels: row.get("channels"),
         bitrate_bps: row.get("bitrate_bps"),
         duration_ms: row.get("duration_ms"),
+    }
+}
+
+/// Decodes one Release external-identity evidence row.
+fn release_external_identity_row(row: &sqlx::postgres::PgRow) -> ReleaseExternalIdentityRow {
+    use sqlx::Row as _;
+    ReleaseExternalIdentityRow {
+        provider: row.get("provider"),
+        external_id: row.get("external_id"),
+        trusted: row.get("trusted"),
+        confidence: row.get("confidence"),
+        evidence_source: row.get("evidence_source"),
+        is_locked: row.get("is_locked"),
+        observed_at: row.get("observed_at"),
+    }
+}
+
+/// Decodes one Release merge event row.
+fn release_merge_event_row(row: &sqlx::postgres::PgRow) -> ReleaseMergeEventRow {
+    use sqlx::Row as _;
+    ReleaseMergeEventRow {
+        id: row.get("id"),
+        source_release_public_id: row.get("source_release_public_id"),
+        target_release_public_id: row.get("target_release_public_id"),
+        actor: row.get("actor"),
+        reason: row.get("reason"),
+        created_at: row.get("created_at"),
     }
 }
 

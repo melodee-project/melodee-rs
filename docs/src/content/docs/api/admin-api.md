@@ -9,8 +9,8 @@ The Admin API is a Rust-native administration and curation API, separate from th
 API v1, OpenSubsonic, and Jellyfin compatibility surfaces. It uses Melodee's own vocabulary
 (`Release` work items, not `Album`) and is independently versioned under `/api/admin/v1`.
 
-It is intended for operators and administrators monitoring ingestion, diagnosing failures, and
-eventually curating the catalog. It is **not** a compatibility surface for existing clients.
+It is intended for operators, administrators, and authorized curation harnesses monitoring
+ingestion, diagnosing failures, and curating the catalog. It is **not** a compatibility surface for existing clients.
 
 ## Authentication and authorization
 
@@ -25,6 +25,12 @@ The admin single-page application (served by the server at `/admin` when the bui
 deployed — see [Configuration](../installation/configuration/)) signs in through the native
 cookie sign-in endpoints (`POST /api/v1/auth/cookie/sign-in`) and is bound by the same gate;
 route guards in the UI are a convenience only.
+
+Automated curation harnesses and coding agents authenticate the same way (preferably with a
+bearer token) and may send an optional `X-Melodee-Agent: <name>` header. The value is trimmed,
+bounded, stripped of control characters, and recorded as advisory attribution in tracing and in
+an agent proposal's authority. It never replaces the administrator gate or the durable audit
+actor, which remains the administrator's public user id.
 
 The browser-facing `/admin` and `/api/admin/v1` responses carry a dedicated security-header
 policy: a same-origin Content Security Policy, `X-Content-Type-Options: nosniff`,
@@ -472,6 +478,41 @@ Body: `{"artistId": "…", "reason": "…"}`. Records a durable, locked negative
 the exact observation/candidate pair; automated resolvers then fail closed for that pair.
 Repeating the same pair returns `409`.
 
+### Propose an observation match
+
+```http
+POST /api/admin/v1/identity/observations/{id}/propose
+```
+
+Body:
+
+```json
+{
+  "artistId": "…",
+  "confidence": 8200,
+  "reason": "exact normalized name plus shared release context",
+  "evidence": [
+    {
+      "kind": "name_similarity",
+      "polarity": "supports",
+      "confidence": 8200,
+      "payload": { "normalized": "example" }
+    }
+  ]
+}
+```
+
+This is the agent-assisted curation path. It records the immutable evidence facts and a
+**non-authoritative** `proposed` decision with automated authority. A proposal never advances
+the authoritative identity pointer and never changes a Release or Track credit; an administrator
+still confirms the candidate, creates a new Artist, or rejects it. At least one evidence fact is
+required (maximum 32; each payload is limited to 8 KiB). Known kinds are `name_similarity`,
+`alias`, `embedded_external_id`, `release_context`, `track_participation`, `artist_type`,
+`active_date`, `area`, `group_membership`, `external_provider_agreement`, and `manual`; polarity
+is `supports` or `conflicts`. Proposals return `409 already_resolved` once an authoritative
+decision exists. The optional `X-Melodee-Agent` label becomes the automated authority
+(`agent:<name>`) and is stored in the decision payload.
+
 ### Identity decision feed
 
 ```http
@@ -648,7 +689,11 @@ and a per-Track `streamUrl` (see [Track detail](#track-detail) below),
 billed Artists with roles and join phrases, contributors, the distinct media files, the
 persisted classification (traits, confidence, classifier version) when policy has evaluated the
 Release, the immutable import provenance (work item, manifest ids and hashes, resolver version,
-import time), an `imageId`, and the audit history. Sub-lists are bounded as above.
+import time), the durable provider/tag `externalIdentities` (each row carries `trusted`,
+`confidence`, `evidenceSource`, `isLocked`, and `observedAt`), the audited `mergeEvents` in which
+this Release participated (newest first; each carries the `id` needed for a split), the surviving
+Release in `mergedIntoReleaseId` when this row is a merge tombstone, an `imageId`, and the audit
+history. Sub-lists are bounded as above.
 
 ### Track detail
 
@@ -673,6 +718,80 @@ admin API itself. Track streaming and Release/Track artwork obey the accepted-Re
 boundary: a non-active policy result is intentionally unavailable until an audited Accept decision
 restores the Release to active. Artwork reads for a withheld Release answer with the captured default
 image, so a client slot renders instead of breaking, but never with that Release's own cover.
+
+### Duplicate candidate scans
+
+```http
+GET /api/admin/v1/catalog/duplicates/artists?limit=50&offset=0&minScore=0
+GET /api/admin/v1/catalog/duplicates/releases?limit=50&offset=0&minScore=0
+```
+
+These read-only, bounded scans return likely duplicate pairs for review by an operator or an
+AI curation harness. `limit` is 1–200 (default 50), `offset` is capped at 1,000,000, and
+`minScore` filters the advisory score (0–10000, default 0). The response uses the shared
+pagination envelope plus the pair's evidence and blockers:
+
+```json
+{
+  "items": [
+    {
+      "score": 6000,
+      "left": { "id": "…", "name": "…", "status": "active" },
+      "right": { "id": "…", "name": "…", "status": "active" },
+      "evidence": [
+        {
+          "kind": "shared_trusted_external_id",
+          "weight": 6000,
+          "detail": { "provider": "musicbrainz", "externalId": "…" }
+        }
+      ],
+      "blockers": [
+        { "kind": "disambiguation_conflict", "detail": { "left": null, "right": "US grunge band" } }
+      ]
+    }
+  ],
+  "total": 1,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+Artist evidence kinds include `exact_normalized_name`, `alias_overlap`,
+`shared_trusted_external_id`, and `shared_provider_candidate`. Release evidence kinds include
+`shared_trusted_external_id`, `shared_audio_identity` and `shared_track_titles` (both with
+`sharedTrackCount`), `same_title_and_display_artist`, and `same_normalized_title`. `shared_track_titles`
+matches normalized Track titles with durations within two seconds across the two Releases.
+
+Blockers are explicit safety signals, not silent vetoes. Artist blockers include `name_only`
+(always present when equality of names is the only evidence), `disambiguation_conflict`,
+`artist_type_conflict`, and `trusted_provider_conflict`. Release blockers include
+`no_shared_recording_or_provider_evidence`, `trusted_provider_conflict`,
+`release_date_mismatch`, and `track_count_mismatch`.
+
+A candidate is never an identity decision. The scan never writes identity rows, never merges,
+and never treats a score as authority. Use the normal merge/resolve endpoints after review,
+with a reason and the administrator's audit identity.
+
+### Release identity correction
+
+```http
+POST /api/admin/v1/catalog/releases/merge/preview
+POST /api/admin/v1/catalog/releases/merge
+POST /api/admin/v1/catalog/releases/{id}/split
+```
+
+Preview body: `{"sourceReleaseId": "…", "targetReleaseId": "…"}`. It returns both Release
+summaries, the moved Track/observation/contribution counts, the target's Track count after the
+merge, the number of shared recordings, metadata conflicts (`title`, `displayArtist`,
+`releaseDate`, `releaseDateText`), and warnings. Preview never mutates data.
+
+Merge accepts the same two public ids plus a required `reason`. It moves the source Tracks and
+observations to the target, records an auditable merge event, and leaves the source as a
+`merged` redirect tombstone. Canonical media files are never moved or deleted.
+
+Split body: `{"mergeEventId": "…", "reason": "…"}` on the source Release path. `mergeEventId`
+comes from the source Release's `mergeEvents` detail section. Split restores exactly that merge's
+Tracks and observations using its immutable ordinal map and records a split event.
 
 ### Catalog artwork overrides
 

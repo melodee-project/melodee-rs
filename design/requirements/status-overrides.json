@@ -2977,13 +2977,17 @@
   "PRD-API-ADMIN-002": {
     "status": "tested",
     "implementation": [
-      "admin.rs, admin_review.rs, admin_identity.rs, admin_policies.rs, admin_system.rs, admin_catalog.rs, admin_access.rs, admin_config.rs, admin_onboarding.rs, admin_notifications.rs, admin_scripts.rs, admin_radio.rs, admin_device_profiles.rs (work items, evidence, decisions, policies, queues, workers, health, identities, Releases, Tracks, users, config, audit)",
-      "catalog_mutations.rs (metadata edit endpoints: release/artist/track metadata update with audit events)"
+      "admin.rs, admin_review.rs, admin_identity.rs, admin_policies.rs, admin_system.rs, admin_catalog.rs, admin_access.rs, admin_config.rs, admin_onboarding.rs, admin_notifications.rs, admin_scripts.rs, admin_radio.rs, admin_device_profiles.rs, admin_duplicates.rs, admin_release_identity.rs (work items, evidence, decisions, policies, queues, workers, health, identities, Releases, Tracks, users, config, audit, duplicate candidate scans, Release merge/split, agent proposals)",
+      "catalog_mutations.rs (metadata edit endpoints: release/artist/track metadata update with audit events)",
+      "design/adr/ADR-0196-expose-duplicate-candidate-scans-and-release-identity-correction-in-the-admin-api.md (evidence/blocker vocabulary, non-authoritative proposals, advisory agent attribution)"
     ],
     "tests": [
       "apps/melodee-server/tests/ (all admin suites green; full workspace gate)",
       "apps/melodee-server/tests/admin_catalog_api.rs (metadata update routes: auth, success, 400 validation, 404)",
-      "crates/melodee-persistence/tests/catalog_metadata.rs (7 store-level tests)"
+      "apps/melodee-server/tests/admin_duplicates_api.rs (administrator gate, Artist/Release candidate evidence and blockers, score filtering/paging, Release merge preview/apply/split, tombstone detail, agent proposal authority and rejection)",
+      "crates/melodee-persistence/tests/catalog_metadata.rs (7 store-level tests)",
+      "crates/melodee-persistence/tests/migrations.rs (0047 duplicate candidate indexes migrate from empty and forward)",
+      "crates/melodee-persistence/tests/catalog_import.rs (trusted Release evidence merge/split remains reversible)"
     ]
   },
   "PRD-API-ADMIN-003": {

@@ -42,6 +42,21 @@ acting administrator:
 A **recent decisions** feed on the same screen shows the append-only identity audit — matches,
 evidence, assertions, and Artist-level events — newest first, with actor and reason.
 
+## AI-assisted proposals
+
+An AI curation harness can contribute evidence without changing identity authority. It calls
+`POST /api/admin/v1/identity/observations/{id}/propose` with a candidate Artist and one or more
+evidence facts. Melodee stores the evidence and a non-authoritative **proposed** decision; the
+observation stays in the queue and no Release or Track credit changes. The candidate comparison
+shows the proposal like any other resolver proposal, and an administrator still confirms,
+creates a new Artist, or rejects it. See
+[Propose an observation match](../api/admin-api/#propose-an-observation-match).
+
+Harnesses can also use the read-only
+[duplicate candidate scans](../api/admin-api/#duplicate-candidate-scans) to find likely duplicate
+Artists and Releases with the supporting evidence and explicit blockers. A scan result is a
+review suggestion, never an automatic merge.
+
 ## Merge and split
 
 The screen also corrects Artist identities directly:

@@ -63,8 +63,8 @@ pub use catalog_browse::{
     BilledArtistRow, BoundedSection, CatalogArtistListRow, CatalogArtistSort, CatalogAuditEventRow,
     CatalogBrowseError, CatalogReleaseListRow, CatalogReleaseSort, CatalogTrackListRow,
     CatalogTrackSort, ContributionRow, MAX_CATALOG_BROWSE_QUERY_CHARS, MAX_CATALOG_DETAIL_ITEMS,
-    MediaAssetRow, ReleaseCatalogDetail, ReleaseProvenanceRow, ReleaseTrackRow, TrackCatalogDetail,
-    contains_pattern,
+    MediaAssetRow, ReleaseCatalogDetail, ReleaseExternalIdentityRow, ReleaseMergeEventRow,
+    ReleaseProvenanceRow, ReleaseTrackRow, TrackCatalogDetail, contains_pattern,
 };
 pub use catalog_identity::{
     ArtistMergeImpact, ArtistMergePreview, ArtistMergePreviewArtist, MAX_ARTIST_MERGE_SOURCES,

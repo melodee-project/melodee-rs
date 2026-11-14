@@ -44,5 +44,12 @@ An administrator-confirmed deletion removes the Release from this listing and de
 canonical and retained staged media. Immutable identifiers and audit evidence remain as a
 non-browsable tombstone; see [Release Review](./release-review/#deciding).
 
-The same routes are available over
+Duplicate Releases can be reviewed from the admin API's
+[duplicate candidate scan](../api/admin-api/#duplicate-candidate-scans). A confirmed duplicate can
+be merged through the audited
+[Release identity correction](../api/admin-api/#release-identity-correction) endpoints: the
+source Release becomes a redirect tombstone, its Tracks move to the surviving Release, and the
+operation can be reversed with the recorded merge event. No media files are moved or deleted.
+
+The same browsing routes are available over
 [Admin API — Catalog browsing and detail](../api/admin-api/#catalog-browsing-and-detail).

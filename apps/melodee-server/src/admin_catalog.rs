@@ -27,8 +27,8 @@ use melodee_persistence::{
     CatalogAuditEventRow, CatalogBrowseError, CatalogImageAudit, CatalogImageEntity,
     CatalogImageError, CatalogImageStore, CatalogReleaseSort, CatalogStore, CatalogStoreError,
     CatalogTrackSort, ContributionRow, MediaAssetRow, PolicyStore, ProviderIdentityCandidateStore,
-    ReleaseCatalogDetail, ReleaseMetadataPatch, StoredReleaseClassification, TrackCatalogDetail,
-    TrackMetadataPatch, contains_pattern,
+    ReleaseCatalogDetail, ReleaseExternalIdentityRow, ReleaseMergeEventRow, ReleaseMetadataPatch,
+    StoredReleaseClassification, TrackCatalogDetail, TrackMetadataPatch, contains_pattern,
 };
 use serde::{Deserialize, Serialize};
 use time::{Date, OffsetDateTime, format_description::well_known::Rfc3339};
@@ -765,7 +765,66 @@ pub struct ReleaseDetailDto {
     pub media_assets: SectionDto<MediaAssetDto>,
     pub classification: Option<ReleaseClassificationDto>,
     pub provenance: Option<ReleaseProvenanceDto>,
+    /// Durable provider/tag evidence. `trusted` rows are the input to
+    /// automatic Release convergence; every row is evidence, not identity.
+    pub external_identities: SectionDto<ReleaseExternalIdentityDto>,
+    /// Audited merge/split history in which this Release participated.
+    pub merge_events: SectionDto<ReleaseMergeEventDto>,
     pub history: SectionDto<CatalogAuditEventDto>,
+    /// Surviving Release when this Release is a merge tombstone.
+    pub merged_into_release_id: Option<Uuid>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReleaseExternalIdentityDto {
+    pub provider: String,
+    pub external_id: String,
+    pub trusted: bool,
+    pub confidence: i32,
+    pub evidence_source: String,
+    pub is_locked: bool,
+    #[serde(with = "crate::admin_time")]
+    pub observed_at: OffsetDateTime,
+}
+
+impl From<ReleaseExternalIdentityRow> for ReleaseExternalIdentityDto {
+    fn from(row: ReleaseExternalIdentityRow) -> Self {
+        Self {
+            provider: row.provider,
+            external_id: row.external_id,
+            trusted: row.trusted,
+            confidence: row.confidence,
+            evidence_source: row.evidence_source,
+            is_locked: row.is_locked,
+            observed_at: row.observed_at,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReleaseMergeEventDto {
+    pub id: Uuid,
+    pub source_release_id: Uuid,
+    pub target_release_id: Uuid,
+    pub actor: String,
+    pub reason: String,
+    #[serde(with = "crate::admin_time")]
+    pub created_at: OffsetDateTime,
+}
+
+impl From<ReleaseMergeEventRow> for ReleaseMergeEventDto {
+    fn from(row: ReleaseMergeEventRow) -> Self {
+        Self {
+            id: row.id,
+            source_release_id: row.source_release_public_id,
+            target_release_id: row.target_release_public_id,
+            actor: row.actor,
+            reason: row.reason,
+            created_at: row.created_at,
+        }
+    }
 }
 
 /// Full Track detail: identity facts, Release linkage, billed Artists,
@@ -1319,6 +1378,9 @@ fn release_detail_dto(
             imported_at: row.imported_at,
         }),
         history: section(detail.history, audit_event_dto),
+        external_identities: section(detail.external_identities, ReleaseExternalIdentityDto::from),
+        merge_events: section(detail.merge_events, ReleaseMergeEventDto::from),
+        merged_into_release_id: detail.merged_into_public_id,
     }
 }
 
