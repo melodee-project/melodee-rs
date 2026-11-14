@@ -11,6 +11,7 @@ tests pin the two properties that keep that safe:
 
 import importlib.util
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -19,8 +20,11 @@ ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location(
     "verify_known_corpus", ROOT / "scripts" / "verify_known_corpus.py"
 )
-MODULE = importlib.util.module_from_spec(SPEC)
 assert SPEC is not None and SPEC.loader is not None
+MODULE = importlib.util.module_from_spec(SPEC)
+# Register before execution so decorators like @dataclass can resolve the module
+# in sys.modules (required on Python 3.12 when annotations are strings).
+sys.modules[SPEC.name] = MODULE
 SPEC.loader.exec_module(MODULE)
 
 SPEC_SOURCE = ROOT / "admin-ui" / "e2e" / "live" / "known-corpus-views.spec.ts"
