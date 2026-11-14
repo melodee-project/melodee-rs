@@ -12,8 +12,17 @@ compatibility evidence by differential tests — never assumed.
 ## Authentication
 
 Requests authenticate with the OpenSubsonic token scheme (`u`, `t`, `s` query parameters or
-equivalent POST form fields). Per-user API tokens are managed in Melodee. Requests from the
-server's own host and image URLs are exempt, matching the captured compatibility behavior.
+equivalent POST form fields), or username/password (`u`, `p`). Per-user API tokens are managed in
+Melodee. Protected routes require credentials even on loopback and when the Host matches the
+server. Public ping/extension discovery and separately served native artwork keep their existing
+access rules.
+
+For upgrades from the pre-release localhost/baseUrl bypass, configure credentials in clients before
+upgrading. An isolated transition environment can explicitly set
+`MELODEE__OPENSUBSONIC__LEGACY_AUTH_BYPASS=true` to restore that legacy behavior. This grants
+anonymous catalog access to matching-host/loopback requests and must stay disabled for public
+reverse-proxy deployments. Configure the shared trusted-proxy setting separately; see
+[Configuration](../installation/configuration/#native-api-urls-streaming-and-proxies).
 
 ## Browser clients and CORS
 

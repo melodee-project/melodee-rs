@@ -151,7 +151,7 @@ async fn podcasts_recovery_requeues_only_expired_leases_and_removes_only_orphans
         .join(format!("{}.{}.tmp", Uuid::now_v7(), Uuid::now_v7()));
     std::fs::write(&orphan_tmp, b"abandoned partial").expect("orphan temp");
 
-    let database_url = common::admin_url().replace("/postgres", &format!("/{}", db.name));
+    let database_url = common::database_url(&db.name);
 
     // Listing is read-only and reports exactly the stuck + failed rows.
     let stdout = run_cli(&database_url, storage.path(), &["podcasts", "stuck"]);

@@ -41,7 +41,7 @@ jobs:
         working-directory: admin-ui
 
       - name: Static gates
-        run: pnpm check && pnpm lint && pnpm i18n:check
+        run: python3 ../scripts/ci_tasks.py admin-static
         working-directory: admin-ui
 
       - name: Unit tests

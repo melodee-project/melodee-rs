@@ -47,7 +47,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 
 import { getSystemInfo } from '../api/admin';
 import { useAuth } from '../auth/AuthContext';
-import { CULTURES, dirFor } from '../i18n';
+import { CULTURES, dirFor, isLocaleComplete } from '../i18n';
 import i18n from '../i18n';
 import { useThemeState, type Appearance } from '../theme/ThemeProvider';
 import { HealthIndicator, type HealthState } from '../components/HealthIndicator';
@@ -374,18 +374,20 @@ export function AppShell() {
           expanded={openPanel === 'language'}
           href="#language"
         >
+          <p className="melodee-shell__language-note">{t('shell.languagePreviewDescription')}</p>
           {/* SwitcherItem renders an <li>; it must sit inside a list
               (WCAG 1.3.1 — axe listitem rule). */}
           <ul className="melodee-shell__panel-list">
             {CULTURES.map((culture) => (
               <SwitcherItem
                 key={culture.code}
-                aria-label={culture.nativeName}
+                aria-label={`${culture.nativeName}${!isLocaleComplete(culture.code) ? ` — ${t('shell.languagePreview')}` : ''}`}
                 isSelected={i18n.language === culture.code}
                 onClick={() => changeLanguage(culture.code)}
               >
                 {culture.nativeName}
                 {dirFor(culture.code) === 'rtl' ? ' (RTL)' : ''}
+                {!isLocaleComplete(culture.code) ? ` — ${t('shell.languagePreview')}` : ''}
               </SwitcherItem>
             ))}
           </ul>

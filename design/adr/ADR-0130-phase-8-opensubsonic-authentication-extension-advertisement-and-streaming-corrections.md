@@ -7,7 +7,7 @@
 - **Supersedes:** None
 - **Superseded by:** ADR-0147 (partially — only the "transcode parameters remain silently
   ignored" clause of decision 2 and the "There is no transcoding" sentence of decision 4; all
-  other decisions stand)
+  other decisions stand); [ADR-0191](ADR-0191-require-explicit-legacy-authentication-bypass-and-shared-trusted-proxies.md) (decision 7 default bypass; historical behavior remains explicit opt-in)
 - **Related requirements:** PRD-API-OS-001 through PRD-API-OS-007, PRD-STREAM-002, PRD-SEC-001,
   PRD-TEST-001/002; ADR-0102 (separate adapters), ADR-0113 (no unsigned JWT),
   ADR-0123 (scope-overlap governance), ADR-0124 (native auth precedent)

@@ -21,7 +21,9 @@ use axum::{
     response::Response,
     routing::get,
 };
-use image::{ImageFormat, ImageReader, Limits, imageops::FilterType};
+#[cfg(test)]
+use image::ImageReader;
+use image::{ImageFormat, imageops::FilterType};
 use sha2::{Digest, Sha256};
 use sqlx::Row;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
@@ -46,7 +48,6 @@ pub(crate) const DEFAULT_USER: &[u8] = include_bytes!(
 );
 const MAX_IMAGE_INPUT_BYTES: u64 = 10 * 1024 * 1024;
 const MAX_IMAGE_OUTPUT_BYTES: usize = 16 * 1024 * 1024;
-const MAX_IMAGE_PIXELS: u64 = 16 * 1024 * 1024;
 const MAX_IMAGE_DIMENSION: u32 = 4096;
 const IMAGE_PROCESSING_CONCURRENCY: usize = 4;
 /// How long an artwork read waits for a processing permit before the endpoint
@@ -375,11 +376,6 @@ pub(super) async fn normalize_avatar_image(
     input: Vec<u8>,
     format: ImageFormat,
 ) -> Result<Vec<u8>, ImageUploadValidationError> {
-    const MAX_AVATAR_STORE_BYTES: usize = 1024 * 1024;
-    const MAX_AVATAR_DIMENSION: u32 = 1024;
-    if input.is_empty() || u64::try_from(input.len()).unwrap_or(u64::MAX) > MAX_IMAGE_INPUT_BYTES {
-        return Err(ImageUploadValidationError::Invalid);
-    }
     let processor =
         IMAGE_PROCESSOR.get_or_init(|| ImageProcessor::new(IMAGE_PROCESSING_CONCURRENCY));
     let permit = processor
@@ -387,27 +383,8 @@ pub(super) async fn normalize_avatar_image(
         .map_err(|_| ImageUploadValidationError::Busy)?;
     tokio::task::spawn_blocking(move || {
         let _permit = permit;
-        let image = decode_image(&input).map_err(|_| ImageUploadValidationError::Invalid)?;
-        // Bound the long edge without ever upscaling small uploads.
-        let resized =
-            if image.width() > MAX_AVATAR_DIMENSION || image.height() > MAX_AVATAR_DIMENSION {
-                image.resize(
-                    MAX_AVATAR_DIMENSION,
-                    MAX_AVATAR_DIMENSION,
-                    FilterType::Lanczos3,
-                )
-            } else {
-                image
-            };
-        let mut output = Cursor::new(Vec::new());
-        resized
-            .write_to(&mut output, format)
-            .map_err(|_| ImageUploadValidationError::Invalid)?;
-        let bytes = output.into_inner();
-        if bytes.is_empty() || bytes.len() > MAX_AVATAR_STORE_BYTES {
-            return Err(ImageUploadValidationError::Invalid);
-        }
-        Ok(bytes)
+        melodee_application::avatars::normalize_avatar_bytes(&input, format)
+            .map_err(|_| ImageUploadValidationError::Invalid)
     })
     .await
     .map_err(|_| ImageUploadValidationError::Invalid)?
@@ -422,27 +399,7 @@ pub async fn normalize_legacy_avatar_image(
 }
 
 fn decode_image(input: &[u8]) -> Result<image::DynamicImage, ImageProcessingError> {
-    let reader = ImageReader::new(Cursor::new(input))
-        .with_guessed_format()
-        .map_err(|_| ImageProcessingError)?;
-    let (width, height) = reader.into_dimensions().map_err(|_| ImageProcessingError)?;
-    if width == 0
-        || height == 0
-        || width > MAX_IMAGE_DIMENSION
-        || height > MAX_IMAGE_DIMENSION
-        || u64::from(width).saturating_mul(u64::from(height)) > MAX_IMAGE_PIXELS
-    {
-        return Err(ImageProcessingError);
-    }
-    let mut reader = ImageReader::new(Cursor::new(input))
-        .with_guessed_format()
-        .map_err(|_| ImageProcessingError)?;
-    let mut limits = Limits::default();
-    limits.max_image_width = Some(MAX_IMAGE_DIMENSION);
-    limits.max_image_height = Some(MAX_IMAGE_DIMENSION);
-    limits.max_alloc = Some(MAX_IMAGE_PIXELS.saturating_mul(4));
-    reader.limits(limits);
-    reader.decode().map_err(|_| ImageProcessingError)
+    melodee_application::avatars::decode_image(input).map_err(|_| ImageProcessingError)
 }
 
 fn parse_image_id(value: &str) -> Option<(ImageKind, Uuid)> {

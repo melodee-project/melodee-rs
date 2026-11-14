@@ -591,7 +591,8 @@ async fn set_user_password(
     {
         return admin_error(StatusCode::BAD_REQUEST, "invalid_password");
     }
-    let password_hash = match melodee_auth::hash_password(request.password.as_bytes()) {
+    let password_hash = match crate::password_work::hash_password(request.password.as_bytes()).await
+    {
         Ok(hash) => hash,
         Err(_) => return admin_error(StatusCode::SERVICE_UNAVAILABLE, "store_error"),
     };
@@ -620,7 +621,8 @@ async fn create_user(
     {
         return admin_error(StatusCode::BAD_REQUEST, "invalid_password");
     }
-    let password_hash = match melodee_auth::hash_password(request.password.as_bytes()) {
+    let password_hash = match crate::password_work::hash_password(request.password.as_bytes()).await
+    {
         Ok(hash) => hash,
         Err(_) => return admin_error(StatusCode::SERVICE_UNAVAILABLE, "store_error"),
     };

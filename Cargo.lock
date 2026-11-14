@@ -2274,6 +2274,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "melodee-application"
+version = "0.1.0"
+dependencies = [
+ "boa_engine",
+ "futures-util",
+ "image",
+ "lettre",
+ "melodee-domain",
+ "melodee-ingestion",
+ "melodee-media",
+ "melodee-persistence",
+ "melodee-search",
+ "quick-xml",
+ "reqwest",
+ "rustix 1.1.6",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "sqlx",
+ "tempfile",
+ "thiserror 2.0.21",
+ "time",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "zip",
+]
+
+[[package]]
 name = "melodee-auth"
 version = "0.1.0"
 dependencies = [
@@ -2312,6 +2342,7 @@ dependencies = [
  "base64 0.23.1",
  "clap",
  "dotenvy",
+ "melodee-application",
  "melodee-auth",
  "melodee-catalog",
  "melodee-domain",
@@ -2320,7 +2351,6 @@ dependencies = [
  "melodee-persistence",
  "melodee-policy",
  "melodee-search",
- "melodee-server",
  "ring",
  "rustix 1.1.6",
  "serde",
@@ -2457,7 +2487,6 @@ dependencies = [
  "base64 0.23.1",
  "bcrypt",
  "blake3",
- "boa_engine",
  "decentdb",
  "dotenvy",
  "futures-util",
@@ -2466,9 +2495,9 @@ dependencies = [
  "http-body-util",
  "image",
  "jsonwebtoken",
- "lettre",
  "lofty",
  "md-5",
+ "melodee-application",
  "melodee-auth",
  "melodee-catalog",
  "melodee-domain",

@@ -9,12 +9,13 @@
 //! already exist); missing or malformed packs are recorded as durable
 //! issues, never silently dropped.
 
-use std::io::{Cursor, Read};
 use std::path::Path;
 
+use melodee_application::theme_archive::read_theme_entries;
+#[cfg(test)]
+use melodee_application::theme_archive::safe_theme_entry_name;
 use sqlx::PgPool;
 use uuid::Uuid;
-use zip::{CompressionMethod, ZipArchive};
 
 use super::runs;
 use super::source::SourceDb;
@@ -35,17 +36,6 @@ fn valid_theme_id(id: &str) -> bool {
         && chars.all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-'))
 }
 
-/// Safe theme entry name check (mirrors `safe_theme_entry_name` in discovery.rs).
-fn safe_theme_entry_name(name: &str) -> bool {
-    !name.is_empty()
-        && name.len() <= 1000
-        && !name.starts_with('/')
-        && !name.contains('\\')
-        && name
-            .split('/')
-            .all(|part| !part.is_empty() && part != "." && part != "..")
-}
-
 /// Theme metadata parsed from a legacy theme pack's `theme.json`.
 #[derive(Debug, Clone)]
 struct LegacyThemeMetadata {
@@ -61,52 +51,10 @@ struct LegacyThemeMetadata {
 /// `discovery.rs::parse_theme_archive` but returns structured data for
 /// import.
 fn parse_theme_archive(bytes: &[u8]) -> Result<(LegacyThemeMetadata, ThemeAssetList), String> {
-    let mut archive = ZipArchive::new(Cursor::new(bytes)).map_err(|_| "Invalid ZIP archive")?;
-    if archive.is_empty() || archive.len() > 256 {
-        return Err("Theme archive contains an invalid number of entries".to_string());
-    }
-    let mut expanded = 0_u64;
-    let mut assets: ThemeAssetList = Vec::new();
-    let mut metadata: Option<LegacyThemeMetadata> = None;
-
-    for index in 0..archive.len() {
-        let mut entry = archive
-            .by_index(index)
-            .map_err(|_| "Invalid ZIP archive entry")?;
-        if entry.encrypted() {
-            return Err("Encrypted theme archives are not supported".to_string());
-        }
-        if !matches!(
-            entry.compression(),
-            CompressionMethod::Stored | CompressionMethod::Deflated
-        ) {
-            return Err("Unsupported ZIP compression method".to_string());
-        }
-        if entry.is_dir() {
-            continue;
-        }
-        if entry
-            .unix_mode()
-            .is_some_and(|mode| mode & 0o170_000 != 0o100_000)
-        {
-            return Err("Theme archive links and special files are not allowed".to_string());
-        }
-        let name = entry
-            .name()
-            .map_err(|e| format!("Invalid theme entry name: {e}"))?
-            .to_string();
-        if !safe_theme_entry_name(&name) {
-            return Err(format!("Unsafe theme entry name: {name}"));
-        }
-        let mut data = Vec::new();
-        entry
-            .read(&mut data)
-            .map_err(|e| format!("Cannot read theme entry: {e}"))?;
-        expanded += data.len() as u64;
-        if expanded > 100 * 1024 * 1024 {
-            return Err("Theme archive expanded size exceeds maximum".to_string());
-        }
-
+    let entries = read_theme_entries(bytes).map_err(str::to_owned)?;
+    let mut assets = Vec::new();
+    let mut metadata = None;
+    for (name, data) in entries {
         if name == "theme.json" {
             let json: serde_json::Value =
                 serde_json::from_slice(&data).map_err(|e| format!("Invalid theme.json: {e}"))?;
@@ -190,7 +138,9 @@ pub async fn import_theme_packs(
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("unknown");
-        let bytes = match std::fs::read(&pack_path) {
+        let bytes = match std::fs::File::open(&pack_path)
+            .and_then(melodee_application::theme_archive::read_theme_archive)
+        {
             Ok(b) => b,
             Err(error) => {
                 let mut tx = target.begin().await.map_err(|e| e.to_string())?;
@@ -353,6 +303,33 @@ mod tests {
         assert!(!safe_theme_entry_name("."));
         assert!(!safe_theme_entry_name(".."));
         assert!(!safe_theme_entry_name("sub/../escape"));
+    }
+
+    #[test]
+    fn valid_theme_pack_preserves_metadata_and_asset_bytes() {
+        use std::io::{Cursor, Write};
+        let mut writer = ZipWriter::new(Cursor::new(Vec::new()));
+        writer
+            .start_file("theme.json", zip::write::SimpleFileOptions::default())
+            .expect("metadata entry");
+        writer
+            .write_all(br#"{"id":"legacy-theme","name":"Legacy Theme","author":"A"}"#)
+            .expect("metadata");
+        writer
+            .start_file("theme.css", zip::write::SimpleFileOptions::default())
+            .expect("asset entry");
+        writer
+            .write_all(b"body { color: #123456; }")
+            .expect("asset");
+        let bytes = writer.finish().expect("finish").into_inner();
+        let (metadata, assets) = parse_theme_archive(&bytes).expect("valid pack");
+        assert_eq!(metadata.id, "legacy-theme");
+        assert_eq!(metadata.name, "Legacy Theme");
+        assert_eq!(metadata.author.as_deref(), Some("A"));
+        assert_eq!(
+            assets,
+            vec![("theme.css".to_owned(), b"body { color: #123456; }".to_vec())]
+        );
     }
 
     #[test]

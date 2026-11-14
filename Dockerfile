@@ -22,6 +22,8 @@ RUN pnpm build
 
 FROM rust:${RUST_VERSION}-bookworm AS rust-build
 
+ARG TARGETARCH
+
 WORKDIR /src
 
 # pg_query's pinned bindgen build requires libclang in the builder. Keep this
@@ -30,8 +32,18 @@ RUN apt-get update \
     && apt-get install --no-install-recommends -y clang libclang-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY . ./
-RUN cargo build --locked --release -p melodee-server -p melodee-cli
+# Documentation-only edits do not invalidate Rust compilation. BuildKit caches
+# are architecture-specific and locked because cargo mutates their contents.
+COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
+COPY crates/ crates/
+COPY apps/ apps/
+COPY compatibility/ compatibility/
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
+    --mount=type=cache,id=melodee-target-${TARGETARCH},target=/src/target,sharing=locked \
+    cargo build --locked --release -p melodee-server -p melodee-cli -p melodee-application \
+    && mkdir -p /out \
+    && cp target/release/melodee-server target/release/melodee-cli target/release/melodee-script-worker /out/
 
 # ADR-0151 accepted. Use Debian Trixie runtime base for release images.
 FROM debian:trixie-slim AS runtime
@@ -59,8 +71,9 @@ RUN apt-get update \
 
 WORKDIR /opt/melodee
 
-COPY --from=rust-build /src/target/release/melodee-server /usr/local/bin/melodee-server
-COPY --from=rust-build /src/target/release/melodee-cli /usr/local/bin/melodee-cli
+COPY --from=rust-build /out/melodee-server /usr/local/bin/melodee-server
+COPY --from=rust-build /out/melodee-cli /usr/local/bin/melodee-cli
+COPY --from=rust-build /out/melodee-script-worker /usr/local/bin/melodee-script-worker
 COPY --from=admin-ui-build --chown=melodee:melodee /src/admin-ui/dist /opt/melodee/admin-ui/dist
 COPY LICENSE /usr/share/licenses/melodee/LICENSE
 

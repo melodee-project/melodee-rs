@@ -2997,25 +2997,30 @@ async fn reuse_existing_artists(
             .execute(&mut **tx)
             .await?;
     }
-    let candidates: Vec<(Uuid, String, Option<String>)> = sqlx::query_as(
-        "SELECT artist.id, artist.normalized_name, external.external_id
+    // Count every live homonym before checking the sole candidate's eligibility.
+    // Aggregate provider rows per Artist: multiple aliases for one provider identity
+    // do not imply multiple Artist identities (ADR-0194).
+    let candidates: Vec<(Uuid, String, Option<String>, Vec<String>)> = sqlx::query_as(
+        "SELECT artist.id, artist.normalized_name, artist.disambiguation,
+                COALESCE(array_agg(DISTINCT external.external_id)
+                         FILTER (WHERE external.external_id IS NOT NULL), ARRAY[]::text[])
            FROM artists artist
            LEFT JOIN artist_external_identities external
              ON external.artist_id = artist.id AND external.provider = 'musicbrainz'
           WHERE artist.normalized_name = ANY($1)
             AND artist.status IN ('active','verified')
             AND artist.merged_into_artist_id IS NULL
-            AND COALESCE(btrim(artist.disambiguation), '') = ''",
+          GROUP BY artist.id",
     )
     .bind(&names)
     .fetch_all(&mut **tx)
     .await?;
-    // Group by name; a name with more than one candidate (or conflicting embedded
-    // identifiers) is left alone so the identity review decides.
-    let mut by_name: std::collections::BTreeMap<String, Vec<(Uuid, Option<String>)>> =
-        std::collections::BTreeMap::new();
-    for (id, name, external_id) in candidates {
-        by_name.entry(name).or_default().push((id, external_id));
+    let mut by_name = BTreeMap::<_, Vec<_>>::new();
+    for (id, name, disambiguation, external_ids) in candidates {
+        by_name
+            .entry(name)
+            .or_default()
+            .push((id, disambiguation, external_ids));
     }
     for resolution in &mut prepared.resolutions {
         let Some(candidates) = by_name.get(&resolution.normalized_value) else {
@@ -3024,14 +3029,21 @@ async fn reuse_existing_artists(
         let [candidate] = candidates.as_slice() else {
             continue;
         };
+        if candidate
+            .1
+            .as_ref()
+            .is_some_and(|value| !value.trim().is_empty())
+        {
+            continue;
+        }
         let embedded = resolution
             .musicbrainz_ids
             .iter()
             .filter(|(family, _)| matches!(family.as_str(), "artist" | "release_artist"))
-            .map(|(_, external_id)| external_id)
-            .collect::<Vec<_>>();
-        if let Some(existing) = &candidate.1
-            && embedded.iter().any(|external_id| *external_id != existing)
+            .map(|(_, external_id)| external_id);
+        if embedded
+            .into_iter()
+            .any(|external_id| !candidate.2.contains(external_id))
         {
             continue;
         }
@@ -3045,10 +3057,39 @@ async fn reuse_existing_artists(
             reused.insert(candidate.0);
         }
     }
+    // Preparation allocates provisional IDs before the transaction can resolve reuse.
+    // Rebuild this not-yet-persisted snapshot from the final decisions before hashing;
+    // never modify an already committed immutable overlay.
+    let overlay = &prepared.overlay;
+    let mut references = overlay.references().clone();
+    references.artist_resolutions = prepared
+        .resolutions
+        .iter()
+        .map(|resolution| OverlayArtistResolution {
+            observed_artist_id: ObservedArtistId::from_uuid(resolution.observation_id),
+            artist_id: ArtistId::from_uuid(resolution.artist_id),
+            decision_id: Some(melodee_domain::ArtistMatchDecisionId::from_uuid(
+                resolution.decision_id,
+            )),
+        })
+        .collect();
+    prepared.overlay = CatalogSemanticOverlay::new(NewCatalogSemanticOverlay {
+        id: overlay.id(),
+        release_id: overlay.release_id(),
+        source_manifest_id: overlay.source_manifest_id(),
+        source_semantic_manifest_hash: overlay.source_semantic_manifest_hash().to_owned(),
+        publication_plan_hash: overlay.publication_plan_hash().to_owned(),
+        catalog_import_id: overlay.catalog_import_id(),
+        resolver_version: overlay.resolver_version().to_owned(),
+        predecessor_id: overlay.predecessor_id(),
+        references,
+        created_at: overlay.created_at(),
+        created_by: overlay.created_by().to_owned(),
+    })?;
     Ok((prepared, reused))
 }
 
-const SET_BASED_MUTATION_STATEMENT_COUNT: u32 = 18;
+const SET_BASED_MUTATION_STATEMENT_COUNT: u32 = 19;
 
 async fn persist_prepared_import(
     tx: &mut Transaction<'_, Postgres>,
@@ -3328,8 +3369,9 @@ async fn persist_prepared_import(
             .push_bind("manifest-v3")
             .push_bind(serde_json::json!({
                 "source_pointer": resolution.source_pointer,
-                "provisional_bias": !resolution.reused_release_artist,
-                "same_release_identity": resolution.reused_release_artist
+                "provisional_bias": !resolution.reused_release_artist && !reused_artist_ids.contains(&resolution.artist_id),
+                "same_release_identity": resolution.reused_release_artist,
+                "reused_catalog_identity": reused_artist_ids.contains(&resolution.artist_id)
             }))
             .push_bind(now);
     });
@@ -3352,10 +3394,12 @@ async fn persist_prepared_import(
             } else {
                 6000_i32
             })
-            .push_bind(if resolution.reused_release_artist {
+            .push_bind(if reused_artist_ids.contains(&resolution.artist_id) {
+                "reused the unambiguous existing Artist by exact normalized name and compatible evidence"
+            } else if resolution.reused_release_artist {
                 "resolved to the sole matching Release Artist from manifest context"
             } else {
-                "created a distinct provisional identity from manifest context"
+                "created a distinct active identity from manifest context"
             })
             .push_bind(false)
             .push_bind(serde_json::json!({
@@ -3554,39 +3598,40 @@ async fn persist_prepared_import(
         .collect::<Vec<_>>();
     refresh_artist_catalog_aggregates(tx, &imported_track_ids, now).await?;
 
-    // Distinct Artists this import resolved, including reused ones; the outbox set
-    // below is the same set, so one value serves both.
-    let resolved_artist_count = prepared
+    // Advance reused identities once per import, then publish their actual revisions.
+    // New Artists retain revision one; retries return before any mutation.
+    let reused_ids = reused_artist_ids.iter().copied().collect::<Vec<_>>();
+    sqlx::query("UPDATE artists SET revision=revision+1, updated_at=$2 WHERE id=ANY($1)")
+        .bind(&reused_ids)
+        .bind(now)
+        .execute(&mut **tx)
+        .await?;
+    let resolved_artist_ids = prepared
         .resolutions
         .iter()
         .map(|resolution| resolution.artist_id)
         .collect::<std::collections::BTreeSet<_>>()
-        .len();
-    let mut outbox_rows = vec![("release", release_id)];
-    outbox_rows.extend(prepared.tracks.iter().map(|track| ("track", track.id)));
-    outbox_rows.extend(
-        artist_identities
-            .keys()
-            .copied()
-            .map(|artist_id| ("artist", artist_id)),
-    );
-    let mut outbox_query: QueryBuilder<Postgres> = QueryBuilder::new(
+        .into_iter()
+        .collect::<Vec<_>>();
+    let resolved_artist_count = resolved_artist_ids.len();
+    sqlx::query(
         "INSERT INTO catalog_projection_outbox (
             projection_name, entity_type, entity_id, operation, entity_revision,
             available_at, attempt_count, created_at
-         ) ",
-    );
-    outbox_query.push_values(outbox_rows, |mut row, (entity_type, entity_id)| {
-        row.push_bind("tantivy.catalog")
-            .push_bind(entity_type)
-            .push_bind(entity_id)
-            .push_bind("upsert")
-            .push_bind(1_i64)
-            .push_bind(now)
-            .push_bind(0_i32)
-            .push_bind(now);
-    });
-    outbox_query.build().execute(&mut **tx).await?;
+         )
+         SELECT 'tantivy.catalog', input.entity_type, input.id, 'upsert', input.revision, $4, 0, $4
+         FROM (
+             SELECT 'release'::text AS entity_type, id, revision FROM releases WHERE id=$1
+             UNION ALL SELECT 'track', id, revision FROM tracks WHERE id=ANY($2)
+             UNION ALL SELECT 'artist', id, revision FROM artists WHERE id=ANY($3)
+         ) input",
+    )
+    .bind(release_id)
+    .bind(&imported_track_ids)
+    .bind(&resolved_artist_ids)
+    .bind(now)
+    .execute(&mut **tx)
+    .await?;
 
     sqlx::query(
         "INSERT INTO catalog_audit_events (

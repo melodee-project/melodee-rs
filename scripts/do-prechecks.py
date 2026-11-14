@@ -20,7 +20,7 @@ from typing import Sequence
 
 
 ROOT = Path(__file__).resolve().parents[1]
-REQUIRED_TOOLS = ("git", "cargo", "node", "pnpm", "cargo-deny", "ffmpeg", "ffprobe", "fpcalc")
+REQUIRED_TOOLS = ("git", "cargo", "node", "pnpm", "cargo-deny", "ffmpeg", "ffprobe", "fpcalc", "psql")
 
 
 @dataclass(frozen=True)
@@ -49,7 +49,11 @@ def checks_for(*, include_e2e: bool = False) -> list[Check]:
 def validate_environment() -> None:
     """Prevent optional-tool skips in check.py from looking like a complete pass."""
 
-    missing = [tool for tool in REQUIRED_TOOLS if shutil.which(tool) is None]
+    missing = [
+        tool for tool in REQUIRED_TOOLS
+        if shutil.which(tool) is None
+        and not (tool == "pnpm" and (shutil.which("corepack") or shutil.which("npx")))
+    ]
     if missing:
         raise RuntimeError(
             "Required tools missing from PATH: " + ", ".join(missing)

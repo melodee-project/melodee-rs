@@ -32,32 +32,17 @@ jobs:
       # before building. Never alter these paths on a self-hosted runner.
       - name: Free GitHub-hosted runner disk space
         if: runner.environment == 'github-hosted'
-        run: |
-          df -h /
-          sudo rm -rf -- /usr/local/lib/android /usr/share/dotnet /opt/ghc
-          df -h /
-
+        run: sudo -E python3 scripts/ci_tasks.py free-space
+        env:
+          MELODEE_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
       - name: Install pinned Rust toolchain
-        run: |
-          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy
-          rustup default 1.99.0
-
+        run: python3 scripts/ci_tasks.py toolchain
       - name: Show tool versions
-        run: |
-          rustc --version
-          cargo --version
-          python3 --version
-
+        run: python3 scripts/ci_tasks.py versions
       # The fast gate runs the media crate's library suite, which creates
       # fixtures with ffmpeg and inspects them with ffprobe. Keep the runner
       # environment faithful to that executable contract.
       - name: Install media inspection tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends -y ffmpeg libchromaprint-tools
-          ffprobe -version | head -1
-          ffmpeg -version | head -1
-          fpcalc -version
-
+        run: python3 scripts/ci_tasks.py media-tools
       - name: Run fast gate
         run: python3 scripts/check.py fast

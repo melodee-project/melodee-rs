@@ -32,8 +32,8 @@ pub const MAX_SCRIPT_SOURCE_BYTES: usize = 256 * 1024;
 pub const MAX_RUN_ERROR_CHARS: usize = 2000;
 /// ADR-0135 §3 hard ceiling on the per-execution wall-clock budget.
 pub const MAX_TIMEOUT_MS: i32 = 10_000;
-/// Sanity bounds for the advisory memory budget (not enforceable with Boa;
-/// ADR-0135 §3), mirroring the migration CHECK.
+/// Script allocation budget added to fixed worker address-space headroom by
+/// ADR-0193; the registry CHECK retains the existing range.
 pub const MIN_MEMORY_BYTES: i64 = 4096;
 pub const MAX_MEMORY_BYTES: i64 = 64 * 1024 * 1024;
 /// Upper bound for registry list responses; the API layer clamps to this.

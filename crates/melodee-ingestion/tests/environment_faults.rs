@@ -458,7 +458,7 @@ async fn postgres_unavailable_during_handoff_fails_closed_and_recovers() {
     // Observe durable state during the outage through a fresh connection:
     // no receipt, no final tree, inbound retained. (The database itself is
     // unchanged by the restart; only the application's pool was refused.)
-    let url = common::admin_url().replace("/postgres", &format!("/{}", scenario.database.name));
+    let url = common::database_url(&scenario.database.name);
     scenario.pool = PgPool::connect(&url).await.expect("observe pool");
     match scenario.handoff(item_id).await {
         None => {}

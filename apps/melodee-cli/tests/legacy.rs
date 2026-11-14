@@ -1078,3 +1078,108 @@ async fn verify_then_delta_is_convergent() {
     drop_db(&source.name).await;
     drop_db(&target.name).await;
 }
+
+/// Synthetic public fixtures exercise several keyset pages and the set-based
+/// hot paths without accessing operator media or claiming production-scale acceptance.
+#[tokio::test]
+async fn synthetic_batched_catalog_and_history_preserve_ids_and_resume() {
+    let seed = format!(
+        r#"{SEED_MIXED}
+        INSERT INTO "Songs" SELECT (jsonb_populate_record(NULL::"Songs", to_jsonb(s) ||
+            jsonb_build_object('Id', n, 'ApiKey', md5('synthetic-track-' || n)::uuid,
+                'SongNumber', n, 'FileName', n || '.flac'))).*
+        FROM "Songs" s CROSS JOIN generate_series(3,1002) n WHERE s."Id"=1;
+        INSERT INTO "UserSongPlayHistories" ("Id","UserId","SongId","PlayedAt","SecondsPlayed","Client","IsNowPlaying","Source")
+        SELECT n,1,1 + n % 1002,now(),30,'synthetic',false,0 FROM generate_series(2,10001) n;
+        UPDATE "UserPlaybackSettings" SET "AudioQuality"='invalid-quality', "ReplayGain"='invalid-gain';
+    "#
+    );
+    let source = create_source("synthetic_batches", &seed).await;
+    let target = create_target("synthetic_batches").await;
+    let mut args = vec![
+        "import".to_string(),
+        "--batch-size".to_string(),
+        "257".to_string(),
+    ];
+    args.extend(source_args(&source.url));
+    args.extend(["--library-path-map".to_string(), map_arg()]);
+    let started = std::time::Instant::now();
+    run_legacy(&target.url, &args);
+    eprintln!(
+        "synthetic migration: 1002 tracks + 10001 plays, batch257, {:?}",
+        started.elapsed()
+    );
+    assert_eq!(count(&target.pool, "tracks").await, 1002);
+    assert_eq!(count(&target.pool, "native_track_plays").await, 10001);
+    let public_ids: Vec<uuid::Uuid> =
+        sqlx::query_scalar("SELECT public_api_id FROM tracks ORDER BY public_api_id")
+            .fetch_all(&target.pool)
+            .await
+            .expect("public IDs");
+    let source_ids: Vec<uuid::Uuid> =
+        sqlx::query_scalar(r#"SELECT "ApiKey" FROM "Songs" ORDER BY "ApiKey""#)
+            .fetch_all(&source.pool)
+            .await
+            .expect("source IDs");
+    assert_eq!(public_ids, source_ids);
+    let notes: Vec<String> = sqlx::query_scalar("SELECT message FROM legacy_migration.issues WHERE domain='playback_settings' AND code='playback.value_mapped' ORDER BY message").fetch_all(&target.pool).await.expect("all normalization notes");
+    assert_eq!(
+        notes.len(),
+        2,
+        "both invalid settings need separate audit evidence: {notes:?}"
+    );
+    let before: Vec<(uuid::Uuid, uuid::Uuid)> =
+        sqlx::query_as("SELECT id,public_api_id FROM tracks ORDER BY public_api_id")
+            .fetch_all(&target.pool)
+            .await
+            .expect("stable identity");
+    run_legacy(&target.url, &args);
+    let after: Vec<(uuid::Uuid, uuid::Uuid)> =
+        sqlx::query_as("SELECT id,public_api_id FROM tracks ORDER BY public_api_id")
+            .fetch_all(&target.pool)
+            .await
+            .expect("stable identity after repeat");
+    assert_eq!(before, after);
+    assert_eq!(count(&target.pool, "native_track_plays").await, 10001);
+    drop_db(&source.name).await;
+    drop_db(&target.name).await;
+}
+
+/// Run manually for comparative evidence; ordinary regressions above already
+/// verify the bounded paths. Batch size one is a serial-page control, not a
+/// claim about timing an older revision or an authorized production catalog.
+#[tokio::test]
+#[ignore = "manual synthetic migration batch-size measurement"]
+async fn synthetic_migration_batch_size_measurement() {
+    let seed = format!(
+        r#"{SEED_MIXED}
+        INSERT INTO "Songs" SELECT (jsonb_populate_record(NULL::"Songs", to_jsonb(s) ||
+            jsonb_build_object('Id', n, 'ApiKey', md5('synthetic-track-' || n)::uuid,
+                'SongNumber', n, 'FileName', n || '.flac'))).*
+        FROM "Songs" s CROSS JOIN generate_series(3,202) n WHERE s."Id"=1;
+        INSERT INTO "UserSongPlayHistories" ("Id","UserId","SongId","PlayedAt","SecondsPlayed","Client","IsNowPlaying","Source")
+        SELECT n,1,1 + n % 202,now(),30,'synthetic',false,0 FROM generate_series(2,2001) n;
+    "#
+    );
+    let source = create_source("synthetic_measurement", &seed).await;
+    for batch in [1, 257] {
+        let target = create_target("synthetic_measurement").await;
+        let mut args = vec![
+            "import".to_string(),
+            "--batch-size".to_string(),
+            batch.to_string(),
+        ];
+        args.extend(source_args(&source.url));
+        args.extend(["--library-path-map".to_string(), map_arg()]);
+        let started = std::time::Instant::now();
+        run_legacy(&target.url, &args);
+        eprintln!(
+            "synthetic batch-size comparison: 202 tracks + 2001 plays, batch{batch}, {:?}",
+            started.elapsed()
+        );
+        assert_eq!(count(&target.pool, "tracks").await, 202);
+        assert_eq!(count(&target.pool, "native_track_plays").await, 2001);
+        drop_db(&target.name).await;
+    }
+    drop_db(&source.name).await;
+}

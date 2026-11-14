@@ -330,3 +330,21 @@ exact source identity and read-only proof, and use the [cutover and rollback run
 Do not freeze writes, switch traffic, publish an image, or delete rollback assets without the
 corresponding approval and audit record. Historical rehearsal results do not prove a current
 release candidate.
+
+## Theme packs and migration diagnostics
+
+Theme ZIP files are limited to 50 MiB compressed. Entries are read with bounds on both declared
+and actual expanded size: up to 256 entries, 10 MiB per entry, and 100 MiB in total. Unsafe paths, links, encrypted entries, and
+mismatched sizes are rejected. Valid `theme.json` metadata and asset bytes are preserved. A
+previous importer incorrectly read zero bytes from valid entries; operators whose rehearsal
+recorded those failures must repeat theme import and verify the resulting packs before accepting
+migration completeness.
+
+Playback-setting normalization records each unsupported value independently. If both audio quality
+and ReplayGain require defaults, both explanations remain in the migration issue report.
+
+Artists, Releases, and Tracks import identity rows, mappings, and links in bounded sets of up to 500
+rows. Play-history import resolves references and writes each bounded source batch as a set. Catalog
+references are resolved once per page; batch size still controls memory and transaction scope. Measure
+migration duration against an authorized representative snapshot before cutover; synthetic test
+timings do not establish production-scale acceptance.

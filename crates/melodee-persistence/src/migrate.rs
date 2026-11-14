@@ -92,7 +92,10 @@ pub async fn migrate(pool: &PgPool) -> Result<(), MigrateError> {
     match compatible_migrator(pool).await? {
         Some(migrator) => migrator.run(pool).await,
         None => MIGRATOR.run(pool).await,
-    }
+    }?;
+    crate::catalog_mutations::repair_import_overlay_references(pool)
+        .await
+        .map_err(|error| MigrateError::Source(Box::new(error)))
 }
 
 /// Builds a one-run migrator for exact historical checksums created by

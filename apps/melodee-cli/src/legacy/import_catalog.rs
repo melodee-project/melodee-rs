@@ -1,7 +1,9 @@
 //! Catalog importers: artists and releases (ADR-0148 §D.2). Track/media
 //! adoption lives in `import_tracks.rs`; contributions in `import_contrib.rs`.
 
-use sqlx::{PgPool, Row};
+use std::collections::BTreeSet;
+
+use sqlx::{PgPool, Postgres, QueryBuilder, Row, Transaction};
 use uuid::Uuid;
 
 use super::map;
@@ -41,12 +43,15 @@ pub async fn import_artists(
         }
         let mut inserted = 0_i64;
         let mut issues = 0_i64;
+        let keys: Vec<i64> = rows
+            .iter()
+            .map(|row| i64::from(row.get::<i32, _>("Id")))
+            .collect();
+        let existing = map::catalog_mappings(&mut tx, run_id, "artist", &keys).await?;
+        let mut pending = Vec::with_capacity(rows.len());
         for row in &rows {
             let source_pk: i64 = i64::from(row.get::<i32, _>("Id"));
-            if map::catalog_mapping(&mut tx, run_id, "artist", source_pk)
-                .await?
-                .is_some()
-            {
+            if existing.contains_key(&source_pk) {
                 continue;
             }
             let public_id: Uuid = row.get("ApiKey");
@@ -59,43 +64,25 @@ pub async fn import_artists(
             let created: time::OffsetDateTime = row.get("CreatedAt");
             let updated = map::clamp_updated(created, row.get("LastUpdatedAt"));
 
-            let target_id = Uuid::now_v7();
-            let written = sqlx::query(
-                "INSERT INTO artists (
-                    id, public_api_id, canonical_name, normalized_name, sort_name,
-                    artist_type, status, revision, created_at, updated_at
-                 ) VALUES ($1,$2,$3,$4,$5,'unknown','verified',1,$6,$7)
-                 ON CONFLICT (public_api_id) DO NOTHING",
-            )
-            .bind(target_id)
-            .bind(public_id)
-            .bind(&name)
-            .bind(&normalized)
-            .bind(&sort)
-            .bind(created)
-            .bind(updated)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| format!("artist {source_pk} insert failed: {e}"))?
-            .rows_affected();
-            if written == 0 {
-                runs::record_issue(
-                    &mut tx,
-                    run_id,
-                    "artists",
-                    Some(source_pk),
-                    "error",
-                    "target.public_id_conflict",
-                    "public ApiKey already exists in the target outside this run",
-                    None,
-                )
-                .await?;
-                issues += 1;
-                continue;
-            }
-            map::insert_catalog_mapping(&mut tx, run_id, "artist", source_pk, target_id, public_id)
-                .await?;
-            inserted += 1;
+            pending.push(PendingCatalog {
+                source_pk,
+                public_id,
+                id: Uuid::now_v7(),
+                name,
+                normalized,
+                sort,
+                created,
+                updated,
+                display_artist: None,
+                artist_id: None,
+                release_date: None,
+                original_release_date: None,
+            });
+        }
+        for page in pending.chunks(500) {
+            let (written, reported) = insert_catalog_page(&mut tx, run_id, "artist", page).await?;
+            inserted += written;
+            issues += reported;
         }
         runs::advance_checkpoint(
             &mut tx, run_id, "artists", last_pk, count, inserted, 0, issues, 0,
@@ -147,17 +134,24 @@ pub async fn import_releases(
         }
         let mut inserted = 0_i64;
         let mut issues = 0_i64;
+        let keys: Vec<i64> = rows
+            .iter()
+            .map(|row| i64::from(row.get::<i32, _>("Id")))
+            .collect();
+        let artist_keys: Vec<i64> = rows
+            .iter()
+            .map(|row| i64::from(row.get::<i32, _>("ArtistId")))
+            .collect();
+        let existing = map::catalog_mappings(&mut tx, run_id, "release", &keys).await?;
+        let artists = map::catalog_mappings(&mut tx, run_id, "artist", &artist_keys).await?;
+        let mut pending = Vec::with_capacity(rows.len());
         for row in &rows {
             let source_pk: i64 = i64::from(row.get::<i32, _>("Id"));
-            if map::catalog_mapping(&mut tx, run_id, "release", source_pk)
-                .await?
-                .is_some()
-            {
+            if existing.contains_key(&source_pk) {
                 continue;
             }
             let legacy_artist_pk = i64::from(row.get::<i32, _>("ArtistId"));
-            let artist_target =
-                map::catalog_mapping(&mut tx, run_id, "artist", legacy_artist_pk).await?;
+            let artist_target = artists.get(&legacy_artist_pk).copied();
             let Some(artist_target) = artist_target else {
                 runs::record_issue(
                     &mut tx,
@@ -186,64 +180,25 @@ pub async fn import_releases(
             let created: time::OffsetDateTime = row.get("CreatedAt");
             let updated = map::clamp_updated(created, row.get("LastUpdatedAt"));
 
-            let target_id = Uuid::now_v7();
-            let written = sqlx::query(
-                "INSERT INTO releases (
-                    id, public_api_id, title, normalized_title, sort_title,
-                    display_artist, release_date, release_date_text,
-                    original_release_date, status, revision, created_at, updated_at
-                 ) VALUES ($1,$2,$3,$4,$5,$6,$7,NULL,$8,'active',1,$9,$10)
-                 ON CONFLICT (public_api_id) DO NOTHING",
-            )
-            .bind(target_id)
-            .bind(public_id)
-            .bind(&title)
-            .bind(&normalized)
-            .bind(&sort)
-            .bind(&display_artist)
-            .bind(release_date)
-            .bind(original_release_date)
-            .bind(created)
-            .bind(updated)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| format!("release {source_pk} insert failed: {e}"))?
-            .rows_affected();
-            if written == 0 {
-                runs::record_issue(
-                    &mut tx,
-                    run_id,
-                    "releases",
-                    Some(source_pk),
-                    "error",
-                    "target.public_id_conflict",
-                    "public ApiKey already exists in the target outside this run",
-                    None,
-                )
-                .await?;
-                issues += 1;
-                continue;
-            }
-            map::insert_catalog_mapping(
-                &mut tx, run_id, "release", source_pk, target_id, public_id,
-            )
-            .await?;
-            let display = display_artist.clone().unwrap_or_else(|| title.clone());
-            sqlx::query(
-                "INSERT INTO release_artists (
-                    id, release_id, artist_id, observed_artist_id, role,
-                    presentation_order, display_value, join_phrase, created_at
-                 ) VALUES ($1,$2,$3,NULL,'primary',1,$4,'',$5)",
-            )
-            .bind(Uuid::now_v7())
-            .bind(target_id)
-            .bind(artist_target)
-            .bind(&display)
-            .bind(created)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| format!("release_artist link failed for {source_pk}: {e}"))?;
-            inserted += 1;
+            pending.push(PendingCatalog {
+                source_pk,
+                public_id,
+                id: Uuid::now_v7(),
+                name: title,
+                normalized,
+                sort,
+                created,
+                updated,
+                display_artist,
+                artist_id: Some(artist_target),
+                release_date,
+                original_release_date,
+            });
+        }
+        for page in pending.chunks(500) {
+            let (written, reported) = insert_catalog_page(&mut tx, run_id, "release", page).await?;
+            inserted += written;
+            issues += reported;
         }
         runs::advance_checkpoint(
             &mut tx, run_id, "releases", last_pk, count, inserted, 0, issues, 0,
@@ -256,4 +211,146 @@ pub async fn import_releases(
         }
     }
     Ok(())
+}
+
+struct PendingCatalog {
+    source_pk: i64,
+    public_id: Uuid,
+    id: Uuid,
+    name: String,
+    normalized: String,
+    sort: String,
+    created: time::OffsetDateTime,
+    updated: time::OffsetDateTime,
+    display_artist: Option<String>,
+    artist_id: Option<Uuid>,
+    release_date: Option<time::Date>,
+    original_release_date: Option<time::Date>,
+}
+
+/// Bounded inserts preserve public-ID conflict reporting and atomically anchor
+/// the successful rows in the same run's mapping table.
+async fn insert_catalog_page(
+    tx: &mut Transaction<'_, Postgres>,
+    run_id: Uuid,
+    kind: &str,
+    page: &[PendingCatalog],
+) -> Result<(i64, i64), String> {
+    let mut query = if kind == "artist" {
+        QueryBuilder::<Postgres>::new(
+            "INSERT INTO artists (id,public_api_id,canonical_name,normalized_name,sort_name,artist_type,status,revision,created_at,updated_at) ",
+        )
+    } else {
+        QueryBuilder::<Postgres>::new(
+            "INSERT INTO releases (id,public_api_id,title,normalized_title,sort_title,display_artist,release_date,original_release_date,status,revision,created_at,updated_at) ",
+        )
+    };
+    query.push_values(page, |mut values, row| {
+        values
+            .push_bind(row.id)
+            .push_bind(row.public_id)
+            .push_bind(&row.name)
+            .push_bind(&row.normalized)
+            .push_bind(&row.sort);
+        if kind == "artist" {
+            values.push_bind("unknown").push_bind("verified");
+        } else {
+            values
+                .push_bind(&row.display_artist)
+                .push_bind(row.release_date)
+                .push_bind(row.original_release_date)
+                .push_bind("active");
+        }
+        values
+            .push_bind(1_i64)
+            .push_bind(row.created)
+            .push_bind(row.updated);
+    });
+    query.push(" ON CONFLICT (public_api_id) DO NOTHING RETURNING id");
+    let written: BTreeSet<Uuid> = query
+        .build_query_scalar()
+        .fetch_all(&mut **tx)
+        .await
+        .map_err(|e| format!("{kind} batch insert failed: {e}"))?
+        .into_iter()
+        .collect();
+    let imported: Vec<_> = page
+        .iter()
+        .filter(|row| written.contains(&row.id))
+        .collect();
+    if !imported.is_empty() {
+        let mut mappings = QueryBuilder::<Postgres>::new(
+            "INSERT INTO legacy_catalog_id_mappings (id,migration_run_id,entity_type,legacy_numeric_id,internal_id,public_api_id,source_snapshot,imported_at) ",
+        );
+        mappings.push_values(imported.iter(), |mut values, row| {
+            values
+                .push_bind(Uuid::now_v7())
+                .push_bind(run_id)
+                .push_bind(kind)
+                .push_bind(row.source_pk)
+                .push_bind(row.id)
+                .push_bind(row.public_id)
+                .push_bind(super::source::FROZEN_SCHEMA_FINAL_MIGRATION)
+                .push_bind(time::OffsetDateTime::now_utc());
+        });
+        mappings
+            .build()
+            .execute(&mut **tx)
+            .await
+            .map_err(|e| format!("{kind} mapping batch failed: {e}"))?;
+        if kind == "release" {
+            let mut links = QueryBuilder::<Postgres>::new(
+                "INSERT INTO release_artists (id,release_id,artist_id,role,presentation_order,display_value,join_phrase,created_at) ",
+            );
+            links.push_values(imported, |mut values, row| {
+                values
+                    .push_bind(Uuid::now_v7())
+                    .push_bind(row.id)
+                    .push_bind(row.artist_id)
+                    .push_bind("primary")
+                    .push_bind(1_i32)
+                    .push_bind(row.display_artist.as_ref().unwrap_or(&row.name))
+                    .push_bind("")
+                    .push_bind(row.created);
+            });
+            links
+                .build()
+                .execute(&mut **tx)
+                .await
+                .map_err(|e| format!("release artist batch failed: {e}"))?;
+        }
+    }
+    let conflicts: Vec<_> = page
+        .iter()
+        .filter(|row| !written.contains(&row.id))
+        .collect();
+    if !conflicts.is_empty() {
+        let mut query = QueryBuilder::<Postgres>::new(
+            "INSERT INTO legacy_migration.issues (id,run_id,domain,source_pk,severity,code,message,created_at) ",
+        );
+        query.push_values(conflicts.iter(), |mut values, row| {
+            values
+                .push_bind(Uuid::now_v7())
+                .push_bind(run_id)
+                .push_bind(if kind == "artist" {
+                    "artists"
+                } else {
+                    "releases"
+                })
+                .push_bind(row.source_pk)
+                .push_bind("error")
+                .push_bind("target.public_id_conflict")
+                .push_bind("public ApiKey already exists in the target outside this run")
+                .push_bind(time::OffsetDateTime::now_utc());
+        });
+        query
+            .build()
+            .execute(&mut **tx)
+            .await
+            .map_err(|e| format!("{kind} conflicts batch failed: {e}"))?;
+    }
+    Ok((
+        i64::try_from(written.len()).unwrap_or(0),
+        i64::try_from(conflicts.len()).unwrap_or(0),
+    ))
 }

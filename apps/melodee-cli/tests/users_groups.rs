@@ -68,7 +68,7 @@ async fn seed_member(db: &TestDb, name: &str) {
 #[tokio::test]
 async fn bootstrap_admin_is_fail_closed_and_password_never_a_cli_argument() {
     let db = TestDb::create("cli_users_bootstrap").await;
-    let database_url = common::admin_url().replace("/postgres", &format!("/{}", db.name));
+    let database_url = common::database_url(&db.name);
 
     // Without the environment password the command refuses to run.
     let stderr = run_cli_failing(
@@ -142,7 +142,7 @@ async fn bootstrap_admin_is_fail_closed_and_password_never_a_cli_argument() {
 #[tokio::test]
 async fn disable_enable_roundtrips_account_state() {
     let db = TestDb::create("cli_users_recovery").await;
-    let database_url = common::admin_url().replace("/postgres", &format!("/{}", db.name));
+    let database_url = common::database_url(&db.name);
     seed_member(&db, "recoverable-user").await;
 
     let stdout = run_cli(
@@ -186,7 +186,7 @@ async fn disable_enable_roundtrips_account_state() {
 #[tokio::test]
 async fn group_lifecycle_through_the_cli_fails_closed_with_members_and_bindings() {
     let db = TestDb::create("cli_groups_lifecycle").await;
-    let database_url = common::admin_url().replace("/postgres", &format!("/{}", db.name));
+    let database_url = common::database_url(&db.name);
     seed_member(&db, "cli-group-member").await;
 
     let stdout = run_cli(&database_url, &["groups", "create", "Family"], None);

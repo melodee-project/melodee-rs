@@ -1,0 +1,41 @@
+[package]
+name = "melodee-application"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Shared Melodee operational use cases for the server and CLI"
+publish = false
+
+[dependencies]
+boa_engine.workspace = true
+futures-util.workspace = true
+sha2.workspace = true
+melodee-search = { path = "../melodee-search", version = "0.1.0" }
+image.workspace = true
+lettre.workspace = true
+melodee-domain = { path = "../melodee-domain", version = "0.1.0" }
+melodee-ingestion = { path = "../melodee-ingestion", version = "0.1.0" }
+melodee-media = { path = "../melodee-media", version = "0.1.0" }
+melodee-persistence = { path = "../melodee-persistence", version = "0.1.0" }
+quick-xml.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+time.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+zip.workspace = true
+
+[target.'cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))'.dependencies]
+rustix = { workspace = true, features = ["process", "std"] }
+
+[dev-dependencies]
+tracing-subscriber.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

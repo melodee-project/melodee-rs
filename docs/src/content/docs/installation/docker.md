@@ -67,6 +67,20 @@ unset MELODEE__CLI__BOOTSTRAP_ADMIN_PASSWORD
 The password is supplied through the process environment rather than a command-line argument.
 Open `https://your-public-origin/admin` and finish the server-side onboarding checks.
 
+### Reverse-proxy client addresses
+
+Set `MELODEE_SERVER_TRUSTED_PROXIES` to the exact source addresses or CIDRs of the proxies that
+connect to the container. With a native server and a proxy on loopback, use
+`MELODEE__SERVER__TRUSTED_PROXIES=127.0.0.1,::1`. In a bridge-networked container the observed
+source may instead be the bridge gateway or another container address; trust only controlled proxy
+infrastructure. Have the proxy replace incoming forwarding headers. This configuration applies to
+all APIs, rate limits, and configured IP deny lists.
+
+Keep `MELODEE_OPENSUBSONIC_LEGACY_AUTH_BYPASS=false`. Loopback connections and a matching Host
+are not credentials under the default policy. Existing local clients that relied on anonymous access
+must configure credentials. See [OpenSubsonic authentication](../api/opensubsonic/#authentication)
+and [proxy configuration](./configuration/#native-api-urls-streaming-and-proxies).
+
 ## Image tags
 
 | Tag | Meaning | Use |
@@ -167,3 +181,18 @@ scanning as a release candidate. The accepted release record must bind the exact
 amd64 and arm64 digests, SPDX SBOMs, vulnerability reports, checksums, and provenance. If a
 required security finding has no fixed version, it still needs a documented release-owner
 disposition; “no fixed version” is not an automatic waiver.
+
+## Release identity and publication retries
+
+Every official release job builds and validates the same pinned Git commit. The publication job
+loads the archived images that passed smoke tests and vulnerability scans; it does not rebuild them.
+An exact version tag cannot be replaced with a different image digest by the official workflow.
+A changed image requires a new version. Publication is serialized, and floating tags are updated
+before the immutable exact-version tag records completion. Retrying an already completed publication
+with the same digest leaves all tags unchanged.
+
+Release maintainers should rerun failed publication jobs using the original scanned-image evidence
+artifacts, which are retained for 14 days. Rebuilding a published version is not a way to repair its
+image. Registry authentication or network failures stop publication rather than being interpreted as
+an absent version tag. Restrict package-write access to the controlled release workflow to preserve
+these guarantees outside that workflow as well.

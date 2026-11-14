@@ -53,7 +53,7 @@ async fn failure_evidence_survives_reconnect() {
 
     // Destroy all application state: new pool (simulates process restart).
     db.pool.close().await;
-    let db_url = admin_url().replace("/postgres", &format!("/{}", db.name));
+    let db_url = common::database_url(&db.name);
     let pool = sqlx::PgPool::connect(&db_url).await.expect("reconnect");
 
     let item = store.get(&pool, id).await.expect("get after restart");
@@ -366,5 +366,3 @@ async fn failure_without_lease_is_rejected() {
     assert_eq!(item.attempt_count, 0);
     db.drop().await;
 }
-
-use common::admin_url;

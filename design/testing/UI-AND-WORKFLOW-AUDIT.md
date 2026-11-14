@@ -165,10 +165,11 @@ MELODEE_LIVE_USERNAME=… MELODEE_LIVE_PASSWORD=… \
   MELODEE_CLIENT_URL=http://<host-lan-ip>:8080 make audit-live
 ```
 
-`corpus-verify` needs a **non-loopback** client URL for the OpenSubsonic checks: loopback requests hit
-the captured OpenSubsonic auth bypass, which synthesizes no principal, and media routes answer 404 to
-it. The server must therefore also be bound beyond `127.0.0.1`
-(`MELODEE__SERVER__BIND=0.0.0.0:8080 make up`).
+`corpus-verify` authenticates OpenSubsonic requests on loopback and remote URLs with the secure
+default configuration. Keep `MELODEE__OPENSUBSONIC__LEGACY_AUTH_BYPASS=false` for live audits:
+the explicit legacy bypass synthesizes no principal, so principal-dependent media checks cannot
+prove authenticated behavior while it is enabled. A loopback-only server binding is sufficient
+when the audit runs on the same host.
 
 Live suites authenticate **once**: the Admin API rate-limits sign-in, so a per-test login pattern
 exhausts the budget and returns `429` part-way through a run (observed, and a good sign that the

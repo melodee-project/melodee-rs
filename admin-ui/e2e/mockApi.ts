@@ -296,7 +296,7 @@ const IDENTITY_DETAIL = {
       artistId: ARTIST_ID,
       artistName: "The Nomads",
       artistStatus: "active",
-      latestOutcome: "provisional",
+      latestOutcome: "proposed",
       latestConfidence: 9200,
       latestReason: "Strong alias and release overlap.",
       latestLocked: false,

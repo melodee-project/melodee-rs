@@ -9,6 +9,7 @@ checks must be unique and read-only, and a violation must fail the run.
 from __future__ import annotations
 
 import importlib.util
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -53,6 +54,15 @@ class AuditCheckInventoryTests(unittest.TestCase):
                 detail = check.detail_sql.strip().lower()
                 self.assertTrue(detail.startswith("select") or detail.startswith("with"))
 
+    def test_artist_status_dictionary_matches_the_domain(self) -> None:
+        source = (ROOT / "crates/melodee-domain/src/artist.rs").read_text()
+        body = source.split("pub enum ArtistStatus {", 1)[1].split("}", 1)[0]
+        variants = re.findall(r"^\s*(\w+)(?:\([^)]*\))?,", body, re.MULTILINE)
+        # MergedInto carries the target ID in the domain; its SQL discriminator is merged.
+        expected = {"merged" if value == "MergedInto" else value.lower() for value in variants}
+        check = next(item for item in self.audit.CHECKS if item.name == "catalog.artist_status_in_dictionary")
+        self.assertEqual(set(re.findall(r"'([^']+)'", check.sql)), expected)
+
     def test_workflow_completion_and_drilldown_invariants_exist(self) -> None:
         # These two encode the classes of defect that reached the operator:
         # a Release parked in a non-terminal state, and a statistic whose rows
@@ -62,6 +72,7 @@ class AuditCheckInventoryTests(unittest.TestCase):
         self.assertIn("workflow.indexed_requires_durable_projection", names)
         self.assertIn("catalog.artist_credits_backed_by_rows", names)
         self.assertIn("catalog.artist_type_in_dictionary", names)
+        self.assertIn("catalog.current_overlay_artist_references", names)
 
 
 class ReadOnlyGuardTests(unittest.TestCase):

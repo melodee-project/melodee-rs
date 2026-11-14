@@ -82,9 +82,20 @@ starting an older image.
 
 Migration `0044_rename_artist_status_provisional_to_active.sql` relabels the Artist identity state
 `provisional` to `active` (ADR-0190) and tightens `artists_status_check`. It rewrites only the status
-column: public IDs, merge tombstones, decisions, evidence, aggregates, and audit history are untouched,
-and it needs no media or reindex pass. An older image expects the previous vocabulary, so roll back
-the image and the schema together.
+column: public IDs, merge tombstones, decisions, evidence, aggregates, and audit history are untouched.
+Migration `0045_repair_artist_projection_and_overlay_references.sql` then advances live Artist
+revisions and queues search updates, including for catalogs that already applied `0044`. Wait for
+search projection work to catch up before checking status filters; a full rebuild and media
+re-ingestion are not required.
+
+Migration `0045` also identifies current import snapshots with inconsistent Artist references.
+Startup repairs these in bounded transactions by appending corrected snapshots and retaining the
+original evidence. Interrupted repairs resume on the next startup; a repair failure prevents startup
+from completing and must be resolved before opening traffic. Include the Artist revision/outbox
+update and any snapshot repair in maintenance-window and WAL headroom. Verify the runtime audit and
+representative Artist searches afterward. An older image expects the previous schema/vocabulary,
+so restore the pre-upgrade database backup with the previous image for rollback; do not delete
+snapshot history or decrement entity revisions.
 
 ## Rollback
 
@@ -115,3 +126,17 @@ Migration from an existing C# Melodee installation is handled by the
 status commands that adopt the canonical library in place. Dual run, final delta sync, cutover,
 and demonstrable rollback against a production snapshot remain rehearsal-gated; do not treat a
 container upgrade as a legacy-server migration.
+
+## Authentication and installation identity changes
+
+OpenSubsonic requires credentials by default even for loopback requests or a matching Host header.
+If a proxy forwards requests to the server, configure `MELODEE__SERVER__TRUSTED_PROXIES` for the
+actual proxy addresses; the historical `MELODEE__NATIVE__TRUSTED_PROXIES` name remains an alias.
+The explicit `MELODEE__OPENSUBSONIC__LEGACY_AUTH_BYPASS=true` compatibility option restores the
+historical bypass and should only be used in an appropriately isolated deployment. See
+[OpenSubsonic authentication](../api/opensubsonic/) and [configuration](./configuration/).
+
+Jellyfin-compatible discovery now reports a persistent installation identity instead of a shared
+constant. Existing clients may need to reconnect once after this upgrade. Keep the installation
+identity when restoring the same installation; independent clones need distinct identities. See
+[the Jellyfin guide](../api/jellyfin/) for the supported clone procedure and client impact.

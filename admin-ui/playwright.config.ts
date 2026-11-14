@@ -48,7 +48,7 @@ export default defineConfig({
   webServer: {
     // Bind 127.0.0.1 explicitly: the default `localhost` may resolve to ::1
     // while the readiness probe hits 127.0.0.1.
-    command: 'pnpm build && pnpm exec vite preview --port 4173 --strictPort --host 127.0.0.1',
+    command: 'python3 ../scripts/admin_preview.py',
     url: 'http://127.0.0.1:4173/admin/',
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,

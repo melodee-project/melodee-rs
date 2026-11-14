@@ -1,0 +1,82 @@
+{
+  "ar-SA": {
+    "present": 84,
+    "total": 1448
+  },
+  "cs-CZ": {
+    "present": 84,
+    "total": 1448
+  },
+  "de-DE": {
+    "present": 99,
+    "total": 1448
+  },
+  "en-US": {
+    "present": 1448,
+    "total": 1448
+  },
+  "es-ES": {
+    "present": 81,
+    "total": 1448
+  },
+  "fa-IR": {
+    "present": 84,
+    "total": 1448
+  },
+  "fr-FR": {
+    "present": 84,
+    "total": 1448
+  },
+  "id-ID": {
+    "present": 83,
+    "total": 1448
+  },
+  "it-IT": {
+    "present": 81,
+    "total": 1448
+  },
+  "ja-JP": {
+    "present": 84,
+    "total": 1448
+  },
+  "ko-KR": {
+    "present": 84,
+    "total": 1448
+  },
+  "nl-NL": {
+    "present": 84,
+    "total": 1448
+  },
+  "pl-PL": {
+    "present": 83,
+    "total": 1448
+  },
+  "pt-BR": {
+    "present": 84,
+    "total": 1448
+  },
+  "ru-RU": {
+    "present": 84,
+    "total": 1448
+  },
+  "sv-SE": {
+    "present": 84,
+    "total": 1448
+  },
+  "tr-TR": {
+    "present": 84,
+    "total": 1448
+  },
+  "uk-UA": {
+    "present": 84,
+    "total": 1448
+  },
+  "vi-VN": {
+    "present": 83,
+    "total": 1448
+  },
+  "zh-CN": {
+    "present": 84,
+    "total": 1448
+  }
+}

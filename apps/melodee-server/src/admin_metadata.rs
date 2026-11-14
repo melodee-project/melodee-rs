@@ -10,6 +10,7 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
+use crate::admin_time::AdminTimestamp;
 use axum::{
     Json, Router,
     extract::{Path as AxumPath, Query, State},
@@ -113,8 +114,8 @@ struct AuditRow {
     applied_by: String,
     status: String,
     recovery_evidence: Value,
-    created_at: OffsetDateTime,
-    completed_at: Option<OffsetDateTime>,
+    created_at: AdminTimestamp,
+    completed_at: Option<AdminTimestamp>,
 }
 
 #[derive(Debug, Clone, FromRow)]

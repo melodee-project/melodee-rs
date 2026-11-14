@@ -16,8 +16,14 @@ Scripts run in a capability-less JavaScript sandbox (the [Boa](https://boajs.dev
 - **No filesystem, network, process, or module access exists in the sandbox.** Scripts receive
   exactly two pieces of plain data (`ctx` and `scriptConfig`) and return a decision; there is
   nothing to escape to.
-- Every execution runs on a dedicated worker thread with a wall-clock timeout (default 250 ms,
-  configurable per script up to 10 seconds). A script that overruns is abandoned and counted.
+- Every execution runs in a separate process with a wall-clock timeout (default 250 ms,
+  configurable per script up to 10 seconds). A timeout terminates and reaps that process.
+  At most four script workers run concurrently.
+- The Linux worker enforces a total address-space ceiling of 128 MiB of runtime headroom plus
+  the script's `memory_bytes` budget (4 KiB–64 MiB). This bounds the whole process, rather than
+  measuring only JavaScript allocations. Unsupported platforms or an unavailable worker record
+  an error and use the documented failure behavior below.
+- The VM also bounds loop iterations (100,000), recursion (128), and stack size (4,096).
 - Payloads and return values are size-capped (256 KiB in, 16 KiB out).
 - A **circuit breaker** disables a script automatically after 3 consecutive failed runs
   (errors or timeouts) and records a `tripped` audit row. A tripped script stays off until you
@@ -59,8 +65,7 @@ Anything else — a number, a string, an exception, a timeout — is recorded as
 (fail-degraded semantics). A broken script can never block your library.
 
 `scriptConfig` is plain data: `{ eventName, timeoutMs, onDeny }`. Legacy `maxStatements` has no
-equivalent in the Rust engine; runaway CPU is bounded by the wall-clock timeout and the circuit
-breaker instead.
+exact equivalent in the Rust engine; VM limits and a process deadline bound execution instead.
 
 ## The master switch
 
@@ -151,10 +156,15 @@ Scripts written for the legacy server's Jint runtime use the same contract and t
 unchanged (modern ECMAScript, camelCase `ctx`, same auto-wrap rule). Known differences:
 
 - the timeout budget defaults to 250 ms wall clock (legacy: 50 ms);
-- `maxStatements` is accepted in stored configs but not enforced (no instruction counter);
+- `maxStatements` is not a supported setting; fixed VM limits and the process deadline apply;
 - failures are queryable audit rows instead of log lines;
 - the legacy editor's mock ctx advertised `libraryId`/`relativePath` fields that production
   never supplied — test against the real field list above.
+
+Source installations must install `melodee-script-worker` beside the matching server and CLI
+executables; see [Build from source](../installation/build-from-source/). Official container
+images include the helper. Existing registry rows need no data migration. When upgrading, test
+operator scripts against the limits above before re-enabling any script that trips its circuit breaker.
 
 Per-hook dispositions and shell-hook migration paths are recorded in the repository's
 engineering documentation (`design/adr/ADR-0135` and the scripting module documentation).

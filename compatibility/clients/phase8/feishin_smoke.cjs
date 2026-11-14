@@ -40,7 +40,7 @@ const OUT = process.env.SMOKE_EVIDENCE_DIR || '/tmp/phase8-smoke-evidence';
 
 const CHROMIUM =
   process.env.CHROMIUM_EXECUTABLE ||
-  '/home/steven/.cache/ms-playwright/chromium_headless_shell-1223/chrome-headless-shell-linux64/chrome-headless-shell';
+  chromium.executablePath();
 
 const apiLog = [];
 const assertions = [];

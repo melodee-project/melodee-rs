@@ -225,6 +225,23 @@ pub struct ClientAddressResolver {
     trusted_proxies: Arc<[TrustedProxy]>,
 }
 
+/// Shared setting wins even when explicitly empty; the native name remains an
+/// upgrade alias. Parsing is kept pure so precedence is testable without mutating
+/// process environment shared by other tests.
+pub fn configured_trusted_proxies(
+    shared: Option<&str>,
+    native_alias: Option<&str>,
+) -> Result<Vec<TrustedProxy>, ClientAddressError> {
+    shared
+        .or(native_alias)
+        .unwrap_or_default()
+        .split(',')
+        .map(str::trim)
+        .filter(|entry| !entry.is_empty())
+        .map(str::parse)
+        .collect()
+}
+
 impl ClientAddressResolver {
     #[must_use]
     pub fn new(trusted_proxies: Vec<TrustedProxy>) -> Self {

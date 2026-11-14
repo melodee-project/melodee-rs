@@ -255,6 +255,7 @@ fn os_state(pool: sqlx::PgPool) -> OsState {
         server_version: "0.0.0-test".to_string(),
         public_origin: "http://melodee.test".to_string(),
         base_url_host: Some("capture-fixture.example.test".to_string()),
+        legacy_auth_bypass: true, // Frozen ADR-0130 fixture; production defaults false.
         music_folders: vec![Arc::new(MusicFolder {
             id: Uuid::parse_str("c598e196-db6f-582e-b110-1726c138bd4f").expect("folder id"),
             name: "Fixture Library".to_string(),

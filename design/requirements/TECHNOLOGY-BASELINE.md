@@ -29,7 +29,7 @@ remain fully FOSS.
 | Fingerprint | Chromaprint/fpcalc | 1.6.1 at PRD audit | MIT library | Proposed ADR-0108 |
 | Admin UI | React + Carbon | Carbon v11 / `@carbon/react` 1.x | MIT + Apache-2.0 | Proposed ADR-0109 |
 | Dependency audit | cargo-deny | 0.20.2 at audit | MIT/Apache-2.0 | Required tooling |
-| Documentation site | Astro + Starlight | astro 7.3.7, @astrojs/starlight 0.42.5 | MIT | Proposed ADR-0112 |
+| Documentation site | Astro + Starlight | astro 7.4.7, @astrojs/starlight 0.42.10 | MIT | Proposed ADR-0112 |
 | Docs validation | @astrojs/check, starlight-links-validator | 0.9.10, 0.26.0 | MIT | Proposed ADR-0112 |
 | Docs image pipeline | sharp | 0.35.5 | Apache-2.0 | Proposed ADR-0112 |
 | Docs toolchain | Node.js + pnpm + TypeScript | Node 26.11.1, pnpm 12.10.1, TS 6.0.3 | MIT / Apache-2.0 | Proposed ADR-0112 |

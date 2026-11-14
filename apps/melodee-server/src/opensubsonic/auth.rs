@@ -82,6 +82,9 @@ fn auth_failure(params: &Params, path: &str, server_version: &str) -> Response {
 }
 
 fn is_bypass(request: &Request, state: &OsState) -> bool {
+    if !state.legacy_auth_bypass {
+        return false;
+    }
     if request.uri().path().contains("/images/") {
         return true;
     }
@@ -104,10 +107,14 @@ fn is_bypass(request: &Request, state: &OsState) -> bool {
             .get(name)
             .and_then(|value| value.to_str().ok())
     };
-    let client_ip = state
-        .client_addresses
-        .resolve(peer, header_str("forwarded"), header_str("x-forwarded-for"))
-        .unwrap_or_else(|_| peer.ip());
+    let Ok(client_ip) = state.client_addresses.resolve(
+        peer,
+        header_str("forwarded"),
+        header_str("x-forwarded-for"),
+    ) else {
+        // Malformed proxy data must not fall back to the loopback proxy peer.
+        return false;
+    };
     if client_ip.is_loopback() {
         return true;
     }
@@ -229,11 +236,12 @@ pub async fn authenticate(
                     Some(password.to_string())
                 };
                 match decoded {
-                    Some(candidate) => melodee_auth::verify_password(
+                    Some(candidate) => crate::password_work::verify_password(
                         candidate.as_bytes(),
                         record.password_hash_algorithm,
                         record.password_hash.expose_secret(),
                     )
+                    .await
                     .unwrap_or(false),
                     None => false,
                 }

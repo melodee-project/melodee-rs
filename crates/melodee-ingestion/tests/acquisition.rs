@@ -206,7 +206,7 @@ impl Scenario {
     }
 
     fn reconnect(&self) -> PgPool {
-        let url = common::admin_url().replace("/postgres", &format!("/{}", self.database.name));
+        let url = common::database_url(&self.database.name);
         PgPool::connect_lazy(&url).expect("reconnect pool")
     }
 }

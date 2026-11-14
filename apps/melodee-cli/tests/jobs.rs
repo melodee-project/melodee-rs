@@ -20,7 +20,7 @@ fn run_cli(database_url: &str, args: &[&str]) -> std::process::Output {
 #[tokio::test]
 async fn jobs_history_is_machine_readable_and_cleanup_requires_confirmation() {
     let db = TestDb::create("cli_jobs").await;
-    let database_url = common::admin_url().replace("/postgres", &format!("/{}", db.name));
+    let database_url = common::database_url(&db.name);
     let now = OffsetDateTime::now_utc();
     let store = JobRunHistoryStore;
     let run = store

@@ -542,6 +542,19 @@ async fn preview_then_apply_replace_title() {
     assert_eq!(status, StatusCode::OK, "list audits status");
     let audits: serde_json::Value = parse_json(&bytes);
     assert!(!audits.as_array().unwrap().is_empty());
+    for row in audits.as_array().expect("audit list") {
+        for field in ["createdAt", "completedAt"] {
+            if !row[field].is_null() {
+                let timestamp = row[field].as_str().expect("audit timestamp string");
+                time::OffsetDateTime::parse(
+                    timestamp,
+                    &time::format_description::well_known::Rfc3339,
+                )
+                .expect("audit timestamp is RFC 3339");
+                assert!(timestamp.ends_with('Z'));
+            }
+        }
+    }
 
     // Verify the audit record contains the audit_id.
     let audit_found = audits

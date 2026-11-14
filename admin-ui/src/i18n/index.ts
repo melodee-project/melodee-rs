@@ -3,6 +3,7 @@ import LanguageDetector from 'i18next-browser-languagedetector';
 import { initReactI18next } from 'react-i18next';
 
 import enUS from './locales/en-US.json';
+import coverage from './coverage.json';
 
 /**
  * The 20-culture inventory preserved from the legacy server (PRD-I18N-001,
@@ -11,6 +12,12 @@ import enUS from './locales/en-US.json';
  * and falls back to English for admin-console vocabulary with no legacy analog.
  */
 export const FALLBACK_LOCALE = 'en-US';
+
+/** Missing source keys are disclosed as preview coverage, never hidden by fallback. */
+export function isLocaleComplete(code: string): boolean {
+  const entry = (coverage as Record<string, { present: number; total: number }>)[code];
+  return entry !== undefined && entry.present === entry.total;
+}
 
 export const RTL_LOCALES: ReadonlySet<string> = new Set(['ar-SA', 'fa-IR']);
 

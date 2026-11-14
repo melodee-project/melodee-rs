@@ -61,7 +61,7 @@ async fn pool_row(
 #[tokio::test]
 async fn worker_pool_pause_resume_is_durable_and_audited() {
     let db = TestDb::create("cli_worker_pools").await;
-    let database_url = common::admin_url().replace("/postgres", &format!("/{}", db.name));
+    let database_url = common::database_url(&db.name);
 
     // The migration seeds exactly the wired pools, all unpaused.
     let stdout = run_cli(&database_url, &["worker-pools", "list"]);

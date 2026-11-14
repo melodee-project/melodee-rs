@@ -76,7 +76,7 @@ pub(crate) async fn run(command: ConfigCommands) {
             }
         }
         ConfigCommands::Validate => {
-            let report = melodee_server::onboarding::evaluate_onboarding(&pool).await;
+            let report = melodee_application::onboarding::evaluate_onboarding(&pool).await;
             for check in &report.checks {
                 println!(
                     "{:<14} {:<8} {}{}",

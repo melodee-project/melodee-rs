@@ -181,7 +181,7 @@ pub async fn import_user_avatars(
                 }
             };
             let normalized =
-                match melodee_server::native::images::normalize_legacy_avatar_image(bytes).await {
+                match melodee_application::avatars::normalize_legacy_avatar_image(bytes).await {
                     Ok(bytes) => bytes,
                     Err(_) => {
                         runs::record_issue(

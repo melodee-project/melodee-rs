@@ -20,7 +20,7 @@ promise support for every operating system or architecture.
   Dockerfile records the reference Linux builder setup.
 - PostgreSQL; the reference development and CI environments use PostgreSQL 18.
 - FFmpeg with the `libmp3lame` encoder, `ffprobe`, and Chromaprint `fpcalc`.
-- Node.js 26.11.1+ and pnpm 12 to build the admin SPA.
+- Node.js 26.11.1+ and the exact pnpm version pinned in `admin-ui/package.json` to build the admin SPA.
 - Python 3.11+ for repository validation. Docker Compose is useful for the development PostgreSQL
   service but is not required for a native build.
 
@@ -31,14 +31,31 @@ git clone https://github.com/melodee-project/melodee-rs.git
 cd melodee-rs
 npm install --global pnpm@12.10.1
 (cd admin-ui && pnpm install --frozen-lockfile && pnpm build)
-cargo build --locked --release -p melodee-server -p melodee-cli
+cargo build --locked --release -p melodee-server -p melodee-cli -p melodee-application
 ```
 
 For a database-free checkout validation, run `make bootstrap`. It runs repository checks, Python
-tests, formatting checks, and Rust library/binary unit tests. Media tools are required for the media
+tests, formatting checks, Rust library/binary unit tests, and database-free application, domain, MQL,
+policy, and media integration targets. Media tools are required for the media
 tests. PostgreSQL-backed integration tests are available through
 `make test-integration` and are part of the full `make check` gate. They require the development
-database or an explicitly configured test database.
+database or an explicitly configured test administrator connection. Install PostgreSQL client tools
+(`psql`) for the test runner. `MELODEE_TEST_DATABASE_URL` selects the administrator database;
+tests create their own UUID-named databases and verify each target before applying migrations.
+The full gate and `make test-integration` use a disposable migrated template to reduce setup cost;
+forward-migration tests still start with an empty database. Created databases are cleaned up after
+normal completion and test failures. `python3 scripts/test_database.py --benchmark` compares fresh
+migration and template cloning on the configured test PostgreSQL instance.
+
+The repository gates verify the committed pnpm version. If a global pnpm differs, they use
+Corepack's project version or an exact-version npm cache invocation; they do not replace your global
+installation. `python3 scripts/node_toolchain.py --project admin-ui` checks this resolution, and
+`--project docs` checks the documentation project's pin. Playwright's preview server, `make up`, and
+the guided reset command use the same resolver, including the configured build environment and
+`PATH`. Direct `pnpm` commands still require a compatible global/Corepack installation.
+
+Install `melodee-script-worker` beside `melodee-server` and `melodee-cli` when copying the binaries
+out of `target/release`. The server uses that executable for bounded script execution.
 
 Copy [`.env.example`](../../../../../.env.example) to a private local `.env`, replace the secret
 placeholders, and configure separate absolute inbound, staging, work, canonical-storage, and
@@ -66,7 +83,7 @@ make up
 make down
 ```
 
-`make up` installs the frozen Admin UI dependencies, builds the UI and debug Rust server/CLI,
+`make up` installs the frozen Admin UI dependencies, builds the UI, debug Rust server/CLI, and script worker,
 starts PostgreSQL through `compose.dev.yaml`, and waits for server readiness before returning.
 Database startup can take up to ten minutes when an existing development volume is large.
 The server runs in the background, including the workers enabled by your configuration, and serves

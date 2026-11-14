@@ -12,9 +12,8 @@ use axum::{
 };
 use melodee_auth::{
     NativeAccessClaims, NativeCookieClaims, PasswordHashAlgorithm, RefreshTokenDigest,
-    SecretString, generate_password_reset_token, generate_refresh_token, hash_password,
-    issue_access_token, issue_cookie_session, validate_access_token, validate_cookie_session,
-    verify_password,
+    SecretString, generate_password_reset_token, generate_refresh_token, issue_access_token,
+    issue_cookie_session, validate_access_token, validate_cookie_session,
 };
 use melodee_persistence::{
     AuthLookup, AuthStore, AuthStoreError, PasswordResetIssue, PasswordResetOutcome,
@@ -1177,25 +1176,52 @@ async fn authenticate_user(
     let record = match record {
         Ok(Some(record)) => record,
         Ok(None) => {
-            let _ = verify_password(
+            let _ = verify_login_password(
                 request.password.as_bytes(),
                 PasswordHashAlgorithm::Bcrypt,
                 DUMMY_BCRYPT,
-            );
+            )
+            .await?;
             return Ok(None);
         }
         Err(_) => return Err(()),
     };
-    let valid = verify_password(
+    let valid = verify_login_password(
         request.password.as_bytes(),
         record.password_hash_algorithm,
         record.password_hash.expose_secret(),
     )
-    .unwrap_or(false);
+    .await?;
     if !valid || !record.user.can_authenticate() {
         return Ok(None);
     }
     Ok(Some(record.user))
+}
+
+/// Malformed imported hashes remain credential failures. Pool saturation and
+/// worker failure use the same unavailable response as a failed account lookup,
+/// including for the dummy verification that hides unknown accounts.
+async fn verify_login_password(
+    password: &[u8],
+    algorithm: PasswordHashAlgorithm,
+    hash: &str,
+) -> Result<bool, ()> {
+    password_verification_result(
+        crate::password_work::verify_password(password, algorithm, hash).await,
+    )
+}
+
+fn password_verification_result(
+    result: Result<bool, crate::password_work::PasswordWorkError>,
+) -> Result<bool, ()> {
+    match result {
+        Ok(valid) => Ok(valid),
+        Err(crate::password_work::PasswordWorkError::Verification(_)) => Ok(false),
+        Err(error) => {
+            tracing::warn!(%error, "native password verification unavailable");
+            Err(())
+        }
+    }
 }
 
 async fn cookie_sign_in(
@@ -1471,7 +1497,7 @@ async fn password_reset_confirm(
             "Password must be at least 8 characters",
         ));
     }
-    let hash = match hash_password(request.new_password.as_bytes()) {
+    let hash = match crate::password_work::hash_password(request.new_password.as_bytes()).await {
         Ok(hash) => hash,
         Err(_) => return no_store(unavailable()),
     };
@@ -1796,4 +1822,26 @@ fn invalid_credentials() -> Response {
 }
 fn unavailable() -> Response {
     StatusCode::SERVICE_UNAVAILABLE.into_response()
+}
+
+#[cfg(test)]
+mod password_work_tests {
+    use super::password_verification_result;
+    use crate::password_work::PasswordWorkError;
+
+    #[test]
+    fn overload_is_unavailable_while_wrong_or_malformed_hashes_are_credentials_failures() {
+        assert_eq!(password_verification_result(Ok(true)), Ok(true));
+        assert_eq!(password_verification_result(Ok(false)), Ok(false));
+        assert_eq!(
+            password_verification_result(Err(PasswordWorkError::Verification(
+                melodee_auth::PasswordVerificationError::MalformedHash,
+            ))),
+            Ok(false)
+        );
+        assert_eq!(
+            password_verification_result(Err(PasswordWorkError::Busy)),
+            Err(())
+        );
+    }
 }

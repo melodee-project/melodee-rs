@@ -30,7 +30,7 @@ pub(crate) async fn run(command: PodcastCommands) {
     let pool = pool().await;
     match command {
         PodcastCommands::Stuck { limit } => {
-            match melodee_server::podcast_worker::list_stuck_downloads(
+            match melodee_application::podcast_worker::list_stuck_downloads(
                 &pool,
                 i64::from(limit.min(500)),
             )
@@ -69,7 +69,7 @@ pub(crate) async fn run(command: PodcastCommands) {
             limit,
             retry_failed,
         } => {
-            let recovered = match melodee_server::podcast_worker::recover_stuck_downloads(
+            let recovered = match melodee_application::podcast_worker::recover_stuck_downloads(
                 &pool,
                 i64::from(limit.min(500)),
                 retry_failed,
@@ -85,7 +85,7 @@ pub(crate) async fn run(command: PodcastCommands) {
             println!(
                 "recovered {recovered} stuck download(s) back to Queued (retry_failed={retry_failed})"
             );
-            let podcast_config = melodee_server::podcast_worker::PodcastConfig::from_env()
+            let podcast_config = melodee_application::podcast_worker::PodcastConfig::from_env()
                 .unwrap_or_else(|error| {
                     eprintln!("error: invalid podcast configuration: {error}");
                     std::process::exit(2);
@@ -95,8 +95,11 @@ pub(crate) async fn run(command: PodcastCommands) {
                     eprintln!("error: podcast storage root failed ownership verification: {error}");
                     std::process::exit(2);
                 }
-                match melodee_server::podcast_worker::reconcile_owned_files(&pool, &podcast_config)
-                    .await
+                match melodee_application::podcast_worker::reconcile_owned_files(
+                    &pool,
+                    &podcast_config,
+                )
+                .await
                 {
                     Ok(removed) => {
                         println!("orphan reconciliation: removed {removed} file(s)");

@@ -53,7 +53,7 @@ fn write_temp(content: &str) -> std::path::PathBuf {
 #[tokio::test]
 async fn scripts_list_shows_registry_and_wired_flags() {
     let db = TestDb::create("cli_scripts_list").await;
-    let database_url = common::admin_url().replace("/postgres", &format!("/{}", db.name));
+    let database_url = common::database_url(&db.name);
 
     // Empty registry is honest.
     let stdout = run_cli(&database_url, &["scripts", "list"]);
@@ -93,7 +93,7 @@ async fn scripts_list_shows_registry_and_wired_flags() {
 #[tokio::test]
 async fn scripts_test_evaluates_ad_hoc_source_and_records_the_run() {
     let db = TestDb::create("cli_scripts_test_adhoc").await;
-    let database_url = common::admin_url().replace("/postgres", &format!("/{}", db.name));
+    let database_url = common::database_url(&db.name);
     let ctx = write_temp(r#"{ "mediaFilesCount": 2 }"#);
     let source = write_temp("ctx.mediaFilesCount >= 3");
 
@@ -127,7 +127,7 @@ async fn scripts_test_evaluates_ad_hoc_source_and_records_the_run() {
 #[tokio::test]
 async fn scripts_test_without_source_evaluates_stored_scripts_in_order() {
     let db = TestDb::create("cli_scripts_test_stored").await;
-    let database_url = common::admin_url().replace("/postgres", &format!("/{}", db.name));
+    let database_url = common::database_url(&db.name);
 
     ScriptRegistryStore::new()
         .upsert(
@@ -188,7 +188,7 @@ async fn scripts_test_without_source_evaluates_stored_scripts_in_order() {
 #[tokio::test]
 async fn scripts_test_rejects_invalid_inputs() {
     let db = TestDb::create("cli_scripts_test_invalid").await;
-    let database_url = common::admin_url().replace("/postgres", &format!("/{}", db.name));
+    let database_url = common::database_url(&db.name);
 
     // Missing ctx file.
     let ctx = write_temp(r#"{}"#);

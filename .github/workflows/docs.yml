@@ -67,10 +67,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Validate content, types, and links
-        run: |
-          pnpm check
-          pnpm check:links
-
+        run: python3 ../scripts/ci_tasks.py docs-static
       - name: Audit all dependencies
         run: pnpm audit
 

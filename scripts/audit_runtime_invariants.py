@@ -213,7 +213,24 @@ CHECKS: tuple[Check, ...] = (
         "No Artist carries a status outside the domain enum.",
         """
         SELECT count(*)::bigint FROM artists
-         WHERE status NOT IN ('provisional','verified','merged','deprecated')
+         WHERE status NOT IN ('active','verified','merged','deprecated')
+        """,
+        None,
+    ),
+    Check(
+        "catalog.current_overlay_artist_references",
+        "Current immutable import snapshots reference the Artists recorded by their decisions.",
+        """
+        SELECT count(*)::bigint
+          FROM releases release
+          JOIN catalog_semantic_overlays overlay ON overlay.id=release.current_overlay_id
+          CROSS JOIN LATERAL jsonb_array_elements(
+              overlay.payload->'references'->'artist_resolutions'
+          ) reference
+          LEFT JOIN artists artist ON artist.id::text=reference->>'artist_id'
+          LEFT JOIN artist_match_decisions decision ON decision.id::text=reference->>'decision_id'
+         WHERE artist.id IS NULL
+            OR reference->>'artist_id' IS DISTINCT FROM decision.artist_id::text
         """,
         None,
     ),

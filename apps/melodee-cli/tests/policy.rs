@@ -36,7 +36,7 @@ async fn policy_test_persists_default_accept_without_a_synthetic_matched_rule() 
         )
         .await
         .expect("persist ordinary Studio catalog assertion");
-    let database_url = common::admin_url().replace("/postgres", &format!("/{}", db.name));
+    let database_url = common::database_url(&db.name);
     let contexts = melodee_persistence::PolicyStore
         .load_test_contexts(&db.pool, 1)
         .await

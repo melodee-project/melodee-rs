@@ -220,71 +220,52 @@ pub async fn import_track_plays(
                 "run {run_id}: lost lease during track plays import"
             ));
         }
-        let mut inserted = 0_i64;
-        let mut issues = 0_i64;
-        for row in &rows {
-            let source_pk: i64 = i64::from(row.get::<i32, _>("Id"));
-            if map::mapped_target(&mut tx, run_id, "track_plays", source_pk)
-                .await?
-                .is_some()
-            {
-                continue;
-            }
-            let user_pk = i64::from(row.get::<i32, _>("UserId"));
-            let song_pk = i64::from(row.get::<i32, _>("SongId"));
-            let user_target = user_target(&mut tx, run_id, user_pk).await?;
-            let track_target = map::catalog_mapping(&mut tx, run_id, "track", song_pk).await?;
-            let (Some(user_target), Some(track_target)) = (user_target, track_target) else {
-                runs::record_issue(
-                    &mut tx,
-                    run_id,
-                    "track_plays",
-                    Some(source_pk),
-                    "error",
-                    "ownership.unmapped_reference",
-                    "play history references an unmapped user or track; skipped",
-                    None,
-                )
-                .await?;
-                issues += 1;
-                continue;
-            };
-            let played_at: time::OffsetDateTime = row.get("PlayedAt");
-            // client_event_id is the idempotency anchor in the target schema;
-            // the legacy row's source identity makes replays convergent.
-            let client_event_id = format!("legacy-play-{source_pk}");
-            let target_id = Uuid::now_v7();
-            let written = sqlx::query(
-                "INSERT INTO native_track_plays (
-                    id, user_id, track_id, client_event_id, played_at,
-                    submitted_at, duration_seconds, completed
-                 ) VALUES ($1,$2,$3,$4,$5,$5,$6,true)
-                 ON CONFLICT (user_id, client_event_id) DO NOTHING",
-            )
-            .bind(target_id)
-            .bind(user_target)
-            .bind(track_target)
-            .bind(&client_event_id)
-            .bind(played_at)
-            .bind(row.get::<Option<i32>, _>("SecondsPlayed"))
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| format!("track play {source_pk} insert failed: {e}"))?
-            .rows_affected();
-            if written > 0 {
-                map::insert_mapping(
-                    &mut tx,
-                    run_id,
-                    "track_plays",
-                    source_pk,
-                    None,
-                    target_id,
-                    played_at,
-                )
-                .await?;
-                inserted += 1;
-            }
-        }
+        // One set operation resolves ownership, records exclusions, writes
+        // history, and anchors idempotency for the whole bounded source page.
+        let ids: Vec<i64> = rows
+            .iter()
+            .map(|row| i64::from(row.get::<i32, _>("Id")))
+            .collect();
+        let users: Vec<i64> = rows
+            .iter()
+            .map(|row| i64::from(row.get::<i32, _>("UserId")))
+            .collect();
+        let tracks: Vec<i64> = rows
+            .iter()
+            .map(|row| i64::from(row.get::<i32, _>("SongId")))
+            .collect();
+        let played: Vec<time::OffsetDateTime> =
+            rows.iter().map(|row| row.get("PlayedAt")).collect();
+        let seconds: Vec<Option<i32>> = rows.iter().map(|row| row.get("SecondsPlayed")).collect();
+        let (inserted, issues): (i64, i64) = sqlx::query_as(
+            "WITH input AS (
+                SELECT * FROM unnest($2::bigint[], $3::bigint[], $4::bigint[], $5::timestamptz[], $6::integer[])
+                AS i(source_pk, user_pk, track_pk, played_at, seconds)
+             ), resolved AS MATERIALIZED (
+                SELECT i.*, users.target_id AS user_id, tracks.internal_id AS track_id
+                FROM input i
+                LEFT JOIN legacy_migration.entity_map users ON users.run_id=$1 AND users.domain='users' AND users.source_pk=i.user_pk
+                LEFT JOIN legacy_catalog_id_mappings tracks ON tracks.migration_run_id=$1 AND tracks.entity_type='track' AND tracks.legacy_numeric_id=i.track_pk
+                WHERE NOT EXISTS (SELECT 1 FROM legacy_migration.entity_map old WHERE old.run_id=$1 AND old.domain='track_plays' AND old.source_pk=i.source_pk)
+             ), failures AS (
+                INSERT INTO legacy_migration.issues(id,run_id,domain,source_pk,severity,code,message,created_at)
+                SELECT uuidv7(),$1,'track_plays',source_pk,'error','ownership.unmapped_reference',
+                       'play history references an unmapped user or track; skipped',now()
+                FROM resolved WHERE user_id IS NULL OR track_id IS NULL RETURNING id
+             ), written AS (
+                INSERT INTO native_track_plays(id,user_id,track_id,client_event_id,played_at,submitted_at,duration_seconds,completed)
+                SELECT uuidv7(),user_id,track_id,'legacy-play-' || source_pk,played_at,played_at,seconds,true
+                FROM resolved WHERE user_id IS NOT NULL AND track_id IS NOT NULL
+                ON CONFLICT (user_id,client_event_id) DO NOTHING
+                RETURNING id,user_id,client_event_id,played_at
+             ), mapped AS (
+                INSERT INTO legacy_migration.entity_map(run_id,domain,source_pk,source_public_id,target_id,source_updated_at,created_at)
+                SELECT $1,'track_plays',r.source_pk,NULL,w.id,w.played_at,now()
+                FROM written w JOIN resolved r ON r.user_id=w.user_id AND 'legacy-play-' || r.source_pk=w.client_event_id
+                ON CONFLICT (run_id,domain,source_pk) DO NOTHING RETURNING target_id
+             ) SELECT (SELECT count(*) FROM mapped), (SELECT count(*) FROM failures)"
+        ).bind(run_id).bind(&ids).bind(&users).bind(&tracks).bind(&played).bind(&seconds)
+            .fetch_one(&mut *tx).await.map_err(|error| format!("track play batch failed: {error}"))?;
         runs::advance_checkpoint(
             &mut tx,
             run_id,

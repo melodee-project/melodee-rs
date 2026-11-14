@@ -2,8 +2,18 @@
 
 **Work item:** MEL-13 (Rehearse authorized C# migration and filesystem-data preservation)
 **Assignee:** Steven Hildreth (67ec2a49-4466-47ba-af85-52c2bb882a1d)
-**Status:** Done — run `cutover-ready`
+**Historical run status:** `cutover-ready` (not complete data-preservation acceptance; see correction below)
 **Date:** 2026-10-17
+
+## Review correction (2026-11-13)
+
+The original run recorded `theme_pack.invalid` caused by a theme-reader defect. A recorded
+error is not evidence that theme preservation succeeded. This report remains the historical
+rehearsal record; its successful stages do not establish theme-pack acceptance or acceptance of
+the current candidate. The November review hardening program fixes and regression-tests the
+reader; a new authorized rehearsal must provide candidate-specific preservation evidence.
+MEL-7/MEL-13 must not use this run alone as proof of complete theme preservation.
+
 
 ## Overview
 

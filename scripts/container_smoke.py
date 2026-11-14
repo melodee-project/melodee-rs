@@ -295,6 +295,13 @@ class SmokeHarness:
         if user_id != "10001":
             raise SmokeError(f"image runs as unexpected user id {user_id!r}")
 
+        # Verify actual runtime linkage across the build/runtime distributions.
+        for binary in ("melodee-server", "melodee-cli", "melodee-script-worker"):
+            linked = captured(["docker", "run", "--rm", "--entrypoint", "ldd", self.config.image, f"/usr/local/bin/{binary}"])
+            if "not found" in linked:
+                raise SmokeError(f"runtime shared library missing for {binary}")
+        run(["docker", "run", "--rm", "--entrypoint", "melodee-script-worker", self.config.image, "--help"])
+
         for tool in ("ffmpeg", "ffprobe"):
             version = captured(
                 ["docker", "run", "--rm", "--entrypoint", tool, self.config.image, "-version"]

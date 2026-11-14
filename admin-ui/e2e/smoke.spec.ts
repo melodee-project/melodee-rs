@@ -122,6 +122,9 @@ test('switching to ar-SA sets dir=rtl on the document root', async ({ page }) =>
   await page.goto('/');
 
   await page.getByRole('button', { name: /^Language:/ }).click();
+  await expect(page.getByLabel('Deutsch — Preview', { exact: true })).toContainText('Preview');
+  await expect(page.getByLabel('English (US)', { exact: true })).not.toContainText('Preview');
+  await expect(page.getByText('Preview languages use English where translations are missing.')).toBeVisible();
   // SwitcherItem entries are anchors without href (roleless); click by text.
   await page.getByText(/العربية/).click();
 

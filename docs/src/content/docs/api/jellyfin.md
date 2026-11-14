@@ -26,6 +26,27 @@ equivalent.
 | `GET`/`POST /System/Ping` | `204 No Content`; used by clients as a liveness probe. |
 | `GET /` | `200` with an empty body when the request carries a Jellyfin marker (a `MediaBrowser` authorization header, a Jellyfin token header, or an `api_key` query parameter). |
 
+## Installation identity and upgrades
+
+Each installation has a persistent ServerId stored in PostgreSQL. Discovery and sign-in return the
+same ID; restarts and upgrades retain it. Upgrading from the pre-release fixed ServerId assigns a
+unique ID once. Existing Jellyfin clients may need to remove and re-add the server and refresh local
+caches; record their settings first. User and media identifiers do not change.
+
+A full database restore retains the installation identity. To expose a restored copy as an independent
+server, stop that copy before its first client connection, verify the selected database belongs to the
+copy, and rotate only its installation identity with an administrator SQL session:
+
+```sql
+SELECT current_database(), installation_id FROM server_installation_identity WHERE singleton;
+UPDATE server_installation_identity SET installation_id = uuidv7() WHERE singleton
+RETURNING installation_id;
+```
+
+Restart the copy after rotation. Do not rotate the original instance or a restore intended to replace
+it. Retain the additive identity table on binary downgrade; an older server returns the old fixed ID
+and may require client reconnection again.
+
 ## Authentication
 
 `POST /Users/AuthenticateByName` accepts `{"Username": "...", "Pw": "..."}` and returns the user

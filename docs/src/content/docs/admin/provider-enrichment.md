@@ -31,7 +31,10 @@ The worker is enabled by default and can be bounded with:
 | `MELODEE__ENRICHMENT__WORKER__LEASE_SECONDS` | `120` | Lease duration, bounded from 5 to 900 seconds. |
 
 The runtime enforces a process-wide limit of eight provider operations and a separate two-operation
-gate per provider. HTTP responses are capped, timeouts are configured per provider, and 429/5xx or
+gate per provider. Metadata responses are limited to 256 KiB and downloaded images to 10 MiB,
+including responses without a Content-Length header. Oversized streams are stopped as soon as
+they exceed the limit. Images must also fit 16,777,216 pixels and a 64 MiB decode allocation
+budget. Timeouts are configured per provider, and 429/5xx or
 transient transport failures use a bounded retry count with capped backoff. Cancellation and
 shutdown drop in-flight request futures; claimed database work is recovered by lease expiry.
 

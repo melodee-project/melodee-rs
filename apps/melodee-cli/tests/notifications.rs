@@ -53,7 +53,7 @@ fn run_cli_failing(database_url: &str, args: &[&str]) -> String {
 #[tokio::test]
 async fn templates_list_shows_seeded_templates() {
     let db = TestDb::create("cli_notifications_list").await;
-    let database_url = common::admin_url().replace("/postgres", &format!("/{}", db.name));
+    let database_url = common::database_url(&db.name);
 
     let stdout = run_cli(&database_url, &["notifications", "templates", "list"]);
     for key in ["request.fulfilled", "share.created", "user.password_reset"] {
@@ -71,7 +71,7 @@ async fn templates_list_shows_seeded_templates() {
 #[tokio::test]
 async fn test_send_records_honest_audited_outcomes() {
     let db = TestDb::create("cli_notifications_send").await;
-    let database_url = common::admin_url().replace("/postgres", &format!("/{}", db.name));
+    let database_url = common::database_url(&db.name);
 
     // Email delivery disabled (environment scrubbed): an honest skip, and
     // the command still succeeds.

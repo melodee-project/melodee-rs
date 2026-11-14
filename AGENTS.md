@@ -17,7 +17,8 @@ template.
   Add `--include-e2e` for Admin UI work (requires Playwright Chromium).
 - **Fast gate: `make check-fast`** (`python3 scripts/check.py fast`) gives broad feedback:
   repository/doc and requirement-index validation, Rust formatting, workspace Clippy, and Rust
-  library tests. It intentionally excludes PostgreSQL integration, compatibility captures, UI
+  library/binary tests and database-free application, domain, MQL, policy, and media integration targets.
+  It intentionally excludes PostgreSQL integration, compatibility captures, UI
   static builds, and dependency auditing.
 - **Full local gate: `make check`** (`python3 scripts/check.py full`). Runs, in
   order: repository/doc validation → requirements index check → Python tests → admin-ui gate

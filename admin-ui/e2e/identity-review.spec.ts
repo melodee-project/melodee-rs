@@ -55,7 +55,7 @@ const DETAIL = {
       artistId: ARTIST_ID,
       artistName: 'The Nomads',
       artistStatus: 'active',
-      latestOutcome: 'provisional',
+      latestOutcome: 'proposed',
       latestConfidence: 9200,
       latestReason: 'Strong alias and release overlap.',
       latestLocked: false,
@@ -179,7 +179,7 @@ test('three-pane workspace loads: queue, observation/candidates, actions, feed',
   // Right rail: ordered decision actions, destructive distinct.
   await expect(page.getByRole('button', { name: 'Confirm Match' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Create New Artist' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Leave Provisional' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Leave Unresolved' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Never Match Candidate' })).toBeVisible();
 
   // Below the panes: recent identity decisions feed.

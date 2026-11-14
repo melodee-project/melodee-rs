@@ -35,6 +35,12 @@ HSTS at the TLS-terminating reverse proxy when serving the application over HTTP
 
 ## Implemented endpoints
 
+Response timestamps use RFC 3339 strings in UTC, for example `2026-11-13T03:23:10Z`.
+Optional timestamps are `null` when the event has not occurred. This includes processing work
+items, event history, active leases, and metadata-transform audits. Clients should parse these
+strings as timestamps and format them in the viewer's locale; numeric date-component arrays
+are not part of the Admin API contract.
+
 The following diagnostics endpoints are implemented and tested against real PostgreSQL. They
 expose durable work-item state and evidence only — no secrets, no arbitrary filesystem contents,
 and no raw database rows.

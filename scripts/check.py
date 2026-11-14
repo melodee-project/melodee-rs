@@ -20,6 +20,10 @@ class CheckError(RuntimeError):
 
 
 def run(command: list[str], *, cwd: Path = ROOT) -> None:
+    if Path(command[0]).name in {"pnpm", "pnpm.cmd", "pnpm.exe"}:
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import node_toolchain
+        command = [*node_toolchain.command(cwd), *command[1:]]
     subprocess.run(command, cwd=cwd, check=True)
 
 
@@ -53,7 +57,7 @@ def run_python_checks(*, include_tests: bool) -> None:
 
 
 def run_admin_ui_checks(*, required: bool = False) -> None:
-    pnpm = shutil.which("pnpm")
+    pnpm = shutil.which("pnpm") or ("pnpm" if shutil.which("corepack") or shutil.which("npx") else None)
     if pnpm is None:
         message = "pnpm not installed; cannot run the admin-ui gate"
         if required:
@@ -69,7 +73,7 @@ def run_admin_ui_checks(*, required: bool = False) -> None:
 
 
 def run_docs_site_checks() -> None:
-    pnpm = shutil.which("pnpm")
+    pnpm = shutil.which("pnpm") or ("pnpm" if shutil.which("corepack") or shutil.which("npx") else None)
     if pnpm is None:
         raise CheckError("pnpm not installed; cannot run the documentation-site gate")
     run([pnpm, "install", "--frozen-lockfile"], cwd=DOCS)
@@ -79,7 +83,7 @@ def run_docs_site_checks() -> None:
 
 
 def run_admin_ui_e2e() -> None:
-    pnpm = shutil.which("pnpm")
+    pnpm = shutil.which("pnpm") or ("pnpm" if shutil.which("corepack") or shutil.which("npx") else None)
     if pnpm is None:
         raise CheckError("pnpm not installed; cannot run the admin-ui end-to-end gate")
     run([pnpm, "install", "--frozen-lockfile"], cwd=ADMIN_UI)
@@ -94,7 +98,7 @@ def run_live_ui_audit() -> None:
     server plus administrator credentials in the environment; the spec skips
     itself (never silently passes) when they are absent.
     """
-    pnpm = shutil.which("pnpm")
+    pnpm = shutil.which("pnpm") or ("pnpm" if shutil.which("corepack") or shutil.which("npx") else None)
     if pnpm is None:
         raise CheckError("pnpm not installed; cannot run the live admin-ui audit")
     run([pnpm, "install", "--frozen-lockfile"], cwd=ADMIN_UI)
@@ -110,8 +114,14 @@ def run_checks(mode: str) -> None:
         "docs",
         "fast",
         "full",
+        "unit",
     }:
         raise ValueError(f"unsupported check mode: {mode}")
+    if mode == "unit":
+        run(["cargo", "build", "--locked", "-p", "melodee-application", "--bin", "melodee-script-worker"])
+        run(["cargo", "test", "--workspace", "--all-features", "--lib", "--bins"])
+        run(["cargo", "test", "--all-features", "-p", "melodee-application", "-p", "melodee-domain", "-p", "melodee-mql", "-p", "melodee-policy", "-p", "melodee-media", "--test", "*"])
+        return
     if mode == "audit-live":
         run_live_ui_audit()
         return
@@ -146,8 +156,9 @@ def run_checks(mode: str) -> None:
             "warnings",
         ]
     )
+    run(["cargo", "build", "--locked", "-p", "melodee-application", "--bin", "melodee-script-worker"])
     if full:
-        run(["cargo", "test", "--workspace", "--all-features"])
+        run([sys.executable, "scripts/test_database.py", "--", "cargo", "test", "--workspace", "--all-features"])
     else:
         run(
             [
@@ -159,6 +170,8 @@ def run_checks(mode: str) -> None:
                 "--bins",
             ]
         )
+
+        run(["cargo", "test", "--all-features", "-p", "melodee-application", "-p", "melodee-domain", "-p", "melodee-mql", "-p", "melodee-policy", "-p", "melodee-media", "--test", "*"])
 
     if full:
         if shutil.which("cargo-deny") is None:
@@ -221,7 +234,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "mode",
-        choices=("admin-ui", "admin-ui-e2e", "audit-live", "coverage", "docs", "fast", "full"),
+        choices=("admin-ui", "admin-ui-e2e", "audit-live", "coverage", "docs", "fast", "full", "unit"),
     )
     return parser.parse_args()
 
@@ -230,7 +243,7 @@ def main() -> int:
     args = parse_args()
     try:
         run_checks(args.mode)
-    except CheckError as error:
+    except (CheckError, RuntimeError) as error:
         print(str(error), file=sys.stderr)
         return 1
     except subprocess.CalledProcessError as error:

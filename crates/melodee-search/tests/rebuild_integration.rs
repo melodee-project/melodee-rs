@@ -1920,3 +1920,93 @@ async fn repeated_projection_passes_do_not_abandon_one_segment_per_batch() {
 
     db.drop().await;
 }
+
+/// 0044 may already be applied while an existing generation still stores provisional.
+/// 0045 must make the ordinary outbox worker replace that revision without a rebuild.
+#[tokio::test]
+async fn migration_0045_refreshes_artist_status_in_an_existing_generation() {
+    use melodee_persistence::{MIGRATOR, migrate};
+    use sqlx::migrate::Migrator;
+    use std::borrow::Cow;
+    let db = TestDb::create_unmigrated("search_status_upgrade").await;
+    Migrator {
+        migrations: Cow::Owned(
+            MIGRATOR
+                .migrations
+                .iter()
+                .filter(|migration| migration.version <= 44)
+                .cloned()
+                .collect(),
+        ),
+        ..Migrator::DEFAULT
+    }
+    .run(&db.pool)
+    .await
+    .expect("pre-repair schema");
+    let artist:uuid::Uuid=sqlx::query_scalar("INSERT INTO artists(id,public_api_id,canonical_name,normalized_name,sort_name,artist_type,status,revision,created_at,updated_at) VALUES(uuidv7(),uuidv7(),'Status Artist','status artist','Status Artist','unknown','active',1,now(),now()) RETURNING id")
+        .fetch_one(&db.pool).await.expect("Artist after status rename");
+    let directory = TempDir::new().expect("search temp root");
+    let config = activate_empty_generation(&db, &directory).await;
+    let root = SearchRoot::open(&config.search_root).expect("root");
+    let active =
+        SearchProjectionStore::active_generation(&db.pool, root.path().to_string_lossy().as_ref())
+            .await
+            .expect("generation lookup")
+            .expect("active");
+    let Some(SearchCatalogRecord::Artist(record)) =
+        SearchProjectionStore::load_catalog_record(&db.pool, SearchEntityType::Artist, artist)
+            .await
+            .expect("record")
+    else {
+        panic!("missing Artist");
+    };
+    let mut stale = ArtistDoc::from(record);
+    stale.status = "provisional".to_owned();
+    stale.revision = 2;
+    sqlx::query("UPDATE artists SET revision=2 WHERE id=$1")
+        .bind(artist)
+        .execute(&db.pool)
+        .await
+        .expect("historical revision");
+    let mut store = SearchStore::open(&root.generation_path(active.generation_id)).expect("index");
+    store
+        .upsert_artist(&stale)
+        .expect("historical index document");
+    store.commit().expect("historical index commit");
+    assert_eq!(
+        store
+            .search(&parse_and_plan("status:provisional").expect("query"), 10, 0)
+            .expect("old status")
+            .len(),
+        1
+    );
+    assert!(
+        store
+            .search(&parse_and_plan("status:active").expect("query"), 10, 0)
+            .expect("new status before upgrade")
+            .is_empty()
+    );
+    drop(store);
+    migrate(&db.pool).await.expect("upgrade");
+    let pass = apply_outbox_once(&config, &db.pool)
+        .await
+        .expect("apply status refresh");
+    assert_eq!(pass.applied, 1);
+    let store = SearchStore::open_readonly(&root.generation_path(active.generation_id))
+        .expect("same index");
+    assert_eq!(
+        store
+            .search(&parse_and_plan("status:active").expect("query"), 10, 0)
+            .expect("updated status")
+            .len(),
+        1
+    );
+    assert!(
+        store
+            .search(&parse_and_plan("status:provisional").expect("query"), 10, 0)
+            .expect("obsolete status")
+            .is_empty()
+    );
+    drop(store);
+    db.drop().await;
+}

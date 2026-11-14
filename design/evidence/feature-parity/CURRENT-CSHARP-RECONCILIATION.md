@@ -1,9 +1,9 @@
 # Current C# feature-parity reconciliation
 
 - **Audit date:** 2026-09-20
-- **Legacy behavioral-oracle checkout:** `/home/steven/src/github/melodee`, branch
+- **Legacy behavioral-oracle checkout:** a sibling `melodee` checkout, branch
   `sph.2026-07-11.01`, `4028b58dbd3302ed431e2c5b32d9dde5634db218`
-- **Rust replacement checkout:** `/home/steven/src/github/melodee-rs`, branch `main`,
+- **Rust replacement checkout:** this `melodee-rs` checkout, branch `main`,
   `7ab01c515295d9f883585157287436f05d37f422`
 - **Oracle qualification:** the local C# checkout is ahead of its local `origin/main`
   reference (`d91342e5`) and is the frozen compatibility-oracle commit used by this
@@ -17,6 +17,16 @@
 The audit used `AGENTS.md`, `PRD.md`, `SPEC.md`, the definition of done, the
 requirements index and overrides, accepted relevant ADRs, compatibility contracts,
 existing docs, source, runtime router composition, migrations, and tests instead.
+
+## Review correction (2026-11-13): theme preservation evidence
+
+The historical MEL-13 rehearsal recorded `theme_pack.invalid` from an empty-buffer read in
+legacy theme import. That failure was not a data-disposition approval and cannot support a
+claim that theme preservation passed. The [corrected historical report](MEL-13-REHEARSAL-REPORT.md)
+retains its original counts and failures. The [review hardening program](../REVIEW-HARDENING-2026-11.md)
+tracks the reader correction and regression tests; candidate-specific authorized migration
+acceptance remains unverified until a new rehearsal proves the affected theme content survives.
+Earlier blanket “done”/“no losses” statements below are superseded for this evidence claim.
 
 ## Addendum (2026-11-09): settings-consumer, curation and library-truth corrections
 
@@ -112,7 +122,7 @@ updated for the same items.
   (notification-template library import — commit `bca206e`), MEL-7 (legacy custom theme
   pack import — same commit), MEL-8 (metadata transforms against canonical storage —
   `design/runbooks/METADATA-TRANSFORMS.md`), MEL-13 (authorized migration rehearsal —
-  [rehearsal report](../../../MEL-13-rehearsal-report.md)), MEL-14 (cutover/rollback drill —
+  [rehearsal report](MEL-13-REHEARSAL-REPORT.md)), MEL-14 (cutover/rollback drill —
   [evidence](MEL-14-CUTOVER-ROLLBACK-EVIDENCE.md) + drill JSON), MEL-15 (full
   current-candidate differential — [evidence](MEL-15-DIFFERENTIAL-EVIDENCE.md) + report
   JSON).

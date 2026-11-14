@@ -52,7 +52,7 @@ pub(crate) async fn run(command: ScriptCommands) {
             {
                 Ok(scripts) => {
                     for script in &scripts {
-                        let wired = if melodee_server::scripting::WIRED_EVENTS
+                        let wired = if melodee_application::scripting::WIRED_EVENTS
                             .contains(&script.event.as_str())
                         {
                             "wired"
@@ -84,12 +84,12 @@ pub(crate) async fn run(command: ScriptCommands) {
             timeout_ms,
         } => {
             let ctx = read_json_file(&ctx);
-            let service = melodee_server::scripting::ScriptingService::new(pool.clone());
+            let service = melodee_application::scripting::ScriptingService::new(pool.clone());
             match source {
                 Some(source_path) => {
                     let source = read_source_file(&source_path);
                     let timeout =
-                        timeout_ms.unwrap_or(melodee_server::scripting::DEFAULT_TIMEOUT_MS);
+                        timeout_ms.unwrap_or(melodee_application::scripting::DEFAULT_TIMEOUT_MS);
                     match service.test_run(&event, None, &source, timeout, &ctx).await {
                         Ok((evaluation, run)) => {
                             println!(
@@ -159,7 +159,7 @@ pub(crate) async fn run(command: ScriptCommands) {
                     }
                     println!(
                         "verdict: {verdict} (effective onDeny: {})",
-                        melodee_server::scripting::EFFECTIVE_ON_DENY
+                        melodee_application::scripting::EFFECTIVE_ON_DENY
                     );
                 }
             }
@@ -168,15 +168,15 @@ pub(crate) async fn run(command: ScriptCommands) {
 }
 
 fn read_json_file(path: &Path) -> Value {
-    let bytes =
-        read_bounded_file(path, melodee_server::scripting::MAX_CTX_BYTES).unwrap_or_else(|error| {
+    let bytes = read_bounded_file(path, melodee_application::scripting::MAX_CTX_BYTES)
+        .unwrap_or_else(|error| {
             eprintln!("error: cannot read {}: {error}", path.display());
             std::process::exit(2);
         });
-    if bytes.len() > melodee_server::scripting::MAX_CTX_BYTES {
+    if bytes.len() > melodee_application::scripting::MAX_CTX_BYTES {
         eprintln!(
             "error: ctx file exceeds {} bytes",
-            melodee_server::scripting::MAX_CTX_BYTES
+            melodee_application::scripting::MAX_CTX_BYTES
         );
         std::process::exit(2);
     }

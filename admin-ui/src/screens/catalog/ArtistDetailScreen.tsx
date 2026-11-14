@@ -186,13 +186,18 @@ export function ArtistDetailScreen() {
   const { t } = useTranslation();
   const { id = '' } = useParams();
   const [editing, setEditing] = useState(false);
-  // Deep links (e.g. the stat cards) select a tab via ?tab=; the tab bar then
-  // owns the state locally.
-  const [searchParams] = useSearchParams();
-  const [tab, setTab] = useState(() => {
-    const requested = searchParams.get('tab');
-    return requested && ARTIST_TABS.includes(requested) ? requested : 'overview';
-  });
+  // The URL owns selection so same-screen statistic links and browser history
+  // update the visible tab just as an initial deep link does.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get('tab');
+  const tab = requestedTab && ARTIST_TABS.includes(requestedTab) ? requestedTab : 'overview';
+  const setTab = (nextTab: string) => {
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.set('tab', nextTab);
+      return next;
+    });
+  };
   const { detail, error, loading, retry } = useCatalogDetail(getCatalogArtist, id);
 
   if (loading && detail === null) {

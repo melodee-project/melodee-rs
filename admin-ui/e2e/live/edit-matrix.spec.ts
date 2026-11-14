@@ -62,6 +62,7 @@ test.describe('edit matrix', () => {
     const suffix = 'Matrix';
     const nameField = page.getByLabel('Name', { exact: true });
     const originalName = await nameField.inputValue();
+    const originalSortName = await page.getByLabel('Sort name').inputValue();
     await nameField.fill(`${originalName} ${suffix}`);
     await page.getByLabel('Sort name').fill(`${suffix}, sort`);
     await page.getByLabel('Type').selectOption('orchestra');
@@ -91,11 +92,14 @@ test.describe('edit matrix', () => {
     // Restore.
     await page.getByRole('button', { name: 'Edit' }).click();
     await page.getByLabel('Name', { exact: true }).fill(originalName);
+    await page.getByLabel('Sort name').fill(originalSortName);
     await page.getByLabel('Type').selectOption(String(before['artistType']));
     await page.getByLabel('Identity status').selectOption(String(before['status']));
     await page.getByRole('button', { name: /save/i }).click();
     await page.reload();
-    expect((await artistDetail(request, cookie, id))['name']).toBe(originalName);
+    const restored = await artistDetail(request, cookie, id);
+    expect(restored['name']).toBe(originalName);
+    expect(restored['sortName']).toBe(originalSortName);
   });
 
   test('release metadata edit persists through the form and reverts cleanly', async ({
@@ -174,7 +178,7 @@ test.describe('edit matrix', () => {
     );
   });
 
-  test('search reflects a renamed release (the projection is not stale)', async ({
+  test('release rename queues a projection update that drains', async ({
     page,
     context,
     request,
@@ -206,12 +210,15 @@ test.describe('edit matrix', () => {
     const deadline = Date.now() + 30_000;
     let found = false;
     while (Date.now() < deadline) {
-      const body = await apiGet<{ projection?: { pending?: number } }>(
+      const body = await apiGet<{ enabled: boolean; projection: { pending: number; failed: number } | null }>(
         request,
         cookie,
         `${API_URL}/api/admin/v1/search/status`,
       );
-      if ((body.projection?.pending ?? 0) === 0) {
+      expect(body.enabled, 'search worker is enabled for the live audit').toBe(true);
+      expect(body.projection, 'the real projection status is present').not.toBeNull();
+      expect(body.projection?.failed, 'no projection updates failed').toBe(0);
+      if (body.projection?.pending === 0) {
         found = true;
         break;
       }
@@ -238,7 +245,7 @@ test.describe('edit matrix', () => {
     ).toBe(originalTitle);
   });
 
-  test('policy editor: create, disable, and delete round-trip', async ({ page, context, request }) => {
+  test('policy editor loads its rules and dictionary controls', async ({ page, context, request }) => {
     await signIn(context, request);
     await page.goto(`${BASE_URL}/policies/releases`);
     await expect(page.getByRole('table', { name: /Policy rules/ })).toBeVisible();

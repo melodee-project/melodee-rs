@@ -356,8 +356,9 @@ def up() -> None:
         )
         return
     STATE.unlink(missing_ok=True)
-    for tool in ("cargo", "docker", "pnpm", "ffmpeg", "ffprobe", "fpcalc"):
-        if shutil.which(tool, path=environment.get("PATH")) is None:
+    pnpm_prefix = setup.require_commands(environment)
+    for tool in ("ffmpeg", "ffprobe", "fpcalc"):
+        if shutil.which(tool, path=os.pathsep.join(os.get_exec_path(environment))) is None:
             raise StackError(f"required command not found: {tool}")
     # Bind, rather than kill anything using the requested port.
     with socket.socket(
@@ -374,7 +375,7 @@ def up() -> None:
                 f"server address {bind.configured} is unavailable; stop its owner first"
             ) from error
     validate_compose()
-    for command in setup.admin_ui_commands(["pnpm"]):
+    for command in setup.admin_ui_commands(pnpm_prefix):
         run(command, cwd=ROOT / "admin-ui", environment=environment)
     run(setup.rust_build_command(), environment=environment)
     was_running = (

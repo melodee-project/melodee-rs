@@ -13,6 +13,27 @@
 use serde::Serializer;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
+/// An Admin response timestamp whose wire representation is always RFC 3339.
+///
+/// Keeping serialization on the type prevents a newly added DTO field from
+/// silently reverting to `OffsetDateTime`'s tuple representation. SQLx decodes
+/// the transparent wrapper directly for response rows backed by PostgreSQL.
+#[derive(Debug, Clone, Copy, sqlx::Type)]
+#[sqlx(transparent)]
+pub struct AdminTimestamp(OffsetDateTime);
+
+impl From<OffsetDateTime> for AdminTimestamp {
+    fn from(value: OffsetDateTime) -> Self {
+        Self(value)
+    }
+}
+
+impl serde::Serialize for AdminTimestamp {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serialize(&self.0, serializer)
+    }
+}
+
 fn to_rfc3339(value: &OffsetDateTime) -> Result<String, time::error::Format> {
     value.to_offset(time::UtcOffset::UTC).format(&Rfc3339)
 }
@@ -85,5 +106,28 @@ mod tests {
     fn non_utc_offsets_are_normalized_to_utc() {
         let value = datetime!(2026-11-13 03:23:10 +02:00);
         assert_eq!(format(value), "2026-11-13T01:23:10Z");
+    }
+
+    #[test]
+    fn timestamp_type_preserves_rfc3339_without_field_attributes() {
+        #[derive(Serialize)]
+        struct TypedRow {
+            at: AdminTimestamp,
+            maybe: Option<AdminTimestamp>,
+        }
+        let value = datetime!(2026-11-13 03:23:10.123456789 +02:00);
+        let json = serde_json::to_value(TypedRow {
+            at: value.into(),
+            maybe: Some(value.into()),
+        })
+        .expect("serialize typed timestamps");
+        assert_eq!(json["at"], "2026-11-13T01:23:10.123456789Z");
+        assert_eq!(json["maybe"], json["at"]);
+        let json = serde_json::to_value(TypedRow {
+            at: value.into(),
+            maybe: None,
+        })
+        .expect("serialize absent timestamp");
+        assert!(json["maybe"].is_null());
     }
 }

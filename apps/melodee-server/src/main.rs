@@ -446,13 +446,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             .with_security_settings(password_reset_ttl_minutes, blacklist.clone()),
     );
     let native_cors = native::auth::cors_from_env()?;
-    let trusted_proxies = env::var("MELODEE__NATIVE__TRUSTED_PROXIES")
-        .unwrap_or_default()
-        .split(',')
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::parse)
-        .collect::<Result<Vec<_>, _>>()?;
+    let trusted_proxies = native_stream::configured_trusted_proxies(
+        env::var("MELODEE__SERVER__TRUSTED_PROXIES").ok().as_deref(),
+        env::var("MELODEE__NATIVE__TRUSTED_PROXIES").ok().as_deref(),
+    )?;
     // Direct-play admission (`streaming.maxConcurrentStreams.global` /
     // `.perUser`, legacy `StreamingLimiter`). Legacy `0` means unlimited; the
     // Rust process keeps a bounded safety default instead of an unbounded
@@ -591,6 +588,11 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         native_stream::ClientAddressResolver::new(trusted_proxies.clone()),
         search_config.enabled.then_some(search_config.clone()),
     )?;
+    if opensubsonic_state.legacy_auth_bypass {
+        tracing::warn!(
+            "legacy OpenSubsonic authentication bypass enabled: matching-host and loopback requests can access the catalog without credentials; do not expose through a public proxy"
+        );
+    }
     if let Some(enabled) = downloads_enabled_setting {
         opensubsonic_state.downloads_enabled = enabled;
     }
@@ -602,7 +604,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         pool: pool.clone(),
         server_name: server_site_name.clone(),
         server_version: env!("CARGO_PKG_VERSION").to_string(),
-        server_id: "93cd3cc3a120127ccfda124620290cae".to_string(),
+        server_id: melodee_persistence::installation_id(&pool)
+            .await?
+            .simple()
+            .to_string(),
         local_address: public_origin.clone(),
         public_origin: public_origin.clone(),
         token_pepper: jellyfin::token_pepper_from_env()?,
@@ -610,15 +615,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         max_active_tokens: 10,
         direct_play: direct_play.clone(),
         transcoding: transcoding.clone(),
-        client_addresses: native_stream::ClientAddressResolver::new(
-            env::var("MELODEE__NATIVE__TRUSTED_PROXIES")
-                .unwrap_or_default()
-                .split(',')
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .map(str::parse)
-                .collect::<Result<Vec<_>, _>>()?,
-        ),
+        client_addresses: native_stream::ClientAddressResolver::new(trusted_proxies.clone()),
         search: search_config.enabled.then_some(search_config.clone()),
         libraries: jellyfin_libraries(&ingestion_config),
         lastfm_api_base_url: None,

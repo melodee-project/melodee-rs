@@ -1,7 +1,7 @@
 import i18next from 'i18next';
 import { describe, expect, it } from 'vitest';
 
-import i18n, { CULTURES, dirFor, FALLBACK_LOCALE } from './index';
+import i18n, { CULTURES, dirFor, FALLBACK_LOCALE, isLocaleComplete } from './index';
 import { formatDateTime, formatDuration, formatNumber } from './format';
 
 describe('i18n foundation (ADR-0137)', () => {
@@ -21,6 +21,13 @@ describe('i18n foundation (ADR-0137)', () => {
   it('uses en-US as the fallback locale', () => {
     expect(FALLBACK_LOCALE).toBe('en-US');
     expect(i18n.options.fallbackLng).toContain('en-US');
+  });
+
+  it('discloses partial catalogs independently of the English fallback', () => {
+    expect(isLocaleComplete('en-US')).toBe(true);
+    expect(isLocaleComplete('de-DE')).toBe(false);
+    expect(isLocaleComplete('ar-SA')).toBe(false);
+    expect(isLocaleComplete('unknown')).toBe(false);
   });
 
   it('falls back to English for keys missing from a harvested locale', async () => {

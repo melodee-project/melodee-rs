@@ -18,7 +18,8 @@ Configure a client with the server's public origin and authenticate with a nativ
 The server returns absolute image and signed direct-play URLs, so deployments behind a reverse
 proxy must set `MELODEE__NATIVE__PUBLIC_ORIGIN` to the externally reachable `http` or `https`
 origin. If the proxy terminates client connections, also configure only its exact address or CIDR
-in `MELODEE__NATIVE__TRUSTED_PROXIES`; untrusted forwarding headers are ignored.
+in `MELODEE__SERVER__TRUSTED_PROXIES`; untrusted forwarding headers are ignored. The historical
+`MELODEE__NATIVE__TRUSTED_PROXIES` name remains a fallback alias.
 
 MeloAmp accepts either the server origin, such as `http://127.0.0.1:8080`, or the complete native
 API base, such as `http://127.0.0.1:8080/api/v1`. Its browser renderer calls the server from a

@@ -20,6 +20,8 @@ from pathlib import Path
 from typing import Sequence
 from urllib.parse import urlsplit
 
+import node_toolchain
+
 
 ROOT = Path(__file__).resolve().parents[1]
 ENV_FILE = ROOT / ".env"
@@ -569,7 +571,7 @@ def parse_bind_address(environment: dict[str, str]) -> BindAddress:
 
 
 def require_commands(environment: dict[str, str]) -> list[str]:
-    search_path = environment.get("PATH")
+    search_path = os.pathsep.join(os.get_exec_path(environment))
     missing = [
         command
         for command in ("cargo", "docker")
@@ -577,11 +579,10 @@ def require_commands(environment: dict[str, str]) -> list[str]:
     ]
     if missing:
         raise SetupError(f"missing required command(s): {', '.join(missing)}")
-    if shutil.which("pnpm", path=search_path) is not None:
-        return ["pnpm"]
-    if shutil.which("corepack", path=search_path) is not None:
-        return ["corepack", "pnpm"]
-    raise SetupError("missing pnpm and corepack; install Node.js with Corepack support")
+    try:
+        return node_toolchain.command(ADMIN_UI, environment=environment)
+    except RuntimeError as error:
+        raise SetupError(str(error)) from error
 
 
 def ensure_server_port_available(bind: BindAddress) -> None:
@@ -622,6 +623,8 @@ def rust_build_command() -> list[str]:
         "melodee-server",
         "-p",
         "melodee-cli",
+        "-p",
+        "melodee-application",
     ]
 
 

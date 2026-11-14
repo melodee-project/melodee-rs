@@ -49,6 +49,18 @@ pub async fn catalog_mapping(
     .map_err(|e| format!("catalog mapping lookup failed for {entity_type}/{legacy_pk}: {e}"))
 }
 
+/// Fetches only this page's identity references; never loads the whole catalog.
+pub async fn catalog_mappings(
+    tx: &mut Transaction<'_, Postgres>,
+    run_id: Uuid,
+    entity_type: &str,
+    keys: &[i64],
+) -> Result<std::collections::BTreeMap<i64, Uuid>, String> {
+    let rows: Vec<(i64, Uuid)> = sqlx::query_as("SELECT legacy_numeric_id,internal_id FROM legacy_catalog_id_mappings WHERE migration_run_id=$1 AND entity_type=$2 AND legacy_numeric_id=ANY($3)")
+        .bind(run_id).bind(entity_type).bind(keys).fetch_all(&mut **tx).await.map_err(|error| format!("catalog batch mapping lookup failed: {error}"))?;
+    Ok(rows.into_iter().collect())
+}
+
 /// Inserts the non-catalog mapping row; a conflict means a committed earlier
 /// batch already migrated this source row, which is the idempotency anchor.
 pub async fn insert_mapping(
@@ -76,35 +88,6 @@ pub async fn insert_mapping(
     .execute(&mut **tx)
     .await
     .map_err(|e| format!("mapping insert failed for {domain}/{source_pk}: {e}"))?;
-    Ok(())
-}
-
-/// Inserts the catalog identity mapping (ADR-0148 §D.2).
-pub async fn insert_catalog_mapping(
-    tx: &mut Transaction<'_, Postgres>,
-    run_id: Uuid,
-    entity_type: &str,
-    legacy_pk: i64,
-    internal_id: Uuid,
-    public_api_id: Uuid,
-) -> Result<(), String> {
-    sqlx::query(
-        "INSERT INTO legacy_catalog_id_mappings (
-            id, migration_run_id, entity_type, legacy_numeric_id, internal_id,
-            public_api_id, source_snapshot, imported_at
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,now())
-         ON CONFLICT (migration_run_id, entity_type, legacy_numeric_id) DO NOTHING",
-    )
-    .bind(Uuid::now_v7())
-    .bind(run_id)
-    .bind(entity_type)
-    .bind(legacy_pk)
-    .bind(internal_id)
-    .bind(public_api_id)
-    .bind(super::source::FROZEN_SCHEMA_FINAL_MIGRATION)
-    .execute(&mut **tx)
-    .await
-    .map_err(|e| format!("catalog mapping insert failed for {entity_type}/{legacy_pk}: {e}"))?;
     Ok(())
 }
 

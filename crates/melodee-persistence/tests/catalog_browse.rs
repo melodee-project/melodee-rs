@@ -497,7 +497,7 @@ async fn artist_detail_exposes_identity_stats_and_bounded_sections() {
             .any(|event| event.event_type == "artist_created")
     );
 
-    // The import-billed provisional Artist reports set-based aggregate stats.
+    // The import-billed active Artist reports set-based aggregate stats.
     let billed_public: Uuid = sqlx::query_scalar(
         "SELECT a.public_api_id FROM artists a
          JOIN release_artists ra ON ra.artist_id = a.id
@@ -516,6 +516,66 @@ async fn artist_detail_exposes_identity_stats_and_bounded_sections() {
     assert_eq!(billed.releases.total, 1);
     assert_eq!(billed.releases.items[0].title, "Detail Release");
     assert_eq!(billed.releases.items[0].role, "primary");
+    // Release and Track billing produce independent association evidence for
+    // the same Track. The statistic and its drill-down count distinct Tracks.
+    assert_eq!(billed.billed_track_count, 1);
+    assert_eq!(billed.track_credits.total, 1);
+    assert_eq!(billed.track_credits.items.len(), 1);
+    assert_eq!(
+        billed.track_credits.items[0].role.as_deref(),
+        Some("primary")
+    );
+    assert!(billed.track_credits.items[0].is_performance);
+
+    sqlx::query(
+        "INSERT INTO track_artists (
+           id, track_id, artist_id, role, presentation_order, display_value,
+           join_phrase, created_at
+         ) SELECT uuidv7(), billing.track_id, billing.artist_id, 'featured', 2,
+                  billing.display_value, billing.join_phrase, billing.created_at
+             FROM track_artists billing JOIN tracks track ON track.id = billing.track_id
+            WHERE track.release_id = $1 LIMIT 1",
+    )
+    .bind(release.release_id().into_uuid())
+    .execute(&db.pool)
+    .await
+    .expect("second billing for the same Artist and Track");
+    let repeated = CatalogStore
+        .artist_catalog_detail(&db.pool, billed_public)
+        .await
+        .expect("repeated billing detail")
+        .expect("artist exists");
+    assert_eq!(repeated.track_credits.total, 1);
+    assert_eq!(repeated.track_credits.items.len(), 1);
+    assert_eq!(
+        repeated.track_credits.items[0].role.as_deref(),
+        Some("primary")
+    );
+
+    CatalogStore
+        .add_contribution(
+            &db.pool,
+            &melodee_domain::Contribution {
+                id: ContributionId::new(),
+                target: ContributionTarget::Release(release.release_id()),
+                artist_id: member_id,
+                role: ContributionRole::Vocalist,
+                credit_text: Some("Vocals by Detail Member".to_string()),
+                evidence_source: "fixture".to_string(),
+            },
+            now,
+        )
+        .await
+        .expect("additional performance contribution");
+    let combined = CatalogStore
+        .artist_catalog_detail(&db.pool, member_public)
+        .await
+        .expect("combined contribution detail")
+        .expect("artist exists");
+    assert_eq!(combined.track_credits.total, 1);
+    assert_eq!(combined.track_credits.items.len(), 1);
+    assert!(combined.track_credits.items[0].is_performance);
+    assert_eq!(combined.contributions.total, 2);
 
     // Unknown public ids resolve to None (the API maps this to 404).
     let missing = CatalogStore

@@ -188,7 +188,7 @@ pub async fn create_user(
     }
     let normalized_email = email.trim().to_uppercase();
     let now = OffsetDateTime::now_utc();
-    let password_hash = match melodee_auth::hash_password(password.as_bytes()) {
+    let password_hash = match crate::password_work::hash_password(password.as_bytes()).await {
         Ok(hash) => hash,
         Err(error) => {
             tracing::error!(%error, "opensubsonic createUser password hash failed");

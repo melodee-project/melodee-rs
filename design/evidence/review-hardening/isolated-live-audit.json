@@ -1,0 +1,155 @@
+{
+  "status": "final-local-pass",
+  "recorded_at": "2026-11-14T01:41:20.860366+00:00",
+  "scope": "Isolated synthetic local validation, not a release-qualification or production acceptance claim.",
+  "isolation": {
+    "database": "new generated melodee_test_live_<UUID> database on documented local test PostgreSQL",
+    "server": "separate process on an ephemeral loopback port",
+    "configuration": "explicit environment and empty .env in a private temporary working directory; repository .env never read",
+    "media": "three generated 15-second tagged FLAC files under independent temporary inbound/staging/work/library/search roots",
+    "administrator": "new bootstrap administrator with an ephemeral random password",
+    "external_workers": "enrichment, discovery, podcast and Google authentication disabled",
+    "cleanup": "server stopped, exact generated database dropped, browser authentication state deleted; existing development data untouched"
+  },
+  "candidate": {
+    "server_sha256": "4f24a9a4d3595ed120639137f14e84936d7716553f93162c090547c9c25efefc",
+    "cli_sha256": "f2e279f4db07c6a05436db560ef8551d634e83f6d867c4ecf04427d9e7e09de7",
+    "script_worker_sha256": "29eade6f9a4b84a5d477032cd6b9374a6de9ca79fdce456597d25e430d38bcc4",
+    "ui_index_sha256": "57d8ab0f4e80bf7a9bfd4d4bb8e78830966bc07e05dc7a548f0753a263ccb757",
+    "build_command": "cargo build -p melodee-server -p melodee-cli -p melodee-application --bin melodee-server --bin melodee-cli --bin melodee-script-worker",
+    "includes_final_boundary_changes": "Podcast and onboarding SQL moved into persistence; application stored-script memory limit honored."
+  },
+  "fixture_result": {
+    "artists": 2,
+    "releases": 3,
+    "tracks": 3,
+    "indexed_work_items": 3
+  },
+  "browser": {
+    "passed": 10,
+    "failed": 0,
+    "skipped": 0,
+    "duration_seconds": 32.0,
+    "api_mocks": false,
+    "specs": [
+      "auth.setup.ts",
+      "edit-matrix.spec.ts",
+      "live-admin-audit.spec.ts",
+      "timestamps.spec.ts"
+    ],
+    "coverage": [
+      "real administrator cookie sign-in",
+      "Artist metadata/type/status and sort-name restoration",
+      "Release title/date round trip",
+      "enabled search projection backlog drain without failed rows",
+      "policy controls and queue screens load",
+      "sixteen canonical screens without console/API errors",
+      "Release edit contract",
+      "distinct Track-credit count and actual statistic-link drill-down",
+      "real populated work-item/event RFC3339 timestamps and browser tooltip rendering"
+    ],
+    "log_sha256": "d506302a295570d0d74d58d4a366fee9397ed2ecc4199f762672fcd75e4ac587"
+  },
+  "runtime_audit": {
+    "before": {
+      "checks": 16,
+      "failures": 0
+    },
+    "after": {
+      "checks": 16,
+      "failures": 0
+    },
+    "checks": [
+      {
+        "name": "workflow.no_stuck_non_terminal",
+        "before_violations": 0,
+        "after_violations": 0
+      },
+      {
+        "name": "workflow.client_visible_matches_status",
+        "before_violations": 0,
+        "after_violations": 0
+      },
+      {
+        "name": "workflow.indexed_requires_durable_projection",
+        "before_violations": 0,
+        "after_violations": 0
+      },
+      {
+        "name": "workflow.awaiting_operator",
+        "before_violations": 0,
+        "after_violations": 0
+      },
+      {
+        "name": "catalog.playable_asset_resolves",
+        "before_violations": 0,
+        "after_violations": 0
+      },
+      {
+        "name": "catalog.release_aggregate_matches_tracks",
+        "before_violations": 0,
+        "after_violations": 0
+      },
+      {
+        "name": "catalog.artist_credits_backed_by_rows",
+        "before_violations": 0,
+        "after_violations": 0
+      },
+      {
+        "name": "catalog.artist_type_in_dictionary",
+        "before_violations": 0,
+        "after_violations": 0
+      },
+      {
+        "name": "catalog.artist_status_in_dictionary",
+        "before_violations": 0,
+        "after_violations": 0
+      },
+      {
+        "name": "catalog.current_overlay_artist_references",
+        "before_violations": 0,
+        "after_violations": 0
+      },
+      {
+        "name": "catalog.release_status_in_dictionary",
+        "before_violations": 0,
+        "after_violations": 0
+      },
+      {
+        "name": "workflow.state_in_dictionary",
+        "before_violations": 0,
+        "after_violations": 0
+      },
+      {
+        "name": "catalog.import_bindings_resolve",
+        "before_violations": 0,
+        "after_violations": 0
+      },
+      {
+        "name": "identity.provider_candidates_resolve",
+        "before_violations": 0,
+        "after_violations": 0
+      },
+      {
+        "name": "projection.no_stale_outbox_when_idle",
+        "before_violations": 0,
+        "after_violations": 0
+      },
+      {
+        "name": "queue.counts_match_rows",
+        "before_violations": 0,
+        "after_violations": 0
+      }
+    ]
+  },
+  "findings_fixed": [
+    "Artist Track drill-down duplicated independent association/billing evidence; now one row per distinct Track with combined performance truth",
+    "Statistic links changed the URL without selecting the target tab; UI tab state now follows the URL",
+    "Live selectors chose arbitrary navigation links and conditionally skipped the statistic assertion; now actual API fixtures and visible table rows are required",
+    "Artist edit test failed to restore sort name; restoration is now asserted"
+  ],
+  "remaining_validation": [
+    "Declared known-answer corpus views and frozen C# differential runs were not executed by this isolated synthetic run.",
+    "Target-scale and fault acceptance, provider credentials, external-client qualification, publication, production rehearsal, cutover and rollback remain operator-controlled release requirements; this local pass does not satisfy them."
+  ]
+}

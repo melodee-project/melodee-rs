@@ -8,3 +8,10 @@ overrides:
   # Expressive Code still brings postcss-nested 6 and its vulnerable parser.
   # Remove when upstream resolves GHSA-rj75-hqrm-r3gf without an override.
   'postcss-selector-parser@<7.1.6': 7.1.6
+packageExtensions:
+  # astro2tsx pins emnapi core 1.x but leaves its runtime peer unconstrained
+  # across major versions. A 2.x peer crashes astro check before diagnostics.
+  # Keep this local to the checker; Rolldown's optional 2.x WASM pair is valid.
+  '@astrojs/astro2tsx@0.1.2':
+    dependencies:
+      '@emnapi/runtime': 1.11.3

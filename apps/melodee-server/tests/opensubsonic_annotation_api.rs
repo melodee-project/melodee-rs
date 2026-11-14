@@ -87,6 +87,7 @@ async fn state(db: &common::TestDb) -> OsState {
         server_version: SERVER_VERSION.to_string(),
         public_origin: "http://melodee.test".to_string(),
         base_url_host: Some("capture-fixture.example.test".to_string()),
+        legacy_auth_bypass: true, // Frozen ADR-0130 fixture; production defaults false.
         music_folders: Vec::new(),
         podcasts_enabled: true,
         downloads_enabled: true,

@@ -224,6 +224,7 @@ class DevStackTests(unittest.TestCase):
         supervisor.poll.return_value = None
         with (
             mock.patch.object(stack, "load_environment", return_value=environment),
+            mock.patch.object(stack.setup, "require_commands", return_value=["corepack", "pnpm"]) as resolve,
             mock.patch.object(stack.shutil, "which", return_value="tool"),
             mock.patch.object(stack, "validate_compose"),
             mock.patch.object(stack, "wait_for_postgres"),
@@ -238,9 +239,13 @@ class DevStackTests(unittest.TestCase):
         ):
             stack.up()
         self.assertEqual(ready.call_count, 2)
+        resolve.assert_called_once_with(environment)
         commands = [call.args[0] for call in run.call_args_list]
-        self.assertIn(["pnpm", "install", "--frozen-lockfile"], commands)
-        self.assertIn(["pnpm", "build"], commands)
+        self.assertIn(["corepack", "pnpm", "install", "--frozen-lockfile"], commands)
+        self.assertIn(["corepack", "pnpm", "build"], commands)
+        frontend_calls = [call for call in run.call_args_list if call.args[0][:2] == ["corepack", "pnpm"]]
+        for call in frontend_calls:
+            self.assertIs(call.kwargs["environment"], environment)
         self.assertIn(
             stack.compose("up", "-d", "postgres"),
             commands,
@@ -338,6 +343,7 @@ class DevStackTests(unittest.TestCase):
             }
             with (
                 mock.patch.object(stack, "load_environment", return_value=environment),
+                mock.patch.object(stack.setup, "require_commands", return_value=["corepack", "pnpm"]),
                 mock.patch.object(stack.shutil, "which", return_value="tool"),
                 mock.patch.object(stack, "run") as run,
             ):
@@ -361,6 +367,7 @@ class DevStackTests(unittest.TestCase):
 
             with (
                 mock.patch.object(stack, "load_environment", return_value=environment),
+                mock.patch.object(stack.setup, "require_commands", return_value=["corepack", "pnpm"]),
                 mock.patch.object(stack.shutil, "which", return_value="tool"),
                 mock.patch.object(stack, "validate_compose"),
                 mock.patch.object(stack, "wait_for_postgres"),

@@ -21,7 +21,8 @@ def load_module():
         raise RuntimeError(f"unable to load {SCRIPT}")
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
+    with mock.patch.object(sys, "path", [str(ROOT / "scripts"), *sys.path]):
+        spec.loader.exec_module(module)
     return module
 
 
@@ -328,6 +329,28 @@ class ResetAndRunServerTests(unittest.TestCase):
                 ["corepack", "pnpm", "build"],
             ],
         )
+
+    def test_require_commands_resolves_pin_using_build_environment(self) -> None:
+        environment = {"PATH": "/custom/tools", "COREPACK_HOME": "/custom/cache"}
+        prefix = ["/custom/tools/corepack", "pnpm"]
+        with (
+            mock.patch.object(self.module.shutil, "which", return_value="tool") as which,
+            mock.patch.object(self.module.node_toolchain, "command", return_value=prefix) as resolve,
+        ):
+            self.assertEqual(self.module.require_commands(environment), prefix)
+        self.assertEqual(which.call_args_list, [
+            mock.call("cargo", path=environment["PATH"]),
+            mock.call("docker", path=environment["PATH"]),
+        ])
+        resolve.assert_called_once_with(self.module.ADMIN_UI, environment=environment)
+
+    def test_require_commands_reports_exact_version_resolution_failure(self) -> None:
+        with (
+            mock.patch.object(self.module.shutil, "which", return_value="tool"),
+            mock.patch.object(self.module.node_toolchain, "command", side_effect=RuntimeError("Install pnpm@12.10.1")),
+            self.assertRaisesRegex(self.module.SetupError, "pnpm@12.10.1"),
+        ):
+            self.module.require_commands({"PATH": "/custom/tools"})
 
     def test_command_cancellation_terminates_and_reaps_the_child(self) -> None:
         process = mock.MagicMock()

@@ -12,10 +12,10 @@ name = "melodee_server"
 path = "src/lib.rs"
 
 [dependencies]
+melodee-application = { path = "../../crates/melodee-application", version = "0.1.0" }
 blake3.workspace = true
 axum.workspace = true
 base64.workspace = true
-boa_engine.workspace = true
 dotenvy.workspace = true
 decentdb.workspace = true
 futures-util.workspace = true
@@ -23,7 +23,6 @@ getrandom.workspace = true
 hmac.workspace = true
 image.workspace = true
 jsonwebtoken.workspace = true
-lettre.workspace = true
 lofty.workspace = true
 md-5.workspace = true
 melodee-auth = { path = "../../crates/melodee-auth", version = "0.1.0" }

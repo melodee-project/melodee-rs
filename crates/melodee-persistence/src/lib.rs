@@ -20,6 +20,7 @@ mod discovery;
 mod error;
 mod group_admin;
 mod identity_review;
+mod installation;
 mod job_history;
 mod migrate;
 mod native_user_state;
@@ -102,6 +103,7 @@ pub use identity_review::{
     ObservedArtistCurrentDecision, ObservedArtistDetail, ObservedArtistMatchEvidence,
     ObservedArtistNegativeAssertion, ObservedArtistSort, UnresolvedObservedArtist,
 };
+pub use installation::installation_id;
 pub use job_history::{
     DEFAULT_JOB_HISTORY_RETENTION_DAYS, JobHistoryStoreError, JobRunHistory, JobRunHistoryStore,
     MAX_JOB_HISTORY_PAGE, scheduled_tick,
@@ -191,3 +193,8 @@ pub use worker_pool::{
     WorkerPoolMetrics, WorkerPoolState, WorkerPoolStore, WorkerPoolStoreError, is_pool_paused,
     is_valid_pool_name,
 };
+
+/// SQL operations for shared onboarding preflight.
+pub mod onboarding;
+/// SQL operations for podcast workers and recovery.
+pub mod podcast_work;

@@ -9,20 +9,17 @@
 use std::process::Command;
 
 use sqlx::PgPool;
-use uuid::Uuid;
+#[path = "../../../../crates/melodee-persistence/tests/common/mod.rs"]
+mod common;
 
 pub const LEGACY_DDL: &str = include_str!("../fixtures/legacy_schema.sql");
-
-pub fn admin_url() -> String {
-    std::env::var("MELODEE_TEST_DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://melodee:melodee-dev@127.0.0.1:5433/postgres".to_string())
-}
 
 /// A disposable database seeded with the frozen legacy schema plus seed SQL.
 pub struct LegacySource {
     pub name: String,
     pub url: String,
     pub pool: PgPool,
+    _guard: common::DatabaseGuard,
 }
 
 pub async fn create_source(test_name: &str, seed_sql: &str) -> LegacySource {
@@ -30,73 +27,49 @@ pub async fn create_source(test_name: &str, seed_sql: &str) -> LegacySource {
 }
 
 pub async fn create_source_with_ddl(test_name: &str, ddl: &str, seed_sql: &str) -> LegacySource {
-    let admin = PgPool::connect(&admin_url()).await.expect("admin connect");
-    let name = format!("legacy_src_{}_{}", test_name, Uuid::now_v7().simple());
-    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-        "DROP DATABASE IF EXISTS \"{name}\" WITH (FORCE)"
-    )))
-    .execute(&admin)
-    .await
-    .expect("drop source");
-    sqlx::raw_sql(sqlx::AssertSqlSafe(format!("CREATE DATABASE \"{name}\"")))
-        .execute(&admin)
-        .await
-        .expect("create source");
-    let url = admin_url().replace("/postgres", &format!("/{name}"));
-    let pool = PgPool::connect(&url).await.expect("source connect");
-    // DDL and seed are test-owned literals; AssertSqlSafe satisfies sqlx's
-    // static-SQL bound for the owned copies.
-    let ddl = ddl.to_string();
-    sqlx::raw_sql(sqlx::AssertSqlSafe(ddl))
+    let guard = common::DatabaseGuard::create(test_name).await;
+    let pool = guard.connect().await;
+    sqlx::raw_sql(sqlx::AssertSqlSafe(ddl.to_string()))
         .execute(&pool)
         .await
         .expect("legacy ddl");
     if !seed_sql.trim().is_empty() {
-        let seed = seed_sql.to_string();
-        sqlx::raw_sql(sqlx::AssertSqlSafe(seed))
+        sqlx::raw_sql(sqlx::AssertSqlSafe(seed_sql.to_string()))
             .execute(&pool)
             .await
             .expect("legacy seed");
     }
-    LegacySource { name, url, pool }
+    LegacySource {
+        name: guard.name.clone(),
+        url: guard.url(),
+        pool,
+        _guard: guard,
+    }
 }
 
-/// A disposable migrated target database.
 pub struct Target {
     pub name: String,
     pub url: String,
     pub pool: PgPool,
+    _guard: common::DatabaseGuard,
 }
 
 pub async fn create_target(test_name: &str) -> Target {
-    let admin = PgPool::connect(&admin_url()).await.expect("admin connect");
-    let name = format!("legacy_tgt_{}_{}", test_name, Uuid::now_v7().simple());
-    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-        "DROP DATABASE IF EXISTS \"{name}\" WITH (FORCE)"
-    )))
-    .execute(&admin)
-    .await
-    .expect("drop target");
-    sqlx::raw_sql(sqlx::AssertSqlSafe(format!("CREATE DATABASE \"{name}\"")))
-        .execute(&admin)
-        .await
-        .expect("create target");
-    let url = admin_url().replace("/postgres", &format!("/{name}"));
-    let pool = PgPool::connect(&url).await.expect("target connect");
+    let guard = common::DatabaseGuard::create(test_name).await;
+    let pool = guard.connect().await;
     melodee_persistence::migrate(&pool)
         .await
         .expect("target migrations");
-    Target { name, url, pool }
+    Target {
+        name: guard.name.clone(),
+        url: guard.url(),
+        pool,
+        _guard: guard,
+    }
 }
 
 pub async fn drop_db(name: &str) {
-    let admin = PgPool::connect(&admin_url()).await.expect("admin connect");
-    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-        "DROP DATABASE IF EXISTS \"{name}\" WITH (FORCE)"
-    )))
-    .execute(&admin)
-    .await
-    .expect("drop db");
+    common::drop_owned_database(name).await;
 }
 
 /// Runs the CLI successfully; returns stdout.

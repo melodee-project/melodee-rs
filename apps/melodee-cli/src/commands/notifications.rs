@@ -83,19 +83,22 @@ pub(crate) async fn run(command: NotificationCommands) {
                     eprintln!("error: invalid settings configuration: {error}");
                     std::process::exit(2);
                 });
-            let settings =
-                melodee_server::notifications::EmailSettings::from_resolved(&settings_resolver)
-                    .await
-                    .unwrap_or_else(|error| {
-                        eprintln!("error: invalid email configuration: {error}");
-                        std::process::exit(2);
-                    });
-            let service =
-                melodee_server::notifications::NotificationService::new(pool.clone(), &settings)
-                    .unwrap_or_else(|error| {
-                        eprintln!("error: invalid email configuration: {error}");
-                        std::process::exit(2);
-                    });
+            let settings = melodee_application::notifications::EmailSettings::from_resolved(
+                &settings_resolver,
+            )
+            .await
+            .unwrap_or_else(|error| {
+                eprintln!("error: invalid email configuration: {error}");
+                std::process::exit(2);
+            });
+            let service = melodee_application::notifications::NotificationService::new(
+                pool.clone(),
+                &settings,
+            )
+            .unwrap_or_else(|error| {
+                eprintln!("error: invalid email configuration: {error}");
+                std::process::exit(2);
+            });
             match service
                 .send_templated(&template, locale.as_deref().unwrap_or("en"), to.trim(), &[])
                 .await

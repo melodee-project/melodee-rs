@@ -12,57 +12,16 @@ use std::{
 
 use axum::{Router, extract::State, http::StatusCode, response::IntoResponse, routing::get};
 use melodee_persistence::{
-    EnrichmentEntityType, EnrichmentPurpose, ProviderEnrichmentStore, SettingsStore, migrate,
+    EnrichmentEntityType, EnrichmentPurpose, ProviderEnrichmentStore, SettingsStore,
 };
 use melodee_server::enrichment_worker::{EnrichmentWorkerConfig, run_enrichment_once};
 use melodee_server::providers::ProviderRuntime;
-use sqlx::PgPool;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-const ADMIN_URL: &str = "postgres://melodee:melodee-dev@127.0.0.1:5433/postgres";
-
-struct TestDb {
-    name: String,
-    pool: PgPool,
-    admin: PgPool,
-}
-
-impl TestDb {
-    async fn create(label: &str) -> Self {
-        let admin = PgPool::connect(
-            &std::env::var("MELODEE_TEST_DATABASE_URL").unwrap_or_else(|_| ADMIN_URL.to_owned()),
-        )
-        .await
-        .expect("connect admin database");
-        let name = format!(
-            "melodee_test_provider_worker_{}_{}",
-            label,
-            Uuid::now_v7().simple()
-        );
-        sqlx::raw_sql(sqlx::AssertSqlSafe(format!("CREATE DATABASE \"{name}\"")))
-            .execute(&admin)
-            .await
-            .expect("create test database");
-        let base_url =
-            std::env::var("MELODEE_TEST_DATABASE_URL").unwrap_or_else(|_| ADMIN_URL.to_owned());
-        let url = base_url.replace("/postgres", &format!("/{name}"));
-        let pool = PgPool::connect(&url).await.expect("connect test database");
-        migrate(&pool).await.expect("migrate test database");
-        Self { name, pool, admin }
-    }
-
-    async fn drop(self) {
-        self.pool.close().await;
-        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-            "DROP DATABASE IF EXISTS \"{}\" WITH (FORCE)",
-            self.name
-        )))
-        .execute(&self.admin)
-        .await
-        .expect("drop test database");
-    }
-}
+#[path = "../../../crates/melodee-persistence/tests/common/mod.rs"]
+mod common;
+use common::TestDb;
 
 #[tokio::test]
 async fn disabled_provider_task_is_claimed_and_completed_without_http() {

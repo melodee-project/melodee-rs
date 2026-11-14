@@ -59,6 +59,8 @@ pub struct OsState {
     /// Host that triggers the captured auth bypass when it equals the
     /// request Host header (the legacy `system.baseUrl` rule).
     pub base_url_host: Option<String>,
+    /// Explicit legacy anonymous bypass; disabled by default (ADR-0191).
+    pub legacy_auth_bypass: bool,
     pub music_folders: Vec<Arc<MusicFolder>>,
     pub podcasts_enabled: bool,
     pub downloads_enabled: bool,
@@ -75,6 +77,7 @@ pub struct OsState {
     pub lastfm_api_base_url: Option<String>,
 }
 
+pub const ENV_LEGACY_AUTH_BYPASS: &str = "MELODEE__OPENSUBSONIC__LEGACY_AUTH_BYPASS";
 const ENV_BASE_URL_HOST: &str = "MELODEE__OPENSUBSONIC__BASE_URL_HOST";
 const ENV_STORAGE_LIBRARY_ID: &str = "MELODEE__OPENSUBSONIC__STORAGE_LIBRARY_ID";
 const ENV_PODCASTS_ENABLED: &str = "MELODEE__OPENSUBSONIC__PODCASTS_ENABLED";
@@ -141,6 +144,8 @@ impl OsState {
             base_url_host: std::env::var(ENV_BASE_URL_HOST)
                 .ok()
                 .filter(|value| !value.is_empty()),
+            legacy_auth_bypass: env_flag(ENV_LEGACY_AUTH_BYPASS, false)
+                .map_err(|_| "MELODEE__OPENSUBSONIC__LEGACY_AUTH_BYPASS must be a boolean")?,
             music_folders,
             podcasts_enabled: env_flag(ENV_PODCASTS_ENABLED, podcast_default_enabled)
                 .map_err(|_| "MELODEE__OPENSUBSONIC__PODCASTS_ENABLED must be a boolean")?,

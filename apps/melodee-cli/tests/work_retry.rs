@@ -88,7 +88,7 @@ async fn seed_failed_item(db: &TestDb, source_path: &str) -> Uuid {
 async fn work_retry_requeues_a_failed_item_with_an_audited_reason() {
     let db = TestDb::create("cli_work_retry").await;
     let id = seed_failed_item(&db, "cli/retry/failed-item").await;
-    let database_url = common::admin_url().replace("/postgres", &format!("/{}", db.name));
+    let database_url = common::database_url(&db.name);
 
     let stdout = run_cli(
         &database_url,
@@ -133,7 +133,7 @@ async fn work_retry_rejects_items_that_are_not_failed_or_quarantined() {
     let db = TestDb::create("cli_work_retry_reject").await;
     let id = seed_ready_item(&WorkItemStore, &db.pool, "cli/retry/ready-item").await;
 
-    let database_url = common::admin_url().replace("/postgres", &format!("/{}", db.name));
+    let database_url = common::database_url(&db.name);
     let stderr = run_cli_failing(&database_url, &["work", "retry", &id.to_string()]);
     assert!(
         stderr.contains("only failed or quarantined items can be reprocessed"),
@@ -153,7 +153,7 @@ async fn work_retry_rejects_items_that_are_not_failed_or_quarantined() {
 #[tokio::test]
 async fn work_retry_fails_for_an_unknown_id() {
     let db = TestDb::create("cli_work_retry_missing").await;
-    let database_url = common::admin_url().replace("/postgres", &format!("/{}", db.name));
+    let database_url = common::database_url(&db.name);
     let stderr = run_cli_failing(
         &database_url,
         &["work", "retry", &Uuid::now_v7().to_string()],

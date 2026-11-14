@@ -139,26 +139,11 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertIn("format: json", workflow)
         self.assertIn("output: trivy-critical.json", workflow)
         self.assertIn("output: trivy-high.json", workflow)
-        self.assertIn("sha256sum --", workflow)
-        self.assertIn("name: Require complete image evidence", workflow)
-        for evidence_file in (
-            "image-metadata.json",
-            "image-digest.txt",
-            "sbom.spdx.json",
-            "trivy-critical.json",
-            "trivy-high.json",
-            "scan-status.txt",
-            "release-evidence.json",
-            "SHA256SUMS",
-        ):
-            self.assertIn(evidence_file, workflow)
-        self.assertIn("scripts/validate_release_evidence.py", workflow)
+        for operation in ("record-image", "archive-image", "finalize-evidence", "require-evidence"):
+            self.assertIn(f"python3 scripts/release_pipeline.py {operation}", workflow)
         self.assertIn("uses: actions/upload-artifact@v7", workflow)
         self.assertIn("if-no-files-found: error", workflow)
         self.assertIn("if: always()", workflow)
-        self.assertIn("name: Archive exact scanned image", workflow)
-        self.assertIn('docker save "$SMOKE_IMAGE" | gzip -1', workflow)
-        self.assertIn("image.tar.gz", workflow)
 
     def test_publication_waits_for_the_complete_architecture_matrix(self) -> None:
         workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
@@ -167,9 +152,9 @@ class ReleaseWorkflowTests(unittest.TestCase):
             workflow,
         )
         self.assertIn("uses: actions/download-artifact@v8", workflow)
-        self.assertIn("docker load --input", workflow)
+        self.assertIn("python3 scripts/release_pipeline.py load-images", workflow)
         self.assertIn("staging-${{ github.run_id }}", workflow)
-        self.assertIn("docker buildx imagetools create", workflow)
+        self.assertIn("python3 scripts/release_pipeline.py publish", workflow)
         self.assertNotIn("name: Build and publish multi-platform release image", workflow)
 
     def test_release_quality_gate_requires_terminal_requirement_dispositions(self) -> None:

@@ -1444,5 +1444,7 @@
   "validation.passwordTooShort": "Password must be at least {{min}} characters",
   "validation.passwordsDoNotMatch": "Passwords do not match",
   "validation.required": "This field is required",
-  "identity.outcome.proposed": "Proposed"
+  "identity.outcome.proposed": "Proposed",
+  "shell.languagePreview": "Preview",
+  "shell.languagePreviewDescription": "Preview languages use English where translations are missing."
 }

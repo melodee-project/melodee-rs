@@ -156,7 +156,7 @@ async fn script_errors_fail_degraded_to_allow_and_are_audited() {
 }
 
 #[tokio::test]
-async fn circuit_breaker_trips_after_consecutive_timeouts_and_disables() {
+async fn circuit_breaker_trips_after_consecutive_resource_failures_and_disables() {
     let db = TestDb::create("scripting_breaker").await;
     let service = ScriptingService::new(db.pool.clone());
     let script_id = register(
@@ -182,8 +182,8 @@ async fn circuit_breaker_trips_after_consecutive_timeouts_and_disables() {
     assert!(!script.enabled, "breaker disables the runaway script");
     assert_eq!(
         service.leaked_thread_count(),
-        CIRCUIT_BREAKER_WINDOW as usize,
-        "each timed-out execution detached one worker thread"
+        0,
+        "isolated executions are killed and reaped without detached threads"
     );
 
     let runs = ScriptRunStore::new()
@@ -191,10 +191,13 @@ async fn circuit_breaker_trips_after_consecutive_timeouts_and_disables() {
         .await
         .expect("runs");
     let outcomes: Vec<&str> = runs.iter().map(|run| run.outcome.as_str()).collect();
-    assert_eq!(
-        outcomes,
-        vec!["tripped", "timeout", "timeout", "timeout"],
-        "newest first: the trip row follows the third timeout"
+    assert_eq!(outcomes.len(), 4);
+    assert_eq!(outcomes[0], "tripped");
+    assert!(
+        outcomes[1..]
+            .iter()
+            .all(|outcome| matches!(*outcome, "error" | "timeout")),
+        "VM limits or wall-clock termination must audit failures before the circuit trips: {outcomes:?}"
     );
     assert!(
         runs[0]

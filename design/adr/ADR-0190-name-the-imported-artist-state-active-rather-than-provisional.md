@@ -4,9 +4,17 @@
 - **Status:** Accepted
 - **Decision owners:** User-directed product correction
 - **Supersedes:** [ADR-0117](ADR-0117-use-a-postgresql-catalog-identity-and-contribution-schema-with-set-based-manifest-import.md) decision item 8, only its Artist status vocabulary
-- **Superseded by:** None
+- **Superseded by:** [ADR-0194](ADR-0194-preserve-catalog-import-references-and-projection-revisions.md), only the projection-refresh assertion
 - **Related requirements:** PRD-ARTIST-001, PRD-ARTIST-002, PRD-ARTIST-010, PRD-ARTIST-011,
   PRD-CATALOG-001, PRD-I18N-006
+
+## Correction: projection freshness (2026-11-13)
+
+The original rationale below asserted that no reindex work was needed. Review demonstrated that
+Artist status is stored in Tantivy and revision-fenced upserts skip unchanged revisions. ADR-0194
+supersedes that assertion: forward migration 0045 advances live Artist revisions and queues fresh
+projections. It also repairs current import overlays by appending new revisions without rewriting
+history. Migration 0044 remains unchanged, and the Active/Verified product decision still applies.
 
 ## Context
 

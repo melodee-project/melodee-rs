@@ -146,6 +146,7 @@ The parity release starts as a modular monolith:
 
 - one server executable;
 - one optional administrative CLI executable;
+- the matching `melodee-script-worker` helper for bounded, single-use script execution (ADR-0193);
 - one PostgreSQL database;
 - one canonical media root;
 - one local Tantivy index root;
@@ -194,7 +195,7 @@ Required properties include:
 - type;
 - optional disambiguation;
 - optional begin/end dates and areas;
-- status (`Provisional`, `Verified`, `Merged`, `Deprecated`);
+- status (`Active`, `Verified`, `Merged`, `Deprecated`);
 - optional `merged_into_artist_id`; and
 - audit timestamps.
 
@@ -269,7 +270,7 @@ flowchart TD
     Decision{Confidence and conflicts}
     Match[Confirmed match]
     Review[Identity review]
-    New[Create provisional Artist]
+    New[Create active Artist]
     Negative[Persist do-not-match evidence]
 
     Observation --> Structured
@@ -402,7 +403,7 @@ These are separate axes:
 - **Enrichment:** provider identities, biographies, relationships, artwork, catalog metadata.
 - **Curation:** administrator-confirmed identity, classification, or policy decision.
 
-A structurally valid obscure/private Release may enter the catalog with provisional identities.
+A structurally valid obscure/private Release may enter the catalog with active, unverified Artist identities.
 External provider failure must not automatically block it.
 
 Curation includes editing display metadata. The implemented contract (W0, `RELEASE-002`,

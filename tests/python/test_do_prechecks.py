@@ -42,7 +42,7 @@ class PrecheckTests(unittest.TestCase):
                 self.subTest(tool=tool),
                 mock.patch.object(
                     prechecks.shutil, "which",
-                    side_effect=lambda name: None if name == tool else name,
+                    side_effect=lambda name: None if name == tool or (tool == "pnpm" and name in {"corepack", "npx"}) else name,
                 ),
                 mock.patch.object(prechecks.subprocess, "run") as run,
                 contextlib.redirect_stderr(io.StringIO()) as output,
@@ -50,6 +50,10 @@ class PrecheckTests(unittest.TestCase):
                 self.assertEqual(prechecks.main([]), 2)
                 self.assertIn(tool, output.getvalue())
                 run.assert_not_called()
+
+    def test_corepack_can_supply_the_pinned_package_manager(self) -> None:
+        with mock.patch.object(prechecks.shutil, "which", side_effect=lambda name: None if name == "pnpm" else name):
+            prechecks.validate_environment()
 
     def test_help_runs_without_tools_from_another_directory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -38,6 +38,7 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::admin_access::{AdminAccessState, AdminPrincipal};
+use crate::admin_time::AdminTimestamp;
 use crate::system::SystemInfo;
 
 /// Maximum rows returned by list endpoints. The query layer clamps to this
@@ -70,19 +71,19 @@ pub struct WorkItemDto {
     pub state: IngestionState,
     pub state_reason: Option<String>,
     pub attempt_count: u32,
-    pub next_attempt_at: Option<OffsetDateTime>,
+    pub next_attempt_at: Option<AdminTimestamp>,
     pub lease_owner: Option<String>,
-    pub lease_acquired_at: Option<OffsetDateTime>,
-    pub lease_expires_at: Option<OffsetDateTime>,
+    pub lease_acquired_at: Option<AdminTimestamp>,
+    pub lease_expires_at: Option<AdminTimestamp>,
     pub last_error_code: Option<String>,
     pub last_error_message: Option<String>,
     pub correlation_id: Uuid,
-    pub discovered_at: OffsetDateTime,
-    pub first_started_at: Option<OffsetDateTime>,
-    pub last_attempt_at: Option<OffsetDateTime>,
-    pub updated_at: OffsetDateTime,
-    pub created_at: OffsetDateTime,
-    pub completed_at: Option<OffsetDateTime>,
+    pub discovered_at: AdminTimestamp,
+    pub first_started_at: Option<AdminTimestamp>,
+    pub last_attempt_at: Option<AdminTimestamp>,
+    pub updated_at: AdminTimestamp,
+    pub created_at: AdminTimestamp,
+    pub completed_at: Option<AdminTimestamp>,
     /// Bound catalog Release (display only; see the struct docs).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub release_id: Option<Uuid>,
@@ -121,19 +122,19 @@ impl From<ReleaseWorkItem> for WorkItemDto {
             state: item.state,
             state_reason: item.state_reason,
             attempt_count: item.attempt_count,
-            next_attempt_at: item.next_attempt_at,
+            next_attempt_at: item.next_attempt_at.map(Into::into),
             lease_owner: item.lease_owner,
-            lease_acquired_at: item.lease_acquired_at,
-            lease_expires_at: item.lease_expires_at,
+            lease_acquired_at: item.lease_acquired_at.map(Into::into),
+            lease_expires_at: item.lease_expires_at.map(Into::into),
             last_error_code: item.last_error_code.map(|c| c.as_str().to_string()),
             last_error_message: item.last_error_message,
             correlation_id: item.correlation_id,
-            discovered_at: item.discovered_at,
-            first_started_at: item.first_started_at,
-            last_attempt_at: item.last_attempt_at,
-            updated_at: item.updated_at,
-            created_at: item.created_at,
-            completed_at: item.completed_at,
+            discovered_at: item.discovered_at.into(),
+            first_started_at: item.first_started_at.map(Into::into),
+            last_attempt_at: item.last_attempt_at.map(Into::into),
+            updated_at: item.updated_at.into(),
+            created_at: item.created_at.into(),
+            completed_at: item.completed_at.map(Into::into),
             release_id: None,
             release_title: None,
             artist_name: None,
@@ -180,7 +181,7 @@ pub struct WorkItemEventDto {
     pub reason_code: Option<String>,
     pub worker_id: Option<String>,
     pub correlation_id: Uuid,
-    pub created_at: OffsetDateTime,
+    pub created_at: AdminTimestamp,
     /// Structured, operator-safe extras only. Never secrets or stack traces.
     pub metadata: Option<serde_json::Value>,
 }
@@ -196,7 +197,7 @@ impl From<ReleaseWorkItemEvent> for WorkItemEventDto {
             reason_code: event.reason_code,
             worker_id: event.worker_id,
             correlation_id: event.correlation_id,
-            created_at: event.created_at,
+            created_at: event.created_at.into(),
             metadata: event.metadata,
         }
     }
@@ -212,9 +213,9 @@ pub struct ActiveLeaseDto {
     pub api_key: Uuid,
     pub state: IngestionState,
     pub lease_owner: String,
-    pub lease_acquired_at: OffsetDateTime,
-    pub lease_expires_at: OffsetDateTime,
-    pub last_activity_at: OffsetDateTime,
+    pub lease_acquired_at: AdminTimestamp,
+    pub lease_expires_at: AdminTimestamp,
+    pub last_activity_at: AdminTimestamp,
 }
 
 impl From<ActiveLease> for ActiveLeaseDto {
@@ -224,9 +225,9 @@ impl From<ActiveLease> for ActiveLeaseDto {
             api_key: lease.api_key,
             state: lease.state,
             lease_owner: lease.lease_owner,
-            lease_acquired_at: lease.lease_acquired_at,
-            lease_expires_at: lease.lease_expires_at,
-            last_activity_at: lease.last_activity_at,
+            lease_acquired_at: lease.lease_acquired_at.into(),
+            lease_expires_at: lease.lease_expires_at.into(),
+            last_activity_at: lease.last_activity_at.into(),
         }
     }
 }

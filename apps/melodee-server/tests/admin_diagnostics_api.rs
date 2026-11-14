@@ -144,7 +144,29 @@ async fn get_json(router: axum::Router, path: &str, bearer: Option<&str>) -> (St
         .await
         .expect("response");
     let status = response.status();
-    (status, body_json(response).await)
+    let body = body_json(response).await;
+    assert_timestamp_contract(&body);
+    (status, body)
+}
+
+/// Assert the actual router responses, including absent timestamps and nested
+/// listing rows. Handwritten browser fixtures cannot prove this wire contract.
+fn assert_timestamp_contract(value: &Value) {
+    match value {
+        Value::Object(fields) => {
+            for (key, value) in fields {
+                if key.ends_with("At") && !value.is_null() {
+                    let text = value.as_str().expect("Admin timestamps are strings");
+                    OffsetDateTime::parse(text, &time::format_description::well_known::Rfc3339)
+                        .expect("Admin timestamp is RFC 3339");
+                    assert!(text.ends_with('Z'), "Admin timestamps use UTC");
+                }
+                assert_timestamp_contract(value);
+            }
+        }
+        Value::Array(items) => items.iter().for_each(assert_timestamp_contract),
+        _ => {}
+    }
 }
 
 /// Asserts the stable auth failure envelope (`code`, `correlationId`).

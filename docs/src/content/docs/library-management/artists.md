@@ -169,8 +169,10 @@ The summary numbers are **links into the rows they count**, so a statistic is ne
 **Track credits** card (every Track the Artist is credited on, whatever the role) and
 **Appearances** (the performance subset) both open the **Tracks** tab, which lists the Track, the
 Release, the billing role, and whether the credit is a performance credit or a written/production
-credit. Those rows come from the same association records the counts aggregate over, so the number
-and the list can never disagree. The detail
+credit. Each Track appears once even when the Artist has several billing or contribution records
+for it; a Track is marked as a performance credit if any of those records is a performance.
+The earliest billing supplies the displayed role, while the Contributions tab retains the separate
+credits. The list and its count use the same distinct Tracks. The detail
 view also offers an **Edit** panel with the editable metadata fields: name, sort name, artist type,
 and identity status. **Artist type is a closed dictionary** (`person`, `group`, `orchestra`,
 `ensemble`, `choir`, `character`, `other`, `unknown`) rendered as a select: the store rejects any
@@ -185,3 +187,16 @@ is available from the Artist list; merge/split and observation decisions remain 
 
 The same browsing and detail routes are available over
 [Admin API — Catalog browsing and detail](../api/admin-api/#catalog-browsing-and-detail).
+
+## Import reuse and identity evidence
+
+Import can reuse a live Artist when exactly one Artist has the observed normalized name, that Artist
+has no disambiguation hint, and any embedded MusicBrainz Artist identifiers already match its recorded
+identifiers. Multiple provider identifiers on one Artist do not make it multiple candidates. Two
+live Artists with the same name remain ambiguous even if only one has a disambiguation hint.
+
+Reuse preserves the existing public ID and identity status. Import records that reuse in its decision
+history, retains a snapshot of the final Artist references, refreshes counts, and queues a new search
+revision. Retrying an already completed import does not create another identity or duplicate the
+revision. See [upgrading](../installation/upgrading/) for repair of snapshots and search status
+created by earlier builds.

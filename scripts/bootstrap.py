@@ -71,7 +71,12 @@ def bootstrap() -> None:
 
     run(["cargo", "fmt", "--all", "--check"])
     print("Running database-free Rust unit tests (PostgreSQL integration tests excluded).")
+    run(["cargo", "build", "--locked", "-p", "melodee-application", "--bin", "melodee-script-worker"])
     run(UNIT_TEST_COMMAND)
+    run(["cargo", "test", "--all-features", "-p", "melodee-application", "-p", "melodee-domain", "-p", "melodee-mql", "-p", "melodee-policy", "-p", "melodee-media", "--test", "*"])
+    if shutil.which("node") and (shutil.which("pnpm") or shutil.which("npx")):
+        for project in ("admin-ui", "docs"):
+            run([sys.executable, "scripts/node_toolchain.py", "--project", project])
     print("Bootstrap checks completed.")
 
 

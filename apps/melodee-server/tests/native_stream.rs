@@ -653,3 +653,24 @@ async fn per_user_cap_zero_disables_the_admission_bound() {
         .expect("no per-user bound");
     drop((first, second, third));
 }
+
+#[test]
+fn shared_proxy_setting_precedes_legacy_alias_including_empty() {
+    use melodee_server::native_stream::configured_trusted_proxies;
+    let alias = Some("127.0.0.1,::1");
+    assert_eq!(
+        configured_trusted_proxies(None, alias)
+            .expect("alias")
+            .len(),
+        2
+    );
+    assert!(
+        configured_trusted_proxies(Some(""), alias)
+            .expect("empty override")
+            .is_empty()
+    );
+    let shared = configured_trusted_proxies(Some("192.0.2.1"), alias).expect("shared");
+    assert_eq!(shared.len(), 1);
+    assert!(shared[0].contains("192.0.2.1".parse().expect("IP")));
+    assert!(configured_trusted_proxies(Some("invalid"), alias).is_err());
+}

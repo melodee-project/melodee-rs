@@ -702,3 +702,35 @@ async fn apikey_query_param_authenticates_alongside_api_key() {
     let (status, _) = respond(state, bare_get("/Users?apiKey=deadbeef")).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
 }
+
+#[tokio::test]
+async fn discovery_and_authentication_use_the_persisted_installation_id() {
+    let db = common::TestDb::create("jf_install_id").await;
+    let mut state = state(&db).await;
+    let expected = melodee_persistence::installation_id(&db.pool)
+        .await
+        .expect("installation")
+        .simple()
+        .to_string();
+    state.server_id = expected.clone();
+    for path in ["/System/Info/Public", "/api/jf/System/Info/Public"] {
+        let request = Request::builder()
+            .uri(path)
+            .body(Body::empty())
+            .expect("request");
+        let (status, bytes) = respond(state.clone(), request).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(json_body(&bytes)["Id"], expected);
+    }
+    let (status, bytes) = respond(
+        state,
+        post_json(
+            "/Users/AuthenticateByName",
+            r#"{"Username":"phase0-fixture","Pw":"Mel0deeR0cks!"}"#,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json_body(&bytes)["ServerId"], expected);
+    db.drop().await;
+}

@@ -23,7 +23,7 @@
   --melodee-status-info: #0f62fe;
   --melodee-status-warning: #f1c21b;
   --melodee-status-error: #da1e28;
-  --melodee-status-provisional: #8a3ffc;
+  --melodee-status-pending: #8a3ffc;
   --melodee-status-neutral: #6f6f6f;
 
   /* Brand accent (links, primary navigation active state). */
@@ -99,8 +99,8 @@
   --melodee-chip-warning-ink: #b34700;
   --melodee-chip-error-surface: #fff1f1;
   --melodee-chip-error-ink: #a2191f;
-  --melodee-chip-provisional-surface: #f6f2ff;
-  --melodee-chip-provisional-ink: #6929c4;
+  --melodee-chip-pending-surface: #f6f2ff;
+  --melodee-chip-pending-ink: #6929c4;
   --melodee-chip-neutral-surface: #f4f4f4;
   --melodee-chip-neutral-ink: #525252;
 
@@ -119,7 +119,7 @@
   --melodee-status-info: #78a9ff;
   --melodee-status-warning: #f1c21b;
   --melodee-status-error: #fa4d56;
-  --melodee-status-provisional: #be95ff;
+  --melodee-status-pending: #be95ff;
   --melodee-status-neutral: #a8a8a8;
   --melodee-brand-accent: #78a9ff;
   --melodee-link-contrast: #78a9ff;
@@ -145,8 +145,8 @@
   --melodee-chip-warning-ink: #ffb784;
   --melodee-chip-error-surface: #3a1417;
   --melodee-chip-error-ink: #ffb3b8;
-  --melodee-chip-provisional-surface: #241a3d;
-  --melodee-chip-provisional-ink: #d4bbff;
+  --melodee-chip-pending-surface: #241a3d;
+  --melodee-chip-pending-ink: #d4bbff;
   --melodee-chip-neutral-surface: #333333;
   --melodee-chip-neutral-ink: #e0e0e0;
 

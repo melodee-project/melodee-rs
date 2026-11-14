@@ -97,6 +97,7 @@ async fn state(db: &common::TestDb) -> OsState {
         server_version: SERVER_VERSION.to_string(),
         public_origin: "http://melodee.test".to_string(),
         base_url_host: Some("capture-fixture.example.test".to_string()),
+        legacy_auth_bypass: true, // Frozen ADR-0130 fixture; production defaults false.
         music_folders: music_folders(),
         podcasts_enabled: true,
         downloads_enabled: true,
@@ -608,8 +609,9 @@ async fn bypass_needs_no_credentials_and_synthesizes_no_user() {
         header::HOST,
         "capture-fixture.example.test".parse().expect("host"),
     );
-    let (status, _, _) = respond(state.clone(), host_match).await;
+    let (status, _, body) = respond(state.clone(), host_match).await;
     assert_eq!(status, StatusCode::OK);
+    assert_eq!(json_body(&body)["subsonic-response"]["status"], "ok");
 
     // Paths containing /images/ bypass auth. The route itself is owned by the
     // native surface (not mounted in this harness), so the request falls
@@ -622,6 +624,66 @@ async fn bypass_needs_no_credentials_and_synthesizes_no_user() {
     )
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn safe_mode_requires_credentials_for_loopback_matching_host_and_forwarding() {
+    let db = common::TestDb::create("os_safe_auth").await;
+    let mut state = state(&db).await;
+    state.legacy_auth_bypass = false;
+    for peer in ["127.0.0.1:8000", "192.0.2.10:8000"] {
+        for forwarded in [
+            None,
+            Some("198.51.100.9"),
+            Some("127.0.0.1"),
+            Some("invalid"),
+        ] {
+            let mut request = get("/rest/getMusicFolders.view?f=json");
+            request
+                .extensions_mut()
+                .insert(ConnectInfo(peer.parse::<SocketAddr>().expect("peer")));
+            request.headers_mut().insert(
+                header::HOST,
+                "capture-fixture.example.test".parse().expect("host"),
+            );
+            if let Some(forwarded) = forwarded {
+                request
+                    .headers_mut()
+                    .insert("x-forwarded-for", forwarded.parse().expect("header"));
+            }
+            let (_, _, body) = respond(state.clone(), request).await;
+            assert_eq!(json_body(&body)["subsonic-response"]["error"]["code"], 40);
+        }
+    }
+    let (_, _, body) = respond(
+        state,
+        enforced_get(&format!(
+            "/rest/getMusicFolders.view?f=json&u=phase0-fixture&t={}&s=safe",
+            token_for("safe")
+        )),
+    )
+    .await;
+    assert_eq!(json_body(&body)["subsonic-response"]["status"], "ok");
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn legacy_bypass_does_not_fall_back_to_loopback_for_invalid_proxy_headers() {
+    let db = common::TestDb::create("os_bad_proxy").await;
+    let mut state = state(&db).await;
+    state.client_addresses = melodee_server::native_stream::ClientAddressResolver::new(vec![
+        "127.0.0.1".parse().expect("trusted proxy"),
+    ]);
+    let mut request = get("/rest/getMusicFolders.view?f=json");
+    request.extensions_mut().insert(ConnectInfo(
+        "127.0.0.1:8000".parse::<SocketAddr>().expect("peer"),
+    ));
+    request
+        .headers_mut()
+        .insert("x-forwarded-for", "invalid".parse().expect("header"));
+    let (_, _, body) = respond(state, request).await;
+    assert_eq!(json_body(&body)["subsonic-response"]["error"]["code"], 40);
+    db.drop().await;
 }
 
 #[tokio::test]

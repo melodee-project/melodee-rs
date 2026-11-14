@@ -13,6 +13,37 @@ use super::map;
 use super::runs;
 use super::source::SourceDb;
 
+fn playback_values(
+    quality: Option<&str>,
+    replay: Option<&str>,
+) -> (&'static str, &'static str, Vec<String>) {
+    let mut notes = Vec::new();
+    let quality = match quality.map(|value| value.trim().to_lowercase()).as_deref() {
+        Some("low") => "low",
+        Some("medium") => "medium",
+        Some("lossless") => "lossless",
+        Some("high") | None => "high",
+        Some(other) => {
+            notes.push(format!(
+                "audio quality {other:?} has no target value; using 'high'"
+            ));
+            "high"
+        }
+    };
+    let replay = match replay.map(|value| value.trim().to_lowercase()).as_deref() {
+        Some("track") => "track",
+        Some("album") => "album",
+        Some("none") | None => "none",
+        Some(other) => {
+            notes.push(format!(
+                "replay gain {other:?} has no target value; using 'none'"
+            ));
+            "none"
+        }
+    };
+    (quality, replay, notes)
+}
+
 /// Playback settings: one row per user. Out-of-vocabulary legacy values fall
 /// back to the target defaults with an informational issue, never a silent
 /// rewrite.
@@ -76,39 +107,11 @@ pub async fn import_playback_settings(
                 issues += 1;
                 continue;
             };
-            let mut note: Option<String> = None;
-            let quality = match row
-                .get::<Option<String>, _>("AudioQuality")
-                .map(|q| q.trim().to_lowercase())
-                .as_deref()
-            {
-                Some("low") => "low",
-                Some("medium") => "medium",
-                Some("lossless") => "lossless",
-                Some("high") | None => "high",
-                Some(other) => {
-                    note = Some(format!(
-                        "audio quality {other:?} has no target value; using 'high'"
-                    ));
-                    "high"
-                }
-            };
-            let replay_gain = match row
-                .get::<Option<String>, _>("ReplayGain")
-                .map(|v| v.trim().to_lowercase())
-                .as_deref()
-            {
-                Some("track") => "track",
-                Some("album") => "album",
-                Some("none") | None => "none",
-                Some(other) => {
-                    note = Some(format!(
-                        "replay gain {other:?} has no target value; using 'none'"
-                    ));
-                    "none"
-                }
-            };
-            if let Some(message) = note {
+            let (quality, replay_gain, notes) = playback_values(
+                row.get::<Option<String>, _>("AudioQuality").as_deref(),
+                row.get::<Option<String>, _>("ReplayGain").as_deref(),
+            );
+            for message in notes {
                 runs::record_issue(
                     &mut tx,
                     run_id,
@@ -1528,4 +1531,21 @@ pub async fn record_excluded_summaries(
     }
     tx.commit().await.map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[cfg(test)]
+mod playback_tests {
+    #[test]
+    fn both_invalid_playback_fields_retain_independent_audit_messages() {
+        let (quality, replay, notes) = super::playback_values(Some("ultra"), Some("loud"));
+        assert_eq!((quality, replay), ("high", "none"));
+        assert_eq!(notes.len(), 2);
+        assert!(notes[0].contains("audio quality"));
+        assert!(notes[1].contains("replay gain"));
+        assert!(
+            super::playback_values(Some(" LOSSLESS "), Some(" TRACK "))
+                .2
+                .is_empty()
+        );
+    }
 }

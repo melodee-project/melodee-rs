@@ -26,7 +26,7 @@ import { expect, test, type Page } from '@playwright/test';
  * unaffected.
  */
 
-import { HAVE_CREDENTIALS, LIVE_URL as BASE_URL, signIn } from './session';
+import { apiGet, HAVE_CREDENTIALS, LIVE_API, LIVE_URL as BASE_URL, signIn } from './session';
 
 /** Screens every operator can reach; each must render cleanly. */
 const SCREENS: ReadonlyArray<{ path: string; ready: RegExp }> = [
@@ -95,9 +95,13 @@ test.describe('live admin UI', () => {
   });
 
   test('Release edit offers no field the API rejects', async ({ page, context, request }) => {
-    await signIn(context, request);
-    await page.goto(`${BASE_URL}/catalog/releases`);
-    await page.getByRole('link').filter({ hasText: /./ }).nth(1).click();
+    const cookie = await signIn(context, request);
+    const releases = await apiGet<{ items: { id: string; status: string }[] }>(
+      request, cookie, `${LIVE_API}/api/admin/v1/catalog/releases?limit=50`,
+    );
+    const release = releases.items.find((item) => item.status === 'active');
+    expect(release, 'a populated active Release fixture is required').toBeTruthy();
+    await page.goto(`${BASE_URL}/catalog/releases/${release!.id}`);
     await page.getByRole('button', { name: 'Edit' }).click();
     const labels = await page
       .locator('form .cds--label')
@@ -111,18 +115,27 @@ test.describe('live admin UI', () => {
   });
 
   test('queue statistics drill down to the rows they count', async ({ page, context, request }) => {
-    await signIn(context, request);
-    await page.goto(`${BASE_URL}/catalog/artists`);
-    const artistLink = page.getByRole('link').filter({ hasText: /./ }).nth(1);
-    await artistLink.click();
+    const cookie = await signIn(context, request);
+    const artists = await apiGet<{ items: { id: string }[] }>(
+      request, cookie, `${LIVE_API}/api/admin/v1/catalog/artists?limit=1`,
+    );
+    expect(artists.items.length, 'a populated Artist fixture is required').toBeGreaterThan(0);
+    const id = artists.items[0]!.id;
+    const detail = await apiGet<{
+      stats: { billedTrackCount: number };
+      trackCredits: { items: unknown[]; total: number };
+    }>(request, cookie, `${LIVE_API}/api/admin/v1/catalog/artists/${id}`);
+    expect(detail.stats.billedTrackCount).toBeGreaterThan(0);
+    expect(detail.trackCredits.total).toBe(detail.stats.billedTrackCount);
+    await page.goto(`${BASE_URL}/catalog/artists/${id}`);
     // The stat cards are links into the credits tab: a count is never a dead end.
     const credits = page.getByRole('link', { name: /track credits/i });
-    if (await credits.count()) {
-      await credits.first().click();
-      await expect(page.getByRole('tab', { name: 'Tracks' })).toHaveAttribute(
-        'aria-selected',
-        'true',
-      );
-    }
+    await expect(credits).toBeVisible();
+    await credits.click();
+    await expect(page.getByRole('tab', { name: 'Tracks' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await expect(page.getByRole('table').locator('tbody tr')).toHaveCount(detail.trackCredits.items.length);
   });
 });

@@ -25,6 +25,36 @@ use time::OffsetDateTime;
 use tokio::{sync::Semaphore, time::sleep};
 use uuid::Uuid;
 
+/// Abort before appending a chunk that would exceed the response budget. A
+/// Content-Length check is only an early rejection, never the memory bound.
+async fn read_bounded_response(
+    mut response: reqwest::Response,
+    max_bytes: usize,
+    category: &'static str,
+) -> Result<Vec<u8>, ProviderError> {
+    let oversized = || ProviderError {
+        category,
+        message: "provider response exceeded the byte limit".to_owned(),
+    };
+    if response
+        .content_length()
+        .is_some_and(|size| size > max_bytes as u64)
+    {
+        return Err(oversized());
+    }
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(|error| ProviderError {
+        category: "transport",
+        message: error.to_string(),
+    })? {
+        if chunk.len() > max_bytes.saturating_sub(bytes.len()) {
+            return Err(oversized());
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    Ok(bytes)
+}
+
 pub const MELODEE_PROVIDER_ID: &str = "018A798D-7B68-4F3E-80CD-1BAF03998C0B";
 pub const SPOTIFY_PROVIDER_ID: &str = "BBAC49B7-0EDF-4D31-8A54-C9126509C2CE";
 pub const ITUNES_PROVIDER_ID: &str = "36E4DB7A-18BB-4A7D-86F7-A3C653A21611";
@@ -366,42 +396,44 @@ impl ProviderRuntime {
                 message: "provider image response did not declare an image content type".to_owned(),
             });
         }
-        if response
-            .content_length()
-            .is_some_and(|length| length > MAX_PROVIDER_IMAGE_BYTES as u64)
-        {
+        let bytes =
+            read_bounded_response(response, MAX_PROVIDER_IMAGE_BYTES, "image_too_large").await?;
+        if bytes.is_empty() {
             return Err(ProviderError {
-                category: "image_too_large",
-                message: "provider image exceeded the configured byte bound".to_owned(),
+                category: "invalid_image",
+                message: "provider image is empty".to_owned(),
             });
         }
-        let bytes = response.bytes().await.map_err(|error| ProviderError {
-            category: "transport",
-            message: error.to_string(),
-        })?;
-        if bytes.is_empty() || bytes.len() > MAX_PROVIDER_IMAGE_BYTES {
-            return Err(ProviderError {
-                category: "image_too_large",
-                message: "provider image exceeded the configured byte bound".to_owned(),
-            });
-        }
-        let reader = ImageReader::new(Cursor::new(bytes.as_ref()))
+        let reader = ImageReader::new(Cursor::new(bytes.as_slice()))
             .with_guessed_format()
             .map_err(|error| ProviderError {
                 category: "invalid_image",
                 message: error.to_string(),
             })?;
-        let image = reader.decode().map_err(|error| ProviderError {
+        let (width, height) = reader.into_dimensions().map_err(|error| ProviderError {
             category: "invalid_image",
             message: error.to_string(),
         })?;
-        let pixels = u64::from(image.width()).saturating_mul(u64::from(image.height()));
+        let pixels = u64::from(width).saturating_mul(u64::from(height));
         if pixels == 0 || pixels > MAX_PROVIDER_IMAGE_PIXELS {
             return Err(ProviderError {
                 category: "invalid_image",
                 message: "provider image dimensions exceeded the configured bound".to_owned(),
             });
         }
+        let mut reader = ImageReader::new(Cursor::new(bytes.as_slice()))
+            .with_guessed_format()
+            .map_err(|error| ProviderError {
+                category: "invalid_image",
+                message: error.to_string(),
+            })?;
+        let mut limits = image::Limits::default();
+        limits.max_alloc = Some(MAX_PROVIDER_IMAGE_PIXELS * 4);
+        reader.limits(limits);
+        let image = reader.decode().map_err(|error| ProviderError {
+            category: "invalid_image",
+            message: error.to_string(),
+        })?;
         let mut normalized = Cursor::new(Vec::new());
         image
             .write_to(&mut normalized, ImageFormat::Png)
@@ -749,17 +781,9 @@ impl ProviderRuntime {
                 .await;
             match response {
                 Ok(response) if response.status().is_success() => {
-                    let bytes = response.bytes().await.map_err(|error| ProviderError {
-                        category: "transport",
-                        message: error.to_string(),
-                    })?;
-                    if bytes.len() > MAX_RESPONSE_BYTES {
-                        return Err(ProviderError {
-                            category: "response_too_large",
-                            message: "provider response exceeded the bounded response size"
-                                .to_owned(),
-                        });
-                    }
+                    let bytes =
+                        read_bounded_response(response, MAX_RESPONSE_BYTES, "response_too_large")
+                            .await?;
                     return serde_json::from_slice(&bytes).map_err(|error| ProviderError {
                         category: "malformed_response",
                         message: error.to_string(),
@@ -1672,6 +1696,64 @@ pub fn selected_provider_names(ids: Option<Vec<String>>) -> Option<BTreeSet<Stri
 mod tests {
     use super::*;
     use tempfile::tempdir;
+
+    #[tokio::test]
+    async fn chunked_response_stops_at_limit_without_waiting_for_end() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("listener");
+        let address = listener.local_addr().expect("address");
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.expect("accept");
+            let mut request = [0; 4096];
+            assert!(socket.read(&mut request).await.expect("request") > 0);
+            socket.write_all(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nabcd\r\n4\r\nefgh\r\n").await.expect("body");
+            tokio::time::sleep(Duration::from_secs(5)).await;
+        });
+        let response = reqwest::Client::new()
+            .get(format!("http://{address}"))
+            .send()
+            .await
+            .expect("response");
+        let result = tokio::time::timeout(
+            Duration::from_secs(1),
+            read_bounded_response(response, 6, "response_too_large"),
+        )
+        .await
+        .expect("reject before EOF");
+        assert_eq!(result.expect_err("oversize").category, "response_too_large");
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn bounded_response_accepts_exact_limit_and_rejects_declared_oversize() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        for (body, limit, expected) in [("abcd", 4, true), ("abcde", 4, false)] {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+                .await
+                .expect("listener");
+            let address = listener.local_addr().expect("address");
+            let server = tokio::spawn(async move {
+                let (mut socket, _) = listener.accept().await.expect("accept");
+                let mut request = [0; 4096];
+                assert!(socket.read(&mut request).await.expect("request") > 0);
+                socket.write_all(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes()).await.expect("body");
+            });
+            let response = reqwest::Client::new()
+                .get(format!("http://{address}"))
+                .send()
+                .await
+                .expect("response");
+            assert_eq!(
+                read_bounded_response(response, limit, "response_too_large")
+                    .await
+                    .is_ok(),
+                expected
+            );
+            server.await.expect("server");
+        }
+    }
 
     #[test]
     fn provider_parsers_keep_external_ids_and_artwork() {

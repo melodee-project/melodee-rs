@@ -16,8 +16,8 @@ current architecture and implementation.
 
 > **Project status: pre-release, working toward v1.0.0.** The core server, ingestion/catalog
 > pipeline, API adapters, and Admin UI are implemented. Legacy migration tooling is implemented
-> and ready for isolated rehearsal, but feature/data-preservation gaps and release qualification
-> remain. This checkout is **not yet a qualified production replacement** for the C# server.
+> and has isolated rehearsal evidence, while current-candidate data-preservation acceptance and
+> release qualification remain. This checkout is **not yet a qualified production replacement** for the C# server.
 
 Start with the [user documentation](https://melodee-project.github.io/melodee-rs/),
 [source-build guide](docs/src/content/docs/installation/build-from-source.md), or
@@ -31,11 +31,13 @@ ADRs. It does not imply compatibility with every later C# change or every Jellyf
 
 Remaining work includes:
 
-- Preserving or explicitly resolving legacy custom content blocks, per-user device profiles,
-  notification-template files, and custom theme packs.
+- Revalidating preservation on the exact candidate, including corrected legacy theme-pack import.
+  Custom content retirement, device-profile dispositions, and notification-template import have
+  recorded decisions/evidence; historical evidence is not current-candidate acceptance.
 - Qualifying metadata transforms against canonical files and PostgreSQL, configured integrations,
   and performance/fault recovery at representative scale.
-- Rehearsing migration, backup/restore, cutover, and rollback with authorized representative data.
+- Repeating migration, backup/restore, cutover, and rollback acceptance as required for the exact
+  candidate with authorized representative data; prior rehearsals remain historical evidence.
 - Completing current-candidate differential replay and Android phone, Android Auto/DHU, MeloAmp,
   OpenSubsonic, and Jellyfin client acceptance.
 - Accepting the exact amd64/arm64 release images, security/supply-chain evidence, and final
@@ -57,7 +59,7 @@ implementation ticket does not replace candidate-specific client and operator ac
   content verification, versioned manifests, and retry-safe no-replace publication. BLAKE3 proves
   byte identity; Chromaprint is acoustic evidence, not a Track identity.
 - **A real music catalog.** Melodee models Artists, aliases, Releases, Tracks, credits,
-  contributions, and provisional identity separately. Names and filesystem paths never decide
+  contributions, and unverified imported identity separately. Names and filesystem paths never decide
   identity by themselves.
 - **Policy and discovery.** Release traits, auditable policy decisions, dry runs and overrides,
   MQL, and a rebuildable Tantivy search projection are all backed by PostgreSQL as the
@@ -390,3 +392,16 @@ as described in [SECURITY.md](SECURITY.md).
 ## License
 
 Melodee is released under the [MIT License](LICENSE).
+
+### Review hardening checks
+
+Pull requests run the fast gate plus PostgreSQL-backed full validation. The fast gate executes
+library/binary unit tests and the database-free application, domain, MQL, policy, and media `tests/*.rs`
+targets. The full gate and `make test` use a temporary migrated PostgreSQL template for ordinary
+tests; migration tests still start from an empty database. The wrapper owns and removes only
+its uniquely named template. Individual tests retain their own isolated databases.
+
+Repository checks resolve the exact pnpm version declared in each project, preferring Corepack
+and otherwise using the installed exact version or `npx`. A globally installed newer pnpm version
+does not require relaxing the project pin. `python3 scripts/node_toolchain.py --project admin-ui`
+checks the selected version; `--project docs` checks the documentation tooling.

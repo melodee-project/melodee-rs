@@ -11,7 +11,6 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
-use melodee_auth::hash_password;
 use melodee_persistence::{
     MIN_PASSWORD_CHARS, ProfileUpdate, RegistrationRequest, SettingsResolver, UserProfileError,
     UserProfileStore,
@@ -132,7 +131,8 @@ async fn register(
             );
         }
     }
-    let password_hash = match hash_password(request.password.as_bytes()) {
+    let password_hash = match crate::password_work::hash_password(request.password.as_bytes()).await
+    {
         Ok(hash) => hash,
         Err(error) => {
             tracing::error!(error = ?error, "registration password hashing failed");

@@ -2,7 +2,7 @@
 
 use std::{
     collections::BTreeMap,
-    io::{Cursor, Read, Write},
+    io::{Cursor, Write},
 };
 
 use axum::{
@@ -16,7 +16,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
-use zip::{CompressionMethod, ZipArchive, ZipWriter, write::SimpleFileOptions};
+use zip::{CompressionMethod, ZipWriter, write::SimpleFileOptions};
 
 use super::{Authenticated, NativeState, dto::PaginationMetadata, error::NativeApiError};
 
@@ -30,7 +30,6 @@ const MAX_CHART_PLAYLIST_TRACKS: i64 = 5_000;
 const MAX_RECOMMENDATION_CANDIDATES_SCANNED: i64 = 4_096;
 const MAX_THEME_ARCHIVE_BYTES: usize = 50 * 1024 * 1024;
 const MAX_THEME_EXPANDED_BYTES: u64 = 100 * 1024 * 1024;
-const MAX_THEME_ASSET_BYTES: u64 = 10 * 1024 * 1024;
 const MAX_THEME_ENTRIES: usize = 256;
 
 pub fn protected_router() -> Router<NativeState> {
@@ -1588,82 +1587,15 @@ fn theme_asset_mime(path: &str) -> Option<&'static str> {
     }
 }
 
-fn safe_theme_entry_name(name: &str) -> bool {
-    !name.is_empty()
-        && name.len() <= 1000
-        && !name.starts_with('/')
-        && !name.contains('\\')
-        && name
-            .split('/')
-            .all(|part| !part.is_empty() && part != "." && part != "..")
-}
+use melodee_application::theme_archive::safe_theme_entry_name;
 
 fn parse_theme_archive(bytes: Vec<u8>) -> Result<ParsedThemeArchive, &'static str> {
-    let mut archive = ZipArchive::new(Cursor::new(bytes)).map_err(|_| "Invalid ZIP archive")?;
-    if archive.is_empty() || archive.len() > MAX_THEME_ENTRIES {
-        return Err("Theme archive contains an invalid number of entries");
-    }
-    let mut expanded = 0_u64;
+    let entries = melodee_application::theme_archive::read_theme_entries(&bytes)?;
     let mut assets = BTreeMap::new();
-    for index in 0..archive.len() {
-        let entry = archive
-            .by_index(index)
-            .map_err(|_| "Invalid ZIP archive entry")?;
-        if entry.encrypted() {
-            return Err("Encrypted theme archives are not supported");
-        }
-        if !matches!(
-            entry.compression(),
-            CompressionMethod::Stored | CompressionMethod::Deflated
-        ) {
-            return Err("Unsupported ZIP compression method");
-        }
-        if entry.is_dir() {
-            continue;
-        }
-        if entry
-            .unix_mode()
-            .is_some_and(|mode| mode & 0o170_000 != 0o100_000)
-        {
-            return Err("Theme archive links and special files are not allowed");
-        }
-        let name = entry
-            .name()
-            .map_err(|_| "Invalid ZIP archive entry")?
-            .into_owned();
-        if entry.enclosed_name().is_none() || !safe_theme_entry_name(&name) {
-            return Err("Theme archive contains an unsafe path");
-        }
+    for (name, content) in entries {
         let mime =
             theme_asset_mime(&name).ok_or("Theme archive contains a disallowed file type")?;
-        if entry.size() == 0 || entry.size() > MAX_THEME_ASSET_BYTES {
-            return Err("Theme archive entry exceeds the size limit");
-        }
-        expanded = expanded
-            .checked_add(entry.size())
-            .ok_or("Theme archive expanded size is invalid")?;
-        if expanded > MAX_THEME_EXPANDED_BYTES {
-            return Err("Theme archive exceeds the expanded size limit");
-        }
-        let declared_size = entry.size();
-        let read_limit = declared_size
-            .checked_add(1)
-            .ok_or("Theme archive entry size is invalid")?;
-        let mut content = Vec::with_capacity(
-            usize::try_from(declared_size).map_err(|_| "Theme archive entry is too large")?,
-        );
-        entry
-            .take(read_limit)
-            .read_to_end(&mut content)
-            .map_err(|_| "Theme archive entry could not be read")?;
-        if u64::try_from(content.len()).map_err(|_| "Theme archive entry is too large")?
-            != declared_size
-        {
-            return Err("Theme archive entry size does not match its declaration");
-        }
-        if assets.insert(name, (mime.to_owned(), content)).is_some() {
-            return Err("Theme archive contains duplicate paths");
-        }
+        assets.insert(name, (mime.to_owned(), content));
     }
     let metadata_bytes = assets
         .get("theme.json")

@@ -23,8 +23,7 @@ struct IngestionScenario {
     root: PathBuf,
     source: InboundSource,
     config: IngestionConfig,
-    pool: PgPool,
-    db_name: String,
+    database: common::TestDb,
 }
 
 impl IngestionScenario {
@@ -47,8 +46,7 @@ impl IngestionScenario {
             root,
             source,
             config,
-            pool: db.pool,
-            db_name: db.name,
+            database: db,
         }
     }
 
@@ -75,7 +73,7 @@ impl IngestionScenario {
         reconcile_all_sources(
             &self.config,
             &WorkItemStore,
-            &self.pool,
+            &self.database.pool,
             common::T0 + Duration::seconds(seconds),
         )
         .await
@@ -84,7 +82,7 @@ impl IngestionScenario {
 
     async fn work_item_count(&self) -> usize {
         WorkItemStore
-            .list(&self.pool, None, 10_000, 0)
+            .list(&self.database.pool, None, 10_000, 0)
             .await
             .unwrap()
             .len()
@@ -92,7 +90,7 @@ impl IngestionScenario {
 
     async fn work_items(&self) -> Vec<melodee_domain::ReleaseWorkItem> {
         WorkItemStore
-            .list(&self.pool, None, 10_000, 0)
+            .list(&self.database.pool, None, 10_000, 0)
             .await
             .unwrap()
     }
@@ -100,7 +98,7 @@ impl IngestionScenario {
     async fn release_item(&self, source_path: &str) -> melodee_domain::ReleaseWorkItem {
         let path = candidate_relative_path(PathBuf::from(source_path).as_path());
         WorkItemStore
-            .list(&self.pool, None, 10_000, 0)
+            .list(&self.database.pool, None, 10_000, 0)
             .await
             .unwrap()
             .into_iter()
@@ -109,7 +107,7 @@ impl IngestionScenario {
     }
 
     fn db_url(&self) -> String {
-        common::admin_url().replace("/postgres", &format!("/{}", self.db_name))
+        common::database_url(&self.database.name)
     }
 }
 
@@ -126,7 +124,7 @@ async fn discovery_creates_durable_work_item_and_snapshot() {
     assert!(item.latest_settling_snapshot_id.is_some());
 
     let snapshot = WorkItemStore
-        .latest_snapshot(&scenario.pool, item.id)
+        .latest_snapshot(&scenario.database.pool, item.id)
         .await
         .expect("latest snapshot")
         .expect("snapshot should exist");
@@ -162,8 +160,8 @@ async fn concurrent_reconcilers_do_not_create_duplicates() {
 
     let config_one = scenario.config.clone();
     let config_two = scenario.config.clone();
-    let pool_one = scenario.pool.clone();
-    let pool_two = scenario.pool.clone();
+    let pool_one = scenario.database.pool.clone();
+    let pool_two = scenario.database.pool.clone();
 
     let first = tokio::spawn(async move {
         reconcile_all_sources(&config_one, &WorkItemStore, &pool_one, common::T0).await
@@ -309,7 +307,7 @@ async fn restart_preserves_settling_state() {
     restart_pool.close().await;
 
     let item = WorkItemStore
-        .list(&scenario.pool, None, 100, 0)
+        .list(&scenario.database.pool, None, 100, 0)
         .await
         .expect("list")
         .into_iter()
@@ -327,8 +325,8 @@ async fn concurrent_reconcilers_settle_to_ready_with_single_ready_transition() {
     let now = common::T0 + Duration::seconds(1);
     let config_one = scenario.config.clone();
     let config_two = scenario.config.clone();
-    let pool_one = scenario.pool.clone();
-    let pool_two = scenario.pool.clone();
+    let pool_one = scenario.database.pool.clone();
+    let pool_two = scenario.database.pool.clone();
     let source_one = scenario.source.clone();
     let source_two = scenario.source.clone();
 
@@ -347,7 +345,7 @@ async fn concurrent_reconcilers_settle_to_ready_with_single_ready_transition() {
     assert_eq!(IngestionState::Ready, item.state);
 
     let ready_events = WorkItemStore
-        .list_events(&scenario.pool, item.id)
+        .list_events(&scenario.database.pool, item.id)
         .await
         .expect("events")
         .into_iter()
@@ -491,7 +489,7 @@ async fn scheduler_runs_periodic_reconciliation_with_restart_signal() {
 
     let handle = start_reconciliation_loop(
         scenario.config.clone(),
-        scenario.pool.clone(),
+        scenario.database.pool.clone(),
         WorkItemStore,
     );
 

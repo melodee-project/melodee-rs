@@ -70,7 +70,7 @@ fn run_cli_failing(database_url: &str, args: &[&str]) -> String {
 }
 
 fn db_url(db: &TestDb) -> String {
-    common::admin_url().replace("/postgres", &format!("/{}", db.name))
+    common::database_url(&db.name)
 }
 
 #[tokio::test]

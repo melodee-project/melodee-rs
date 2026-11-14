@@ -69,7 +69,7 @@ class DeveloperCommandTests(unittest.TestCase):
         ):
             self.check.run_checks("full")
         commands = [call.args[0] for call in run.call_args_list]
-        self.assertIn(["cargo", "test", "--workspace", "--all-features"], commands)
+        self.assertIn([sys.executable, "scripts/test_database.py", "--", "cargo", "test", "--workspace", "--all-features"], commands)
 
     def test_makefile_uses_explicit_check_and_test_scope_names(self) -> None:
         lines = (ROOT / "Makefile").read_text().splitlines()

@@ -113,11 +113,12 @@ pub async fn authenticate_by_name(
         Ok(Some(record)) => record,
         _ => return unauthorized_401(),
     };
-    let password_valid = melodee_auth::verify_password(
+    let password_valid = crate::password_work::verify_password(
         pw.as_bytes(),
         record.password_hash_algorithm,
         record.password_hash.expose_secret(),
     )
+    .await
     .unwrap_or(false);
     if !password_valid {
         return unauthorized_401();

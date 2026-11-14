@@ -951,25 +951,44 @@ impl CatalogStore {
                 }
             },
         );
-        // Drill-down for the statistics: the counts come from
-        // `artist_track_associations`, so the rows do too.
+        // Statistics count distinct Tracks, not independent billing/contribution
+        // evidence. Collapse those associations before the window count/limit;
+        // preserve whether any credit is a performance and prefer direct billing
+        // for the representative label. Full evidence remains in its own sections.
         let track_credits = section_rows(
             sqlx::query(
-                "SELECT track.public_api_id AS track_public_api_id,
+                "WITH credited_tracks AS (
+                     SELECT DISTINCT ON (track_id) track_id, association_type,
+                            bool_or(is_performance) OVER (PARTITION BY track_id)
+                                AS has_performance
+                       FROM artist_track_associations
+                      WHERE artist_id = $1
+                      ORDER BY track_id, (participation_kind = 'direct') DESC,
+                               CASE association_type
+                                 WHEN 'primary_artist' THEN 0
+                                 WHEN 'featured_artist' THEN 1
+                                 WHEN 'guest_artist' THEN 2
+                                 ELSE 3 END,
+                               is_performance DESC, association_type, source_key
+                 )
+                 SELECT track.public_api_id AS track_public_api_id,
                         track.title AS track_title,
                         release.public_api_id AS release_public_api_id,
                         release.title AS release_title,
                         billing.role, billing.display_value, billing.join_phrase,
                         billing.presentation_order,
-                        association.is_performance, association.association_type,
+                        association.has_performance AS is_performance,
+                        association.association_type,
                         COUNT(*) OVER () AS total_count
-                   FROM artist_track_associations association
+                   FROM credited_tracks association
                    JOIN tracks track ON track.id = association.track_id
                    JOIN releases release ON release.id = track.release_id
-                   LEFT JOIN track_artists billing
-                     ON billing.track_id = association.track_id
-                    AND billing.artist_id = association.artist_id
-                  WHERE association.artist_id = $1
+                   LEFT JOIN LATERAL (
+                     SELECT role, display_value, join_phrase, presentation_order
+                       FROM track_artists
+                      WHERE track_id = association.track_id AND artist_id = $1
+                      ORDER BY presentation_order, id LIMIT 1
+                   ) billing ON true
                   ORDER BY release.title, track.disc_number ASC NULLS FIRST,
                            track.track_number ASC NULLS FIRST, track.ordinal, track.id
                   LIMIT $2",

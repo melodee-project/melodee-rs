@@ -2429,3 +2429,52 @@ fn candidate_rows(
         })
         .collect()
 }
+
+/// Completes the one-time ADR-0194 upgrade repair without changing historical overlays.
+/// A failed batch leaves its queue rows and Release pointers unchanged for retry.
+pub(crate) async fn repair_import_overlay_references(
+    pool: &PgPool,
+) -> Result<(), CatalogStoreError> {
+    loop {
+        let mut tx = pool.begin().await?;
+        let queued: Vec<Uuid> = sqlx::query_scalar(
+            "SELECT release_id FROM catalog_overlay_repair_queue
+             ORDER BY release_id LIMIT 100 FOR UPDATE",
+        )
+        .fetch_all(&mut *tx)
+        .await?;
+        if queued.is_empty() {
+            tx.commit().await?;
+            return Ok(());
+        }
+        // An operator correction may already have replaced the defective snapshot.
+        // Lock and check the pointer, never overwrite a newer immutable revision.
+        let affected: Vec<Uuid> = sqlx::query_scalar(
+            "SELECT release.id FROM releases release
+             JOIN catalog_overlay_repair_queue queue ON queue.release_id=release.id
+             WHERE release.id=ANY($1) AND release.current_overlay_id=queue.invalid_overlay_id
+             ORDER BY release.id FOR UPDATE OF release",
+        )
+        .bind(&queued)
+        .fetch_all(&mut *tx)
+        .await?;
+        append_overlay_revisions(
+            &mut tx,
+            &affected,
+            "catalog.import-reference-repair.v1",
+            "migration.0045",
+            "catalog_import_overlay_repaired",
+            OffsetDateTime::now_utc(),
+        )
+        .await?;
+        sqlx::query("DELETE FROM catalog_overlay_repair_queue WHERE release_id=ANY($1)")
+            .bind(&queued)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        tracing::info!(
+            repaired_releases = affected.len(),
+            "repaired catalog import overlay references"
+        );
+    }
+}

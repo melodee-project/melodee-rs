@@ -4,7 +4,7 @@
 - **Status:** Accepted
 - **Decision owners:** Phase 9 work package
 - **Supersedes:** None
-- **Superseded by:** None
+- **Superseded by:** [ADR-0193](ADR-0193-enforce-terminable-script-execution-resource-limits.md) (resource enforcement in decision 3 only)
 - **Related requirements:** PRD-SCRIPT-001, PRD-SCRIPT-002, PRD-SCRIPT-003, PRD-SCRIPT-004,
   PRD-SCRIPT-005, PRD-ARCH-006, PRD-SEC-001
 

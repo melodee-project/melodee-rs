@@ -386,9 +386,9 @@
   color: var(--melodee-chip-error-ink);
 }
 
-.melodee-chip--provisional {
-  background: var(--melodee-chip-provisional-surface);
-  color: var(--melodee-chip-provisional-ink);
+.melodee-chip--pending {
+  background: var(--melodee-chip-pending-surface);
+  color: var(--melodee-chip-pending-ink);
 }
 
 .melodee-chip--neutral {
@@ -405,9 +405,9 @@
   color: var(--melodee-chip-warning-ink);
 }
 
-.melodee-status-tag--provisional {
-  background: var(--melodee-chip-provisional-surface);
-  color: var(--melodee-chip-provisional-ink);
+.melodee-status-tag--pending {
+  background: var(--melodee-chip-pending-surface);
+  color: var(--melodee-chip-pending-ink);
 }
 
 /* =========================================================================
@@ -1204,7 +1204,7 @@
 }
 
 /* Selectable candidate cards: real buttons with radio semantics. The selected
-   state uses the §5 provisional accent (identity work), never color alone —
+   state uses the §5 pending accent (identity work), never color alone —
    the radio role/aria-checked carries the semantics. */
 .melodee-identity-candidate {
   display: block;
@@ -1681,7 +1681,7 @@
 }
 
 /* Muted inline text for a value that is the catalogue default (e.g. a
-   provisional Artist): readable, but not an alert. */
+   pending Artist): readable, but not an alert. */
 .melodee-text-muted {
   color: var(--melodee-text-secondary);
 }

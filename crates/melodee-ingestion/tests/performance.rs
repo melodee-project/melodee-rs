@@ -15,7 +15,6 @@ use melodee_ingestion::{
 };
 use melodee_persistence::WorkItemStore;
 use serde::Serialize;
-use sqlx::PgPool;
 use time::Duration;
 use uuid::Uuid;
 
@@ -46,13 +45,11 @@ struct SettlementBenchmarks {
     notes: Vec<String>,
 }
 
-#[derive(Debug)]
 struct Scenario {
     root: PathBuf,
     source: InboundSource,
     config: IngestionConfig,
-    pool: PgPool,
-    _name: String,
+    database: common::TestDb,
 }
 
 impl Scenario {
@@ -74,8 +71,7 @@ impl Scenario {
             root,
             source,
             config,
-            pool: db.pool,
-            _name: name.to_owned(),
+            database: db,
         }
     }
 
@@ -146,7 +142,7 @@ impl Scenario {
         reconcile_all_sources(
             &self.config,
             &WorkItemStore,
-            &self.pool,
+            &self.database.pool,
             common::T0 + Duration::seconds(now_seconds),
         )
         .await
@@ -155,7 +151,7 @@ impl Scenario {
 
     async fn ready_count(&self) -> usize {
         WorkItemStore
-            .list(&self.pool, None, 10_000, 0)
+            .list(&self.database.pool, None, 10_000, 0)
             .await
             .expect("list")
             .into_iter()
@@ -165,7 +161,7 @@ impl Scenario {
 
     async fn snapshot_row_count(&self) -> i64 {
         sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM release_work_item_settling_snapshots")
-            .fetch_one(&self.pool)
+            .fetch_one(&self.database.pool)
             .await
             .expect("count snapshots")
     }

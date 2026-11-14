@@ -27,11 +27,7 @@
 use axum::{extract::Request, http::HeaderMap, middleware::Next, response::Response};
 use uuid::Uuid;
 
-tokio::task_local! {
-    /// The in-flight request's correlation id. Scoped by [`middleware`]; read
-    /// by [`envelope_id`] and [`current`].
-    static CURRENT_CORRELATION_ID: Uuid;
-}
+pub use melodee_application::correlation::{current, envelope_id};
 
 /// Request extension carrying the sourced correlation id, for handlers that
 /// have `Parts` access and want the id directly.
@@ -56,23 +52,7 @@ pub async fn middleware(mut request: Request, next: Next) -> Response {
     let id = source_from_headers(request.headers());
     tracing::Span::current().record("correlation_id", tracing::field::display(id));
     request.extensions_mut().insert(CorrelationId(id));
-    CURRENT_CORRELATION_ID.scope(id, next.run(request)).await
-}
-
-/// Correlation id for a newly constructed error envelope: the in-flight
-/// request's id inside the middleware scope, otherwise a fresh id.
-#[must_use]
-pub fn envelope_id() -> Uuid {
-    CURRENT_CORRELATION_ID
-        .try_with(|id| *id)
-        .unwrap_or_else(|_| Uuid::now_v7())
-}
-
-/// The in-flight request's correlation id, for explicit capture before a
-/// `tokio::spawn` crosses the task boundary.
-#[must_use]
-pub fn current() -> Option<Uuid> {
-    CURRENT_CORRELATION_ID.try_with(|id| *id).ok()
+    melodee_application::correlation::scope(id, next.run(request)).await
 }
 
 #[cfg(test)]

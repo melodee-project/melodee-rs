@@ -261,7 +261,8 @@ describe('ArtistDetailScreen', () => {
     // The stat card is a link into the credits tab, so a count is never a dead end.
     const credits = screen.getByRole('link', { name: /Track credits/ });
     expect(credits).toHaveAttribute('href', `/catalog/artists/${ARTIST_ID}?tab=tracks`);
-    fireEvent.click(screen.getByRole('tab', { name: 'Tracks' }));
+    fireEvent.click(credits);
+    expect(screen.getByRole('tab', { name: 'Tracks' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('link', { name: 'Down Under' })).toHaveAttribute(
       'href',
       `/catalog/tracks/${TRACK_ID}`,

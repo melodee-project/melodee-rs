@@ -257,16 +257,25 @@ facts. Every pass is bounded, set-based, and idempotent, so the worker is safe t
 | `MELODEE__NATIVE__AUTH__RATE_WINDOW_SECONDS` | `60` | PostgreSQL-backed authentication rate window (`1`–`86400` seconds). |
 | `MELODEE__NATIVE__AUTH__RATE_MAX_KEYS` | `100000` | Maximum active rate-counter keys retained cluster-wide (`1`–`10000000`). New keys fail closed at capacity. |
 | `MELODEE__NATIVE__CORS__ALLOWED_ORIGINS` | empty | Comma-separated exact `http`/`https` browser origins allowed to call native v1. Wildcards are rejected. The policy admits native `GET`/`POST`/`PUT`/`PATCH`/`DELETE` requests and exposes only the paging, range, duration, and ETag response headers used by browser clients. The source-build and Compose examples explicitly allow MeloAmp's source UI (`http://localhost:3000`) and packaged desktop renderer (`http://localhost:3001`). |
-| `MELODEE__NATIVE__TRUSTED_PROXIES` | empty | Comma-separated exact proxy IPs or CIDRs allowed to supply `Forwarded`/`X-Forwarded-For`. Untrusted forwarding headers are ignored. For a trusted peer, Melodee walks the forwarded chain from right to left, removes trusted proxy hops, and uses the first untrusted address as the client. List only proxy infrastructure you control. |
+| `MELODEE__SERVER__TRUSTED_PROXIES` | empty | Shared by native, OpenSubsonic, Jellyfin, and Admin requests. Comma-separated exact proxy IPs or CIDRs allowed to supply `Forwarded`/`X-Forwarded-For`. Untrusted forwarding headers are ignored. For a trusted peer, Melodee walks the forwarded chain from right to left, removes trusted proxy hops, and uses the first untrusted address as the client. List only proxy infrastructure you control. |
+| `MELODEE__NATIVE__TRUSTED_PROXIES` | empty | Backward-compatible fallback alias, used only when `MELODEE__SERVER__TRUSTED_PROXIES` is absent. An explicitly empty shared value disables trust even when this alias is set. |
 | `MELODEE__NATIVE__AUTH__GOOGLE__ENABLED` | `false` | Enables Google ID-token exchange only when the client ID and JWKS configuration also validate. |
 | `MELODEE__NATIVE__AUTH__GOOGLE__CLIENT_ID` | — | Exact Google OAuth client ID used as the required token audience. |
 | `MELODEE__NATIVE__AUTH__GOOGLE__JWKS_URL` | Google v3 certificates URL | HTTPS JWKS endpoint. Redirects are rejected and the response/cache are bounded. |
 | `MELODEE__NATIVE__AUTH__GOOGLE__HOSTED_DOMAINS` | empty | Optional comma-separated lowercase hosted-domain allowlist checked after signature, issuer, audience, lifetime, and verified-email validation. |
 
+Password hashing and verification share a bounded pool of four active operations and at most 64
+admitted requests per process. Excess password work uses the endpoint's existing backend-failure
+response: native sign-in returns service unavailable, while OpenSubsonic and Jellyfin retain their
+non-enumerating authentication failure envelopes. Password creation/reset operations retain their
+existing failure responses. This keeps authentication load off async request workers.
+
 ### OpenSubsonic browser clients
 
 | Key | Default | Effect |
 | --- | --- | --- |
+| `MELODEE__OPENSUBSONIC__LEGACY_AUTH_BYPASS` | `false` | Unsafe legacy localhost/matching-host authentication bypass. Enable only for isolated client migration. Never enable behind a public reverse proxy. Startup logs a warning when enabled. |
+| `MELODEE__OPENSUBSONIC__BASE_URL_HOST` | absent | Host compared by the legacy bypass only when explicitly enabled; matching a host is not authentication. |
 | `MELODEE__OPENSUBSONIC__CORS__ALLOWED_ORIGINS` | empty | Comma-separated exact HTTP(S) origins allowed to read OpenSubsonic responses from browsers, for example `https://feishin.vercel.app`. Rejects wildcards, credentials, trailing slashes, paths, queries, fragments, and more than 100 origins. Applies to API and media requests with `Origin`, including OPTIONS preflight, and admits GET/POST/HEAD with authentication, content-type, conditional, and range request headers. Exposes paging, range, duration, disposition, and cache-validation response headers. Cookie credentials are not enabled. |
 
 OpenSubsonic `download` is gated by `system.isDownloadingEnabled` (default `true`); the legacy

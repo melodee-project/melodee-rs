@@ -44,6 +44,11 @@ The admin UI ships with twenty cultures:
 The header's language menu switches the UI immediately. **English (`en-US`) is the fallback**:
 any string missing from the selected culture renders in English rather than as a raw key.
 
+Languages with incomplete key coverage are marked **Preview** in the menu. These remain fully
+selectable, but screens can mix the selected language with English. The label measures whether
+all source strings are present, not the quality of a translation. English is currently complete;
+the other nineteen cultures retain their available translations and use fallback for missing text.
+
 Arabic (`ar-SA`) and Persian (`fa-IR`) render **right-to-left**: the entire layout mirrors,
 including navigation, tables, and dialogs.
 

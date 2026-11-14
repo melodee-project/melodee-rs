@@ -18,6 +18,10 @@ env:
   CARGO_PROFILE_DEV_DEBUG: "0"
   CARGO_PROFILE_TEST_DEBUG: "0"
 
+concurrency:
+  group: melodee-release-publication
+  cancel-in-progress: false
+
 jobs:
   validate-release:
     name: Validate release tag and package version
@@ -36,53 +40,16 @@ jobs:
           fetch-depth: 0
 
       - name: Install pinned Rust toolchain
-        run: |
-          rustup toolchain install 1.99.0 --profile minimal
-          rustup default 1.99.0
-
+        run: python3 scripts/ci_tasks.py toolchain
       - name: Validate SemVer and Cargo package versions
         id: version
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
           RELEASE_PRERELEASE: ${{ github.event.release.prerelease }}
-        run: |
-          set -euo pipefail
-          if [[ ! "$RELEASE_TAG" =~ ^v?([0-9]+)\.([0-9]+)\.([0-9]+)(-[0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]; then
-            echo "Published release tag must be SemVer, optionally prefixed with v: $RELEASE_TAG" >&2
-            exit 1
-          fi
-          version="${RELEASE_TAG#v}"
-          minor="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
-          tag_has_prerelease=false
-          if [[ "$version" == *-* ]]; then
-            tag_has_prerelease=true
-          fi
-          if [[ "$RELEASE_PRERELEASE" == "false" && "$tag_has_prerelease" == "true" ]]; then
-            echo "A SemVer prerelease tag must be marked as a GitHub prerelease." >&2
-            exit 1
-          fi
-          stable=false
-          if [[ "$RELEASE_PRERELEASE" == "false" ]]; then
-            stable=true
-          fi
-          mapfile -t package_versions < <(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "melodee-server" or .name == "melodee-cli") | .version')
-          if [[ "${#package_versions[@]}" -ne 2 ]] || [[ "${package_versions[0]}" != "$version" ]] || [[ "${package_versions[1]}" != "$version" ]]; then
-            printf 'Release tag %s must match melodee-server and melodee-cli versions; found: %s\n' "$version" "${package_versions[*]:-none}" >&2
-            exit 1
-          fi
-          printf 'version=%s\nminor=%s\nstable=%s\n' "$version" "$minor" "$stable" >> "$GITHUB_OUTPUT"
-
+        run: python3 scripts/release_pipeline.py validate-version
       - name: Record checked-out release revision
         id: revision
-        run: |
-          set -euo pipefail
-          git fetch origin main
-          if ! git merge-base --is-ancestor HEAD origin/main; then
-            echo "Published release tag must resolve to a commit reachable from origin/main." >&2
-            exit 1
-          fi
-          printf 'revision=%s\n' "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
+        run: python3 scripts/release_pipeline.py record-revision
   quality-gate:
     name: Run full release quality gate
     needs: validate-release
@@ -106,20 +73,20 @@ jobs:
       - name: Check out the published release tag
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ needs.validate-release.outputs.revision }}
+
+      - name: Verify validated revision
+        env:
+          RELEASE_REVISION: ${{ needs.validate-release.outputs.revision }}
+        run: python3 scripts/release_pipeline.py verify-revision
 
       - name: Free GitHub-hosted runner disk space
         if: runner.environment == 'github-hosted'
-        run: |
-          df -h /
-          sudo rm -rf -- /usr/local/lib/android /usr/share/dotnet /opt/ghc
-          df -h /
-
+        run: sudo -E python3 scripts/ci_tasks.py free-space
+        env:
+          MELODEE_CI_RUNNER_ENVIRONMENT: ${{ runner.environment }}
       - name: Install pinned Rust toolchain
-        run: |
-          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy
-          rustup default 1.99.0
-
+        run: python3 scripts/ci_tasks.py toolchain
       - name: Install pnpm
         uses: pnpm/action-setup@v6
         with:
@@ -134,13 +101,7 @@ jobs:
           cache-dependency-path: admin-ui/pnpm-lock.yaml
 
       - name: Install media inspection tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends -y ffmpeg libchromaprint-tools
-          ffprobe -version | head -1
-          ffmpeg -version | head -1
-          fpcalc -version
-
+        run: python3 scripts/ci_tasks.py media-tools
       - name: Install cargo-deny
         run: cargo install cargo-deny --version 0.20.2 --locked
 
@@ -169,7 +130,12 @@ jobs:
       - name: Check out the published release tag
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ needs.validate-release.outputs.revision }}
+
+      - name: Verify validated revision
+        env:
+          RELEASE_REVISION: ${{ needs.validate-release.outputs.revision }}
+        run: python3 scripts/release_pipeline.py verify-revision
 
       - name: Set up QEMU for arm64
         if: matrix.architecture == 'arm64'
@@ -185,6 +151,8 @@ jobs:
           load: true
           push: false
           platforms: ${{ matrix.platform }}
+          cache-from: type=gha,scope=melodee-${{ matrix.architecture }}
+          cache-to: type=gha,mode=max,scope=melodee-${{ matrix.architecture }}
           tags: melodee-release-smoke:${{ github.run_id }}-${{ matrix.architecture }}
           build-args: |
             VERSION=${{ needs.validate-release.outputs.version }}
@@ -198,14 +166,15 @@ jobs:
           SMOKE_IMAGE: melodee-release-smoke:${{ github.run_id }}-${{ matrix.architecture }}
           RELEASE_VERSION: ${{ needs.validate-release.outputs.version }}
           RELEASE_REVISION: ${{ needs.validate-release.outputs.revision }}
-        run: SMOKE_RUN_ID="github-${GITHUB_RUN_ID}-${{ matrix.architecture }}" SMOKE_PORT="${{ matrix.smoke_port }}" python3 scripts/container_smoke.py
+          SMOKE_RUN_ID: github-${{ github.run_id }}-${{ matrix.architecture }}
+          SMOKE_PORT: ${{ matrix.smoke_port }}
+        run: python3 scripts/container_smoke.py
 
       - name: Prepare per-architecture evidence directory
         if: always()
         env:
           EVIDENCE_DIR: ${{ runner.temp }}/melodee-release-evidence-${{ matrix.architecture }}
-        run: mkdir -p "$EVIDENCE_DIR"
-
+        run: python3 scripts/release_pipeline.py prepare-evidence
       - name: Install Syft for the image SBOM
         id: syft
         if: success()
@@ -222,27 +191,7 @@ jobs:
           EVIDENCE_DIR: ${{ runner.temp }}/melodee-release-evidence-${{ matrix.architecture }}
           SYFT_COMMAND: ${{ steps.syft.outputs.cmd }}
           EXPECTED_ARCHITECTURE: ${{ matrix.architecture }}
-        run: |
-          set -euo pipefail
-          inspect_json="$(docker image inspect "$SMOKE_IMAGE")"
-          jq -e --arg architecture "$EXPECTED_ARCHITECTURE" '
-            .[0] as $image |
-            ($image.Id | startswith("sha256:")) and $image.Architecture == $architecture
-          ' <<< "$inspect_json" >/dev/null
-          jq -e --arg version "$RELEASE_VERSION" --arg revision "$RELEASE_REVISION" '
-            .[0].Config.Labels["org.opencontainers.image.title"] == "Melodee" and
-            .[0].Config.Labels["org.opencontainers.image.source"] == "https://github.com/melodee-project/melodee-rs" and
-            .[0].Config.Labels["org.opencontainers.image.licenses"] == "MIT" and
-            .[0].Config.Labels["org.opencontainers.image.version"] == $version and
-            .[0].Config.Labels["org.opencontainers.image.revision"] == $revision
-          ' <<< "$inspect_json" >/dev/null
-          jq '.[0] | {Id, Architecture, Os, Config: {User, Labels}}' \
-            <<< "$inspect_json" > "$EVIDENCE_DIR/image-metadata.json"
-          jq -r '.[0].Id' <<< "$inspect_json" > "$EVIDENCE_DIR/image-digest.txt"
-          "$SYFT_COMMAND" "$SMOKE_IMAGE" \
-            -o "spdx-json=$EVIDENCE_DIR/sbom.spdx.json"
-          test -s "$EVIDENCE_DIR/sbom.spdx.json"
-
+        run: python3 scripts/release_pipeline.py record-image
       # Critical findings always block publication. High findings block only
       # when a fix is available; no ignore file exists, so exceptions require
       # a reviewed, versioned policy change rather than a silent waiver.
@@ -276,76 +225,20 @@ jobs:
         env:
           EVIDENCE_DIR: ${{ runner.temp }}/melodee-release-evidence-${{ matrix.architecture }}
           SMOKE_IMAGE: melodee-release-smoke:${{ github.run_id }}-${{ matrix.architecture }}
-        run: |
-          set -euo pipefail
-          docker save "$SMOKE_IMAGE" | gzip -1 > "$EVIDENCE_DIR/image.tar.gz"
-          test -s "$EVIDENCE_DIR/image.tar.gz"
-
+        run: python3 scripts/release_pipeline.py archive-image
       - name: Finalize image evidence checksums
         if: always()
         env:
           EVIDENCE_DIR: ${{ runner.temp }}/melodee-release-evidence-${{ matrix.architecture }}
           RELEASE_VERSION: ${{ needs.validate-release.outputs.version }}
           RELEASE_REVISION: ${{ needs.validate-release.outputs.revision }}
-        run: |
-          set -euo pipefail
-          for report in trivy-critical.json trivy-high.json; do
-            if [[ -f "$report" ]]; then
-              cp -- "$report" "$EVIDENCE_DIR/$report"
-            fi
-          done
-          {
-            printf 'architecture=%s\n' '${{ matrix.architecture }}'
-            printf 'critical_scan=%s\n' "$([[ -f "$EVIDENCE_DIR/trivy-critical.json" ]] && echo present || echo unavailable)"
-            printf 'high_scan=%s\n' "$([[ -f "$EVIDENCE_DIR/trivy-high.json" ]] && echo present || echo unavailable)"
-          } > "$EVIDENCE_DIR/scan-status.txt"
-          python3 scripts/validate_release_evidence.py \
-            --directory "$EVIDENCE_DIR" \
-            --architecture '${{ matrix.architecture }}' \
-            --version "$RELEASE_VERSION" \
-            --revision "$RELEASE_REVISION" \
-            --write
-          mapfile -t evidence_files < <(
-            find "$EVIDENCE_DIR" -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\n' | sort
-          )
-          if (( ${#evidence_files[@]} > 0 )); then
-            (cd "$EVIDENCE_DIR" && sha256sum -- "${evidence_files[@]}" > SHA256SUMS)
-          fi
-          python3 scripts/validate_release_evidence.py \
-            --directory "$EVIDENCE_DIR" \
-            --architecture '${{ matrix.architecture }}' \
-            --version "$RELEASE_VERSION" \
-            --revision "$RELEASE_REVISION" \
-            --check
-
+          EXPECTED_ARCHITECTURE: ${{ matrix.architecture }}
+        run: python3 scripts/release_pipeline.py finalize-evidence
       - name: Require complete image evidence
         if: always()
         env:
           EVIDENCE_DIR: ${{ runner.temp }}/melodee-release-evidence-${{ matrix.architecture }}
-        run: |
-          set -euo pipefail
-          required_files=(
-            image-metadata.json
-            image-digest.txt
-            image.tar.gz
-            sbom.spdx.json
-            trivy-critical.json
-            trivy-high.json
-            scan-status.txt
-            release-evidence.json
-            SHA256SUMS
-          )
-          missing=0
-          for file in "${required_files[@]}"; do
-            if [[ ! -s "$EVIDENCE_DIR/$file" ]]; then
-              printf 'missing required release evidence: %s\n' "$file" >&2
-              missing=1
-            fi
-          done
-          if (( missing != 0 )); then
-            exit 1
-          fi
-
+        run: python3 scripts/release_pipeline.py require-evidence
       - name: Upload per-architecture image evidence
         if: always()
         uses: actions/upload-artifact@v7
@@ -370,7 +263,12 @@ jobs:
       - name: Check out the published release tag
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ needs.validate-release.outputs.revision }}
+
+      - name: Verify validated revision
+        env:
+          RELEASE_REVISION: ${{ needs.validate-release.outputs.revision }}
+        run: python3 scripts/release_pipeline.py verify-revision
 
       - name: Extract release image metadata
         id: meta
@@ -411,56 +309,20 @@ jobs:
           EVIDENCE_ROOT: ${{ runner.temp }}/melodee-release-evidence
           RELEASE_VERSION: ${{ needs.validate-release.outputs.version }}
           RELEASE_REVISION: ${{ needs.validate-release.outputs.revision }}
-        run: |
-          set -euo pipefail
-          for architecture in amd64 arm64; do
-            evidence_dir="$EVIDENCE_ROOT/melodee-release-evidence-$architecture"
-            test -d "$evidence_dir"
-            (cd "$evidence_dir" && sha256sum --check SHA256SUMS)
-            python3 scripts/validate_release_evidence.py \
-              --directory "$evidence_dir" \
-              --architecture "$architecture" \
-              --version "$RELEASE_VERSION" \
-              --revision "$RELEASE_REVISION" \
-              --check
-            docker load --input "$evidence_dir/image.tar.gz"
-            image_id="$(<"$evidence_dir/image-digest.txt")"
-            [[ "$image_id" == sha256:* ]]
-            docker image inspect "$image_id" >/dev/null
-            docker tag "$image_id" "melodee-scanned:$architecture"
-            test "$(docker image inspect --format '{{.Id}}' "melodee-scanned:$architecture")" = "$image_id"
-          done
-
+        run: python3 scripts/release_pipeline.py load-images
       - name: Push scanned images to unique staging references
         env:
           STAGING_AMD64: ${{ env.IMAGE_NAME }}:${{ needs.validate-release.outputs.version }}-staging-${{ github.run_id }}-amd64
           STAGING_ARM64: ${{ env.IMAGE_NAME }}:${{ needs.validate-release.outputs.version }}-staging-${{ github.run_id }}-arm64
-        run: |
-          set -euo pipefail
-          docker tag melodee-scanned:amd64 "$STAGING_AMD64"
-          docker tag melodee-scanned:arm64 "$STAGING_ARM64"
-          docker push "$STAGING_AMD64"
-          docker push "$STAGING_ARM64"
-
+        run: python3 scripts/release_pipeline.py push-staging
       - name: Assemble and publish manifest tags from scanned images
         id: push
         env:
           FINAL_TAGS: ${{ steps.meta.outputs.tags }}
+          RELEASE_VERSION: ${{ needs.validate-release.outputs.version }}
           STAGING_AMD64: ${{ env.IMAGE_NAME }}:${{ needs.validate-release.outputs.version }}-staging-${{ github.run_id }}-amd64
           STAGING_ARM64: ${{ env.IMAGE_NAME }}:${{ needs.validate-release.outputs.version }}-staging-${{ github.run_id }}-arm64
-        run: |
-          set -euo pipefail
-          while IFS= read -r final_tag; do
-            [[ -n "$final_tag" ]] || continue
-            docker buildx imagetools create \
-              --tag "$final_tag" \
-              "$STAGING_AMD64" "$STAGING_ARM64"
-          done <<< "$FINAL_TAGS"
-          primary_tag="$(printf '%s\n' "$FINAL_TAGS" | sed -n '/./{p;q;}')"
-          digest="$(docker buildx imagetools inspect "$primary_tag" --format '{{.Manifest.Digest}}')"
-          [[ "$digest" == sha256:* ]]
-          printf 'digest=%s\n' "$digest" >> "$GITHUB_OUTPUT"
-
+        run: python3 scripts/release_pipeline.py publish
       - name: Generate keyless GitHub build provenance attestation
         uses: actions/attest@v4
         with:

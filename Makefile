@@ -27,20 +27,19 @@ lint:
 	cargo clippy --workspace --all-targets --all-features -- -D warnings
 
 test:
-	cargo test --workspace --all-features
+	$(PYTHON) scripts/test_database.py -- cargo test --workspace --all-features
 
 test-unit:
-	cargo test --workspace --all-features --lib --bins
+	$(PYTHON) scripts/check.py unit
 
 test-integration:
-	cargo test --workspace --all-features --test "*"
+	$(PYTHON) scripts/test_database.py -- cargo test --workspace --all-features --test "*"
 
 test-coverage:
 	$(PYTHON) scripts/check.py coverage
 
 docs:
-	$(PYTHON) scripts/validate_repository.py
-	$(PYTHON) scripts/extract_requirements.py --check
+	$(PYTHON) scripts/ci_tasks.py repository-docs
 
 docs-site-check:
 	$(PYTHON) scripts/check.py docs
