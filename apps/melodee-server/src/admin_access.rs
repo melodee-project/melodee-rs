@@ -12,14 +12,16 @@ use std::sync::Arc;
 
 use axum::{
     Json, Router,
-    extract::{FromRequestParts, Path, Query, State},
-    http::{StatusCode, header, request::Parts},
+    body::Bytes,
+    extract::{DefaultBodyLimit, FromRequestParts, Path, Query, State},
+    http::{HeaderMap, StatusCode, header, request::Parts},
     response::{IntoResponse, Response},
     routing::{get, post, put},
 };
 use melodee_persistence::{
-    AccessGroupDetail, GroupAdminError, GroupAdminStore, NativeUserAdminUpdate, NativeUserCreate,
-    StoredAccessGroup, StoredNativeUser, UserAdminError, UserAdminStore, UserSort,
+    AccessGroupDetail, AuthStore, GroupAdminError, GroupAdminStore, NativeUserAdminUpdate,
+    NativeUserCreate, StoredAccessGroup, StoredNativeUser, UserAdminError, UserAdminStore,
+    UserSort,
 };
 use serde::{Deserialize, Serialize};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
@@ -29,6 +31,10 @@ use crate::native::auth::NativeAuthService;
 
 /// Upper bound for a client-supplied password on user creation.
 const MAX_PASSWORD_CHARS: usize = 1024;
+
+/// Admin avatar uploads use the same bounded raw-image pipeline as the native
+/// self-service route.
+const MAX_ADMIN_AVATAR_BYTES: usize = 4 * 1024 * 1024;
 
 /// Shared state for the admin access surface.
 #[derive(Clone)]
@@ -207,6 +213,10 @@ pub struct AdminUserDto {
     pub enabled: bool,
     pub locked: bool,
     pub roles: Vec<String>,
+    pub description: Option<String>,
+    pub time_zone_id: String,
+    pub preferred_language: Option<String>,
+    pub preferred_theme: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -221,6 +231,10 @@ fn user_dto(user: &StoredNativeUser) -> Result<AdminUserDto, ()> {
         enabled: user.enabled,
         locked: user.locked,
         roles: user.roles.clone(),
+        description: user.description.clone(),
+        time_zone_id: user.time_zone_id.clone(),
+        preferred_language: user.preferred_language.clone(),
+        preferred_theme: user.preferred_theme.clone(),
         created_at: format_time(user.created_at)?,
         updated_at: format_time(user.updated_at)?,
     })
@@ -292,6 +306,13 @@ pub struct UpdateUserRequest {
     pub enabled: Option<bool>,
     pub locked: Option<bool>,
     pub roles: Option<Vec<String>>,
+    pub username: Option<String>,
+    pub email: Option<String>,
+    /// `null` clears the description; omission leaves it unchanged.
+    pub description: Option<Option<String>>,
+    pub time_zone_id: Option<String>,
+    pub preferred_language: Option<Option<String>>,
+    pub preferred_theme: Option<Option<String>>,
 }
 
 /// Query parameters for the paginated user listing. All optional.
@@ -338,7 +359,7 @@ pub struct SetPasswordRequest {
 }
 
 pub fn router() -> Router<AdminAccessState> {
-    Router::new()
+    let base = Router::new()
         .route("/api/admin/v1/groups", get(list_groups).post(create_group))
         .route(
             "/api/admin/v1/groups/{id}",
@@ -355,7 +376,17 @@ pub fn router() -> Router<AdminAccessState> {
         .route("/api/admin/v1/users", get(list_users).post(create_user))
         .route("/api/admin/v1/users/{id}", put(update_user))
         .route("/api/admin/v1/users/{id}/password", post(set_user_password))
-        .route_layer(axum::extract::DefaultBodyLimit::max(64 * 1024))
+        .route_layer(DefaultBodyLimit::max(64 * 1024));
+    // Avatar uploads need the native raw-image body bound; keeping this route
+    // outside the JSON 64 KiB layer avoids widening every account mutation.
+    base.merge(
+        Router::new()
+            .route(
+                "/api/admin/v1/users/{id}/avatar",
+                post(set_user_avatar).delete(delete_user_avatar),
+            )
+            .layer(DefaultBodyLimit::max(MAX_ADMIN_AVATAR_BYTES)),
+    )
 }
 
 async fn list_groups(State(state): State<AdminAccessState>, _admin: AdminPrincipal) -> Response {
@@ -581,6 +612,130 @@ async fn list_users(
     }
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AdminAvatarMutationDto {
+    message: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    updated_at: Option<String>,
+}
+
+/// Resolves an admin-addressed user public id to the stored row.
+async fn load_user_for_admin(
+    pool: &sqlx::PgPool,
+    public_api_id: Uuid,
+) -> Result<StoredNativeUser, Box<Response>> {
+    match AuthStore::new()
+        .user_by_public_id(pool, public_api_id)
+        .await
+    {
+        Ok(Some(user)) => Ok(user),
+        Ok(None) => Err(Box::new(admin_error(StatusCode::NOT_FOUND, "not_found"))),
+        Err(error) => {
+            tracing::error!(%error, "admin user lookup failed");
+            Err(Box::new(admin_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "store_error",
+            )))
+        }
+    }
+}
+
+/// POST /api/admin/v1/users/{id}/avatar — replace one user's avatar using the
+/// same bounded raw-image pipeline as the native self-service route.
+async fn set_user_avatar(
+    State(state): State<AdminAccessState>,
+    admin: AdminPrincipal,
+    Path(id): Path<Uuid>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    let user = match load_user_for_admin(&state.pool, id).await {
+        Ok(user) => user,
+        Err(response) => return *response,
+    };
+    let declared = headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| {
+            value
+                .split(';')
+                .next()
+                .unwrap_or_default()
+                .trim()
+                .to_ascii_lowercase()
+        });
+    let Some((mime, format)) = crate::native::avatars::avatar_image_format(&body) else {
+        return admin_error(StatusCode::BAD_REQUEST, "invalid_avatar");
+    };
+    if declared.as_deref() != Some(mime) {
+        return admin_error(StatusCode::BAD_REQUEST, "invalid_avatar");
+    }
+    let normalized =
+        match crate::native::images::normalize_avatar_image(body.to_vec(), format).await {
+            Ok(bytes) => bytes,
+            Err(crate::native::images::ImageUploadValidationError::Invalid) => {
+                return admin_error(StatusCode::BAD_REQUEST, "invalid_avatar");
+            }
+            Err(crate::native::images::ImageUploadValidationError::Busy) => {
+                return admin_error(StatusCode::SERVICE_UNAVAILABLE, "store_error");
+            }
+        };
+    let now = OffsetDateTime::now_utc();
+    match UserAdminStore::new()
+        .set_avatar_as(&state.pool, user.id, admin.user_id, mime, &normalized, now)
+        .await
+    {
+        Ok(stored) => {
+            tracing::info!(
+                actor = %admin.public_api_id,
+                user = %id,
+                "admin updated user avatar"
+            );
+            Json(AdminAvatarMutationDto {
+                message: "Avatar updated",
+                updated_at: stored.updated_at.format(&Rfc3339).ok(),
+            })
+            .into_response()
+        }
+        Err(UserAdminError::InvalidRequest(_)) => {
+            admin_error(StatusCode::BAD_REQUEST, "invalid_avatar")
+        }
+        Err(error) => store_error(error),
+    }
+}
+
+/// DELETE /api/admin/v1/users/{id}/avatar — remove one user's avatar.
+async fn delete_user_avatar(
+    State(state): State<AdminAccessState>,
+    admin: AdminPrincipal,
+    Path(id): Path<Uuid>,
+) -> Response {
+    let user = match load_user_for_admin(&state.pool, id).await {
+        Ok(user) => user,
+        Err(response) => return *response,
+    };
+    match UserAdminStore::new()
+        .delete_avatar_as(&state.pool, user.id, admin.user_id)
+        .await
+    {
+        Ok(true) => {
+            tracing::info!(
+                actor = %admin.public_api_id,
+                user = %id,
+                "admin deleted user avatar"
+            );
+            Json(AdminAvatarMutationDto {
+                message: "Avatar deleted",
+                updated_at: None,
+            })
+            .into_response()
+        }
+        Ok(false) => admin_error(StatusCode::NOT_FOUND, "not_found"),
+        Err(error) => store_error(error),
+    }
+}
+
 async fn set_user_password(
     State(state): State<AdminAccessState>,
     admin: AdminPrincipal,
@@ -676,9 +831,21 @@ async fn update_user(
         enabled: request.enabled,
         locked: request.locked,
         roles: request.roles,
+        username: request.username,
+        email: request.email,
+        description: request.description,
+        time_zone_id: request.time_zone_id,
+        preferred_language: request.preferred_language,
+        preferred_theme: request.preferred_theme,
     };
     match UserAdminStore::new()
-        .update_user(&state.pool, id, &update, OffsetDateTime::now_utc())
+        .update_user_as(
+            &state.pool,
+            id,
+            Some(admin.user_id),
+            &update,
+            OffsetDateTime::now_utc(),
+        )
         .await
     {
         Ok(user) => {

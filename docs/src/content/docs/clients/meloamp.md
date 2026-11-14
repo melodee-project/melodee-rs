@@ -15,6 +15,9 @@ identity decisions, artwork overrides, processing, settings, users, and diagnost
 does not ship a second full listener-facing SPA at `/`; this keeps listener behavior in one
 maintained client and avoids duplicate application state and compatibility surfaces.
 
+Listener account self-service lives in MeloAmp. Open **Profile** in the sidebar footer to edit
+the server-stored username, email, description, timezone, preferred language/theme, and avatar.
+
 Narrow browser-only pages may still exist when a public link or security flow genuinely requires
 HTML, such as a public-share landing or password-reset completion. Those pages are not a listener
 application.

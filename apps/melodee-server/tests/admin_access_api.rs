@@ -148,6 +148,40 @@ async fn call(
     (status, json)
 }
 
+async fn call_raw(
+    app: axum::Router,
+    method: &str,
+    path: &str,
+    content_type: &str,
+    body: Vec<u8>,
+    bearer: Option<&str>,
+) -> (StatusCode, Value) {
+    let mut builder = Request::builder()
+        .method(method)
+        .uri(path)
+        .header(header::CONTENT_TYPE, content_type);
+    if let Some(token) = bearer {
+        builder = builder.header(header::AUTHORIZATION, format!("Bearer {token}"));
+    }
+    let response = app
+        .oneshot(builder.body(Body::from(body)).expect("request"))
+        .await
+        .expect("response");
+    let status = response.status();
+    let bytes = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body")
+        .to_bytes();
+    let json = if bytes.is_empty() {
+        Value::Null
+    } else {
+        serde_json::from_slice(&bytes).expect("json body")
+    };
+    (status, json)
+}
+
 #[tokio::test]
 async fn group_lifecycle_via_http() {
     let db = common::TestDb::create("wp03_admin_group_lifecycle").await;
@@ -528,6 +562,147 @@ async fn update_user_flags_and_disable_enable() {
         "PUT",
         &format!("/api/admin/v1/users/{}", Uuid::now_v7()),
         Some(serde_json::json!({"enabled": false})),
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn admin_updates_profile_fields_and_avatar_with_actor_audit() {
+    let db = common::TestDb::create("wp03_admin_profile_avatar").await;
+    let fixture = seed(&db).await;
+    let admin = token_for(fixture.admin_public, "wp03-admin");
+    let app = app(db.pool.clone());
+
+    let (status, updated) = call(
+        app.clone(),
+        "PUT",
+        &format!("/api/admin/v1/users/{}", fixture.plain_public),
+        Some(serde_json::json!({
+            "username": "renamed-user",
+            "email": "renamed@example.test",
+            "description": "Curator biography",
+            "timeZoneId": "Europe/London",
+            "preferredLanguage": "en-GB",
+            "preferredTheme": "dark"
+        })),
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{updated}");
+    assert_eq!(updated["username"], "renamed-user");
+    assert_eq!(updated["email"], "renamed@example.test");
+    assert_eq!(updated["description"], "Curator biography");
+    assert_eq!(updated["timeZoneId"], "Europe/London");
+    assert_eq!(updated["preferredLanguage"], "en-GB");
+    assert_eq!(updated["preferredTheme"], "dark");
+
+    // The profile mutation names the acting administrator in the audit feed.
+    let admin_internal: Uuid =
+        sqlx::query_scalar("SELECT id FROM native_users WHERE public_api_id=$1")
+            .bind(fixture.admin_public)
+            .fetch_one(&db.pool)
+            .await
+            .expect("admin internal id");
+    let target_internal: Uuid =
+        sqlx::query_scalar("SELECT id FROM native_users WHERE public_api_id=$1")
+            .bind(fixture.plain_public)
+            .fetch_one(&db.pool)
+            .await
+            .expect("target internal id");
+    let (actor, event, fields): (Uuid, String, Vec<String>) = sqlx::query_as(
+        "SELECT actor_user_id, event, changed_fields FROM native_user_profile_audits
+          WHERE user_id=$1 ORDER BY created_at DESC, id DESC LIMIT 1",
+    )
+    .bind(target_internal)
+    .fetch_one(&db.pool)
+    .await
+    .expect("profile audit");
+    assert_eq!(admin_internal, actor);
+    assert_eq!("profile_updated", event);
+    assert!(fields.contains(&"username".to_string()));
+    assert!(fields.contains(&"timeZoneId".to_string()));
+
+    // Invalid timezone keeps the whole update atomic.
+    let (status, body) = call(
+        app.clone(),
+        "PUT",
+        &format!("/api/admin/v1/users/{}", fixture.plain_public),
+        Some(serde_json::json!({"timeZoneId": "not a zone"})),
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(body["code"], "invalid_request");
+
+    // Avatar upload uses the bounded raw-image pipeline.
+    let mut png = Vec::new();
+    image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(
+        2,
+        2,
+        image::Rgba([255, 0, 0, 255]),
+    ))
+    .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+    .expect("encode png");
+    let (status, body) = call_raw(
+        app.clone(),
+        "POST",
+        &format!("/api/admin/v1/users/{}/avatar", fixture.plain_public),
+        "image/png",
+        png.clone(),
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let stored_type: String =
+        sqlx::query_scalar("SELECT content_type FROM native_user_avatars WHERE user_id=$1")
+            .bind(target_internal)
+            .fetch_one(&db.pool)
+            .await
+            .expect("stored avatar");
+    assert_eq!("image/png", stored_type);
+
+    // A mismatched declared type is rejected before storage.
+    let (status, _) = call_raw(
+        app.clone(),
+        "POST",
+        &format!("/api/admin/v1/users/{}/avatar", fixture.plain_public),
+        "image/jpeg",
+        png,
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    // Remove, then a second remove is an explicit 404.
+    let (status, body) = call(
+        app.clone(),
+        "DELETE",
+        &format!("/api/admin/v1/users/{}/avatar", fixture.plain_public),
+        None,
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (status, _) = call(
+        app.clone(),
+        "DELETE",
+        &format!("/api/admin/v1/users/{}/avatar", fixture.plain_public),
+        None,
+        Some(&admin),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    // Unknown user is 404 for avatar mutations.
+    let (status, _) = call_raw(
+        app,
+        "POST",
+        &format!("/api/admin/v1/users/{}/avatar", Uuid::now_v7()),
+        "image/png",
+        Vec::new(),
         Some(&admin),
     )
     .await;

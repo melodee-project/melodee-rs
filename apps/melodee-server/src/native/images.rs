@@ -372,7 +372,7 @@ fn process_image(
 
 /// Decoded, dimension-bounded, re-encoded avatar bytes for the native
 /// avatar store. Output never exceeds the 1 MiB `native_user_avatars` bound.
-pub(super) async fn normalize_avatar_image(
+pub(crate) async fn normalize_avatar_image(
     input: Vec<u8>,
     format: ImageFormat,
 ) -> Result<Vec<u8>, ImageUploadValidationError> {

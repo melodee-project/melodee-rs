@@ -621,6 +621,22 @@ export function updateUser(id: string, request: UserUpdateRequest): Promise<User
   });
 }
 
+export function uploadUserAvatar(
+  id: string,
+  file: File,
+): Promise<{ message: string; updatedAt?: string }> {
+  return apiFetch<{ message: string; updatedAt?: string }>(
+    `${ADMIN}/users/${encodeURIComponent(id)}/avatar`,
+    { method: 'POST', rawBody: { data: file, contentType: file.type } },
+  );
+}
+
+export function deleteUserAvatar(id: string): Promise<{ message: string }> {
+  return apiFetch<{ message: string }>(`${ADMIN}/users/${encodeURIComponent(id)}/avatar`, {
+    method: 'DELETE',
+  });
+}
+
 export function setUserPassword(id: string, password: string): Promise<void> {
   return apiFetch<void>(`${ADMIN}/users/${encodeURIComponent(id)}/password`, {
     method: 'POST',

@@ -49,7 +49,7 @@ pub fn router() -> Router<NativeState> {
 
 /// Detects the stored image family from magic bytes; the declared
 /// Content-Type is never trusted (same rule as playlist image uploads).
-fn avatar_image_format(bytes: &[u8]) -> Option<(&'static str, image::ImageFormat)> {
+pub(crate) fn avatar_image_format(bytes: &[u8]) -> Option<(&'static str, image::ImageFormat)> {
     if bytes.starts_with(&[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]) {
         Some(("image/png", image::ImageFormat::Png))
     } else if bytes.starts_with(&[0xff, 0xd8, 0xff]) {

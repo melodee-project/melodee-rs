@@ -204,6 +204,16 @@ describe('OverviewScreen', () => {
     mockListWorkItems.mockResolvedValue(makeQueuePage([makeQueueItem()]));
   });
 
+  it.each([0, 1])('links the review KPI to the matching state when the count is %s', async (count) => {
+    const dashboard = makeDashboard();
+    dashboard.workItems.countsByState = [{ state: 'needs_review', count }];
+    mockGetDashboard.mockResolvedValue(dashboard);
+    renderScreen();
+    const card = await screen.findByRole('link', { name: /Needs review/ });
+    expect(card).toHaveAttribute('href', '/processing/review?state=needs_review');
+    expect(within(card).getByText(String(count))).toBeInTheDocument();
+  });
+
   it('renders KPI cards, attention rows, and subsystem health from the DTO', async () => {
     renderScreen();
     expect(await screen.findByText('35,214')).toBeInTheDocument();

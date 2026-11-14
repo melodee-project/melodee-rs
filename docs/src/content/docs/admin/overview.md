@@ -50,6 +50,10 @@ The landing screen answers "what needs attention?" first, then summarizes the ca
 The dashboard refreshes every 60 seconds and keeps showing the last good data if a refresh fails;
 a retryable error banner appears instead of a blank screen.
 
+Select the **Needs review** card to open the Review Queue filtered to the work items counted by
+that card. You can click anywhere on the card or focus it with the keyboard and press **Enter**.
+The link remains available when the count is zero, showing the empty review queue.
+
 ![The admin Overview dashboard in the light appearance](./images/overview-light.png)
 
 ![The admin Overview dashboard in the dark appearance](./images/overview-dark.png)

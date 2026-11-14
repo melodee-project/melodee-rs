@@ -244,117 +244,7 @@ impl UserProfileStore {
         now: OffsetDateTime,
     ) -> Result<StoredNativeUser, UserProfileError> {
         let mut tx = pool.begin().await?;
-        let current = sqlx::query_as::<_, ProfileRow>(
-            "SELECT username,email,description,time_zone_id,preferred_language,preferred_theme
-             FROM native_users WHERE id=$1 FOR UPDATE",
-        )
-        .bind(user_id)
-        .fetch_optional(&mut *tx)
-        .await?
-        .ok_or(UserProfileError::NotFound)?;
-        let username = update
-            .username
-            .as_deref()
-            .unwrap_or(&current.username)
-            .trim()
-            .to_owned();
-        let email = update
-            .email
-            .as_deref()
-            .unwrap_or(&current.email)
-            .trim()
-            .to_owned();
-        validate_username(&username)?;
-        validate_email(&email)?;
-        let description = match &update.description {
-            Some(value) => {
-                if value
-                    .as_ref()
-                    .is_some_and(|v| v.chars().count() > MAX_DESCRIPTION_CHARS)
-                {
-                    return Err(UserProfileError::InvalidValue("description"));
-                }
-                value.clone()
-            }
-            None => current.description.clone(),
-        };
-        let time_zone_id = update
-            .time_zone_id
-            .as_deref()
-            .unwrap_or(&current.time_zone_id)
-            .trim();
-        let time_zone_id = if time_zone_id.is_empty() {
-            DEFAULT_TIME_ZONE
-        } else if valid_time_zone_id(time_zone_id) {
-            time_zone_id
-        } else {
-            return Err(UserProfileError::InvalidValue("time zone id"));
-        };
-        let preferred_language = match &update.preferred_language {
-            Some(value) => bounded_optional(value.clone(), MAX_LANGUAGE_CHARS, "language")?,
-            None => current.preferred_language.clone(),
-        };
-        let preferred_theme = match &update.preferred_theme {
-            Some(value) => bounded_optional(value.clone(), MAX_THEME_CHARS, "theme")?,
-            None => current.preferred_theme.clone(),
-        };
-        let normalized_username = normalize_login(&username);
-        let normalized_email = normalize_login(&email);
-        let conflict = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS (
-                SELECT 1 FROM native_users
-                 WHERE id <> $1 AND (normalized_username=$2 OR normalized_email=$3)
-             )",
-        )
-        .bind(user_id)
-        .bind(&normalized_username)
-        .bind(&normalized_email)
-        .fetch_one(&mut *tx)
-        .await?;
-        if conflict {
-            return Err(UserProfileError::Conflict);
-        }
-        let mut changed = Vec::new();
-        if current.username != username {
-            changed.push("username");
-        }
-        if current.email != email {
-            changed.push("email");
-        }
-        if current.description != description {
-            changed.push("description");
-        }
-        if current.time_zone_id != time_zone_id {
-            changed.push("timeZoneId");
-        }
-        if current.preferred_language != preferred_language {
-            changed.push("language");
-        }
-        if current.preferred_theme != preferred_theme {
-            changed.push("theme");
-        }
-        if !changed.is_empty() {
-            sqlx::query(
-                "UPDATE native_users
-                    SET username=$2, normalized_username=$3, email=$4, normalized_email=$5,
-                        description=$6, time_zone_id=$7, preferred_language=$8,
-                        preferred_theme=$9, updated_at=$10
-                  WHERE id=$1",
-            )
-            .bind(user_id)
-            .bind(&username)
-            .bind(&normalized_username)
-            .bind(&email)
-            .bind(&normalized_email)
-            .bind(&description)
-            .bind(time_zone_id)
-            .bind(&preferred_language)
-            .bind(&preferred_theme)
-            .bind(now)
-            .execute(&mut *tx)
-            .await?;
-            insert_audit(&mut tx, user_id, user_id, "profile_updated", &changed, now).await?;
-        }
+        apply_profile_update(&mut tx, user_id, user_id, update, now).await?;
         tx.commit().await?;
         AuthStore::new()
             .user_by_id(pool, user_id)
@@ -365,6 +255,131 @@ impl UserProfileStore {
             })?
             .ok_or(UserProfileError::NotFound)
     }
+}
+
+/// Applies validated profile fields to one user inside an existing
+/// transaction and records the value-free audit event. `actor_user_id` is the
+/// authenticated subject for self-service, or the acting administrator for the
+/// admin user-management surface. The caller owns commit/rollback.
+pub(crate) async fn apply_profile_update(
+    tx: &mut Transaction<'_, Postgres>,
+    user_id: Uuid,
+    actor_user_id: Uuid,
+    update: &ProfileUpdate,
+    now: OffsetDateTime,
+) -> Result<(), UserProfileError> {
+    let current = sqlx::query_as::<_, ProfileRow>(
+        "SELECT username,email,description,time_zone_id,preferred_language,preferred_theme
+         FROM native_users WHERE id=$1 FOR UPDATE",
+    )
+    .bind(user_id)
+    .fetch_optional(&mut **tx)
+    .await?
+    .ok_or(UserProfileError::NotFound)?;
+    let username = update
+        .username
+        .as_deref()
+        .unwrap_or(&current.username)
+        .trim()
+        .to_owned();
+    let email = update
+        .email
+        .as_deref()
+        .unwrap_or(&current.email)
+        .trim()
+        .to_owned();
+    validate_username(&username)?;
+    validate_email(&email)?;
+    let description = match &update.description {
+        Some(value) => {
+            if value
+                .as_ref()
+                .is_some_and(|v| v.chars().count() > MAX_DESCRIPTION_CHARS)
+            {
+                return Err(UserProfileError::InvalidValue("description"));
+            }
+            value.clone()
+        }
+        None => current.description.clone(),
+    };
+    let time_zone_id = update
+        .time_zone_id
+        .as_deref()
+        .unwrap_or(&current.time_zone_id)
+        .trim();
+    let time_zone_id = if time_zone_id.is_empty() {
+        DEFAULT_TIME_ZONE
+    } else if valid_time_zone_id(time_zone_id) {
+        time_zone_id
+    } else {
+        return Err(UserProfileError::InvalidValue("time zone id"));
+    };
+    let preferred_language = match &update.preferred_language {
+        Some(value) => bounded_optional(value.clone(), MAX_LANGUAGE_CHARS, "language")?,
+        None => current.preferred_language.clone(),
+    };
+    let preferred_theme = match &update.preferred_theme {
+        Some(value) => bounded_optional(value.clone(), MAX_THEME_CHARS, "theme")?,
+        None => current.preferred_theme.clone(),
+    };
+    let normalized_username = normalize_login(&username);
+    let normalized_email = normalize_login(&email);
+    let conflict = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS (
+            SELECT 1 FROM native_users
+             WHERE id <> $1 AND (normalized_username=$2 OR normalized_email=$3)
+         )",
+    )
+    .bind(user_id)
+    .bind(&normalized_username)
+    .bind(&normalized_email)
+    .fetch_one(&mut **tx)
+    .await?;
+    if conflict {
+        return Err(UserProfileError::Conflict);
+    }
+    let mut changed = Vec::new();
+    if current.username != username {
+        changed.push("username");
+    }
+    if current.email != email {
+        changed.push("email");
+    }
+    if current.description != description {
+        changed.push("description");
+    }
+    if current.time_zone_id != time_zone_id {
+        changed.push("timeZoneId");
+    }
+    if current.preferred_language != preferred_language {
+        changed.push("language");
+    }
+    if current.preferred_theme != preferred_theme {
+        changed.push("theme");
+    }
+    if !changed.is_empty() {
+        sqlx::query(
+            "UPDATE native_users
+                SET username=$2, normalized_username=$3, email=$4, normalized_email=$5,
+                    description=$6, time_zone_id=$7, preferred_language=$8,
+                    preferred_theme=$9, updated_at=$10
+              WHERE id=$1",
+        )
+        .bind(user_id)
+        .bind(&username)
+        .bind(&normalized_username)
+        .bind(&email)
+        .bind(&normalized_email)
+        .bind(&description)
+        .bind(time_zone_id)
+        .bind(&preferred_language)
+        .bind(&preferred_theme)
+        .bind(now)
+        .execute(&mut **tx)
+        .await?;
+        insert_audit(tx, user_id, actor_user_id, "profile_updated", &changed, now).await?;
+    }
+    Ok(())
 }
 
 async fn insert_audit(

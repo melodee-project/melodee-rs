@@ -91,8 +91,40 @@ function makeDetail(overrides: Partial<ArtistDetail> = {}): ArtistDetail {
           confidence: 7500,
           observedAt: '2026-08-14T10:00:00Z',
         },
+        {
+          provider: 'musicbrainz',
+          externalId: 'rank-two-musicbrainz',
+          query: 'The Nomads',
+          candidateRank: 2,
+          confidence: 7000,
+          observedAt: '2026-08-14T10:00:00Z',
+        },
+        {
+          provider: 'deezer',
+          externalId: 'deezer-best',
+          query: 'The Nomads',
+          candidateRank: 1,
+          confidence: 7200,
+          observedAt: '2026-08-14T10:00:00Z',
+        },
+        {
+          provider: 'deezer',
+          externalId: 'deezer-second',
+          query: 'The Nomads',
+          candidateRank: 2,
+          confidence: 6600,
+          observedAt: '2026-08-14T10:00:00Z',
+        },
+        {
+          provider: 'deezer',
+          externalId: 'deezer-third',
+          query: 'The Nomads',
+          candidateRank: 3,
+          confidence: 6000,
+          observedAt: '2026-08-14T10:00:00Z',
+        },
       ],
-      total: 1,
+      total: 5,
     },
     trackCredits: {
       items: [
@@ -275,12 +307,18 @@ describe('ArtistDetailScreen', () => {
     expect(screen.getByText('Performance')).toBeInTheDocument();
   });
 
-  it('shows provider-found external IDs as evidence on the Identity tab', async () => {
+  it('shows one highest-ranked provider match per provider for a Verified Artist', async () => {
     renderScreen(makeDetail());
     await screen.findByRole('heading', { name: 'The Nomads' });
     fireEvent.click(screen.getByRole('tab', { name: 'Identity' }));
-    expect(screen.getByText('Provider matches')).toBeInTheDocument();
+    expect(screen.getByText('Provider match')).toBeInTheDocument();
     expect(screen.getByText('3f451fd3-c27a-4e76-acc6-ed42991f13df')).toBeInTheDocument();
+    expect(screen.getByText('deezer-best')).toBeInTheDocument();
+    // Ranked search results are not matches; only rank 1 is shown for a
+    // non-review (Verified) Artist.
+    expect(screen.queryByText('rank-two-musicbrainz')).not.toBeInTheDocument();
+    expect(screen.queryByText('deezer-second')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /more candidates/ })).not.toBeInTheDocument();
     // `musicbrainz` also appears in the header external-id chips.
     expect(screen.getAllByText('musicbrainz').length).toBeGreaterThan(0);
     expect(screen.getByText('75%')).toBeInTheDocument();
@@ -288,6 +326,25 @@ describe('ArtistDetailScreen', () => {
     expect(
       screen.getByText(/Candidates are evidence, not authority/),
     ).toBeInTheDocument();
+  });
+
+  it('offers the remaining ranked candidates only for an Active (review) Artist', async () => {
+    renderScreen(makeDetail({ status: 'active' }));
+    await screen.findByRole('heading', { name: 'The Nomads' });
+    fireEvent.click(screen.getByRole('tab', { name: 'Identity' }));
+
+    expect(screen.getByText('deezer-best')).toBeInTheDocument();
+    expect(screen.queryByText('deezer-second')).not.toBeInTheDocument();
+    const showDeezer = screen.getByRole('button', { name: 'Show 2 more candidates' });
+    expect(showDeezer).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(showDeezer);
+    expect(screen.getByText('deezer-second')).toBeInTheDocument();
+    expect(screen.getByText('deezer-third')).toBeInTheDocument();
+    expect(screen.getByText('#2')).toBeInTheDocument();
+    expect(screen.getByText('#3')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Hide additional candidates' })).toBeInTheDocument();
+    // The other provider's extra candidate stays collapsed independently.
+    expect(screen.queryByText('rank-two-musicbrainz')).not.toBeInTheDocument();
   });
 
   it('edits the Artist type from the closed dictionary, not free text', async () => {

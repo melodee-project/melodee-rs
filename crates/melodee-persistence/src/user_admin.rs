@@ -14,6 +14,7 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::auth::{AuthStoreError, StoredNativeUser, UserRow, stored_user_from_row};
+use crate::user_profile::{ProfileUpdate, UserProfileError, apply_profile_update};
 
 /// Maximum accepted length for a username or email on admin user creation.
 pub const MAX_USER_IDENTITY_CHARS: usize = 320;
@@ -51,6 +52,36 @@ pub struct NativeUserAdminUpdate {
     pub enabled: Option<bool>,
     pub locked: Option<bool>,
     pub roles: Option<Vec<String>>,
+    /// Profile fields use the same tri-state contract as self-service:
+    /// omitted keeps the value, `Some(None)` clears a nullable field.
+    pub username: Option<String>,
+    pub email: Option<String>,
+    pub description: Option<Option<String>>,
+    pub time_zone_id: Option<String>,
+    pub preferred_language: Option<Option<String>>,
+    pub preferred_theme: Option<Option<String>>,
+}
+
+impl NativeUserAdminUpdate {
+    fn profile_update(&self) -> ProfileUpdate {
+        ProfileUpdate {
+            username: self.username.clone(),
+            email: self.email.clone(),
+            description: self.description.clone(),
+            time_zone_id: self.time_zone_id.clone(),
+            preferred_language: self.preferred_language.clone(),
+            preferred_theme: self.preferred_theme.clone(),
+        }
+    }
+
+    fn has_profile_fields(&self) -> bool {
+        self.username.is_some()
+            || self.email.is_some()
+            || self.description.is_some()
+            || self.time_zone_id.is_some()
+            || self.preferred_language.is_some()
+            || self.preferred_theme.is_some()
+    }
 }
 
 #[derive(Debug, Error)]
@@ -167,6 +198,20 @@ impl UserAdminStore {
         image: &[u8],
         now: OffsetDateTime,
     ) -> Result<StoredAvatar, UserAdminError> {
+        self.set_avatar_as(pool, user_id, user_id, content_type, image, now)
+            .await
+    }
+
+    /// Replaces one user's avatar with an explicit audit actor.
+    pub async fn set_avatar_as(
+        &self,
+        pool: &PgPool,
+        user_id: Uuid,
+        actor_user_id: Uuid,
+        content_type: &str,
+        image: &[u8],
+        now: OffsetDateTime,
+    ) -> Result<StoredAvatar, UserAdminError> {
         if !matches!(content_type, "image/jpeg" | "image/png") {
             return Err(UserAdminError::InvalidRequest("avatar content type"));
         }
@@ -190,10 +235,11 @@ impl UserAdminStore {
         sqlx::query(
             "INSERT INTO native_user_profile_audits
                 (id,user_id,actor_user_id,event,changed_fields,created_at)
-             VALUES ($1,$2,$2,'avatar_updated',$3,$4)",
+             VALUES ($1,$2,$3,'avatar_updated',$4,$5)",
         )
         .bind(Uuid::now_v7())
         .bind(user_id)
+        .bind(actor_user_id)
         .bind(vec!["avatar".to_owned()])
         .bind(now)
         .execute(&mut *tx)
@@ -210,6 +256,16 @@ impl UserAdminStore {
         pool: &PgPool,
         user_id: Uuid,
     ) -> Result<bool, UserAdminError> {
+        self.delete_avatar_as(pool, user_id, user_id).await
+    }
+
+    /// Removes one user's avatar with an explicit audit actor.
+    pub async fn delete_avatar_as(
+        &self,
+        pool: &PgPool,
+        user_id: Uuid,
+        actor_user_id: Uuid,
+    ) -> Result<bool, UserAdminError> {
         let mut tx = pool.begin().await?;
         let deleted = sqlx::query("DELETE FROM native_user_avatars WHERE user_id=$1")
             .bind(user_id)
@@ -221,10 +277,11 @@ impl UserAdminStore {
             sqlx::query(
                 "INSERT INTO native_user_profile_audits
                     (id,user_id,actor_user_id,event,changed_fields,created_at)
-                 VALUES ($1,$2,$2,'avatar_deleted',$3,$4)",
+                 VALUES ($1,$2,$3,'avatar_deleted',$4,$5)",
             )
             .bind(Uuid::now_v7())
             .bind(user_id)
+            .bind(actor_user_id)
             .bind(vec!["avatar".to_owned()])
             .bind(OffsetDateTime::now_utc())
             .execute(&mut *tx)
@@ -425,6 +482,21 @@ impl UserAdminStore {
         update: &NativeUserAdminUpdate,
         now: OffsetDateTime,
     ) -> Result<StoredNativeUser, UserAdminError> {
+        self.update_user_as(pool, public_api_id, None, update, now)
+            .await
+    }
+
+    /// Admin update with an explicit audit actor. `None` records the target
+    /// user (the CLI's operator-less path); the Admin API passes the acting
+    /// administrator's internal id so profile/avatar audits name the actor.
+    pub async fn update_user_as(
+        &self,
+        pool: &PgPool,
+        public_api_id: Uuid,
+        actor_user_id: Option<Uuid>,
+        update: &NativeUserAdminUpdate,
+        now: OffsetDateTime,
+    ) -> Result<StoredNativeUser, UserAdminError> {
         if let Some(roles) = &update.roles {
             validate_roles(roles)?;
         }
@@ -474,6 +546,17 @@ impl UserAdminStore {
                 .await?;
             }
         }
+        if update.has_profile_fields() {
+            apply_profile_update(
+                &mut tx,
+                user_id,
+                actor_user_id.unwrap_or(user_id),
+                &update.profile_update(),
+                now,
+            )
+            .await
+            .map_err(profile_error)?;
+        }
         let now_enabled = update.enabled.unwrap_or(was_enabled);
         let now_locked = update.locked.unwrap_or(was_locked);
         if !now_enabled || now_locked {
@@ -499,6 +582,15 @@ fn like_contains_pattern(raw: &str) -> String {
     }
     pattern.push('%');
     pattern
+}
+
+fn profile_error(error: UserProfileError) -> UserAdminError {
+    match error {
+        UserProfileError::Database(error) => UserAdminError::Database(error),
+        UserProfileError::InvalidValue(field) => UserAdminError::InvalidRequest(field),
+        UserProfileError::Conflict => UserAdminError::UserConflict,
+        UserProfileError::NotFound => UserAdminError::NotFound,
+    }
 }
 
 fn validate_roles(roles: &[String]) -> Result<(), UserAdminError> {

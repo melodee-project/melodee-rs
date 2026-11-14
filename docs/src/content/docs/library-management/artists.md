@@ -122,11 +122,15 @@ kinds of result are stored:
 - **Provider artwork** — cover/portrait images, used by client apps as artwork fallback when no
   operator image exists.
 
-The **Identity** tab of an Artist lists its provider candidates with confidence and observation time,
-so an operator can judge whether this identity is the artist the providers agree on, then
-assert **Identity status** or resolve the observation in Identity Review. Provider credentials are
-per-provider settings (`searchEngine.<provider>.enabled`, `…baseUrl`, and a token where one is
-required — Discogs `userToken`, Spotify `accessToken`); MusicBrainz, Deezer, and iTunes need none.
+The **Identity** tab shows exactly one **provider match** per provider: the highest-ranked candidate
+wins, and its rank, confidence, and observation time are shown. The other ranked search results
+remain stored as evidence. An **Active** Artist — the imported, unverified state that older builds
+called Provisional — can expand the remaining ranked candidates for review. A **Verified** Artist,
+where an operator has asserted the identity, shows only the winner. This keeps a provider search
+result set from reading as several competing matches while retaining the full evidence for review.
+Provider credentials are per-provider settings (`searchEngine.<provider>.enabled`, `…baseUrl`, and a
+token where one is required — Discogs `userToken`, Spotify `accessToken`); MusicBrainz, Deezer, and
+iTunes need none.
 A provider that is unreachable logs `provider enrichment attempt failed` and retries on a durable
 schedule; the Artist keeps its Active identity meanwhile.
 

@@ -629,6 +629,10 @@ const USER = {
   enabled: true,
   locked: false,
   roles: ["HasStreamRole"],
+  description: null,
+  timeZoneId: "UTC",
+  preferredLanguage: null,
+  preferredTheme: null,
   createdAt: "2026-08-14T10:00:00Z",
   updatedAt: "2026-08-14T10:00:00Z",
 };

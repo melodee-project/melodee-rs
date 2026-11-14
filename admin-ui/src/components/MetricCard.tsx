@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 
 import { StatusChip, type StatusKind } from './StatusTag';
 
@@ -18,6 +19,7 @@ export function MetricCard({
   status,
   description,
   children,
+  to,
 }: {
   label: string;
   value: ReactNode;
@@ -28,13 +30,13 @@ export function MetricCard({
   status?: StatusKind;
   description?: string;
   children?: ReactNode;
+  /** Render the whole card as a native link to a filtered detail screen. */
+  to?: string;
 }) {
   const deltaTone = delta?.tone ?? 'default';
-  return (
-    <div
-      className="melodee-metric-card"
-      aria-label={description ? `${label}: ${description}` : label}
-    >
+  const accessibleLabel = description ? `${label}: ${description}` : label;
+  const content = (
+    <>
       <p className="melodee-metric-card__label">{label}</p>
       <p className="melodee-metric-card__value">{value}</p>
       {delta ? (
@@ -49,6 +51,16 @@ export function MetricCard({
       {hint && !delta ? <p className="melodee-metric-card__hint">{hint}</p> : null}
       {status ? <StatusChip kind={status} /> : null}
       {children}
+      {description ? <span className="cds--visually-hidden">{description}</span> : null}
+    </>
+  );
+  return to ? (
+    <Link className="melodee-metric-card melodee-metric-card--link" to={to}>
+      {content}
+    </Link>
+  ) : (
+    <div className="melodee-metric-card" aria-label={accessibleLabel}>
+      {content}
     </div>
   );
 }

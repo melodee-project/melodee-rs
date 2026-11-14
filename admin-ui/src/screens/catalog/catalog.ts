@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { ApiError } from '../../api/client';
 import type {
+  ArtistProviderCandidate,
   CatalogAuditEvent,
   CatalogReleaseStatus,
   PolicyDisposition,
@@ -15,6 +16,46 @@ import type { StatusKind } from '../../components/StatusTag';
  * Shared helpers for the catalog browsing + detail screens.
  * Pure mappings and the detail fetch hook; no rendering.
  */
+
+/**
+ * One provider's candidate list reduced to the highest-ranked result. A
+ * provider search returns a ranked set, not repeated matches: rank 1 is the
+ * provider's best answer, and the remaining ranks are optional review evidence.
+ */
+export interface ProviderCandidateGroup {
+  provider: string;
+  best: ArtistProviderCandidate;
+  others: ArtistProviderCandidate[];
+}
+
+/**
+ * Groups provider candidates by provider and selects the winner per provider.
+ * Lower `candidateRank` wins; confidence then recency break ties. Additional
+ * candidates remain ordered by rank for the review-only expanded view.
+ */
+export function groupProviderCandidates(
+  candidates: readonly ArtistProviderCandidate[],
+): ProviderCandidateGroup[] {
+  const byProvider = new Map<string, ArtistProviderCandidate[]>();
+  for (const candidate of candidates) {
+    const current = byProvider.get(candidate.provider) ?? [];
+    current.push(candidate);
+    byProvider.set(candidate.provider, current);
+  }
+  return [...byProvider.entries()]
+    .map(([provider, items]) => {
+      const sorted = [...items].sort(
+        (left, right) =>
+          left.candidateRank - right.candidateRank ||
+          right.confidence - left.confidence ||
+          right.observedAt.localeCompare(left.observedAt),
+      );
+      const [best, ...others] = sorted;
+      return best ? { provider, best, others } : null;
+    })
+    .filter((group): group is ProviderCandidateGroup => group !== null)
+    .sort((left, right) => left.provider.localeCompare(right.provider));
+}
 
 /** Maps a catalog Artist/Release status onto the §5 status semantics. */
 export function catalogStatusKind(status: string): StatusKind {

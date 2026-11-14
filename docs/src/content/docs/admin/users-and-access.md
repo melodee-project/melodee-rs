@@ -74,6 +74,17 @@ safe timezone identifier syntax. Role, account-state, public-ID, and password fi
 accepted by the profile request. Each actual change creates a value-free audit event in the same
 PostgreSQL transaction.
 
+In MeloAmp, open **Profile** (`/profile`) from the sidebar footer. The screen edits those fields
+and manages the user's avatar: choose a JPEG/PNG, upload it, or remove it. The server owns the
+bounded resize/re-encode pipeline; the app only previews it and refreshes `/user/me` after each
+change.
+
+Administrators can manage the same fields and the avatar for any account from **System → Users →
+Edit** in the Admin UI. The dialog keeps the existing role and account-state controls and adds the
+profile fields and avatar upload/remove. Those admin mutations are audited with the acting
+administrator as the actor; the Admin API endpoints are documented in
+[Admin API — Users](../api/admin-api/#users).
+
 ### Browser password reset
 
 Password-reset completion is the one bounded anonymous security page served by Rust. When email

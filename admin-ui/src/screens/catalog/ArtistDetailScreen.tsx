@@ -14,7 +14,7 @@ import {
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { Link as RouterLink, useParams, useSearchParams } from 'react-router-dom';
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 
 import { getCatalogArtist, updateArtistMetadata } from '../../api/admin';
 import type { ArtistContribution, ArtistDetail } from '../../api/types';
@@ -29,7 +29,12 @@ import { StatusChip, StatusTag } from '../../components/StatusTag';
 import { Surface } from '../../components/Surface';
 import { TabNav } from '../../components/TabNav';
 import { formatDate, formatDateTime, formatNumber } from '../../i18n/format';
-import { catalogStatusKind, toCatalogAuditEvent, useCatalogDetail } from './catalog';
+import {
+  catalogStatusKind,
+  groupProviderCandidates,
+  toCatalogAuditEvent,
+  useCatalogDetail,
+} from './catalog';
 import { ArtworkManager } from './ArtworkManager';
 import { CatalogArtwork } from './CatalogArtwork';
 import { EditPanel } from './EditPanel';
@@ -186,6 +191,7 @@ export function ArtistDetailScreen() {
   const { t } = useTranslation();
   const { id = '' } = useParams();
   const [editing, setEditing] = useState(false);
+  const [expandedProviders, setExpandedProviders] = useState<string[]>([]);
   // The URL owns selection so same-screen statistic links and browser history
   // update the visible tab just as an initial deep link does.
   const [searchParams, setSearchParams] = useSearchParams();
@@ -199,6 +205,20 @@ export function ArtistDetailScreen() {
     });
   };
   const { detail, error, loading, retry } = useCatalogDetail(getCatalogArtist, id);
+  const providerGroups = detail
+    ? groupProviderCandidates(detail.providerCandidates?.items ?? [])
+    : [];
+  // Active is the imported/unverified state (ADR-0190; formerly `provisional`).
+  // Only that review state exposes the remaining ranked provider candidates;
+  // a Verified Artist presents exactly one winner per provider.
+  const canShowAdditionalProviderCandidates = detail?.status === 'active';
+  const toggleProvider = (provider: string) => {
+    setExpandedProviders((previous) =>
+      previous.includes(provider)
+        ? previous.filter((value) => value !== provider)
+        : [...previous, provider],
+    );
+  };
 
   if (loading && detail === null) {
     return (
@@ -721,7 +741,7 @@ export function ArtistDetailScreen() {
                   headingLevel={3}
                   className="melodee-surface--stacked"
                 >
-                  {detail.providerCandidates.items.length === 0 ? (
+                  {providerGroups.length === 0 ? (
                     <EmptyState title={t('catalog.artist.providers.empty')} compact />
                   ) : (
                     <div className="melodee-review-table-scroll">
@@ -730,33 +750,76 @@ export function ArtistDetailScreen() {
                           <TableHead>
                             <TableRow>
                               <TableHeader>{t('catalog.artist.providers.column.provider')}</TableHeader>
+                              <TableHeader>{t('catalog.artist.providers.column.rank')}</TableHeader>
                               <TableHeader>{t('catalog.artist.providers.column.externalId')}</TableHeader>
                               <TableHeader>{t('catalog.artist.providers.column.confidence')}</TableHeader>
                               <TableHeader>{t('catalog.artist.providers.column.observed')}</TableHeader>
                             </TableRow>
                           </TableHead>
                           <TableBody>
-                            {detail.providerCandidates.items.map((candidate) => (
-                              <TableRow
-                                key={`${candidate.provider}-${candidate.externalId}-${candidate.query}`}
-                              >
-                                <TableCell>{candidate.provider}</TableCell>
-                                <TableCell>
-                                  <span className="melodee-cell-stack__primary">
-                                    {candidate.externalId}
-                                  </span>
-                                  <span className="melodee-cell-stack__secondary">
-                                    {t('catalog.artist.providers.matchedOn', {
-                                      query: candidate.query,
-                                    })}
-                                  </span>
-                                </TableCell>
-                                <TableCell>
-                                  {`${formatNumber(Math.round(candidate.confidence / 100))}%`}
-                                </TableCell>
-                                <TableCell>{formatDateTime(candidate.observedAt)}</TableCell>
-                              </TableRow>
-                            ))}
+                            {providerGroups.map((group) => {
+                              const expanded = expandedProviders.includes(group.provider);
+                              return (
+                                <Fragment key={group.provider}>
+                                  <TableRow>
+                                    <TableCell>{group.provider}</TableCell>
+                                    <TableCell>{`#${formatNumber(group.best.candidateRank)}`}</TableCell>
+                                    <TableCell>
+                                      <span className="melodee-cell-stack__primary">
+                                        {group.best.externalId}
+                                      </span>
+                                      <span className="melodee-cell-stack__secondary">
+                                        {t('catalog.artist.providers.matchedOn', {
+                                          query: group.best.query,
+                                        })}
+                                      </span>
+                                      {canShowAdditionalProviderCandidates && group.others.length > 0 ? (
+                                        <Button
+                                          kind="ghost"
+                                          size="sm"
+                                          aria-expanded={expanded}
+                                          onClick={() => toggleProvider(group.provider)}
+                                        >
+                                          {expanded
+                                            ? t('catalog.artist.providers.hideMore')
+                                            : t('catalog.artist.providers.showMore', {
+                                                count: group.others.length,
+                                              })}
+                                        </Button>
+                                      ) : null}
+                                    </TableCell>
+                                    <TableCell>
+                                      {`${formatNumber(Math.round(group.best.confidence / 100))}%`}
+                                    </TableCell>
+                                    <TableCell>{formatDateTime(group.best.observedAt)}</TableCell>
+                                  </TableRow>
+                                  {expanded && canShowAdditionalProviderCandidates
+                                    ? group.others.map((candidate) => (
+                                        <TableRow
+                                          key={`${candidate.provider}-${candidate.externalId}-${candidate.query}-${candidate.candidateRank}`}
+                                        >
+                                          <TableCell />
+                                          <TableCell>{`#${formatNumber(candidate.candidateRank)}`}</TableCell>
+                                          <TableCell>
+                                            <span className="melodee-cell-stack__primary">
+                                              {candidate.externalId}
+                                            </span>
+                                            <span className="melodee-cell-stack__secondary">
+                                              {t('catalog.artist.providers.matchedOn', {
+                                                query: candidate.query,
+                                              })}
+                                            </span>
+                                          </TableCell>
+                                          <TableCell>
+                                            {`${formatNumber(Math.round(candidate.confidence / 100))}%`}
+                                          </TableCell>
+                                          <TableCell>{formatDateTime(candidate.observedAt)}</TableCell>
+                                        </TableRow>
+                                      ))
+                                    : null}
+                                </Fragment>
+                              );
+                            })}
                           </TableBody>
                         </Table>
                       </TableContainer>

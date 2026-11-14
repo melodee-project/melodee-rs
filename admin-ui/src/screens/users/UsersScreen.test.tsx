@@ -10,6 +10,8 @@ vi.mock('../../api/admin', () => ({
   listUsers: vi.fn(),
   createUser: vi.fn(),
   updateUser: vi.fn(),
+  uploadUserAvatar: vi.fn(),
+  deleteUserAvatar: vi.fn(),
   setUserPassword: vi.fn(),
   listGroups: vi.fn(),
   createGroup: vi.fn(),
@@ -26,6 +28,8 @@ const admin = await import('../../api/admin');
 const mockListUsers = vi.mocked(admin.listUsers);
 const mockCreateUser = vi.mocked(admin.createUser);
 const mockUpdateUser = vi.mocked(admin.updateUser);
+const mockUploadUserAvatar = vi.mocked(admin.uploadUserAvatar);
+const mockDeleteUserAvatar = vi.mocked(admin.deleteUserAvatar);
 const mockSetUserPassword = vi.mocked(admin.setUserPassword);
 const mockListGroups = vi.mocked(admin.listGroups);
 const mockCreateGroup = vi.mocked(admin.createGroup);
@@ -50,6 +54,10 @@ function makeUser(overrides: Partial<UserSummary> = {}): UserSummary {
     enabled: true,
     locked: false,
     roles: ['HasStreamRole'],
+    description: null,
+    timeZoneId: 'UTC',
+    preferredLanguage: null,
+    preferredTheme: null,
     createdAt: '2026-08-14T10:00:00Z',
     updatedAt: '2026-08-14T10:00:00Z',
     ...overrides,
@@ -165,6 +173,12 @@ describe('UsersScreen users tab', () => {
 
     await waitFor(() =>
       expect(mockUpdateUser).toHaveBeenCalledWith(USER_ID, {
+        username: 'operator',
+        email: 'operator@example.com',
+        description: null,
+        timeZoneId: 'UTC',
+        preferredLanguage: null,
+        preferredTheme: null,
         isAdmin: true,
         isEditor: false,
         enabled: true,
@@ -173,6 +187,64 @@ describe('UsersScreen users tab', () => {
       }),
     );
     expect(await screen.findByText('User updated.')).toBeInTheDocument();
+  });
+
+  it('edits profile fields and uploads/removes the user avatar', async () => {
+    mockUpdateUser.mockResolvedValue(makeUser({ description: 'Curator' }));
+    mockUploadUserAvatar.mockResolvedValue({ message: 'Avatar updated' });
+    mockDeleteUserAvatar.mockResolvedValue({ message: 'Avatar deleted' });
+    renderScreen();
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Edit operator' });
+    fireEvent.change(within(dialog).getByLabelText('Username'), {
+      target: { value: 'curator' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Email'), {
+      target: { value: 'curator@example.com' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Description'), {
+      target: { value: 'Curator profile' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Time zone'), {
+      target: { value: 'Europe/London' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Preferred language'), {
+      target: { value: 'en-GB' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Preferred theme'), {
+      target: { value: 'dark' },
+    });
+
+    const file = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], 'avatar.png', {
+      type: 'image/png',
+    });
+    fireEvent.change(within(dialog).getByLabelText('Choose avatar image (JPEG or PNG)'), {
+      target: { files: [file] },
+    });
+    await waitFor(() => expect(mockUploadUserAvatar).toHaveBeenCalledWith(USER_ID, file));
+    expect(await within(dialog).findByText('Avatar updated.')).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove avatar' }));
+    await waitFor(() => expect(mockDeleteUserAvatar).toHaveBeenCalledWith(USER_ID));
+    expect(await within(dialog).findByText('Avatar removed.')).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }));
+    await waitFor(() =>
+      expect(mockUpdateUser).toHaveBeenCalledWith(USER_ID, {
+        username: 'curator',
+        email: 'curator@example.com',
+        description: 'Curator profile',
+        timeZoneId: 'Europe/London',
+        preferredLanguage: 'en-GB',
+        preferredTheme: 'dark',
+        isAdmin: true,
+        isEditor: false,
+        enabled: true,
+        locked: false,
+        roles: ['HasStreamRole'],
+      }),
+    );
   });
 
   it('sets a password with the exact request body', async () => {

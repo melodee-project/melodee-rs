@@ -110,6 +110,19 @@ const ARTIST_DETAIL = {
     total: 1,
   },
   contributions: { items: [], total: 0 },
+  providerCandidates: {
+    items: [
+      {
+        provider: 'musicbrainz',
+        externalId: '8f6bd1e4-fbe1-4f50-aa9b-94c450ec0f11',
+        query: 'The Nomads',
+        candidateRank: 1,
+        confidence: 7500,
+        observedAt: '2026-08-14T10:00:00Z',
+      },
+    ],
+    total: 1,
+  },
   relationships: { items: [], total: 0 },
   memberships: { items: [], total: 0 },
   history: {
@@ -566,6 +579,84 @@ test('artist detail tabs are keyboard accessible', async ({ page }) => {
   await page.keyboard.press('Enter');
   await expect(releases).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('link', { name: 'Into the Night' })).toBeVisible();
+});
+
+test('Identity tab shows one winning provider match and expands candidates only for Active Artists', async ({
+  page,
+}) => {
+  await mockAdminApi(page);
+  // Override the default detail response: Active is the imported/unverified
+  // (formerly Provisional) state that may expose the remaining ranked search
+  // candidates. A Verified Artist shows only the winner.
+  await page.route(`**/api/admin/v1/catalog/artists/${ARTIST_ID}`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ...ARTIST_DETAIL,
+        status: 'active',
+        providerCandidates: {
+          items: [
+            {
+              provider: 'deezer',
+              externalId: 'deezer-best',
+              query: 'The Nomads',
+              candidateRank: 1,
+              confidence: 7200,
+              observedAt: '2026-08-14T10:00:00Z',
+            },
+            {
+              provider: 'deezer',
+              externalId: 'deezer-second',
+              query: 'The Nomads',
+              candidateRank: 2,
+              confidence: 6600,
+              observedAt: '2026-08-14T10:00:00Z',
+            },
+            {
+              provider: 'deezer',
+              externalId: 'deezer-third',
+              query: 'The Nomads',
+              candidateRank: 3,
+              confidence: 6000,
+              observedAt: '2026-08-14T10:00:00Z',
+            },
+            {
+              provider: 'musicbrainz',
+              externalId: 'musicbrainz-best',
+              query: 'The Nomads',
+              candidateRank: 1,
+              confidence: 7500,
+              observedAt: '2026-08-14T10:00:00Z',
+            },
+            {
+              provider: 'musicbrainz',
+              externalId: 'musicbrainz-second',
+              query: 'The Nomads',
+              candidateRank: 2,
+              confidence: 7000,
+              observedAt: '2026-08-14T10:00:00Z',
+            },
+          ],
+          total: 5,
+        },
+      }),
+    });
+  });
+
+  await page.goto(`catalog/artists/${ARTIST_ID}`);
+  await page.getByRole('tab', { name: 'Identity' }).click();
+  await expect(page.getByText('Provider match', { exact: true })).toBeVisible();
+  await expect(page.getByText('deezer-best', { exact: true })).toBeVisible();
+  await expect(page.getByText('musicbrainz-best', { exact: true })).toBeVisible();
+  // Ranked search results are not matches: rank 2+ stays collapsed.
+  await expect(page.getByText('deezer-second')).toHaveCount(0);
+  await expect(page.getByText('musicbrainz-second')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Show 2 more candidates' }).click();
+  await expect(page.getByText('deezer-second')).toBeVisible();
+  await expect(page.getByText('deezer-third')).toBeVisible();
+  await expect(page.getByText('musicbrainz-second')).toHaveCount(0);
 });
 
 test('release detail shows tracks, an honest empty classification, and provenance', async ({

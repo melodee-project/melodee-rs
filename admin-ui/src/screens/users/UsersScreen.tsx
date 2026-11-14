@@ -12,16 +12,25 @@ import {
   TabPanel,
   TabPanels,
   Tabs,
+  TextArea,
   TextInput,
 } from '@carbon/react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 
-import { createUser, listUsers, setUserPassword, updateUser } from '../../api/admin';
+import {
+  createUser,
+  deleteUserAvatar,
+  listUsers,
+  setUserPassword,
+  updateUser,
+  uploadUserAvatar,
+} from '../../api/admin';
 import { ApiError } from '../../api/client';
 import type { Page, SortParam, UserCreateRequest, UserSummary } from '../../api/types';
 import { CellInteractive } from '../../components/CellInteractive';
+import { EntityAvatar } from '../../components/EntityAvatar';
 import { EntityTable, type EntityColumn, type EntityRow } from '../../components/EntityTable';
 import { PageHeader } from '../../components/PageHeader';
 import { StatusTag } from '../../components/StatusTag';
@@ -482,6 +491,12 @@ function EditUserModal({
   onSaved: () => void;
 }) {
   const { t } = useTranslation();
+  const [username, setUsername] = useState(user?.username ?? '');
+  const [email, setEmail] = useState(user?.email ?? '');
+  const [description, setDescription] = useState(user?.description ?? '');
+  const [timeZoneId, setTimeZoneId] = useState(user?.timeZoneId ?? 'UTC');
+  const [preferredLanguage, setPreferredLanguage] = useState(user?.preferredLanguage ?? '');
+  const [preferredTheme, setPreferredTheme] = useState(user?.preferredTheme ?? '');
   const [isAdmin, setIsAdmin] = useState(user?.isAdmin ?? false);
   const [isEditor, setIsEditor] = useState(user?.isEditor ?? false);
   const [enabled, setEnabled] = useState(user?.enabled ?? true);
@@ -489,10 +504,61 @@ function EditUserModal({
   const [roles, setRoles] = useState((user?.roles ?? []).join(', '));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const [avatarVersion, setAvatarVersion] = useState(0);
+  const [avatarNotice, setAvatarNotice] = useState<string | null>(null);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   if (!user) {
     return null;
   }
+
+  const purgeAvatarCache = () => {
+    setAvatarVersion((version) => version + 1);
+  };
+
+  const uploadAvatar = (file: File | null) => {
+    if (!file || avatarBusy) {
+      return;
+    }
+    setAvatarBusy(true);
+    setAvatarNotice(null);
+    uploadUserAvatar(user.id, file)
+      .then(() => {
+        purgeAvatarCache();
+        setAvatarNotice(t('users.avatar.updated'));
+      })
+      .catch((cause: unknown) => setError(mutationErrorText(toApiError(cause), t)))
+      .finally(() => {
+        setAvatarBusy(false);
+        if (avatarInputRef.current) {
+          avatarInputRef.current.value = '';
+        }
+      });
+  };
+
+  const removeAvatar = () => {
+    if (avatarBusy) {
+      return;
+    }
+    setAvatarBusy(true);
+    setAvatarNotice(null);
+    deleteUserAvatar(user.id)
+      .then(() => {
+        purgeAvatarCache();
+        setAvatarNotice(t('users.avatar.removed'));
+      })
+      .catch((cause: unknown) => {
+        const apiError = toApiError(cause);
+        if (apiError.status === 404) {
+          purgeAvatarCache();
+          setAvatarNotice(t('users.avatar.removed'));
+          return;
+        }
+        setError(mutationErrorText(apiError, t));
+      })
+      .finally(() => setAvatarBusy(false));
+  };
 
   const submit = () => {
     if (busy) {
@@ -501,6 +567,12 @@ function EditUserModal({
     setBusy(true);
     setError(null);
     updateUser(user.id, {
+      username: username.trim(),
+      email: email.trim(),
+      description: description.trim().length > 0 ? description : null,
+      timeZoneId: timeZoneId.trim() || 'UTC',
+      preferredLanguage: preferredLanguage.trim() || null,
+      preferredTheme: preferredTheme.trim() || null,
       isAdmin,
       isEditor,
       enabled,
@@ -525,6 +597,76 @@ function EditUserModal({
       {error ? (
         <InlineNotification kind="error" lowContrast title={error} hideCloseButton />
       ) : null}
+      {avatarNotice ? (
+        <InlineNotification kind="success" lowContrast title={avatarNotice} hideCloseButton />
+      ) : null}
+      <div className="melodee-user-avatar-editor">
+        <EntityAvatar
+          name={user.username}
+          imageUrl={`/images/user_${user.id}/128?v=${avatarVersion}`}
+          size={64}
+        />
+        <div className="melodee-user-avatar-editor__controls">
+          <p className="melodee-surface__subtitle">{t('users.avatar.title')}</p>
+          <input
+            ref={avatarInputRef}
+            type="file"
+            accept="image/jpeg,image/png"
+            aria-label={t('users.avatar.choose')}
+            onChange={(event) => uploadAvatar(event.target.files?.[0] ?? null)}
+          />
+          <Button
+            kind="danger--tertiary"
+            size="sm"
+            disabled={avatarBusy}
+            onClick={removeAvatar}
+          >
+            {t('users.avatar.remove')}
+          </Button>
+          <p className="melodee-surface__subtitle">{t('users.avatar.note')}</p>
+        </div>
+      </div>
+      <TextInput
+        id="edit-user-username"
+        labelText={t('auth.username')}
+        value={username}
+        onChange={(event) => setUsername(event.target.value)}
+      />
+      <TextInput
+        id="edit-user-email"
+        type="email"
+        labelText={t('auth.email')}
+        value={email}
+        onChange={(event) => setEmail(event.target.value)}
+      />
+      <TextArea
+        id="edit-user-description"
+        labelText={t('users.fieldDescription')}
+        helperText={t('users.fieldDescriptionHelp')}
+        value={description}
+        onChange={(event) => setDescription(event.target.value)}
+      />
+      <TextInput
+        id="edit-user-timezone"
+        labelText={t('users.fieldTimeZone')}
+        helperText={t('users.fieldTimeZoneHelp')}
+        value={timeZoneId}
+        onChange={(event) => setTimeZoneId(event.target.value)}
+      />
+      <TextInput
+        id="edit-user-language"
+        labelText={t('users.fieldPreferredLanguage')}
+        helperText={t('users.fieldPreferredLanguageHelp')}
+        value={preferredLanguage}
+        onChange={(event) => setPreferredLanguage(event.target.value)}
+      />
+      <TextInput
+        id="edit-user-theme"
+        labelText={t('users.fieldPreferredTheme')}
+        helperText={t('users.fieldPreferredThemeHelp')}
+        value={preferredTheme}
+        onChange={(event) => setPreferredTheme(event.target.value)}
+      />
       <Checkbox
         id="edit-user-enabled"
         labelText={t('users.fieldEnabled')}

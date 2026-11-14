@@ -1129,8 +1129,10 @@ async fn artist_detail(
     Json(artist_detail_dto(detail, provider_candidates)).into_response()
 }
 
-/// Bounded provider-candidate section size for one Artist detail read.
-const PROVIDER_CANDIDATE_LIMIT: u32 = 25;
+/// Bounded provider-candidate section size for one Artist detail read. A
+/// provider search returns at most 10 ranked results per query, so 100 keeps
+/// the complete candidate set available for grouping while staying bounded.
+const PROVIDER_CANDIDATE_LIMIT: u32 = 100;
 
 fn artist_detail_dto(
     detail: ArtistCatalogDetail,

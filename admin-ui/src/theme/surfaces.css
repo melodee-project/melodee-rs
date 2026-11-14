@@ -255,6 +255,21 @@
   font-weight: 600;
 }
 
+.melodee-metric-card--link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.melodee-metric-card--link:hover {
+  background: var(--melodee-surface-hover);
+  border-color: var(--melodee-text-accent);
+}
+
+.melodee-metric-card--link:focus-visible {
+  outline: 2px solid var(--cds-focus);
+  outline-offset: 2px;
+}
+
 .melodee-metric-card__value {
   color: var(--melodee-text-primary);
   font-size: var(--melodee-font-metric);
@@ -1684,4 +1699,21 @@
    pending Artist): readable, but not an alert. */
 .melodee-text-muted {
   color: var(--melodee-text-secondary);
+}
+
+.melodee-user-avatar-editor {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-block: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--melodee-surface-border);
+}
+
+.melodee-user-avatar-editor__controls {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
 }

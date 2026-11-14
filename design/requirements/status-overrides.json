@@ -320,11 +320,18 @@
     "status": "tested",
     "implementation": [
       "crates/melodee-persistence/migrations/0011_phase7_native_user_state.sql",
-      "crates/melodee-persistence/src/native_user_state.rs"
+      "crates/melodee-persistence/src/native_user_state.rs",
+      "apps/melodee-server/src/native/profile.rs (self-service GET/PATCH /api/v1/user/me/profile)",
+      "apps/melodee-server/src/native/avatars.rs (self-service GET/POST/DELETE /api/v1/user/me/avatar with bounded normalize pipeline)",
+      "meloamp/src/ui/src/pages/ProfilePage.tsx (listener Profile screen: account fields + avatar upload/remove; ADR-0161/ADR-0178)"
     ],
     "tests": [
       "crates/melodee-persistence/tests/native_user_state_phase7.rs",
-      "apps/melodee-server/tests/native_catalog_api.rs"
+      "crates/melodee-persistence/tests/user_profile_mel2.rs (registration, profile audit, restart durability)",
+      "apps/melodee-server/tests/native_catalog_api.rs",
+      "apps/melodee-server/tests/native_auth_api.rs (profile PATCH validation)",
+      "apps/melodee-server/tests/native_avatar_api.rs (upload/get/delete, bad content, auth)",
+      "meloamp/src/ui/src/pages/ProfilePage.test.tsx (load/save profile; avatar upload/remove request paths)"
     ]
   },
   "PRD-USER-002": {
@@ -2979,7 +2986,8 @@
     "implementation": [
       "admin.rs, admin_review.rs, admin_identity.rs, admin_policies.rs, admin_system.rs, admin_catalog.rs, admin_access.rs, admin_config.rs, admin_onboarding.rs, admin_notifications.rs, admin_scripts.rs, admin_radio.rs, admin_device_profiles.rs, admin_duplicates.rs, admin_release_identity.rs (work items, evidence, decisions, policies, queues, workers, health, identities, Releases, Tracks, users, config, audit, duplicate candidate scans, Release merge/split, agent proposals)",
       "catalog_mutations.rs (metadata edit endpoints: release/artist/track metadata update with audit events)",
-      "design/adr/ADR-0196-expose-duplicate-candidate-scans-and-release-identity-correction-in-the-admin-api.md (evidence/blocker vocabulary, non-authoritative proposals, advisory agent attribution)"
+      "design/adr/ADR-0196-expose-duplicate-candidate-scans-and-release-identity-correction-in-the-admin-api.md (evidence/blocker vocabulary, non-authoritative proposals, advisory agent attribution)",
+      "apps/melodee-server/src/admin_access.rs (admin user profile-field update plus raw-jpeg/png avatar POST/DELETE with acting-administrator audit)"
     ],
     "tests": [
       "apps/melodee-server/tests/ (all admin suites green; full workspace gate)",
@@ -2987,7 +2995,8 @@
       "apps/melodee-server/tests/admin_duplicates_api.rs (administrator gate, Artist/Release candidate evidence and blockers, score filtering/paging, Release merge preview/apply/split, tombstone detail, agent proposal authority and rejection)",
       "crates/melodee-persistence/tests/catalog_metadata.rs (7 store-level tests)",
       "crates/melodee-persistence/tests/migrations.rs (0047 duplicate candidate indexes migrate from empty and forward)",
-      "crates/melodee-persistence/tests/catalog_import.rs (trusted Release evidence merge/split remains reversible)"
+      "crates/melodee-persistence/tests/catalog_import.rs (trusted Release evidence merge/split remains reversible)",
+      "apps/melodee-server/tests/admin_access_api.rs (admin profile-field update audit, avatar upload/remove, validation, 404s)"
     ]
   },
   "PRD-API-ADMIN-003": {

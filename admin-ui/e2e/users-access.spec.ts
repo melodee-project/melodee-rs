@@ -15,6 +15,10 @@ const USER = {
   enabled: true,
   locked: false,
   roles: ['HasStreamRole'],
+  description: null,
+  timeZoneId: 'UTC',
+  preferredLanguage: null,
+  preferredTheme: null,
   createdAt: '2026-08-14T10:00:00Z',
   updatedAt: '2026-08-14T10:00:00Z',
 };
@@ -32,10 +36,18 @@ interface Captured {
   createdUser: unknown;
   updatedUser: unknown;
   passwordSet: unknown;
+  avatarUploaded: string | null;
+  avatarDeleted: boolean;
 }
 
 async function mockAdminApi(page: Page): Promise<Captured> {
-  const captured: Captured = { createdUser: null, updatedUser: null, passwordSet: null };
+  const captured: Captured = {
+    createdUser: null,
+    updatedUser: null,
+    passwordSet: null,
+    avatarUploaded: null,
+    avatarDeleted: false,
+  };
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
     const { pathname } = url;
@@ -58,6 +70,16 @@ async function mockAdminApi(page: Page): Promise<Captured> {
     if (pathname === `/api/admin/v1/users/${USER.id}` && method === 'PUT') {
       captured.updatedUser = route.request().postDataJSON();
       await json(USER);
+      return;
+    }
+    if (pathname === `/api/admin/v1/users/${USER.id}/avatar` && method === 'POST') {
+      captured.avatarUploaded = route.request().headers()['content-type'] ?? null;
+      await json({ message: 'Avatar updated', updatedAt: '2026-08-14T10:00:00Z' });
+      return;
+    }
+    if (pathname === `/api/admin/v1/users/${USER.id}/avatar` && method === 'DELETE') {
+      captured.avatarDeleted = true;
+      await json({ message: 'Avatar deleted' });
       return;
     }
     if (pathname === `/api/admin/v1/users/${USER.id}/password` && method === 'POST') {
@@ -137,12 +159,33 @@ test('create, edit, and set-password send the exact request bodies', async ({ pa
   await editDialog.getByText('Locked', { exact: true }).click();
   await editDialog.getByRole('button', { name: 'Save changes' }).click();
   await expect.poll(() => captured.updatedUser).toEqual({
+    username: 'operator',
+    email: 'operator@example.com',
+    description: null,
+    timeZoneId: 'UTC',
+    preferredLanguage: null,
+    preferredTheme: null,
     isAdmin: true,
     isEditor: false,
     enabled: true,
     locked: true,
     roles: ['HasStreamRole'],
   });
+
+  // Avatar upload/remove keeps the role editor in the same dialog.
+  await table.getByRole('button', { name: 'Edit' }).click();
+  const avatarDialog = page.getByRole('dialog', { name: /Edit operator/ });
+  await avatarDialog.getByLabel('Choose avatar image (JPEG or PNG)').setInputFiles({
+    name: 'avatar.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47]),
+  });
+  await expect.poll(() => captured.avatarUploaded).toBe('image/png');
+  await expect(avatarDialog.getByText('Avatar updated.')).toBeVisible();
+  await avatarDialog.getByRole('button', { name: 'Remove avatar' }).click();
+  await expect.poll(() => captured.avatarDeleted).toBe(true);
+  await expect(avatarDialog.getByText('Avatar removed.')).toBeVisible();
+  await avatarDialog.getByRole('button', { name: 'Cancel' }).click();
 
   // Set password (204 surface).
   await table.getByRole('button', { name: 'Set password' }).click();

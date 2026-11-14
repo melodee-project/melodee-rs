@@ -236,6 +236,10 @@ export interface UserSummary {
   enabled: boolean;
   locked: boolean;
   roles: string[];
+  description: string | null;
+  timeZoneId: string;
+  preferredLanguage: string | null;
+  preferredTheme: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -255,6 +259,13 @@ export interface UserUpdateRequest {
   enabled?: boolean;
   locked?: boolean;
   roles?: string[];
+  username?: string;
+  email?: string;
+  /** `null` clears the description; omission leaves it unchanged. */
+  description?: string | null;
+  timeZoneId?: string;
+  preferredLanguage?: string | null;
+  preferredTheme?: string | null;
 }
 
 /** Access group list row (AccessGroupDto in admin_access.rs). */

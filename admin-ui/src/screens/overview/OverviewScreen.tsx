@@ -228,6 +228,7 @@ export function OverviewScreen() {
             />
             <MetricCard
               label={t('overview.kpi.review')}
+              to="/processing/review?state=needs_review"
               value={formatNumber(countStates(countsByState, ['needs_review']))}
               delta={
                 dashboard.deltas

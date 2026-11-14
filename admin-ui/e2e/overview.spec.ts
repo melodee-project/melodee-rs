@@ -176,6 +176,55 @@ test('attention rows navigate to the owning screens', async ({ page }) => {
   await expect(page).toHaveURL(/\/catalog\/identity/);
 });
 
+for (const activation of ['click', 'keyboard'] as const) {
+  test(`Needs review card opens the filtered items using ${activation}`, async ({ page }) => {
+    await page.route('**/api/admin/v1/dashboard', (route) => route.fulfill({
+      json: {
+        ...DASHBOARD,
+        workItems: {
+          ...DASHBOARD.workItems,
+          countsByState: [{ state: 'needs_review', count: 1 }, { state: 'failed', count: 3 }],
+        },
+      },
+    }));
+    await page.route('**/api/admin/v1/review/queue?*', (route) => route.fulfill({
+      json: {
+        items: [{
+          id: '11111111-1111-4111-8111-111111111111',
+          state: 'needs_review',
+          currentPath: '/library/incoming/Release needing review',
+          sourcePath: '/library/incoming/Release needing review',
+          attemptCount: 1,
+          createdAt: '2026-08-14T10:00:00Z',
+          updatedAt: '2026-08-14T10:05:00Z',
+          lastErrorMessage: null,
+        }],
+        total: 1, limit: 50, offset: 0,
+        countsByState: [{ state: 'needs_review', count: 1 }, { state: 'failed', count: 3 }],
+      },
+    }));
+    await page.goto('/');
+    const card = page.getByRole('link', { name: /Needs review/ });
+    await expect(card.getByText('1', { exact: true })).toBeVisible();
+    await expect(card).toHaveAttribute('href', '/admin/processing/review?state=needs_review');
+    const reviewRequest = page.waitForRequest((request) => {
+      const url = new URL(request.url());
+      return url.pathname === '/api/admin/v1/review/queue' && url.searchParams.get('state') === 'needs_review';
+    });
+    if (activation === 'keyboard') {
+      await card.focus();
+      await expect(card).toBeFocused();
+      await card.press('Enter');
+    } else {
+      await card.getByText('1', { exact: true }).click();
+    }
+    await reviewRequest;
+    await expect(page).toHaveURL(/\/admin\/processing\/review\?state=needs_review$/);
+    await expect(page.getByText('Release needing review', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Needs review/ })).toHaveAttribute('aria-pressed', 'true');
+  });
+}
+
 test('rtl smoke: ar-SA renders the dashboard with dir=rtl', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByText('35,214')).toBeVisible();

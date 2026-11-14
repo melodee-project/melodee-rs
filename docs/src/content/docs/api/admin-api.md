@@ -184,6 +184,8 @@ of a bound group can access it (see [Users and Access](../admin/users-and-access
 GET /api/admin/v1/users?query=ann&limit=50&offset=0&sort=username:asc
 POST /api/admin/v1/users
 PUT /api/admin/v1/users/{id}
+POST /api/admin/v1/users/{id}/avatar
+DELETE /api/admin/v1/users/{id}/avatar
 POST /api/admin/v1/users/{id}/password
 ```
 
@@ -197,9 +199,21 @@ password hashes or signing keys.
 `POST` creates an enabled, unlocked account from `{"username", "email", "password", "isAdmin"?,
 "isEditor"?, "roles"?}`; when `roles` is omitted the account receives the streaming role. A
 duplicate username returns `409 user_conflict`; passwords shorter than 8 characters are rejected.
-`PUT` applies a field-optional update (`isAdmin`, `isEditor`, `enabled`, `locked`, `roles`); any
+`PUT` applies a field-optional update (`isAdmin`, `isEditor`, `enabled`, `locked`, `roles`,
+`username`, `email`, `description`, `timeZoneId`, `preferredLanguage`, `preferredTheme`); any
 change bumps the credential revision, and disabling or locking an account revokes all of its
-refresh sessions immediately. Unknown ids return `404`.
+refresh sessions immediately. `description`, `preferredLanguage`, and `preferredTheme` are
+tri-state: omitted keeps the stored value, `null` clears it, and a string replaces it. Username,
+email, description, timezone, and preference values use the same bounded validation as the
+self-service profile route; profile changes are audited with the acting administrator as the actor.
+Unknown ids return `404`, and a username/email collision returns `409 user_conflict`.
+
+`POST …/{id}/avatar` accepts a raw `image/jpeg` or `image/png` request body (the `Content-Type`
+must match the magic bytes); the server decodes under its image limits, downscales to at most
+1024 pixels per edge, re-encodes to at most 1 MiB, and stores it as the user's avatar. `DELETE`
+removes it (`404` when no avatar is stored). Both mutations are audit-logged with the acting
+administrator. The shared `/images/user_{publicId}/{size}` endpoint continues to serve the stored
+avatar (or the generated fallback when none is set).
 
 `POST …/{id}/password` sets a new password from `{"password": "…"}` (8–1024 characters) and
 answers `204`. The credential revision is bumped and **all** of the account's refresh sessions are
@@ -652,10 +666,13 @@ history. Every sub-list is bounded (at most 100 items) and carries its full `tot
 
 ### Artist provider candidates
 
-`GET /api/admin/v1/catalog/artists/{id}` returns a bounded `providerCandidates` section (best match
-first, at most 25): `provider`, `externalId`, `query`, `candidateRank`, `confidence` (basis points),
+`GET /api/admin/v1/catalog/artists/{id}` returns a bounded `providerCandidates` section (ranked candidates,
+best match first, at most 100): `provider`, `externalId`, `query`, `candidateRank`, `confidence` (basis points),
 and `observedAt`. These rows are enrichment evidence recorded per Artist — they are not
-`externalIds`, which only ever come from source tags, and they never authorize a merge. A failure to
+`externalIds`, which only ever come from source tags, and they never authorize a merge. The Admin
+UI groups them by provider and presents the highest-ranked candidate as that provider's match; the
+other ranked candidates are available for review on an Active (unverified) Artist and are hidden for
+a Verified Artist. A failure to
 read them degrades to an empty section rather than failing the Artist read.
 
 ### Artist identity status
