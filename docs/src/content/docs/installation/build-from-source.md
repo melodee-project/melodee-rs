@@ -87,7 +87,9 @@ make down
 starts PostgreSQL through `compose.dev.yaml`, and waits for server readiness before returning.
 Database startup can take up to ten minutes when an existing development volume is large.
 The server runs in the background, including the workers enabled by your configuration, and serves
-the Admin UI at `http://127.0.0.1:8080/admin` by default. Console logs are appended to
+the Admin UI at `http://127.0.0.1:8081/admin` by default. Set `MELODEE__SERVER__BIND` in `.env`
+to use another address; when setting `MELODEE__NATIVE__PUBLIC_ORIGIN`, keep its port consistent
+with the public address. Console logs are appended to
 `.local-dev/server.log`. Create the first administrator once using the CLI instructions above.
 
 This workflow requires Docker Compose and the reference development database URL from `.env.example`

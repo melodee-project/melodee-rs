@@ -126,6 +126,12 @@ def load_environment() -> dict[str, str]:
         raise StackError(
             f"{setup.DATABASE_ENV} must select the compose.dev.yaml development database"
         )
+    # Pass the development default to the child as well as readiness probes;
+    # otherwise the server would still use its own default listener address.
+    environment.setdefault(
+        setup.SERVER_BIND_ENV,
+        environment.get(setup.LEGACY_SERVER_BIND_ENV, "127.0.0.1:8081"),
+    )
     config = json.loads(run(compose("config", "--format", "json"), capture=True))
     defaults = config.get("x-melodee-server-environment", {})
     # Only the documented browser setting can enter the host process through

@@ -74,6 +74,23 @@ class DevStackTests(unittest.TestCase):
         self.assertEqual(environment["MELODEE__SERVER__BIND"], "127.0.0.1:8081")
         self.assertNotIn(stack.setup.BOOTSTRAP_PASSWORD_ENV, environment)
 
+    def test_development_bind_is_forwarded_and_preserves_legacy_override(self):
+        (self.root / ".env").write_text(
+            f"{stack.setup.DATABASE_ENV}={stack.setup.SAFE_DATABASE_URL}\n"
+        )
+        for exports, expected in (
+            ({}, "127.0.0.1:8081"),
+            ({stack.setup.LEGACY_SERVER_BIND_ENV: "127.0.0.1:9090"}, "127.0.0.1:9090"),
+        ):
+            with (
+                self.subTest(exports=exports),
+                mock.patch.dict(os.environ, exports, clear=True),
+                mock.patch.object(stack, "run", return_value="{}"),
+            ):
+                environment = stack.load_environment()
+            self.assertEqual(environment[stack.setup.SERVER_BIND_ENV], expected)
+            self.assertEqual(stack.setup.parse_bind_address(environment).configured, expected)
+
     def test_compose_cors_default_respects_env_file_exports_and_empty_override(self):
         default = "https://feishin.vercel.app"
         for file_value, exported, expected in (

@@ -206,7 +206,7 @@ make down
 
 `make up` installs the frozen Admin UI dependencies, builds the SPA and locked Rust server/CLI,
 starts the fixed `compose.dev.yaml` PostgreSQL service, and returns when `/readyz` succeeds.
-The server runs in the background and serves the Admin UI at `http://127.0.0.1:8080/admin`
+The server runs in the background and serves the Admin UI at `http://127.0.0.1:8081/admin`
 (or your configured bind address). Console logs are appended to `.local-dev/server.log`.
 The configured `.env` is required; exported environment variables take precedence. The database
 URL must select the reference development database on port 5433. Enabled workers use your existing
@@ -241,7 +241,7 @@ cargo run --locked -p melodee-cli -- users bootstrap-admin \
 unset MELODEE__CLI__BOOTSTRAP_ADMIN_PASSWORD
 ```
 
-Visit `http://127.0.0.1:8080/admin` and use the onboarding flow. It checks the live database,
+Visit `http://127.0.0.1:8081/admin` and use the onboarding flow. It checks the live database,
 storage roots, media tools, search configuration, administrator account, and email configuration.
 Database and administrator checks block completion; storage, tools, search, and email checks are
 advisory. Completing onboarding does not prove that every optional feature is configured.
