@@ -98,7 +98,7 @@ function makeDetail(overrides: Partial<ObservationDetail> = {}): ObservationDeta
         artistName: 'The Nomads',
         artistDisambiguation: 'Australian rock band',
         artistStatus: 'active',
-        latestOutcome: 'provisional',
+        latestOutcome: 'proposed',
         latestConfidence: 9200,
         latestReason: 'Strong alias and release overlap.',
         latestLocked: false,
@@ -151,8 +151,8 @@ function makeDetail(overrides: Partial<ObservationDetail> = {}): ObservationDeta
         artistId: ARTIST_ID_2,
         artistName: 'The Nomads (US)',
         artistDisambiguation: null,
-        artistStatus: 'provisional',
-        latestOutcome: 'provisional',
+        artistStatus: 'active',
+        latestOutcome: 'proposed',
         latestConfidence: 4100,
         latestReason: '',
         latestLocked: false,
@@ -312,7 +312,7 @@ describe('IdentityReviewScreen', () => {
         reason: 'No existing Artist is correct.',
       }),
     );
-    expect(await screen.findByText('New provisional Artist created.')).toBeInTheDocument();
+    expect(await screen.findByText('New Artist created.')).toBeInTheDocument();
   });
 
   it('confirm requires a selected candidate', async () => {
@@ -326,7 +326,7 @@ describe('IdentityReviewScreen', () => {
 
   it('never-match is destructive-styled and requires a reason', async () => {
     renderScreen(`/catalog/identity?observation=${OBSERVATION_ID}`);
-    fireEvent.click(await screen.findByRole('radio', { name: /^The Nomads \(US\)Provisional/ }));
+    fireEvent.click(await screen.findByRole('radio', { name: /^The Nomads \(US\)Active/ }));
     const neverMatch = screen.getByRole('button', { name: /^Never Match Candidate/ });
     fireEvent.click(neverMatch);
     const dialog = await screen.findByRole('dialog');

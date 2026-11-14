@@ -312,11 +312,11 @@ describe('ArtistDetailScreen', () => {
 
   it('lets an administrator assert identity status (the audited path to Verified)', async () => {
     mockUpdateArtistMetadata.mockResolvedValue(undefined);
-    renderScreen(makeDetail({ status: 'provisional' }));
+    renderScreen(makeDetail({ status: 'active' }));
     await screen.findByRole('heading', { name: 'The Nomads' });
     fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
     const select = await screen.findByLabelText('Identity status');
-    expect(select).toHaveValue('provisional');
+    expect(select).toHaveValue('active');
     fireEvent.change(select, { target: { value: 'verified' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() =>

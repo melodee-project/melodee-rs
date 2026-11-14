@@ -256,7 +256,7 @@ pub async fn seed_legacy_repeated_track_artist_identity(
         "INSERT INTO artists (
             id, public_api_id, canonical_name, normalized_name, sort_name,
             artist_type, status, revision, created_at, updated_at
-         ) VALUES ($1,$2,$3,$4,$3,'unknown','provisional',1,$5,$5)",
+         ) VALUES ($1,$2,$3,$4,$3,'unknown','active',1,$5,$5)",
     )
     .bind(source_artist_id)
     .bind(source_public_api_id)

@@ -1,7 +1,7 @@
 //! Artist Identity Review API (PRD-API-ADMIN-002, SPEC §20):
 //! the operator queue of observed Artist strings awaiting an authoritative
 //! resolution, observation detail with candidate evidence, audited
-//! resolutions (confirm / create-new / leave-provisional / never-match), the
+//! resolutions (confirm / create-new / leave-unresolved / never-match), the
 //! identity decision audit feed, and Artist merge/split corrections.
 //!
 //! All routes are `AdminPrincipal`-gated. Every mutation is driven through
@@ -242,7 +242,7 @@ pub struct ObservationDetailDto {
 }
 
 /// Resolution request. `artistId` is the Artist public id and is required
-/// for `confirm`, forbidden for `create-new`/`leave-provisional`.
+/// for `confirm`, forbidden for `create-new`/`leave-unresolved`.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResolveRequest {
@@ -589,8 +589,8 @@ async fn observation_detail(
 }
 
 /// POST /api/admin/v1/identity/observations/{id}/resolve — confirm an
-/// existing Artist, create a new provisional Artist from the observation, or
-/// explicitly leave the observation provisional (an audited no-op).
+/// existing Artist, create a new active Artist from the observation, or
+/// explicitly leave the observation unresolved (an audited no-op).
 async fn resolve_observation(
     State(state): State<AdminAccessState>,
     admin: AdminPrincipal,
@@ -661,7 +661,7 @@ async fn resolve_observation(
                 artist_type: ArtistType::Unknown,
                 disambiguation: None,
                 active_dates: None,
-                status: ArtistStatus::Provisional,
+                status: ArtistStatus::Active,
                 created_at: now,
             }) {
                 Ok(artist) => artist,
@@ -693,12 +693,14 @@ async fn resolve_observation(
                 Err(response) => *response,
             }
         }
-        "leave-provisional" => {
+        // `leave-provisional` is the pre-ADR-0190 name of this resolution; it is
+        // still accepted so an existing client or script keeps working.
+        "leave-unresolved" | "leave-provisional" => {
             if request.artist_id.is_some() {
                 return identity_error(
                     StatusCode::BAD_REQUEST,
                     "unexpected_artist_id",
-                    "leave-provisional must not carry an artistId",
+                    "leave-unresolved must not carry an artistId",
                 );
             }
             // Honest no-op acknowledgement: no decision row is written, so
@@ -707,11 +709,11 @@ async fn resolve_observation(
                 actor = %admin.public_api_id,
                 observation = %id,
                 reason = %reason,
-                "admin left observed artist provisional"
+                "admin left observed artist unresolved"
             );
             Json(ResolveResponseDto {
                 observation_id: id,
-                resolution: "leave-provisional".to_string(),
+                resolution: "leave-unresolved".to_string(),
                 artist_id: None,
                 changed: false,
             })
@@ -727,13 +729,13 @@ async fn resolve_observation(
 
 /// Records the administrator's confirmed match decision through the durable
 /// decision store (locked, so no automated resolver supersedes it).
-/// Promotes the confirmed Artist from `provisional` to `verified`.
+/// Promotes the confirmed Artist from `active` to `verified`.
 ///
-/// ADR-0117 keeps `provisional` for Artists created from observed credit text and
-/// reserves `verified` for identities backed by credible or locked evidence. An
-/// operator confirming that an observation names an existing Artist is exactly that
-/// evidence, so the Artist stops being provisional. `create-new` deliberately does
-/// not promote: it records "this is a distinct Artist", not "this identity is known".
+/// Imported Artists are `active`: live and usable, but not identity-verified
+/// (ADR-0117, ADR-0190). `verified` is reserved for identities backed by credible
+/// or locked evidence, and an operator confirming that an observation names an
+/// existing Artist is exactly that evidence. `create-new` deliberately does not
+/// promote: it records "this is a distinct Artist", not "this identity is known".
 async fn promote_confirmed_artist(
     pool: &sqlx::PgPool,
     artist_id: ArtistId,
@@ -742,7 +744,7 @@ async fn promote_confirmed_artist(
     sqlx::query(
         "UPDATE artists
             SET status = 'verified', revision = revision + 1, updated_at = $2
-          WHERE id = $1 AND status = 'provisional'",
+          WHERE id = $1 AND status = 'active'",
     )
     .bind(artist_id.into_uuid())
     .bind(now)
@@ -1201,7 +1203,7 @@ async fn split_artist(
             .disambiguation
             .filter(|value| !value.trim().is_empty()),
         active_dates: None,
-        status: ArtistStatus::Provisional,
+        status: ArtistStatus::Active,
         created_at: now,
     }) {
         Ok(artist) => artist,

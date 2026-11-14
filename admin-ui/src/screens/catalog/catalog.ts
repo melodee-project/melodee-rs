@@ -20,10 +20,9 @@ import type { StatusKind } from '../../components/StatusTag';
 export function catalogStatusKind(status: string): StatusKind {
   switch (status) {
     case 'verified':
-    case 'active':
       return 'success';
-    case 'provisional':
-      return 'provisional';
+    case 'active':
+      return 'info';
     case 'merged':
     case 'deprecated':
       return 'neutral';

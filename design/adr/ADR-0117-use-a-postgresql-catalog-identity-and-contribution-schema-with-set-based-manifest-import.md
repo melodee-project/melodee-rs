@@ -4,7 +4,7 @@
 - **Status:** Superseded
 - **Decision owners:** User-directed Phase 4 authority work
 - **Supersedes:** None
-- **Superseded by:** [ADR-0189](ADR-0189-reuse-an-existing-artist-by-exact-normalized-name-at-import.md) — only the "creates provisional Artists when no credible or locked match exists rather than merging by name" import rule; every schema and identity invariant below stands
+- **Superseded by:** [ADR-0189](ADR-0189-reuse-an-existing-artist-by-exact-normalized-name-at-import.md) — only the "creates provisional Artists when no credible or locked match exists rather than merging by name" import rule; and [ADR-0190](ADR-0190-name-the-imported-artist-state-active-rather-than-provisional.md) — only the Artist status vocabulary in decision item 8. Every other schema and identity invariant below stands
 - **Related requirements:** PRD-ARTIST-001 through PRD-ARTIST-012, PRD-RESOLVE-001 through
   PRD-RESOLVE-005, PRD-CREDIT-001 through PRD-CREDIT-008, PRD-CATALOG-001 through
   PRD-CATALOG-005, PRD-INGEST-007 through PRD-INGEST-010, PRD-API-M1-004, PRD-MIG-002,
@@ -89,8 +89,10 @@ The migrations enforce these invariants:
    globally unique semantic key. A canonical storage-relative path is unique; repeated manifest map
    entries may refer to that one asset.
 8. Artist types are `person`, `group`, `orchestra`, `ensemble`, `choir`, `character`, `other`, and
-   `unknown`; profession is not an Artist type. Artist status is `provisional`, `verified`, `merged`,
-   or `deprecated`.
+   `unknown`; profession is not an Artist type. Artist status is `active`, `verified`, `merged`, or
+   `deprecated` (**naming superseded by
+   [ADR-0190](ADR-0190-name-the-imported-artist-state-active-rather-than-provisional.md)**: the
+   imported state is `active`; it was `provisional` under this ADR).
 9. ReleaseArtist and TrackArtist express billing/presentation. Contribution expresses participation
    or credit. The initial role vocabulary is `primary_artist`, `featured_artist`, `guest_artist`,
    `performer`, `band_member`, `vocalist`, `instrumentalist`, `composer`, `lyricist`, `producer`,

@@ -24,10 +24,16 @@ pub enum ArtistType {
 }
 
 /// Current lifecycle state of a Melodee-owned Artist identity.
+///
+/// `Active` is the normal state of an imported Artist: the catalogue knows the
+/// name and the credits are usable. `Verified` records that an operator asserted
+/// the identity itself. Neither state is a name-keyed identity claim; see
+/// ADR-0190 for why the imported state is named for what it is (`active`) rather
+/// than for what it lacks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ArtistStatus {
-    Provisional,
+    Active,
     Verified,
     MergedInto(ArtistId),
     Deprecated,

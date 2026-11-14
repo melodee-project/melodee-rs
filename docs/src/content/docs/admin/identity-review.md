@@ -31,9 +31,9 @@ acting administrator:
 - **Confirm** — lock the observation to the chosen candidate Artist. A locked administrator
   decision is never superseded by an automated resolver, and the observation leaves the
   unresolved queue.
-- **Create New** — create a new provisional Artist from the observation's display value and lock
+- **Create New** — create a new Artist from the observation's display value and lock
   the observation to it.
-- **Leave Provisional** — an honest, audited no-op: no decision row is written and the
+- **Leave Unresolved** — an honest, audited no-op: no decision row is written and the
   observation stays queued for a later pass.
 - **Never Match** — a durable, locked *negative* assertion against the exact
   observation/candidate pair; automated resolvers then fail closed for that pair. Because this
@@ -50,7 +50,7 @@ The screen also corrects Artist identities directly:
   redirect, the merged Artist can no longer participate in identity mutations, and merging an
   Artist into itself is rejected. Merge is destructive-class: the dialog requires typed
   confirmation and a reason.
-- **Split** creates a new provisional Artist and moves **only** the explicitly listed
+- **Split** creates a new Artist and moves **only** the explicitly listed
   assignments (Release/Track credits, contributions, aliases, external identities) off the
   source Artist; an empty assignment list is rejected. In this build the form takes the durable
   row ids of the selected links directly (a picker UI is not built yet), so splits are
@@ -77,9 +77,10 @@ decisions, or **Never Match** assertions, plus names no automated rule may resol
 
 ## Artist status
 
-Artists created from imported credit text start as **Provisional**: the catalogue knows
-the name, not the identity. Confirming that an observation names an existing Artist (the
-`confirm` resolution) promotes that Artist to **Verified** in the same transaction, so the
-Artists list shows how much identity work has been done rather than treating every
-imported name as an open question. The `create-new` resolution records a distinct Artist
-and leaves it Provisional. You can also set the status directly in the Artist's Edit panel.
+Artists created from imported credit text start as **Active**: the catalogue knows the name
+and the credits are usable, while the identity itself is not yet asserted. Confirming that an
+observation names an existing Artist (the `confirm` resolution) promotes that Artist to
+**Verified** in the same transaction, so the Artists list shows how much identity work has been
+done. The `create-new` resolution records a distinct Artist and leaves it Active. You can also set
+the status directly in the Artist's Edit panel. ADR-0190 renamed this state from `provisional`;
+migration `0044` relabelled existing rows in place.

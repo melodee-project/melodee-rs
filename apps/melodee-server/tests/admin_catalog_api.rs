@@ -302,7 +302,7 @@ async fn artist_browsing_envelope_filters_and_whitelist_sort() {
     assert_eq!(item["name"], "Browse Artist");
     assert_eq!(item["sortName"], "Browse Artist");
     assert_eq!(item["artistType"], "unknown");
-    assert_eq!(item["status"], "provisional");
+    assert_eq!(item["status"], "active");
     assert_eq!(item["releaseCount"], 1);
     assert_eq!(item["trackCount"], 1);
     assert_eq!(
@@ -523,7 +523,7 @@ async fn artist_detail_payload_and_not_found() {
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["name"], "Detail Artist");
-    assert_eq!(body["status"], "provisional");
+    assert_eq!(body["status"], "active");
     assert_eq!(body["artistType"], "unknown");
     assert_eq!(body["stats"]["releaseCount"], 1);
     assert_eq!(body["stats"]["performanceTrackCount"], 1);

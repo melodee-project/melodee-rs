@@ -510,7 +510,7 @@ async fn repeated_track_artist_credit_reconciliation_is_release_scoped_audited_a
         .expect("reconcile repeated Track credit");
 
     let statuses: (i64, i64) = sqlx::query_as(
-        "SELECT count(*) FILTER (WHERE status='provisional'),
+        "SELECT count(*) FILTER (WHERE status='active'),
                 count(*) FILTER (WHERE status='merged')
            FROM artists WHERE normalized_name='glockboyz teejaee'",
     )
@@ -1033,7 +1033,7 @@ async fn legacy_same_name_artist_rows_are_reconciled_audited_and_reversible() {
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
             "SELECT count(*) FROM artists
-              WHERE normalized_name='alice cooper' AND status='provisional'",
+              WHERE normalized_name='alice cooper' AND status='active'",
         )
         .fetch_one(&db.pool)
         .await
@@ -1078,7 +1078,7 @@ async fn legacy_same_name_artist_rows_are_reconciled_audited_and_reversible() {
         .expect("reconcile repeated Artist credit");
 
     let statuses: (i64, i64) = sqlx::query_as(
-        "SELECT count(*) FILTER (WHERE status='provisional'),
+        "SELECT count(*) FILTER (WHERE status='active'),
                 count(*) FILTER (WHERE status='merged')
            FROM artists WHERE normalized_name='alice cooper'",
     )
@@ -1124,7 +1124,7 @@ async fn legacy_same_name_artist_rows_are_reconciled_audited_and_reversible() {
         artist_type: melodee_domain::ArtistType::Unknown,
         disambiguation: None,
         active_dates: None,
-        status: melodee_domain::ArtistStatus::Provisional,
+        status: melodee_domain::ArtistStatus::Active,
         created_at: time::OffsetDateTime::now_utc(),
     })
     .expect("valid restored Artist");
@@ -1266,7 +1266,7 @@ async fn conflicting_provider_ids_preserve_same_name_identities_and_allow_review
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
             "SELECT count(*) FROM artists
-              WHERE normalized_name='same name' AND status='provisional'",
+              WHERE normalized_name='same name' AND status='active'",
         )
         .fetch_one(&db.pool)
         .await
@@ -1484,7 +1484,7 @@ async fn disambiguated_same_name_primary_artists_remain_distinct() {
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
             "SELECT count(*) FROM artists
-              WHERE normalized_name='nirvana' AND status='provisional'",
+              WHERE normalized_name='nirvana' AND status='active'",
         )
         .fetch_one(&db.pool)
         .await
@@ -1521,7 +1521,7 @@ async fn disambiguated_same_name_primary_artists_remain_distinct() {
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
             "SELECT count(*) FROM artists
-              WHERE normalized_name='nirvana' AND status='provisional'",
+              WHERE normalized_name='nirvana' AND status='active'",
         )
         .fetch_one(&db.pool)
         .await

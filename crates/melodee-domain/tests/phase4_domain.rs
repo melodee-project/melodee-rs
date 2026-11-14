@@ -39,7 +39,7 @@ fn artist(id: ArtistId, public_api_id: ArtistPublicId, name: &str) -> Artist {
         artist_type: ArtistType::Person,
         disambiguation: None,
         active_dates: None,
-        status: ArtistStatus::Provisional,
+        status: ArtistStatus::Active,
         created_at: OffsetDateTime::UNIX_EPOCH,
     })
     .unwrap()
@@ -538,7 +538,7 @@ fn invariant_constructors_reject_version_four_internal_ids() {
             artist_type: ArtistType::Person,
             disambiguation: None,
             active_dates: None,
-            status: ArtistStatus::Provisional,
+            status: ArtistStatus::Active,
             created_at: OffsetDateTime::UNIX_EPOCH,
         }),
         Err(DomainInvariantError::InvalidInternalId("ArtistId"))

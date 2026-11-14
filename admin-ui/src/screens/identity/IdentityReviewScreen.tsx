@@ -109,7 +109,7 @@ function toApiError(cause: unknown): ApiError {
   return cause instanceof ApiError ? cause : new ApiError(0, 'unknown', String(cause), null);
 }
 
-/** Reason-required confirmation for confirm / create-new / leave-provisional. */
+/** Reason-required confirmation for confirm / create-new / leave-unresolved. */
 function ResolveDialog({
   action,
   busy,
@@ -758,7 +758,7 @@ export function IdentityReviewScreen() {
           ),
           pending: (
             <StatusTag
-              kind="provisional"
+              kind="pending"
               label={t('identity.queue.pendingCount', { count: item.pendingMatchCount })}
             />
           ),
@@ -865,7 +865,7 @@ export function IdentityReviewScreen() {
       setNotice({ kind: 'warning', text: t('identity.decision.selectCandidateFirst') });
       return;
     }
-    if (id === 'confirm' || id === 'create-new' || id === 'leave-provisional') {
+    if (id === 'confirm' || id === 'create-new' || id === 'leave-unresolved') {
       setPendingAction(id);
     }
   };
@@ -939,7 +939,7 @@ export function IdentityReviewScreen() {
                 </span>
                 <div className="melodee-identity-observation__header">
                   <h2 className="melodee-hero__title">{observation.displayValue}</h2>
-                  <StatusTag kind="provisional" label={t('identity.observation.reviewTag')} />
+                  <StatusTag kind="pending" label={t('identity.observation.reviewTag')} />
                 </div>
                 <div className="melodee-review-header__facts">
                   <div>

@@ -151,7 +151,7 @@ function artistHeroFacts(detail: ArtistDetail, t: TFunction) {
  * True when a name contains a collaboration separator Melodee deliberately does
  * not auto-split. `&`, `,`, `;` and `x` are part of real band names
  * ("Simon & Garfunkel", "Earth, Wind & Fire"), so a combined credit string is
- * kept as one provisional identity until an operator resolves it — this hint
+ * kept as one active identity until an operator resolves it — this hint
  * points at that workflow instead of guessing.
  */
 function looksLikeCollaboration(name: string): boolean {
@@ -250,13 +250,13 @@ export function ArtistDetailScreen() {
                   value: detail.artistType,
                 },
                 {
-                  // Only `provisional` and `verified` are operator-settable;
+                  // Only `active` and `verified` are operator-settable;
                   // merge/delete states belong to their own flows.
                   name: 'status',
                   label: t('catalog.artist.edit.status'),
                   type: 'select',
                   options: [
-                    { value: 'provisional', label: t('catalog.status.provisional') },
+                    { value: 'active', label: t('catalog.status.active') },
                     { value: 'verified', label: t('catalog.status.verified') },
                   ],
                   value: detail.status,
@@ -267,7 +267,7 @@ export function ArtistDetailScreen() {
                 sortName: state['sortName'] !== undefined && String(state['sortName']).trim() !== '' ? String(state['sortName']) : null,
                 artistType: state['artistType'] !== undefined && String(state['artistType']).trim() !== '' ? String(state['artistType']) : null,
                 status:
-                  state['status'] === 'provisional' || state['status'] === 'verified'
+                  state['status'] === 'active' || state['status'] === 'verified'
                     ? state['status']
                     : null,
               })}
@@ -285,8 +285,8 @@ export function ArtistDetailScreen() {
                   kind={catalogStatusKind(detail.status)}
                   label={t(`catalog.status.${detail.status}`, { defaultValue: detail.status })}
                   description={
-                    detail.status === 'provisional'
-                      ? t('catalog.artists.provisionalHint')
+                    detail.status === 'active'
+                      ? t('catalog.artists.activeHint')
                       : undefined
                   }
                 />

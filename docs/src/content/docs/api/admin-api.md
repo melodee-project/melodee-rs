@@ -445,16 +445,16 @@ do-not-match assertions.
 POST /api/admin/v1/identity/observations/{id}/resolve
 ```
 
-Body: `{"resolution": "confirm"|"create-new"|"leave-provisional", "artistId": "…", "reason": "…"}`.
+Body: `{"resolution": "confirm"|"create-new"|"leave-unresolved", "artistId": "…", "reason": "…"}`.
+The pre-ADR-0190 verb `leave-provisional` is still accepted as an alias for `leave-unresolved`.
 A non-blank `reason` is required and audited.
 
 - `confirm` requires `artistId` (the Artist public id) and records a locked administrator
   decision, so no automated resolver supersedes it; the observation leaves the unresolved queue.
-- `create-new` must not carry `artistId`; it creates a new provisional Artist from the
-  observation's display value and records the same locked decision.
-- `leave-provisional` must not carry `artistId` and is an honest, audited no-op — no decision
-  row is written and the observation stays queued for a later review pass
-  (`"changed": false`).
+- `create-new` must not carry `artistId`; it creates a new Artist from the observation's display
+  value and records the same locked decision.
+- `leave-unresolved` must not carry `artistId` and is an honest, audited no-op — no decision row
+  is written and the observation stays queued for a later review pass (`"changed": false`).
 
 ### Record a do-not-match assertion
 
@@ -532,8 +532,8 @@ POST /api/admin/v1/identity/artists/{id}/split
 ```
 
 Body: `{"reason": "…", "newArtist": {"canonicalName": "…", "sortName"?, "artistType"?,
-"disambiguation"?}, "assignments": [{"kind": "…", "id": "…"}]}`. Creates a new provisional
-Artist and moves **only** the explicitly selected assignments off the source Artist —
+"disambiguation"?}, "assignments": [{"kind": "…", "id": "…"}]}`. Creates a new Artist
+and moves **only** the explicitly selected assignments off the source Artist —
 `assignments` must be non-empty (`400 empty_split`). `kind` is one of `releaseArtist`,
 `trackArtist`, `contribution`, `alias`, or `externalIdentity`; each `id` is the internal durable
 row identity of the selected link.
@@ -614,9 +614,9 @@ read them degrades to an empty section rather than failing the Artist read.
 ### Artist identity status
 
 `PUT /api/admin/v1/catalog/artists/{id}/metadata` accepts the optional `status` field alongside the
-name fields. Only `provisional` and `verified` are accepted — `merged` and `deprecated` belong to the
+name fields. Only `active` and `verified` are accepted — `merged` and `deprecated` belong to the
 merge and delete flows, and any other value returns `400 invalid_request`. Import always writes
-`provisional`, so this is the audited operator path to `verified`: the edit bumps the revision,
+`active` (ADR-0190), so this is the audited operator path to `verified`: the edit bumps the revision,
 records an `artist_metadata_updated` audit event with the field delta, and refreshes the search
 projection.
 

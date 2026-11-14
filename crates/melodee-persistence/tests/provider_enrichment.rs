@@ -137,7 +137,7 @@ async fn provider_identity_candidates_are_observations_and_upserts_are_idempoten
             id, public_api_id, canonical_name, normalized_name, sort_name,
             artist_type, status, created_at, updated_at
          ) VALUES ($1,$1,'Candidate Artist','candidate artist','Candidate Artist',
-                   'unknown','provisional',$2,$2)",
+                   'unknown','active',$2,$2)",
     )
     .bind(artist_id)
     .bind(now)

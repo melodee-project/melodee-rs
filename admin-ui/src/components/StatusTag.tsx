@@ -19,7 +19,7 @@ import { useTranslation } from 'react-i18next';
  * treatment is a flat tinted pill with a tinted ink (no ring, no border), which
  * Carbon tags cannot express without forking their internals.
  */
-export type StatusKind = 'success' | 'info' | 'warning' | 'error' | 'provisional' | 'neutral';
+export type StatusKind = 'success' | 'info' | 'warning' | 'error' | 'pending' | 'neutral';
 
 const ICONS: Record<
   StatusKind,
@@ -29,7 +29,7 @@ const ICONS: Record<
   info: InProgress,
   warning: WarningFilled,
   error: ErrorFilled,
-  provisional: PendingFilled,
+  pending: PendingFilled,
   neutral: Subtract,
 };
 

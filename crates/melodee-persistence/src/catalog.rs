@@ -206,7 +206,7 @@ pub struct StrongArtistMergeCandidate {
 
 /// One exact-name Artist candidate that requires operator review.
 ///
-/// The current provisional identity is deliberately retained. This row only
+/// The current active identity is deliberately retained. This row only
 /// provides enough information to append immutable name evidence and a
 /// non-authoritative proposal for Identity Review.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -217,7 +217,7 @@ pub struct NameOnlyArtistMatchProposalCandidate {
     pub normalized_name: String,
 }
 
-/// One provisional Artist that can be consolidated with the oldest
+/// One active Artist that can be consolidated with the oldest
 /// indistinguishable primary Release Artist carrying the same exact name.
 ///
 /// This is not a global normalized-name key. The candidate query requires
@@ -233,7 +233,7 @@ pub struct RepeatedPrimaryReleaseArtistMergeCandidate {
 }
 
 /// One repeated structured Track credit that can safely reuse another
-/// provisional, track-only Artist identity inside the same immutable Release.
+/// active, track-only Artist identity inside the same immutable Release.
 ///
 /// Release Artist identities and mixed-scope observations never enter this
 /// candidate set. That keeps ADR-0173's bounded co-resolution rule separate
@@ -251,7 +251,7 @@ pub struct SameReleaseTrackArtistMergeCandidate {
 /// Structured evidence retained with an automated Artist reconciliation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ArtistReconciliationEvidence {
-    /// Both provisional identities carried the same trusted provider key.
+    /// Both active identities carried the same trusted provider key.
     EmbeddedExternalId {
         provider: String,
         external_id: String,
@@ -995,7 +995,7 @@ impl CatalogStore {
     /// Returns bounded ADR-0173 candidates for repeated structured Track
     /// credits inside one immutable Release.
     ///
-    /// Every identity in a candidate group is provisional, resolves only
+    /// Every identity in a candidate group is active (unverified), resolves only
     /// Track-scoped observations from one Release, and has no Release Artist
     /// link. Mixed-scope identities, locked decisions, active do-not-match
     /// assertions, and same-provider/different-ID evidence block the group.
@@ -1041,7 +1041,7 @@ impl CatalogStore {
              ), duplicate_names AS (
                  SELECT normalized_name
                  FROM artists
-                 WHERE status='provisional'
+                 WHERE status='active'
                  GROUP BY normalized_name
                  HAVING count(*) > 1
              ), track_only_identities AS (
@@ -1060,7 +1060,7 @@ impl CatalogStore {
                   AND track_credit.observed_artist_id=observed.id
                  LEFT JOIN release_artists release_credit
                    ON release_credit.artist_id=artist.id
-                 WHERE artist.status='provisional'
+                 WHERE artist.status='active'
                    AND btrim(observed.normalized_value) <> ''
                  GROUP BY artist.id, artist.public_api_id, artist.normalized_name
                  HAVING count(DISTINCT observed.normalized_value)=1
@@ -1095,7 +1095,7 @@ impl CatalogStore {
                   AND qualified.normalized_name=candidate_group.normalized_name
                   AND qualified.release_id=candidate_group.release_id
                  WHERE qualified.id IS NULL
-                    OR same_name.status <> 'provisional'
+                    OR same_name.status <> 'active'
                     OR same_decision.is_locked
                     OR EXISTS (
                         SELECT 1
@@ -1236,7 +1236,7 @@ impl CatalogStore {
     /// Returns bounded candidates for repeated exact primary Artist billing
     /// across different cataloged Releases.
     ///
-    /// The whole active normalized-name group must be provisional and
+    /// The whole active normalized-name group must be active and unverified, and
     /// indistinguishable. External identities, disambiguation, differing
     /// types or dates, memberships, relationships, manual/locked decisions,
     /// negative assertions, or same-Release ambiguity make the group
@@ -1255,13 +1255,13 @@ impl CatalogStore {
                  SELECT artist.id, artist.public_api_id, artist.normalized_name,
                         artist.artist_type, artist.begin_date, artist.end_date
                  FROM artists artist
-                 WHERE artist.status IN ('provisional','verified')
+                 WHERE artist.status IN ('active','verified')
                    AND btrim(artist.normalized_name) <> ''
              ), eligible_artists AS (
                  SELECT active.*
                  FROM active_artists active
                  JOIN artists artist ON artist.id=active.id
-                 WHERE artist.status='provisional'
+                 WHERE artist.status='active'
                    AND COALESCE(btrim(artist.disambiguation), '')=''
                    AND NOT EXISTS (
                        SELECT 1 FROM artist_external_identities external
@@ -1419,7 +1419,7 @@ impl CatalogStore {
     /// ADR-0189: C# reuses an Artist row by normalized name at import, so a
     /// featured artist appearing on two different Releases is one Artist there.
     /// The guards are unchanged from the primary-Release variant — the whole
-    /// active name group must be provisional, disambiguation-free, free of
+    /// active name group must be active, disambiguation-free, free of
     /// external identifiers, relationships, group memberships and aliases, carry
     /// only automated decisions, have every observation matching the name, no
     /// same-Release ambiguity, and no negative assertion — so genuinely distinct
@@ -1437,13 +1437,13 @@ impl CatalogStore {
                  SELECT artist.id, artist.public_api_id, artist.normalized_name,
                         artist.artist_type, artist.begin_date, artist.end_date
                  FROM artists artist
-                 WHERE artist.status IN ('provisional','verified')
+                 WHERE artist.status IN ('active','verified')
                    AND btrim(artist.normalized_name) <> ''
              ), eligible_artists AS (
                  SELECT active.*
                  FROM active_artists active
                  JOIN artists artist ON artist.id=active.id
-                 WHERE artist.status='provisional'
+                 WHERE artist.status='active'
                    AND COALESCE(btrim(artist.disambiguation), '')=''
                    AND NOT EXISTS (
                        SELECT 1 FROM artist_external_identities external
@@ -1608,7 +1608,7 @@ impl CatalogStore {
     /// Returns bounded exact-name candidates for non-authoritative review
     /// proposals. Name equality is discovery evidence, never an identity key.
     ///
-    /// Only observations still owned by an automated provisional decision are
+    /// Only observations still owned by an automated, unverified decision are
     /// eligible. Existing proposals and active local do-not-match assertions
     /// make the scan idempotent without suppressing other same-name Artists.
     pub async fn name_only_artist_match_proposal_candidates(
@@ -1631,7 +1631,7 @@ impl CatalogStore {
                  JOIN artist_match_decisions current_decision
                    ON current_decision.id=current.decision_id
                  JOIN artists owner ON owner.id=current_decision.artist_id
-                 WHERE owner.status='provisional'
+                 WHERE owner.status='active'
                    AND current_decision.authority='automated'
                    AND NOT current_decision.is_locked
                    AND btrim(owner.normalized_name) <> ''
@@ -1641,7 +1641,7 @@ impl CatalogStore {
              FROM current_observations source
              JOIN artists candidate
                ON candidate.normalized_name=source.normalized_name
-              AND candidate.status IN ('provisional','verified')
+              AND candidate.status IN ('active','verified')
               AND candidate.id <> source.current_artist_id
              WHERE NOT EXISTS (
                  SELECT 1
@@ -3003,7 +3003,7 @@ async fn reuse_existing_artists(
            LEFT JOIN artist_external_identities external
              ON external.artist_id = artist.id AND external.provider = 'musicbrainz'
           WHERE artist.normalized_name = ANY($1)
-            AND artist.status IN ('provisional','verified')
+            AND artist.status IN ('active','verified')
             AND artist.merged_into_artist_id IS NULL
             AND COALESCE(btrim(artist.disambiguation), '') = ''",
     )
@@ -3165,7 +3165,7 @@ async fn persist_prepared_import(
     // instead of creating a second row for the same name. C# resolves credits
     // against a normalized-name lookup at import (`LibraryInsertJob`), so a
     // featured artist appearing on several Releases is one Artist there; creating
-    // one provisional row per Release is what produced the duplicates. Reuse is
+    // one row per Release is what produced the duplicates. Reuse is
     // deliberately narrow: exactly one candidate may carry the name, it must not
     // be a tombstone, a disambiguation hint refuses reuse, and a conflicting
     // embedded MusicBrainz Artist identifier blocks the reuse (two same-name
@@ -3199,7 +3199,7 @@ async fn persist_prepared_import(
                 .push_bind(&resolution.normalized_value)
                 .push_bind(&resolution.raw_value)
                 .push_bind("unknown")
-                .push_bind("provisional")
+                .push_bind("active")
                 .push_bind(1_i64)
                 .push_bind(now)
                 .push_bind(now);

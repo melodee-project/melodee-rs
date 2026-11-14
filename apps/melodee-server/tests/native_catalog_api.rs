@@ -617,7 +617,7 @@ async fn native_catalog_browse_detail_and_search_preserve_public_ids_and_user_st
         "INSERT INTO artists
            (id, public_api_id, canonical_name, sort_name, normalized_name, artist_type, status,
             created_at, updated_at)
-         VALUES ($1,$2,'Bare Artist','Bare Artist','bare artist','person','provisional',$3,$3)",
+         VALUES ($1,$2,'Bare Artist','Bare Artist','bare artist','person','active',$3,$3)",
     )
     .bind(Uuid::now_v7())
     .bind(bare_artist_public_id)

@@ -683,7 +683,7 @@ async fn resolve_create_new_and_leave_provisional() {
         .await
         .expect("lookup")
         .expect("created artist");
-    assert_eq!(created.status, "provisional");
+    assert_eq!(created.status, "active");
     assert_eq!(created.canonical_name, "Create Me");
     let (status, body) = call(
         app.clone(),
@@ -1095,7 +1095,7 @@ async fn split_moves_only_the_selected_assignments() {
         .expect("lookup")
         .expect("new artist");
     assert_eq!(moved.0, new_artist.id.into_uuid());
-    assert_eq!(new_artist.status, "provisional");
+    assert_eq!(new_artist.status, "active");
 
     db.drop().await;
 }

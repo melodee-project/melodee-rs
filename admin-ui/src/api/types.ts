@@ -27,10 +27,10 @@ export interface ArtistMetadataPatch {
   sortName?: string | null;
   artistType?: string | null;
   /**
-   * Operator identity assertion. Import always creates `provisional` and nothing
-   * promoted it, so this is the audited path to `verified`.
+   * Operator identity assertion. Import always creates `active` (usable, not
+   * identity-verified); this is the audited path to `verified`.
    */
-  status?: 'provisional' | 'verified' | null;
+  status?: 'active' | 'verified' | null;
 }
 
 export interface TrackMetadataPatch {
@@ -662,7 +662,7 @@ export interface ObservationDetail {
 
 /** Resolution verbs accepted by the resolve endpoint. `artistId` is required
  *  for `confirm` and forbidden for the other two. */
-export type IdentityResolution = 'confirm' | 'create-new' | 'leave-provisional';
+export type IdentityResolution = 'confirm' | 'create-new' | 'leave-unresolved';
 
 export interface ResolveObservationResult {
   observationId: string;
@@ -1018,8 +1018,8 @@ export interface Section<T> {
   total: number;
 }
 
-/** Artist catalog status (artists_status_check). */
-export type CatalogArtistStatus = 'provisional' | 'verified' | 'merged' | 'deprecated';
+/** Artist catalog status (artists_status_check, ADR-0190). */
+export type CatalogArtistStatus = 'active' | 'verified' | 'merged' | 'deprecated';
 
 /** Release catalog status (releases_status_check). */
 export type CatalogReleaseStatus = 'active' | 'deprecated' | 'deleted' | 'merged';

@@ -257,7 +257,7 @@ const OBSERVATION_SELECT: &str = "SELECT o.id, o.release_id, r.public_api_id AS 
                JOIN artists proposed_artist ON proposed_artist.id=proposed.artist_id
               WHERE proposed.observed_artist_id = o.id
                 AND proposed.outcome = 'proposed'
-                AND proposed_artist.status IN ('provisional','verified')
+                AND proposed_artist.status IN ('active','verified')
                 AND NOT EXISTS (
                     SELECT 1
                     FROM artist_match_current settled
@@ -311,7 +311,7 @@ impl CatalogStore {
                       AND proposal.outcome='proposed'
                       AND proposal.created_at > current_decision.created_at
                       AND proposal.artist_id <> current_decision.artist_id
-                      AND candidate.status IN ('provisional','verified')
+                      AND candidate.status IN ('active','verified')
                       AND NOT EXISTS (
                           SELECT 1 FROM artist_negative_assertions negative
                           WHERE negative.observed_artist_id=o.id
@@ -355,7 +355,7 @@ impl CatalogStore {
                       AND proposal.outcome='proposed'
                       AND proposal.created_at > current_decision.created_at
                       AND proposal.artist_id <> current_decision.artist_id
-                      AND candidate.status IN ('provisional','verified')
+                      AND candidate.status IN ('active','verified')
                       AND NOT EXISTS (
                           SELECT 1 FROM artist_negative_assertions negative
                           WHERE negative.observed_artist_id=o.id
@@ -391,7 +391,7 @@ impl CatalogStore {
                       AND proposal.outcome='proposed'
                       AND proposal.created_at > current_decision.created_at
                       AND proposal.artist_id <> current_decision.artist_id
-                      AND candidate.status IN ('provisional','verified')
+                      AND candidate.status IN ('active','verified')
                       AND NOT EXISTS (
                           SELECT 1 FROM artist_negative_assertions negative
                           WHERE negative.observed_artist_id=o.id

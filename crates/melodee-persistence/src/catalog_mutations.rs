@@ -46,9 +46,9 @@ pub struct ArtistMetadataPatch {
     pub canonical_name: Option<String>,
     pub sort_name: Option<String>,
     pub artist_type: Option<String>,
-    /// Operator assertion of identity authority: `provisional` or `verified`.
+    /// Operator assertion of identity authority: `active` or `verified`.
     ///
-    /// Import always creates `provisional` (a name observation is not an
+    /// Import always creates `active` (a name observation is not an
     /// identity) and nothing promoted it, so this is the auditable path an
     /// administrator uses to state that the identity is confirmed.
     /// System-managed states (`merged`, `deprecated`) are rejected.
@@ -98,7 +98,7 @@ impl CatalogStore {
                 FROM seeds seed
                 JOIN artists resolved
                   ON resolved.id = resolve_artist_redirect(seed.owner_id)
-                WHERE resolved.status IN ('provisional','verified')
+                WHERE resolved.status IN ('active','verified')
              )
              SELECT DISTINCT ON (candidate.id) candidate.*
              FROM candidates candidate
@@ -147,7 +147,7 @@ impl CatalogStore {
              FROM seeds external
              JOIN artists resolved
                ON resolved.id = resolve_artist_redirect(external.artist_id)
-             WHERE resolved.status IN ('provisional','verified')
+             WHERE resolved.status IN ('active','verified')
                AND NOT EXISTS (
                    SELECT 1
                    FROM artist_negative_assertions negative
@@ -1109,7 +1109,7 @@ impl CatalogStore {
         // Only the two operator-settable statuses are accepted; `merged` and
         // `deprecated` belong to merge/delete flows, never to a metadata edit.
         if let Some(status) = patch.status.as_deref()
-            && !matches!(status, "provisional" | "verified")
+            && !matches!(status, "active" | "verified")
         {
             return Err(CatalogStoreError::InvalidRequest);
         }
@@ -2275,7 +2275,7 @@ pub(crate) async fn audit_event(
 
 fn artist_status_parts(status: ArtistStatus) -> (&'static str, Option<Uuid>) {
     match status {
-        ArtistStatus::Provisional => ("provisional", None),
+        ArtistStatus::Active => ("active", None),
         ArtistStatus::Verified => ("verified", None),
         ArtistStatus::MergedInto(target) => ("merged", Some(target.into_uuid())),
         ArtistStatus::Deprecated => ("deprecated", None),

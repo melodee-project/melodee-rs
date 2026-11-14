@@ -242,12 +242,12 @@ export function ArtistsScreen() {
         ),
         artistType: t(`catalog.artistType.${item.artistType}`, { defaultValue: item.artistType }),
         status:
-          item.status === 'provisional' ? (
-            // Provisional is the default for every imported Artist, so a chip on
-            // every row is alarm without information. Verified/merged/deprecated
-            // are the states an operator needs to spot.
-            <span className="melodee-text-muted" title={t('catalog.artists.provisionalHint')}>
-              {t('catalog.status.provisional')}
+          item.status === 'active' ? (
+            // Active is the normal state of every imported Artist, so a chip on
+            // every row is noise. Verified/merged/deprecated are the states an
+            // operator needs to spot.
+            <span className="melodee-text-muted" title={t('catalog.artists.activeHint')}>
+              {t('catalog.status.active')}
             </span>
           ) : (
             <StatusTag

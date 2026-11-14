@@ -1664,7 +1664,7 @@ const ARTIST_SELECT_BY_ID: &str = "
            artist.revision, artist.updated_at
     FROM artists artist
     WHERE artist.id = $1
-      AND artist.status IN ('provisional', 'verified')";
+      AND artist.status IN ('active', 'verified')";
 
 const RELEASE_SELECT_BY_ID: &str = "
     SELECT release.id, release.public_api_id, release.title, release.sort_title,
@@ -1919,7 +1919,7 @@ impl SearchSnapshotReader {
         let rows = sqlx::query(AssertSqlSafe(format!(
             "SELECT {ARTIST_COLUMNS} FROM artists artist
              WHERE ($1::uuid IS NULL OR artist.id > $1)
-               AND artist.status IN ('provisional', 'verified')
+               AND artist.status IN ('active', 'verified')
              ORDER BY artist.id LIMIT $2"
         )))
         .bind(after)

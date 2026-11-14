@@ -18,7 +18,7 @@ import type { StatusKind } from '../../components/StatusTag';
  */
 
 /** Decision actions in their canonical presentation order. */
-export const IDENTITY_ACTIONS = ['confirm', 'create-new', 'leave-provisional', 'never-match'] as const;
+export const IDENTITY_ACTIONS = ['confirm', 'create-new', 'leave-unresolved', 'never-match'] as const;
 export type IdentityAction = (typeof IDENTITY_ACTIONS)[number];
 
 /** Split assignment kinds accepted by the backend (SplitAssignment). */
@@ -43,15 +43,15 @@ export function confidencePercent(basisPoints: number): number {
 }
 
 /**
- * Artist status onto §5 semantics. Provisional artists are identity work in
- * progress (purple); merged/deprecated artists cannot participate.
+ * Artist status onto §5 semantics. Active artists are imported and usable;
+ * merged/deprecated artists cannot participate.
  */
 export function artistStatusKind(status: string): StatusKind {
   switch (status) {
-    case 'active':
+    case 'verified':
       return 'success';
-    case 'provisional':
-      return 'provisional';
+    case 'active':
+      return 'info';
     case 'merged':
     case 'deprecated':
       return 'neutral';

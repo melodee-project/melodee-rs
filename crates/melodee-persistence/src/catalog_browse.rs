@@ -573,7 +573,7 @@ impl CatalogStore {
     ) -> Result<(Vec<CatalogArtistListRow>, i64), CatalogStoreError> {
         let total = sqlx::query_scalar::<_, i64>(sqlx::AssertSqlSafe(format!(
             "SELECT COUNT(*)::bigint FROM artists a
-              WHERE a.status IN ('provisional','verified') AND {ARTIST_QUERY_FILTER}"
+              WHERE a.status IN ('active','verified') AND {ARTIST_QUERY_FILTER}"
         )))
         .bind(search)
         .fetch_one(pool)
@@ -589,7 +589,7 @@ impl CatalogStore {
                     a.created_at, a.updated_at
                FROM artists a
                LEFT JOIN artist_catalog_aggregates aggregate ON aggregate.artist_id = a.id
-              WHERE a.status IN ('provisional','verified') AND {ARTIST_QUERY_FILTER}
+              WHERE a.status IN ('active','verified') AND {ARTIST_QUERY_FILTER}
               ORDER BY {}
               LIMIT $2 OFFSET $3",
             sort.order_by()

@@ -921,7 +921,7 @@ async fn same_name_imports_serialize_on_the_artist_name_lock() {
     .await
     .expect("read serialized reuse Artists");
     assert_eq!(artists.len(), 1, "the name lock guarantees one Artist");
-    assert_eq!(artists[0].1, "provisional");
+    assert_eq!(artists[0].1, "active");
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
             "SELECT count(DISTINCT release_id) FROM release_artists WHERE artist_id=$1",
@@ -1004,7 +1004,7 @@ async fn concurrent_imports_of_one_artist_name_reuse_one_artist() {
         1,
         "concurrent imports must not create a second Artist for one name"
     );
-    assert_eq!(artists[0].1, "provisional");
+    assert_eq!(artists[0].1, "active");
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
             "SELECT count(DISTINCT release_id) FROM release_artists WHERE artist_id=$1",

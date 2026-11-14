@@ -197,7 +197,7 @@ async fn configured_provider_uses_http_fixture_then_fresh_cache() {
             id, public_api_id, canonical_name, normalized_name, sort_name,
             artist_type, status, created_at, updated_at
          ) VALUES ($1,$1,'Fixture Provider Artist','fixture provider artist',
-                   'Fixture Provider Artist','unknown','provisional',$2,$2)",
+                   'Fixture Provider Artist','unknown','active',$2,$2)",
     )
     .bind(artist_id)
     .bind(now)

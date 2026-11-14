@@ -14,6 +14,22 @@ use common::TestDb;
 use melodee_persistence::{MIGRATOR, migrate};
 use sqlx::migrate::{MigrateError, Migrator};
 
+/// A stepwise migration test that imports catalog data runs *today's* catalog
+/// code against a historical schema snapshot. The Artist status vocabulary
+/// changed in migration 0044 (ADR-0190: `provisional` -> `active`), so the
+/// snapshot has to accept what the current importer writes without pretending
+/// 0044 has run.
+async fn allow_current_artist_status_vocabulary(pool: &sqlx::PgPool) {
+    sqlx::raw_sql(sqlx::AssertSqlSafe(
+        "ALTER TABLE artists DROP CONSTRAINT IF EXISTS artists_status_check;\
+         ALTER TABLE artists ADD CONSTRAINT artists_status_check \
+         CHECK (status IN ('active','verified','merged','deprecated'));",
+    ))
+    .execute(pool)
+    .await
+    .expect("install the current Artist status vocabulary on the historical snapshot");
+}
+
 const COMMENT_ONLY_CANONICAL_CHECKSUMS: &[(i64, &str)] = &[
     (
         24,
@@ -546,7 +562,7 @@ async fn admin_browse_indexes_are_full_and_browse_results_stay_correct() {
     for artist in [
         seed("Beta", melodee_domain::ArtistStatus::Verified),
         seed("Alpha", melodee_domain::ArtistStatus::Deprecated),
-        seed("Gamma", melodee_domain::ArtistStatus::Provisional),
+        seed("Gamma", melodee_domain::ArtistStatus::Active),
     ] {
         melodee_persistence::CatalogStore
             .create_artist(&db.pool, &artist)
@@ -1153,7 +1169,7 @@ async fn migration_0034_repairs_only_the_same_release_artist_identity() {
         .expect("merged source Artist");
     let target = rows
         .iter()
-        .find(|(_, status, _)| status == "provisional")
+        .find(|(_, status, _)| status == "active")
         .expect("visible target Artist");
     assert_eq!(source.2, Some(target.0));
     assert_eq!(
@@ -1349,7 +1365,7 @@ async fn migration_0040_repairs_a_unique_match_on_a_multi_artist_release() {
 
     let visible: Vec<(uuid::Uuid, String)> = sqlx::query_as(
         "SELECT id, canonical_name FROM artists
-          WHERE status IN ('provisional','verified') ORDER BY canonical_name, id",
+          WHERE status IN ('active','verified') ORDER BY canonical_name, id",
     )
     .fetch_all(&db.pool)
     .await
@@ -1446,6 +1462,7 @@ async fn migration_0041_reconciles_only_builtin_unknown_reviews() {
     .run(&db.pool)
     .await
     .expect("apply pre-0041 schema");
+    allow_current_artist_status_vocabulary(&db.pool).await;
 
     let store = PolicyStore;
     let now = OffsetDateTime::now_utc();

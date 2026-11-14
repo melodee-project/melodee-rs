@@ -303,8 +303,8 @@ pub struct ArtistMetadataUpdate {
     pub canonical_name: Option<String>,
     pub sort_name: Option<String>,
     pub artist_type: Option<String>,
-    /// Operator identity assertion (`provisional` or `verified`). This is the
-    /// only path that promotes an imported provisional Artist, because import
+    /// Operator identity assertion (`active` or `verified`). This is the
+    /// only path that promotes an imported active Artist, because import
     /// never promotes and no provider-confirmation path exists yet.
     pub status: Option<String>,
 }
@@ -442,7 +442,7 @@ pub struct ArtistReleaseDto {
 /// One provider-found identity candidate for an Artist (enrichment evidence).
 ///
 /// Recorded by the enrichment worker and never displayed before; it is evidence
-/// an operator uses when deciding whether a provisional identity is correct.
+/// an operator uses when deciding whether an unverified (`active`) identity is correct.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ArtistProviderCandidateDto {

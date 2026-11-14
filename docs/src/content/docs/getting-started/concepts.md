@@ -28,7 +28,7 @@ Two Tracks may refer to the same underlying recording or performance through `Au
 
 An `AudioIdentity` represents one underlying audible recording or performance. It is separate from
 a Track occurrence and from the encoded bytes in a MediaAsset. A new catalog import creates
-provisional identities conservatively; a byte hash or fingerprint is evidence, not an automatic
+unverified (`active`) identities conservatively; a byte hash or fingerprint is evidence, not an automatic
 identity key.
 
 ## Contributions and credits

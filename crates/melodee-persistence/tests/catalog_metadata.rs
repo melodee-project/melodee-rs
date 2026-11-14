@@ -437,7 +437,7 @@ async fn artist_status_is_operator_settable_but_system_states_are_not() {
         .fetch_one(&db.pool)
         .await
         .expect("imported artist status");
-    assert_eq!(status, "provisional", "import never promotes an Artist");
+    assert_eq!(status, "active", "import never promotes an Artist");
     let audit_before = audit_count(&db.pool, "artist", artist_id).await;
 
     store
@@ -470,7 +470,7 @@ async fn artist_status_is_operator_settable_but_system_states_are_not() {
             &db.pool,
             artist_id,
             &ArtistMetadataPatch {
-                status: Some("provisional".to_string()),
+                status: Some("active".to_string()),
                 ..Default::default()
             },
             "test-admin",
@@ -501,7 +501,7 @@ async fn artist_status_is_operator_settable_but_system_states_are_not() {
         .fetch_one(&db.pool)
         .await
         .expect("artist status");
-    assert_eq!(status, "provisional", "rejected edits change nothing");
+    assert_eq!(status, "active", "rejected edits change nothing");
 
     db.drop().await;
 }

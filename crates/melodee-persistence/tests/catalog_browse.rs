@@ -108,7 +108,7 @@ async fn artist_listing_filters_by_name_and_alias_and_paginates() {
     assert!(
         items
             .iter()
-            .any(|item| item.release_count == 1 && item.status == "provisional"),
+            .any(|item| item.release_count == 1 && item.status == "active"),
         "the release-scoped Artist carries the billed Release count"
     );
 

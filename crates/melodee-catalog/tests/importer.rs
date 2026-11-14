@@ -57,7 +57,7 @@ async fn successful_import_reuses_one_artist_per_trusted_artist_id() {
     assert_eq!(stats.failed, 0);
 
     let statuses: (i64, i64, i64) = sqlx::query_as(
-        "SELECT count(*) FILTER (WHERE status='provisional'),
+        "SELECT count(*) FILTER (WHERE status='active'),
                 count(*) FILTER (WHERE status='merged'),
                 (SELECT count(DISTINCT artist_id) FROM release_artists credit
                    JOIN artists artist ON artist.id=credit.artist_id
@@ -153,7 +153,7 @@ async fn scheduler_repairs_legacy_duplicates_sharing_a_trusted_artist_id() {
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
             "SELECT count(*) FROM artists
-              WHERE normalized_name='trusted artist' AND status='provisional'",
+              WHERE normalized_name='trusted artist' AND status='active'",
         )
         .fetch_one(&db.pool)
         .await
@@ -173,7 +173,7 @@ async fn scheduler_repairs_legacy_duplicates_sharing_a_trusted_artist_id() {
     let _ = handle.stop().await;
 
     let statuses: (i64, i64, i64) = sqlx::query_as(
-        "SELECT count(*) FILTER (WHERE status='provisional'),
+        "SELECT count(*) FILTER (WHERE status='active'),
                 count(*) FILTER (WHERE status='merged'),
                 (SELECT count(*) FROM artist_merge_events
                   WHERE actor='catalog-reconciler'
@@ -225,7 +225,7 @@ async fn successful_import_reuses_one_artist_for_repeated_release_credits() {
     assert_eq!(stats.failed, 0);
 
     let statuses: (i64, i64, i64, i64, i64) = sqlx::query_as(
-        "SELECT count(*) FILTER (WHERE status='provisional'),
+        "SELECT count(*) FILTER (WHERE status='active'),
                 count(*) FILTER (WHERE status='merged'),
                 (SELECT count(*) FROM artist_merge_events
                   WHERE actor='catalog-reconciler'),
@@ -345,7 +345,7 @@ async fn scheduler_startup_repairs_older_repeated_primary_artist_identities() {
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
             "SELECT count(*) FROM artists
-              WHERE normalized_name='alice cooper' AND status='provisional'",
+              WHERE normalized_name='alice cooper' AND status='active'",
         )
         .fetch_one(&db.pool)
         .await
@@ -365,7 +365,7 @@ async fn scheduler_startup_repairs_older_repeated_primary_artist_identities() {
     let _ = handle.stop().await;
 
     let statuses: (i64, i64, i64) = sqlx::query_as(
-        "SELECT count(*) FILTER (WHERE status='provisional'),
+        "SELECT count(*) FILTER (WHERE status='active'),
                 count(*) FILTER (WHERE status='merged'),
                 (SELECT count(*) FROM artist_merge_events
                   WHERE moved_relationships #>> '{reconciliation,evidence,predicate}'
@@ -416,7 +416,7 @@ async fn scheduler_startup_reconciles_repeated_track_credits_left_by_an_older_bi
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
             "SELECT count(*) FROM artists
-              WHERE normalized_name='glockboyz teejaee' AND status='provisional'",
+              WHERE normalized_name='glockboyz teejaee' AND status='active'",
         )
         .fetch_one(&db.pool)
         .await
@@ -436,7 +436,7 @@ async fn scheduler_startup_reconciles_repeated_track_credits_left_by_an_older_bi
     let _ = handle.stop().await;
 
     let statuses: (i64, i64, i64) = sqlx::query_as(
-        "SELECT count(*) FILTER (WHERE status='provisional'),
+        "SELECT count(*) FILTER (WHERE status='active'),
                 count(*) FILTER (WHERE status='merged'),
                 (SELECT count(*) FROM artist_merge_events
                   WHERE actor='catalog-reconciler'

@@ -41,9 +41,10 @@ const STATE_KINDS: Record<string, StatusKind> = {
   failed: 'error',
   rejected: 'error',
   error: 'error',
-  provisional: 'provisional',
-  identity: 'provisional',
-  identity_review: 'provisional',
+  // Legacy rows recorded the state string "provisional"; keep rendering them.
+  provisional: 'pending',
+  identity: 'pending',
+  identity_review: 'pending',
   disabled: 'neutral',
   ignored: 'neutral',
   paused: 'neutral',

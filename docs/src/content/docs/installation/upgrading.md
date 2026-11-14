@@ -72,13 +72,19 @@ reviewed unit. Migration `0039_native_normalized_search_indexes.sql` subsequentl
 catalog-scale trigram GIN indexes; include that disk, WAL, and wall time in the same window. After
 verification, start the remaining replicas and restore traffic.
 
-Migration `0040_repair_multi_artist_release_track_identities.sql` repairs provisional Track Artist
+Migration `0040_repair_multi_artist_release_track_identities.sql` repairs unverified Track Artist
 identities created by the earlier singleton-only matching rule. It acts only when one primary
 Release Artist on the same Release exactly matches the Track observation. Raw observations and
 prior decisions remain; repaired sources become audited merge tombstones. Verify the active Artist
 count and representative multi-Artist Releases after startup. Reversing the migration requires an
 audited Artist split or restoring the pre-upgrade PostgreSQL backup—it is not rolled back by merely
 starting an older image.
+
+Migration `0044_rename_artist_status_provisional_to_active.sql` relabels the Artist identity state
+`provisional` to `active` (ADR-0190) and tightens `artists_status_check`. It rewrites only the status
+column: public IDs, merge tombstones, decisions, evidence, aggregates, and audit history are untouched,
+and it needs no media or reindex pass. An older image expects the previous vocabulary, so roll back
+the image and the schema together.
 
 ## Rollback
 

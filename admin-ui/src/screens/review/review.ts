@@ -30,7 +30,7 @@ export function noveltyKind(category: string): StatusKind {
     case 'new_track':
       return 'info';
     case 'alternate_recording':
-      return 'provisional';
+      return 'pending';
     case 'uncertain':
     default:
       return 'warning';

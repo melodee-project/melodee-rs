@@ -589,7 +589,7 @@ export function ReleaseReviewScreen() {
                         value:
                           decision.matchedRuleIds.length > 0 ? (
                             <StatusChip
-                              kind="provisional"
+                              kind="pending"
                               label={decision.matchedRuleIds.join(', ')}
                               hideIcon
                             />

@@ -29,7 +29,7 @@ Inbound processing discovers candidate Releases from inbound roots and creates o
    replacing an existing target. A crash retry adopts an identical completed bundle.
 9. **Catalog import** — an independently bounded worker consumes the PostgreSQL manifest-v3,
    publication plan, and receipt without reopening media. One transaction creates the Release,
-   Tracks, MediaAssets, provisional local Artist and AudioIdentity records, semantic overlay,
+   Tracks, MediaAssets, Active local Artist records, unverified AudioIdentity records, semantic overlay,
    aggregates, audit evidence, and future-projection outbox records.
 
 Discovery and settling are source-correctness gates only in this processing stage. The candidate is not interpreted as

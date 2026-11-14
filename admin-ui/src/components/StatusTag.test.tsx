@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { StatusChip, StatusTag, type StatusKind } from './StatusTag';
 
-const KINDS: StatusKind[] = ['success', 'info', 'warning', 'error', 'provisional', 'neutral'];
+const KINDS: StatusKind[] = ['success', 'info', 'warning', 'error', 'pending', 'neutral'];
 
 describe('StatusChip', () => {
   it.each(KINDS)('renders %s with a label, icon, and description (never color-only)', (kind) => {
