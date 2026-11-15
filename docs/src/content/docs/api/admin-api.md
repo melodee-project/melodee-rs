@@ -151,14 +151,14 @@ Body:
 ```json
 {
   "workItemIds": ["…"],
-  "reason": "discard corrupted failed import",
   "confirm": true
 }
 ```
 
 Hard-deletes failed, pre-catalog work items and their processing evidence. The request accepts
-1–100 ids and requires a non-blank reason plus `confirm: true`; the Admin UI also requires the
-operator to type `DELETE`. For each item the server removes the work item, its event log,
+1–100 ids plus `confirm: true`; the Admin UI asks **Continue to delete?** with Yes/No and does not
+require a reason. An optional `reason` note is recorded when supplied; otherwise the audit row uses
+the fixed reason “administrator confirmed bulk purge of failed pre-catalog work items”. For each item the server removes the work item, its event log,
 manifests, settling snapshots, staging handoff, publication journal/plan/receipt/authorization,
 and the owned staging, work-area, and canonical directories. The inbound candidate is removed only
 when no staging handoff exists; once a handoff exists its path may have been released for a new

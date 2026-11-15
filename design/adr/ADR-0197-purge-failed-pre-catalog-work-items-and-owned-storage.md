@@ -29,8 +29,10 @@ unbounded filesystem delete.
 
 1. Add an administrator-only bulk endpoint:
    `POST /api/admin/v1/ingest/work-items/purge`.
-   It accepts 1–100 internal work-item ids, a non-blank reason, and `confirm: true`. The Admin UI
-   additionally requires a typed `DELETE` confirmation.
+   It accepts 1–100 internal work-item ids and `confirm: true`. The Admin UI presents the impact
+   and asks **Continue to delete?** with **Yes**/**No**; it does not require a typed word or a
+   free-text reason. An optional reason note is recorded when supplied; otherwise the audit row
+   uses a fixed bulk-purge reason.
 2. Only work items in the `failed` state are eligible. Any other state is reported per item as
    `invalid_state` and left untouched.
 3. An item with a `catalog_imports` binding is refused as `cataloged`. Catalog identity uses the
@@ -55,8 +57,8 @@ unbounded filesystem delete.
    administrator, reason, and removed relative paths. It deliberately survives the deleted
    processing history so the destructive operation remains attributable.
 7. The Admin UI exposes the operation only when every selected row is `failed`, through
-   **Bulk actions → Delete selected**, with an impact summary, required reason, and typed
-   confirmation. Partial batches report each refusal and leave those rows in the queue.
+   **Bulk actions → Delete selected**, with an impact summary and a Yes/No confirmation. Partial
+   batches report each refusal and leave those rows in the queue.
 
 ## Alternatives considered
 
@@ -117,7 +119,7 @@ destructive action outside the deleted evidence.
   requirement, storage and event-log deletion, surviving audit evidence, per-item invalid-state
   refusal, and refusing a cataloged Release even when its work item was marked failed.
 - `admin-ui/src/screens/processing/ProcessingQueueScreen.test.tsx` covers selection, the two-step
-  bulk action, typed confirmation, and the exact API call.
+  bulk action, Yes confirmation, and the exact API call.
 - `admin-ui/e2e/processing-queue.spec.ts` drives the real UI at the canonical viewport.
 - The repository full gate (`make check`) remains required.
 

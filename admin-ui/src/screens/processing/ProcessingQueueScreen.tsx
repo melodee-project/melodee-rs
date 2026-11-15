@@ -6,8 +6,6 @@ import {
   Loading,
   Modal,
   Search,
-  TextArea,
-  TextInput,
 } from '@carbon/react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -148,8 +146,6 @@ export function ProcessingQueueScreen() {
   const [bulkSelected, setBulkSelected] = useState<string[]>([]);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleteReason, setDeleteReason] = useState('');
-  const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [purgeError, setPurgeError] = useState<string | null>(null);
   const [notice, setNotice] = useState<{
@@ -379,13 +375,10 @@ export function ProcessingQueueScreen() {
   );
   const allSelectedFailed =
     selectedItems.length > 0 && selectedItems.every((item) => item.state === 'failed');
-  const canConfirmPurge =
-    deleteReason.trim().length > 0 && deleteConfirmation === 'DELETE' && !deleting;
+  const canConfirmPurge = !deleting;
 
   const closeDelete = () => {
     setDeleteOpen(false);
-    setDeleteReason('');
-    setDeleteConfirmation('');
     setPurgeError(null);
   };
 
@@ -394,10 +387,7 @@ export function ProcessingQueueScreen() {
     setDeleting(true);
     setPurgeError(null);
     try {
-      const result: PurgeWorkItemsResult = await purgeWorkItems(
-        bulkSelected,
-        deleteReason.trim(),
-      );
+      const result: PurgeWorkItemsResult = await purgeWorkItems(bulkSelected);
       const deleted = result.deleted.length;
       const failed = result.failed.length;
       setBulkSelected([]);
@@ -510,16 +500,14 @@ export function ProcessingQueueScreen() {
     <Modal
       open={deleteOpen}
       danger
-      modalHeading={t('queue.bulk.confirmTitle', { count: bulkSelected.length })}
-      primaryButtonText={
-        deleting ? t('common.deleting') : t('queue.bulk.deletePermanently')
-      }
-      secondaryButtonText={t('actions.cancel')}
+      modalHeading={t('queue.bulk.confirmTitle')}
+      primaryButtonText={deleting ? t('common.deleting') : t('common.yes')}
+      secondaryButtonText={t('common.no')}
       primaryButtonDisabled={!canConfirmPurge}
       onRequestClose={closeDelete}
       onRequestSubmit={() => void submitPurge()}
     >
-      <p>{t('queue.bulk.confirmBody')}</p>
+      <p>{t('queue.bulk.confirmBody', { count: bulkSelected.length })}</p>
       {purgeError ? (
         <InlineNotification
           kind="error"
@@ -528,18 +516,6 @@ export function ProcessingQueueScreen() {
           hideCloseButton
         />
       ) : null}
-      <TextArea
-        id="purge-reason"
-        labelText={t('queue.bulk.reason')}
-        value={deleteReason}
-        onChange={(event) => setDeleteReason(event.target.value)}
-      />
-      <TextInput
-        id="purge-confirmation"
-        labelText={t('queue.bulk.typeDelete')}
-        value={deleteConfirmation}
-        onChange={(event) => setDeleteConfirmation(event.target.value)}
-      />
     </Modal>
     </>
   );

@@ -379,13 +379,22 @@ async fn purge_removes_inbound_source_when_no_staging_handoff_exists() {
         app,
         "POST",
         "/api/admin/v1/ingest/work-items/purge",
-        Some(json!({"workItemIds": [id], "reason": "cleanup", "confirm": true})),
+        Some(json!({"workItemIds": [id], "confirm": true})),
         Some(&admin),
     )
     .await;
     assert_eq!(StatusCode::OK, status, "{body}");
     assert_eq!(body["deleted"][0]["paths"]["inbound"], "Never Acquired");
     assert!(!inbound.join("Never Acquired").exists());
+    let audit_reason: String = sqlx::query_scalar(
+        "SELECT reason FROM catalog_audit_events
+          WHERE entity_id=$1 AND event_type='work_item_purged'",
+    )
+    .bind(id)
+    .fetch_one(&db.pool)
+    .await
+    .expect("purge audit reason");
+    assert!(audit_reason.contains("administrator confirmed bulk purge"));
     db.drop().await;
 }
 

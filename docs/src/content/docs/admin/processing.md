@@ -40,7 +40,7 @@ below; every other disposition is a per-item, audited decision made from the
 ### Bulk purge of failed items
 
 Select one or more rows on the **Failed** phase, choose **Bulk actions → Delete selected**, then
-confirm with a reason and the typed word `DELETE`. The purge removes the selected work items, their
+answer **Continue to delete?** with **Yes**. The purge removes the selected work items, their
 append-only processing event log, their manifests and staging handoffs, and every owned directory
 for the item: the inbound candidate (when no staging handoff exists), durable staging tree,
 normalization work area, and any published canonical bundle. The item disappears from the queue as

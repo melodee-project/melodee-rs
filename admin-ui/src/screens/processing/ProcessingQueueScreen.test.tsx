@@ -177,7 +177,7 @@ describe('ProcessingQueueScreen', () => {
     expect(within(table).getByText('Business as Usual')).toBeInTheDocument();
   });
 
-  it('bulk deletes failed items only after a typed confirmation', async () => {
+  it('bulk deletes failed items after the Yes confirmation', async () => {
     mockListWorkItems.mockResolvedValue({
       items: [makeWorkItem({ state: 'failed' })],
       total: 1,
@@ -198,21 +198,11 @@ describe('ProcessingQueueScreen', () => {
     fireEvent.click(within(actions).getByRole('button', { name: 'Delete selected' }));
 
     const confirm = await screen.findByRole('dialog', {
-      name: /Delete 1 processing items/,
+      name: 'Continue to delete?',
     });
-    const submit = within(confirm).getByRole('button', { name: 'Delete permanently' });
-    expect(submit).toBeDisabled();
-    fireEvent.change(within(confirm).getByLabelText('Reason'), {
-      target: { value: 'discard corrupted import' },
-    });
-    fireEvent.change(within(confirm).getByLabelText('Type DELETE to confirm'), {
-      target: { value: 'DELETE' },
-    });
-    fireEvent.click(submit);
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Yes' }));
 
-    await waitFor(() =>
-      expect(mockPurgeWorkItems).toHaveBeenCalledWith([ID_ONE], 'discard corrupted import'),
-    );
+    await waitFor(() => expect(mockPurgeWorkItems).toHaveBeenCalledWith([ID_ONE]));
     expect(await screen.findByText('Deleted 1 processing items.')).toBeInTheDocument();
   });
 

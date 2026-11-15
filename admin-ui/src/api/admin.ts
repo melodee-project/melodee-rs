@@ -650,13 +650,10 @@ export function setUserPassword(id: string, password: string): Promise<void> {
  * owned storage trees. The server refuses cataloged items and requires the
  * explicit confirmation flag.
  */
-export function purgeWorkItems(
-  workItemIds: string[],
-  reason: string,
-): Promise<PurgeWorkItemsResult> {
+export function purgeWorkItems(workItemIds: string[]): Promise<PurgeWorkItemsResult> {
   return apiFetch<PurgeWorkItemsResult>(`${ADMIN}/ingest/work-items/purge`, {
     method: 'POST',
-    body: { workItemIds, reason, confirm: true },
+    body: { workItemIds, confirm: true },
   });
 }
 

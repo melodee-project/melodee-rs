@@ -28,6 +28,8 @@ use crate::admin_access::{AdminAccessErrorBody, AdminAccessState, AdminPrincipal
 
 const MAX_PURGE_BATCH: usize = 100;
 const MAX_PURGE_BODY_BYTES: usize = 64 * 1024;
+const DEFAULT_PURGE_REASON: &str =
+    "administrator confirmed bulk purge of failed pre-catalog work items";
 
 /// One configured inbound root and its optional library id.
 #[derive(Debug, Clone)]
@@ -83,9 +85,10 @@ impl axum::extract::FromRequestParts<AdminPurgeState> for AdminPrincipal {
 #[serde(rename_all = "camelCase")]
 pub struct PurgeWorkItemsRequest {
     pub work_item_ids: Vec<Uuid>,
-    pub reason: String,
-    /// Explicit destructive acknowledgement; the UI also requires typed
-    /// confirmation before it sends this.
+    /// Optional operator note; omitted/blank records the fixed purge reason.
+    #[serde(default)]
+    pub reason: Option<String>,
+    /// Explicit destructive acknowledgement from the Yes/No confirmation.
     pub confirm: bool,
 }
 
@@ -137,14 +140,13 @@ async fn purge_work_items(
     admin: AdminPrincipal,
     Json(request): Json<PurgeWorkItemsRequest>,
 ) -> Response {
-    let reason = request.reason.trim().to_string();
-    if reason.is_empty() {
-        return purge_error(
-            StatusCode::BAD_REQUEST,
-            "invalid_reason",
-            "a non-blank reason is required",
-        );
-    }
+    let reason = request
+        .reason
+        .as_deref()
+        .map(str::trim)
+        .filter(|reason| !reason.is_empty())
+        .unwrap_or(DEFAULT_PURGE_REASON)
+        .to_owned();
     if !request.confirm {
         return purge_error(
             StatusCode::BAD_REQUEST,
