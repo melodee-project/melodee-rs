@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand};
 
 mod commands;
 mod legacy;
+mod user_state_import;
 
 use commands::{
     catalog::CatalogCommands, charts::ChartCommands, config::ConfigCommands, groups::GroupCommands,
@@ -533,6 +534,43 @@ mod tests {
         assert!(
             Cli::try_parse_from(["melodee", "worker-pools", "pause", "1pool", "--by", "ops"])
                 .is_err()
+        );
+    }
+
+    #[test]
+    fn user_state_import_defaults_to_partial_catalog_matching_with_optional_strict_mode() {
+        let command = ["melodee", "users", "import-state", "--input", "export"];
+        assert!(matches!(
+            Cli::try_parse_from(command)
+                .expect("default import")
+                .command,
+            Commands::Users {
+                command: UserCommands::ImportState {
+                    require_all_matches: false,
+                    allow_unmatched: false,
+                    no_create_users: false,
+                    ..
+                }
+            }
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(command.into_iter().chain(["--require-all-matches"]))
+                .expect("strict import")
+                .command,
+            Commands::Users {
+                command: UserCommands::ImportState {
+                    require_all_matches: true,
+                    ..
+                }
+            }
+        ));
+        assert!(
+            Cli::try_parse_from(
+                command
+                    .into_iter()
+                    .chain(["--require-all-matches", "--allow-unmatched"])
+            )
+            .is_err()
         );
     }
 

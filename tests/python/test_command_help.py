@@ -14,7 +14,7 @@ SPEC.loader.exec_module(MODULE)
 
 class CommandHelpTests(unittest.TestCase):
     def test_documented_cli_matrix_is_unique_and_complete(self) -> None:
-        self.assertEqual(len(MODULE.CLI_COMMANDS), 77)
+        self.assertEqual(len(MODULE.CLI_COMMANDS), 78)
         self.assertEqual(len(set(MODULE.CLI_COMMANDS)), len(MODULE.CLI_COMMANDS))
         self.assertIn(("legacy", "freeze"), MODULE.CLI_COMMANDS)
         self.assertIn(("search", "rebuild"), MODULE.CLI_COMMANDS)

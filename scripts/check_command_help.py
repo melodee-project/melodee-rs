@@ -75,6 +75,7 @@ CLI_COMMANDS: tuple[tuple[str, ...], ...] = (
     ("users", "bootstrap-admin"),
     ("users", "disable"),
     ("users", "enable"),
+    ("users", "import-state"),
     ("groups",),
     ("groups", "list"),
     ("groups", "create"),

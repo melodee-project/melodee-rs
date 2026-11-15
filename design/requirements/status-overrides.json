@@ -3145,12 +3145,16 @@
       "apps/melodee-cli/src/legacy/import_state2.rs (starred/rating/hated/play-count state, play history, podcast channels, radio, settings reference-only)",
       "apps/melodee-cli/src/legacy/import_state3.rs (user groups/members, smart playlists, podcast episodes/bookmarks/history)",
       "apps/melodee-cli/src/legacy/import_state4.rs (playback settings, equalizer presets, social logins, Last.fm re-seal, pins, requests/comments/seen, device-profile reference-only, excluded summaries)",
-      "design/adr/ADR-0148-legacy-migration-contract.md §D.8 + 2026-08-17 amendment (per-table dispositions; Party/Jukebox excluded by ADR-0133/0140/0141)"
+      "design/adr/ADR-0148-legacy-migration-contract.md §D.8 + 2026-08-17 amendment (per-table dispositions; Party/Jukebox excluded by ADR-0133/0140/0141)",
+      "design/adr/ADR-0200-portable-user-state-export-and-import.md (versioned, checksummed portable export; additive/idempotent re-run contract; public-id identity; explicit unprivileged user creation; reference-only dispositions); scripts/export_legacy_user_state.py (read-only C# extractor for users/profile, likes/dislikes/ratings/pins, play history, playlists, smart playlists, bookmarks, groups, playback settings, equalizer presets); apps/melodee-cli/src/user_state_import.rs and commands/users.rs (`melodee-cli users import-state --input DIR`)",
+      "design/adr/ADR-0201-import-available-user-state-as-the-catalog-grows.md (skip/report missing catalog rows by default; strict preflight opt-in; re-resolve the same export as music arrives; preserve local flags and merge play maxima)"
     ],
     "tests": [
       "apps/melodee-cli/tests/legacy.rs (full_import_covers_all_domains_and_preserves_identity: every mapped domain asserted)",
       "apps/melodee-cli/tests/legacy.rs (verify_then_delta_is_convergent: user-state totals)",
-      "apps/melodee-cli/tests/legacy_faults.rs (orphan references, fencing, restart convergence)"
+      "apps/melodee-cli/tests/legacy_faults.rs (orphan references, fencing, restart convergence)",
+      "apps/melodee-cli/tests/user_state_import.rs (partial_catalog_import_retries_the_same_export_when_more_music_arrives; strict_catalog_matching_checks_every_stream_before_creating_accounts; reruns_preserve_local_flags_and_merge_play_maxima_independently_of_updated_at)",
+      "apps/melodee-cli/tests/user_state_import.rs (end-to-end first import, identical re-run no-op, refreshed export merge with monotonic play counts and appended playlist items, dry run writes nothing); apps/melodee-cli/src/user_state_import.rs unit tests (manifest checksum/count/version rejection, duplicate keys, timestamp and rating bounds, stable play event ids, orphan playlist items, reference-only); tests/python/test_export_legacy_user_state.py (timestamp/boolean/integer parsing, deterministic checksummed streams, output-directory safety, reference-only reasons); scripts/check_command_help.py (users import-state help coverage)"
     ],
     "note": "Retired Party/Jukebox persistent configuration is excluded by ADR-0133/0140/0141 and inventoried as excluded-by-decision."
   },

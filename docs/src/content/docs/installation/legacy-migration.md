@@ -314,6 +314,14 @@ mapping, and resolved rows import normally.
 - Never migrates retired Party/Jukebox behavior as an enabled feature, and never copies the
   legacy search index as authority.
 
+## Portable user-state refresh
+
+When the catalog is already in Melodee, listener data can be refreshed without a second full
+migration: `scripts/export_legacy_user_state.py` exports likes, dislikes, ratings, pins, play
+history, playlists, smart playlists, bookmarks, groups, and playback preferences from the C#
+database, and `melodee-cli users import-state` applies them additively and idempotently. See
+[Importing user data and activity](./user-state-import/).
+
 ## See also
 
 - [Database setup and backup](./database/)

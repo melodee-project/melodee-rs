@@ -1,6 +1,7 @@
 //! User bootstrap and operator account recovery commands.
 
 use std::env;
+use std::path::PathBuf;
 
 use clap::Subcommand;
 use sqlx::PgPool;
@@ -36,6 +37,45 @@ pub(crate) enum UserCommands {
     Enable {
         /// Login username (normalized like sign-in).
         username: String,
+    },
+    /// Import portable user state (likes, dislikes, ratings, pins, play
+    /// counts, play history, playlists, smart playlists, bookmarks, groups,
+    /// and playback preferences) exported from a C# Melodee snapshot by
+    /// `scripts/export_legacy_user_state.py` (ADR-0200).
+    ///
+    /// The import is additive: it never deletes rows, older exports cannot
+    /// downgrade newer local changes, play counts are monotonic, and playlist
+    /// items are only appended. Missing music is skipped and reported. Re-run
+    /// the same export after adding music to import newly matched state.
+    ImportState {
+        /// Export directory containing manifest.json and the NDJSON streams.
+        #[arg(long, value_name = "DIR")]
+        input: PathBuf,
+        /// Validate, resolve identities, and print the plan without writing.
+        #[arg(long)]
+        dry_run: bool,
+        /// Skip missing users with --no-create-users. Missing catalog entities
+        /// are always skipped and reported by default.
+        #[arg(long)]
+        allow_unmatched: bool,
+        /// Fail if any catalog entity is missing or not live, before writing.
+        #[arg(long, conflicts_with = "allow_unmatched")]
+        require_all_matches: bool,
+        /// Do not create missing accounts; every exported user must already
+        /// exist. Creating missing accounts is the default.
+        #[arg(long = "no-create-users")]
+        no_create_users: bool,
+        /// Keep the exported administrator/editor flags on newly created
+        /// accounts. Off by default: existing accounts never change privilege,
+        /// and a created account is unprivileged unless you ask for this.
+        #[arg(long)]
+        grant_privileged_roles: bool,
+        /// Rows per committed transaction.
+        #[arg(long, default_value_t = 1000)]
+        batch_size: i64,
+        /// Emit the machine-readable summary as JSON.
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -119,6 +159,44 @@ pub(crate) async fn run(command: UserCommands) {
                 ),
                 Err(error) => {
                     eprintln!("error: {error}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        UserCommands::ImportState {
+            input,
+            dry_run,
+            allow_unmatched,
+            require_all_matches,
+            no_create_users,
+            grant_privileged_roles,
+            batch_size,
+            json,
+        } => {
+            let options = crate::user_state_import::ImportOptions {
+                dry_run,
+                allow_unmatched,
+                require_all_matches,
+                create_users: !no_create_users,
+                grant_privileged_roles,
+                batch_size,
+            };
+            match crate::user_state_import::import(&pool, &input, options).await {
+                Ok(summary) => {
+                    if json {
+                        match serde_json::to_string_pretty(&summary) {
+                            Ok(rendered) => println!("{rendered}"),
+                            Err(error) => {
+                                eprintln!("error: cannot render summary: {error}");
+                                std::process::exit(1);
+                            }
+                        }
+                    } else {
+                        println!("{}", crate::user_state_import::render(&summary));
+                    }
+                }
+                Err(message) => {
+                    eprintln!("user-state import failed: {message}");
                     std::process::exit(1);
                 }
             }
